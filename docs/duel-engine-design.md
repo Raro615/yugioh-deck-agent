@@ -380,6 +380,9 @@ AI 가 "확실히 합법 / 가능성 있음 / 판단 불가"를 구분하는 근
 
 ## 9. Action / Legal Action
 
+> **구현됨 (Phase 2-A).** 아래 구조는 `engine/action.py` 에 있다. 실제
+> 필드 이름과 검증 계약은 `docs/phase2a-player-action.md` 를 따른다.
+
 > **⚠ 이름 충돌 (ADR-001 에서 해결됨).** 아래의 `ActionKind` 는
 > `analysis.effect_model.ActionKind` 와 **다른 것**이다. 후자는 이미 존재하고
 > 효과의 결과(`DESTROY`, `BANISH`, `TO_GRAVE` …)를 담는다. 실제로 멤버 하나
@@ -598,9 +601,13 @@ GameState(읽기 전용 뷰) → LegalActions → AI → Action → Engine → G
 
 세 가지를 강제한다.
 
-1. AI 에는 **읽기 전용 뷰**만 넘긴다 (`GameStateView`)
-2. AI 는 `Action` 객체만 돌려준다 — 상태를 만들지 않는다
+1. AI 에는 **읽기 전용 뷰**만 넘긴다 (`GameStateView`) — **Phase 2-A 에서 구현됨**
+2. AI 는 `Action` 객체만 돌려준다 — 상태를 만들지 않는다 — **Phase 2-A 에서 구현됨**
 3. 규칙 계산은 전부 엔진 안에 있다
+
+`GameStateView` 는 **스냅숏**이다 (살아 있는 프록시가 아니다). 숨겨진 정보는
+플래그로 가리지 않고 **값 자체를 넣지 않는다.** 자세한 것은
+`docs/phase2a-player-action.md`.
 
 | AI 종류 | 필요한 접점 |
 |---|---|
@@ -616,7 +623,8 @@ GameState(읽기 전용 뷰) → LegalActions → AI → Action → Engine → G
 | Phase | 내용 | 의존 | 검증 기준 |
 |---|---|---|---|
 | **1** | 어휘 · ID · CardInstance · Zone · Player · GameState · Turn/Phase | 없음 | 카드 정의 불변, 존 이동 정확 |
-| **2** | Event · Journal · StateDelta · 기본 Action · 결정론 replay | 1 | 같은 입력 → 같은 출력 |
+| **2-A** | `PlayerAction` · `ActionTarget` · 검증 인터페이스 · `GameStateView` | 1 | Action 생성·검증이 `state_hash()` 를 바꾸지 않음 ✅ |
+| **2** | Event · Journal · StateDelta · Action **실행** · 결정론 replay | 2-A | 같은 입력 → 같은 출력 |
 | **3** | ConditionEvaluator (3-값) | 1, analysis | `evaluable` 8.5% 정확 판정 |
 | **3.5** | **`EffectSpec` 에 `SetHintTiming` 수집 추가** | analysis 수정 | 퀵 효과 시점 판단 |
 | **4** | LegalActionGenerator + Cost / Target | 2, 3 | 등급 구분 동작 |

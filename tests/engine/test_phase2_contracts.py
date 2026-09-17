@@ -273,17 +273,35 @@ def test_contract_e_engine_does_not_borrow_the_analysis_action_vocabulary():
         "확인하세요 — 엔진 Action 은 PlayerActionKind 라는 별도 이름을 씁니다."
     )
 
+    import ast
     import pathlib
 
+    # 문자열 검색으로는 안 된다. ``engine/action.py`` 의 설명글은 두 어휘가
+    # 왜 다른지 **설명하려고** analysis.ActionKind 를 언급하는데, 그것은
+    # 막아야 할 것이 아니라 있어야 할 것이다. 막아야 하는 것은 **실제 사용**
+    # 이므로 코드를 파싱해서 본다. ``PlayerActionKind`` 는 다른 이름이라
+    # 자연히 걸리지 않는다.
     root = pathlib.Path(engine.__file__).parent
-    offenders = [
-        path.relative_to(root.parent)
-        for path in root.rglob("*.py")
-        if "ActionKind" in path.read_text(encoding="utf-8")
-    ]
+    offenders: list[str] = []
+    for path in root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            used = (
+                (isinstance(node, ast.Name) and node.id == "ActionKind")
+                or (isinstance(node, ast.Attribute) and node.attr == "ActionKind")
+                or (
+                    isinstance(node, (ast.Import, ast.ImportFrom))
+                    and any(a.name.rsplit(".", 1)[-1] == "ActionKind" for a in node.names)
+                )
+            )
+            if used:
+                offenders.append(str(path.relative_to(root.parent)))
+                break
+
     assert offenders == [], (
-        f"{offenders} 가 ActionKind 를 언급합니다. analysis 의 Effect 어휘를 "
-        "엔진 Action 으로 쓰면 ADR-001 이 무너집니다."
+        f"{offenders} 가 analysis 의 ActionKind 를 **사용**합니다. Effect 어휘를 "
+        "엔진 Action 으로 쓰면 ADR-001 이 무너집니다. (설명글에서 언급하는 "
+        "것은 괜찮습니다 — 이 검사는 코드만 봅니다.)"
     )
 
 

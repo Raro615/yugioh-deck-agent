@@ -1,8 +1,17 @@
 """
 Duel Engine.
 
-``docs/duel-engine-design.md`` 의 설계를 구현한다. 현재는 Phase 1 —
-규칙 판정 없이 듀얼 **상태**만 정확하게 표현하는 데이터 계층이다.
+``docs/duel-engine-design.md`` 의 설계를 구현한다. 현재까지:
+
+- **Phase 1** — 규칙 판정 없이 듀얼 **상태**만 정확하게 표현하는 데이터 계층
+  (``engine/state/``, ``ids.py``, ``vocabulary.py``).
+- **Phase 2-A** — AI 가 *무엇을 할지* 표현하는 계층. 아직 **판을 바꾸지
+  못한다** (``action.py``, ``action_target.py``, ``action_validation.py``,
+  ``game_state_view.py``). ``docs/phase2a-player-action.md`` 참고.
+
+``PlayerActionKind`` 는 ``analysis.effect_model.ActionKind`` 와 **다른
+어휘**다. 전자는 고르는 주체가 고르는 행위, 후자는 효과가 하는 일이다
+(ADR-001).
 
 이 패키지는 ``core/`` 와 ``analysis/`` 를 **읽기만 한다.** 카드 정의는
 :class:`~core.card_repository.CardRepository` 가 소유하고, 엔진은

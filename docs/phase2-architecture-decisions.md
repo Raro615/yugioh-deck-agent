@@ -213,6 +213,13 @@ Action 과 Effect 를 합치면 **AI 가 규칙을 계산하게 된다.**
 - 후보 생성기는 `PlayerActionKind` 만 나열한다. `EffectOperation` 은 나열 대상이 아니다.
 - `Contract E` 가 이 분리를 감시한다.
 
+> **구현 결과 (Phase 2-A).** `engine/action.py` 의 `PlayerActionKind` 10개 중
+> `DESTROY` / `BANISH` / `SEND` / `DISCARD` / `RELEASE` 는 없다.
+> `Contract E` 는 처음에 문자열 검색이었는데, `engine/action.py` 의 설명글이
+> 두 어휘의 차이를 **설명하려고** `analysis.ActionKind` 를 언급하는 바람에
+> 오탐이 났다. 지금은 AST 로 **실제 사용**만 본다 — 설명은 막을 것이 아니라
+> 있어야 할 것이기 때문이다.
+
 ### Future implications
 
 `Activate` Action 이 `EffectRef` 를 들고 있고, 그 효과의 해결이
@@ -846,7 +853,7 @@ def move(self, instance, zone, *, to_player=None, index=None, position=None):
 
 | 단계 | 내용 | 조정 |
 |---|---|---|
-| **2-A** | `PlayerActionKind` · `Action` 어휘 + `GameStateView` | `GameStateView` 를 여기로 **앞당김** — ADR-007 의 경계를 Action 이 생기는 순간부터 지키기 위해 |
+| **2-A** ✅ | `PlayerActionKind` · `PlayerAction` · `ActionTarget` · 검증 인터페이스 · `GameStateView` | `GameStateView` 를 여기로 **앞당김** — ADR-007 의 경계를 Action 이 생기는 순간부터 지키기 위해. **구현 완료**, `docs/phase2a-player-action.md` |
 | **2-B** | Condition 표현 (평가 아님) | 원안대로 |
 | **2-C** | `EffectOperation` 모델 + `REASON_*` | 원안대로 |
 | **2-D** | `EffectRegistry` + `CardExecutionAvailability` | 원안대로 |
@@ -940,7 +947,7 @@ Phase 2 를 **시작할 수는 있으나**, 진행 중 답이 필요한 것들�
 | B | `NO_EFFECT` 는 발동할 효과가 없다 | 746장 전부 `EffectRef` 0개. `TEXT_DERIVED` 와 **다른** 상태임을 확인 |
 | C | `LUA_VERIFIED` 만으로는 실행 가능하지 않다 | `EffectRef` 0개인 `LUA_VERIFIED` 카드가 195장 **존재한다** |
 | D | `UNVERIFIED` identity 로 공식 재정을 얻을 수 없다 | `trusted` 는 `VERIFIED` 만 참 |
-| E | `Action` 과 `Effect` 는 다른 개념이다 | 두 어휘의 이름 겹침이 `normal_summon` 하나뿐임을 고정. `engine` 이 `ActionKind` 를 언급하지 않음 |
+| E | `Action` 과 `Effect` 는 다른 개념이다 | 두 어휘의 이름 겹침이 `normal_summon` 하나뿐임을 고정. `engine` 코드가 `analysis.ActionKind` 를 **사용**하지 않음 (AST 검사) |
 | F | `Destroy` 와 `Send` 는 자동으로 같지 않다 | `ACTION_DESTINATION` 이 실제로 둘을 합침을 박제. `REASON_DESTROY` 는 독립 비트 |
 | G | `EffectRef(card_id, ordinal)` 이 효과 identity 다 | `EffectSpec.index` 가 4,884장에서 중복 |
 | H | AI 는 분석 데이터로 상태를 바꿀 수 없다 | `engine` → `analysis` 의존이 `LimitScope` 하나뿐 |

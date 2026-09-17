@@ -146,6 +146,13 @@ class ZoneContainer:
             )
         if self._slots[index] is not None:
             raise ZoneFull(f"{self.zone.value} 의 {index}번 칸이 이미 찼습니다.")
+        if card in self:
+            # 같은 카드가 두 칸을 동시에 차지하는 상태는 표현할 수 없다.
+            # 옮기려면 먼저 빼야 한다 (``move_card`` 가 그렇게 한다).
+            raise ZoneFull(
+                f"{card.instance_id} 는 이미 {self.zone.value} 존의 "
+                f"{self.index(card)}번 칸에 있습니다. 옮기려면 먼저 빼세요."
+            )
         self._slots[index] = card
         self._rebuild_from_slots()
 

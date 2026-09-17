@@ -359,3 +359,35 @@ def test_move_card_into_a_specific_monster_zone_slot():
     assert card.sequence == 3
     assert card.previous.location is Zone.HAND
     assert len(hand) == 0
+
+
+def test_the_same_card_cannot_occupy_two_slots_at_once():
+    """
+    칸을 지정해 넣을 때 이미 그 존에 있는 카드인지 보지 않으면, 같은 카드가
+    두 칸에 동시에 나타나고 ``len()`` 이 2를 돌려준다. 규칙 위반이 아니라
+    **표현할 수 없는 상태**이므로 자료구조가 막는다.
+    """
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    (card,) = make_cards(1, zone=Zone.MZONE)
+    monsters.place(4, card)
+
+    with pytest.raises(ZoneFull):
+        monsters.place(3, card)
+    with pytest.raises(ZoneFull):
+        monsters.insert(3, card)
+
+    assert len(monsters) == 1
+    assert monsters.slots() == [None, None, None, None, card]
+
+
+def test_moving_within_a_slotted_zone_works_once_the_card_is_removed():
+    """막는 것은 중복이지 이동이 아니다."""
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    (card,) = make_cards(1, zone=Zone.MZONE)
+    monsters.place(4, card)
+
+    monsters.remove(card)
+    monsters.place(3, card)
+
+    assert monsters.slots() == [None, None, None, card, None]
+    assert card.sequence == 3
