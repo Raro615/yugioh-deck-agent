@@ -285,6 +285,92 @@ PIP_ROOT_USER_ACTION=ignore
 `YGO_CARDS_CDB` 는 훅이 실제 경로로 직접 써 넣으므로 여기 적을 필요가 없다.
 한국어 데이터를 다른 위치에 두려면 `YGO_KO_DIR` 로 지정한다.
 
+
+## 효과 분석 계층 (analysis/)
+
+검색 계층은 "이 카드가 조건에 맞는가"를 판단한다. 분석 계층은 한 단계 더 들어가
+**"이 효과가 무엇을, 어디에서, 어디로, 어떤 비용으로 옮기는가"** 를 구조화한다.
+검색 계층과 독립적이며 카드를 읽기만 한다.
+
+```
+$ python -m app.main analyze 21441617
+오르페골 스켈레촌 · 레벨3 · 어둠속성 · 기계족 · 1200/1500 · 몬스터/효과
+  소속 카드군 : ORCUST
+  [e1] GRAVE에서 · 비용 self_banish · GRAVE의 ORCUST 카드군 선택 · special_summon→MZONE · 턴 1회
+      비용      : self_banish (Cost.SelfBanish)
+      대상 지정 : 예
+      선택      : GRAVE 의 ORCUST 카드군
+      처리      : special_summon  GRAVE → MZONE
+```
+
+Lua 핸들러를 따라 들어가 읽는다.
+
+```lua
+e1:SetCost(Cost.SelfBanish)   -- 비용: 자신을 제외
+e1:SetTarget(s.sptg)          -- s.sptg 의 Duel.SelectTarget(..., LOCATION_GRAVE, ...)
+                              --   -> s.spfilter 의 IsSetCard(SET_ORCUST)
+e1:SetOperation(s.spop)       -- s.spop 의 Duel.SpecialSummon(...)
+```
+
+### 소속과 상호작용을 구분한다
+
+`archetype` 만 소속이고 나머지는 전부 상호작용이다. 소속의 근거는 공식
+`setcode` 뿐이며, 카드 텍스트에 이름이 등장한다는 이유로 소속을 판정하지 않는다.
+
+```
+$ python -m app.main relations 93920420
+성유물－『성장』
+소속 (같은 카드군): 1건
+  · WORLD_LEGACY   근거=setcode:WORLD_LEGACY
+상호작용: 5건
+  · series    ORCUST                      ← 지명할 뿐, 오르페골 카드가 아니다
+  · summons   ORCUST (REMOVED→MZONE)      ← 실제로 다루기는 한다
+```
+
+| 관계 | 근거 | 소속 |
+|---|---|---|
+| `archetype` | 공식 `setcode` | ✅ |
+| `series` | 스크립트의 `listed_series` | ❌ |
+| `listed_name` | 스크립트의 `listed_names` | ❌ |
+| `searches` / `summons` / `destroys` / `banishes` / `sends_to_grave` / `bounces` / `targets` | 효과 분석 | ❌ |
+
+### 콤보 탐색을 위한 구조
+
+이동을 일으키는 관계는 `from_location` → `to_location` 과 대상 조건을 가진다.
+이것이 상태 전이가 되어 역방향 질의가 가능하다.
+
+```python
+builder.find_sources(
+    kind=RelationshipKind.SUMMONS,
+    archetype="ORCUST",
+    from_location="GRAVE",
+)
+# -> 오르페골 몬스터를 묘지에서 특수 소환할 수 있는 카드들
+```
+
+### 구조화 범위와 한계
+
+억지로 추론하지 않는다. 읽어내지 못한 것은 `unparsed` 에 원문으로 남고,
+원본 효과 블록은 `raw` 로 항상 보존된다.
+
+전체 코퍼스(12,687장, 등록 효과 26,352블록) 기준:
+
+| | 비율 |
+|---|---|
+| 처리(액션) 구조화 | 55.0% |
+| 선택 대상 구조화 | 45.5% |
+| 비용 구조화 | 18.9% |
+
+액션이 없는 11,853블록의 내역:
+
+- **48.9%** 처리 함수가 없는 지속·상시 효과 (수치/제약 변경). 성격상 '처리'가 없다
+- **33.3%** 효과를 등록하는 트리거 등, 이동을 일으키지 않는 효과
+- **15.1%** 분류는 있으나 처리를 읽지 못함 — 실제 미구조화
+- **2.7%** 소환 절차
+
+아직 읽지 못하는 것: 조건문의 의미(`SetCondition` 은 유무만 안다), 체인/타이밍
+제약, 지속 효과의 수치 계산, `Duel.SSet` 등 일부 처리 호출.
+
 ## 테스트
 
 ```bash

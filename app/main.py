@@ -407,6 +407,104 @@ def cmd_archetype(agent: DeckAgent, args) -> int:
     return 0
 
 
+def cmd_analyze(agent: DeckAgent, args) -> int:
+    """카드 효과를 구조적으로 분해해 보여준다."""
+    from analysis import EffectAnalyzer
+
+    card = agent.repository.get(args.card_id)
+    if card is None:
+        print(f"카드를 찾을 수 없습니다: {args.card_id}", file=sys.stderr)
+        return 1
+
+    analysis = EffectAnalyzer(agent.repository).analyze(card)
+    print("=" * 72)
+    print(card.summary_ko())
+    if not analysis.has_script:
+        print("  Lua 스크립트가 없습니다 (일반 몬스터 등).")
+        print("=" * 72)
+        return 0
+
+    if analysis.setcodes:
+        print(f"  소속 카드군 : {', '.join(analysis.setcodes)}")
+    if analysis.listed_series:
+        print(f"  지명 카드군 : {', '.join(analysis.listed_series)} (소속과 다름)")
+
+    for effect in analysis.effects:
+        print(f"\n  [{effect.index}] {effect.describe_ko()}")
+        print(f"      종류      : {'/'.join(effect.effect_types) or '-'}")
+        if effect.trigger_event:
+            print(f"      발동 계기 : {effect.trigger_event}")
+        if effect.activation_locations:
+            print(f"      발동 위치 : {'/'.join(effect.activation_locations)}")
+        if effect.costs:
+            print(
+                "      비용      : "
+                + ", ".join(f"{c.kind.value} ({c.raw})" for c in effect.costs)
+            )
+        print(f"      대상 지정 : {'예' if effect.targets_card else '아니오'}")
+        if effect.selection:
+            where = "/".join(effect.selection.locations)
+            print(
+                f"      선택      : {where} 의 "
+                f"{effect.selection.constraint.describe_ko()}"
+            )
+        for action in effect.actions:
+            src = "/".join(action.from_locations) or "?"
+            print(f"      처리      : {action.kind.value}  {src} → {action.to_location}")
+        if effect.unparsed:
+            print(f"      미구조화  : {', '.join(effect.unparsed)}")
+
+    if analysis.resolution_effects:
+        print(f"\n  처리 중 생성되는 효과 {len(analysis.resolution_effects)}개 (적용 제약 등)")
+    coverage = analysis.coverage()
+    print(
+        f"\n  구조화 정도 : 효과 {coverage['effects']}개 중 "
+        f"처리 {coverage['with_actions']}개 / 비용 {coverage['with_costs']}개 "
+        f"/ 선택 {coverage['with_selection']}개"
+    )
+    print("=" * 72)
+    return 0
+
+
+def cmd_relations(agent: DeckAgent, args) -> int:
+    """카드의 관계를 소속과 상호작용으로 나눠 보여준다."""
+    from analysis import EffectAnalyzer, RelationshipBuilder
+
+    card = agent.repository.get(args.card_id)
+    if card is None:
+        print(f"카드를 찾을 수 없습니다: {args.card_id}", file=sys.stderr)
+        return 1
+
+    builder = RelationshipBuilder(agent.repository, EffectAnalyzer(agent.repository))
+    relationships = builder.for_card(args.card_id)
+    print(card.summary_ko())
+    print("-" * 72)
+
+    memberships = [r for r in relationships if r.is_membership]
+    interactions = [r for r in relationships if not r.is_membership]
+
+    print(f"소속 (같은 카드군): {len(memberships)}건")
+    for relation in memberships:
+        print(f"  · {relation.target_archetype}   근거={relation.evidence}")
+    print(f"\n상호작용: {len(interactions)}건")
+    for relation in interactions:
+        target = (
+            agent.repository.get(relation.target_card_id)
+            if relation.target_card_id
+            else None
+        )
+        label = target.display_name() if target else relation.describe_ko()
+        print(f"  · {relation.kind.value:16} {label}")
+        if relation.constraint and not relation.constraint.is_empty():
+            print(f"      조건: {relation.constraint.describe_ko()}")
+        if relation.from_location or relation.to_location:
+            print(
+                f"      이동: {relation.from_location or '?'} → "
+                f"{relation.to_location or '?'}"
+            )
+    return 0
+
+
 def cmd_stats(agent: DeckAgent, args) -> int:
     stats = agent.repository.stats()
     labels = {
@@ -501,6 +599,14 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("archetype", parents=[common], help="카드군 소속 카드 목록")
     p.add_argument("name", nargs="+")
     p.set_defaults(func=cmd_archetype)
+
+    p = sub.add_parser("analyze", parents=[common], help="카드 효과 구조 분석")
+    p.add_argument("card_id", type=int)
+    p.set_defaults(func=cmd_analyze)
+
+    p = sub.add_parser("relations", parents=[common], help="카드 관계 (소속/상호작용)")
+    p.add_argument("card_id", type=int)
+    p.set_defaults(func=cmd_relations)
 
     p = sub.add_parser("stats", parents=[common], help="데이터 현황")
     p.set_defaults(func=cmd_stats)
