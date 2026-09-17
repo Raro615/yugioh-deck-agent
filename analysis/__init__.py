@@ -25,6 +25,14 @@ from analysis.effect_model import (
     EffectSelection,
 )
 from analysis.condition_parser import LuaConditionParser
+from analysis.predicate_analyzer import PredicateAnalyzer
+from analysis.predicate_model import (
+    READINESS_BY_KIND,
+    ConditionPredicate,
+    EvalReadiness,
+    PredicateKind,
+    PredicateSubject,
+)
 from analysis.effect_analyzer import EffectAnalyzer
 from analysis.relationship import (
     MEMBERSHIP_KINDS,
@@ -53,6 +61,12 @@ __all__ = [
     "EffectCost",
     "EffectSelection",
     "LuaConditionParser",
+    "PredicateAnalyzer",
+    "PredicateKind",
+    "PredicateSubject",
+    "EvalReadiness",
+    "ConditionPredicate",
+    "READINESS_BY_KIND",
     "MEMBERSHIP_KINDS",
     "CardRelationship",
     "RelationshipBuilder",

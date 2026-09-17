@@ -218,6 +218,10 @@ class ConditionNode:
     op: BoolOp
     children: list["ConditionNode"] = field(default_factory=list)
     requirement: "ActivationRequirement | None" = None
+    """굵은 분류(ConditionKind). 평면 목록과 호환을 위해 유지한다."""
+    predicate: "object | None" = None
+    """leaf 의 세부 의미 (:class:`~analysis.predicate_model.ConditionPredicate`).
+    해석하지 못한 leaf 에도 UNKNOWN 술어가 붙어 원문이 보존된다."""
     raw: str = ""
 
     @property
@@ -258,6 +262,9 @@ class ConditionNode:
             if self.requirement is not None:
                 # 부정은 상위 NOT 노드가 표현한다. 여기서 또 붙이면 중복된다.
                 return self.requirement.describe_ko(include_negation=False)
+            kind = getattr(getattr(self.predicate, "kind", None), "value", None)
+            if kind and kind != "unknown":
+                return self.predicate.describe_ko().removeprefix("아님: ")
             return f"?({self.raw.strip()[:40]})"
         if self.op is BoolOp.NOT:
             inner = self.children[0].describe_ko() if self.children else "?"
@@ -364,9 +371,23 @@ class ActivationCondition:
                 if counts.get(op)
             )
             leaves = self.tree.leaves()
-            known = sum(1 for leaf in leaves if leaf.requirement is not None)
+            evaluable = sum(
+                1
+                for leaf in leaves
+                if getattr(getattr(leaf.predicate, "readiness", None), "value", None)
+                == "evaluable"
+            )
+            context = sum(
+                1
+                for leaf in leaves
+                if getattr(getattr(leaf.predicate, "readiness", None), "value", None)
+                == "needs_context"
+            )
             summary = f"조건 {shape}" if shape else "조건 단일"
-            parts.append(f"{summary} (leaf {known}/{len(leaves)} 해석)")
+            parts.append(
+                f"{summary} (leaf {len(leaves)}: 평가가능 {evaluable} "
+                f"/ 문맥필요 {context} / 미해석 {len(leaves) - evaluable - context})"
+            )
         else:
             parts.extend(r.describe_ko() for r in self.requirements)
             if self.has_condition_function:
@@ -564,7 +585,26 @@ class CardAnalysis:
             for e in self.effects
             if e.costs and all(c.kind is not CostKind.UNKNOWN for c in e.costs)
         )
+        leaf_total = leaf_evaluable = leaf_context = leaf_unknown = 0
+        for effect in self.effects:
+            tree = effect.activation.tree
+            if tree is None:
+                continue
+            for leaf in tree.leaves():
+                leaf_total += 1
+                readiness = getattr(leaf.predicate, "readiness", None)
+                value = getattr(readiness, "value", None)
+                if value == "evaluable":
+                    leaf_evaluable += 1
+                elif value == "needs_context":
+                    leaf_context += 1
+                else:
+                    leaf_unknown += 1
         return {
+            "leaf_total": leaf_total,
+            "leaf_evaluable": leaf_evaluable,
+            "leaf_needs_context": leaf_context,
+            "leaf_unknown": leaf_unknown,
             "has_condition": has_condition,
             "condition_structured": condition_structured,
             "condition_ratio": (

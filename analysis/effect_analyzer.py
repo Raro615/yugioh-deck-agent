@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 
 from analysis.condition_parser import LuaConditionParser
+from analysis.predicate_analyzer import PredicateAnalyzer
 from analysis.effect_model import (
     ACTION_DESTINATION,
     ActionKind,
@@ -203,6 +204,9 @@ class EffectAnalyzer:
             or Path(__file__).resolve().parent.parent
         )
         self._cache: dict[int, CardAnalysis] = {}
+        self.predicates = PredicateAnalyzer(
+            constants=getattr(repository, "constants", None)
+        )
 
     # ------------------------------------------------------------------
     def analyze(self, card: Card | None) -> CardAnalysis:
@@ -466,7 +470,8 @@ class EffectAnalyzer:
         # 논리 구조를 먼저 세우고, 평면 목록은 트리 leaf 에서 유도한다.
         # 둘을 따로 만들면 어긋난다.
         parser = LuaConditionParser(
-            classify_leaf=lambda text: self._classify_leaf(text, functions)
+            classify_leaf=lambda text: self._classify_leaf(text, functions),
+            analyze_predicate=self.predicates.analyze,
         )
         tree = parser.parse_function(source) if body else None
         if tree is not None:
@@ -514,6 +519,8 @@ class EffectAnalyzer:
         if node.op is BoolOp.LEAF:
             if node.requirement is not None:
                 node.requirement.negated = negated
+            if node.predicate is not None:
+                node.predicate.negated = negated
             return
         flip = negated != (node.op is BoolOp.NOT)
         for child in node.children:

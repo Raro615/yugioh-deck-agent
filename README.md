@@ -413,6 +413,35 @@ Lua 우선순위 `not` > `and` > `or` 를 그대로 따르며, 여러 줄에 걸
 지어내지 않는다.** 평면 목록(`requirements`)은 트리 leaf 에서 유도되므로
 둘이 어긋나지 않으며, `NOT` 아래의 leaf 는 평면 목록에서도 `negated` 로 표시된다.
 
+### leaf 의 의미 — 세 가지 상태
+
+leaf 안의 Lua 술어가 무슨 뜻인지는 논리 구조와 별개 문제다. 세 상태로 나눈다.
+
+| 상태 | 뜻 | 비율 |
+|---|---|---|
+| `evaluable` ✓ | 필드/패/묘지/턴/페이즈 상태만으로 판정 가능 | **32.5%** |
+| `needs_context` ~ | 술어와 인자는 읽었으나 체인·이벤트 문맥 필요 | **41.4%** |
+| `unknown` ? | 안전하게 해석 불가. 원문만 보존 | 26.0% |
+
+**"구조를 못 읽었다"와 "문맥이 있어야 판정된다"는 다르다.** 전자는 쓸 수 없지만
+후자는 구조를 알고 있으므로 문맥이 주어지면 판정할 수 있다.
+
+```
+$ python -m app.main analyze 2511
+          논리: (?(rp==tp) 그리고 … 또는 (?(rc:IsSetCard(SET_LABRYNTH)) 그리고 아님(…)))
+            ~ 플레이어 player_comparison
+            ~ 체인 효과 chain_effect_type
+            ✓ 체인 카드 card_property LABRYNTH 카드군
+```
+
+술어 25종을 다룬다. 카드 성질(`IsSetCard`/`IsRace`/`IsAttribute`/`IsLevel`)은
+검색 계층과 **같은 `CardConstraint` 로 연결**되어 1,689개 leaf 가 카드 조건을 갖는다.
+
+주체(subject)는 EDOPro 가 콜백 서명 `(e,tp,eg,ep,ev,re,r,rp)` 로 보장하는
+이름에서만 판정한다. 스크립트가 임의로 붙인 지역 변수는 `LOCAL` 로 두되,
+`local rc=re:GetHandler()` 처럼 대입을 따라갈 수 있으면 `CHAIN_CARD` 로 풀린다.
+**술어 이름만 보고 게임 의미를 추측하지 않는다.**
+
 ### 발동 제한은 범위가 다르다
 
 "1턴에 1번"이 무엇을 기준으로 하는지에 따라 실제 제약이 완전히 달라진다.
@@ -444,8 +473,10 @@ Lua 우선순위 `not` > `and` > `or` 를 그대로 따르며, 여러 줄에 걸
 
 아직 읽지 못하는 것:
 
-- 조건 leaf 의 66% 는 분류하지 못한다 (`re:IsTrapEffect()` 같은 객체 술어).
-  **논리 구조는 보존되지만 leaf 의 의미는 원문으로만 남는다**
+- 조건 leaf 의 26% 는 여전히 해석하지 못한다 (`c==nil` 같은 절차 관례,
+  `aux.SelectUnselectGroup` 같은 헬퍼, 벌거벗은 지역 변수)
+- `needs_context` leaf 41.4% 는 구조는 알지만 **평가하려면 체인·이벤트 문맥이
+  필요하다** — 정적 게임 상태만으로는 판정할 수 없다
 - 지역 변수 재대입·값 교환이 섞인 조건 (`a,b=b,a`), 중첩 `if`
 - 체인·타이밍의 세부 (`GetChainInfo` 의 인자, `SetHintTiming`)
 - 지속 효과의 수치 계산 (`SetValue` 의 계산식)

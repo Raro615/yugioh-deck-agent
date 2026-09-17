@@ -445,6 +445,18 @@ def cmd_analyze(agent: DeckAgent, args) -> int:
             print(f"     {mark}{labels[stage.stage]} : {stage.summary}")
         if effect.activation.tree is not None:
             print(f"          논리: {effect.activation.tree.describe_ko()}")
+            marks = {"evaluable": "✓", "needs_context": "~", "unknown": "?"}
+            for leaf in effect.activation.tree.leaves():
+                predicate = leaf.predicate
+                if predicate is None:
+                    continue
+                mark = marks.get(predicate.readiness.value, "?")
+                label = (
+                    predicate.describe_ko()
+                    if predicate.kind.value != "unknown"
+                    else leaf.raw.strip()[:46]
+                )
+                print(f"            {mark} {label}")
         else:
             for requirement in effect.activation.requirements:
                 print(f"          · {requirement.describe_ko()}")

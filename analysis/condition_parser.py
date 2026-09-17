@@ -54,13 +54,15 @@ _TOKEN = re.compile(r"\(|\)|\bnot\b|\band\b|\bor\b")
 class LuaConditionParser:
     """조건 함수 본문 -> :class:`ConditionNode`."""
 
-    def __init__(self, classify_leaf=None):
+    def __init__(self, classify_leaf=None, analyze_predicate=None):
         """
         Args:
             classify_leaf: leaf 원문을 받아 :class:`ActivationRequirement` 또는
                 ``None`` 을 돌려주는 함수. 분류는 호출자(분석기)가 맡는다.
+            analyze_predicate: leaf 원문을 받아 세부 술어를 돌려주는 함수.
         """
         self.classify_leaf = classify_leaf or (lambda _text: None)
+        self.analyze_predicate = analyze_predicate or (lambda _text: None)
 
     # ------------------------------------------------------------------
     def parse_function(self, body: str) -> ConditionNode | None:
@@ -238,9 +240,12 @@ class LuaConditionParser:
         # 표현식 전체를 감싼 괄호는 벗겨내고 다시 본다.
         if stripped.startswith("(") and _matching_paren(stripped, 0) == len(stripped) - 1:
             return self._parse_or(stripped[1:-1], locals_map)
+        # 지역 변수를 되돌린 표현으로 해석하되, raw 는 원문 그대로 남긴다.
+        expanded = _expand_locals(stripped, locals_map)
         return ConditionNode(
             op=BoolOp.LEAF,
-            requirement=self.classify_leaf(_expand_locals(stripped, locals_map)),
+            requirement=self.classify_leaf(expanded),
+            predicate=self.analyze_predicate(expanded),
             raw=stripped[:200],
         )
 
