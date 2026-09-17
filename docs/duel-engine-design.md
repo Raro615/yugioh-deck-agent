@@ -380,9 +380,16 @@ AI 가 "확실히 합법 / 가능성 있음 / 판단 불가"를 구분하는 근
 
 ## 9. Action / Legal Action
 
+> **⚠ 이름 충돌 (ADR-001 에서 해결됨).** 아래의 `ActionKind` 는
+> `analysis.effect_model.ActionKind` 와 **다른 것**이다. 후자는 이미 존재하고
+> 효과의 결과(`DESTROY`, `BANISH`, `TO_GRAVE` …)를 담는다. 실제로 멤버 하나
+> (`normal_summon`) 가 두 어휘에서 서로 다른 뜻으로 겹친다.
+> Phase 2 의 엔진 Action 어휘 이름은 **`PlayerActionKind`** 다.
+> 자세한 근거는 `docs/phase2-architecture-decisions.md` ADR-001.
+
 ```
 Action (불변)
- ├ kind: ActionKind
+ ├ kind: PlayerActionKind          # analysis.ActionKind 와 다른 타입
  ├ player: int
  ├ source: InstanceId | None
  ├ effect: EffectRef | None
@@ -404,8 +411,11 @@ Action (불변)
 ### Action 이 아닌 것
 
 `Destroy` / `Banish` / `AddToHand` / `Discard` / `Send` 는 **Action 이 아니라
-효과의 결과**다. AI 가 고르는 것이 아니므로 `StateDelta` 로 표현한다.
-이 구분을 흐리면 AI 가 규칙을 계산하게 된다.
+효과의 결과**다. AI 가 고르는 것이 아니므로 `EffectOperation` → `StateDelta`
+로 표현한다. 이 구분을 흐리면 AI 가 규칙을 계산하게 된다.
+
+`Destroy` 와 `Send to GY` 는 **목적지가 같다** (둘 다 묘지). 구분은
+`REASON_DESTROY` 비트 하나뿐이다 — ADR-002.
 
 ---
 
@@ -456,13 +466,26 @@ if card.provenance.analysis_status is AnalysisStatus.TEXT_DERIVED:
     raise NotDuelReady(card_id)   # 실행 거부
 ```
 
-| 상태 | 건수 | 듀얼 실행 |
+| 상태 | 건수 (`7450109` 실측) | 듀얼 실행 |
 |---|---:|---|
-| `lua_verified` | 12,687 | 허용 |
-| `text_derived` | 1,440 | **거부** |
+| `lua_verified` | 12,968 | **조건부** 허용 — ADR-006 |
+| `text_derived` | 806 | **거부** |
+| `no_effect` | 746 | 해당 없음 — 발동할 효과가 **없다** |
 
-`text_derived` 카드는 검색 · 덱 구성에는 쓰이지만 듀얼 실행에는 쓰이지
-않는다. 엔진 진입점에서 차단하므로 하위 계층이 실수할 수 없다.
+> **초안 정정.** 이 표는 원래 `lua_verified 12,687 / text_derived 1,440` 이었고
+> `no_effect` 가 없었다. 1,440 은 `no_effect` 가 도입되기(`9bf690a`) 전
+> 숫자이고, 그때는 통상 몬스터 746장이 `text_derived` 에 섞여 있었다.
+> **설계대로 차단했다면 푸른 눈의 백룡이 듀얼에 나올 수 없었다.**
+>
+> 그리고 `lua_verified` 라고 해서 실행 가능한 것도 아니다. 그중 195장은
+> 효과를 공유 라이브러리 팩토리(`Fusion.CreateSummonEff` 등) 안에서 만들어
+> **`EffectRef` 를 하나도 만들 수 없다.** 실행 가능성은 별도로 판정한다 —
+> ADR-006 의 `CardExecutionAvailability`.
+
+`text_derived` 카드는 검색 · 덱 구성 · 분석에는 쓰이지만 듀얼 실행에는 쓰이지
+않는다. 엔진 진입점에서 차단하므로 하위 계층이 실수할 수 없다. 나아가
+`text_derived` 카드는 `EffectRef` 자체를 만들 수 없으므로 (`engine/ids.py`),
+`EffectRegistry` 에 **등록될 수도 조회될 수도 없다** — 방어선이 두 겹이다.
 
 ---
 
@@ -713,12 +736,14 @@ Phase 1 은 규칙을 전혀 담지 않으므로 구현 · 검증이 명확하�
 
 ## 미결 사항
 
-구현 전에 확인이 필요한 결정 두 가지.
+> **두 항목 모두 `docs/phase2-architecture-decisions.md` 에서 결정되었다.**
 
-1. **Action 에서 `Destroy` / `Banish` 를 제외한 것** — 이들을 효과의 결과로만
-   두는 설계. AI 가 직접 "파괴한다"를 고르는 구조를 원한다면 재검토 필요.
-2. **`text_derived` 카드의 듀얼 실행 차단** — 덱에 그런 카드가 섞이면 그 덱은
-   시뮬레이션할 수 없다.
+1. ~~**Action 에서 `Destroy` / `Banish` 를 제외한 것**~~ → **ADR-001 · ADR-002 에서
+   확정.** 둘 다 Effect semantics 이고 Action 이 아니다.
+2. **`text_derived` 카드의 듀얼 실행 차단** → **ADR-004 에서 차단 확정.**
+   다만 *거부 단위* (덱 전체인가 카드 하나인가) 는 아직 결정되지 않았다.
+   Phase 2-E 전까지 사용자 결정이 필요하다 — ADR 문서의 "사용자 결정이
+   필요한 것" 절 참조.
 
    > **2026-09 감사 정정.** 이 항목에 적혀 있던 1,440장은 잘못된 수치였다.
    > 당시 `text_derived` 가 "Lua 가 없는 카드" 전부를 담고 있어서, 효과 자체가
