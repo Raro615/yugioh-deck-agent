@@ -11,7 +11,9 @@ from analysis.effect_model import (
     ActivationCondition,
     ActivationLimit,
     ActivationRequirement,
+    BoolOp,
     ConditionKind,
+    ConditionNode,
     LimitScope,
     PipelineStage,
     CardAnalysis,
@@ -22,6 +24,7 @@ from analysis.effect_model import (
     EffectCost,
     EffectSelection,
 )
+from analysis.condition_parser import LuaConditionParser
 from analysis.effect_analyzer import EffectAnalyzer
 from analysis.relationship import (
     MEMBERSHIP_KINDS,
@@ -36,7 +39,9 @@ __all__ = [
     "ActivationCondition",
     "ActivationLimit",
     "ActivationRequirement",
+    "BoolOp",
     "ConditionKind",
+    "ConditionNode",
     "LimitScope",
     "PipelineStage",
     "CardAnalysis",
@@ -47,6 +52,7 @@ __all__ = [
     "EffectAnalyzer",
     "EffectCost",
     "EffectSelection",
+    "LuaConditionParser",
     "MEMBERSHIP_KINDS",
     "CardRelationship",
     "RelationshipBuilder",

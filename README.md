@@ -379,6 +379,40 @@ Duel.IsExistingMatchingCard(
 **부정을 놓치지 않는다.** `not Duel.IsPlayerAffectedByEffect(...)` 는
 `negated=True` 로 기록된다. 놓치면 의미가 정반대가 된다.
 
+### 조건의 논리 구조
+
+조건은 평면 목록이 아니라 트리로 보존한다. OR 를 AND 로 평탄화하면
+"둘 중 하나면 된다"가 "둘 다 필요하다"로 바뀌어, 성립하지 않는 경로를
+성립한다고 판단하게 된다.
+
+```
+$ python -m app.main analyze 2511
+  [e2] FIELD/TRIGGER_O
+      ① 발동 조건 : GRAVE에서 · EVENT_TO_GRAVE · 이 효과 1턴 1회
+          논리: (?(rp==tp) 그리고 … 그리고 ((?(re:IsTrapEffect()) 그리고 ?(re:IsHasType(…)))
+                또는 (?(rc:IsSetCard(SET_LABRYNTH)) 그리고 아님(?(rc:IsCode(id))))))
+```
+
+다루는 Lua 형태:
+
+| Lua | 트리 |
+|---|---|
+| `A and B` | `AND(A, B)` |
+| `A or B` | `OR(A, B)` |
+| `not A` | `NOT(A)` |
+| `(A or B) and C` | `AND(OR(A,B), C)` — 괄호 우선순위 보존 |
+| `A and (B or C)` | `AND(A, OR(B,C))` |
+| `if X then return false end` | `X` 를 AND 가지로 (가드) |
+| `if X then return true end` | `X` 를 OR 가지로 (충분조건) |
+| `if X then return A else return B end` | `OR(AND(X,A), AND(NOT X,B))` |
+
+Lua 우선순위 `not` > `and` > `or` 를 그대로 따르며, 여러 줄에 걸친 조건식과
+줄 머리에 오는 `and` / `or` 도 이어 붙인다.
+
+분류하지 못한 항목은 `?(원문)` 으로 남는다. **논리 구조는 살리되 의미는
+지어내지 않는다.** 평면 목록(`requirements`)은 트리 leaf 에서 유도되므로
+둘이 어긋나지 않으며, `NOT` 아래의 leaf 는 평면 목록에서도 `negated` 로 표시된다.
+
 ### 발동 제한은 범위가 다르다
 
 "1턴에 1번"이 무엇을 기준으로 하는지에 따라 실제 제약이 완전히 달라진다.
@@ -400,7 +434,7 @@ Duel.IsExistingMatchingCard(
 
 | 요소 | 해당 효과 | 구조화 |
 |---|---|---|
-| 발동 조건 | 11,625 | **44.5%** (흔적 보존은 100%) |
+| 발동 조건 | 11,625 | 트리 **82.8%** / 요구 추출 **44.1%** (흔적 보존 100%) |
 | 비용 | 4,982 | **95.1%** |
 | 선택 조건 | 11,990 | **56.8%** |
 | 처리(액션) | 26,352 전체 | 55.0% |
@@ -410,8 +444,9 @@ Duel.IsExistingMatchingCard(
 
 아직 읽지 못하는 것:
 
-- 조건의 **논리 결합** — `and` / `or` / 중첩 괄호를 무시하고 요구를 평면으로 모은다.
-  "A이고 B" 와 "A이거나 B" 를 구분하지 못한다
+- 조건 leaf 의 66% 는 분류하지 못한다 (`re:IsTrapEffect()` 같은 객체 술어).
+  **논리 구조는 보존되지만 leaf 의 의미는 원문으로만 남는다**
+- 지역 변수 재대입·값 교환이 섞인 조건 (`a,b=b,a`), 중첩 `if`
 - 체인·타이밍의 세부 (`GetChainInfo` 의 인자, `SetHintTiming`)
 - 지속 효과의 수치 계산 (`SetValue` 의 계산식)
 - 액션이 없는 45% 중 실제 미구조화는 15.1% (나머지는 처리 함수가 없는 지속 효과)

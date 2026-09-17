@@ -19,13 +19,16 @@ import os
 import re
 from pathlib import Path
 
+from analysis.condition_parser import LuaConditionParser
 from analysis.effect_model import (
     ACTION_DESTINATION,
     ActionKind,
     ActivationCondition,
     ActivationLimit,
     ActivationRequirement,
+    BoolOp,
     ConditionKind,
+    ConditionNode,
     LimitScope,
     CardAnalysis,
     CardConstraint,
@@ -459,9 +462,29 @@ class EffectAnalyzer:
         name = self._handler_name(raw)
         body = functions.get(name or "", "")
         source = body or raw
-        activation.requirements.extend(
-            self._parse_requirements(source, functions)
+
+        # 논리 구조를 먼저 세우고, 평면 목록은 트리 leaf 에서 유도한다.
+        # 둘을 따로 만들면 어긋난다.
+        parser = LuaConditionParser(
+            classify_leaf=lambda text: self._classify_leaf(text, functions)
         )
+        tree = parser.parse_function(source) if body else None
+        if tree is not None:
+            activation.tree = self._prune(tree)
+
+        if activation.tree is not None:
+            # NOT 아래에 있는 leaf 는 평면 목록에서도 negated 로 표시한다.
+            # 평면 목록만 쓰는 기존 코드가 의미를 잃지 않게 하기 위해서다.
+            self._mark_negation(activation.tree, False)
+            activation.requirements.extend(
+                leaf.requirement
+                for leaf in activation.tree.leaves()
+                if leaf.requirement is not None
+            )
+        else:
+            activation.requirements.extend(
+                self._parse_requirements(source, functions)
+            )
         activation.unparsed.extend(self._condition_unparsed(source))
 
         if not activation.requirements and not activation.unparsed:
@@ -469,6 +492,57 @@ class EffectAnalyzer:
             # "조건 없음"과 구분되지 않으므로 핸들러 자체를 흔적으로 남긴다.
             activation.unparsed.append(raw.strip()[:60])
         return activation
+
+    def _classify_leaf(self, text: str, functions):
+        """
+        조건식의 leaf 하나를 :class:`ActivationRequirement` 로 분류한다.
+
+        분류하지 못하면 ``None`` 을 돌려주고, 트리는 원문만 가진 leaf 로 남긴다.
+        논리 구조는 보존하되 의미를 지어내지 않기 위해서다.
+        """
+        found = self._parse_requirements(text, functions)
+        if not found:
+            return None
+        requirement = found[0]
+        # 부정은 트리의 NOT 노드가 표현한다. leaf 안에서 중복으로 뒤집지 않는다.
+        requirement.negated = False
+        return requirement
+
+    @classmethod
+    def _mark_negation(cls, node: ConditionNode, negated: bool) -> None:
+        """NOT 을 몇 번 거쳤는지에 따라 leaf 의 negated 를 채운다."""
+        if node.op is BoolOp.LEAF:
+            if node.requirement is not None:
+                node.requirement.negated = negated
+            return
+        flip = negated != (node.op is BoolOp.NOT)
+        for child in node.children:
+            cls._mark_negation(child, flip)
+
+    @staticmethod
+    def _prune(node: ConditionNode) -> ConditionNode:
+        """
+        아무것도 분류하지 못한 가지를 정리한다.
+
+        구조만 남고 leaf 가 전부 미분류인 가지는 그대로 두되(원문 보존),
+        자식이 하나뿐인 AND/OR 는 접어서 트리를 읽기 쉽게 만든다.
+        """
+        if node.op is BoolOp.LEAF:
+            return node
+        node.children = [EffectAnalyzer._prune(c) for c in node.children]
+        if node.op in (BoolOp.AND, BoolOp.OR):
+            # AND(A, AND(B, C)) 는 AND(A, B, C) 와 같다. 같은 연산자가 겹쳐 있으면
+            # 접어야 "이 AND 안에 OR 가지가 있는가" 를 한 단계에서 볼 수 있다.
+            merged: list[ConditionNode] = []
+            for child in node.children:
+                if child.op is node.op:
+                    merged.extend(child.children)
+                else:
+                    merged.append(child)
+            node.children = merged
+            if len(node.children) == 1:
+                return node.children[0]
+        return node
 
     def _parse_requirements(self, body: str, functions):
         """조건 함수의 Duel 호출을 상태 요구로 바꾼다."""

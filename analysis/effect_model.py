@@ -193,6 +193,80 @@ class LimitScope(str, Enum):
     UNKNOWN = "unknown"
 
 
+class BoolOp(str, Enum):
+    """조건 트리의 노드 종류."""
+
+    AND = "and"
+    OR = "or"
+    NOT = "not"
+    LEAF = "leaf"
+
+
+@dataclass(slots=True)
+class ConditionNode:
+    """
+    조건식의 논리 구조를 담는 트리.
+
+    OR 를 AND 로 평탄화하면 "둘 중 하나면 된다"가 "둘 다 필요하다"로 바뀐다.
+    콤보 탐색이 성립하지 않는 경로를 성립한다고 보게 되므로 구조를 보존한다.
+
+    leaf 는 :class:`ActivationRequirement` 를 가지되, 분류하지 못한 leaf 는
+    ``requirement=None`` 으로 두고 :attr:`raw` 에 원문만 남긴다. 논리 구조는
+    살리면서 의미는 지어내지 않기 위해서다.
+    """
+
+    op: BoolOp
+    children: list["ConditionNode"] = field(default_factory=list)
+    requirement: "ActivationRequirement | None" = None
+    raw: str = ""
+
+    @property
+    def is_alternative(self) -> bool:
+        """이 노드의 자식들이 '둘 중 하나'인가 (AND 가 아니라 OR 인가)."""
+        return self.op is BoolOp.OR
+
+    def leaves(self) -> list["ConditionNode"]:
+        """트리의 모든 leaf 를 왼쪽부터 순서대로."""
+        if self.op is BoolOp.LEAF:
+            return [self]
+        found: list[ConditionNode] = []
+        for child in self.children:
+            found.extend(child.leaves())
+        return found
+
+    def depth(self) -> int:
+        if not self.children:
+            return 1
+        return 1 + max(child.depth() for child in self.children)
+
+    def count_ops(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        stack = [self]
+        while stack:
+            node = stack.pop()
+            counts[node.op.value] = counts.get(node.op.value, 0) + 1
+            stack.extend(node.children)
+        return counts
+
+    @property
+    def is_structured(self) -> bool:
+        """leaf 를 하나라도 분류했는가."""
+        return any(leaf.requirement is not None for leaf in self.leaves())
+
+    def describe_ko(self) -> str:
+        if self.op is BoolOp.LEAF:
+            if self.requirement is not None:
+                # 부정은 상위 NOT 노드가 표현한다. 여기서 또 붙이면 중복된다.
+                return self.requirement.describe_ko(include_negation=False)
+            return f"?({self.raw.strip()[:40]})"
+        if self.op is BoolOp.NOT:
+            inner = self.children[0].describe_ko() if self.children else "?"
+            return f"아님({inner})"
+        joiner = " 또는 " if self.op is BoolOp.OR else " 그리고 "
+        parts = [child.describe_ko() for child in self.children]
+        return "(" + joiner.join(parts) + ")"
+
+
 @dataclass(slots=True)
 class ActivationLimit:
     count: int | None = None
@@ -226,18 +300,25 @@ class ActivationRequirement:
     constraint: CardConstraint | None = None
     raw: str = ""
 
-    def describe_ko(self) -> str:
+    def describe_ko(self, include_negation: bool = True) -> str:
+        """
+        Args:
+            include_negation: 거짓이면 부정 표시를 빼고 조건 내용만 쓴다.
+                조건 트리에서는 NOT 노드가 부정을 표현하므로, leaf 가 다시
+                부정을 붙이면 "아님(아니어야 함: ...)" 처럼 두 번 나온다.
+        """
         who = {"self": "자신", "opponent": "상대", "both": "양쪽"}.get(
             self.player or "", ""
         )
         where = "/".join(self.locations)
+        negated = self.negated and include_negation
         if self.kind is ConditionKind.REQUIRES_CARD:
             what = self.constraint.describe_ko() if self.constraint else "카드"
             face = "앞면 " if self.faceup else ""
             text = f"{who} {where}에 {face}{what} {self.min_count or 1}장"
-            return ("없어야 함: " if self.negated else "필요: ") + text.strip()
+            return ("없어야 함: " if negated else "필요: ") + text.strip()
         label = self.kind.value
-        return ("아니어야 함: " if self.negated else "") + f"{label} {where}".strip()
+        return ("아니어야 함: " if negated else "") + f"{label} {where}".strip()
 
 
 @dataclass(slots=True)
@@ -253,7 +334,10 @@ class ActivationCondition:
     locations: list[str] = field(default_factory=list)
     """발동 가능한 위치 (LOCATION_* 접두사 제외)."""
     trigger_event: str | None = None
+    tree: ConditionNode | None = None
+    """조건식의 논리 구조. 조건 함수가 없으면 ``None``."""
     requirements: list[ActivationRequirement] = field(default_factory=list)
+    """트리 leaf 에서 유도한 평면 목록. 논리 관계는 담기지 않는다."""
     limit: ActivationLimit = field(default_factory=ActivationLimit)
     has_condition_function: bool = False
     raw: str | None = None
@@ -271,11 +355,24 @@ class ActivationCondition:
             parts.append("/".join(self.locations) + "에서")
         if self.trigger_event:
             parts.append(self.trigger_event)
-        parts.extend(r.describe_ko() for r in self.requirements)
+        if self.tree is not None:
+            # 트리 전문은 따로 보여준다. 여기서는 모양만 요약한다.
+            counts = self.tree.count_ops()
+            shape = " ".join(
+                f"{op.upper()}×{counts[op]}"
+                for op in ("and", "or", "not")
+                if counts.get(op)
+            )
+            leaves = self.tree.leaves()
+            known = sum(1 for leaf in leaves if leaf.requirement is not None)
+            summary = f"조건 {shape}" if shape else "조건 단일"
+            parts.append(f"{summary} (leaf {known}/{len(leaves)} 해석)")
+        else:
+            parts.extend(r.describe_ko() for r in self.requirements)
+            if self.has_condition_function:
+                parts.append("조건 있음(미구조화)")
         if self.limit.count is not None:
             parts.append(self.limit.describe_ko())
-        if self.has_condition_function and not self.requirements:
-            parts.append("조건 있음(미구조화)")
         return " · ".join(parts) if parts else "(조건 없음)"
 
 

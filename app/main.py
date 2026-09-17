@@ -443,8 +443,11 @@ def cmd_analyze(agent: DeckAgent, args) -> int:
         for stage in effect.pipeline():
             mark = " " if stage.structured else "~"
             print(f"     {mark}{labels[stage.stage]} : {stage.summary}")
-        for requirement in effect.activation.requirements:
-            print(f"          · {requirement.describe_ko()}")
+        if effect.activation.tree is not None:
+            print(f"          논리: {effect.activation.tree.describe_ko()}")
+        else:
+            for requirement in effect.activation.requirements:
+                print(f"          · {requirement.describe_ko()}")
         if effect.targets_card:
             print("          · 규칙상 대상 지정")
         for action in effect.actions:
