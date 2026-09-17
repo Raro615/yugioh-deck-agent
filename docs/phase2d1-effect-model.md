@@ -8,11 +8,11 @@
 EffectDefinition                    무엇을 요구하고 무엇을 하는가
   ├ activation  engine.condition    발동 조건
   ├ cost        engine.cost         비용
-  ├ target      TargetSpec          대상 규칙
-  ├ operations  Operation           무엇을 하는가
+  ├ targets     TargetBinding       대상 규칙 — **이름별**
+  ├ operations  Operation           무엇을 하는가 — 그 **이름을 가리킨다**
   └ provenance  EffectProvenance    어디서 왔는가
         ↓
-ResolutionContext                   누가 · 무엇을 골랐는가
+ResolutionContext                   누가 · 어느 이름에 무엇을 골랐는가
         ↓  EffectResolver.resolve()   ← 계약만
 EffectResult
         ✗  StateDelta → GameState — Phase 2-E (ADR-008)
@@ -115,7 +115,72 @@ PlayerAction.ACTIVATE_EFFECT  →  EffectDefinition  →  Operation.DESTROY
 
 ---
 
-## 5. TargetSpec — 없음과 아직 안 고름은 다르다
+## 5. 하는 일이 어느 대상을 쓰는지 말한다
+
+처음 판에서는 `TargetSpec` 과 `operations` 가 따로 있어서 **"대상으로 지정한
+몬스터 1장을 파괴한다" 를 표현할 수 없었다.** 파괴가 그 대상을 쓴다는
+연결이 어디에도 없었다.
+
+대상에 **이름**을 붙이고 하는 일이 그 이름을 가리킨다.
+
+```python
+EffectDefinition(
+    targets    = (TargetBinding(PRIMARY_TARGET, TargetSpec.targeting(...)),),
+    operations = (CardOperation.destroy(PRIMARY_TARGET),),
+)
+```
+
+| 조각 | 무엇 | 어디에 |
+|---|---|---|
+| `TargetRef` | 이름 (`@primary`) | 정의 |
+| `TargetBinding` | 이름 ↔ 대상 규칙 | 정의 |
+| `TargetSelection` | 이름 ↔ **골라진 카드** | 해결 문맥 |
+
+`TargetRef` 는 이름일 뿐이고 `InstanceId` 가 아니다. **정의에 카드를 박으면
+그 정의는 한 판에서 한 번밖에 못 쓴다.** 정의는 "무엇을 대상으로 하는가",
+문맥은 "이번에 무엇이 골라졌는가" 다.
+
+### 네 가지 잘못된 연결을 거부한다
+
+생성 단계에서 `EffectDefinitionError` 다.
+
+| 잘못 | 왜 |
+|---|---|
+| 없는 이름을 가리킨다 | 해결할 수 없다 |
+| 대상을 하나도 선언하지 않았는데 가리킨다 | 같은 이유 |
+| 같은 이름을 두 번 선언했다 | 어느 규칙인지 정해지지 않는다 |
+| 선언한 대상을 아무 일도 쓰지 않는다 | 고르게 해 놓고 쓰지 않는 정의다 |
+
+마지막은 **하는 일을 아직 적지 않았으면(`operations` 가 비었으면) 넘어간다.**
+"미완성" 과 "모순" 은 다르고, Phase 2-D-1 이 세운 "적지 않음 ≠ 없음" 원칙
+그대로다.
+
+### 대상이 없는 일과 대상을 빠뜨린 일
+
+`DrawOperation` 에는 `target_ref` **칸 자체가 없다.** 없는 것을 `None` 으로
+표현하면 "빠뜨렸다" 와 구분되지 않는다. 반대로 `CardOperation` 은
+`target_ref` 를 **필수로** 받으므로, 빠뜨린 일은 애초에 만들어지지 않는다.
+
+```python
+DrawOperation(1).target_refs                    # ()  — 필요 없다
+CardOperation.destroy(PRIMARY_TARGET)           # (@primary,)
+CardOperation(OperationKind.DESTROY, None)      # TypeError
+```
+
+### 무엇을 아직 기다리는가
+
+문맥은 자기가 무엇을 요구받았는지 모른다. 요구는 정의에 있다.
+
+```python
+context.pending_targets(definition)   # (@primary, @second)
+```
+
+빈 `Selection` 과 `None` 도 다르다 — 전자는 "고른 결과가 없음", 후자는
+"아직 고르지 않음" 이다.
+
+---
+
+## 6. TargetSpec — 없음과 아직 안 고름은 다르다
 
 ```
 NONE       대상을 요구하지 않는다
@@ -138,7 +203,7 @@ TargetSpec.targeting(spec).is_pending(None)     # True  — 아직 안 골랐다
 
 ---
 
-## 6. 검증된 의미 ≠ 실행 가능
+## 7. 검증된 의미 ≠ 실행 가능
 
 **ADR-006 을 효과 단위로 구현했다.**
 
@@ -170,7 +235,7 @@ Phase 2-D-2 다 (§16). 기본값 `EmptyImplementationLookup` 은 아무것도 �
 
 ---
 
-## 7. 해결 계약
+## 8. 해결 계약
 
 ```python
 class EffectResolver(Protocol):
@@ -196,7 +261,7 @@ class EffectResolver(Protocol):
 
 ---
 
-## 8. ResolutionContext
+## 9. ResolutionContext
 
 ```python
 ResolutionContext(effect_ref, controller, source=None, targets=Selection(),
@@ -214,24 +279,24 @@ ResolutionContext(effect_ref, controller, source=None, targets=Selection(),
 
 ---
 
-## 9. 실제 구현된 Operation
+## 10. 실제 구현된 Operation
 
 | Operation | 생성자 | 비고 |
 |---|---|---|
-| `DESTROY` | `CardOperation.destroy(target)` | `REASON_DESTROY \| EFFECT` |
-| `SEND_TO_GRAVE` | `CardOperation.send_to_grave(target)` | 파괴가 **아니다** |
-| `BANISH` | `CardOperation.banish(target)` | |
-| `RELEASE` | `CardOperation.release(target)` | `REASON_RELEASE` |
-| `DISCARD` | `CardOperation.discard(target)` | |
-| `RETURN_TO_HAND` | `CardOperation.return_to_hand(target)` | |
-| `RETURN_TO_DECK` | `CardOperation.return_to_deck(target)` | |
+| `DESTROY` | `CardOperation.destroy(ref)` | `REASON_DESTROY \| EFFECT` |
+| `SEND_TO_GRAVE` | `CardOperation.send_to_grave(ref)` | 파괴가 **아니다** |
+| `BANISH` | `CardOperation.banish(ref)` | |
+| `RELEASE` | `CardOperation.release(ref)` | `REASON_RELEASE` |
+| `DISCARD` | `CardOperation.discard(ref)` | |
+| `RETURN_TO_HAND` | `CardOperation.return_to_hand(ref)` | |
+| `RETURN_TO_DECK` | `CardOperation.return_to_deck(ref)` | |
 | `DRAW` | `DrawOperation(count, who)` | |
 | `CHANGE_LIFE` | `LifeChangeOperation(delta, who)` | |
 | `UNKNOWN` | `UnimplementedOperation(rule)` | 표현 불가를 솔직하게 |
 
 ---
 
-## 10. 의도적으로 미구현
+## 11. 의도적으로 미구현
 
 | 영역 | 어떻게 |
 |---|---|
@@ -244,10 +309,12 @@ ResolutionContext(effect_ref, controller, source=None, targets=Selection(),
 | "효과 데미지" 와 "효과로 LP 감소" 구분 | 데미지 처리 계층이 없어 남겨 둠 |
 | 전투 · 비용으로 인한 `REASON_*` | 그 경로가 생길 때 함께 |
 | 195장의 공유 라이브러리 효과 | 건드리지 않음 |
+| 여러 일의 순서 · 동시 처리 · 조건 분기 | `operations` 는 순차 목록뿐 (STRUCTURAL-8) |
+| "존 전체를 대상" (고르지 않는 일괄 처리) | `TargetSpec` 이 담지 못함 (STRUCTURAL-10) |
 
 ---
 
-## 11. 의존 방향
+## 12. 의존 방향
 
 ```
 engine.validation · engine.ids · engine.vocabulary

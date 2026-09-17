@@ -4,7 +4,7 @@
     EffectDefinition                    무엇을 요구하고 무엇을 하는가
       ├ activation   engine.condition   발동 조건
       ├ cost         engine.cost        비용
-      ├ target       TargetSpec         대상 규칙
+      ├ targets      TargetBinding      대상 규칙 (이름별)
       ├ operations   Operation          무엇을 하는가
       └ provenance   EffectProvenance   어디서 왔는가
               ↓
@@ -53,7 +53,14 @@ from engine.effect.resolution import (
     ResolutionStatus,
     UnimplementedResolver,
 )
-from engine.effect.target import TargetRequirement, TargetSpec
+from engine.effect.target import (
+    PRIMARY_TARGET,
+    TargetBinding,
+    TargetRef,
+    TargetRequirement,
+    TargetSelection,
+    TargetSpec,
+)
 
 __all__ = [
     # 정의
@@ -79,6 +86,10 @@ __all__ = [
     # 대상
     "TargetSpec",
     "TargetRequirement",
+    "TargetRef",
+    "PRIMARY_TARGET",
+    "TargetBinding",
+    "TargetSelection",
     # 해결 계약
     "ResolutionContext",
     "ResolutionStatus",

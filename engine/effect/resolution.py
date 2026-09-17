@@ -41,6 +41,7 @@ from engine.effect.definition import (
     ExecutionAvailability,
     execution_availability,
 )
+from engine.effect.target import TargetRef, TargetSelection
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
 from engine.validation import ValidationCode
@@ -60,22 +61,64 @@ class ResolutionContext:
     controller: int
     source: InstanceId | None = None
     """효과를 발동한 카드. 필드를 떠난 뒤에도 해결되는 효과가 있으므로 없을 수 있다."""
-    targets: Selection = field(default_factory=Selection)
-    """대상 지정 · 선택의 결과. 빈 것은 **"대상이 없다" 가 아니라 "고른 것이 없다"** 다."""
+    selections: tuple[TargetSelection, ...] = ()
+    """
+    **이번 해결에서** 각 대상 이름에 무엇이 골라졌는가.
+
+    비어 있는 것은 "대상이 없다" 가 아니라 **"아직 고르지 않았다"** 다.
+    대상이 없는 효과는 정의의 ``targets`` 가 비어 있는 쪽으로 표현된다.
+    """
     cost_selections: tuple[Selection, ...] = ()
     """비용으로 내놓기로 한 카드들. 비용 순서대로다."""
 
     def __post_init__(self) -> None:
         if self.controller not in (0, 1):
             raise ValueError(f"controller 는 0 또는 1 입니다: {self.controller}")
-        if not isinstance(self.cost_selections, tuple):
-            raise TypeError(
-                "cost_selections 는 tuple 이어야 합니다 — 문맥은 불변입니다."
-            )
+        for name in ("selections", "cost_selections"):
+            if not isinstance(getattr(self, name), tuple):
+                raise TypeError(f"{name} 은 tuple 이어야 합니다 — 문맥은 불변입니다.")
+        seen: set[TargetRef] = set()
+        for chosen in self.selections:
+            if chosen.ref in seen:
+                raise ValueError(f"대상 {chosen.ref} 에 선택이 두 번 들어왔습니다.")
+            seen.add(chosen.ref)
 
     @property
     def opponent(self) -> int:
         return 1 - self.controller
+
+    def selection_for(self, ref: TargetRef) -> Selection | None:
+        """
+        그 이름에 골라진 것. **아직 고르지 않았으면 ``None``.**
+
+        빈 :class:`~engine.cost.Selection` 과 ``None`` 은 다르다 — 전자는
+        "고른 결과가 없음", 후자는 "아직 고르지 않음" 이다.
+        """
+        for chosen in self.selections:
+            if chosen.ref == ref:
+                return chosen.selection
+        return None
+
+    @property
+    def chosen_instances(self) -> tuple[InstanceId, ...]:
+        """골라진 카드 전부. 대상 이름 선언 순서대로 이어 붙인다."""
+        found: list[InstanceId] = []
+        for chosen in self.selections:
+            found.extend(chosen.selection.chosen)
+        return tuple(found)
+
+    def pending_targets(self, definition: EffectDefinition) -> tuple[TargetRef, ...]:
+        """
+        정의가 요구하는데 **아직 고르지 않은** 대상들.
+
+        정의를 인자로 받는다 — 문맥은 자기가 무엇을 요구받았는지 모른다.
+        요구는 정의에 있고 결과는 문맥에 있다.
+        """
+        waiting: list[TargetRef] = []
+        for binding in definition.targets:
+            if binding.spec.is_pending(self.selection_for(binding.ref)):
+                waiting.append(binding.ref)
+        return tuple(waiting)
 
     def condition_context(self) -> ConditionContext:
         """
@@ -89,7 +132,7 @@ class ResolutionContext:
             player=self.controller,
             source=self.source,
             effect_ref=self.effect_ref,
-            targets=self.targets.chosen,
+            targets=self.chosen_instances,
         )
 
     def canonical_state(self) -> tuple:
@@ -97,7 +140,7 @@ class ResolutionContext:
             (self.effect_ref.card_id, self.effect_ref.ordinal),
             self.controller,
             self.source.value if self.source is not None else None,
-            self.targets.canonical_state(),
+            tuple(s.canonical_state() for s in self.selections),
             tuple(s.canonical_state() for s in self.cost_selections),
         )
 
@@ -108,7 +151,7 @@ class ResolutionContext:
                 "ordinal": self.effect_ref.ordinal,
             },
             "controller": self.controller,
-            "targets": self.targets.to_dict(),
+            "selections": [s.to_dict() for s in self.selections],
         }
         if self.source is not None:
             data["source"] = self.source.value

@@ -14,6 +14,7 @@ import pytest
 from engine.condition import ConditionContext, PlayerRef
 from engine.cost import CandidateSource, ChoiceSpec, Selection
 from engine.effect import (
+    PRIMARY_TARGET,
     CardOperation,
     DrawOperation,
     EffectDefinition,
@@ -22,6 +23,9 @@ from engine.effect import (
     EffectResult,
     ResolutionContext,
     ResolutionStatus,
+    TargetBinding,
+    TargetRef,
+    TargetSelection,
     TargetSpec,
     UnimplementedResolver,
 )
@@ -50,12 +54,18 @@ def view(state) -> GameStateView:
     return GameStateView.from_state(state, viewer=0)
 
 
+def monsters() -> ChoiceSpec:
+    return ChoiceSpec(source=CandidateSource(zones=frozenset({Zone.MZONE})))
+
+
 @pytest.fixture
 def definition() -> EffectDefinition:
+    """"대상으로 지정한 몬스터 1장을 파괴하고 1장 드로우."" """
     return EffectDefinition(
         effect_ref=EffectRef(KUKLOK, 0),
         source_card_id=KUKLOK,
-        operations=(CardOperation.destroy(TargetSpec.none()), DrawOperation(1)),
+        targets=TargetBinding.single(TargetSpec.targeting(monsters())),
+        operations=(CardOperation.destroy(PRIMARY_TARGET), DrawOperation(1)),
         provenance=EffectProvenance.official_lua(),
     )
 
@@ -75,26 +85,56 @@ def test_the_context_keeps_what_the_resolution_needs():
         effect_ref=EffectRef(KUKLOK, 1),
         controller=1,
         source=InstanceId(4),
-        targets=Selection.of(InstanceId(7), InstanceId(9)),
+        selections=(
+            TargetSelection(PRIMARY_TARGET, Selection.of(InstanceId(7), InstanceId(9))),
+        ),
         cost_selections=(Selection.of(InstanceId(3)),),
     )
     assert context.effect_ref == EffectRef(KUKLOK, 1)
     assert context.controller == 1
     assert context.opponent == 0
     assert context.source == InstanceId(4)
-    assert len(context.targets) == 2
+    assert context.chosen_instances == (InstanceId(7), InstanceId(9))
     assert len(context.cost_selections) == 1
+
+
+def test_a_selection_is_looked_up_by_name():
+    """
+    이름으로 잇는다. 고르지 않은 이름은 **빈 선택이 아니라 ``None``** 이다 —
+    "고른 결과가 없음" 과 "아직 고르지 않음" 은 다르다.
+    """
+    context = ResolutionContext(
+        EffectRef(KUKLOK, 0),
+        controller=0,
+        selections=(TargetSelection(PRIMARY_TARGET, Selection.of(InstanceId(7))),),
+    )
+    assert context.selection_for(PRIMARY_TARGET) == Selection.of(InstanceId(7))
+    assert context.selection_for(TargetRef("other")) is None
+
+
+def test_the_same_name_cannot_be_chosen_twice():
+    with pytest.raises(ValueError):
+        ResolutionContext(
+            EffectRef(KUKLOK, 0),
+            controller=0,
+            selections=(
+                TargetSelection(PRIMARY_TARGET, Selection.of(InstanceId(1))),
+                TargetSelection(PRIMARY_TARGET, Selection.of(InstanceId(2))),
+            ),
+        )
 
 
 def test_the_context_is_immutable():
     context = ResolutionContext(EffectRef(KUKLOK, 0), controller=0)
-    for name in ("effect_ref", "controller", "source", "targets"):
+    for name in ("effect_ref", "controller", "source", "selections"):
         with pytest.raises(dataclasses.FrozenInstanceError):
             setattr(context, name, None)
     with pytest.raises(TypeError):
         ResolutionContext(
             EffectRef(KUKLOK, 0), 0, cost_selections=[Selection()]
         )
+    with pytest.raises(TypeError):
+        ResolutionContext(EffectRef(KUKLOK, 0), 0, selections=[])
 
 
 def test_the_context_refuses_an_impossible_controller():
@@ -111,7 +151,7 @@ def test_the_context_holds_no_object_references():
         EffectRef(KUKLOK, 1),
         controller=0,
         source=InstanceId(4),
-        targets=Selection.of(InstanceId(7)),
+        selections=(TargetSelection(PRIMARY_TARGET, Selection.of(InstanceId(7))),),
         cost_selections=(Selection.of(InstanceId(3)),),
     )
 
@@ -142,7 +182,7 @@ def test_the_context_converts_to_a_condition_context():
         EffectRef(KUKLOK, 1),
         controller=1,
         source=InstanceId(4),
-        targets=Selection.of(InstanceId(7)),
+        selections=(TargetSelection(PRIMARY_TARGET, Selection.of(InstanceId(7))),),
         cost_selections=(Selection.of(InstanceId(3)),),
     )
     condition_context = context.condition_context()
@@ -159,19 +199,25 @@ def test_the_context_converts_to_a_condition_context():
 def test_an_empty_target_selection_is_not_the_same_as_no_target(definition):
     """
     §11 의 구분이 문맥에서도 유지된다. 고른 것이 없는 것과 고를 것이
-    없는 것은 다르다.
+    없는 것은 다르다. 무엇을 기다리는지는 **정의를 봐야** 알 수 있다 —
+    문맥은 자기가 무엇을 요구받았는지 모른다.
     """
-    needs_target = dataclasses.replace(
-        definition,
-        target=TargetSpec.targeting(
-            ChoiceSpec(source=CandidateSource(zones=frozenset({Zone.MZONE})))
-        ),
-    )
     nothing_chosen = ResolutionContext(EffectRef(KUKLOK, 0), controller=0)
+    assert definition.requires_target
+    assert nothing_chosen.pending_targets(definition) == (PRIMARY_TARGET,)
 
-    assert needs_target.requires_target
-    assert needs_target.target.is_pending(nothing_chosen.targets)
-    assert not definition.target.is_pending(nothing_chosen.targets)
+    chosen = dataclasses.replace(
+        nothing_chosen,
+        selections=(TargetSelection(PRIMARY_TARGET, Selection.of(InstanceId(7))),),
+    )
+    assert chosen.pending_targets(definition) == ()
+
+    # 대상을 요구하지 않는 효과는 아무것도 기다리지 않는다.
+    no_target = EffectDefinition(
+        EffectRef(KUKLOK, 0), KUKLOK, operations=(DrawOperation(1),)
+    )
+    assert not no_target.requires_target
+    assert nothing_chosen.pending_targets(no_target) == ()
 
 
 # ======================================================================
@@ -235,7 +281,8 @@ def test_text_derived_is_refused_before_anything_else(view, context):
     forbidden = EffectDefinition(
         EffectRef(KUKLOK, 0),
         KUKLOK,
-        operations=(DrawOperation(1),),
+        targets=TargetBinding.single(TargetSpec.targeting(monsters())),
+        operations=(CardOperation.destroy(PRIMARY_TARGET),),
         provenance=EffectProvenance.text_derived(),
     )
 
@@ -335,9 +382,10 @@ def test_building_a_definition_changes_nothing(state):
         EffectDefinition(
             EffectRef(KUKLOK, 0),
             KUKLOK,
+            targets=TargetBinding.single(TargetSpec.targeting(monsters())),
             operations=(
-                CardOperation.destroy(TargetSpec.none()),
-                CardOperation.banish(TargetSpec.none()),
+                CardOperation.destroy(PRIMARY_TARGET),
+                CardOperation.banish(PRIMARY_TARGET),
                 DrawOperation(3),
             ),
             provenance=EffectProvenance.official_lua(),
@@ -353,7 +401,9 @@ def test_building_a_context_changes_nothing(state):
             EffectRef(KUKLOK, 0),
             controller=0,
             source=card.instance_id,
-            targets=Selection.of(card.instance_id),
+            selections=(
+                TargetSelection(PRIMARY_TARGET, Selection.of(card.instance_id)),
+            ),
         )
     assert _snapshot(state) == before
 
@@ -382,10 +432,12 @@ def test_a_destroy_operation_does_not_destroy_anything(state):
     """
     before = _snapshot(state)
     card = state.player(0).monster_zone[0]
-    CardOperation.destroy(
-        TargetSpec.targeting(
-            ChoiceSpec(source=CandidateSource(zones=frozenset({Zone.MZONE})))
-        )
+    CardOperation.destroy(PRIMARY_TARGET)
+    EffectDefinition(
+        EffectRef(KUKLOK, 0),
+        KUKLOK,
+        targets=TargetBinding.single(TargetSpec.targeting(monsters())),
+        operations=(CardOperation.destroy(PRIMARY_TARGET),),
     )
     assert _snapshot(state) == before
     assert card.zone is Zone.MZONE
@@ -425,12 +477,9 @@ def test_a_fresh_resolver_agrees(view, definition, context):
 
 
 def test_the_context_representation_is_deterministic():
-    a = ResolutionContext(
-        EffectRef(KUKLOK, 1), 0, InstanceId(3), Selection.of(InstanceId(7))
-    )
-    b = ResolutionContext(
-        EffectRef(KUKLOK, 1), 0, InstanceId(3), Selection.of(InstanceId(7))
-    )
+    picked = (TargetSelection(PRIMARY_TARGET, Selection.of(InstanceId(7))),)
+    a = ResolutionContext(EffectRef(KUKLOK, 1), 0, InstanceId(3), picked)
+    b = ResolutionContext(EffectRef(KUKLOK, 1), 0, InstanceId(3), picked)
     assert a == b
     assert a.canonical_state() == b.canonical_state()
     assert (

@@ -7,9 +7,25 @@ EffectDefinition — "이 효과가 무엇을 요구하고 무엇을 하는가".
       ├ effect_ref        어느 효과인가 (card_id, ordinal)
       ├ activation        발동 조건        engine.condition
       ├ cost              비용             engine.cost
-      ├ target            대상 규칙        engine.effect.target
+      ├ targets           대상 규칙 (이름별)  engine.effect.target
       ├ operations        무엇을 하는가    engine.effect.operation
       └ provenance        어디서 왔는가
+
+하는 일이 어느 대상을 쓰는지 말한다
+------------------------------------
+대상 규칙과 하는 일을 따로 두면 "대상으로 지정한 몬스터 1장을 파괴한다" 를
+표현할 수 없다. 그래서 대상에 **이름**을 붙이고 일이 그 이름을 가리킨다.
+
+    targets    = (TargetBinding(PRIMARY_TARGET, TargetSpec.targeting(...)),)
+    operations = (CardOperation.destroy(PRIMARY_TARGET),)
+
+이름이 정의에 없으면 생성 단계에서 거부한다 — 그 일은 존재하지 않는 대상을
+가리키고 있으므로 해결할 수 없다.
+
+**실제로 골라진 카드는 여기 없다.** 정의는 "무엇을 대상으로 하는가" 이고,
+"이번에 무엇이 골라졌는가" 는 :class:`~engine.effect.resolution.
+ResolutionContext` 다. 정의에 ``InstanceId`` 를 박으면 그 정의는 한 판에서
+한 번밖에 쓸 수 없다.
 
 analysis.EffectSpec 과 다르다
 -----------------------------
@@ -41,7 +57,7 @@ from typing import Protocol, runtime_checkable
 from engine.condition import Condition
 from engine.cost import CostGroup
 from engine.effect.operation import Operation
-from engine.effect.target import TargetSpec
+from engine.effect.target import TargetBinding, TargetRef
 from engine.ids import EffectRef
 
 
@@ -138,7 +154,8 @@ class EffectDefinition:
     activation: Condition | None = None
     """발동 조건. ``None`` 이면 **조건이 없다는 뜻이 아니라 적지 않았다는 뜻**이다."""
     cost: CostGroup = field(default_factory=CostGroup)
-    target: TargetSpec = field(default_factory=TargetSpec.none)
+    targets: tuple[TargetBinding, ...] = ()
+    """이름별 대상 규칙. 하는 일이 이 이름을 가리킨다."""
     provenance: EffectProvenance = field(default_factory=EffectProvenance)
 
     def __post_init__(self) -> None:
@@ -150,6 +167,48 @@ class EffectDefinition:
             )
         if not isinstance(self.operations, tuple):
             raise TypeError("operations 는 tuple 이어야 합니다 — 정의는 불변입니다.")
+        if not isinstance(self.targets, tuple):
+            raise TypeError("targets 는 tuple 이어야 합니다 — 정의는 불변입니다.")
+        self._check_target_links()
+
+    def _check_target_links(self) -> None:
+        """
+        이름과 일이 실제로 이어지는지 본다.
+
+        세 가지를 거부한다.
+
+        1. 같은 이름을 두 번 선언했다 — 어느 규칙인지 정해지지 않는다.
+        2. 일이 **없는 이름**을 가리킨다 — 해결할 수 없다.
+        3. 선언한 대상을 **아무 일도 쓰지 않는다** — 고르게 해 놓고 쓰지
+           않는 정의다. 단, 하는 일을 아직 적지 않았으면(``operations`` 가
+           비었으면) 넘어간다. 그것은 "미완성" 이지 "모순" 이 아니다.
+        """
+        declared: set[TargetRef] = set()
+        for binding in self.targets:
+            if binding.ref in declared:
+                raise EffectDefinitionError(
+                    f"대상 이름 {binding.ref} 가 두 번 선언되었습니다."
+                )
+            declared.add(binding.ref)
+
+        used: set[TargetRef] = set()
+        for operation in self.operations:
+            for ref in operation.target_refs:
+                if ref not in declared:
+                    raise EffectDefinitionError(
+                        f"{operation.kind.value} 가 선언되지 않은 대상 {ref} 를 "
+                        f"가리킵니다. 선언된 것: "
+                        f"{sorted(r.name for r in declared) or '없음'}"
+                    )
+                used.add(ref)
+
+        if self.operations:
+            unused = declared - used
+            if unused:
+                raise EffectDefinitionError(
+                    f"선언한 대상 {sorted(r.name for r in unused)} 를 아무 일도 "
+                    "쓰지 않습니다. 고르게 해 놓고 쓰지 않는 정의입니다."
+                )
 
     # ------------------------------------------------------------------
     # 조회
@@ -165,7 +224,25 @@ class EffectDefinition:
 
     @property
     def requires_target(self) -> bool:
-        return self.target.requires_selection
+        """대상을 하나라도 선언했는가."""
+        return bool(self.targets)
+
+    @property
+    def target_refs(self) -> tuple[TargetRef, ...]:
+        """선언된 대상 이름들. 선언 순서 그대로다."""
+        return tuple(binding.ref for binding in self.targets)
+
+    def target_spec(self, ref: TargetRef):
+        """
+        그 이름의 대상 규칙. 없으면 :class:`KeyError`.
+
+        조용히 ``None`` 을 돌려주지 않는다 — 없는 이름을 묻는 것은 정의와
+        해결이 어긋났다는 뜻이고, 그것은 감춰야 할 일이 아니다.
+        """
+        for binding in self.targets:
+            if binding.ref == ref:
+                return binding.spec
+        raise KeyError(f"{ref} 는 이 정의에 선언되어 있지 않습니다.")
 
     @property
     def is_described(self) -> bool:
@@ -183,7 +260,7 @@ class EffectDefinition:
             tuple(op.canonical_state() for op in self.operations),
             self.activation.canonical_state() if self.activation is not None else None,
             self.cost.canonical_state(),
-            self.target.canonical_state(),
+            tuple(b.canonical_state() for b in self.targets),
             self.provenance.canonical_state(),
         )
 
@@ -196,7 +273,7 @@ class EffectDefinition:
             "source_card_id": self.source_card_id,
             "operations": [op.to_dict() for op in self.operations],
             "cost": self.cost.to_dict(),
-            "target": self.target.to_dict(),
+            "targets": [b.to_dict() for b in self.targets],
             "provenance": self.provenance.to_dict(),
         }
         if self.activation is not None:
@@ -210,7 +287,9 @@ class EffectDefinition:
         if self.activation is not None:
             parts.append(f"조건: {self.activation.describe_ko()}")
         if self.requires_target:
-            parts.append(f"대상: {self.target.describe_ko()}")
+            parts.append(
+                "대상: " + ", ".join(b.describe_ko() for b in self.targets)
+            )
         if self.operations:
             parts.append(
                 "효과: " + ", ".join(op.describe_ko() for op in self.operations)

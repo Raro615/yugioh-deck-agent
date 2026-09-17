@@ -13,6 +13,7 @@ import pytest
 from engine.condition import AttributeIs, LevelAtLeast, PlayerRef
 from engine.cost import CandidateSource, CardCost, ChoiceSpec, CostGroup, LifeCost, Selection
 from engine.effect import (
+    PRIMARY_TARGET,
     CardOperation,
     DrawOperation,
     EffectDefinition,
@@ -24,6 +25,8 @@ from engine.effect import (
     LifeChangeOperation,
     Operation,
     OperationKind,
+    TargetBinding,
+    TargetRef,
     TargetRequirement,
     TargetSpec,
     UnimplementedOperation,
@@ -39,6 +42,11 @@ def monsters(owner: PlayerRef = PlayerRef.CONTROLLER) -> ChoiceSpec:
     return ChoiceSpec(
         source=CandidateSource(zones=frozenset({Zone.MZONE, Zone.EMZONE}), owner=owner)
     )
+
+
+def one_target(owner: PlayerRef = PlayerRef.CONTROLLER) -> tuple[TargetBinding, ...]:
+    """대상 하나를 ``@primary`` 라는 이름으로 선언한다."""
+    return TargetBinding.single(TargetSpec.targeting(monsters(owner)))
 
 
 # ======================================================================
@@ -142,8 +150,8 @@ def test_destroy_and_send_to_grave_are_different_operations():
     둘 다 묘지로 간다. **목적지로는 절대 구분할 수 없다.** 구분은
     ``REASON_DESTROY`` 비트 하나다 (ADR-002).
     """
-    destroy = CardOperation.destroy(TargetSpec.none())
-    send = CardOperation.send_to_grave(TargetSpec.none())
+    destroy = CardOperation.destroy(PRIMARY_TARGET)
+    send = CardOperation.send_to_grave(PRIMARY_TARGET)
 
     assert destroy.kind is not send.kind
     assert destroy.canonical_state() != send.canonical_state()
@@ -153,9 +161,9 @@ def test_destroy_and_send_to_grave_are_different_operations():
 
 
 def test_release_is_neither_destroy_nor_send_to_grave():
-    release = CardOperation.release(TargetSpec.none())
-    destroy = CardOperation.destroy(TargetSpec.none())
-    send = CardOperation.send_to_grave(TargetSpec.none())
+    release = CardOperation.release(PRIMARY_TARGET)
+    destroy = CardOperation.destroy(PRIMARY_TARGET)
+    send = CardOperation.send_to_grave(PRIMARY_TARGET)
 
     assert release.kind is not destroy.kind
     assert release.kind is not send.kind
@@ -165,8 +173,8 @@ def test_release_is_neither_destroy_nor_send_to_grave():
 
 
 def test_banish_and_send_to_grave_are_different_operations():
-    banish = CardOperation.banish(TargetSpec.none())
-    send = CardOperation.send_to_grave(TargetSpec.none())
+    banish = CardOperation.banish(PRIMARY_TARGET)
+    send = CardOperation.send_to_grave(PRIMARY_TARGET)
     assert banish.kind is not send.kind
     assert banish.canonical_state() != send.canonical_state()
 
@@ -177,9 +185,9 @@ def test_the_reason_bits_actually_separate_them():
     에서 읽는다 — 여기에 숫자를 적어 두지 않는다.
     """
     vocabulary = default_vocabulary()
-    destroy = CardOperation.destroy(TargetSpec.none()).reason_mask(vocabulary)
-    send = CardOperation.send_to_grave(TargetSpec.none()).reason_mask(vocabulary)
-    release = CardOperation.release(TargetSpec.none()).reason_mask(vocabulary)
+    destroy = CardOperation.destroy(PRIMARY_TARGET).reason_mask(vocabulary)
+    send = CardOperation.send_to_grave(PRIMARY_TARGET).reason_mask(vocabulary)
+    release = CardOperation.release(PRIMARY_TARGET).reason_mask(vocabulary)
 
     assert destroy != send != release
     assert destroy != release
@@ -228,14 +236,14 @@ def test_operation_vocabulary_is_not_the_analysis_one():
         == ACTION_DESTINATION[ActionKind.TO_GRAVE]
     )
     assert (
-        CardOperation.destroy(TargetSpec.none()).reason_names
-        != CardOperation.send_to_grave(TargetSpec.none()).reason_names
+        CardOperation.destroy(PRIMARY_TARGET).reason_names
+        != CardOperation.send_to_grave(PRIMARY_TARGET).reason_names
     )
 
 
 def test_a_non_card_kind_cannot_be_a_card_operation():
     with pytest.raises(ValueError):
-        CardOperation(OperationKind.DRAW, TargetSpec.none())
+        CardOperation(OperationKind.DRAW, PRIMARY_TARGET)
 
 
 def test_draw_and_life_operations():
@@ -332,13 +340,17 @@ def test_target_spec_holds_stable_identity_only():
 
 
 def test_a_definition_links_cost_condition_target_and_operations():
+    """
+    "상대 몬스터 1장을 대상으로 지정하고, **그것을** 파괴한 뒤 1장 드로우."
+    하는 일이 어느 대상을 쓰는지 이름으로 이어진다.
+    """
     definition = EffectDefinition(
         effect_ref=EffectRef(KUKLOK, 0),
         source_card_id=KUKLOK,
         activation=LevelAtLeast(4),
         cost=CostGroup((LifeCost(1000), CardCost.release(1))),
-        target=TargetSpec.targeting(monsters(PlayerRef.OPPONENT)),
-        operations=(CardOperation.destroy(TargetSpec.none()), DrawOperation(1)),
+        targets=one_target(PlayerRef.OPPONENT),
+        operations=(CardOperation.destroy(PRIMARY_TARGET), DrawOperation(1)),
         provenance=EffectProvenance.official_lua(),
     )
 
@@ -348,6 +360,13 @@ def test_a_definition_links_cost_condition_target_and_operations():
     assert definition.activation is not None
     assert len(definition.operations) == 2
     assert definition.provenance.source is EffectSource.OFFICIAL_LUA
+
+    # 파괴가 가리키는 이름이 정의가 선언한 규칙으로 이어진다.
+    destroy = definition.operations[0]
+    assert destroy.target_refs == (PRIMARY_TARGET,)
+    assert definition.target_spec(PRIMARY_TARGET).is_targeting
+    # 드로우는 대상이 없다.
+    assert definition.operations[1].target_refs == ()
 
 
 def test_an_empty_definition_does_not_claim_the_effect_does_nothing():
@@ -364,7 +383,7 @@ def test_an_empty_definition_does_not_claim_the_effect_does_nothing():
 
 def test_definitions_are_immutable():
     definition = EffectDefinition(EffectRef(KUKLOK, 0), KUKLOK)
-    for name in ("effect_ref", "source_card_id", "operations", "cost", "target"):
+    for name in ("effect_ref", "source_card_id", "operations", "cost", "targets"):
         with pytest.raises(dataclasses.FrozenInstanceError):
             setattr(definition, name, None)
     with pytest.raises(TypeError):
@@ -375,7 +394,8 @@ def test_definitions_are_immutable():
 
 def test_every_model_piece_is_immutable():
     for value in (
-        CardOperation.destroy(TargetSpec.none()),
+        CardOperation.destroy(PRIMARY_TARGET),
+        TargetBinding(PRIMARY_TARGET, TargetSpec.targeting(monsters())),
         DrawOperation(1),
         LifeChangeOperation(-100),
         UnimplementedOperation("x"),
@@ -497,8 +517,8 @@ def _definition() -> EffectDefinition:
         source_card_id=KUKLOK,
         activation=AttributeIs("DARK"),
         cost=CostGroup((LifeCost(800), CardCost.discard(1))),
-        target=TargetSpec.targeting(monsters(PlayerRef.OPPONENT)),
-        operations=(CardOperation.destroy(TargetSpec.none()),),
+        targets=one_target(PlayerRef.OPPONENT),
+        operations=(CardOperation.destroy(PRIMARY_TARGET),),
         provenance=EffectProvenance.official_lua("테스트"),
     )
 
@@ -540,12 +560,15 @@ def test_representation_is_stable_across_processes():
 
     snippet = (
         "import json;"
-        "from engine.effect import (CardOperation, EffectDefinition, "
-        "EffectProvenance, TargetSpec);"
-        "from engine.cost import CostGroup, LifeCost;"
+        "from engine.effect import (PRIMARY_TARGET, CardOperation, "
+        "EffectDefinition, EffectProvenance, TargetBinding, TargetSpec);"
+        "from engine.cost import CandidateSource, ChoiceSpec, CostGroup, LifeCost;"
         "from engine.ids import EffectRef;"
+        "from engine.vocabulary import Zone;"
+        "spec = ChoiceSpec(source=CandidateSource(zones=frozenset({Zone.MZONE})));"
         "d = EffectDefinition(EffectRef(2511, 1), 2511,"
-        " operations=(CardOperation.destroy(TargetSpec.none()),),"
+        " targets=TargetBinding.single(TargetSpec.targeting(spec)),"
+        " operations=(CardOperation.destroy(PRIMARY_TARGET),),"
         " cost=CostGroup((LifeCost(800),)),"
         " provenance=EffectProvenance.official_lua());"
         "print(json.dumps(d.canonical_state()))"
@@ -566,7 +589,11 @@ def test_representation_is_stable_across_processes():
 
 def test_operation_order_is_part_of_the_definition():
     """효과가 하는 일의 순서는 의미를 갖는다. 정렬하지 않는다."""
-    draw, destroy = DrawOperation(1), CardOperation.destroy(TargetSpec.none())
-    a = EffectDefinition(EffectRef(KUKLOK, 0), KUKLOK, operations=(draw, destroy))
-    b = EffectDefinition(EffectRef(KUKLOK, 0), KUKLOK, operations=(destroy, draw))
+    draw, destroy = DrawOperation(1), CardOperation.destroy(PRIMARY_TARGET)
+    a = EffectDefinition(
+        EffectRef(KUKLOK, 0), KUKLOK, targets=one_target(), operations=(draw, destroy)
+    )
+    b = EffectDefinition(
+        EffectRef(KUKLOK, 0), KUKLOK, targets=one_target(), operations=(destroy, draw)
+    )
     assert a.canonical_state() != b.canonical_state()

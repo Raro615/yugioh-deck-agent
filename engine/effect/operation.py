@@ -31,6 +31,26 @@ Operation            reason                      뜻
 세 줄이 전부 묘지로 끝나지만 서로 다른 사건이다. "파괴되었을 때" 트리거는
 가운데와 아래로 발동하지 않고, 파괴 내성은 가운데를 막지 못한다.
 
+무엇을 대상으로 하는가
+----------------------
+카드를 다루는 일은 **이름으로** 대상을 가리킨다
+(:class:`~engine.effect.target.TargetRef`). 규칙 자체는 정의가 들고 있고,
+실제로 골라진 카드는 해결 문맥에 있다.
+
+    EffectDefinition.targets      @primary -> "상대 몬스터 1장을 대상으로"
+    CardOperation.destroy(@primary)         "그것을 파괴한다"
+    ResolutionContext.selections  @primary -> #7
+
+``InstanceId`` 를 일에 박아 넣지 않는다. 박으면 그 정의는 한 판에서 한 번밖에
+쓸 수 없다.
+
+대상이 없는 일과 대상을 빠뜨린 일은 다르다
+------------------------------------------
+:class:`DrawOperation` 에는 ``target_ref`` **칸 자체가 없다** — 드로우에는
+대상이 없기 때문이고, 없는 것을 ``None`` 으로 표현하면 "빠뜨렸다" 와
+구분되지 않는다. 반대로 :class:`CardOperation` 은 ``target_ref`` 가 **반드시**
+있어야 한다.
+
 수치가 아니라 이름을 담는다
 ---------------------------
 ``REASON_*`` 의 **숫자를 여기에 적지 않는다.** ``engine/vocabulary.py`` 의
@@ -44,7 +64,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from engine.condition import PlayerRef
-from engine.effect.target import TargetSpec
+from engine.effect.target import TargetRef
 
 
 class OperationKind(str, Enum):
@@ -118,6 +138,17 @@ class Operation:
         """이 일이 **왜** 일어나는가. ``REASON_*`` 상수 이름들."""
         return REASON_NAMES[self.kind]
 
+    @property
+    def target_refs(self) -> tuple["TargetRef", ...]:
+        """
+        이 일이 쓰는 대상 이름들. **대상이 없는 일은 빈 튜플이다.**
+
+        비어 있다는 것은 "대상을 빠뜨렸다" 가 아니라 "대상이 필요 없다" 는
+        뜻이다. 빠뜨린 경우는 애초에 만들어지지 않는다 —
+        :class:`CardOperation` 이 ``target_ref`` 를 필수로 받기 때문이다.
+        """
+        return ()
+
     def reason_mask(self, vocabulary=None) -> int:
         """
         ``reason_names`` 를 실제 비트마스크로 바꾼다.
@@ -153,61 +184,74 @@ class Operation:
 @dataclass(frozen=True, slots=True)
 class CardOperation(Operation):
     """
-    카드에 무언가 하는 일. 대상 규칙을 함께 들고 있다.
+    카드에 무언가 하는 일. 대상을 **이름으로** 가리킨다.
 
     :meth:`destroy` · :meth:`send_to_grave` · :meth:`banish` 등으로 만든다.
     같은 대상이라도 :attr:`operation` 이 다르면 **다른 사건**이다.
+
+    ``target_ref`` 는 반드시 있어야 한다. 카드를 다루는 일인데 어느 카드인지
+    말하지 않으면 그것은 일이 아니다.
     """
 
     operation: OperationKind
-    target: TargetSpec = TargetSpec.none()
+    target_ref: TargetRef
 
     def __post_init__(self) -> None:
         if self.operation not in CARD_OPERATION_KINDS:
             raise ValueError(
                 f"{self.operation.value} 는 카드를 다루는 일이 아닙니다."
             )
+        if not isinstance(self.target_ref, TargetRef):
+            raise TypeError(
+                f"{self.operation.value} 에는 TargetRef 가 필요합니다. "
+                "정의가 선언한 대상의 이름을 주세요 (예: PRIMARY_TARGET). "
+                f"들어온 것: {self.target_ref!r}"
+            )
 
     @property
     def kind(self) -> OperationKind:
         return self.operation
 
+    @property
+    def target_refs(self) -> tuple[TargetRef, ...]:
+        return (self.target_ref,)
+
     @classmethod
-    def destroy(cls, target: TargetSpec) -> "CardOperation":
+    def destroy(cls, target_ref: TargetRef) -> "CardOperation":
         """파괴한다. 결과적으로 묘지에 가더라도 **묘지로 보내는 것이 아니다.**"""
-        return cls(OperationKind.DESTROY, target)
+        return cls(OperationKind.DESTROY, target_ref)
 
     @classmethod
-    def send_to_grave(cls, target: TargetSpec) -> "CardOperation":
+    def send_to_grave(cls, target_ref: TargetRef) -> "CardOperation":
         """묘지로 보낸다. **파괴가 아니다** — 파괴 내성이 막지 못한다."""
-        return cls(OperationKind.SEND_TO_GRAVE, target)
+        return cls(OperationKind.SEND_TO_GRAVE, target_ref)
 
     @classmethod
-    def banish(cls, target: TargetSpec) -> "CardOperation":
-        return cls(OperationKind.BANISH, target)
+    def banish(cls, target_ref: TargetRef) -> "CardOperation":
+        return cls(OperationKind.BANISH, target_ref)
 
     @classmethod
-    def release(cls, target: TargetSpec) -> "CardOperation":
-        return cls(OperationKind.RELEASE, target)
+    def release(cls, target_ref: TargetRef) -> "CardOperation":
+        return cls(OperationKind.RELEASE, target_ref)
 
     @classmethod
-    def discard(cls, target: TargetSpec) -> "CardOperation":
-        return cls(OperationKind.DISCARD, target)
+    def discard(cls, target_ref: TargetRef) -> "CardOperation":
+        return cls(OperationKind.DISCARD, target_ref)
 
     @classmethod
-    def return_to_hand(cls, target: TargetSpec) -> "CardOperation":
-        return cls(OperationKind.RETURN_TO_HAND, target)
+    def return_to_hand(cls, target_ref: TargetRef) -> "CardOperation":
+        return cls(OperationKind.RETURN_TO_HAND, target_ref)
 
     @classmethod
-    def return_to_deck(cls, target: TargetSpec) -> "CardOperation":
-        return cls(OperationKind.RETURN_TO_DECK, target)
+    def return_to_deck(cls, target_ref: TargetRef) -> "CardOperation":
+        return cls(OperationKind.RETURN_TO_DECK, target_ref)
 
     def canonical_state(self) -> tuple:
         return (
             "card_operation",
             self.operation.value,
             self.reason_names,
-            self.target.canonical_state(),
+            self.target_ref.name,
         )
 
     def to_dict(self) -> dict:
@@ -215,7 +259,7 @@ class CardOperation(Operation):
             "kind": "card_operation",
             "operation": self.operation.value,
             "reasons": list(self.reason_names),
-            "target": self.target.to_dict(),
+            "target_ref": self.target_ref.name,
         }
 
     def describe_ko(self) -> str:
@@ -228,7 +272,7 @@ class CardOperation(Operation):
             OperationKind.RETURN_TO_HAND: "패로 되돌림",
             OperationKind.RETURN_TO_DECK: "덱으로 되돌림",
         }[self.operation]
-        return f"{self.target.describe_ko()} 을 {korean}"
+        return f"{self.target_ref} 을 {korean}"
 
 
 @dataclass(frozen=True, slots=True)

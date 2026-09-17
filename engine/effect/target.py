@@ -29,11 +29,25 @@ Phase 2-C 의 선택과 혼동하지 않는다.
 
 둘을 같은 상태로 만들면 "대상이 없어도 되는 효과" 와 "대상을 빠뜨린 효과"
 가 구분되지 않는다.
+
+이름으로 잇는다
+---------------
+한 효과가 대상을 여럿 가질 수 있고, 하는 일이 그중 **어느 것**을 쓰는지
+말할 수 있어야 한다. "대상으로 지정한 몬스터 1장을 파괴한다" 가 그것이다.
+
+    EffectDefinition
+      targets     = (TargetBinding(PRIMARY_TARGET, TargetSpec.targeting(...)),)
+      operations  = (CardOperation.destroy(PRIMARY_TARGET),)
+
+:class:`TargetRef` 는 **이름일 뿐**이다. 실제로 고른 카드는 정의가 아니라
+:class:`~engine.effect.resolution.ResolutionContext` 에 있다 —
+정의는 "무엇을 대상으로 하는가", 문맥은 "이번에 무엇이 골라졌는가" 다.
+정의에 ``InstanceId`` 를 박아 넣으면 그 정의는 한 판에서 한 번밖에 못 쓴다.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from engine.cost import ChoiceSpec, Selection
@@ -147,4 +161,99 @@ class TargetSpec:
         return self.describe_ko()
 
 
-__all__ = ["TargetRequirement", "TargetSpec"]
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class TargetRef:
+    """
+    효과 안에서 대상을 가리키는 **이름.**
+
+    ``InstanceId`` 가 아니다. 정의는 어느 카드가 골라질지 모르고, 알 필요도
+    없다 — 같은 정의를 여러 판에서 쓰기 때문이다.
+
+    이름은 정의 안에서만 뜻이 있다. 다른 카드의 ``"primary"`` 와 같은
+    이름이어도 서로 다른 대상이다.
+    """
+
+    name: str
+
+    def __post_init__(self) -> None:
+        if not self.name or self.name != self.name.strip():
+            raise ValueError(f"대상 이름이 비었거나 공백이 섞였습니다: {self.name!r}")
+
+    def __str__(self) -> str:
+        return f"@{self.name}"
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return f"TargetRef({self.name!r})"
+
+
+#: 대상이 하나뿐인 흔한 경우의 이름.
+PRIMARY_TARGET = TargetRef("primary")
+
+
+@dataclass(frozen=True, slots=True)
+class TargetBinding:
+    """정의 안에서 이름 하나와 대상 규칙 하나를 잇는다."""
+
+    ref: TargetRef
+    spec: TargetSpec
+
+    def __post_init__(self) -> None:
+        if not self.spec.requires_selection:
+            raise ValueError(
+                f"{self.ref} 에 대상을 요구하지 않는 규칙이 묶였습니다. "
+                "고를 것이 없는 대상은 이름을 가질 이유가 없습니다."
+            )
+
+    @classmethod
+    def single(cls, spec: TargetSpec) -> tuple["TargetBinding", ...]:
+        """대상이 하나뿐인 효과. :data:`PRIMARY_TARGET` 이름을 쓴다."""
+        return (cls(PRIMARY_TARGET, spec),)
+
+    def canonical_state(self) -> tuple:
+        return (self.ref.name, self.spec.canonical_state())
+
+    def to_dict(self) -> dict:
+        return {"ref": self.ref.name, "spec": self.spec.to_dict()}
+
+    def describe_ko(self) -> str:
+        return f"{self.ref}: {self.spec.describe_ko()}"
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.describe_ko()
+
+
+@dataclass(frozen=True, slots=True)
+class TargetSelection:
+    """
+    **이번 해결에서** 그 이름에 무엇이 골라졌는가.
+
+    정의가 아니라 문맥에 속한다 (:class:`~engine.effect.resolution.
+    ResolutionContext`). 이름은 정의에서 오고 카드는 여기서 온다.
+    """
+
+    ref: TargetRef
+    selection: Selection = field(default_factory=Selection)
+
+    def canonical_state(self) -> tuple:
+        return (self.ref.name, self.selection.canonical_state())
+
+    def to_dict(self) -> dict:
+        return {"ref": self.ref.name, "selection": self.selection.to_dict()}
+
+    def __len__(self) -> int:
+        return len(self.selection)
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return f"{self.ref}={self.selection}"
+
+
+__all__ = [
+    "TargetRequirement",
+    "TargetSpec",
+    "TargetRef",
+    "PRIMARY_TARGET",
+    "TargetBinding",
+    "TargetSelection",
+]
