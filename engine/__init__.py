@@ -8,6 +8,9 @@ Duel Engine.
 - **Phase 2-A** — AI 가 *무엇을 할지* 표현하는 계층. 아직 **판을 바꾸지
   못한다** (``action.py``, ``action_target.py``, ``action_validation.py``,
   ``game_state_view.py``). ``docs/phase2a-player-action.md`` 참고.
+- **Phase 2-B-1** — 조건을 표현하고 평가하는 계층 (``condition/``).
+  ``TRUE`` / ``FALSE`` / ``UNKNOWN`` 삼치 논리이고, 조건은 질문이지 명령이
+  아니다. ``docs/phase2b1-condition.md`` 참고.
 
 ``PlayerActionKind`` 는 ``analysis.effect_model.ActionKind`` 와 **다른
 어휘**다. 전자는 고르는 주체가 고르는 행위, 후자는 효과가 하는 일이다
