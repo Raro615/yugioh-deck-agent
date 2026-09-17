@@ -20,6 +20,12 @@ Duel Engine.
 - **Phase 2-D-1** — 효과 모델과 해결 계약 (``effect/``). 효과가 무엇을
   요구하고 무엇을 하는지 정의하되 **실행하지 않는다**.
   ``docs/phase2d1-effect-model.md`` 참고.
+- **Phase 2-D-2** — 효과 실행 (``effect/executor.py``).
+  :class:`~engine.effect.executor.EffectExecutor` 가 **효과가 판을 바꾸는
+  유일한 문**이다. 등록된 구현이 있고, 출처가 허용하고, 조건이 참이고,
+  대상이 다 풀렸을 때만 바꾼다. 파괴는 아직 실행하지 않는다 —
+  파괴 내성 · 파괴 대체 · 파괴 트리거가 없기 때문이다.
+  ``docs/phase2d2-effect-execution.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 

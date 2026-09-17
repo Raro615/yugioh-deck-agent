@@ -12,9 +12,9 @@
               ↓  EffectResolver.resolve()  ← **계약만 있다**
     EffectResult
 
-**아무것도 실행하지 않는다.** 지금 있는 실행기
-(:class:`UnimplementedResolver`)는 언제나 실패를 돌려주고 판을 바꾸지 않는다 —
-등록된 효과 구현이 하나도 없다는 사실을 그대로 표현한다.
+**실행은 :class:`EffectExecutor` 하나만 한다** (Phase 2-D-2). 그것도
+등록된 구현이 있고, 조건이 참이고, 대상이 다 풀렸을 때만이다.
+:class:`UnimplementedResolver` 는 계약을 보여주는 쪽으로 남아 있다.
 
 지키는 구분
 -----------
@@ -46,7 +46,15 @@ from engine.effect.operation import (
     OperationKind,
     UnimplementedOperation,
 )
+from engine.effect.executor import (
+    DESTINATION,
+    SUPPORTED,
+    UNSUPPORTED_REASON,
+    EffectExecutor,
+    EffectImplementationRegistry,
+)
 from engine.effect.resolution import (
+    AppliedOperation,
     EffectResolver,
     EffectResult,
     ResolutionContext,
@@ -93,7 +101,14 @@ __all__ = [
     # 해결 계약
     "ResolutionContext",
     "ResolutionStatus",
+    "AppliedOperation",
     "EffectResult",
     "EffectResolver",
     "UnimplementedResolver",
+    # 실행
+    "EffectExecutor",
+    "EffectImplementationRegistry",
+    "DESTINATION",
+    "SUPPORTED",
+    "UNSUPPORTED_REASON",
 ]

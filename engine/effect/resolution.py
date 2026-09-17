@@ -41,6 +41,7 @@ from engine.effect.definition import (
     ExecutionAvailability,
     execution_availability,
 )
+from engine.effect.operation import OperationKind
 from engine.effect.target import TargetRef, TargetSelection
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
@@ -164,21 +165,92 @@ class ResolutionContext:
 
 
 class ResolutionStatus(str, Enum):
-    """해결 시도의 결과."""
+    """
+    해결 시도의 결과.
+
+    **``RESOLVED`` 하나만 판을 바꾼다.** 나머지는 전부 "아무 일도 일어나지
+    않았다" 를 뜻하고, 이유만 다르다.
+    """
 
     RESOLVED = "resolved"
-    """
-    해결되었다. **지금 이 값을 내는 실행기는 없다** — 등록된 구현이 없기
-    때문이다. Phase 2-D-2 가 실제 실행기를 넣을 때 쓴다.
-    """
+    """해결되었다. 판이 바뀌었다."""
     NOT_IMPLEMENTED = "not_implemented"
-    """이 효과의 실행 구현이 없다. 판은 그대로다."""
+    """이 효과의 실행 구현이 등록되어 있지 않다. 판은 그대로다."""
+    UNSUPPORTED_OPERATION = "unsupported_operation"
+    """
+    실행기가 다룰 수 없는 일이 들어 있다. 판은 그대로다.
+
+    "구현이 없다" 와 다르다 — 효과는 등록되어 있는데 그 안의 일을 이
+    실행기가 못 하는 경우다.
+    """
     FORBIDDEN = "forbidden"
     """출처가 실행을 금지한다 (``TEXT_DERIVED``). 판은 그대로다."""
     INVALID_CONTEXT = "invalid_context"
     """문맥이 정의와 맞지 않는다. 판은 그대로다."""
+    INVALID_TARGET = "invalid_target"
+    """대상이 없거나, 고르지 않았거나, 판에 존재하지 않는다. 판은 그대로다."""
+    CONDITION_FALSE = "condition_false"
+    """발동 조건이 **거짓**이다. 판은 그대로다."""
+    CONDITION_UNKNOWN = "condition_unknown"
+    """
+    발동 조건을 **판정할 수 없다.** 판은 그대로다.
+
+    ``CONDITION_FALSE`` 와 합치지 않는다 — "안 된다" 와 "모르겠다" 는
+    다른 답이고, 모르는 것을 거짓으로 접으면 프로젝트 전체의 원칙이 깨진다.
+    """
+    EXECUTION_ERROR = "execution_error"
+    """
+    적용 중에 예상 못 한 오류가 났다.
+
+    **이때만 판이 반쯤 바뀌어 있을 수 있다.** 실행기는 그 전에 모든 것을
+    검사하므로 일어나서는 안 되는 경우이고, 일어났다면 결함이다.
+    """
     UNKNOWN = "unknown"
     """해결할 수 있는지 판단할 수 없다. 판은 그대로다."""
+
+
+@dataclass(frozen=True, slots=True)
+class AppliedOperation:
+    """
+    실제로 적용된 일 하나의 **기록**.
+
+    무엇이 왜 일어났는지 남긴다. 목적지가 같아도 ``kind`` 와
+    ``reason_names`` 가 다르므로, 나중에 트리거 계층이 "파괴되었을 때" 와
+    "묘지로 보내졌을 때" 를 구분할 수 있다 (ADR-002).
+
+    ``StateDelta`` 가 아니다 — 되돌리는 데 쓸 수 없고, 무슨 일이 있었는지만
+    말한다. 되돌리기는 ADR-008 이 Phase 2-E 로 미뤄 두었다.
+    """
+
+    kind: OperationKind
+    reason_names: tuple[str, ...] = ()
+    instances: tuple[InstanceId, ...] = ()
+    """이 일이 건드린 카드들. 수치만 다루는 일이면 비어 있다."""
+    amount: int | None = None
+    """드로우 매수 · 라이프 변화량처럼 수치가 있는 일의 값."""
+    player: int | None = None
+
+    def canonical_state(self) -> tuple:
+        return (
+            self.kind.value,
+            self.reason_names,
+            tuple(i.value for i in self.instances),
+            self.amount,
+            self.player,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": self.kind.value, "reasons": list(self.reason_names)}
+        if self.instances:
+            data["instances"] = [i.value for i in self.instances]
+        if self.amount is not None:
+            data["amount"] = self.amount
+        if self.player is not None:
+            data["player"] = self.player
+        return data
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return f"{self.kind.value}{[i.value for i in self.instances] or self.amount}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,11 +259,11 @@ class EffectResult:
     해결 시도의 결과. **불변**이다.
 
     :attr:`changed_state` 는 이 시도가 판을 바꿨는지 말한다. ``RESOLVED``
-    가 아니면 언제나 거짓이고, 지금은 어떤 실행기도 ``RESOLVED`` 를 내지
-    않으므로 **언제나 거짓**이다.
+    가 아니면 언제나 거짓이다.
 
-    상태 변화 자체(``StateDelta``)는 여기 없다. ADR-008 이 Phase 2-E 로
-    미뤄 두었고, 그때 이 자리에 붙인다.
+    ``StateDelta`` 는 여기 없다. :attr:`applied` 는 **무슨 일이 있었는지의
+    기록**이지 되돌리기 위한 것이 아니다. 되돌리기는 ADR-008 이 Phase 2-E
+    로 미뤄 두었다.
     """
 
     status: ResolutionStatus
@@ -199,6 +271,8 @@ class EffectResult:
     reason: str = ""
     missing: str | None = None
     """무엇이 없어서 해결하지 못했는가."""
+    applied: tuple[AppliedOperation, ...] = ()
+    """실제로 적용된 일들. 순서대로다. 실패하면 비어 있다."""
 
     @property
     def changed_state(self) -> bool:
@@ -212,7 +286,13 @@ class EffectResult:
         )
 
     def canonical_state(self) -> tuple:
-        return (self.status.value, self.code.value, self.reason, self.missing)
+        return (
+            self.status.value,
+            self.code.value,
+            self.reason,
+            self.missing,
+            tuple(a.canonical_state() for a in self.applied),
+        )
 
     def to_dict(self) -> dict:
         data: dict = {
@@ -222,6 +302,8 @@ class EffectResult:
         }
         if self.missing is not None:
             data["missing"] = self.missing
+        if self.applied:
+            data["applied"] = [a.to_dict() for a in self.applied]
         return data
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
@@ -331,6 +413,7 @@ class UnimplementedResolver:
 __all__ = [
     "ResolutionContext",
     "ResolutionStatus",
+    "AppliedOperation",
     "EffectResult",
     "EffectResolver",
     "UnimplementedResolver",
