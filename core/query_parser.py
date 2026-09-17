@@ -124,14 +124,65 @@ CARD_TYPE_KO: list[tuple[str, int]] = [
 # 서포트 질의를 나타내는 꼬리표: "마법사족에 좋은", "기계족 덱", "드래곤족용"
 _SUPPORT_SUFFIX = r"(?:에좋은|에어울리는|서포트|덱용|덱에|덱|용)"
 
-# 결과 해석에 쓰이지 않는 조사/군더더기
-_STOPWORDS = {
-    "카드", "중", "있는", "가능한", "가능", "하는", "되는", "그리고", "또는",
-    "좋은", "추천", "찾아줘", "알려줘", "보여줘", "검색", "리스트", "목록",
-    "인", "의", "를", "을", "이", "가", "은", "는", "와", "과", "랑", "에",
-    "에서", "으로", "로", "들", "것", "거", "좀", "다", "해줘", "줘", "효과",
-    "발동", "사용", "쓰는", "가진", "포함", "관련", "위한", "쓸", "수",
-}
+# 조사. 남은 조각의 **앞쪽에서만** 떼어낸다.
+# 아무 데서나 지우면 "마을" 의 "을" 까지 먹어서 실제 낱말이 사라진다.
+_PARTICLES = (
+    "에서", "으로", "한테", "까지", "부터",
+    "은", "는", "이", "가", "을", "를", "의", "에", "로", "와", "과", "랑", "도", "만",
+)
+
+# 검색 조건과 무관한 군더더기. 두 글자 이상이라 낱말 안을 잘라먹을 위험이 적다.
+_FILLER_WORDS = (
+    "찾아줘", "알려줘", "보여줘", "가능한", "그리고", "리스트", "목록",
+    "있는", "하는", "되는", "좋은", "추천", "검색", "가능", "또는",
+    "효과", "발동", "사용", "쓰는", "가진", "포함", "관련", "위한", "해줘", "카드",
+)
+
+# 통째로 군더더기인 조각
+_STANDALONE_NOISE = frozenset(
+    {"중", "것", "거", "좀", "들", "수", "다", "줘", "등", "쓸"}
+)
+
+
+def _strip_leading_particles(text: str) -> str:
+    """앞쪽에 붙은 조사를 반복해서 떼어낸다."""
+    changed = True
+    while changed and text:
+        changed = False
+        for particle in _PARTICLES:
+            if text.startswith(particle) and len(text) > len(particle):
+                text = text[len(particle):]
+                changed = True
+                break
+    return text
+
+
+
+def _english_term_key(text: str) -> str:
+    """영어 용어 비교용 정규화: 소문자, 공백/하이픈/밑줄 제거."""
+    return re.sub(r"[\s_\-]+", "", text).casefold()
+
+
+def _build_english_terms() -> tuple[dict[str, int], dict[str, int]]:
+    """영어 종족명 / 속성명 -> 비트값 조회표."""
+    races: dict[str, int] = {}
+    for bit, name in C.RACE_NAMES.items():
+        races[_english_term_key(name)] = bit
+    for bit, terms in C.RACE_TEXT_EN.items():
+        for term in terms:
+            races[_english_term_key(term)] = bit
+    attributes = {
+        _english_term_key(name): bit for bit, name in C.ATTRIBUTE_NAMES.items()
+    }
+    return races, attributes
+
+
+_ENGLISH_RACES, _ENGLISH_ATTRIBUTES = _build_english_terms()
+
+# "Spellcaster monster", "Machine-Type" 처럼 붙는 꼬리말
+_RE_ENGLISH_SUFFIX = re.compile(
+    r"(?:s|es)?(?:type)?(?:monsters?)?$", re.I
+)
 
 
 @dataclass(slots=True)
@@ -160,6 +211,13 @@ class KoreanQueryParser:
     def parse(self, text: str) -> ParsedQuery:
         filters = SearchFilters(limit=self.default_limit)
         matched: list[str] = []
+
+        # 영어 종족/속성명은 질의 **전체**와 일치할 때만 필터로 본다.
+        # 카드명에 Dragon, Warrior 같은 낱말이 흔히 들어가므로,
+        # 부분 일치까지 허용하면 "Blue-Eyes White Dragon" 이 드래곤족 필터가 된다.
+        english = self._parse_english_whole_query(text, filters)
+        if english:
+            return ParsedQuery(filters=filters, original=text, matched_terms=[english])
 
         quoted_names = self._extract_quoted(text)
         compact = re.sub(r"\s+", "", text)
@@ -205,6 +263,31 @@ class KoreanQueryParser:
         )
 
     # ------------------------------------------------------------------
+    @staticmethod
+    def _parse_english_whole_query(text: str, filters: SearchFilters) -> str | None:
+        """
+        질의 전체가 영어 종족명 또는 속성명이면 그 필터를 세운다.
+        해당 없으면 ``None`` 을 돌려주고 평소 경로로 넘어간다.
+        """
+        key = _english_term_key(text)
+        if not key or not key.isascii():
+            return None
+
+        for candidate in (key, _RE_ENGLISH_SUFFIX.sub("", key)):
+            if not candidate:
+                continue
+            race = _ENGLISH_RACES.get(candidate)
+            if race is not None:
+                filters.races.append(race)
+                filters.required_types |= C.TYPE_MONSTER
+                return text.strip()
+            attribute = _ENGLISH_ATTRIBUTES.get(candidate)
+            if attribute is not None:
+                filters.attributes.append(attribute)
+                filters.required_types |= C.TYPE_MONSTER
+                return text.strip()
+        return None
+
     @staticmethod
     def _extract_quoted(text: str) -> list[str]:
         """따옴표/괄호로 묶인 카드명·카드군 이름을 꺼낸다."""
@@ -396,17 +479,13 @@ class KoreanQueryParser:
         if current:
             runs.append("".join(current))
 
-        ordered_stopwords = sorted(_STOPWORDS, key=len, reverse=True)
         out: list[str] = []
         for run in runs:
-            cleaned = run.strip()
-            # 조사와 군더더기를 걷어내고 남는 것이 있는지 본다.
-            # "효과가있는카드" 처럼 붙어 있는 조각도 여기서 걸러진다.
-            residue = cleaned
-            for word in ordered_stopwords:
-                residue = residue.replace(word, "")
-            residue = residue.strip()
-            if len(residue) <= 1:
+            core = _strip_leading_particles(run.strip())
+            for word in _FILLER_WORDS:
+                core = core.replace(word, "")
+            core = _strip_leading_particles(core.strip())
+            if not core or core in _STANDALONE_NOISE or len(core) <= 1:
                 continue
-            out.append(cleaned)
+            out.append(core)
         return out

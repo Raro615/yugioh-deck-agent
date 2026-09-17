@@ -96,3 +96,73 @@ def test_explain_reports_interpretation(parser):
     parsed = parser.parse("4레벨 빛속성 기계족 몬스터")
     text = parsed.explain_ko()
     assert "기계족" in text and "빛속성" in text and "레벨 4" in text
+
+
+# --- 미인식 표현 보고 ---------------------------------------------------
+
+
+def test_unrecognized_word_is_reported_not_silently_dropped(parser):
+    """
+    "마법사족의 마을" 에는 그런 이름의 카드가 없다(실제 카드는 "마법족의 마을").
+    '마을' 이 조용히 사라지면 사용자는 794장을 받고도 무시된 조건을 알 수 없다.
+    """
+    parsed = parser.parse("마법사족의 마을")
+    assert parsed.unknown_terms == ["마을"]
+
+
+def test_particles_are_stripped_only_at_the_edge(parser):
+    """
+    조사 '을' 을 아무 데서나 지우면 '마을' 이 '마' 가 되어 사라진다.
+    조사는 조각 앞쪽에서만 떼어내야 한다.
+    """
+    from core.query_parser import _strip_leading_particles
+
+    assert _strip_leading_particles("의마을") == "마을"
+    assert _strip_leading_particles("마을") == "마을"
+
+
+def test_filler_only_leftovers_are_not_reported(parser):
+    for query in [
+        "묘지에서 효과를 발동하는 카드",
+        "4레벨 빛속성 기계족 몬스터 중 특수 소환 효과가 있는 카드",
+        "기계족 빛속성 몬스터",
+    ]:
+        assert parser.parse(query).unknown_terms == [], query
+
+
+# --- 영어 용어 ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "query,expected_race",
+    [
+        ("Spellcaster", C.RACE_SPELLCASTER),
+        ("spellcaster", C.RACE_SPELLCASTER),
+        ("Winged Beast", C.RACE_WINDBEAST),
+        ("Beast-Warrior monster", C.RACE_BEASTWARRIOR),
+        ("Machine Type", C.RACE_MACHINE),
+    ],
+)
+def test_english_race_name_as_whole_query(parser, query, expected_race):
+    filters = parser.parse(query).filters
+    assert filters.races == [expected_race]
+    assert filters.required_types & C.TYPE_MONSTER
+    assert filters.name is None
+
+
+def test_english_attribute_name_as_whole_query(parser):
+    filters = parser.parse("LIGHT").filters
+    assert filters.attributes == [C.ATTRIBUTE_LIGHT]
+
+
+@pytest.mark.parametrize(
+    "query", ["Blue-Eyes White Dragon", "Dark Magician", "Elemental HERO Neos"]
+)
+def test_english_card_names_are_not_hijacked_by_race_terms(parser, query):
+    """
+    카드명에는 Dragon, Warrior 같은 낱말이 흔하다. 부분 일치로 종족을 잡으면
+    "Blue-Eyes White Dragon" 이 드래곤족 전체 검색이 되어버린다.
+    """
+    filters = parser.parse(query).filters
+    assert filters.name == query
+    assert filters.races == []
