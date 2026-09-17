@@ -23,9 +23,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.card_model import Card  # noqa: E402
-from core.card_repository import CardRepository  # noqa: E402
+from core.card_repository import CardRepository, ExactNameMatch  # noqa: E402
 from core.card_search import CardSearchEngine, SearchFilters  # noqa: E402
-from core.query_parser import KoreanQueryParser  # noqa: E402
+from core.query_parser import KoreanQueryParser, ParsedQuery  # noqa: E402
 from sources.official_db import OfficialDatabaseNotFound  # noqa: E402
 
 
@@ -54,14 +54,43 @@ class DeckAgent:
         return cls(repository, default_limit=default_limit)
 
     def search_korean(self, query: str, limit: int | None = None):
+        """
+        한국어 질의를 해석해 검색한다.
+
+        처리 순서:
+        1. 입력 전체가 실제 카드명과 정확히 일치하면 카드명 검색으로 확정한다.
+           카드명 안에 게임 용어가 들어 있어도(예: "마법족의 마을" 의 '마법')
+           용어 파싱이 카드명을 가로채지 못하게 하기 위해 가장 먼저 본다.
+        2. 그렇지 않으면 게임 용어/조건 파서를 돌린다.
+        3. 파서가 해석하지 못한 조각이 남았고 이름 일부와 맞으면 이름 검색으로
+           넘긴다(카드명을 일부만 입력한 경우).
+
+        Returns:
+            (ParsedQuery, SearchResult). 1번 경로였다면 ``parsed.exact_name`` 에
+            정확 일치 정보(종 수, 판본 수)가 담긴다.
+        """
+        effective_limit = limit if limit is not None else self.parser.default_limit
+
+        # --- 1단계: 카드명 정확 일치 ---
+        exact = self.repository.resolve_exact_name(query)
+        if exact is not None:
+            filters = SearchFilters(
+                name=query, name_exact=True, limit=effective_limit
+            )
+            parsed = ParsedQuery(
+                filters=filters,
+                original=query,
+                matched_terms=[f"카드명 정확 일치 '{query}'"],
+            )
+            parsed.exact_name = exact
+            return parsed, self.engine.search(filters)
+
+        # --- 2단계: 게임 용어 / 조건 파싱 ---
         parsed = self.parser.parse(query)
         if limit is not None:
             parsed.filters.limit = limit
 
-        # 카드명이 게임 용어와 겹치는 경우를 구제한다.
-        # 예) "마법족의 마을" 은 카드명이지만 '마법' 이 카드 종류로 해석되어
-        #     마법 카드 전체가 나온다. 실제로 그런 이름의 카드가 있으면
-        #     이름 검색이 이긴다.
+        # --- 3단계: 카드명 일부만 입력한 경우 구제 ---
         override = self._name_collision_override(query, parsed)
         if override is not None:
             parsed.filters = override
@@ -70,23 +99,27 @@ class DeckAgent:
 
         return parsed, self.engine.search(parsed.filters)
 
+    def name_suggestions(self, query: str, exclude: set[int]) -> list[Card]:
+        """이름에 질의를 포함하는 다른 카드들 (정확 일치와 구분해 보여준다)."""
+        found = self.repository.deduplicate(
+            self.repository.find_by_name_substring(query)
+        )
+        return [c for c in found if c.id not in exclude]
+
     def _name_collision_override(self, query: str, parsed) -> SearchFilters | None:
         """
         질의 전체가 카드명일 때 쓸 이름 검색 조건을 돌려준다.
         해당 없으면 ``None``.
 
+        정확 일치는 1단계에서 이미 처리했으므로 여기서는 부분 일치만 본다.
         조건을 좁게 잡아, 용어만으로 온전히 해석된 질의
         (예: "기계족 빛속성 몬스터")는 절대 가로채지 않는다.
         """
         if parsed.filters.name:
             return None  # 이미 이름 검색으로 해석됨
-
-        limit = parsed.filters.limit
-        if self.repository.find_by_exact_name(query):
-            return SearchFilters(name=query, name_exact=True, limit=limit)
-        # 부분 일치는 해석되지 않은 조각이 남아 있을 때만 인정한다.
+        # 해석되지 않은 조각이 남아 있을 때만 이름 검색으로 넘긴다.
         if parsed.unknown_terms and self.repository.find_by_name_substring(query):
-            return SearchFilters(name=query, limit=limit)
+            return SearchFilters(name=query, limit=parsed.filters.limit)
         return None
 
 
@@ -191,6 +224,15 @@ def cmd_search(agent: DeckAgent, args) -> int:
                 {
                     "query": query,
                     "interpreted": parsed.filters.describe_ko(),
+                    "exact_name_match": (
+                        None
+                        if parsed.exact_name is None
+                        else {
+                            "card_count": parsed.exact_name.card_count,
+                            "printing_count": parsed.exact_name.printing_count,
+                            "printings": parsed.exact_name.printings,
+                        }
+                    ),
                     "unknown_terms": parsed.unknown_terms,
                     "total": result.total,
                     "cards": [card_to_dict(agent, c) for c in result],
@@ -203,7 +245,32 @@ def cmd_search(agent: DeckAgent, args) -> int:
 
     print(f'질의: "{query}"')
     print(parsed.explain_ko())
-    print(f"검색 결과: {result.total}장" + (f" (상위 {len(result)}장 표시)" if result.total > len(result) else ""))
+
+    if parsed.exact_name is not None:
+        match = parsed.exact_name
+        print(f"검색 결과: {match.card_count}종")
+        print("-" * 72)
+        for i, card in enumerate(result, 1):
+            print(format_card_line(card, i))
+            passcodes = match.printings.get(card.id, [])
+            if len(passcodes) > 1:
+                print(
+                    f"       판본 {len(passcodes)}개: "
+                    + ", ".join(str(p) for p in passcodes)
+                )
+        # 이름에 질의를 포함하는 다른 카드는 따로 보여준다.
+        others = agent.name_suggestions(query, {c.id for c in result})
+        if others:
+            print()
+            print(f"이름에 '{query}' 을(를) 포함하는 다른 카드: {len(others)}장")
+            for card in others[: args.limit or len(others)]:
+                print(format_card_line(card))
+        return 0
+
+    print(
+        f"검색 결과: {result.total}장"
+        + (f" (상위 {len(result)}장 표시)" if result.total > len(result) else "")
+    )
     print("-" * 72)
     for i, card in enumerate(result, 1):
         print(format_card_line(card, i))

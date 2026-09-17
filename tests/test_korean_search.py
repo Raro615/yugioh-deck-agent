@@ -135,3 +135,108 @@ def test_support_race_still_matches_after_korean_overlay(agent):
             or "마법사족" in card.desc
             or "Spellcaster" in card.desc_en
         )
+
+
+# --- 카드명 정확 일치가 게임 용어 파싱보다 앞선다 -------------------------
+
+
+@requires_korean_data
+def test_exact_card_name_containing_a_game_term_wins(agent):
+    """
+    "마법족의 마을" 은 실제 카드명이지만 '마법' 이 카드 종류로 읽힌다.
+    정확 일치 검사가 파서보다 먼저 돌아야 카드 1장이 나온다.
+    """
+    parsed, result = agent.search_korean("마법족의 마을")
+    assert parsed.exact_name is not None
+    assert parsed.filters.name == "마법족의 마을"
+    assert parsed.filters.name_exact is True
+    assert parsed.filters.required_types == 0  # 마법 카드 필터가 서지 않아야 한다
+    assert [c.id for c in result] == [68462976]
+
+
+@requires_korean_data
+def test_near_miss_name_falls_through_to_term_parsing(agent):
+    """
+    "마법사족의 마을" 은 실제 카드명이 아니다(진짜 이름은 "마법족의 마을").
+    정확 일치가 없으므로 평소의 용어 파싱으로 넘어가고,
+    해석하지 못한 '마을' 은 사용자에게 보고돼야 한다.
+    """
+    from core import constants as C
+
+    parsed, result = agent.search_korean("마법사족의 마을")
+    assert parsed.exact_name is None
+    assert parsed.filters.races == [C.RACE_SPELLCASTER]
+    assert parsed.unknown_terms == ["마을"]
+    assert result.total > 500
+
+
+@requires_korean_data
+def test_game_term_alone_is_not_treated_as_a_card_name(agent):
+    from core import constants as C
+
+    parsed, result = agent.search_korean("마법사족")
+    assert parsed.exact_name is None
+    assert parsed.filters.races == [C.RACE_SPELLCASTER]
+    assert result.total > 500
+
+
+@requires_korean_data
+def test_exact_match_separates_card_count_from_printing_count(agent):
+    """
+    같은 카드의 다른 일러스트는 패스코드가 각각 있지만 카드로는 1종이다.
+    두 값을 구분해서 보고해야 한다.
+    """
+    parsed, result = agent.search_korean("푸른 눈의 백룡")
+    match = parsed.exact_name
+    assert match is not None
+    assert match.card_count == 1
+    assert match.printing_count == 8
+    assert len(result.cards) == 1
+    assert result.cards[0].id == 89631139
+    assert len(match.printings[89631139]) == 8
+
+
+@requires_korean_data
+def test_partial_name_matches_are_reported_separately(agent):
+    """정확 일치 결과와, 이름에 그 말이 들어가는 다른 카드를 섞지 않는다."""
+    parsed, result = agent.search_korean("푸른 눈의 백룡")
+    others = agent.name_suggestions("푸른 눈의 백룡", {c.id for c in result})
+    names = {c.name_ko for c in others}
+    assert "푸른 눈의 백룡" not in names
+    assert "Sin 푸른 눈의 백룡" in names
+
+
+@requires_korean_data
+def test_english_exact_card_name_also_wins(agent):
+    parsed, result = agent.search_korean("Blue-Eyes White Dragon")
+    assert parsed.exact_name is not None
+    assert result.cards[0].id == 89631139
+
+
+@requires_korean_data
+def test_english_race_term_is_not_an_exact_card_name(agent):
+    from core import constants as C
+
+    parsed, result = agent.search_korean("Spellcaster")
+    assert parsed.exact_name is None
+    assert parsed.filters.races == [C.RACE_SPELLCASTER]
+    assert result.total > 500
+
+
+@requires_korean_data
+def test_archetype_prefix_query_is_a_name_search(agent):
+    parsed, result = agent.search_korean("K9")
+    assert result.total >= 10
+    assert all("K9" in (c.name_ko or c.name_en or "") for c in result)
+
+
+@requires_korean_data
+def test_condition_combination_query_is_unaffected(agent):
+    from core import constants as C
+
+    parsed, result = agent.search_korean("레벨 5 기계족")
+    assert parsed.exact_name is None
+    assert parsed.filters.levels == [5]
+    assert parsed.filters.races == [C.RACE_MACHINE]
+    for card in result.cards[:30]:
+        assert card.level == 5 and card.race_mask & C.RACE_MACHINE

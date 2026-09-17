@@ -15,6 +15,7 @@ import re
 import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from core import constants as C
@@ -38,6 +39,32 @@ def normalize_name(name: str) -> str:
         return ""
     text = unicodedata.normalize("NFKC", name).casefold()
     return _RE_NORMALIZE.sub("", text)
+
+
+@dataclass(slots=True)
+class ExactNameMatch:
+    """
+    질의 전체가 실제 카드명과 정확히 일치했을 때의 결과.
+
+    '몇 종의 카드인가'와 '그 카드에 판본이 몇 개인가'는 다른 값이다.
+    같은 카드의 다른 일러스트/에라타는 각각 패스코드를 갖지만 카드로는 1종이다.
+    """
+
+    query: str
+    cards: list[Card] = field(default_factory=list)
+    """중복 제거된 카드 목록 (종)."""
+    printings: dict[int, list[int]] = field(default_factory=dict)
+    """카드 ID -> 그 카드의 모든 패스코드 (판본)."""
+
+    @property
+    def card_count(self) -> int:
+        """정확히 일치한 카드 종 수."""
+        return len(self.cards)
+
+    @property
+    def printing_count(self) -> int:
+        """그 카드들의 판본 총 개수."""
+        return sum(len(v) for v in self.printings.values())
 
 
 class CardRepository:
@@ -241,6 +268,28 @@ class CardRepository:
     def find_by_exact_name(self, name: str) -> list[Card]:
         ids = self._by_normalized_name.get(normalize_name(name), [])
         return [self._cards[i] for i in ids]
+
+    def resolve_exact_name(self, query: str) -> ExactNameMatch | None:
+        """
+        입력 문자열 전체가 실제 카드명과 정확히 일치하는지 검사한다.
+
+        한국어 / 공식 DB 원문 / 일본어 이름을 모두 대조하며, 공백과 문장부호
+        차이는 무시한다. 일치하지 않으면 ``None`` 을 돌려주고, 호출자는
+        평소의 자연어 파싱 경로로 넘어간다.
+        """
+        records = self.find_by_exact_name(query)
+        if not records:
+            return None
+
+        printings: dict[int, list[int]] = {}
+        for record in records:
+            origin = self.canonical(record)
+            printings.setdefault(origin.id, []).append(record.id)
+        for passcodes in printings.values():
+            passcodes.sort()
+
+        cards = [self._cards[cid] for cid in printings]
+        return ExactNameMatch(query=query, cards=cards, printings=printings)
 
     def find_by_name_substring(self, fragment: str) -> list[Card]:
         """부분 일치 이름 검색 (한/일/영 모두 대상)."""

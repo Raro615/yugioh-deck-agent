@@ -193,8 +193,18 @@ class ParsedQuery:
     original: str
     matched_terms: list[str] = field(default_factory=list)
     unknown_terms: list[str] = field(default_factory=list)
+    exact_name: object | None = None
+    """입력 전체가 실제 카드명과 정확히 일치했을 때의 정보
+    (:class:`~core.card_repository.ExactNameMatch`). 아니면 ``None``."""
 
     def explain_ko(self) -> str:
+        if self.exact_name is not None:
+            match = self.exact_name
+            text = f"해석: 카드명 정확 일치 '{self.original}'"
+            text += f" — {match.card_count}종"
+            if match.printing_count > match.card_count:
+                text += f" (판본 {match.printing_count}개)"
+            return text
         text = f"해석: {self.filters.describe_ko()}"
         if self.unknown_terms:
             text += f"\n인식하지 못한 표현: {', '.join(self.unknown_terms)}"
