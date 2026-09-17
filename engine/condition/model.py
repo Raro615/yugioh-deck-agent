@@ -743,3 +743,146 @@ class AttributeIs(Condition):
     def describe_ko(self) -> str:
         which = str(self.instance) if self.instance is not None else "자신"
         return f"{which} 속성이 {self.attribute}"
+
+
+# ======================================================================
+# 자리 · 컨트롤러 술어
+# ======================================================================
+#
+# 검증 계층(Phase 2-B-2)이 먼저 쓰기 시작했고, 비용 · 선택 계층(Phase 2-C)이
+# 후보를 거를 때도 같은 것을 쓴다. 두 곳에서 각자 만들면 같은 질문에 서로
+# 다른 답이 나올 수 있으므로 조건 계층에 둔다.
+
+
+@dataclass(frozen=True, slots=True)
+class ControllerIs(Condition):
+    """
+    그 카드를 이 사람이 쥐고 있는가.
+
+    ``controller`` 는 관측에 언제나 실려 있다 — 뒷면 카드도 자리와 주인은
+    보인다. 그래서 **정체를 몰라도** 판정할 수 있다.
+    """
+
+    who: PlayerRef
+    instance: InstanceId | None = None
+
+    def evaluate(self, view, context) -> ConditionResult:
+        target = self.instance if self.instance is not None else context.source
+        if target is None:
+            return ConditionResult.UNKNOWN
+        card = view.find(target)
+        if card is None:
+            return ConditionResult.UNKNOWN
+        return ConditionResult.from_bool(card.controller == self.who.resolve(context))
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        target = self.instance if self.instance is not None else context.source
+        if target is None:
+            return ("문맥에 source 가 없어 어느 카드인지 알 수 없음",)
+        if view.find(target) is None:
+            return (f"{target} 가 관측에 보이지 않음 (가려진 존)",)
+        return ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "controller_is",
+            self.who.value,
+            self.instance.value if self.instance is not None else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "controller_is", "who": self.who.value}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 를 {self.who} 가 쥐고 있음"
+
+
+@dataclass(frozen=True, slots=True)
+class InAnyZone(Condition):
+    """
+    그 카드가 이 존들 중 하나에 있는가. 컨트롤러는 따지지 않는다.
+
+    :class:`CardIsInZone` 은 존 하나와 주인을 함께 묻는다. 이쪽은 "필드
+    위에 있는가" 처럼 **여러 존 중 하나**를 물을 때 쓴다.
+    """
+
+    zones: frozenset[Zone]
+    instance: InstanceId | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.zones, frozenset):
+            raise TypeError("zones 는 frozenset 이어야 합니다 — 조건은 불변입니다.")
+        if not self.zones:
+            raise ValueError("InAnyZone 에는 존이 최소 하나 필요합니다.")
+
+    def evaluate(self, view, context) -> ConditionResult:
+        target = self.instance if self.instance is not None else context.source
+        if target is None:
+            return ConditionResult.UNKNOWN
+        card = view.find(target)
+        if card is None:
+            return ConditionResult.UNKNOWN
+        return ConditionResult.from_bool(card.zone in self.zones)
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        target = self.instance if self.instance is not None else context.source
+        if target is None:
+            return ("문맥에 source 가 없어 어느 카드인지 알 수 없음",)
+        if view.find(target) is None:
+            return (f"{target} 가 관측에 보이지 않음 (가려진 존)",)
+        return ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "in_any_zone",
+            tuple(sorted(z.value for z in self.zones)),
+            self.instance.value if self.instance is not None else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {
+            "kind": "in_any_zone",
+            "zones": sorted(z.value for z in self.zones),
+        }
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 가 {'/'.join(sorted(z.value for z in self.zones))} 에 있음"
+
+
+@dataclass(frozen=True, slots=True)
+class NotMonster(Condition):
+    """
+    몬스터가 **아닌가**.
+
+    ``Not(IsMonster(...))`` 와 값이 같지만, 이유와 설명을 붙이기 쉬워
+    따로 둔다. 정의를 못 읽으면 ``UNKNOWN`` 인 것도 그대로다.
+    """
+
+    instance: InstanceId | None = None
+
+    def evaluate(self, view, context) -> ConditionResult:
+        return IsMonster(self.instance).evaluate(view, context).logical_not()
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        return IsMonster(self.instance).unknown_reasons(view, context)
+
+    def canonical_state(self) -> tuple:
+        return ("not_monster", self.instance.value if self.instance else None)
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "not_monster"}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 가 몬스터가 아님"

@@ -41,8 +41,7 @@ UNKNOWN 은 허가가 아니다
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass
 from typing import Callable
 
 from engine.action import (
@@ -62,13 +61,17 @@ from engine.condition import (
     ConditionContext,
     ConditionEvaluator,
     ConditionResult,
+    ControllerIs,
+    InAnyZone,
     IsMonster,
     IsTurnPlayer,
+    NotMonster,
     PhaseIs,
     PlayerRef,
     ZoneHasFreeSlot,
 )
 from engine.game_state_view import CardDefinitionView, CardView, GameStateView
+from engine.validation import ActionValidity, ValidationCode, ValidationResult
 from engine.ids import InstanceId
 from engine.vocabulary import Phase, Zone
 
@@ -84,150 +87,6 @@ BATTLE_PHASES: tuple[Phase, ...] = (
     Phase.DAMAGE,
     Phase.DAMAGE_CAL,
 )
-
-
-class ActionValidity(str, Enum):
-    """검증 결과 세 가지."""
-
-    VALID = "valid"
-    """처리해도 된다. **구조와 적법성이 모두 확인되었을 때만** 쓴다."""
-    INVALID = "invalid"
-    """구조 자체가 틀렸거나 규칙이 확실히 금지한다. 처리하지 않는다."""
-    UNKNOWN = "unknown"
-    """
-    아직 판단할 수 없다. **거부가 아니다.**
-
-    두 가지 원인이 있고 둘 다 정당하다 — 정보가 가려져 있거나, 판정할
-    규칙이 아직 구현되지 않았다.
-    """
-
-
-class ValidationCode(str, Enum):
-    """
-    판정의 **안정적인 이유 코드.**
-
-    문자열 설명은 사람이 읽으라고 있는 것이고, 코드는 기계가 분기하라고
-    있는 것이다. 설명 문구를 다듬는다고 해서 부르는 쪽이 깨지면 안 된다.
-    """
-
-    OK = "ok"
-
-    # --- 구조 (INVALID) ------------------------------------------------
-    ACTOR_INVALID = "actor_invalid"
-    SOURCE_REQUIRED = "source_required"
-    SOURCE_FORBIDDEN = "source_forbidden"
-    EFFECT_REF_REQUIRED = "effect_ref_required"
-    EFFECT_REF_FORBIDDEN = "effect_ref_forbidden"
-    EFFECT_REF_CARD_MISMATCH = "effect_ref_card_mismatch"
-    EFFECT_REF_OUT_OF_RANGE = "effect_ref_out_of_range"
-    PHASE_REQUIRED = "phase_required"
-    PHASE_FORBIDDEN = "phase_forbidden"
-    TARGET_COUNT_MISMATCH = "target_count_mismatch"
-    TARGET_KIND_INVALID = "target_kind_invalid"
-
-    # --- 판 위의 사실 (INVALID) -----------------------------------------
-    DUEL_ALREADY_OVER = "duel_already_over"
-    NOT_TURN_PLAYER = "not_turn_player"
-    SOURCE_NOT_CONTROLLED = "source_not_controlled"
-    SOURCE_WRONG_ZONE = "source_wrong_zone"
-    SOURCE_WRONG_CARD_TYPE = "source_wrong_card_type"
-    ZONE_FULL = "zone_full"
-    WRONG_PHASE = "wrong_phase"
-    TARGET_NOT_OPPONENT = "target_not_opponent"
-    TARGET_SELF_CONTROLLED = "target_self_controlled"
-    TARGET_WRONG_ZONE = "target_wrong_zone"
-    PHASE_UNCHANGED = "phase_unchanged"
-
-    # --- 모른다 (UNKNOWN) ----------------------------------------------
-    HIDDEN_CARD = "hidden_card"
-    """가리킨 카드가 관측에 없다. **없다는 뜻이 아니다** — 가려진 것일 수 있다."""
-    INFORMATION_UNAVAILABLE = "information_unavailable"
-    """
-    요구를 판정할 정보가 없다. 무엇이 없는지는 :attr:`ValidationResult.notes`
-    가 조건 계층의 말 그대로 전한다 — 가려진 카드일 수도, 읽을 수 없는 카드
-    정의일 수도 있다.
-    """
-    CARD_DEFINITION_UNAVAILABLE = "card_definition_unavailable"
-    EFFECT_LIST_UNRELIABLE = "effect_list_unreliable"
-    """``effect_count`` 가 0 이다. 효과가 없어서인지 못 읽어서인지 모른다."""
-    RULE_NOT_IMPLEMENTED = "rule_not_implemented"
-
-
-@dataclass(frozen=True, slots=True)
-class ValidationResult:
-    """검증 결과 하나. 판정 · 안정적인 코드 · 사람이 읽을 설명."""
-
-    validity: ActionValidity
-    code: ValidationCode = ValidationCode.OK
-    reason: str = ""
-    missing_rule: str | None = None
-    """UNKNOWN 일 때, 무엇이 없어서 모르는가. 로드맵 추적에 쓴다."""
-    notes: tuple[str, ...] = ()
-    """부수적으로 모인 관찰. 판정을 바꾸지 않는다."""
-
-    @property
-    def permits_execution(self) -> bool:
-        """
-        실행해도 되는가. **``VALID`` 일 때만 참이다.**
-
-        ``UNKNOWN`` 을 허가로 잘못 읽는 코드를 구조적으로 막는다.
-        """
-        return self.validity is ActionValidity.VALID
-
-    @property
-    def is_structural_failure(self) -> bool:
-        return self.validity is ActionValidity.INVALID
-
-    def __bool__(self) -> bool:
-        raise TypeError(
-            "ValidationResult 를 참/거짓으로 쓸 수 없습니다. UNKNOWN 이 조용히 "
-            "허가가 되는 것을 막기 위해서입니다. `result.permits_execution` 을 "
-            "보세요."
-        )
-
-    def canonical_state(self) -> tuple:
-        return (
-            self.validity.value,
-            self.code.value,
-            self.reason,
-            self.missing_rule,
-            self.notes,
-        )
-
-    def to_dict(self) -> dict:
-        data: dict = {
-            "validity": self.validity.value,
-            "code": self.code.value,
-            "reason": self.reason,
-        }
-        if self.missing_rule is not None:
-            data["missing_rule"] = self.missing_rule
-        if self.notes:
-            data["notes"] = list(self.notes)
-        return data
-
-    # --- 생성자 -------------------------------------------------------
-    @classmethod
-    def valid(cls, reason: str = "") -> "ValidationResult":
-        return cls(ActionValidity.VALID, ValidationCode.OK, reason)
-
-    @classmethod
-    def invalid(cls, code: ValidationCode, reason: str) -> "ValidationResult":
-        return cls(ActionValidity.INVALID, code, reason)
-
-    @classmethod
-    def unknown(
-        cls,
-        code: ValidationCode,
-        reason: str,
-        missing_rule: str | None = None,
-        notes: tuple[str, ...] = (),
-    ) -> "ValidationResult":
-        return cls(ActionValidity.UNKNOWN, code, reason, missing_rule, notes)
-
-    def __str__(self) -> str:
-        head = f"{self.validity.value}[{self.code.value}]"
-        return f"{head}: {self.reason}" if self.reason else head
 
 
 @dataclass(frozen=True, slots=True)
@@ -540,7 +399,7 @@ def _controlled_by_actor(validator: ActionValidator, action: PlayerAction) -> Co
     ``controller`` 는 관측에 언제나 실려 있다 (뒷면 카드도 자리는 보인다).
     그래서 정체를 몰라도 판정할 수 있다.
     """
-    return _ControllerIs(action.source, PlayerRef.CONTROLLER)
+    return ControllerIs(PlayerRef.CONTROLLER, action.source)
 
 
 def _summon_like(validator: ActionValidator, action: PlayerAction) -> tuple[Requirement, ...]:
@@ -552,7 +411,7 @@ def _summon_like(validator: ActionValidator, action: PlayerAction) -> tuple[Requ
             "자신의 턴이 아닙니다.",
         ),
         Requirement(
-            _ControllerIs(action.source, PlayerRef.CONTROLLER),
+            ControllerIs(PlayerRef.CONTROLLER, action.source),
             ValidationCode.SOURCE_NOT_CONTROLLED,
             "자신이 쥐고 있는 카드가 아닙니다.",
         ),
@@ -584,7 +443,7 @@ def _set_spell_trap(
             "자신의 턴이 아닙니다.",
         ),
         Requirement(
-            _ControllerIs(action.source, PlayerRef.CONTROLLER),
+            ControllerIs(PlayerRef.CONTROLLER, action.source),
             ValidationCode.SOURCE_NOT_CONTROLLED,
             "자신이 쥐고 있는 카드가 아닙니다.",
         ),
@@ -594,7 +453,7 @@ def _set_spell_trap(
             "패에 있는 카드가 아닙니다.",
         ),
         Requirement(
-            _NotMonster(action.source),
+            NotMonster(action.source),
             ValidationCode.SOURCE_WRONG_CARD_TYPE,
             "마법 · 함정이 아닙니다.",
         ),
@@ -616,12 +475,12 @@ def _change_position(
             "자신의 턴이 아닙니다.",
         ),
         Requirement(
-            _ControllerIs(action.source, PlayerRef.CONTROLLER),
+            ControllerIs(PlayerRef.CONTROLLER, action.source),
             ValidationCode.SOURCE_NOT_CONTROLLED,
             "자신이 쥐고 있는 카드가 아닙니다.",
         ),
         Requirement(
-            _InAnyZone(action.source, MONSTER_ZONES),
+            InAnyZone(MONSTER_ZONES, action.source),
             ValidationCode.SOURCE_WRONG_ZONE,
             "몬스터 존에 있는 카드가 아닙니다.",
         ),
@@ -641,12 +500,12 @@ def _attack(validator: ActionValidator, action: PlayerAction) -> tuple[Requireme
             "배틀 페이즈가 아닙니다.",
         ),
         Requirement(
-            _ControllerIs(action.source, PlayerRef.CONTROLLER),
+            ControllerIs(PlayerRef.CONTROLLER, action.source),
             ValidationCode.SOURCE_NOT_CONTROLLED,
             "자신이 쥐고 있는 몬스터가 아닙니다.",
         ),
         Requirement(
-            _InAnyZone(action.source, MONSTER_ZONES),
+            InAnyZone(MONSTER_ZONES, action.source),
             ValidationCode.SOURCE_WRONG_ZONE,
             "몬스터 존에 있는 카드가 아닙니다.",
         ),
@@ -664,14 +523,14 @@ def _attack(validator: ActionValidator, action: PlayerAction) -> tuple[Requireme
     elif target is not None and target.kind is ActionTargetKind.INSTANCE:
         requirements.append(
             Requirement(
-                _ControllerIs(target.instance_id, PlayerRef.OPPONENT),
+                ControllerIs(PlayerRef.OPPONENT, target.instance_id),
                 ValidationCode.TARGET_SELF_CONTROLLED,
                 "자신의 몬스터를 공격할 수 없습니다.",
             )
         )
         requirements.append(
             Requirement(
-                _InAnyZone(target.instance_id, MONSTER_ZONES),
+                InAnyZone(MONSTER_ZONES, target.instance_id),
                 ValidationCode.TARGET_WRONG_ZONE,
                 "몬스터 존에 없는 카드는 공격 대상이 아닙니다.",
             )
@@ -686,7 +545,7 @@ def _activate(validator: ActionValidator, action: PlayerAction) -> tuple[Require
     """
     return (
         Requirement(
-            _ControllerIs(action.source, PlayerRef.CONTROLLER),
+            ControllerIs(PlayerRef.CONTROLLER, action.source),
             ValidationCode.SOURCE_NOT_CONTROLLED,
             "자신이 쥐고 있는 카드가 아닙니다.",
         ),
@@ -737,109 +596,6 @@ _REQUIREMENT_BUILDERS: dict[
 #
 # 조건 계층에 있으면 좋겠지만 아직 카드 효과가 쓸 일이 없는 것들이다.
 # 실제로 필요해지면 engine/condition/model.py 로 옮긴다.
-
-
-@dataclass(frozen=True, slots=True)
-class _ControllerIs(Condition):
-    """
-    그 카드를 이 사람이 쥐고 있는가.
-
-    ``controller`` 는 뒷면 카드에도 실려 있으므로 **정체를 몰라도** 판정된다.
-    """
-
-    instance: InstanceId | None
-    who: PlayerRef
-
-    def evaluate(self, view, context) -> ConditionResult:
-        target = self.instance if self.instance is not None else context.source
-        if target is None:
-            return ConditionResult.UNKNOWN
-        card = view.find(target)
-        if card is None:
-            return ConditionResult.UNKNOWN
-        return ConditionResult.from_bool(card.controller == self.who.resolve(context))
-
-    def canonical_state(self) -> tuple:
-        return (
-            "controller_is",
-            self.instance.value if self.instance is not None else None,
-            self.who.value,
-        )
-
-    def to_dict(self) -> dict:
-        data: dict = {"kind": "controller_is", "who": self.who.value}
-        if self.instance is not None:
-            data["instance"] = self.instance.value
-        return data
-
-    def describe_ko(self) -> str:
-        which = str(self.instance) if self.instance is not None else "자신"
-        return f"{which} 를 {self.who} 가 쥐고 있음"
-
-
-@dataclass(frozen=True, slots=True)
-class _InAnyZone(Condition):
-    """그 카드가 이 존들 중 하나에 있는가. 컨트롤러는 따지지 않는다."""
-
-    instance: InstanceId | None
-    zones: frozenset[Zone]
-
-    def evaluate(self, view, context) -> ConditionResult:
-        target = self.instance if self.instance is not None else context.source
-        if target is None:
-            return ConditionResult.UNKNOWN
-        card = view.find(target)
-        if card is None:
-            return ConditionResult.UNKNOWN
-        return ConditionResult.from_bool(card.zone in self.zones)
-
-    def canonical_state(self) -> tuple:
-        return (
-            "in_any_zone",
-            self.instance.value if self.instance is not None else None,
-            tuple(sorted(z.value for z in self.zones)),
-        )
-
-    def to_dict(self) -> dict:
-        data: dict = {
-            "kind": "in_any_zone",
-            "zones": sorted(z.value for z in self.zones),
-        }
-        if self.instance is not None:
-            data["instance"] = self.instance.value
-        return data
-
-    def describe_ko(self) -> str:
-        which = str(self.instance) if self.instance is not None else "자신"
-        return f"{which} 가 {'/'.join(sorted(z.value for z in self.zones))} 에 있음"
-
-
-@dataclass(frozen=True, slots=True)
-class _NotMonster(Condition):
-    """
-    몬스터가 **아닌가**.
-
-    ``Not(IsMonster(...))`` 와 같지만, 코드와 설명을 붙이기 쉬워 따로 둔다.
-    정의를 못 읽으면 ``UNKNOWN`` 인 것도 그대로다.
-    """
-
-    instance: InstanceId | None = None
-
-    def evaluate(self, view, context) -> ConditionResult:
-        return IsMonster(self.instance).evaluate(view, context).logical_not()
-
-    def canonical_state(self) -> tuple:
-        return ("not_monster", self.instance.value if self.instance else None)
-
-    def to_dict(self) -> dict:
-        data: dict = {"kind": "not_monster"}
-        if self.instance is not None:
-            data["instance"] = self.instance.value
-        return data
-
-    def describe_ko(self) -> str:
-        which = str(self.instance) if self.instance is not None else "자신"
-        return f"{which} 가 몬스터가 아님"
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,6 +14,11 @@ Duel Engine.
 - **Phase 2-B-2** — Action 을 판정하는 계층 (``action_validation.py``).
   관측만 읽고 확실한 위반을 잡아내되, 아직 **어떤 행위도 허가하지 않는다**.
   ``docs/phase2b2-action-validator.md`` 참고.
+- **Phase 2-C** — 비용과 선택 (``cost/``). 후보를 세고 선택을 검사하되
+  **아무것도 치르지 않고 아무것도 고르지 않는다**.
+  ``docs/phase2c-cost-choice.md`` 참고.
+
+판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 
 ``PlayerActionKind`` 는 ``analysis.effect_model.ActionKind`` 와 **다른
 어휘**다. 전자는 고르는 주체가 고르는 행위, 후자는 효과가 하는 일이다
