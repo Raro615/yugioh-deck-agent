@@ -55,9 +55,14 @@ class SearchFilters:
 
     # --- 수치 ---
     levels: list[int] = field(default_factory=list)
-    """레벨/랭크/링크 값 (카드 종류에 따라 해석). 여러 값은 OR."""
+    """**실제 레벨**. 엑시즈(랭크)와 링크(링크 수)는 레벨이 없으므로 제외된다.
+    여러 값은 OR."""
     level_min: int | None = None
     level_max: int | None = None
+    ranks: list[int] = field(default_factory=list)
+    """엑시즈 몬스터의 랭크. 여러 값은 OR."""
+    link_ratings: list[int] = field(default_factory=list)
+    """링크 몬스터의 링크 수. 여러 값은 OR."""
     atk_min: int | None = None
     atk_max: int | None = None
     def_min: int | None = None
@@ -105,6 +110,8 @@ class SearchFilters:
                 self.levels,
                 self.level_min is not None,
                 self.level_max is not None,
+                self.ranks,
+                self.link_ratings,
                 self.atk_min is not None,
                 self.atk_max is not None,
                 self.def_min is not None,
@@ -138,6 +145,10 @@ class SearchFilters:
             lo = self.level_min if self.level_min is not None else ""
             hi = self.level_max if self.level_max is not None else ""
             parts.append(f"레벨 {lo}~{hi}")
+        if self.ranks:
+            parts.append("랭크 " + "/".join(str(v) for v in sorted(self.ranks)))
+        if self.link_ratings:
+            parts.append("링크 " + "/".join(str(v) for v in sorted(self.link_ratings)))
         if self.required_types:
             parts.extend(
                 ko for bit, ko in C.TYPE_KO.items() if self.required_types & bit
@@ -226,6 +237,10 @@ class CardSearchEngine:
             return self.repository.by_attribute(filters.attributes[0])
         if len(filters.levels) == 1:
             return self.repository.by_level(filters.levels[0])
+        if len(filters.ranks) == 1:
+            return self.repository.by_rank(filters.ranks[0])
+        if len(filters.link_ratings) == 1:
+            return self.repository.by_link_rating(filters.link_ratings[0])
         return self.repository.all_cards(include_alternates=True)
 
     # ------------------------------------------------------------------
@@ -248,15 +263,24 @@ class CardSearchEngine:
             return False
 
         # --- 수치 ---
-        # 레벨 조건은 몬스터에만 의미가 있다.
+        # 레벨 / 랭크 / 링크는 cards.cdb 의 같은 컬럼에 저장되지만 서로 다른
+        # 개념이다. 엑시즈에는 레벨이 없고(랭크), 링크에도 레벨이 없다(링크 수).
+        # 그래서 원시값(card.level)이 아니라 종류별 속성으로 비교한다.
         if f.levels or f.level_min is not None or f.level_max is not None:
-            if not card.is_monster:
+            level = card.monster_level  # 엑시즈/링크/비몬스터는 None
+            if level is None:
                 return False
-            if f.levels and card.level not in f.levels:
+            if f.levels and level not in f.levels:
                 return False
-            if f.level_min is not None and card.level < f.level_min:
+            if f.level_min is not None and level < f.level_min:
                 return False
-            if f.level_max is not None and card.level > f.level_max:
+            if f.level_max is not None and level > f.level_max:
+                return False
+        if f.ranks:
+            if card.rank is None or card.rank not in f.ranks:
+                return False
+        if f.link_ratings:
+            if card.link_rating is None or card.link_rating not in f.link_ratings:
                 return False
         if f.atk_min is not None and (card.atk < 0 or card.atk < f.atk_min):
             return False

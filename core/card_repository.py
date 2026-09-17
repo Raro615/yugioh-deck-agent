@@ -41,6 +41,63 @@ def normalize_name(name: str) -> str:
     return _RE_NORMALIZE.sub("", text)
 
 
+# 관계의 종류. 검색 결과가 '왜' 관련되었는지 구분하기 위해 쓴다.
+RELATION_ARCHETYPE = "archetype"
+"""공식 DB 의 setcode 로 같은 카드군에 속한다."""
+RELATION_LISTED_NAME = "listed_name"
+"""기준 카드의 텍스트가 이 카드를 이름으로 지명한다."""
+RELATION_REFERENCED_BY = "referenced_by"
+"""이 카드의 텍스트가 기준 카드를 이름으로 지명한다."""
+RELATION_SERIES = "series"
+"""이 카드의 스크립트가 그 카드군을 지명한다(카드군 서포트)."""
+
+
+@dataclass(slots=True)
+class CardRelation:
+    """관련 카드 한 장과, 어떤 근거로 연결되었는지."""
+
+    card: Card
+    relation_types: list[str] = field(default_factory=list)
+
+    def add(self, relation_type: str) -> None:
+        if relation_type not in self.relation_types:
+            self.relation_types.append(relation_type)
+
+
+@dataclass(slots=True)
+class ArchetypeMatch:
+    """이름이 카드군으로 해석되었을 때의 결과."""
+
+    term: str
+    names: list[str] = field(default_factory=list)
+    """확인된 카드군 상수 이름 (SET_ 접두사 제외). 예: ['ORCUST']"""
+    setcodes: list[int] = field(default_factory=list)
+    cards: list[Card] = field(default_factory=list)
+    """카드군 소속 카드 (공식 setcode 기준)."""
+
+
+@dataclass(slots=True)
+class RelationMatch:
+    """이름이 관계 검색으로 해석되었을 때의 결과."""
+
+    term: str
+    seeds: list[Card] = field(default_factory=list)
+    """기준이 된 카드들 (이름이 그 말과 맞는 카드)."""
+    archetype: ArchetypeMatch | None = None
+    relations: list[CardRelation] = field(default_factory=list)
+
+    @property
+    def cards(self) -> list[Card]:
+        return [r.card for r in self.relations]
+
+    def counts_by_type(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for relation in self.relations:
+            for relation_type in relation.relation_types:
+                counts[relation_type] = counts.get(relation_type, 0) + 1
+        return counts
+
+
 @dataclass(slots=True)
 class ExactNameMatch:
     """
@@ -79,6 +136,8 @@ class CardRepository:
         self._by_race: dict[int, list[int]] = defaultdict(list)
         self._by_attribute: dict[int, list[int]] = defaultdict(list)
         self._by_level: dict[int, list[int]] = defaultdict(list)
+        self._by_rank: dict[int, list[int]] = defaultdict(list)
+        self._by_link_rating: dict[int, list[int]] = defaultdict(list)
         self._by_setcode: dict[int, list[int]] = defaultdict(list)
         self._by_series: dict[str, list[int]] = defaultdict(list)
         self._referenced_by: dict[int, list[int]] = defaultdict(list)
@@ -210,8 +269,14 @@ class CardRepository:
             for bit in C.ATTRIBUTE_NAMES:
                 if card.attribute_mask & bit:
                     self._by_attribute[bit].append(card.id)
-            if card.is_monster:
-                self._by_level[card.level].append(card.id)
+            # 레벨 / 랭크 / 링크는 각각 다른 인덱스에 넣는다.
+            # cards.cdb 는 세 값을 한 컬럼에 담지만 의미가 다르기 때문이다.
+            if card.monster_level is not None:
+                self._by_level[card.monster_level].append(card.id)
+            if card.rank is not None:
+                self._by_rank[card.rank].append(card.id)
+            if card.link_rating is not None:
+                self._by_link_rating[card.link_rating].append(card.id)
             for setcode in card.setcodes:
                 self._by_setcode[setcode].append(card.id)
             if card.script:
@@ -312,7 +377,16 @@ class CardRepository:
         return [self._cards[i] for i in self._by_attribute.get(attribute_bit, [])]
 
     def by_level(self, level: int) -> list[Card]:
+        """실제 레벨이 그 값인 몬스터. 엑시즈/링크는 포함되지 않는다."""
         return [self._cards[i] for i in self._by_level.get(level, [])]
+
+    def by_rank(self, rank: int) -> list[Card]:
+        """랭크가 그 값인 엑시즈 몬스터."""
+        return [self._cards[i] for i in self._by_rank.get(rank, [])]
+
+    def by_link_rating(self, rating: int) -> list[Card]:
+        """링크 수가 그 값인 링크 몬스터."""
+        return [self._cards[i] for i in self._by_link_rating.get(rating, [])]
 
     def by_series(self, series: str) -> list[Card]:
         return [self._cards[i] for i in self._by_series.get(series.upper(), [])]
@@ -348,6 +422,117 @@ class CardRepository:
             if label:
                 names.append(label.removeprefix("SET_"))
         return names
+
+    # --- 카드군 / 관계 해석 -------------------------------------------
+    def _seed_cards(self, term: str) -> list[Card]:
+        """이름이 그 말과 맞는 카드들. 정확 일치가 있으면 그것만 쓴다."""
+        exact = self.find_by_exact_name(term)
+        if exact:
+            return self.deduplicate(exact)
+        return self.deduplicate(self.find_by_name_substring(term))
+
+    def _dominant_setcodes(
+        self, seeds: list[Card], ratio: float = 0.5
+    ) -> list[int]:
+        """
+        씨앗 카드 다수가 공유하는 setcode 만 남긴다.
+
+        오르페골 카드 18장 중 18장이 SET_ORCUST 를 갖지만, 2장은 기교(MEKK_KNIGHT)
+        도, 1장은 나이트메어도 겸한다. 교차 소속까지 카드군으로 인정하면
+        관련 없는 카드군 전체가 결과에 딸려 들어온다.
+        """
+        if not seeds:
+            return []
+        counts: dict[int, int] = {}
+        for card in seeds:
+            for setcode in card.setcodes:
+                counts[setcode] = counts.get(setcode, 0) + 1
+        threshold = max(1, int(len(seeds) * ratio))
+        return sorted(
+            (code for code, n in counts.items() if n >= threshold),
+            key=lambda code: -counts[code],
+        )
+
+    def resolve_archetype(self, term: str) -> ArchetypeMatch | None:
+        """
+        입력한 말이 카드군을 가리키는지 판단한다.
+
+        게임 용어("마법", "카운터 함정")는 이름이 겹치는 카드가 많아도 공통
+        setcode 가 없으므로 ``None`` 이 되고, 호출자는 평소 경로로 넘어간다.
+        """
+        if len(term.strip()) < 2:
+            return None
+        seeds = self._seed_cards(term)
+        setcodes = self._dominant_setcodes(seeds)
+        if not setcodes:
+            return None
+
+        cards: dict[int, Card] = {}
+        for setcode in setcodes:
+            for card in self.by_setcode(setcode):
+                cards[card.id] = card
+        names = [
+            (self.constants.setcode_name(code) or hex(code)).removeprefix("SET_")
+            for code in setcodes
+        ]
+        return ArchetypeMatch(
+            term=term,
+            names=names,
+            setcodes=setcodes,
+            cards=self.deduplicate(cards.values()),
+        )
+
+    def relations_for_term(self, term: str) -> RelationMatch | None:
+        """
+        이름 또는 카드군 이름으로 관련 카드를 모으고, 관계 종류를 함께 기록한다.
+
+        기존 :meth:`related_cards` 는 카드 ID 하나를 기준으로 하지만, 자연어
+        질의는 "오르페골" 처럼 카드군 이름으로 들어오므로 이름에서 시작한다.
+        """
+        seeds = self._seed_cards(term)
+        if not seeds:
+            return None
+
+        found: dict[int, CardRelation] = {}
+
+        def add(card: Card, relation_type: str) -> None:
+            origin = self.canonical(card)
+            relation = found.get(origin.id)
+            if relation is None:
+                relation = CardRelation(card=origin)
+                found[origin.id] = relation
+            relation.add(relation_type)
+
+        # 1. 공식 카드군 소속
+        archetype = self.resolve_archetype(term)
+        if archetype:
+            for card in archetype.cards:
+                add(card, RELATION_ARCHETYPE)
+
+        # 2. 카드 텍스트가 서로를 지명하는 관계
+        for seed in seeds:
+            for other in self.references_of(seed.id):
+                add(other, RELATION_LISTED_NAME)
+            for other in self.referenced_by(seed.id):
+                add(other, RELATION_REFERENCED_BY)
+
+        # 3. 그 카드군을 지명하는 카드 (카드군 서포트)
+        # 확인된 카드군만 쓴다. 씨앗 카드가 지명하는 다른 카드군까지 넣으면
+        # 방향이 뒤섞인다 — 오르페골 카드가 성유물을 지명한다는 사실은
+        # "성유물 카드가 오르페골과 관련된다"는 뜻이 아니다.
+        for name in archetype.names if archetype else []:
+            for card in self.by_series(name):
+                add(card, RELATION_SERIES)
+
+        if not found:
+            return None
+        relations = sorted(
+            found.values(),
+            key=lambda rel: (-len(rel.relation_types), rel.card.display_name()),
+        )
+        return RelationMatch(
+            term=term, seeds=seeds, archetype=archetype, relations=relations
+        )
 
     # --- 관계 ---
     def referenced_by(self, card_id: int) -> list[Card]:

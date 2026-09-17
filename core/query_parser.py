@@ -132,11 +132,14 @@ _PARTICLES = (
 )
 
 # 검색 조건과 무관한 군더더기. 두 글자 이상이라 낱말 안을 잘라먹을 위험이 적다.
-_FILLER_WORDS = (
+_FILLER_WORDS_RAW = (
+    "할수있는", "할수없는", "수있는", "관련된", "카드들",
     "찾아줘", "알려줘", "보여줘", "가능한", "그리고", "리스트", "목록",
-    "있는", "하는", "되는", "좋은", "추천", "검색", "가능", "또는",
+    "있는", "하는", "되는", "좋은", "추천", "검색", "가능", "또는", "할수",
     "효과", "발동", "사용", "쓰는", "가진", "포함", "관련", "위한", "해줘", "카드",
 )
+# 긴 표현부터 지워야 "할수있는" 이 "있는" 에 먼저 잘려 "할수" 가 남지 않는다.
+_FILLER_WORDS = tuple(sorted(_FILLER_WORDS_RAW, key=len, reverse=True))
 
 # 통째로 군더더기인 조각
 _STANDALONE_NOISE = frozenset(
@@ -185,6 +188,52 @@ _RE_ENGLISH_SUFFIX = re.compile(
 )
 
 
+
+# 검색 모드. 결과가 어떤 의미로 나온 것인지 구분한다.
+SEARCH_MODE_EXACT_NAME = "exact_name"
+SEARCH_MODE_PARTIAL_NAME = "partial_name"
+SEARCH_MODE_CONDITION = "condition"
+SEARCH_MODE_ARCHETYPE = "archetype"
+SEARCH_MODE_RELATED = "related"
+
+# "오르페골과 관련된 카드", "오르페골 관련" 등
+_RE_RELATED_INTENT = re.compile(
+    r"^(?P<term>.+?)\s*(?:와|과|랑|이랑)?\s*관련\s*(?:된|있는|)\s*(?:카드들|카드)?\s*$"
+)
+# "오르페골 카드군", "오르페골 테마"
+_RE_ARCHETYPE_INTENT = re.compile(
+    r"^(?P<term>.+?)\s*(?:카드군|카드\s*군|테마|아키타입|덱)\s*(?:카드들|카드)?\s*$"
+)
+# "오르페골 카드" — 카드군인지 확인된 경우에만 카드군 검색으로 본다
+_RE_ARCHETYPE_CARDS = re.compile(r"^(?P<term>.+?)\s+카드(?:들)?\s*$")
+
+
+def detect_relation_intent(text: str) -> tuple[str, str] | None:
+    """
+    질의가 관계/카드군 검색을 요청하는지 본다.
+
+    Returns:
+        (검색 모드, 대상이 되는 말) 또는 ``None``.
+
+    여기서는 '요청으로 보인다'까지만 판단한다. 그 말이 실제 카드군인지는
+    카드 데이터를 가진 쪽에서 확인해야 한다 ("마법 카드" 는 카드군이 아니라
+    카드 종류다).
+    """
+    stripped = text.strip()
+    for pattern, mode in (
+        (_RE_RELATED_INTENT, SEARCH_MODE_RELATED),
+        (_RE_ARCHETYPE_INTENT, SEARCH_MODE_ARCHETYPE),
+        (_RE_ARCHETYPE_CARDS, SEARCH_MODE_ARCHETYPE),
+    ):
+        match = pattern.match(stripped)
+        if not match:
+            continue
+        term = match.group("term").strip()
+        if len(term) >= 2:
+            return mode, term
+    return None
+
+
 @dataclass(slots=True)
 class ParsedQuery:
     """파싱 결과. 어떻게 해석했는지 사용자에게 돌려주기 위한 정보도 담는다."""
@@ -196,8 +245,31 @@ class ParsedQuery:
     exact_name: object | None = None
     """입력 전체가 실제 카드명과 정확히 일치했을 때의 정보
     (:class:`~core.card_repository.ExactNameMatch`). 아니면 ``None``."""
+    search_mode: str = SEARCH_MODE_CONDITION
+    """exact_name | partial_name | condition | archetype | related"""
+    relation: object | None = None
+    """카드군/관계 검색일 때의 상세 정보
+    (:class:`~core.card_repository.ArchetypeMatch` 또는 ``RelationMatch``)."""
+
+    MODE_LABELS_KO = {
+        SEARCH_MODE_EXACT_NAME: "카드명 정확 일치",
+        SEARCH_MODE_PARTIAL_NAME: "카드명 부분 일치",
+        SEARCH_MODE_CONDITION: "조건 검색",
+        SEARCH_MODE_ARCHETYPE: "카드군 검색",
+        SEARCH_MODE_RELATED: "관련 카드 검색",
+    }
+
+    def mode_label_ko(self) -> str:
+        return self.MODE_LABELS_KO.get(self.search_mode, self.search_mode)
 
     def explain_ko(self) -> str:
+        if self.search_mode == SEARCH_MODE_ARCHETYPE and self.relation is not None:
+            names = ", ".join(self.relation.names)
+            return f"해석: 카드군 검색 '{self.relation.term}' → {names}"
+        if self.search_mode == SEARCH_MODE_RELATED and self.relation is not None:
+            counts = self.relation.counts_by_type()
+            detail = ", ".join(f"{k} {v}" for k, v in counts.items())
+            return f"해석: 관련 카드 검색 '{self.relation.term}' ({detail})"
         if self.exact_name is not None:
             match = self.exact_name
             text = f"해석: 카드명 정확 일치 '{self.original}'"
@@ -227,7 +299,12 @@ class KoreanQueryParser:
         # 부분 일치까지 허용하면 "Blue-Eyes White Dragon" 이 드래곤족 필터가 된다.
         english = self._parse_english_whole_query(text, filters)
         if english:
-            return ParsedQuery(filters=filters, original=text, matched_terms=[english])
+            return ParsedQuery(
+                filters=filters,
+                original=text,
+                matched_terms=[english],
+                search_mode=SEARCH_MODE_CONDITION,
+            )
 
         quoted_names = self._extract_quoted(text)
         compact = re.sub(r"\s+", "", text)
@@ -252,9 +329,11 @@ class KoreanQueryParser:
         categories = self._parse_categories(compact, consumed, take)
         self._combine_effect_conditions(compact, filters, locations, categories)
 
+        mode = SEARCH_MODE_CONDITION
         if quoted_names:
             filters.name = quoted_names[0]
             matched.append(f"이름 '{quoted_names[0]}'")
+            mode = SEARCH_MODE_PARTIAL_NAME
 
         # 조건이 하나도 없으면 문장 전체를 이름 검색으로 취급한다.
         leftovers = self._leftovers(compact, consumed)
@@ -264,12 +343,14 @@ class KoreanQueryParser:
                 filters.name = fallback
                 matched.append(f"이름 '{fallback}'")
                 leftovers = []
+                mode = SEARCH_MODE_PARTIAL_NAME
 
         return ParsedQuery(
             filters=filters,
             original=text,
             matched_terms=matched,
             unknown_terms=leftovers,
+            search_mode=mode,
         )
 
     # ------------------------------------------------------------------
@@ -328,14 +409,17 @@ class KoreanQueryParser:
                     setattr(filters, lo_attr, value)
                 take(m, f"{stat}{value}{bound or ''}")
 
-        # 랭크 / 링크 (카드 종류까지 결정된다)
-        for word, type_bit in (("랭크", C.TYPE_XYZ), ("링크", C.TYPE_LINK)):
+        # 랭크 / 링크는 레벨과 다른 값이므로 각자의 필드에 넣는다.
+        for word, type_bit, attr in (
+            ("랭크", C.TYPE_XYZ, "ranks"),
+            ("링크", C.TYPE_LINK, "link_ratings"),
+        ):
             pattern = re.compile(rf"(?:(\d+){word}|{word}\s*(\d+))")
             for m in pattern.finditer(compact):
                 if self._overlaps(m, consumed):
                     continue
                 value = int(m.group(1) or m.group(2))
-                filters.levels.append(value)
+                getattr(filters, attr).append(value)
                 filters.required_types |= C.TYPE_MONSTER | type_bit
                 take(m, f"{word}{value}")
 
@@ -491,10 +575,14 @@ class KoreanQueryParser:
 
         out: list[str] = []
         for run in runs:
-            core = _strip_leading_particles(run.strip())
-            for word in _FILLER_WORDS:
-                core = core.replace(word, "")
-            core = _strip_leading_particles(core.strip())
+            # 순서가 중요하다. 조사를 먼저 떼면 "가능한" 의 '가' 가 조사로 잘려
+            # "능한" 이 남고, 군더더기로 인식되지 않는다.
+            # 군더더기 낱말을 먼저 지우고 그다음 남은 조사를 떼어낸다.
+            core = run.strip()
+            for _ in range(2):
+                for word in _FILLER_WORDS:
+                    core = core.replace(word, "")
+                core = _strip_leading_particles(core.strip())
             if not core or core in _STANDALONE_NOISE or len(core) <= 1:
                 continue
             out.append(core)

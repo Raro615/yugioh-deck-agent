@@ -50,14 +50,24 @@ def test_location_only_query(parser):
     assert f.effect_locations[0].category is None
 
 
-def test_rank_and_link_imply_card_type(parser):
+def test_rank_and_link_are_not_levels(parser):
+    """
+    엑시즈에는 레벨이 없고 랭크가, 링크에는 링크 수가 있다.
+    cards.cdb 는 셋을 한 컬럼에 담지만 검색에서는 구분해야 한다.
+    """
     f = parser.parse("랭크 4 엑시즈").filters
-    assert f.levels == [4]
+    assert f.ranks == [4]
+    assert f.levels == []
     assert f.required_types & C.TYPE_XYZ
 
     f = parser.parse("링크 3 몬스터").filters
-    assert f.levels == [3]
+    assert f.link_ratings == [3]
+    assert f.levels == []
     assert f.required_types & C.TYPE_LINK
+
+    f = parser.parse("레벨 5 기계족").filters
+    assert f.levels == [5]
+    assert f.ranks == [] and f.link_ratings == []
 
 
 def test_atk_bounds(parser):

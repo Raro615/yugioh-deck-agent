@@ -23,9 +23,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.card_model import Card  # noqa: E402
-from core.card_repository import CardRepository, ExactNameMatch  # noqa: E402
-from core.card_search import CardSearchEngine, SearchFilters  # noqa: E402
-from core.query_parser import KoreanQueryParser, ParsedQuery  # noqa: E402
+from core.card_repository import CardRepository  # noqa: E402
+from core.card_search import CardSearchEngine, SearchFilters, SearchResult  # noqa: E402
+from core.query_parser import (  # noqa: E402
+    SEARCH_MODE_ARCHETYPE,
+    SEARCH_MODE_EXACT_NAME,
+    SEARCH_MODE_RELATED,
+    KoreanQueryParser,
+    ParsedQuery,
+    detect_relation_intent,
+)
 from sources.official_db import OfficialDatabaseNotFound  # noqa: E402
 
 
@@ -57,17 +64,19 @@ class DeckAgent:
         """
         한국어 질의를 해석해 검색한다.
 
-        처리 순서:
-        1. 입력 전체가 실제 카드명과 정확히 일치하면 카드명 검색으로 확정한다.
-           카드명 안에 게임 용어가 들어 있어도(예: "마법족의 마을" 의 '마법')
-           용어 파싱이 카드명을 가로채지 못하게 하기 위해 가장 먼저 본다.
-        2. 그렇지 않으면 게임 용어/조건 파서를 돌린다.
-        3. 파서가 해석하지 못한 조각이 남았고 이름 일부와 맞으면 이름 검색으로
-           넘긴다(카드명을 일부만 입력한 경우).
+        처리 순서 (앞에서 확정되면 뒤는 보지 않는다):
+
+        1. **카드명 정확 일치** — 카드명 안에 게임 용어가 들어 있어도
+           ("마법족의 마을" 의 '마법') 용어 파싱이 가로채지 못하게 가장 먼저 본다.
+        2. **관련 카드 / 카드군** — "오르페골과 관련된 카드", "오르페골 카드".
+           그 말이 실제 카드군인지는 카드 데이터로 확인하며, 아니면 그냥 넘어간다
+           ("마법 카드" 는 카드군이 아니라 카드 종류다).
+        3. **조건 검색** — 게임 용어/수치 파싱.
+        4. **카드명 부분 일치** — 조건으로 해석되지 않은 조각이 남았을 때.
 
         Returns:
-            (ParsedQuery, SearchResult). 1번 경로였다면 ``parsed.exact_name`` 에
-            정확 일치 정보(종 수, 판본 수)가 담긴다.
+            (ParsedQuery, SearchResult). ``parsed.search_mode`` 에 어느 경로였는지,
+            ``parsed.relation`` 에 카드군/관계 상세가 담긴다.
         """
         effective_limit = limit if limit is not None else self.parser.default_limit
 
@@ -81,23 +90,61 @@ class DeckAgent:
                 filters=filters,
                 original=query,
                 matched_terms=[f"카드명 정확 일치 '{query}'"],
+                search_mode=SEARCH_MODE_EXACT_NAME,
             )
             parsed.exact_name = exact
             return parsed, self.engine.search(filters)
 
-        # --- 2단계: 게임 용어 / 조건 파싱 ---
+        # --- 2단계: 관련 카드 / 카드군 ---
+        intent = detect_relation_intent(query)
+        if intent is not None:
+            mode, term = intent
+            parsed = self._resolve_relation(query, mode, term, effective_limit)
+            if parsed is not None:
+                return parsed
+
+        # --- 3단계: 게임 용어 / 조건 파싱 ---
         parsed = self.parser.parse(query)
         if limit is not None:
             parsed.filters.limit = limit
 
-        # --- 3단계: 카드명 일부만 입력한 경우 구제 ---
+        # --- 4단계: 카드명 일부만 입력한 경우 ---
         override = self._name_collision_override(query, parsed)
         if override is not None:
             parsed.filters = override
             parsed.matched_terms = [f"이름 '{query}'"]
             parsed.unknown_terms = []
+            parsed.search_mode = "partial_name"
 
         return parsed, self.engine.search(parsed.filters)
+
+    def _resolve_relation(
+        self, query: str, mode: str, term: str, limit: int | None
+    ):
+        """
+        카드군/관계 검색을 시도한다. 그 말이 카드군으로 확인되지 않으면
+        ``None`` 을 돌려주고 호출자는 평소의 조건 파싱으로 넘어간다.
+        """
+        if mode == SEARCH_MODE_RELATED:
+            match = self.repository.relations_for_term(term)
+            cards = match.cards if match else []
+        else:
+            match = self.repository.resolve_archetype(term)
+            cards = match.cards if match else []
+        if not match or not cards:
+            return None
+
+        filters = SearchFilters(limit=limit)
+        parsed = ParsedQuery(
+            filters=filters,
+            original=query,
+            matched_terms=[f"{mode} '{term}'"],
+            search_mode=mode,
+        )
+        parsed.relation = match
+        total = len(cards)
+        shown = cards[:limit] if limit is not None else cards
+        return parsed, SearchResult(cards=shown, total=total, filters=filters)
 
     def name_suggestions(self, query: str, exclude: set[int]) -> list[Card]:
         """이름에 질의를 포함하는 다른 카드들 (정확 일치와 구분해 보여준다)."""
@@ -223,7 +270,8 @@ def cmd_search(agent: DeckAgent, args) -> int:
             json.dumps(
                 {
                     "query": query,
-                    "interpreted": parsed.filters.describe_ko(),
+                    "search_mode": parsed.search_mode,
+                    "interpreted": parsed.explain_ko(),
                     "exact_name_match": (
                         None
                         if parsed.exact_name is None
@@ -231,6 +279,24 @@ def cmd_search(agent: DeckAgent, args) -> int:
                             "card_count": parsed.exact_name.card_count,
                             "printing_count": parsed.exact_name.printing_count,
                             "printings": parsed.exact_name.printings,
+                        }
+                    ),
+                    "relation": (
+                        None
+                        if parsed.relation is None
+                        else {
+                            "term": parsed.relation.term,
+                            "archetypes": getattr(parsed.relation, "names", None)
+                            or (
+                                parsed.relation.archetype.names
+                                if getattr(parsed.relation, "archetype", None)
+                                else []
+                            ),
+                            "counts_by_type": (
+                                parsed.relation.counts_by_type()
+                                if hasattr(parsed.relation, "counts_by_type")
+                                else None
+                            ),
                         }
                     ),
                     "unknown_terms": parsed.unknown_terms,
@@ -244,7 +310,23 @@ def cmd_search(agent: DeckAgent, args) -> int:
         return 0
 
     print(f'질의: "{query}"')
+    print(f"검색 모드: {parsed.search_mode} ({parsed.mode_label_ko()})")
     print(parsed.explain_ko())
+
+    # 카드군 / 관련 카드 검색
+    if parsed.relation is not None:
+        relations = getattr(parsed.relation, "relations", None)
+        print(f"검색 결과: {result.total}장" + (f" (상위 {len(result)}장 표시)" if result.total > len(result) else ""))
+        print("-" * 72)
+        by_card = (
+            {r.card.id: r.relation_types for r in relations} if relations else {}
+        )
+        for i, card in enumerate(result, 1):
+            print(format_card_line(card, i))
+            types = by_card.get(card.id)
+            if types:
+                print(f"       관계: {', '.join(types)}")
+        return 0
 
     if parsed.exact_name is not None:
         match = parsed.exact_name
