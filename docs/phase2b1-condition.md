@@ -140,29 +140,109 @@ Condition
  │
  ├ And(children)   Or(children)   Not(child)
  │
- └ 상태 술어 — GameStateView 만 읽는다
-    ├ PhaseIs(phases)
-    ├ IsTurnPlayer(who)
-    ├ LifePointsAtLeast(who, amount)
-    ├ ZoneCountAtLeast(who, zone, count)
-    ├ ZoneHasFreeSlot(who, zone)
-    ├ CardIsInZone(zone, who, instance?)
-    └ CardIsFaceUp(instance?)
+ ├ 상태 술어 — GameStateView 만 읽는다
+ │  ├ PhaseIs(phases)
+ │  ├ IsTurnPlayer(who)
+ │  ├ LifePointsAtLeast(who, amount)
+ │  ├ ZoneCountAtLeast(who, zone, count)
+ │  ├ ZoneHasFreeSlot(who, zone)
+ │  ├ CardIsInZone(zone, who, instance?)
+ │  └ CardIsFaceUp(instance?)
+ │
+ └ 카드 정의 술어 — CardView.definition 만 읽는다
+    ├ IsMonster(instance?)
+    ├ LevelAtLeast(level, instance?)
+    ├ AttackAtLeast(amount, instance?)
+    └ AttributeIs(attribute, instance?)
 ```
 
 **유희왕의 모든 조건을 구현하려 하지 않았다.** 목표는 표현 · 평가 ·
 `UNKNOWN` 전파의 기반이고, 술어는 그 기반이 실제로 동작하는지 보일 만큼만
 만들었다.
 
-### 술어가 이 정도인 이유
+### 카드 정의는 관측이 실어 준다 (STRUCTURAL-1 해결)
 
-관측(`GameStateView`)은 **카드 정의를 노출하지 않는다.** `CardView` 에는
-`card_id` 는 있지만 레벨 · 속성 · 종족 · ATK 는 없다 — 그것을 읽으려면
-`CardRepository` 가 필요하고, Phase 2-A 는 일부러 그것을 관측에서 뺐다.
+조건이 "레벨 4 이상인가" 를 물으려면 카드 정의가 필요하다. 그렇다고
+`ConditionEvaluator` 가 `CardRepository` 를 들면 안 된다 — 저장소는
+**전체 카드**를 알고 있으므로, 그것을 쥔 코드는 상대의 뒷면 카드도 조회할
+수 있게 된다.
 
-그래서 "레벨 4 이상 몬스터가 있는가" 같은 술어는 **지금 만들 수 없다.**
-억지로 만들면 관측의 경계를 뚫거나 값을 지어내게 된다. 그 술어는 카드 정의
-접근 방식을 정한 뒤에 만든다 (아래 🟠 STRUCTURAL-1).
+그래서 정의도 관측을 통해서만 온다.
+
+```
+Card (가변, 저장소 소유)
+   ↓  CardDefinitionView.of(card)      값 복사. 참조를 들고 있지 않는다
+CardDefinitionView (frozen)
+   ↓  CardView.definition               정체가 공개된 카드에만 붙는다
+Condition
+```
+
+`CardDefinitionView` 가 담는 것은 전부 `Card` 에 **실제로 있는** 값이거나
+`Card` 가 이미 계산해 주는 파생값이다. 없는 값을 지어내지 않는다.
+
+| 담는 것 | |
+|---|---|
+| 원본 마스크 | `type_mask` · `attribute_mask` · `race_mask` · `link_marker_mask` |
+| 수치 | `level` · `atk` · `defense` · 펜듈럼 스케일 |
+| 파생 | `is_monster` · `is_spell` · `is_trap` · `is_xyz` · `is_link` · `is_pendulum` · `is_extra_deck` |
+| 파생 | `monster_level` · `rank` · `link_rating` · `attribute_name` · `race_name` · `type_names` · `setcodes` |
+
+담지 않는 것: `script` · `provenance` · `sources` · `desc` · `strings`.
+조건 평가에 필요 없고, 엔진 내부 구현을 관측에 묶는다.
+
+#### 가려진 카드에는 정의가 붙지 않는다
+
+```python
+card = foe_view.find(set_card)
+card.card_id     # None
+card.definition  # None      ← 실어 주지 않는다
+```
+
+레벨 · 속성 · 공격력만 보고도 어느 카드인지 거의 특정할 수 있으므로,
+`card_id` 를 숨기면서 정의를 실으면 숨기는 의미가 없다.
+
+#### 세 가지 "모른다" 를 구분한다
+
+전부 `UNKNOWN` 이지만 원인이 다르고, 이유 문자열이 이를 구분한다.
+
+| 상황 | 이유 |
+|---|---|
+| 관측에 카드가 없다 | `... 가 관측에 보이지 않음 (가려진 존)` |
+| 뒷면이라 정체를 모른다 | `... 는 뒷면이라 정체를 모름` |
+| 저장소가 없어 정의를 못 읽는다 | `... 의 카드 정의를 조회할 수 없음 (저장소 없음)` |
+
+#### 없는 값과 정해지지 않은 값
+
+`cards.cdb` 는 두 가지 음수를 쓴다. **합치면 안 된다.**
+
+| 값 | 뜻 | 조건의 답 |
+|---|---|---|
+| `STAT_NONE` (-1) | 수치가 **없다** (링크 몬스터의 수비력, 실측 499장) | `FALSE` — 없는 것은 확정된 사실 |
+| `STAT_QUESTION` (-2) | **물음표** (실측 ATK 90장 · DEF 60장) | `UNKNOWN` — 값이 정해져 있지 않다 |
+
+`?` 공격력은 **카드가 완전히 공개되어 있는데도** 모르는 경우다. 정보 은닉과
+다른 종류의 `UNKNOWN` 이고, 필드 위의 실제 수치를 알려면 지속 효과 계층
+(Phase 8)이 필요하다.
+
+#### 마법 · 함정의 `atk` 는 읽지 않는다
+
+`AttackAtLeast` 는 `is_monster` 를 **먼저** 본다. 값만 보면 안 되는 이유가
+실측으로 있다.
+
+```
+마법 · 함정 4,967장이 atk 를 저장한다
+  그중 4,919장은 0
+  그런데 23장은 0 이 아니다   ← 버제스토마 레안코일리아(1200) 등
+```
+
+발동하면 몬스터가 되는 함정이 그때의 수치를 들고 있기 때문이다. 값만 보면
+모든 마법 · 함정이 "공격력 0 이상" 으로 참이 되고, 함정 몬스터는 **함정인
+채로** 공격력을 갖게 된다. (필드에서 실제로 몬스터가 되는 것은 규칙의
+문제이고, 그 계층은 아직 없다.)
+
+레벨은 같은 문제가 없다 — `Card.monster_level` 이 이미 비몬스터에 `None` 을
+돌려준다. 그래서 랭크 4 엑시즈에 대해 `LevelAtLeast(4)` 는 `FALSE` 다.
+**랭크는 레벨이 아니다.**
 
 ---
 
@@ -265,7 +345,20 @@ Phase 2-A 의 `PlayerAction.canonical_state()` / `to_dict()` 와 같은 규약�
 
 ---
 
-## 9. 이번 단계에서 구현하지 않은 것
+## 9. `ConditionEvaluator` 는 저장소를 들지 않는다
+
+경계를 코드와 테스트 양쪽에서 고정했다.
+
+- `engine/condition/` 은 `core` 를 **전혀** import 하지 않는다 (AST 검사)
+- `engine/game_state_view.py` 도 런타임에 `core` 를 가져오지 않는다.
+  `STAT_NONE` 을 다시 적어 두고, `core.constants.STAT_NONE` 과 어긋나지
+  않는지 테스트가 지킨다
+- `Card` 는 가변이고 전역 공유이므로 **값을 복사해서** 얼린다.
+  관측을 만드는 것만으로 카드 정의가 바뀌지 않는지 테스트가 확인한다
+
+---
+
+## 10. 이번 단계에서 구현하지 않은 것
 
 Action 실행 · `ActionValidator` 전체 · Effect · `EffectRegistry` · Chain ·
 Trigger · 타이밍 · 소환 절차 · 릴리스 선택 · 공격 · 데미지 · 승패 판정 ·

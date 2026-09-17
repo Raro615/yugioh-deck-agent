@@ -41,7 +41,7 @@ from engine.ids import InstanceId
 from engine.vocabulary import Phase, Zone
 
 if TYPE_CHECKING:  # pragma: no cover - 타입 검사 전용
-    from engine.game_state_view import GameStateView
+    from engine.game_state_view import CardDefinitionView, GameStateView
 
 
 @dataclass(frozen=True, slots=True)
@@ -506,3 +506,240 @@ class CardIsFaceUp(Condition):
     def describe_ko(self) -> str:
         which = str(self.instance) if self.instance is not None else "자신"
         return f"{which} 가 앞면"
+
+
+# ======================================================================
+# 카드 정의 술어 — 관측이 실어 준 스냅숏만 읽는다
+# ======================================================================
+#
+# ``CardRepository`` 를 들지 않는다. 저장소는 **전체 카드**를 알고 있으므로,
+# 그것을 쥔 코드는 상대의 뒷면 카드도 조회할 수 있게 된다. 정의는 오직
+# ``CardView.definition`` 으로만 들어오고, 그것은 정체가 공개된 카드에만
+# 붙어 있다.
+
+#: 정의를 못 읽는 세 가지 경우와 그 이유.
+_NO_CARD = "문맥에 source 가 없어 어느 카드인지 알 수 없음"
+_NOT_VISIBLE = "{card} 가 관측에 보이지 않음 (가려진 존)"
+_FACE_DOWN = "{card} 는 뒷면이라 정체를 모름"
+_NO_DEFINITION = "{card} 의 카드 정의를 조회할 수 없음 (저장소 없음)"
+
+
+def _resolve_definition(
+    view: "GameStateView",
+    context: ConditionContext,
+    instance: InstanceId | None,
+) -> tuple["CardDefinitionView | None", str]:
+    """
+    카드 정의를 찾는다. 못 찾으면 ``(None, 이유)``.
+
+    세 가지 실패를 **구분해서** 알려준다. 전부 ``UNKNOWN`` 으로 이어지지만,
+    부르는 쪽이 "왜 모르는가" 를 알아야 다음 단계를 정할 수 있다.
+    """
+    target = instance if instance is not None else context.source
+    if target is None:
+        return None, _NO_CARD
+    card = view.find(target)
+    if card is None:
+        return None, _NOT_VISIBLE.format(card=target)
+    if not card.is_identified:
+        return None, _FACE_DOWN.format(card=target)
+    if card.definition is None:
+        return None, _NO_DEFINITION.format(card=target)
+    return card.definition, ""
+
+
+@dataclass(frozen=True, slots=True)
+class IsMonster(Condition):
+    """
+    그 카드가 몬스터인가.
+
+    ``instance`` 가 ``None`` 이면 문맥의 ``source`` 를 본다.
+    정의를 못 읽으면 ``UNKNOWN`` 이다 — 거짓이 아니다.
+    """
+
+    instance: InstanceId | None = None
+
+    def evaluate(self, view, context) -> ConditionResult:
+        definition, _ = _resolve_definition(view, context, self.instance)
+        if definition is None:
+            return ConditionResult.UNKNOWN
+        return ConditionResult.from_bool(definition.is_monster)
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        _, reason = _resolve_definition(view, context, self.instance)
+        return (reason,) if reason else ()
+
+    def canonical_state(self) -> tuple:
+        return ("is_monster", self.instance.value if self.instance else None)
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "is_monster"}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 가 몬스터"
+
+
+@dataclass(frozen=True, slots=True)
+class LevelAtLeast(Condition):
+    """
+    레벨이 이 값 이상인가.
+
+    **엑시즈와 링크 몬스터는 ``FALSE`` 다.** 랭크와 링크 수는 레벨이 아니고,
+    "레벨이 없다" 는 것은 확정된 사실이므로 ``UNKNOWN`` 이 아니다.
+    마법 · 함정도 같은 이유로 ``FALSE`` 다.
+    """
+
+    level: int
+    instance: InstanceId | None = None
+
+    def __post_init__(self) -> None:
+        if self.level < 0:
+            raise ValueError(f"레벨은 음수일 수 없습니다: {self.level}")
+
+    def evaluate(self, view, context) -> ConditionResult:
+        definition, _ = _resolve_definition(view, context, self.instance)
+        if definition is None:
+            return ConditionResult.UNKNOWN
+        level = definition.monster_level
+        if level is None:
+            # 레벨을 갖지 않는 카드다. 모르는 것이 아니라 없는 것이다.
+            return ConditionResult.FALSE
+        return ConditionResult.from_bool(level >= self.level)
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        _, reason = _resolve_definition(view, context, self.instance)
+        return (reason,) if reason else ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "level_at_least",
+            self.level,
+            self.instance.value if self.instance else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "level_at_least", "level": self.level}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 레벨 {self.level} 이상"
+
+
+@dataclass(frozen=True, slots=True)
+class AttackAtLeast(Condition):
+    """
+    공격력이 이 값 이상인가.
+
+    **``?`` 공격력은 ``UNKNOWN`` 이다** (실측 90장). 정의상 수치가 정해져
+    있지 않으므로 "2000 이상인가" 는 참도 거짓도 아니다. 필드 위의 실제
+    공격력을 알려면 지속 효과 계층이 있어야 하고, 그것은 Phase 8 이다.
+
+    **몬스터가 아니면 ``FALSE``** 다. 공격력이 없는 것은 확정된 사실이다.
+
+    이 검사를 ``atk`` 값만 보고 대신할 수 없다. ``cards.cdb`` 는 마법 · 함정
+    4,967장에 ``atk`` 를 저장하는데, 4,919장은 0 이고 **23장은 0 이 아니다** —
+    버제스토마 레안코일리아(1200) 처럼 발동하면 몬스터가 되는 함정이 몬스터
+    수치를 들고 있기 때문이다. 값만 보면 함정이 "공격력 0 이상" 으로 참이 되고,
+    함정 몬스터는 함정인 채로 공격력을 갖게 된다.
+
+    (함정 몬스터가 필드에서 실제로 몬스터가 되는 것은 규칙의 문제이고,
+    그 규칙 계층은 아직 없다.)
+
+    수치가 **없는** 몬스터(링크 몬스터의 수비력)도 ``FALSE`` 다.
+    """
+
+    amount: int
+    instance: InstanceId | None = None
+
+    def evaluate(self, view, context) -> ConditionResult:
+        definition, _ = _resolve_definition(view, context, self.instance)
+        if definition is None:
+            return ConditionResult.UNKNOWN
+        if not definition.is_monster:
+            # 저장된 atk 값이 무엇이든 이 카드에는 공격력이 없다.
+            return ConditionResult.FALSE
+        if definition.atk_is_question:
+            return ConditionResult.UNKNOWN
+        if not definition.has_atk:
+            return ConditionResult.FALSE
+        return ConditionResult.from_bool(definition.atk >= self.amount)
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        definition, reason = _resolve_definition(view, context, self.instance)
+        if reason:
+            return (reason,)
+        assert definition is not None
+        if definition.is_monster and definition.atk_is_question:
+            return (f"{definition.name} 의 공격력이 ? 라 수치로 정해져 있지 않음",)
+        return ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "attack_at_least",
+            self.amount,
+            self.instance.value if self.instance else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "attack_at_least", "amount": self.amount}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 공격력 {self.amount} 이상"
+
+
+@dataclass(frozen=True, slots=True)
+class AttributeIs(Condition):
+    """
+    속성이 이것인가. 이름은 ``EARTH`` · ``DARK`` 처럼 EDOPro 상수 이름을 쓴다.
+
+    몬스터가 아니면 속성이 없으므로 ``FALSE`` 다.
+    """
+
+    attribute: str
+    instance: InstanceId | None = None
+
+    def __post_init__(self) -> None:
+        if not self.attribute:
+            raise ValueError("속성 이름이 비어 있습니다.")
+        # 대소문자로 같은 조건이 두 표현을 갖지 않도록 정규화한다.
+        object.__setattr__(self, "attribute", self.attribute.upper())
+
+    def evaluate(self, view, context) -> ConditionResult:
+        definition, _ = _resolve_definition(view, context, self.instance)
+        if definition is None:
+            return ConditionResult.UNKNOWN
+        if definition.attribute_name is None:
+            return ConditionResult.FALSE
+        return ConditionResult.from_bool(definition.attribute_name == self.attribute)
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        _, reason = _resolve_definition(view, context, self.instance)
+        return (reason,) if reason else ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "attribute_is",
+            self.attribute,
+            self.instance.value if self.instance else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "attribute_is", "attribute": self.attribute}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 속성이 {self.attribute}"

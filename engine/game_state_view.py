@@ -33,6 +33,17 @@ AI 는 ``GameState`` 를 직접 받지 않는다. 받으면 ``move()`` · ``chan
 드로우한 그 카드가 아직 손에 있다" 는 정보가 새고, 그것은 실제 대전에서
 알 수 없는 사실이다.
 
+카드 정의
+---------
+조건이 "레벨 4 이상인가" 를 묻으려면 카드 정의가 필요하다. 그렇다고
+``ConditionEvaluator`` 가 ``CardRepository`` 를 들면 관측 경계가 무너진다 —
+저장소는 **전체 카드**를 알고 있으므로, 그것을 쥔 코드는 상대의 뒷면 카드도
+조회할 수 있게 된다.
+
+그래서 정의도 관측을 통해 온다. :class:`CardDefinitionView` 가 그 스냅숏이고,
+**정체가 공개된 카드에만 붙는다.** 가려진 카드는 ``card_id`` 자체가 없으므로
+정의를 붙일 대상이 없다.
+
 Phase 2-A 가 내보내지 않는 것
 ------------------------------
 ``UseRegistry`` · ``EffectRegistry`` · raw Lua · provenance · 파서 상태.
@@ -60,9 +71,192 @@ from engine.vocabulary import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - 타입 검사 전용
+    from core.card_model import Card
     from engine.state.card_instance import CardInstance
     from engine.state.game_state import GameState
     from engine.state.zones import ZoneContainer
+
+
+#: ATK/DEF 에 **수치가 없다**. 링크 몬스터의 수비력이 이 값이다.
+#: ``core.constants.STAT_NONE`` 과 같은 값이어야 한다
+#: (``tests/engine/test_card_definition_view.py`` 가 확인한다).
+#: 런타임에 ``core`` 를 가져오지 않으려고 여기에 다시 적는다 — 관측 계층은
+#: 상태 계층 위에만 서 있어야 한다.
+STAT_NONE = -1
+
+#: ATK/DEF 가 **물음표(?)** 다. 실측 90장이 ``?`` 공격력을 갖는다.
+#: 수치가 없는 것(:data:`STAT_NONE`)과 **다르다** — 값이 정해지지 않았을
+#: 뿐이므로 "2000 이상인가" 는 참도 거짓도 아니다.
+#: 근거: ``sources/official_db.py`` ("``atk``/``def`` 가 -2 이면 물음표(?) 수치").
+STAT_QUESTION = -2
+
+
+@dataclass(frozen=True, slots=True)
+class CardDefinitionView:
+    """
+    카드 **정의**의 읽기 전용 스냅숏.
+
+    ``core.card_model.Card`` 는 가변 dataclass 이고 저장소가 같은 객체를 계속
+    돌려준다. 그것을 관측에 그대로 실으면 조건 코드가 전역 카드 정의를
+    고칠 수 있게 되므로, 필요한 값만 뽑아 얼려서 싣는다.
+
+    **없는 값을 지어내지 않는다.** 여기 있는 것은 전부 ``Card`` 에 실제로
+    있는 값이거나 ``Card`` 가 이미 계산해 주는 파생값이다.
+
+    수치 없음과 물음표
+    ------------------
+    ``atk`` / ``defense`` 에는 두 가지 특별한 값이 들어올 수 있다.
+
+    - :data:`STAT_NONE` (-1) — **수치 자체가 없다.** 링크 몬스터의 수비력.
+    - :data:`STAT_QUESTION` (-2) — **물음표.** 값이 정해져 있지 않다.
+
+    둘을 합치면 "?" 공격력 몬스터가 공격력 0 으로 둔갑한다. 그래서
+    :attr:`atk_is_question` 과 :attr:`has_atk` 를 따로 둔다.
+    """
+
+    card_id: int
+    name: str
+
+    # --- 원본 비트마스크 ---------------------------------------------
+    type_mask: int
+    attribute_mask: int
+    race_mask: int
+    link_marker_mask: int
+
+    # --- 수치 ---------------------------------------------------------
+    level: int
+    """``cards.cdb`` 의 ``level`` 칸 그대로. 엑시즈면 랭크, 링크면 링크 수다."""
+    atk: int
+    defense: int
+    pendulum_scale_left: int | None
+    pendulum_scale_right: int | None
+
+    # --- Card 가 이미 계산해 주는 파생값 ------------------------------
+    is_monster: bool
+    is_spell: bool
+    is_trap: bool
+    is_xyz: bool
+    is_link: bool
+    is_pendulum: bool
+    is_extra_deck: bool
+    monster_level: int | None
+    """엑시즈 · 링크 · 비몬스터는 **레벨이 없다** (``None``)."""
+    rank: int | None
+    link_rating: int | None
+    attribute_name: str | None
+    """``EARTH`` · ``DARK`` 등. 몬스터가 아니면 ``None``."""
+    race_name: str | None
+    type_names: tuple[str, ...]
+    setcodes: tuple[int, ...]
+
+    # ------------------------------------------------------------------
+    # 수치의 세 상태
+    # ------------------------------------------------------------------
+    @property
+    def has_atk(self) -> bool:
+        """공격력이 **수치로** 정해져 있는가. ``?`` 와 '없음' 은 거짓이다."""
+        return self.atk >= 0
+
+    @property
+    def has_defense(self) -> bool:
+        return self.defense >= 0
+
+    @property
+    def atk_is_question(self) -> bool:
+        """공격력이 ``?`` 인가. 수치가 없는 것과 다르다."""
+        return self.atk == STAT_QUESTION
+
+    @property
+    def defense_is_question(self) -> bool:
+        return self.defense == STAT_QUESTION
+
+    # ------------------------------------------------------------------
+    # 만들기
+    # ------------------------------------------------------------------
+    @classmethod
+    def of(cls, card: "Card") -> "CardDefinitionView":
+        """``Card`` 에서 값을 **복사한다.** 원본을 참조로 들고 있지 않는다."""
+        return cls(
+            card_id=card.id,
+            name=card.name,
+            type_mask=card.type_mask,
+            attribute_mask=card.attribute_mask,
+            race_mask=card.race_mask,
+            link_marker_mask=card.link_marker_mask,
+            level=card.level,
+            atk=card.atk,
+            defense=card.defense,
+            pendulum_scale_left=card.pendulum_scale_left,
+            pendulum_scale_right=card.pendulum_scale_right,
+            is_monster=card.is_monster,
+            is_spell=card.is_spell,
+            is_trap=card.is_trap,
+            is_xyz=card.is_xyz,
+            is_link=card.is_link,
+            is_pendulum=card.is_pendulum,
+            is_extra_deck=card.is_extra_deck,
+            monster_level=card.monster_level,
+            rank=card.rank,
+            link_rating=card.link_rating,
+            attribute_name=card.attribute_name,
+            race_name=card.race_name,
+            type_names=tuple(card.type_names),
+            setcodes=tuple(card.setcodes),
+        )
+
+    def canonical_state(self) -> tuple:
+        return (
+            self.card_id,
+            self.name,
+            self.type_mask,
+            self.attribute_mask,
+            self.race_mask,
+            self.link_marker_mask,
+            self.level,
+            self.atk,
+            self.defense,
+            self.pendulum_scale_left,
+            self.pendulum_scale_right,
+            self.monster_level,
+            self.rank,
+            self.link_rating,
+            self.attribute_name,
+            self.race_name,
+            self.type_names,
+            self.setcodes,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "card_id": self.card_id,
+            "name": self.name,
+            "type_mask": self.type_mask,
+            "attribute_mask": self.attribute_mask,
+            "race_mask": self.race_mask,
+            "link_marker_mask": self.link_marker_mask,
+            "level": self.level,
+            "atk": self.atk,
+            "defense": self.defense,
+            "pendulum_scale_left": self.pendulum_scale_left,
+            "pendulum_scale_right": self.pendulum_scale_right,
+            "is_monster": self.is_monster,
+            "is_spell": self.is_spell,
+            "is_trap": self.is_trap,
+            "is_xyz": self.is_xyz,
+            "is_link": self.is_link,
+            "is_pendulum": self.is_pendulum,
+            "is_extra_deck": self.is_extra_deck,
+            "monster_level": self.monster_level,
+            "rank": self.rank,
+            "link_rating": self.link_rating,
+            "attribute_name": self.attribute_name,
+            "race_name": self.race_name,
+            "type_names": list(self.type_names),
+            "setcodes": list(self.setcodes),
+        }
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return f"{self.name}({self.card_id})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,11 +283,26 @@ class CardView:
     counters: tuple[tuple[str, int], ...] = ()
     name: str | None = None
     """표시용 이름. 정체를 모르면 ``None``."""
+    definition: CardDefinitionView | None = None
+    """
+    카드 정의 스냅숏. **정체가 공개된 카드에만 붙는다.**
+
+    ``None`` 인 경우가 둘이고, 조건 계층은 둘 다 ``UNKNOWN`` 으로 다루되
+    이유는 구분한다.
+
+    1. 카드가 가려져 있다 (``card_id`` 도 ``None``).
+    2. 정체는 아는데 카드 저장소가 없어 정의를 조회하지 못했다.
+    """
 
     @property
     def is_identified(self) -> bool:
         """정체를 아는가. ``False`` 면 ``card_id`` 를 기대하지 말 것."""
         return self.card_id is not None
+
+    @property
+    def has_definition(self) -> bool:
+        """카드 정의를 읽을 수 있는가."""
+        return self.definition is not None
 
     @property
     def is_targetable(self) -> bool:
@@ -103,7 +312,12 @@ class CardView:
     # --- 만들기 -------------------------------------------------------
     @classmethod
     def revealed(cls, card: "CardInstance") -> "CardView":
-        """정체까지 보이는 카드."""
+        """
+        정체까지 보이는 카드. 카드 정의 스냅숏도 함께 싣는다.
+
+        저장소가 연결되어 있지 않으면 ``definition`` 이 ``None`` 이다.
+        지어내지 않고 비워 둔다.
+        """
         return cls(
             instance_id=card.instance_id,
             card_id=card.card_id,
@@ -115,6 +329,7 @@ class CardView:
             owner=card.owner,
             counters=tuple(sorted(card.counters.items())),
             name=card.name,
+            definition=_definition_of(card),
         )
 
     @classmethod
@@ -125,6 +340,9 @@ class CardView:
         상대 필드의 뒷면 카드가 이 모양이다. 지목은 할 수 있어야 하므로
         ``instance_id`` 는 남긴다.
         """
+        # definition 을 **넘기지 않는다.** 가려진 카드에 정의를 실으면
+        # card_id 를 숨기는 의미가 없어진다 — 레벨·속성·공격력만 보고도
+        # 어느 카드인지 거의 특정할 수 있기 때문이다.
         return cls(
             instance_id=card.instance_id,
             card_id=None,
@@ -149,6 +367,7 @@ class CardView:
             self.position.value if self.position is not None else None,
             self.owner,
             self.counters,
+            self.definition.canonical_state() if self.definition is not None else None,
         )
 
     def to_dict(self) -> dict:
@@ -168,6 +387,8 @@ class CardView:
             data["owner"] = self.owner
         if self.counters:
             data["counters"] = [list(c) for c in self.counters]
+        if self.definition is not None:
+            data["definition"] = self.definition.to_dict()
         return data
 
     def __str__(self) -> str:
@@ -503,6 +724,23 @@ def _zone_view(container: "ZoneContainer", viewer: int) -> ZoneView:
 _FACE_SENSITIVE_ZONES: frozenset[Zone] = frozenset(
     {Zone.MZONE, Zone.EMZONE, Zone.SZONE, Zone.FZONE, Zone.PZONE, Zone.REMOVED}
 )
+
+
+def _definition_of(card: "CardInstance") -> CardDefinitionView | None:
+    """
+    카드 정의를 스냅숏으로 뜬다. 저장소가 없거나 정의를 못 찾으면 ``None``.
+
+    **예외를 밖으로 내보내지 않는다.** 관측을 만드는 중에 정의 하나가
+    없다고 판 전체를 못 보게 되면 안 되고, 없으면 조건이 ``UNKNOWN`` 으로
+    답하면 되기 때문이다.
+    """
+    repository = card.repository
+    if repository is None:
+        return None
+    definition = repository.get(card.card_id)
+    if definition is None:
+        return None
+    return CardDefinitionView.of(definition)
 
 
 def _card_view(card: "CardInstance", viewer: int) -> CardView:
