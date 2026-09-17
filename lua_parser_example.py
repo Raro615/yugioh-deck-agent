@@ -1,6 +1,16 @@
 """
-유희왕 Lua 카드 파일 파싱 예시
-Yu-Gi-Oh Lua Card File Parser Example
+유희왕 Lua 카드 파일 파싱 예시 (초기 프로토타입 — 더 이상 사용하지 않음)
+Yu-Gi-Oh Lua Card File Parser Example (superseded)
+
+이 파일의 기능은 ``sources/lua_loader.py`` 로 대체되었다.
+차이점:
+
+- 여기서는 상수를 파일 전체에서 뭉뚱그려 모으므로, 어떤 효과가 어디서
+  발동하는지 알 수 없다. 새 파서는 ``Effect.CreateEffect`` 블록 단위로 묶는다.
+- 새 파서는 ``e4=e3:Clone()`` 의 속성 상속과 ``CARD_*``/``SET_*`` 명명 상수를
+  처리하고, 파싱 결과를 캐시한다.
+
+참고용으로 남겨 두었다. 새 코드는 ``sources/lua_loader.py`` 를 사용할 것.
 """
 
 import re

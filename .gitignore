@@ -1,0 +1,14 @@
+# 상류에서 계속 갱신되는 데이터는 커밋하지 않는다.
+# 받는 방법: python -m scripts.fetch_official_db
+data/cards.cdb
+data/constants/
+data/cache/
+
+# 한국어 데이터 (확보되면 이 디렉터리에 둔다)
+data/ko/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
