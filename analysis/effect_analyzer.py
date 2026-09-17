@@ -116,6 +116,23 @@ _ACTION_CALLS: dict[str, ActionKind] = {
     "GetControl": ActionKind.CONTROL,
 }
 
+# 카드를 골라 옮기는 액션이 아니다. 효과가 고른 카드와 무관하므로
+# 선택 조건(위치·카드 조건)을 물려받으면 안 된다.
+#   예) "덱에서 카드를 서치하고 1장 드로우" 에서 드로우는 덱에서 무조건 뽑는다.
+_NON_SELECTION_ACTIONS = frozenset(
+    {
+        ActionKind.DRAW,
+        ActionKind.DAMAGE,
+        ActionKind.RECOVER,
+        ActionKind.TOKEN,
+    }
+)
+
+# 출발지가 규칙으로 정해져 있는 액션
+_FIXED_SOURCE: dict[ActionKind, list[str]] = {
+    ActionKind.DRAW: ["DECK"],
+}
+
 # 카드를 고르는 호출: (이름, 필터 인자 위치)
 _SELECT_CALLS = (
     "SelectTarget",
@@ -790,15 +807,20 @@ class EffectAnalyzer:
             seen.add(kind)
             args = _extract_call_args(body, match.end() - 1)
             locations = _dedupe(_RE_LOCATION.findall(args))
-            if not locations and selection is not None:
+            inherits = kind not in _NON_SELECTION_ACTIONS
+            if not locations and inherits and selection is not None:
                 # 고른 카드를 그대로 처리하는 경우가 흔하다.
                 locations = list(selection.locations)
+            if kind in _FIXED_SOURCE:
+                locations = list(_FIXED_SOURCE[kind])
             actions.append(
                 EffectAction(
                     kind=kind,
                     from_locations=locations,
                     to_location=ACTION_DESTINATION.get(kind),
-                    constraint=selection.constraint if selection else None,
+                    constraint=(
+                        selection.constraint if (inherits and selection) else None
+                    ),
                     raw=f"Duel.{match.group(1)}",
                 )
             )

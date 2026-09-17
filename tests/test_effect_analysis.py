@@ -195,3 +195,64 @@ def test_card_without_script_analyses_cleanly(analyzer, repository):
     analysis = analyzer.analyze(repository.get(89631139))  # 푸른 눈의 백룡
     assert analysis.effects == []
     assert analysis.has_script is False
+
+
+# ===================================================================
+# 액션이 효과의 선택 조건을 잘못 물려받지 않는다
+# ===================================================================
+
+
+@requires_official_db
+def test_draw_does_not_inherit_the_selection(analyzer, repository):
+    """
+    라뷰린스 서번츠 아리안나는 "1장 드로우" 뒤에 패의 악마족을 특수 소환한다.
+    드로우는 덱에서 무조건 뽑는 것이므로, 뒤따르는 선택의 위치(패)나
+    카드 조건(악마족)을 물려받으면 카드 텍스트와 어긋난다.
+    """
+    cards = repository.find_by_exact_name("라뷰린스 서번츠 아리안나")
+    if not cards:
+        pytest.skip("한국어 데이터 없음")
+    analysis = analyzer.analyze(cards[0])
+    draws = [
+        action
+        for effect in analysis.effects
+        for action in effect.actions
+        if action.kind is ActionKind.DRAW
+    ]
+    assert draws
+    for action in draws:
+        assert action.from_locations == ["DECK"]
+        assert action.constraint is None
+
+
+@requires_official_db
+def test_life_point_actions_carry_no_card_condition(analyzer, repository):
+    """데미지와 회복은 카드를 고르지 않는다. 카드 조건이 붙으면 안 된다."""
+    checked = 0
+    for card in list(repository.all_cards())[:1500]:
+        if card.script is None:
+            continue
+        for effect in analyzer.analyze(card).effects:
+            for action in effect.actions:
+                if action.kind in (ActionKind.DAMAGE, ActionKind.RECOVER):
+                    assert action.constraint is None, card.display_name()
+                    checked += 1
+    assert checked > 0
+
+
+@requires_official_db
+def test_card_moving_actions_still_inherit_the_selection(analyzer, repository):
+    """
+    반대로, 고른 카드를 옮기는 액션은 선택 조건을 그대로 이어받아야 한다.
+    수정이 과하게 적용되면 이쪽이 깨진다.
+    """
+    analysis = analyzer.analyze(repository.get(CYMBAL_SKELETON))
+    action = next(
+        a
+        for effect in analysis.effects
+        for a in effect.actions
+        if a.kind is ActionKind.SPECIAL_SUMMON
+    )
+    assert "GRAVE" in action.from_locations
+    assert action.constraint is not None
+    assert "ORCUST" in action.constraint.setcodes
