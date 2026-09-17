@@ -15,17 +15,18 @@ Phase 1 에서 의도적으로 만들지 않은 것 (TODO)
 
 구현 중에 "이게 필요해 보인다" 고 느낀 지점들. 각각 해당 Phase 에서 다룬다.
 
-- **칸(slot) 모델** — 지금 ``MZONE`` / ``SZONE`` 은 빈 칸을 남기지 않는 순서
-  컨테이너다. "3번 칸이 비었다", "존이 꽉 찼다" 는 Phase 4 의 칸 제약과 함께
-  들어온다.
+- **칸 제약의 규칙 판정** — 칸 모델 자체는 있다 (``MZONE`` 5칸 · ``EMZONE``
+  1칸 · ``SZONE`` 5칸 · ``FZONE`` 1칸 · ``PZONE`` 2칸, 가운데가 비어도 밀리지
+  않는다). 다만 ``ZoneFull`` 은 **표현할 수 없는 상태**를 막을 뿐이고,
+  "여기에 소환해도 되는가" · "링크 마커가 가리키는 칸인가" 는 Phase 4 다.
 - **이동에 따른 이벤트** — ``move_card`` 는 ``previous`` 만 남기고 이벤트를
   만들지 않는다. ``GameEvent`` / ``EventJournal`` 은 Phase 2 다.
 - **``chain`` / ``pending`` / ``journal``** — :class:`~engine.state.game_state.GameState`
   에 자리만 있다. 내용이 생기면 ``clone()`` 과 ``canonical_state()`` 양쪽에
   함께 넣어야 한다.
-- **횟수 제한 판정** — :class:`~engine.state.player.UseRegistry` 는 횟수를
+- **횟수 제한 판정** — :class:`~engine.state.use_registry.UseRegistry` 는 횟수를
   세기만 한다. "몇 번까지 허용인가" 는 Phase 4 다.
-- **턴 종료 시 초기화 호출** — ``PlayerState.reset_for_turn()`` 과
+- **사용 횟수 · 턴 플래그의 초기화 시점** — ``UseRegistry.clear()`` 와
   ``TurnState.begin_next_turn()`` 은 있지만, 언제 부를지는 정하지 않았다.
   턴 진행 규칙은 Phase 4 의 타이밍 계층이다.
 - **``AppliedEffect``** — 일시 효과를 보관만 하고 해석하지 않는다. Phase 8.

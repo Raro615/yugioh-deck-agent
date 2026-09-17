@@ -155,9 +155,9 @@ def test_clone_does_not_leak_changes_back_to_the_original():
     copy = state.clone()
     copy.draw(0, 3)
     copy.player(0).change_life(-2000)
-    copy.player(0).record_normal_summon()
-    copy.player(0).turn_flags.drew_for_turn = True
-    copy.player(0).uses.record_card(InstanceId(0))
+    copy.uses.mark_card_used(0, copy.player(0).hand[0].instance_id)
+    copy.uses.mark_card_name_used(0, 1000)
+    copy.uses.mark_effect_used(0, EffectRef(1000, 0))
     copy.player(0).hand[0].add_counter("SPELL")
     copy.player(0).hand[0].materials.append(InstanceId(99))
     copy.turn.begin_next_turn()
@@ -165,9 +165,7 @@ def test_clone_does_not_leak_changes_back_to_the_original():
 
     assert len(state.player(0).hand) == 5
     assert state.player(0).life_points == DEFAULT_LIFE_POINTS
-    assert state.player(0).normal_summon_used == 0
-    assert state.player(0).turn_flags.drew_for_turn is False
-    assert len(state.player(0).uses) == 0
+    assert len(state.uses) == 0
     assert state.player(0).hand[0].counter("SPELL") == 0
     assert state.player(0).hand[0].materials == []
     assert state.turn.turn_number == 1
@@ -215,7 +213,7 @@ def test_same_operations_produce_the_same_hash():
         state.draw(1, 5)
         state.move(state.player(0).hand[0], Zone.MZONE, position=Position.FACEUP_ATTACK)
         state.player(1).change_life(-1500)
-        state.player(0).uses.record_effect(0, EffectRef(2511, 1))
+        state.uses.mark_effect_used(0, EffectRef(2511, 1))
         state.turn.advance_phase()
         return state.state_hash()
 
@@ -235,8 +233,9 @@ def test_hash_changes_with_every_tracked_dimension():
     assert mutated(lambda s: s.player(0).change_life(-1)) != baseline
     assert mutated(lambda s: s.turn.advance_phase()) != baseline
     assert mutated(lambda s: s.turn.begin_next_turn()) != baseline
-    assert mutated(lambda s: s.player(0).record_normal_summon()) != baseline
-    assert mutated(lambda s: s.player(0).uses.record_card(InstanceId(0))) != baseline
+    assert mutated(lambda s: s.uses.mark_card_used(0, s.player(0).deck[0].instance_id)) != baseline
+    assert mutated(lambda s: s.uses.mark_card_name_used(0, 1000)) != baseline
+    assert mutated(lambda s: s.uses.mark_effect_used(0, EffectRef(1000, 0))) != baseline
     assert mutated(lambda s: s.player(0).deck[0].add_counter("SPELL")) != baseline
     assert mutated(lambda s: s.set_result(0, "승")) != baseline
     assert (
@@ -315,3 +314,134 @@ def test_turn_state_rejects_impossible_values():
         TurnState().set_phase(Phase.MAIN1, step=-1)
     with pytest.raises(ValueError):
         TurnState(phase=Phase.DAMAGE).advance_phase()  # 턴 순서에 없는 페이즈
+
+
+# ----------------------------------------------------------------------
+# §15 state_hash 는 instance_id 배정 순서와 무관해야 한다
+# ----------------------------------------------------------------------
+
+
+def test_hash_ignores_the_order_instances_were_created_in():
+    """
+    ``InstanceId`` 는 만들어진 순서를 담는다. 그 값이 해시에 그대로 들어가면
+    "같은 판이지만 카드를 다른 순서로 놓아 만든 상태" 가 다른 해시를 갖는다.
+    """
+    forward = GameState.create(decks=([10, 20], []))
+
+    backward = GameState.create(decks=([], []))
+    later = backward.create_instance(20, owner=0, zone=Zone.DECK)
+    earlier = backward.create_instance(10, owner=0, zone=Zone.DECK, index=0)
+
+    # 배정 순서는 실제로 반대다 — 테스트가 헛돌지 않는지 먼저 확인한다.
+    assert later.instance_id < earlier.instance_id
+    assert [c.card_id for c in forward.player(0).deck] == [10, 20]
+    assert [c.card_id for c in backward.player(0).deck] == [10, 20]
+
+    assert backward.state_hash() == forward.state_hash()
+
+
+def test_hash_still_separates_cards_that_are_actually_in_different_places():
+    """자리 번호로 바꿔 넣는다고 해서 서로 다른 판이 같아지면 안 된다."""
+    a = make_state()
+    b = make_state()
+    a.move(a.player(0).deck[0], Zone.MZONE, position=Position.FACEUP_ATTACK)
+    b.move(b.player(0).deck[1], Zone.MZONE, position=Position.FACEUP_ATTACK)
+    assert a.state_hash() != b.state_hash()
+
+
+def test_use_registry_is_part_of_the_hash_without_leaking_instance_order():
+    forward = GameState.create(decks=([10, 20], []))
+    backward = GameState.create(decks=([], []))
+    backward.create_instance(20, owner=0, zone=Zone.DECK)
+    backward.create_instance(10, owner=0, zone=Zone.DECK, index=0)
+
+    for state in (forward, backward):
+        # 양쪽 모두 "덱 맨 위 카드" 를 썼다고 기록한다. 인스턴스 번호는 다르다.
+        state.uses.mark_card_used(0, state.player(0).deck[0].instance_id)
+
+    assert forward.uses.per_card != backward.uses.per_card  # 원본 키는 다르고
+    assert forward.state_hash() == backward.state_hash()  # 해시는 같다
+
+
+def test_use_registry_lives_on_the_game_state_not_the_player():
+    state = make_state()
+    assert not hasattr(state.player(0), "uses")
+    state.uses.mark_card_name_used(0, 1000)
+    assert state.uses.card_name_used(0, 1000)
+    assert not state.uses.card_name_used(1, 1000)
+
+
+# ----------------------------------------------------------------------
+# §17/§21 결정론적 셋업 — 무작위는 주입된 seed 에서만 나온다
+# ----------------------------------------------------------------------
+
+
+def test_setup_does_not_shuffle_by_default():
+    state = make_state()
+    assert [card.card_id for card in state.player(0).deck] == DECK_A
+    assert state.seed is None
+
+
+def test_same_seed_produces_the_same_state_hash():
+    state_a = make_state(seed=1234, shuffle=True)
+    state_b = make_state(seed=1234, shuffle=True)
+    assert state_a.state_hash() == state_b.state_hash()
+    assert [c.card_id for c in state_a.player(0).deck] == [
+        c.card_id for c in state_b.player(0).deck
+    ]
+
+
+def test_a_different_seed_produces_a_different_order():
+    state_a = make_state(seed=1234, shuffle=True)
+    state_b = make_state(seed=5678, shuffle=True)
+    assert [c.card_id for c in state_a.player(0).deck] != [
+        c.card_id for c in state_b.player(0).deck
+    ]
+    # 섞였을 뿐 장수와 구성은 그대로다.
+    assert sorted(c.card_id for c in state_a.player(0).deck) == sorted(DECK_A)
+
+
+def test_shuffle_actually_reorders_the_deck():
+    state = make_state(seed=1234, shuffle=True)
+    assert [c.card_id for c in state.player(0).deck] != DECK_A
+
+
+def test_shuffle_without_a_seed_is_refused():
+    """seed 없는 무작위는 재현할 수 없다. 조용히 넘어가지 않고 거부한다."""
+    with pytest.raises(ValueError):
+        make_state(shuffle=True)
+
+
+def test_rng_is_unavailable_without_a_seed():
+    """전역 random 으로 조용히 넘어가면 재현 불가능한 상태가 만들어진다."""
+    with pytest.raises(RuntimeError):
+        make_state().rng
+
+
+def test_rng_is_per_duel_and_not_the_global_random():
+    import random
+
+    state = make_state(seed=1234)
+    random.seed(1)
+    first = [state.rng.random() for _ in range(3)]
+
+    state = make_state(seed=1234)
+    random.seed(999)
+    second = [state.rng.random() for _ in range(3)]
+
+    assert first == second
+
+
+def test_clone_copies_the_rng_state_instead_of_sharing_it():
+    state = make_state(seed=1234)
+    copy = state.clone()
+    assert copy.seed == 1234
+    drawn_in_copy = [copy.rng.random() for _ in range(5)]
+    assert [state.rng.random() for _ in range(5)] == drawn_in_copy
+
+
+def test_seed_is_not_part_of_the_logical_state():
+    """같은 판이면 어떤 seed 로 도달했든 같은 해시다."""
+    unseeded = GameState.create(decks=([10, 20], []))
+    seeded = GameState.create(decks=([10, 20], []), seed=99)
+    assert seeded.state_hash() == unseeded.state_hash()

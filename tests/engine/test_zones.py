@@ -4,8 +4,8 @@ import pytest
 
 from engine.ids import InstanceId
 from engine.state.card_instance import CardInstance
-from engine.state.zones import ZoneContainer, move_card
-from engine.vocabulary import Position, Zone
+from engine.state.zones import ZoneContainer, ZoneFull, move_card
+from engine.vocabulary import Position, Zone, ZoneKind, ZoneVisibility
 
 
 def make_cards(count: int, zone: Zone = Zone.DECK, owner: int = 0):
@@ -180,3 +180,182 @@ def test_canonical_state_reflects_order():
 
     b.insert(0, b.pop())
     assert a.canonical_state() != b.canonical_state()
+
+
+# ----------------------------------------------------------------------
+# §8/§23 칸 방식 존 — 가운데가 비어도 양옆이 밀려나지 않는다
+# ----------------------------------------------------------------------
+
+
+def test_zone_declares_its_kind_capacity_and_visibility():
+    deck = ZoneContainer(Zone.DECK, owner=0)
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+
+    assert deck.kind is ZoneKind.ORDERED
+    assert deck.capacity is None
+    assert deck.visibility is ZoneVisibility.HIDDEN
+    assert not deck.is_slotted
+
+    assert monsters.kind is ZoneKind.SLOTTED
+    assert monsters.capacity == 5
+    assert monsters.visibility is ZoneVisibility.PUBLIC
+    assert monsters.is_slotted
+
+
+def test_slotted_zone_starts_with_every_slot_empty():
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    assert monsters.slots() == [None] * 5
+    assert monsters.free_slots() == [0, 1, 2, 3, 4]
+    assert len(monsters) == 0
+
+
+def test_place_puts_a_card_in_the_slot_you_asked_for():
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    (card,) = make_cards(1, zone=Zone.MZONE)
+    monsters.place(3, card)
+
+    assert monsters.slot(3) is card
+    assert monsters.free_slots() == [0, 1, 2, 4]
+    assert card.sequence == 3  # sequence 는 칸 번호다
+    assert len(monsters) == 1
+
+
+def test_removing_from_the_middle_leaves_a_hole():
+    """몬스터 존 1번이 비었다고 2번 몬스터가 1번으로 당겨지면 안 된다."""
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    cards = make_cards(3, zone=Zone.MZONE)
+    for index, card in enumerate(cards):
+        monsters.place(index, card)
+
+    monsters.remove(cards[1])
+
+    assert monsters.slots() == [cards[0], None, cards[2], None, None]
+    assert cards[2].sequence == 2
+    assert monsters.free_slots() == [1, 3, 4]
+
+
+def test_append_to_a_slotted_zone_takes_the_lowest_free_slot():
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    cards = make_cards(3, zone=Zone.MZONE)
+    monsters.place(2, cards[0])
+    monsters.append(cards[1])
+    monsters.append(cards[2])
+
+    assert monsters.slots() == [cards[1], cards[2], cards[0], None, None]
+
+
+def test_insert_into_a_slotted_zone_does_not_shift_slots():
+    """순서 존의 insert 와 달리 칸은 밀리지 않는다 — place 와 같은 뜻이다."""
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    cards = make_cards(2, zone=Zone.MZONE)
+    monsters.place(1, cards[0])
+    monsters.insert(0, cards[1])
+
+    assert monsters.slots() == [cards[1], cards[0], None, None, None]
+
+
+def test_occupied_slot_is_refused():
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    cards = make_cards(2, zone=Zone.MZONE)
+    monsters.place(0, cards[0])
+    with pytest.raises(ZoneFull):
+        monsters.place(0, cards[1])
+
+
+def test_a_full_slotted_zone_refuses_more_cards():
+    """
+    이것은 **규칙 판정이 아니라 표현 불가**다. "소환해도 되는가" 는 Phase 4 이고,
+    여기서는 6번째 몬스터가 있는 존재할 수 없는 상태를 막을 뿐이다.
+    """
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    cards = make_cards(6, zone=Zone.MZONE)
+    for card in cards[:5]:
+        monsters.append(card)
+
+    assert monsters.is_full
+    with pytest.raises(ZoneFull):
+        monsters.append(cards[5])
+
+
+def test_out_of_range_slot_is_an_index_error_not_a_silent_append():
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    (card,) = make_cards(1, zone=Zone.MZONE)
+    with pytest.raises(IndexError):
+        monsters.place(5, card)
+
+
+def test_extra_monster_zone_holds_exactly_one_card():
+    emz = ZoneContainer(Zone.EMZONE, owner=0)
+    cards = make_cards(2, zone=Zone.EMZONE)
+    assert emz.capacity == 1
+    emz.append(cards[0])
+    assert emz.is_full
+    with pytest.raises(ZoneFull):
+        emz.append(cards[1])
+
+
+def test_ordered_zones_have_no_slots():
+    deck = ZoneContainer(Zone.DECK, owner=0)
+    (card,) = make_cards(1)
+    assert deck.free_slots() == []
+    with pytest.raises(TypeError):
+        deck.slots()
+    with pytest.raises(TypeError):
+        deck.slot(0)
+    with pytest.raises(TypeError):
+        deck.place(0, card)
+
+
+def test_extra_deck_is_ordered_but_still_capped():
+    extra = ZoneContainer(Zone.EXTRA, owner=0)
+    cards = make_cards(16, zone=Zone.EXTRA)
+    for card in cards[:15]:
+        extra.append(card)
+    assert extra.kind is ZoneKind.ORDERED
+    assert extra.is_full
+    with pytest.raises(ZoneFull):
+        extra.insert(0, cards[15])
+
+
+def test_slotted_clone_keeps_the_holes():
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    cards = make_cards(2, zone=Zone.MZONE)
+    monsters.place(0, cards[0])
+    monsters.place(4, cards[1])
+
+    copy = monsters.clone()
+    assert [None if c is None else c.card_id for c in copy.slots()] == [
+        cards[0].card_id,
+        None,
+        None,
+        None,
+        cards[1].card_id,
+    ]
+    assert copy[0] is not cards[0]
+
+
+def test_canonical_state_distinguishes_which_slots_are_occupied():
+    """0·2번에 놓인 판과 0·1번에 놓인 판은 서로 다른 상태다."""
+    a = ZoneContainer(Zone.MZONE, owner=0)
+    b = ZoneContainer(Zone.MZONE, owner=0)
+    for index, container in ((2, a), (1, b)):
+        cards = make_cards(2, zone=Zone.MZONE)
+        container.place(0, cards[0])
+        container.place(index, cards[1])
+
+    assert a.canonical_state() != b.canonical_state()
+    assert len(a.canonical_state()[2]) == 5  # 빈 칸까지 표현한다
+
+
+def test_move_card_into_a_specific_monster_zone_slot():
+    hand = ZoneContainer(Zone.HAND, owner=0)
+    monsters = ZoneContainer(Zone.MZONE, owner=0)
+    (card,) = make_cards(1, zone=Zone.HAND)
+    hand.append(card)
+
+    move_card(card, hand, monsters, index=3, position=Position.FACEUP_ATTACK)
+
+    assert monsters.slot(3) is card
+    assert card.sequence == 3
+    assert card.previous.location is Zone.HAND
+    assert len(hand) == 0

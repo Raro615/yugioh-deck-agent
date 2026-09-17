@@ -70,8 +70,9 @@ class TurnState:
         return self.phase
 
     def begin_next_turn(self) -> "TurnState":
-        """턴을 넘긴다. 플레이어별 초기화는 :class:`~engine.state.player.PlayerState`
-        쪽 ``reset_for_turn()`` 이 따로 한다."""
+        """턴을 넘긴다. 사용 횟수 초기화
+        (:meth:`~engine.state.use_registry.UseRegistry.clear`) 는 여기서 하지
+        않는다 — 무엇이 언제 리셋되는가는 규칙이고 Phase 4 의 몫이다."""
         self.turn_number += 1
         self.turn_player = self.non_turn_player
         self.set_phase(TURN_PHASE_ORDER[0])

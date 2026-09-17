@@ -206,11 +206,41 @@ GameState
 
 PlayerState
  ├ life_points: int
- ├ zones: dict[Zone, ZoneContainer]
- │        HAND / DECK / EXTRA / MZONE / SZONE / GRAVE / REMOVED / FZONE / PZONE
- ├ normal_summon_used: int / allowed: int
- └ turn_flags: TurnFlags
+ └ zones: dict[Zone, ZoneContainer]
+          DECK / HAND / EXTRA / MZONE / **EMZONE** / SZONE / GRAVE / REMOVED / FZONE / PZONE
 ```
+
+> **구현과의 차이 (Phase 1 반영됨).** 설계 초안은 `PlayerState` 에
+> `normal_summon_used` / `turn_flags` 를 두었지만, 실제 구현에서는 **뺐다.**
+> "일반 소환을 몇 번 했는가", "이번 턴에 드로우했는가" 는 턴 진행 **규칙에
+> 속하는 상태**다. Phase 1 에 넣어두면 규칙을 구현하기도 전에 규칙의 모양을
+> 못박게 된다. Phase 4 의 타이밍 계층이 들어올 때 함께 정한다.
+> `tests/engine/test_player_state.py::test_player_state_carries_no_rule_state`
+> 가 이 필드들이 다시 생기지 않는지 감시한다.
+
+### 엑스트라 몬스터 존은 별도 존이다
+
+`EMZONE` 은 메인 몬스터 존과 **다른 존**이다 (`LOCATION_EMZONE = 0x1000`,
+`LOCATION_MZONE = 0x4`). 같은 존으로 뭉뚱그리면 "엑스트라 덱 몬스터를 몇 장
+놓을 수 있는가" 가 통째로 틀어진다. 칸 수도 5 와 1 로 다르다.
+
+### 존은 두 종류다 — 순서 존과 칸 존
+
+| 종류 | 존 | 성질 |
+|---|---|---|
+| `ORDERED` | DECK · HAND · EXTRA · GRAVE · REMOVED · OVERLAY | 순서가 의미를 갖고 칸 번호가 없다 |
+| `SLOTTED` | MZONE(5) · EMZONE(1) · SZONE(5) · FZONE(1) · PZONE(2) | 칸이 고정. **가운데가 비어도 양옆이 밀려나지 않는다** |
+
+칸 존에서 `sequence` 는 **칸 번호**다. 몬스터 존 1번이 비었다고 2번 몬스터가
+1번으로 당겨지면 안 되므로, `ZoneContainer` 는 빈 칸까지 들고 있고
+`canonical_state()` 도 빈 칸을 표현한다.
+
+용량을 넘기면 `ZoneFull` 로 거부하는데, 이는 **규칙 판정이 아니라 표현 불가**를
+알리는 것이다. "소환해도 되는가" 는 Phase 4 가 판정한다.
+
+존마다 공개 범위(`ZoneVisibility`)도 선언한다 — DECK 은 `HIDDEN`,
+HAND · EXTRA 는 `OWNER_ONLY`, 나머지는 `PUBLIC`. 개별 카드의 앞면/뒷면과는
+별개의 값이다.
 
 ### once-per-turn 은 별도 레지스터
 
@@ -219,16 +249,32 @@ PlayerState
 
 | 스코프 | Lua | 건수 | 키 |
 |---|---|---:|---|
-| 카드 단위 | `SetCountLimit(1)` | 2,566 | `InstanceId` |
+| 카드 단위 | `SetCountLimit(1)` | 2,566 | `(player, instance_id)` |
 | 카드명 단위 | `SetCountLimit(1,id)` | 5,399 | `(player, card_id)` |
 | 효과 단위 | `SetCountLimit(1,{id,n})` | 2,478 | `(player, card_id, ordinal)` |
 
 ```
-UseRegistry
- ├ per_card:      set[InstanceId]
- ├ per_card_name: set[(player, card_id)]
- └ per_effect:    set[(player, card_id, ordinal)]
+UseRegistry                      # engine/state/use_registry.py — GameState 가 하나만 소유
+ ├ per_card:      dict[(player, instance_id), int]
+ ├ per_card_name: dict[(player, card_id), int]
+ └ per_effect:    dict[(player, card_id, ordinal), int]
 ```
+
+> **구현과의 차이 두 가지 (Phase 1 반영됨).**
+> 1. 설계 초안은 `set` 세 개였지만 실제로는 **횟수 카운터**다.
+>    `SetCountLimit(2..4, ...)` 를 쓰는 효과가 실측 53건 있어서 "썼다/안 썼다"
+>    로는 표현되지 않는다. "몇 번까지 허용인가" 는 여전히 Phase 4 다.
+> 2. `per_card` 키에 `player` 를 넣었고, 레지스트리를 `PlayerState` 가 아니라
+>    `GameState` 가 하나만 갖는다. 키가 전부 `(player, ...)` 로 시작하므로
+>    플레이어마다 따로 둘 이유가 없고, 따로 두면 "상대의 카드명 제약" 을
+>    볼 때 두 곳을 봐야 한다.
+>
+> `PerCardKey` 와 `PerCardNameKey` 는 둘 다 `(int, int)` 다. **한 딕셔너리에
+> 담으면 "인스턴스 7번" 과 "카드 ID 7" 이 같은 칸을 쓴다.** 세 표를 반드시
+> 분리해야 하는 이유다.
+>
+> 리셋 시점은 Phase 1 이 정하지 않는다. `clear()` 를 제공할 뿐이고, 턴이
+> 넘어갈 때 부르는 것은 규칙이라 Phase 4 의 몫이다.
 
 ---
 
@@ -575,6 +621,41 @@ Phase 3.5 만 `analysis/` 를 건드리고, 나머지는 `engine/` 신규 파일
 **결정론 테스트가 가장 중요하다.** `GameState` 에 정규 해시를 두고,
 난수는 seed 로 재현한다.
 
+### `state_hash()` 가 지켜야 하는 것 (Phase 1 구현 결과)
+
+`InstanceId` 는 **만들어진 순서**를 담는다. 그 값을 그대로 해시에 넣으면
+"같은 판이지만 카드를 다른 순서로 놓아 만든 상태" 가 다른 해시를 갖는다.
+그래서 해시 직전에 정해진 순회 순서(플레이어 → `PLAYER_ZONES` 순 → 존 안의
+순서 → 그 카드의 소재)대로 **0 부터 다시 번호를 매긴다**
+(`GameState.instance_numbering()`). 원본 `instance_id` 는 손대지 않는다.
+
+`UseRegistry.per_card` 의 키에도 `instance_id` 가 들어 있으므로 같은 함수로
+바꿔 넣는다. 그러지 않으면 인스턴스 배정 순서가 레지스트리를 통해 해시에
+새어 나온다.
+
+해시에 **넣지 않는 것**: `InstanceIdAllocator` 의 다음 번호, `seed`, 난수원의
+내부 상태. 전부 논리적인 판 상태가 아니다 — 같은 판이면 어떤 seed 로
+도달했든 같은 해시다.
+
+### 무작위는 주입된 seed 에서만 나온다
+
+`GameState.create(..., seed=1234, shuffle=True)` 만 셔플한다. 기본값은
+받은 순서 그대로다.
+
+- `shuffle=True` 인데 `seed` 가 없으면 `ValueError` 로 **거부한다.**
+  재현할 수 없는 상태를 조용히 만들지 않는다.
+- 전역 `random` 을 쓰지 않는다. 듀얼마다 `random.Random(seed)` 를 하나 갖고,
+  seed 없이 `state.rng` 를 꺼내려 하면 `RuntimeError` 다.
+- `clone()` 은 난수원을 **상태째 복제**한다. 사본에서 셔플해도 원본의 다음
+  난수는 변하지 않는다.
+
+### `clone()` 과 `InstanceId`
+
+사본은 같은 세계의 사본이므로 `instance_id` 값을 **바꾸지 않는다.** 그래야
+사본으로 수를 읽어본 뒤 원본에 같은 `InstanceId` 로 지시할 수 있다. 할당기도
+함께 복제해서 두 갈래가 같은 다음 번호에서 이어간다 — 갈라진 세계선끼리
+번호가 겹치는 것은 충돌이 아니다.
+
 ---
 
 ## 19. 위험 요소
@@ -583,7 +664,7 @@ Phase 3.5 만 `analysis/` 를 건드리고, 나머지는 `engine/` 신규 파일
 |---|---|---|
 | **효과 구현이 병목** | 파라미터 완전 25.4% | 레지스트리로 카드별 점진 추가. 미구현은 명시적 거부 |
 | **조건 판정 불가 35.6%** | 실측 | 3-값 논리 + 등급. 절대 추측하지 않음 |
-| **효과 식별자 부재** | index 중복 56장 | Phase 1 에서 `EffectRef` 도입 |
+| **효과 식별자 부재** | `EffectSpec.index` 중복 **4,883장** (초안의 56장은 오기) | Phase 1 에서 `EffectRef(card_id, ordinal)` 도입 |
 | **카드 정의 오염** | Card 가변 · 공유 | CardInstance 분리 + 회귀 테스트 |
 | **타이밍 정보 없음** | `SetHintTiming` 미수집 | Phase 3.5 |
 | **지속 효과 재계산 비용** | 매 상태 변화마다 | 파생 상태 캐시 + 무효화 |
@@ -603,8 +684,9 @@ Phase 3.5 만 `analysis/` 를 건드리고, 나머지는 `engine/` 신규 파일
 | `engine/ids.py` | `InstanceId`, `EffectRef(card_id, ordinal)` |
 | `engine/state/card_instance.py` | 정의는 프로퍼티 참조, 상태만 소유 |
 | `engine/state/zones.py` | 존 컨테이너, 순서 보존 이동 |
-| `engine/state/player.py` | LP, 존, 일반소환 횟수, `UseRegistry` 3-스코프 |
-| `engine/state/game_state.py` | 조립 + `clone()` + `state_hash()` |
+| `engine/state/player.py` | LP 와 존 10 개. 규칙 상태는 담지 않는다 |
+| `engine/state/use_registry.py` | `UseRegistry` 3-스코프 (듀얼 전체에 하나) |
+| `engine/state/game_state.py` | 조립 + `clone()` + `state_hash()` + seed |
 | `engine/state/turn.py` | 턴 · 페이즈 진행 (효과 없음) |
 
 ### 제외
@@ -617,8 +699,12 @@ Action · 조건 평가 · 체인 · 효과 실행 · 소환법 · 지속 효과
 2. 카드를 존 사이로 옮겨도 `repository.get(id)` 가 **변하지 않음**
 3. `clone()` 후 원본과 사본이 서로 영향 없음
 4. 같은 조작 순서 → 같은 `state_hash()`
-5. `UseRegistry` 가 카드 / 카드명 / 효과 스코프를 구분
-6. **기존 218개 테스트 전부 통과**
+5. `state_hash()` 가 `instance_id` **배정 순서에 좌우되지 않음**
+6. `setup(seed=1234)` 를 두 번 하면 같은 `state_hash()`
+7. EMZ 가 메인 몬스터 존과 **다른 존**이고 칸 수가 1
+8. 칸 존에서 가운데를 빼도 양옆이 밀려나지 않음
+9. `UseRegistry` 가 카드 / 카드명 / 효과 스코프를 구분
+10. **기존 테스트 전부 통과** (`tests/engine/` 136개 포함 571 passed / 4 skipped)
 
 Phase 1 은 규칙을 전혀 담지 않으므로 구현 · 검증이 명확하고, 이후 모든
 단계의 토대가 된다.

@@ -106,8 +106,8 @@ def test_card_definitions_survive_a_full_duel_state_workout(repository):
         card.set_controller(1)
     state.move(state.player(1).hand[0], Zone.GRAVE, to_player=0)
     state.player(0).change_life(-4000)
-    state.player(0).uses.record_effect(0, EffectRef(card_ids[0], 0))
-    state.player(0).record_normal_summon()
+    state.uses.mark_effect_used(0, EffectRef(card_ids[0], 0))
+    state.uses.mark_card_name_used(0, card_ids[0])
     state.turn.begin_next_turn()
     state.clone().draw(1, 10)
 

@@ -43,6 +43,15 @@ class Zone(str, Enum):
     DECK = "DECK"
     HAND = "HAND"
     MZONE = "MZONE"
+    """메인 몬스터 존 5칸."""
+    EMZONE = "EMZONE"
+    """
+    엑스트라 몬스터 존. **메인 몬스터 존과 다른 존이다.**
+
+    엑스트라 덱에서 나온 몬스터가 놓이는 자리이고, 메인 몬스터 존 5칸 제한에
+    포함되지 않는다. 같은 존으로 취급하면 "필드에 몬스터 6장" 같은 상태를
+    표현할 수 없고, 칸 제약을 다룰 Phase 4 에서 되돌릴 수 없는 혼선이 생긴다.
+    """
     SZONE = "SZONE"
     GRAVE = "GRAVE"
     REMOVED = "REMOVED"
@@ -61,6 +70,7 @@ PLAYER_ZONES: tuple[Zone, ...] = (
     Zone.HAND,
     Zone.EXTRA,
     Zone.MZONE,
+    Zone.EMZONE,
     Zone.SZONE,
     Zone.GRAVE,
     Zone.REMOVED,
@@ -68,6 +78,91 @@ PLAYER_ZONES: tuple[Zone, ...] = (
     Zone.PZONE,
 )
 """플레이어마다 하나씩 갖는 존. :class:`~engine.state.player.PlayerState` 가 쓴다."""
+
+
+class ZoneKind(str, Enum):
+    """존이 카드를 어떻게 담는가."""
+
+    ORDERED = "ordered"
+    """순서가 의미를 갖고 칸 번호가 없다 (덱 · 패 · 묘지 · 제외)."""
+    SLOTTED = "slotted"
+    """
+    칸이 고정된 필드 존 (몬스터 존 · 마법함정 존 · 필드 존 · 펜듈럼 존 · EMZ).
+
+    가운데 칸이 비어도 양옆이 밀려나지 않는다. Phase 1 은 칸을 **표현만** 하고
+    "여기에 놓을 수 있는가" 는 판정하지 않는다 (Phase 4).
+    """
+
+
+class ZoneVisibility(str, Enum):
+    """누가 내용을 볼 수 있는가. 향후 정보 은닉(information set)의 토대."""
+
+    PUBLIC = "public"
+    """양쪽 모두 내용을 안다 (묘지 · 필드의 앞면 카드)."""
+    OWNER_ONLY = "owner_only"
+    """소유자만 내용을 안다 (엑스트라 덱 · 패)."""
+    HIDDEN = "hidden"
+    """아무도 내용을 모른다 (덱). 장수만 공개다."""
+
+
+#: 존별 칸 수. ``None`` 이면 제한 없음.
+#: 룰북 근거는 ``rules/`` 의 ``RULE-ZONE-001`` 이다. 여기서는 표현만 하고
+#: 넘치는지는 판정하지 않는다.
+ZONE_CAPACITY: dict[Zone, int | None] = {
+    Zone.DECK: None,
+    Zone.HAND: None,
+    Zone.EXTRA: 15,
+    Zone.MZONE: 5,
+    Zone.EMZONE: 1,
+    Zone.SZONE: 5,
+    Zone.GRAVE: None,
+    Zone.REMOVED: None,
+    Zone.FZONE: 1,
+    Zone.PZONE: 2,
+    Zone.OVERLAY: None,
+}
+
+ZONE_KIND: dict[Zone, ZoneKind] = {
+    Zone.DECK: ZoneKind.ORDERED,
+    Zone.HAND: ZoneKind.ORDERED,
+    Zone.EXTRA: ZoneKind.ORDERED,
+    Zone.GRAVE: ZoneKind.ORDERED,
+    Zone.REMOVED: ZoneKind.ORDERED,
+    Zone.OVERLAY: ZoneKind.ORDERED,
+    Zone.MZONE: ZoneKind.SLOTTED,
+    Zone.EMZONE: ZoneKind.SLOTTED,
+    Zone.SZONE: ZoneKind.SLOTTED,
+    Zone.FZONE: ZoneKind.SLOTTED,
+    Zone.PZONE: ZoneKind.SLOTTED,
+}
+
+#: 존 자체의 공개 범위. 개별 카드의 앞면/뒷면은
+#: :class:`~engine.state.card_instance.CardInstance.position` 이 따로 정한다.
+ZONE_VISIBILITY: dict[Zone, ZoneVisibility] = {
+    Zone.DECK: ZoneVisibility.HIDDEN,
+    Zone.HAND: ZoneVisibility.OWNER_ONLY,
+    Zone.EXTRA: ZoneVisibility.OWNER_ONLY,
+    Zone.GRAVE: ZoneVisibility.PUBLIC,
+    Zone.REMOVED: ZoneVisibility.PUBLIC,
+    Zone.MZONE: ZoneVisibility.PUBLIC,
+    Zone.EMZONE: ZoneVisibility.PUBLIC,
+    Zone.SZONE: ZoneVisibility.PUBLIC,
+    Zone.FZONE: ZoneVisibility.PUBLIC,
+    Zone.PZONE: ZoneVisibility.PUBLIC,
+    Zone.OVERLAY: ZoneVisibility.PUBLIC,
+}
+
+
+def zone_kind(zone: Zone) -> ZoneKind:
+    return ZONE_KIND[zone]
+
+
+def zone_capacity(zone: Zone) -> int | None:
+    return ZONE_CAPACITY[zone]
+
+
+def zone_visibility(zone: Zone) -> ZoneVisibility:
+    return ZONE_VISIBILITY[zone]
 
 
 class Position(str, Enum):

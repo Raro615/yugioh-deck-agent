@@ -4,12 +4,20 @@ import pytest
 
 from engine.vocabulary import (
     PLAYER_ZONES,
+    ZONE_CAPACITY,
+    ZONE_KIND,
+    ZONE_VISIBILITY,
     ConstantGroup,
     EngineVocabulary,
     Phase,
     Position,
     Zone,
+    ZoneKind,
+    ZoneVisibility,
     default_vocabulary,
+    zone_capacity,
+    zone_kind,
+    zone_visibility,
 )
 from sources.script_constants import ScriptConstants
 
@@ -68,12 +76,13 @@ def test_phase_names_match_constants():
         assert vocabulary.phase_value(phase) == CONSTANTS.others[f"PHASE_{phase.value}"]
 
 
-def test_player_zones_are_the_nine_designed_zones():
+def test_player_zones_are_the_ten_designed_zones():
     assert set(PLAYER_ZONES) == {
         Zone.DECK,
         Zone.HAND,
         Zone.EXTRA,
         Zone.MZONE,
+        Zone.EMZONE,
         Zone.SZONE,
         Zone.GRAVE,
         Zone.REMOVED,
@@ -82,6 +91,52 @@ def test_player_zones_are_the_nine_designed_zones():
     }
     # OVERLAY 는 존 어휘에는 있지만 플레이어가 소유하는 존은 아니다.
     assert Zone.OVERLAY not in PLAYER_ZONES
+
+
+@requires_constants
+def test_extra_monster_zone_is_not_the_main_monster_zone():
+    """
+    EMZ 를 메인 몬스터 존과 같은 존으로 취급하면 "엑스트라 덱 몬스터를 몇 장
+    놓을 수 있는가" 가 통째로 틀어진다. 상수부터 다른 값이다.
+    """
+    vocabulary = default_vocabulary()
+    assert Zone.EMZONE is not Zone.MZONE
+    assert vocabulary.zone_value(Zone.EMZONE) != vocabulary.zone_value(Zone.MZONE)
+    assert vocabulary.zone_value(Zone.EMZONE) == CONSTANTS.others["LOCATION_EMZONE"]
+    assert zone_capacity(Zone.MZONE) == 5
+    assert zone_capacity(Zone.EMZONE) == 1
+
+
+def test_every_player_zone_declares_kind_capacity_and_visibility():
+    """셋 중 하나라도 빠지면 표현할 수 없는 상태가 조용히 만들어진다."""
+    for zone in Zone:
+        assert zone in ZONE_KIND
+        assert zone in ZONE_CAPACITY
+        assert zone in ZONE_VISIBILITY
+        assert zone_kind(zone) in (ZoneKind.ORDERED, ZoneKind.SLOTTED)
+        assert zone_visibility(zone) in ZoneVisibility
+
+
+def test_slotted_zones_are_exactly_the_ones_with_fixed_slots():
+    slotted = {zone for zone in Zone if zone_kind(zone) is ZoneKind.SLOTTED}
+    assert slotted == {
+        Zone.MZONE,
+        Zone.EMZONE,
+        Zone.SZONE,
+        Zone.FZONE,
+        Zone.PZONE,
+    }
+    # 칸 방식 존은 반드시 칸 수가 있고, 순서 방식 존 중 EXTRA 만 상한이 있다.
+    for zone in slotted:
+        assert zone_capacity(zone) is not None
+
+
+def test_hidden_and_owner_only_zones_are_not_public():
+    assert zone_visibility(Zone.DECK) is ZoneVisibility.HIDDEN
+    assert zone_visibility(Zone.HAND) is ZoneVisibility.OWNER_ONLY
+    assert zone_visibility(Zone.EXTRA) is ZoneVisibility.OWNER_ONLY
+    assert zone_visibility(Zone.GRAVE) is ZoneVisibility.PUBLIC
+    assert zone_visibility(Zone.MZONE) is ZoneVisibility.PUBLIC
 
 
 def test_constant_group_accepts_prefixed_and_bare_names():

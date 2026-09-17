@@ -237,12 +237,19 @@ class CardInstance:
             _repository=self._repository,  # 읽기 전용 공유
         )
 
-    def canonical_state(self) -> tuple:
+    def canonical_state(self, instance_key=None) -> tuple:
         """
         해시용 정규 표현. 파이썬 객체 주소나 기본 ``hash()`` 를 쓰지 않는다.
+
+        ``instance_key`` 는 :class:`~engine.ids.InstanceId` 를 **위치 기반 번호**
+        로 바꾸는 함수다. 넘기면 발급 순서가 해시에 새지 않는다 —
+        같은 판을 다른 순서로 쌓아도 같은 해시가 나온다
+        (:meth:`~engine.state.game_state.GameState.canonical_state` 참고).
+        넘기지 않으면 원래 번호를 그대로 쓴다.
         """
+        key = instance_key if instance_key is not None else (lambda i: i.value)
         return (
-            self.instance_id.value,
+            key(self.instance_id),
             self.card_id,
             self.owner,
             self.controller,
@@ -251,8 +258,8 @@ class CardInstance:
             self.position.value,
             self.previous.as_tuple(),
             tuple(sorted(self.counters.items())),
-            self.equipped_to.value if self.equipped_to else None,
-            tuple(m.value for m in self.materials),
+            key(self.equipped_to) if self.equipped_to else None,
+            tuple(key(m) for m in self.materials),
             tuple(e.as_tuple() for e in self.temporary_effects),
             self.status_flags,
         )
