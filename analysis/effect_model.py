@@ -83,6 +83,13 @@ class CostKind(str, Enum):
     PAY_LP = "pay_lp"
     SEND_DECK_TO_GRAVE = "send_deck_to_grave"
     BANISH = "banish"
+    TO_DECK = "to_deck"
+    RETURN_TO_HAND = "return_to_hand"
+    """자신 필드의 카드를 패로 되돌린다."""
+    REMOVE_COUNTER = "remove_counter"
+    NONE = "none"
+    """비용 함수는 있으나 자원을 소모하지 않는다 (표식만 남기거나 제약을 건다).
+    '읽지 못함'과 구분하기 위해 따로 둔다."""
     UNKNOWN = "unknown"
     """비용이 있다는 것만 알고 내용은 구조화하지 못했다."""
 
@@ -148,6 +155,139 @@ class CardConstraint:
         return ", ".join(parts) if parts else "(조건 미상)"
 
 
+class ConditionKind(str, Enum):
+    """발동 조건의 종류. Lua 조건 함수의 호출에서 유도한다."""
+
+    REQUIRES_CARD = "requires_card"
+    """특정 조건의 카드가 어떤 위치에 존재해야 한다."""
+    ZONE_AVAILABLE = "zone_available"
+    """몬스터 존 등에 빈 자리가 있어야 한다."""
+    CARD_COUNT = "card_count"
+    """패/덱/필드의 매수 조건."""
+    TURN_PLAYER = "turn_player"
+    """자신 턴 / 상대 턴."""
+    PHASE = "phase"
+    LIFE_POINTS = "life_points"
+    CHAIN = "chain"
+    """체인 상태 (무효화 가능 여부, 체인 위치 등)."""
+    BATTLE = "battle"
+    """공격 선언·전투 관련."""
+    PLAYER_AFFECTED = "player_affected"
+    """플레이어가 특정 효과의 영향을 받고 있는지."""
+    UNKNOWN = "unknown"
+
+
+class LimitScope(str, Enum):
+    """
+    발동 제한의 범위. "1턴에 1번"이 무엇을 기준으로 하는지에 따라 실제 제약이
+    완전히 달라지므로 구분한다.
+    """
+
+    NONE = "none"
+    PER_CARD = "per_card"
+    """``SetCountLimit(1)`` — 이 카드 1장 기준."""
+    PER_CARD_NAME = "per_card_name"
+    """``SetCountLimit(1,id)`` — 같은 이름의 카드 전체 기준."""
+    PER_EFFECT = "per_effect"
+    """``SetCountLimit(1,{id,n})`` — 그 카드명의 특정 효과 기준."""
+    UNKNOWN = "unknown"
+
+
+@dataclass(slots=True)
+class ActivationLimit:
+    count: int | None = None
+    scope: LimitScope = LimitScope.NONE
+    raw: str | None = None
+
+    def describe_ko(self) -> str:
+        if self.count is None:
+            return "제한 없음"
+        labels = {
+            LimitScope.PER_CARD: "이 카드",
+            LimitScope.PER_CARD_NAME: "이 카드명",
+            LimitScope.PER_EFFECT: "이 효과",
+            LimitScope.UNKNOWN: "범위 미상",
+        }
+        return f"{labels.get(self.scope, '')} 1턴 {self.count}회"
+
+
+@dataclass(slots=True)
+class ActivationRequirement:
+    """발동에 필요한 상태 하나."""
+
+    kind: ConditionKind
+    locations: list[str] = field(default_factory=list)
+    player: str | None = None
+    """'self' | 'opponent' | 'both'"""
+    min_count: int | None = None
+    faceup: bool = False
+    negated: bool = False
+    """``not ...`` 으로 감싸인 조건. 놓치면 의미가 정반대가 된다."""
+    constraint: CardConstraint | None = None
+    raw: str = ""
+
+    def describe_ko(self) -> str:
+        who = {"self": "자신", "opponent": "상대", "both": "양쪽"}.get(
+            self.player or "", ""
+        )
+        where = "/".join(self.locations)
+        if self.kind is ConditionKind.REQUIRES_CARD:
+            what = self.constraint.describe_ko() if self.constraint else "카드"
+            face = "앞면 " if self.faceup else ""
+            text = f"{who} {where}에 {face}{what} {self.min_count or 1}장"
+            return ("없어야 함: " if self.negated else "필요: ") + text.strip()
+        label = self.kind.value
+        return ("아니어야 함: " if self.negated else "") + f"{label} {where}".strip()
+
+
+@dataclass(slots=True)
+class ActivationCondition:
+    """
+    효과를 언제 발동할 수 있는가.
+
+    발동 위치는 스크립트의 ``SetRange`` 에서, 나머지 상태 조건은
+    ``SetCondition`` 함수에서 읽는다. 조건 함수가 있는데 읽어내지 못하면
+    :attr:`unparsed` 에 호출 이름이 남고 :attr:`raw` 에 원문이 남는다.
+    """
+
+    locations: list[str] = field(default_factory=list)
+    """발동 가능한 위치 (LOCATION_* 접두사 제외)."""
+    trigger_event: str | None = None
+    requirements: list[ActivationRequirement] = field(default_factory=list)
+    limit: ActivationLimit = field(default_factory=ActivationLimit)
+    has_condition_function: bool = False
+    raw: str | None = None
+    """SetCondition 인자 원문."""
+    unparsed: list[str] = field(default_factory=list)
+
+    @property
+    def is_structured(self) -> bool:
+        """조건 함수가 있고, 그 내용을 하나라도 읽어냈는가."""
+        return bool(self.requirements)
+
+    def describe_ko(self) -> str:
+        parts: list[str] = []
+        if self.locations:
+            parts.append("/".join(self.locations) + "에서")
+        if self.trigger_event:
+            parts.append(self.trigger_event)
+        parts.extend(r.describe_ko() for r in self.requirements)
+        if self.limit.count is not None:
+            parts.append(self.limit.describe_ko())
+        if self.has_condition_function and not self.requirements:
+            parts.append("조건 있음(미구조화)")
+        return " · ".join(parts) if parts else "(조건 없음)"
+
+
+@dataclass(slots=True)
+class PipelineStage:
+    """효과 처리 순서의 한 단계. 조건 → 비용 → 선택 → 처리."""
+
+    stage: str
+    summary: str
+    structured: bool
+
+
 @dataclass(slots=True)
 class EffectCost:
     kind: CostKind
@@ -201,6 +341,9 @@ class EffectAnalysis:
     activation_locations: list[str] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)
 
+    # --- 1단계: 발동 조건 ---
+    activation: ActivationCondition = field(default_factory=ActivationCondition)
+
     targets_card: bool = False
     """EFFECT_FLAG_CARD_TARGET — 규칙상 '대상으로 지정'한다."""
     once_per_turn: bool = False
@@ -226,6 +369,43 @@ class EffectAnalysis:
 
     def has_action(self, kind: ActionKind) -> bool:
         return any(a.kind is kind for a in self.actions)
+
+    def pipeline(self) -> list[PipelineStage]:
+        """
+        효과를 처리 순서대로 펼친다: 발동 조건 → 비용 → 선택 → 처리.
+
+        콤보 탐색은 이 순서대로 "쓸 수 있는가 → 무엇을 내야 하는가 →
+        무엇을 고르는가 → 무엇이 일어나는가"를 묻게 된다.
+        """
+        cost_summary = (
+            ", ".join(f"{c.kind.value}" for c in self.costs) if self.costs else "없음"
+        )
+        if self.selection:
+            where = "/".join(self.selection.locations) or "?"
+            selection_summary = f"{where} 의 {self.selection.constraint.describe_ko()}"
+        else:
+            selection_summary = "없음"
+        action_summary = (
+            " / ".join(
+                f"{a.kind.value}→{a.to_location or '?'}" for a in self.actions
+            )
+            if self.actions
+            else "없음"
+        )
+        return [
+            PipelineStage(
+                "activation",
+                self.activation.describe_ko(),
+                self.activation.is_structured or not self.activation.has_condition_function,
+            ),
+            PipelineStage(
+                "cost",
+                cost_summary,
+                all(c.kind is not CostKind.UNKNOWN for c in self.costs),
+            ),
+            PipelineStage("selection", selection_summary, self.selection is not None),
+            PipelineStage("action", action_summary, bool(self.actions)),
+        ]
 
     def describe_ko(self) -> str:
         bits: list[str] = []
@@ -266,12 +446,35 @@ class CardAnalysis:
     """어떤 효과에도 붙이지 못한 Lua 호출."""
 
     def coverage(self) -> dict[str, float]:
-        """분석이 얼마나 구조화했는지. 한계를 숨기지 않기 위한 값이다."""
+        """
+        분석이 얼마나 구조화했는지.
+
+        비율은 '해당 요소를 가진 효과' 를 분모로 한다. 비용이 없는 효과까지
+        분모에 넣으면 비용 구조화율이 실제보다 낮게 보인다.
+        """
         total = len(self.effects)
         with_actions = sum(1 for e in self.effects if e.actions)
         with_costs = sum(1 for e in self.effects if e.costs)
         with_selection = sum(1 for e in self.effects if e.selection)
+        has_condition = sum(
+            1 for e in self.effects if e.activation.has_condition_function
+        )
+        condition_structured = sum(
+            1 for e in self.effects if e.activation.is_structured
+        )
+        cost_structured = sum(
+            1
+            for e in self.effects
+            if e.costs and all(c.kind is not CostKind.UNKNOWN for c in e.costs)
+        )
         return {
+            "has_condition": has_condition,
+            "condition_structured": condition_structured,
+            "condition_ratio": (
+                condition_structured / has_condition if has_condition else 0.0
+            ),
+            "cost_structured": cost_structured,
+            "cost_ratio": (cost_structured / with_costs) if with_costs else 0.0,
             "effects": total,
             "with_actions": with_actions,
             "with_costs": with_costs,

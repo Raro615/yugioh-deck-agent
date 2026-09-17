@@ -22,6 +22,11 @@ from pathlib import Path
 from analysis.effect_model import (
     ACTION_DESTINATION,
     ActionKind,
+    ActivationCondition,
+    ActivationLimit,
+    ActivationRequirement,
+    ConditionKind,
+    LimitScope,
     CardAnalysis,
     CardConstraint,
     CostKind,
@@ -69,7 +74,20 @@ _COST_CALLS: dict[str, CostKind] = {
     "PayLPCost": CostKind.PAY_LP,
     "Remove": CostKind.BANISH,
     "DiscardDeck": CostKind.SEND_DECK_TO_GRAVE,
+    "RemoveCounter": CostKind.REMOVE_COUNTER,
+    "SendtoDeck": CostKind.TO_DECK,
+    "SendtoHand": CostKind.RETURN_TO_HAND,
 }
+
+# 자원을 소모하지 않는 비용 함수에서만 나타나는 호출.
+# 이런 것만 있으면 '읽지 못함'이 아니라 '비용 없음'이다.
+_DECLARATORY_COST_CALLS = frozenset(
+    {"RegisterEffect", "Hint", "GetActivityCount", "GetCustomActivityCount",
+     "GetFlagEffect", "RegisterFlagEffect", "ConfirmCards"}
+)
+
+# 비용 헬퍼 중 자원을 소모하지 않는 것
+_DECLARATORY_COST_HELPERS = ("aux.RemainFieldCost",)
 
 # 처리 함수 안의 Duel 호출 -> 액션
 _ACTION_CALLS: dict[str, ActionKind] = {
@@ -117,6 +135,41 @@ _IGNORED_CALLS = frozenset(
     }
 )
 
+# 조건 함수의 Duel 호출 -> 조건 종류
+_CONDITION_CALLS: dict[str, ConditionKind] = {
+    "IsExistingMatchingCard": ConditionKind.REQUIRES_CARD,
+    "IsExistingTarget": ConditionKind.REQUIRES_CARD,
+    "GetLocationCount": ConditionKind.ZONE_AVAILABLE,
+    "GetFieldGroupCount": ConditionKind.CARD_COUNT,
+    "GetMatchingGroupCount": ConditionKind.CARD_COUNT,
+    "IsTurnPlayer": ConditionKind.TURN_PLAYER,
+    "GetTurnPlayer": ConditionKind.TURN_PLAYER,
+    "IsMainPhase": ConditionKind.PHASE,
+    "IsBattlePhase": ConditionKind.PHASE,
+    "IsPhase": ConditionKind.PHASE,
+    "GetCurrentPhase": ConditionKind.PHASE,
+    "IsDamageStep": ConditionKind.PHASE,
+    "GetLP": ConditionKind.LIFE_POINTS,
+    "IsChainNegatable": ConditionKind.CHAIN,
+    "IsChainDisablable": ConditionKind.CHAIN,
+    "GetCurrentChain": ConditionKind.CHAIN,
+    "GetChainInfo": ConditionKind.CHAIN,
+    "GetAttacker": ConditionKind.BATTLE,
+    "GetAttackTarget": ConditionKind.BATTLE,
+    "IsPlayerAffectedByEffect": ConditionKind.PLAYER_AFFECTED,
+    "IsPlayerCanDraw": ConditionKind.CARD_COUNT,
+    "IsPlayerCanSpecialSummonMonster": ConditionKind.ZONE_AVAILABLE,
+}
+
+# 조건 함수에서 무시할 보조 호출 (미구조화로 기록하지 않는다)
+_CONDITION_IGNORED = frozenset({"Hint", "GetFlagEffect", "GetHandler"})
+
+_RE_FACEUP_FILTER = re.compile(r"aux\.FaceupFilter\s*\(")
+_RE_CALL_WITH_POS = re.compile(r"\bDuel\.(\w+)\s*\(")
+# 조건 함수는 Duel 호출 없이 카드/효과 객체의 술어만 쓰는 경우가 흔하다.
+# (re:IsTrapEffect(), eg:IsExists(...), rc:IsSetCard(...) 등)
+_RE_OBJECT_PREDICATE = re.compile(r"[\w)]\s*[:.](Is\w+|Get\w+|Exists)\s*\(")
+
 # 카드 조건 술어
 _RE_IS_RACE = re.compile(r"IsRace\s*\(\s*([^)]*)\)")
 _RE_IS_ATTRIBUTE = re.compile(r"IsAttribute\s*\(\s*([^)]*)\)")
@@ -130,6 +183,10 @@ _RE_RACE_CONST = re.compile(r"\bRACE_(\w+)")
 _RE_ATTR_CONST = re.compile(r"\bATTRIBUTE_(\w+)")
 _RE_TYPE_CONST = re.compile(r"\bTYPE_(\w+)")
 _RE_SET_CONST = re.compile(r"\bSET_(\w+)")
+# aux.FaceupFilter(Card.IsSetCard,SET_X) 처럼 술어와 인자가 쉼표로 이어지는 형태
+_RE_PRED_COMMA = re.compile(
+    r"Card\.Is(SetCard|Race|Attribute|Type|Code|Level)\s*,\s*([A-Za-z0-9_|+,\s]+)"
+)
 
 
 class EffectAnalyzer:
@@ -289,8 +346,6 @@ class EffectAnalyzer:
             categories=list(spec.categories),
             targets_card="CARD_TARGET" in spec.properties,
             count_limit_raw=spec.count_limit,
-            once_per_turn=bool(spec.count_limit)
-            and spec.count_limit.strip().startswith("1"),
         )
         if spec.code and spec.code.startswith("EVENT_"):
             effect.trigger_event = spec.code
@@ -301,6 +356,8 @@ class EffectAnalyzer:
                 "EFFECT_SPSUMMON_PROC_G",
             )
 
+        effect.activation = self._analyze_activation(spec, handlers, functions)
+        effect.once_per_turn = effect.activation.limit.count == 1
         condition = handlers.get("Condition")
         if condition:
             effect.has_condition = True
@@ -325,6 +382,176 @@ class EffectAnalyzer:
             analysis.unparsed_calls.extend(effect.unparsed)
         return effect
 
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _split_top_level(text: str) -> list[str]:
+        """괄호 깊이를 보며 최상위 쉼표로만 인자를 나눈다."""
+        parts: list[str] = []
+        depth = 0
+        current: list[str] = []
+        for ch in text:
+            if ch in "({[":
+                depth += 1
+            elif ch in ")}]":
+                depth -= 1
+            if ch == "," and depth == 0:
+                parts.append("".join(current).strip())
+                current = []
+                continue
+            current.append(ch)
+        if current:
+            parts.append("".join(current).strip())
+        return parts
+
+    def _constraint_from_argument(self, argument: str, functions) -> CardConstraint:
+        """
+        필터 인자에서 카드 조건을 읽는다.
+
+        이름 있는 함수(``s.spfilter``)면 그 본문을, 인라인 표현
+        (``aux.FaceupFilter(Card.IsSetCard,SET_ORCUST)``)이면 표현 자체를 본다.
+        """
+        name = self._handler_name(argument)
+        if name and name in functions:
+            return self._analyze_constraint(functions[name])
+        return self._analyze_constraint(argument)
+
+    def _analyze_limit(self, raw: str | None) -> ActivationLimit:
+        """
+        ``SetCountLimit`` 인자에서 제한 횟수와 범위를 읽는다.
+
+        범위가 다르면 실제 제약이 완전히 달라진다.
+            SetCountLimit(1)          이 카드 1장 기준
+            SetCountLimit(1,id)       이 카드명 기준
+            SetCountLimit(1,{id,1})   이 카드명의 그 효과 기준
+        """
+        if not raw:
+            return ActivationLimit()
+        args = self._split_top_level(raw)
+        if not args:
+            return ActivationLimit(raw=raw, scope=LimitScope.UNKNOWN)
+        count = int(args[0]) if args[0].isdigit() else None
+        if len(args) == 1:
+            scope = LimitScope.PER_CARD
+        elif args[1].startswith("{"):
+            scope = LimitScope.PER_EFFECT
+        elif args[1] in ("id", "s.id"):
+            scope = LimitScope.PER_CARD_NAME
+        else:
+            scope = LimitScope.UNKNOWN
+        return ActivationLimit(count=count, scope=scope, raw=raw)
+
+    def _analyze_activation(self, spec, handlers, functions) -> ActivationCondition:
+        """발동 위치와 조건 함수를 합쳐 발동 조건을 만든다."""
+        activation = ActivationCondition(
+            locations=list(spec.ranges),
+            limit=self._analyze_limit(spec.count_limit),
+        )
+        if spec.code and spec.code.startswith("EVENT_"):
+            activation.trigger_event = spec.code
+
+        raw = handlers.get("Condition")
+        if not raw:
+            return activation
+        activation.has_condition_function = True
+        activation.raw = raw
+
+        name = self._handler_name(raw)
+        body = functions.get(name or "", "")
+        source = body or raw
+        activation.requirements.extend(
+            self._parse_requirements(source, functions)
+        )
+        activation.unparsed.extend(self._condition_unparsed(source))
+
+        if not activation.requirements and not activation.unparsed:
+            # 조건이 분명히 있는데 아무것도 읽지 못한 경우. 조용히 넘어가면
+            # "조건 없음"과 구분되지 않으므로 핸들러 자체를 흔적으로 남긴다.
+            activation.unparsed.append(raw.strip()[:60])
+        return activation
+
+    def _parse_requirements(self, body: str, functions):
+        """조건 함수의 Duel 호출을 상태 요구로 바꾼다."""
+        requirements: list[ActivationRequirement] = []
+        for match in _RE_CALL_WITH_POS.finditer(body):
+            name = match.group(1)
+            kind = _CONDITION_CALLS.get(name)
+            if kind is None:
+                continue
+            args_text = _extract_call_args(body, match.end() - 1)
+            args = self._split_top_level(args_text)
+            # ``not`` 을 놓치면 조건의 의미가 정반대가 된다.
+            prefix = body[max(0, match.start() - 6) : match.start()]
+            negated = bool(re.search(r"\bnot\s*$", prefix))
+
+            requirement = ActivationRequirement(
+                kind=kind,
+                negated=negated,
+                raw=f"Duel.{name}({args_text.strip()[:110]})",
+            )
+            if kind is ConditionKind.REQUIRES_CARD and len(args) >= 5:
+                self._fill_card_requirement(requirement, args, functions)
+            elif kind in (ConditionKind.ZONE_AVAILABLE, ConditionKind.CARD_COUNT):
+                requirement.locations = _dedupe(_RE_LOCATION.findall(args_text))
+                requirement.player = self._player_from(args[0] if args else "")
+            requirements.append(requirement)
+        return requirements
+
+    def _fill_card_requirement(self, requirement, args, functions) -> None:
+        """
+        ``IsExistingMatchingCard(filter, player, selfloc, opploc, count, ...)``
+        의 인자 위치에서 위치·소유자·매수·카드 조건을 읽는다.
+        """
+        self_locations = _dedupe(_RE_LOCATION.findall(args[2]))
+        opponent_locations = _dedupe(_RE_LOCATION.findall(args[3]))
+        requirement.locations = self_locations or opponent_locations
+        if self_locations and opponent_locations:
+            requirement.player = "both"
+        elif opponent_locations:
+            requirement.player = "opponent"
+        elif self_locations:
+            requirement.player = "self"
+        if args[4].isdigit():
+            requirement.min_count = int(args[4])
+        requirement.faceup = bool(_RE_FACEUP_FILTER.search(args[0]))
+        requirement.constraint = self._constraint_from_argument(args[0], functions)
+
+    @staticmethod
+    def _player_from(argument: str) -> str | None:
+        text = argument.strip()
+        if text == "tp":
+            return "self"
+        if "1-tp" in text:
+            return "opponent"
+        return None
+
+    @staticmethod
+    def _condition_unparsed(body: str) -> list[str]:
+        """
+        조건 함수에서 구조화하지 못한 부분. 추측하지 않고 이름만 남긴다.
+
+        Duel 호출뿐 아니라 객체 술어(``re:IsTrapEffect()``)도 기록한다.
+        그러지 않으면 Duel 호출이 없는 조건 함수가 아무 흔적도 남기지 못해,
+        "조건이 없다"와 "조건을 못 읽었다"가 구분되지 않는다.
+        """
+        found: list[str] = []
+        for match in _RE_CALL_WITH_POS.finditer(body):
+            name = match.group(1)
+            if name in _CONDITION_CALLS or name in _CONDITION_IGNORED:
+                continue
+            entry = f"Duel.{name}"
+            if entry not in found:
+                found.append(entry)
+        for match in _RE_OBJECT_PREDICATE.finditer(body):
+            entry = match.group(1)
+            # 이미 구조화한 Duel 호출이 점 표기로 다시 잡히지 않게 한다.
+            if entry in _CONDITION_CALLS or entry in _CONDITION_IGNORED:
+                continue
+            if entry in found:
+                continue
+            found.append(entry)
+        return found
+
     # ------------------------------------------------------------------
     @staticmethod
     def _handler_name(argument: str) -> str | None:
@@ -339,6 +566,9 @@ class EffectAnalyzer:
         for name, kind in _COST_HELPERS.items():
             if helper.startswith(name):
                 return [EffectCost(kind=kind, raw=name)]
+        for name in _DECLARATORY_COST_HELPERS:
+            if helper.startswith(name):
+                return [EffectCost(kind=CostKind.NONE, raw=name)]
 
         body = functions.get(self._handler_name(helper) or "", "")
         if not body:
@@ -346,11 +576,21 @@ class EffectAnalyzer:
             return [EffectCost(kind=CostKind.UNKNOWN, raw=helper)]
 
         found: list[EffectCost] = []
+        calls = set()
         for match in _RE_DUEL_CALL.finditer(body):
-            kind = _COST_CALLS.get(match.group(1))
+            name = match.group(1)
+            calls.add(name)
+            kind = _COST_CALLS.get(name)
             if kind and not any(c.kind is kind for c in found):
-                found.append(EffectCost(kind=kind, raw=f"Duel.{match.group(1)}"))
-        return found or [EffectCost(kind=CostKind.UNKNOWN, raw=helper)]
+                found.append(EffectCost(kind=kind, raw=f"Duel.{name}"))
+        if found:
+            return found
+
+        # 자원을 쓰지 않는 비용 함수(표식만 남기거나 제약을 거는 경우)는
+        # '읽지 못함'이 아니라 '비용 없음'이다. 둘을 섞으면 안 된다.
+        if not calls or calls <= _DECLARATORY_COST_CALLS:
+            return [EffectCost(kind=CostKind.NONE, raw=helper)]
+        return [EffectCost(kind=CostKind.UNKNOWN, raw=helper)]
 
     # ------------------------------------------------------------------
     def _analyze_selection(self, body: str, functions) -> EffectSelection | None:
@@ -418,6 +658,32 @@ class EffectAnalyzer:
         above = _RE_IS_LEVEL_ABOVE.findall(body)
         if above:
             constraint.level_min = max(int(v) for v in above)
+        # aux.FaceupFilter(Card.IsSetCard,SET_X) 처럼 술어와 인자가 쉼표로 이어지는 형태
+        for predicate, args in _RE_PRED_COMMA.findall(body):
+            if predicate == "SetCard":
+                for name in _RE_SET_CONST.findall(args):
+                    if name not in constraint.setcodes:
+                        constraint.setcodes.append(name)
+            elif predicate == "Race":
+                for name in _RE_RACE_CONST.findall(args):
+                    bit = getattr(C, f"RACE_{name}", None)
+                    if bit and bit not in constraint.races:
+                        constraint.races.append(bit)
+            elif predicate == "Attribute":
+                for name in _RE_ATTR_CONST.findall(args):
+                    bit = getattr(C, f"ATTRIBUTE_{name}", None)
+                    if bit and bit not in constraint.attributes:
+                        constraint.attributes.append(bit)
+            elif predicate == "Type":
+                for name in _RE_TYPE_CONST.findall(args):
+                    if name not in constraint.card_types:
+                        constraint.card_types.append(name)
+            elif predicate == "Level":
+                for value in re.findall(r"\b(\d{1,2})\b", args):
+                    level = int(value)
+                    if level not in constraint.levels:
+                        constraint.levels.append(level)
+
         for negated, args in _RE_IS_CODE.findall(body):
             codes = [int(v) for v in re.findall(r"\b(\d{4,})\b", args)]
             target = (

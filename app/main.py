@@ -429,39 +429,43 @@ def cmd_analyze(agent: DeckAgent, args) -> int:
     if analysis.listed_series:
         print(f"  지명 카드군 : {', '.join(analysis.listed_series)} (소속과 다름)")
 
+    labels = {
+        "activation": "① 발동 조건",
+        "cost": "② 비용",
+        "selection": "③ 선택",
+        "action": "④ 처리",
+    }
     for effect in analysis.effects:
-        print(f"\n  [{effect.index}] {effect.describe_ko()}")
-        print(f"      종류      : {'/'.join(effect.effect_types) or '-'}")
+        print(f"\n  [{effect.index}] {'/'.join(effect.effect_types) or '-'}")
         if effect.trigger_event:
-            print(f"      발동 계기 : {effect.trigger_event}")
-        if effect.activation_locations:
-            print(f"      발동 위치 : {'/'.join(effect.activation_locations)}")
-        if effect.costs:
-            print(
-                "      비용      : "
-                + ", ".join(f"{c.kind.value} ({c.raw})" for c in effect.costs)
-            )
-        print(f"      대상 지정 : {'예' if effect.targets_card else '아니오'}")
-        if effect.selection:
-            where = "/".join(effect.selection.locations)
-            print(
-                f"      선택      : {where} 의 "
-                f"{effect.selection.constraint.describe_ko()}"
-            )
+            print(f"      발동 계기  : {effect.trigger_event}")
+        # 조건 → 비용 → 선택 → 처리 순서로 보여준다.
+        for stage in effect.pipeline():
+            mark = " " if stage.structured else "~"
+            print(f"     {mark}{labels[stage.stage]} : {stage.summary}")
+        for requirement in effect.activation.requirements:
+            print(f"          · {requirement.describe_ko()}")
+        if effect.targets_card:
+            print("          · 규칙상 대상 지정")
         for action in effect.actions:
             src = "/".join(action.from_locations) or "?"
-            print(f"      처리      : {action.kind.value}  {src} → {action.to_location}")
-        if effect.unparsed:
-            print(f"      미구조화  : {', '.join(effect.unparsed)}")
+            print(
+                f"          · {action.kind.value}: {src} → {action.to_location}"
+            )
+        unparsed = list(effect.activation.unparsed) + list(effect.unparsed)
+        if unparsed:
+            print(f"        미구조화  : {', '.join(unparsed[:6])}")
 
     if analysis.resolution_effects:
         print(f"\n  처리 중 생성되는 효과 {len(analysis.resolution_effects)}개 (적용 제약 등)")
     coverage = analysis.coverage()
     print(
-        f"\n  구조화 정도 : 효과 {coverage['effects']}개 중 "
-        f"처리 {coverage['with_actions']}개 / 비용 {coverage['with_costs']}개 "
-        f"/ 선택 {coverage['with_selection']}개"
+        f"\n  구조화 정도 : 효과 {coverage['effects']}개 | "
+        f"조건 {coverage['condition_structured']}/{coverage['has_condition']} · "
+        f"비용 {coverage['cost_structured']}/{coverage['with_costs']} · "
+        f"선택 {coverage['with_selection']} · 처리 {coverage['with_actions']}"
     )
+    print("  (~ 표시는 구조화하지 못한 단계)")
     print("=" * 72)
     return 0
 
