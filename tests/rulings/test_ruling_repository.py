@@ -95,12 +95,20 @@ def test_card_with_no_rulings(repository):
 
 def test_never_checked_card_is_not_reported_as_having_no_rulings(repository):
     """
-    수집한 적 없는 카드를 "재정 없음"이라고 말하면 안 된다.
+    수집한 적 없는 카드를 "재정 없음"이라고 말하면 안 된다. 그리고
+    "사이트 접근 실패"라고도 말하면 안 된다 — 시도조차 하지 않았다.
     """
     assert repository.availability_for_card(46986414) is (
-        RulingAvailability.SOURCE_UNAVAILABLE
+        RulingAvailability.NOT_CHECKED
     )
     assert repository.availability_for_card(2511) is RulingAvailability.NOT_FOUND
+    assert repository.availability_for_card(777) is (
+        RulingAvailability.SOURCE_UNAVAILABLE   # 시도했다가 실패한 카드
+    )
+    assert repository.availability_for_cid(9999) is (
+        RulingAvailability.SOURCE_UNAVAILABLE
+    )
+    assert repository.availability_for_cid(12345) is RulingAvailability.NOT_CHECKED
 
 
 def test_referencing_finds_rulings_that_mention_a_card(repository):
@@ -289,7 +297,8 @@ def test_hits_carry_an_excerpt_cut_from_the_original(search):
 def test_availability_is_exposed_through_search(search):
     assert search.availability(89631139) is RulingAvailability.EXISTS
     assert search.availability(2511) is RulingAvailability.NOT_FOUND
-    assert search.availability(46986414) is RulingAvailability.SOURCE_UNAVAILABLE
+    assert search.availability(777) is RulingAvailability.SOURCE_UNAVAILABLE
+    assert search.availability(46986414) is RulingAvailability.NOT_CHECKED
 
 
 # ----------------------------------------------------------------------

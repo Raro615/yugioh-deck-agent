@@ -235,6 +235,10 @@ class CardRepository:
                 availability.effect_analysis_available = True
                 record.record("effect_analysis", SourceKind.LUA)
                 record.analysis_status = AnalysisStatus.LUA_VERIFIED
+            elif not card.has_printed_effect:
+                # 통상 몬스터·토큰은 Lua 가 없는 것이 정상이다. 분석할 효과
+                # 자체가 없으므로 '텍스트에서 유추했다' 고 하면 거짓이 된다.
+                record.analysis_status = AnalysisStatus.NO_EFFECT
             elif card.desc:
                 # Lua 가 없으면 텍스트에서 유추할 수 있을 뿐이다.
                 # 실제 게임 처리와 어긋날 수 있으므로 상태를 달리 표시한다.

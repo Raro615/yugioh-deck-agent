@@ -62,10 +62,20 @@ class RulingKind(str, Enum):
 
 class RulingAvailability(str, Enum):
     """
-    이 카드의 재정을 확인한 결과.
+    이 카드의 재정을 확인한 결과. 네 가지를 **절대 뭉뚱그리지 않는다.**
 
-    ``NOT_FOUND`` 와 ``SOURCE_UNAVAILABLE`` 을 **절대 같이 취급하지 않는다.**
-    전자는 "공식적으로 재정이 없다"는 확인이고, 후자는 "확인하지 못했다"이다.
+    =====================  ==================================================
+    상태                    뜻
+    =====================  ==================================================
+    ``EXISTS``             공식 사이트에서 재정을 실제로 확인했다
+    ``NOT_FOUND``          정상 조회했고, 이 카드에는 재정이 없다
+    ``SOURCE_UNAVAILABLE`` 조회를 **시도했으나** 실패했다 (접근·파싱·네트워크)
+    ``NOT_CHECKED``        아직 **조회를 시도한 적이 없다**
+    =====================  ==================================================
+
+    뒤의 둘을 합치면 "아직 손도 안 댄 14,353장"이 "사이트가 죽어서 못 봤다"로
+    둔갑한다. 재시도 대상인지 최초 수집 대상인지도 구분할 수 없게 된다.
+    앞의 둘과 뒤의 둘을 섞으면 "확인 안 했다"가 "재정이 없다"가 된다.
     """
 
     EXISTS = "ruling_exists"
@@ -73,7 +83,9 @@ class RulingAvailability(str, Enum):
     NOT_FOUND = "ruling_not_found"
     """정상적으로 조회했고, 이 카드에는 재정이 없었다."""
     SOURCE_UNAVAILABLE = "source_unavailable"
-    """접근 실패 · 파싱 실패 · 네트워크 오류. **아무것도 결론 내리지 않는다.**"""
+    """조회를 시도했으나 실패했다. **아무것도 결론 내리지 않는다.**"""
+    NOT_CHECKED = "not_checked"
+    """조회를 시도한 적이 없다. 실패한 것과 다르다 — 그냥 아직 안 했다."""
 
 
 class TranslationSource(str, Enum):
@@ -100,9 +112,16 @@ def content_hash(*parts: str) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
+# HTML 이 접어주는 공백만. 전각 공백(U+3000)은 접지 않는다 —
+# 공식 카드명에 들어가므로(「魔弾の射手　カスパール」) 접으면 서로 다른
+# 문구가 같은 지문을 갖게 되어 변경을 놓친다.
+_HASH_SPACE = " \t\r\f"
+_RE_HASH_SPACE = re.compile(f"[{_HASH_SPACE}]+")
+
+
 def normalize_text(text: str) -> str:
-    """비교용으로 공백만 정리한다. **원문 자체는 바꾸지 않는다.**"""
-    return re.sub(r"[ \t　]+", " ", text).strip()
+    """지문 계산용으로 HTML 공백만 정리한다. **원문 자체는 바꾸지 않는다.**"""
+    return _RE_HASH_SPACE.sub(" ", text).strip(_HASH_SPACE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -401,7 +420,8 @@ class CardRulingSet:
 
     official_cid: int
     card_id: int | None = None
-    availability: RulingAvailability = RulingAvailability.SOURCE_UNAVAILABLE
+    availability: RulingAvailability = RulingAvailability.NOT_CHECKED
+    """기본값은 '아직 안 함' 이다. 채우지 않은 레코드가 '실패' 를 주장하지 않도록."""
     name_ja: str | None = None
     """공식 페이지가 보여준 일본어 카드명. 식별자 검증에 쓴다."""
     card_text_ja: str = ""
@@ -421,7 +441,15 @@ class CardRulingSet:
     @property
     def confirmed(self) -> bool:
         """조회 자체가 정상이었는가 (재정 유무와는 별개)."""
-        return self.availability is not RulingAvailability.SOURCE_UNAVAILABLE
+        return self.availability in (
+            RulingAvailability.EXISTS,
+            RulingAvailability.NOT_FOUND,
+        )
+
+    @property
+    def attempted(self) -> bool:
+        """조회를 시도라도 해 봤는가. 재시도 대상과 최초 수집 대상을 가른다."""
+        return self.availability is not RulingAvailability.NOT_CHECKED
 
     @property
     def complete(self) -> bool:

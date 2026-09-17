@@ -170,6 +170,13 @@ class RulingSearch:
             if e.card_id != card_id
         ]
 
+    def related_cards(self, card_id: int, depth: int = 1) -> list[int]:
+        """
+        공식 링크를 따라간 관련 카드. 순환 보호가 들어 있다
+        (:meth:`~rulings.ruling_repository.RulingRepository.related_card_closure`).
+        """
+        return sorted(self.repository.related_card_closure(card_id, depth))
+
     # ------------------------------------------------------------------
     # 본문 검색
     # ------------------------------------------------------------------

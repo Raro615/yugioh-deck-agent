@@ -6,7 +6,7 @@
  "name_ja": "万物創世龍",
  "card_text_ja": "このカードは通常召喚できない。攻撃力の合計と守備力の合計が、合わせて１００００以上になるように自分フィールドのモンスターをリリースした場合のみ特殊召喚できる。①：この方法で特殊召喚したこのカードの攻撃力・守備力は１００００になる。",
  "reported_total": null,
- "checked_at": "2026-09-17T13:56:48Z",
+ "checked_at": "2026-09-17T13:56:51Z",
  "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=14809&request_locale=ja&page=1&rp=100",
  "error": "",
  "supplement": {
@@ -25,7 +25,7 @@
    "data_type": "card_supplement",
    "game": "ocg",
    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=14809&request_locale=ja&page=1&rp=100",
-   "retrieved_at": "2026-09-17T13:56:48Z"
+   "retrieved_at": "2026-09-17T13:56:51Z"
   },
   "content_hash": "sha256:430a4744616467289cdfae0921172c49132e6351a7f501ef784d789120761361",
   "translations": {}

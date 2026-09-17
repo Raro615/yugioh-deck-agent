@@ -6,7 +6,7 @@
  "name_ja": "白銀の城の狂時計",
  "card_text_ja": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。①：このカードを手札から捨てて発動できる。このターン、自分フィールドに「ラビュリンス」モンスターが存在する場合、自分は通常罠カード１枚をセットしたターンに発動できる。この効果は相手ターンでも発動できる。②：このカードが墓地に存在する状態で、「白銀の城の狂時計」以外の「ラビュリンス」カードの効果または通常罠カードを自分が発動するために、手札のカードが墓地へ送られた場合に発動できる。このカードを手札に加えるか特殊召喚する。",
  "reported_total": 7,
- "checked_at": "2026-09-17T13:56:08Z",
+ "checked_at": "2026-09-17T13:56:11Z",
  "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=17366&request_locale=ja&page=1&rp=100",
  "error": "",
  "supplement": {
@@ -25,7 +25,7 @@
    "data_type": "card_supplement",
    "game": "ocg",
    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=17366&request_locale=ja&page=1&rp=100",
-   "retrieved_at": "2026-09-17T13:56:08Z"
+   "retrieved_at": "2026-09-17T13:56:11Z"
   },
   "content_hash": "sha256:7328ba1d4d2364d9213afef041214b268fc532c5ddddea8114fd302cde71670a",
   "translations": {}
@@ -161,7 +161,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23815&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:56:08Z"
+    "retrieved_at": "2026-09-17T13:53:19Z"
    },
    "content_hash": "sha256:a19d00ba288d2eaf6f915a6c3f4257b35a03380d06eb36c5243c562b38aee00e",
    "translations": {}
@@ -228,7 +228,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24152&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:56:08Z"
+    "retrieved_at": "2026-09-17T13:56:13Z"
    },
    "content_hash": "sha256:0ded8db4ed79fa53d4ddf1c8576901b64b3c2709e2cea227e6685480f3cb86db",
    "translations": {}
@@ -329,7 +329,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=13508&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:56:08Z"
+    "retrieved_at": "2026-09-17T13:56:15Z"
    },
    "content_hash": "sha256:eed3104e7b13eeeb1ca7e6884331f107ee7815d28a6c4b84ef8e266e54019b70",
    "translations": {}
@@ -374,7 +374,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23926&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:56:08Z"
+    "retrieved_at": "2026-09-17T13:56:18Z"
    },
    "content_hash": "sha256:76b8dac225ce9d64fb387aafe54d4a99ac0fb2b7e3efdb66fedb730d1969ea29",
    "translations": {}
@@ -409,7 +409,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23945&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:56:08Z"
+    "retrieved_at": "2026-09-17T13:56:21Z"
    },
    "content_hash": "sha256:0b786167d271be24a1a759f4fa89587730ff9ba4c69ff56f2aa557f99e1b0425",
    "translations": {}
@@ -442,7 +442,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=14555&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:56:08Z"
+    "retrieved_at": "2026-09-17T13:56:23Z"
    },
    "content_hash": "sha256:b3418b3d8818dc949d9677ead56a1f5e8fcbff2d0d6a988152fc93353aa6304e",
    "translations": {}
@@ -469,7 +469,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23609&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:56:08Z"
+    "retrieved_at": "2026-09-17T13:56:25Z"
    },
    "content_hash": "sha256:1f56181b9c8425eb875bf6f4b616a2bd0fd8f9d664f2f95924e38810304745f8",
    "translations": {}

@@ -211,12 +211,32 @@ def test_not_found_and_source_unavailable_are_different():
     assert not not_found.has_rulings and not unavailable.has_rulings
 
 
-def test_availability_has_exactly_three_states():
+def test_availability_has_exactly_four_states():
     assert {a.value for a in RulingAvailability} == {
         "ruling_exists",
         "ruling_not_found",
         "source_unavailable",
+        "not_checked",
     }
+
+
+def test_not_checked_and_source_unavailable_are_different():
+    """
+    합치면 "아직 손도 안 댄 카드"가 "사이트가 죽어서 못 봤다"로 둔갑한다.
+    재시도 대상인지 최초 수집 대상인지도 구분할 수 없게 된다.
+    """
+    never = CardRulingSet(official_cid=1)                       # 기본값
+    failed = CardRulingSet(
+        official_cid=2,
+        availability=RulingAvailability.SOURCE_UNAVAILABLE,
+        error="timeout",
+    )
+    assert never.availability is RulingAvailability.NOT_CHECKED
+    assert never.attempted is False and failed.attempted is True
+    assert never.confirmed is False and failed.confirmed is False
+    # 둘 다 "재정이 없다"고 말하지 않는다.
+    assert never.availability is not RulingAvailability.NOT_FOUND
+    assert failed.availability is not RulingAvailability.NOT_FOUND
 
 
 def test_incomplete_collection_is_detectable():

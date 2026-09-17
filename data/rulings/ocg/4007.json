@@ -6,7 +6,7 @@
  "name_ja": "青眼の白龍",
  "card_text_ja": "高い攻撃力を誇る伝説のドラゴン。どんな相手でも粉砕する、その破壊力は計り知れない。",
  "reported_total": 88,
- "checked_at": "2026-09-17T13:34:11Z",
+ "checked_at": "2026-09-17T13:34:13Z",
  "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=4007&request_locale=ja&page=1&rp=100",
  "error": "",
  "supplement": {
@@ -25,7 +25,7 @@
    "data_type": "card_supplement",
    "game": "ocg",
    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=4007&request_locale=ja&page=1&rp=100",
-   "retrieved_at": "2026-09-17T13:34:11Z"
+   "retrieved_at": "2026-09-17T13:34:13Z"
   },
   "content_hash": "sha256:ceba470804ee2de2e3b38143b33bd259437f1e948d7cb30bf0e89bf260ad83bc",
   "translations": {}
@@ -120,7 +120,7 @@
     35191415,
     36996508,
     37683547,
-    38033121,
+    38033120,
     38264974,
     38517737,
     39392286,
@@ -151,7 +151,7 @@
     86120751,
     87451661,
     88570003,
-    89631139,
+    89631133,
     90238142,
     91420202,
     97973962
@@ -163,7 +163,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24359&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:16Z"
    },
    "content_hash": "sha256:4fa42e0efd55d22eaba3045e2e317f5f7d9fbe3a2e29d01a4c4948e837002d24",
    "translations": {}
@@ -283,7 +283,7 @@
     84243274,
     85507811,
     88696724,
-    89631139,
+    89631133,
     90050480,
     90957527,
     91998119,
@@ -298,7 +298,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=17900&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:18Z"
    },
    "content_hash": "sha256:890b6e99ec4edd2386c0544f5a52093d5b9ad4e319ab0411e8171baaa2763f2a",
    "translations": {}
@@ -391,7 +391,7 @@
     80666118,
     87451661,
     88570003,
-    89631139,
+    89631133,
     90238142
    ],
    "provenance": {
@@ -401,7 +401,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24314&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:21Z"
    },
    "content_hash": "sha256:9a26918f0587833822d6e425dd788b204a4ee511ad18be968801a8a66a03d3a2",
    "translations": {}
@@ -502,7 +502,7 @@
     85696777,
     87451661,
     88570003,
-    89631139,
+    89631133,
     90238142
    ],
    "provenance": {
@@ -512,7 +512,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=58&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:23Z"
    },
    "content_hash": "sha256:37db34a8a482dd58748deb637fd51836e575a05063664ca15d45a0c6c6e6e15b",
    "translations": {}
@@ -534,7 +534,7 @@
    "related_card_ids": [
     36734924,
     89312388,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -543,7 +543,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=17735&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:25Z"
    },
    "content_hash": "sha256:b4d0203a4cefce1afba0fc4b204344ddeee3851382ab11e3a8527f8b9ce22c54",
    "translations": {}
@@ -567,7 +567,7 @@
     12381100,
     23995346,
     71143015,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -576,7 +576,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24039&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:28Z"
    },
    "content_hash": "sha256:02fdd7a8f95716cba03269713ba7a40fb7e777bcf966ede8b7216fa01f0c6aae",
    "translations": {}
@@ -616,7 +616,7 @@
     71039903,
     73398797,
     88241506,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -625,7 +625,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23362&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:30Z"
    },
    "content_hash": "sha256:51703a9e2bc1618d6ba7330c2412528f4723df04a8feb78a7dc3410721e946f8",
    "translations": {}
@@ -653,7 +653,7 @@
     62873545,
     71143015,
     79109599,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -662,7 +662,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22794&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:33Z"
    },
    "content_hash": "sha256:26fe07f0caefddce2738450d55d6fe055496c097608544bff5852e7405c474d3",
    "translations": {}
@@ -696,7 +696,7 @@
     75141056,
     77571454,
     78021082,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -705,7 +705,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24303&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:35Z"
    },
    "content_hash": "sha256:ad3506451ece130df3f88a3f0df03342747d53ed8e92e609cae38b7c4473a905",
    "translations": {}
@@ -728,10 +728,10 @@
    ],
    "related_card_ids": [
     36996508,
-    38033121,
+    38033120,
     59514116,
     79613121,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -740,7 +740,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22879&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:37Z"
    },
    "content_hash": "sha256:dff9da431c2ed5db4e67a354aff5bd2da75e996db0d8d56be1b6cec1a7056337",
    "translations": {}
@@ -776,7 +776,7 @@
     60465049,
     69533836,
     83827392,
-    89631139,
+    89631133,
     91073013,
     91228233,
     95243515,
@@ -789,7 +789,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23259&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:40Z"
    },
    "content_hash": "sha256:cc6402689445b1b103489921e8be068d68aeb30970d7104189c71d23eb1db1ca",
    "translations": {}
@@ -813,7 +813,7 @@
     16832845,
     36996508,
     53129443,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -822,7 +822,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=19118&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:42Z"
    },
    "content_hash": "sha256:0d86ffb2fe92ae5498b522c31db7955a2d0f6997c7e274c2e22e276923d29ed4",
    "translations": {}
@@ -844,7 +844,7 @@
    "related_card_ids": [
     8837932,
     36996508,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -853,7 +853,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=19193&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:45Z"
    },
    "content_hash": "sha256:80317cea969959855bc775c7f051358bc6a21b393c1d1caa95a48d8edef3d6a3",
    "translations": {}
@@ -874,7 +874,7 @@
    ],
    "related_card_ids": [
     41488249,
-    89631139,
+    89631133,
     92501449
    ],
    "provenance": {
@@ -884,7 +884,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24160&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:47Z"
    },
    "content_hash": "sha256:40960a60f15abd0daaeb5c788f3f8df2fbe725611029026903d196c587b0b8c7",
    "translations": {}
@@ -906,7 +906,7 @@
    "related_card_ids": [
     38517737,
     67768675,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -915,7 +915,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24173&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:50Z"
    },
    "content_hash": "sha256:5c66b4b390d2833af1787a571c31441d76ad702d408a09db6dde8d431cb71cd1",
    "translations": {}
@@ -943,7 +943,7 @@
     38517737,
     56920308,
     67768675,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -952,7 +952,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=56&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:52Z"
    },
    "content_hash": "sha256:4c25680ac70d2657501544b94e99b88ecfaf71f00e89e7d5bce248da84667b51",
    "translations": {}
@@ -978,7 +978,7 @@
     21082832,
     36996508,
     47963370,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -987,7 +987,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22369&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:55Z"
    },
    "content_hash": "sha256:fc29f2d986395553e4dfb853609b9063a3644e264dc26f45b981489469840612",
    "translations": {}
@@ -1010,7 +1010,7 @@
    "related_card_ids": [
     36261276,
     56532353,
-    89631139,
+    89631133,
     95286165
    ],
    "provenance": {
@@ -1020,7 +1020,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22795&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:34:58Z"
    },
    "content_hash": "sha256:e1cea83c5f6a8108dc459229f179b49cdb37e52c1a9cb91e423a5873e8ca0278",
    "translations": {}
@@ -1040,7 +1040,7 @@
    ],
    "related_card_ids": [
     10000020,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1049,7 +1049,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11909&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:00Z"
    },
    "content_hash": "sha256:96e7fb90f9e415cfaf7d10bc23d785353cb9fbe21b9decca66fa37aaba8bfea0",
    "translations": {}
@@ -1073,7 +1073,7 @@
     8251996,
     13093792,
     17655904,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1082,7 +1082,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=6420&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:03Z"
    },
    "content_hash": "sha256:c97d7d4c4b5fe7d4b5e126dc63d1c60902c18758727611db62a31e26c9dc8212",
    "translations": {}
@@ -1104,7 +1104,7 @@
    "related_card_ids": [
     31036355,
     36734924,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1113,7 +1113,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=17740&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:05Z"
    },
    "content_hash": "sha256:21dd08783fd8602f1f038364f9f4b5ce3995b6cb379257896b757114d0ea5662",
    "translations": {}
@@ -1133,7 +1133,7 @@
    ],
    "related_card_ids": [
     73398797,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1142,7 +1142,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=6246&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:07Z"
    },
    "content_hash": "sha256:a40d62dbff3012a3709faec9a5608c249cf409cb326eb77f19881ab8dd43cbb8",
    "translations": {}
@@ -1166,7 +1166,7 @@
     24508238,
     50371210,
     59822133,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1175,7 +1175,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=18122&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:10Z"
    },
    "content_hash": "sha256:82eb4520f6b868c47446d16f2153568293b531f2055647103e3906bffd16d405",
    "translations": {}
@@ -1195,7 +1195,7 @@
    ],
    "related_card_ids": [
     88851326,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1204,7 +1204,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11360&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:12Z"
    },
    "content_hash": "sha256:d98c5e1be29285febed87d16e26d9620c8dc3cd78c1a3c28461bbd503713a135",
    "translations": {}
@@ -1226,7 +1226,7 @@
    "related_card_ids": [
     8837932,
     57728570,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1235,7 +1235,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=7258&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:14Z"
    },
    "content_hash": "sha256:b5996fda6f5453257d31bfb93316056fec4167aee7863565058d19f37bee5ec4",
    "translations": {}
@@ -1257,7 +1257,7 @@
    "related_card_ids": [
     43426903,
     55713623,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1266,7 +1266,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=8976&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:17Z"
    },
    "content_hash": "sha256:f97d4ac5780b4cc4cb66680afb40553131c0cfe1e6841365f090591f6a399238",
    "translations": {}
@@ -1290,7 +1290,7 @@
     38517737,
     43228023,
     81223446,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1299,7 +1299,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22462&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:19Z"
    },
    "content_hash": "sha256:feb6588731975d7828316c149879a7a424928eb433f689c1986552d689329e0c",
    "translations": {}
@@ -1323,7 +1323,7 @@
     45939841,
     68427465,
     73048641,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1332,7 +1332,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=9829&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:21Z"
    },
    "content_hash": "sha256:aae2a436f16e84f35c0e86e8f242854dbc8dff45bb3c2404ffaa5b1fa5e62a37",
    "translations": {}
@@ -1354,7 +1354,7 @@
    "related_card_ids": [
     56920308,
     62089826,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1363,7 +1363,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23374&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:24Z"
    },
    "content_hash": "sha256:fee16e3d28fedd879bba1c3b568e546e02194ffac7a224e4284809349d46aa06",
    "translations": {}
@@ -1385,7 +1385,7 @@
    "related_card_ids": [
     23995346,
     71143015,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1394,7 +1394,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23388&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:26Z"
    },
    "content_hash": "sha256:d8c17fbd34e8506dbc77bd62869f8e500a75fac1637ef94096e7dfa4b281b71c",
    "translations": {}
@@ -1423,7 +1423,7 @@
     21082832,
     36996508,
     68334074,
-    89631139,
+    89631133,
     99789342
    ],
    "provenance": {
@@ -1433,7 +1433,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=13856&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:29Z"
    },
    "content_hash": "sha256:a273725ec784bbc7b60edd4ff44ac980fa08cb783f63d4bedafa6db6bebe4de8",
    "translations": {}
@@ -1456,7 +1456,7 @@
    "related_card_ids": [
     12923641,
     45467446,
-    89631139,
+    89631133,
     97077563
    ],
    "provenance": {
@@ -1466,7 +1466,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=6244&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:32Z"
    },
    "content_hash": "sha256:59c497c19cb622d5452fc64ea4b0b1c5574b5ed6b91c76617e5985dc13c83279",
    "translations": {}
@@ -1488,7 +1488,7 @@
    "related_card_ids": [
     39139935,
     77901552,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1497,7 +1497,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=12271&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:34Z"
    },
    "content_hash": "sha256:b09bccf1a44aa3504a576c601612ebeef400e39704309f845307f01fc3ceabb2",
    "translations": {}
@@ -1519,7 +1519,7 @@
    "related_card_ids": [
     23693634,
     29071332,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1528,7 +1528,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=6259&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:36Z"
    },
    "content_hash": "sha256:b895344fd91896dae456484a4711b18742a053d7d0ad1b3e52768495013cb96e",
    "translations": {}
@@ -1550,7 +1550,7 @@
    "related_card_ids": [
     111280,
     88241506,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1559,7 +1559,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=18634&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:39Z"
    },
    "content_hash": "sha256:8ab0382409f26ce910458ec2f3bc21c638ca0f54e08f8e4f16f3e298cfc42328",
    "translations": {}
@@ -1580,7 +1580,7 @@
    ],
    "related_card_ids": [
     15001619,
-    89631139,
+    89631133,
     93437091
    ],
    "provenance": {
@@ -1590,7 +1590,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23463&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:41Z"
    },
    "content_hash": "sha256:9a3cb95dd84ac12f541cdc3465bef86f465927c791e003abebb7d9178f191578",
    "translations": {}
@@ -1614,7 +1614,7 @@
     21082832,
     36996508,
     47963370,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1623,7 +1623,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22343&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:43Z"
    },
    "content_hash": "sha256:6bec8f3fb6bb2c20c8aedc3e756b756be16440ff8b66ceeb2741f20d6c8a5c58",
    "translations": {}
@@ -1646,7 +1646,7 @@
    "related_card_ids": [
     44163252,
     66809920,
-    89631139,
+    89631133,
     92182447
    ],
    "provenance": {
@@ -1656,7 +1656,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22836&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:46Z"
    },
    "content_hash": "sha256:69e6d56407159f01b14314452b1c0c5b262766193d3ffc8087688efc9d9b0160",
    "translations": {}
@@ -1682,7 +1682,7 @@
     30208479,
     33245030,
     36996508,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1691,7 +1691,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=19098&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:48Z"
    },
    "content_hash": "sha256:7631df74a52f51acdf79c7b76d33ee845d1174b2ae39599cf4366c1ded8978f1",
    "translations": {}
@@ -1721,7 +1721,7 @@
     44508094,
     55343236,
     74677422,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1730,7 +1730,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=9627&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:51Z"
    },
    "content_hash": "sha256:b6999be62532003ea584bd5bc51c3e8a6a4a807df6ffeea48eb91e3b99b04b64",
    "translations": {}
@@ -1752,7 +1752,7 @@
    "related_card_ids": [
     29432790,
     47355498,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1761,7 +1761,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=12596&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:53Z"
    },
    "content_hash": "sha256:a45656994df5c3ed5c3261fa4ea382ec0c0797c364258c3356207b8e8c0305cc",
    "translations": {}
@@ -1785,7 +1785,7 @@
     21082832,
     29549364,
     36996508,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1794,7 +1794,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=9079&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:55Z"
    },
    "content_hash": "sha256:e271aeeaeaa1f54fa03ff54f470c1b97a7a37bb1795970674103b237b33c4cc0",
    "translations": {}
@@ -1818,7 +1818,7 @@
     24094653,
     38517737,
     43228023,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1827,7 +1827,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22461&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:35:57Z"
    },
    "content_hash": "sha256:93032c6047b538f1305100efd1323076bed69d03dd48d540ee27ee20eab769da",
    "translations": {}
@@ -1849,7 +1849,7 @@
    "related_card_ids": [
     81510157,
     88241506,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1858,7 +1858,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=12835&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:00Z"
    },
    "content_hash": "sha256:6bc633a67e13de606609e0f97571f8b870a879b1ed63d9d29784e95a2b36e74c",
    "translations": {}
@@ -1882,7 +1882,7 @@
     44330098,
     47393199,
     64025981,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1891,7 +1891,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22865&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:02Z"
    },
    "content_hash": "sha256:d3b99854cc1566b8584ea7968a4605887f09ac9ca3712f0bb56810871f47c8c0",
    "translations": {}
@@ -1916,7 +1916,7 @@
     21082832,
     36996508,
     46052429,
-    89631139,
+    89631133,
     96239878
    ],
    "provenance": {
@@ -1926,7 +1926,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23155&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:05Z"
    },
    "content_hash": "sha256:f56251998ca034be6aa222375410baf5bc78530cffdbdab33ea91fadab0002d8",
    "translations": {}
@@ -1949,7 +1949,7 @@
    "related_card_ids": [
     24382602,
     45467446,
-    89631139,
+    89631133,
     97077563
    ],
    "provenance": {
@@ -1959,7 +1959,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=18125&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:07Z"
    },
    "content_hash": "sha256:69f4008fae594b1bfd3a30646e9644973c0e2ca3c29097e89680109b59205462",
    "translations": {}
@@ -1981,7 +1981,7 @@
    "related_card_ids": [
     5318639,
     29432790,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -1990,7 +1990,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21953&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:10Z"
    },
    "content_hash": "sha256:d695fc9483b0383a4d65cf3a0500d06d45130a7ced0449fe586c77c6f9bda28c",
    "translations": {}
@@ -2010,7 +2010,7 @@
    ],
    "related_card_ids": [
     20654247,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2019,7 +2019,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21958&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:12Z"
    },
    "content_hash": "sha256:2f42f10e6e05c735761aee567a0064ef2e974442cb474da5ddc2bd0f1dfb768a",
    "translations": {}
@@ -2043,7 +2043,7 @@
     9433350,
     17655904,
     79814787,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2052,7 +2052,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=9562&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:14Z"
    },
    "content_hash": "sha256:ff3da64093934e4582d409a251737f3580520e6d3472c057c4837b84f7de5b8d",
    "translations": {}
@@ -2073,7 +2073,7 @@
    ],
    "related_card_ids": [
     28486799,
-    89631139,
+    89631133,
     94004268
    ],
    "provenance": {
@@ -2083,7 +2083,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=6138&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:17Z"
    },
    "content_hash": "sha256:9fbbd3639d68a1cb2118a6357a53c21a91e182dd9477a055a2ef095a438bb566",
    "translations": {}
@@ -2105,7 +2105,7 @@
    "related_card_ids": [
     27243130,
     80560728,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2114,7 +2114,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=8412&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:20Z"
    },
    "content_hash": "sha256:45be35c8a9bbb25d01fa30d5947ef4c84f73926bf7f4dbf58c59ad85143c0a69",
    "translations": {}
@@ -2136,7 +2136,7 @@
    "related_card_ids": [
     1639384,
     8384771,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2145,7 +2145,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=19005&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:22Z"
    },
    "content_hash": "sha256:83e81cea2c88ec271559254dc008c6168479df36ab9bca03a8298b473096c713",
    "translations": {}
@@ -2167,7 +2167,7 @@
    "related_card_ids": [
     31305911,
     80560728,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2176,7 +2176,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=19188&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:24Z"
    },
    "content_hash": "sha256:ea5f771259b06e4e2ac3c4f84e6502af96a9442207400b4813ebe6ec32d7dcd4",
    "translations": {}
@@ -2196,7 +2196,7 @@
    ],
    "related_card_ids": [
     29432790,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2205,7 +2205,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21954&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:26Z"
    },
    "content_hash": "sha256:a7304a948639dd76346050761d0537ef8e94f07a9251ebc27716082a2becb54f",
    "translations": {}
@@ -2229,7 +2229,7 @@
     5851097,
     8978197,
     71867500,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2238,7 +2238,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22118&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:29Z"
    },
    "content_hash": "sha256:1d66ac5725325b9516ddc8daba355b665e7921034a05443fe873c62d375d0202",
    "translations": {}
@@ -2259,7 +2259,7 @@
    ],
    "related_card_ids": [
     34002992,
-    89631139,
+    89631133,
     92481084
    ],
    "provenance": {
@@ -2269,7 +2269,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=8639&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:32Z"
    },
    "content_hash": "sha256:3a0473062b2a2af8c2f97b7cc64a1af6dfb136a1ecc241cfc7de36062418eb63",
    "translations": {}
@@ -2291,7 +2291,7 @@
    "related_card_ids": [
     20654247,
     84816244,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2300,7 +2300,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=10699&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:34Z"
    },
    "content_hash": "sha256:54ab2b13926a16744d318095dac071db513a627bdac95cf8b339a98e6569c4be",
    "translations": {}
@@ -2322,7 +2322,7 @@
    "related_card_ids": [
     17655904,
     20065549,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2331,7 +2331,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11860&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:37Z"
    },
    "content_hash": "sha256:d33132f4126531cdc4a79f95db845581620fbba114284e20a836646a7c6f5f99",
    "translations": {}
@@ -2353,7 +2353,7 @@
    "related_card_ids": [
     11224103,
     29432790,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2362,7 +2362,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21962&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:39Z"
    },
    "content_hash": "sha256:0d84ba9aab26504d0ca01d9a8886d4841568e1688e7f75244a307ec39c43c57f",
    "translations": {}
@@ -2384,7 +2384,7 @@
    "related_card_ids": [
     29432790,
     30459350,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2393,7 +2393,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21963&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:42Z"
    },
    "content_hash": "sha256:b9869c10d7f07c9b234260c07d3a833f52c1259462903a6a2c34d34c241ea038",
    "translations": {}
@@ -2415,7 +2415,7 @@
    "related_card_ids": [
     3113667,
     76728962,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2424,7 +2424,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21542&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:44Z"
    },
    "content_hash": "sha256:2a52c7d7cabf12e69c74ed6845d8c51c0aa020551db6b27cb049aeb91e6779cd",
    "translations": {}
@@ -2444,7 +2444,7 @@
     13280
    ],
    "related_card_ids": [
-    89631139,
+    89631133,
     92481084,
     94004268
    ],
@@ -2455,7 +2455,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=13734&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:46Z"
    },
    "content_hash": "sha256:efcad77afadff3fadbd4997527d7ea216ec962772f3dc6d36237651aec80e6f6",
    "translations": {}
@@ -2477,7 +2477,7 @@
    "related_card_ids": [
     53567095,
     88241506,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2486,7 +2486,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=14026&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:49Z"
    },
    "content_hash": "sha256:b72865de5ed665cd8f2ef4ae03ebd499910faa024447ec699a05ffd4167d16ec",
    "translations": {}
@@ -2508,7 +2508,7 @@
    "related_card_ids": [
     38517737,
     45644898,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2517,7 +2517,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=18317&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:51Z"
    },
    "content_hash": "sha256:8ae7f48219facb52e03bdb85eb7df24884b523bf3d85b35bb49ef2b137f7138c",
    "translations": {}
@@ -2539,7 +2539,7 @@
    "related_card_ids": [
     82744076,
     88241506,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2548,7 +2548,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=18728&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:54Z"
    },
    "content_hash": "sha256:e4687bb10971a790d466e58c19a5fe68331e0ed9896518884f6c5a54723baaa2",
    "translations": {}
@@ -2568,7 +2568,7 @@
     13280
    ],
    "related_card_ids": [
-    89631139,
+    89631133,
     92481084,
     95448692
    ],
@@ -2579,7 +2579,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21199&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:56Z"
    },
    "content_hash": "sha256:e26d5b2ed03d282ec6b099944162173052da1610c6dc450eb4a274a487d9fed7",
    "translations": {}
@@ -2601,7 +2601,7 @@
    "related_card_ids": [
     22804410,
     89312388,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2610,7 +2610,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=7657&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:36:58Z"
    },
    "content_hash": "sha256:05e670d28f4390e2b84fd3be93fc76a71a1c24aa6a39f282e3a24f5f1906bcbc",
    "translations": {}
@@ -2634,7 +2634,7 @@
     2129638,
     24094653,
     38517737,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2643,7 +2643,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=17902&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:00Z"
    },
    "content_hash": "sha256:ccef2592a2b84ab3dd49cbbb83c35d955c47cd318d7e1fafe1477d8a09c9677b",
    "translations": {}
@@ -2667,7 +2667,7 @@
     50371210,
     59822133,
     78348934,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2676,7 +2676,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=18123&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:09Z"
    },
    "content_hash": "sha256:7eaf4807428c37bf883a9b8a57c18b4958fa88d0c5257766092deccfa9342510",
    "translations": {}
@@ -2699,7 +2699,7 @@
    "related_card_ids": [
     6853254,
     44330098,
-    89631139,
+    89631133,
     95697223
    ],
    "provenance": {
@@ -2709,7 +2709,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=19081&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:11Z"
    },
    "content_hash": "sha256:25f0d1ff51a5db7226eb1001765a050250c936ffd7435e9d68e888cac44d5e01",
    "translations": {}
@@ -2730,7 +2730,7 @@
    ],
    "related_card_ids": [
     20654247,
-    89631139,
+    89631133,
     94192409
    ],
    "provenance": {
@@ -2740,7 +2740,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21957&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:14Z"
    },
    "content_hash": "sha256:f9fe55b741acc9a7fb0e1233094f9ba36ec7051b8fee69907360737b77bd36f0",
    "translations": {}
@@ -2762,7 +2762,7 @@
    "related_card_ids": [
     17655904,
     73398797,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2771,7 +2771,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11938&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:16Z"
    },
    "content_hash": "sha256:d1c1f70c312f32cf717adfd91c99e2ca3d63a696513412d81bd2fbaefa05e028",
    "translations": {}
@@ -2791,7 +2791,7 @@
    ],
    "related_card_ids": [
     71525232,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2800,7 +2800,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=19050&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:19Z"
    },
    "content_hash": "sha256:ef0365bcd47506d5adf9ce73953dcfb61a6f2129c139df2ed4fa2e3c53b059fe",
    "translations": {}
@@ -2820,7 +2820,7 @@
    ],
    "related_card_ids": [
     17655904,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2829,7 +2829,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=12813&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:21Z"
    },
    "content_hash": "sha256:65d881cda714d82736116c41230105c6cdab148a0f0648200a78d09c120a7b44",
    "translations": {}
@@ -2855,7 +2855,7 @@
     38517737,
     48976825,
     50371210,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2864,7 +2864,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=18121&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:23Z"
    },
    "content_hash": "sha256:b0465ca8d2809f14db3e72796e5bc5a56db85c7bd6fe76a3c2b9896d7cbb12c1",
    "translations": {}
@@ -2886,7 +2886,7 @@
    "related_card_ids": [
     84749824,
     88241506,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2895,7 +2895,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=9072&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:25Z"
    },
    "content_hash": "sha256:b0b5c7bb8941caffbc4d73c38d4e62a64c13e021293462698f71d1c8d67385ff",
    "translations": {}
@@ -2915,7 +2915,7 @@
    ],
    "related_card_ids": [
     58293343,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2924,7 +2924,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=16038&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:27Z"
    },
    "content_hash": "sha256:df445b881f1cc5a67812bd8281bce290d9debc1b9f1cf03617b02e1dfdee6cb3",
    "translations": {}
@@ -2946,7 +2946,7 @@
    "related_card_ids": [
     38517737,
     69868555,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2955,7 +2955,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=18439&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:30Z"
    },
    "content_hash": "sha256:07557758fa55355bac9774e5c1c79fa16a52977baf8609712591a21bb9e655c1",
    "translations": {}
@@ -2977,7 +2977,7 @@
    "related_card_ids": [
     5851097,
     45467446,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -2986,7 +2986,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=18334&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:32Z"
    },
    "content_hash": "sha256:6113abe2a781062f4fa570b794e3c0cb315cc7d7714394803c69c2eaaa92c721",
    "translations": {}
@@ -3009,7 +3009,7 @@
    "related_card_ids": [
     16832845,
     36996508,
-    89631139,
+    89631133,
     97077563
    ],
    "provenance": {
@@ -3019,7 +3019,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=19114&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:35Z"
    },
    "content_hash": "sha256:9309ce14ffcc4072ef0a682b6efaf4510caf161990ec30c1ec160d348117d4eb",
    "translations": {}
@@ -3039,7 +3039,7 @@
    ],
    "related_card_ids": [
     29432790,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -3048,7 +3048,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=7511&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:37Z"
    },
    "content_hash": "sha256:e5b10119636c16c4a00fa0b8b4930b14b05470fcc9d7ac29cdce035d93d57895",
    "translations": {}
@@ -3071,7 +3071,7 @@
    "related_card_ids": [
     37520316,
     87025064,
-    89631139,
+    89631133,
     95697223
    ],
    "provenance": {
@@ -3081,7 +3081,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=8427&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:39Z"
    },
    "content_hash": "sha256:bd4e855776e17a2e1df9325767c91b4c514c2f3a4adc7ccd30a47a41df1ce367",
    "translations": {}
@@ -3104,7 +3104,7 @@
    "related_card_ids": [
     50371210,
     53183600,
-    89631139,
+    89631133,
     97077563
    ],
    "provenance": {
@@ -3114,7 +3114,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=18118&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:42Z"
    },
    "content_hash": "sha256:7ff62d166fc1fa15bf9c16c43e22afc51be335c35ec46d60ca8183dabaed310d",
    "translations": {}
@@ -3138,7 +3138,7 @@
     22804410,
     38517737,
     44095762,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -3147,7 +3147,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=19091&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:45Z"
    },
    "content_hash": "sha256:f19449e923aa90f4762a839b8540b4773b6cdd929ac217bb17747480e0e3ebab",
    "translations": {}
@@ -3167,7 +3167,7 @@
    ],
    "related_card_ids": [
     73398797,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -3176,7 +3176,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=10787&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:48Z"
    },
    "content_hash": "sha256:bbb46e2f775b340f90cde630ab8eac4bb0a7272e1402f43a883d6230ef0cc46b",
    "translations": {}
@@ -3198,7 +3198,7 @@
    "related_card_ids": [
     9433350,
     38517737,
-    89631139
+    89631133
    ],
    "provenance": {
     "source": "konami_ocg_database",
@@ -3207,7 +3207,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=17839&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:50Z"
    },
    "content_hash": "sha256:51de5135b72bb4589bd3aa347a8d50d09058c4cd4e790370de1cfe9a9a54b5d1",
    "translations": {}
@@ -3479,7 +3479,7 @@
     85692042,
     88241506,
     88453933,
-    89631139,
+    89631133,
     89812483,
     90276649,
     90829280,
@@ -3500,7 +3500,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23215&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:34:11Z"
+    "retrieved_at": "2026-09-17T13:37:53Z"
    },
    "content_hash": "sha256:35e2f848b46aaf62d6d939a88fdc037ae6a0e20c60f3bcad63d13f6bb6d2532b",
    "translations": {}

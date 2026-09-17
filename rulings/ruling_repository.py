@@ -128,14 +128,22 @@ class RulingRepository:
         """
         이 카드의 재정 상태.
 
-        수집한 적이 없으면 ``SOURCE_UNAVAILABLE`` 이다 — **"재정이 없다"가
-        아니다.** 확인하지 않은 것과 확인해서 없는 것은 다르다.
+        기록이 없으면 ``NOT_CHECKED`` 다 — **"재정이 없다"도 아니고 "사이트가
+        죽었다"도 아니다.** 그냥 아직 조회하지 않았다는 뜻이다.
         """
         ruling_set = self._by_card_id.get(card_id)
         return (
             ruling_set.availability
             if ruling_set is not None
-            else RulingAvailability.SOURCE_UNAVAILABLE
+            else RulingAvailability.NOT_CHECKED
+        )
+
+    def availability_for_cid(self, cid: int) -> RulingAvailability:
+        ruling_set = self._by_cid.get(cid)
+        return (
+            ruling_set.availability
+            if ruling_set is not None
+            else RulingAvailability.NOT_CHECKED
         )
 
     def rulings_for_card(self, card_id: int) -> list[CardRuling]:
@@ -149,6 +157,34 @@ class RulingRepository:
     def referencing(self, card_id: int) -> list[CardRuling | CardRulingSupplement]:
         """이 카드를 본문에서 언급한 다른 카드의 재정."""
         return [e for e in self if card_id in e.related_card_ids]
+
+    def related_card_closure(self, card_id: int, depth: int = 1) -> set[int]:
+        """
+        이 카드에서 출발해 공식 링크를 ``depth`` 홉까지 따라간 카드 집합.
+
+        **순환 보호가 필수다.** 공식 페이지는 본문에서 자기 자신을 링크하므로
+        (실측 596건 중 525건) 방문 집합 없이 따라가면 즉시 무한 루프가 된다.
+        서로를 링크하는 카드 쌍도 마찬가지다.
+
+        결과에 출발 카드는 포함하지 않는다 — 자기 자신은 "관련 카드"가 아니다.
+        """
+        if depth < 1:
+            return set()
+        visited: set[int] = {card_id}
+        frontier: set[int] = {card_id}
+        for _ in range(depth):
+            following: set[int] = set()
+            for current in frontier:
+                ruling_set = self._by_card_id.get(current)
+                if ruling_set is None:
+                    continue
+                for entry in ruling_set.all_entries():
+                    following.update(entry.related_card_ids)
+            frontier = following - visited
+            if not frontier:
+                break
+            visited |= frontier
+        return visited - {card_id}
 
     def __contains__(self, cid: object) -> bool:
         return isinstance(cid, int) and cid in self._by_cid

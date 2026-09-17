@@ -126,6 +126,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 64866,
+   "cid": 22706,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 64865 (같은 카드명 확인)"
+  },
+  {
    "card_id": 96540,
    "cid": 13434,
    "link_source": "ygoprodeck_konami_id",
@@ -572,6 +579,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 423706,
+   "cid": 5059,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 423705 (같은 카드명 확인)"
+  },
+  {
    "card_id": 425934,
    "cid": 5770,
    "link_source": "ygoprodeck_konami_id",
@@ -846,6 +860,20 @@
    "cid": 6337,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 759394,
+   "cid": 6337,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 759393 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 759395,
+   "cid": 6337,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 759393 (같은 카드명 확인)"
   },
   {
    "card_id": 770365,
@@ -1214,6 +1242,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 1186448,
+   "cid": 22703,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 1186447 (같은 카드명 확인)"
+  },
+  {
    "card_id": 1187243,
    "cid": 16250,
    "link_source": "ygoprodeck_konami_id",
@@ -1278,6 +1313,13 @@
    "cid": 8918,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 1264320,
+   "cid": 8918,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 1264319 (같은 카드명 확인)"
   },
   {
    "card_id": 1269512,
@@ -1476,6 +1518,13 @@
    "cid": 21355,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 1498450,
+   "cid": 21355,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 1498449 (같은 카드명 확인)"
   },
   {
    "card_id": 1508649,
@@ -1826,6 +1875,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 1861631,
+   "cid": 13036,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 1861629 (같은 카드명 확인)"
+  },
+  {
    "card_id": 1872843,
    "cid": 14716,
    "link_source": "ygoprodeck_konami_id",
@@ -2144,6 +2200,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 2263870,
+   "cid": 17469,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 2263869 (같은 카드명 확인)"
+  },
+  {
    "card_id": 2266498,
    "cid": 13365,
    "link_source": "ygoprodeck_konami_id",
@@ -2166,6 +2229,13 @@
    "cid": 8197,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 2295441,
+   "cid": 8197,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 2295440 (같은 카드명 확인)"
   },
   {
    "card_id": 2295831,
@@ -2244,6 +2314,13 @@
    "cid": 17360,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 2347658,
+   "cid": 17360,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 2347656 (같은 카드명 확인)"
   },
   {
    "card_id": 2356994,
@@ -2358,6 +2435,13 @@
    "cid": 23502,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 2419597,
+   "cid": 23502,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 2419596 (같은 카드명 확인)"
   },
   {
    "card_id": 2420921,
@@ -3434,6 +3518,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 3606729,
+   "cid": 9877,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 3606728 (같은 카드명 확인)"
+  },
+  {
    "card_id": 3611830,
    "cid": 14439,
    "link_source": "ygoprodeck_konami_id",
@@ -3456,6 +3547,13 @@
    "cid": 23499,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 3635139,
+   "cid": 23499,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 3635138 (같은 카드명 확인)"
   },
   {
    "card_id": 3642509,
@@ -4394,6 +4492,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 4731784,
+   "cid": 20786,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 4731783 (같은 카드명 확인)"
+  },
+  {
    "card_id": 4732017,
    "cid": 5879,
    "link_source": "ygoprodeck_konami_id",
@@ -4704,6 +4809,13 @@
    "cid": 13082,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 5043013,
+   "cid": 13082,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 5043010 (같은 카드명 확인)"
   },
   {
    "card_id": 5050644,
@@ -5554,6 +5666,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 6007214,
+   "cid": 6563,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 6007213 (같은 카드명 확인)"
+  },
+  {
    "card_id": 6021033,
    "cid": 7848,
    "link_source": "ygoprodeck_konami_id",
@@ -5866,6 +5985,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 6327735,
+   "cid": 18482,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 6327734 (같은 카드명 확인)"
+  },
+  {
    "card_id": 6330307,
    "cid": 10604,
    "link_source": "ygoprodeck_konami_id",
@@ -6020,6 +6146,13 @@
    "cid": 15057,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 6498707,
+   "cid": 15057,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 6498706 (같은 카드명 확인)"
   },
   {
    "card_id": 6500778,
@@ -7186,6 +7319,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 7894707,
+   "cid": 22978,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 7894706 (같은 카드명 확인)"
+  },
+  {
    "card_id": 7902349,
    "cid": 4026,
    "link_source": "ygoprodeck_konami_id",
@@ -7670,6 +7810,13 @@
    "cid": 13763,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 8491309,
+   "cid": 13763,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 8491308 (같은 카드명 확인)"
   },
   {
    "card_id": 8491961,
@@ -8356,6 +8503,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 9205574,
+   "cid": 15626,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 9205573 (같은 카드명 확인)"
+  },
+  {
    "card_id": 9212051,
    "cid": 13028,
    "link_source": "ygoprodeck_konami_id",
@@ -8720,6 +8874,13 @@
    "cid": 17037,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 9603253,
+   "cid": 17037,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 9603252 (같은 카드명 확인)"
   },
   {
    "card_id": 9603356,
@@ -9122,6 +9283,13 @@
    "cid": 12234,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 10000100,
+   "cid": 4370,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 5405694 (같은 카드명 확인)"
   },
   {
    "card_id": 10002346,
@@ -11464,6 +11632,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 12580478,
+   "cid": 4343,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 12580477 (같은 카드명 확인)"
+  },
+  {
    "card_id": 12600382,
    "cid": 5701,
    "link_source": "ygoprodeck_konami_id",
@@ -11674,6 +11849,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 12908095,
+   "cid": 22700,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 12908094 (같은 카드명 확인)"
+  },
+  {
    "card_id": 12923641,
    "cid": 6268,
    "link_source": "ygoprodeck_konami_id",
@@ -11800,6 +11982,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 13021683,
+   "cid": 22697,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 13021682 (같은 카드명 확인)"
+  },
+  {
    "card_id": 13023431,
    "cid": 22067,
    "link_source": "ygoprodeck_konami_id",
@@ -11846,6 +12035,13 @@
    "cid": 12337,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 13048473,
+   "cid": 12337,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 13048472 (같은 카드명 확인)"
   },
   {
    "card_id": 13069066,
@@ -12014,6 +12210,13 @@
    "cid": 22694,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 13243125,
+   "cid": 22694,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 13243124 (같은 카드명 확인)"
   },
   {
    "card_id": 13247801,
@@ -12892,6 +13095,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 14391626,
+   "cid": 19146,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 14391625 (같은 카드명 확인)"
+  },
+  {
    "card_id": 14391920,
    "cid": 6090,
    "link_source": "ygoprodeck_konami_id",
@@ -13052,6 +13262,13 @@
    "cid": 14876,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 14532164,
+   "cid": 14876,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 14532163 (같은 카드명 확인)"
   },
   {
    "card_id": 14536035,
@@ -13414,6 +13631,13 @@
    "cid": 22691,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 14965713,
+   "cid": 22691,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 14965712 (같은 카드명 확인)"
   },
   {
    "card_id": 14970113,
@@ -14214,6 +14438,27 @@
    "status": "unverified"
   },
   {
+   "card_id": 15845915,
+   "cid": 18868,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 15845914 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 15845916,
+   "cid": 18868,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 15845914 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 15845917,
+   "cid": 18868,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 15845914 (같은 카드명 확인)"
+  },
+  {
    "card_id": 15848542,
    "cid": 14764,
    "link_source": "ygoprodeck_konami_id",
@@ -14488,6 +14733,13 @@
    "cid": 11213,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 16178684,
+   "cid": 11213,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 16178681 (같은 카드명 확인)"
   },
   {
    "card_id": 16188701,
@@ -15780,6 +16032,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 17548457,
+   "cid": 8577,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 17548456 (같은 카드명 확인)"
+  },
+  {
    "card_id": 17550376,
    "cid": 18479,
    "link_source": "ygoprodeck_konami_id",
@@ -16246,6 +16505,13 @@
    "cid": 4678,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 18144508,
+   "cid": 4678,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 18144506 (같은 카드명 확인)"
   },
   {
    "card_id": 18158393,
@@ -17316,6 +17582,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 19327349,
+   "cid": 7664,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 19327348 (같은 카드명 확인)"
+  },
+  {
    "card_id": 19333131,
    "cid": 9916,
    "link_source": "ygoprodeck_konami_id",
@@ -17794,6 +18067,13 @@
    "cid": 21054,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 19899074,
+   "cid": 21054,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 19899073 (같은 카드명 확인)"
   },
   {
    "card_id": 19932396,
@@ -18888,6 +19168,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 21143941,
+   "cid": 9066,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 21143940 (같은 카드명 확인)"
+  },
+  {
    "card_id": 21147203,
    "cid": 21048,
    "link_source": "ygoprodeck_konami_id",
@@ -19236,6 +19523,20 @@
    "status": "unverified"
   },
   {
+   "card_id": 21522602,
+   "cid": 14409,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 21522601 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 21522603,
+   "cid": 14409,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 21522601 (같은 카드명 확인)"
+  },
+  {
    "card_id": 21524779,
    "cid": 10305,
    "link_source": "ygoprodeck_konami_id",
@@ -19558,6 +19859,13 @@
    "cid": 14297,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 21887176,
+   "cid": 14297,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 21887175 (같은 카드명 확인)"
   },
   {
    "card_id": 21887179,
@@ -20658,6 +20966,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 23171611,
+   "cid": 5129,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 23171610 (같은 카드명 확인)"
+  },
+  {
    "card_id": 23187256,
    "cid": 12088,
    "link_source": "ygoprodeck_konami_id",
@@ -21356,6 +21671,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 23923759,
+   "cid": 18899,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 23923758 (같은 카드명 확인)"
+  },
+  {
    "card_id": 23924608,
    "cid": 13115,
    "link_source": "ygoprodeck_konami_id",
@@ -21438,6 +21760,13 @@
    "cid": 4386,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 23995349,
+   "cid": 4386,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 23995346 (같은 카드명 확인)"
   },
   {
    "card_id": 23998625,
@@ -21570,6 +21899,20 @@
    "cid": 4837,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 24094654,
+   "cid": 4837,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 24094653 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 24094655,
+   "cid": 4837,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 24094653 (같은 카드명 확인)"
   },
   {
    "card_id": 24096228,
@@ -21736,6 +22079,13 @@
    "verified_at": "2026-09-17T13:59:51Z"
   },
   {
+   "card_id": 24224831,
+   "cid": 13619,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 24224830 (같은 카드명 확인)"
+  },
+  {
    "card_id": 24226942,
    "cid": 16830,
    "link_source": "ygoprodeck_konami_id",
@@ -21758,6 +22108,13 @@
    "cid": 18836,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 24269962,
+   "cid": 18836,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 24269961 (같은 카드명 확인)"
   },
   {
    "card_id": 24285858,
@@ -22768,6 +23125,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 25542643,
+   "cid": 12205,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 25542642 (같은 카드명 확인)"
+  },
+  {
    "card_id": 25550531,
    "cid": 18003,
    "link_source": "ygoprodeck_konami_id",
@@ -23230,6 +23594,20 @@
    "status": "unverified"
   },
   {
+   "card_id": 26077388,
+   "cid": 13670,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 26077387 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 26077389,
+   "cid": 13670,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 26077387 (같은 카드명 확인)"
+  },
+  {
    "card_id": 26082117,
    "cid": 9618,
    "link_source": "ygoprodeck_konami_id",
@@ -23252,6 +23630,13 @@
    "cid": 14180,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 26096329,
+   "cid": 14180,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 26096328 (같은 카드명 확인)"
   },
   {
    "card_id": 26099457,
@@ -24016,6 +24401,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 27096834,
+   "cid": 22731,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 27096833 (같은 카드명 확인)"
+  },
+  {
    "card_id": 27103517,
    "cid": 11925,
    "link_source": "ygoprodeck_konami_id",
@@ -24038,6 +24430,13 @@
    "cid": 22728,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 27118422,
+   "cid": 22728,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 27118421 (같은 카드명 확인)"
   },
   {
    "card_id": 27125110,
@@ -24152,6 +24551,13 @@
    "cid": 14741,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 27204313,
+   "cid": 14741,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 27204311 (같은 카드명 확인)"
   },
   {
    "card_id": 27207573,
@@ -24326,6 +24732,13 @@
    "cid": 21380,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 27420824,
+   "cid": 21380,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 27420823 (같은 카드명 확인)"
   },
   {
    "card_id": 27439792,
@@ -25084,6 +25497,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 28331070,
+   "cid": 22725,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 28331069 (같은 카드명 확인)"
+  },
+  {
    "card_id": 28332833,
    "cid": 7818,
    "link_source": "ygoprodeck_konami_id",
@@ -25678,6 +26098,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 29053657,
+   "cid": 22722,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 29053656 (같은 카드명 확인)"
+  },
+  {
    "card_id": 29054481,
    "cid": 7815,
    "link_source": "ygoprodeck_konami_id",
@@ -25930,6 +26357,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 29301451,
+   "cid": 19188,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 29301450 (같은 카드명 확인)"
+  },
+  {
    "card_id": 29302858,
    "cid": 18727,
    "link_source": "ygoprodeck_konami_id",
@@ -26108,6 +26542,13 @@
    "cid": 14672,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 29479266,
+   "cid": 14672,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 29479265 (같은 카드명 확인)"
   },
   {
    "card_id": 29491031,
@@ -26366,6 +26807,13 @@
    "cid": 5738,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 29843095,
+   "cid": 5738,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 29843091 (같은 카드명 확인)"
   },
   {
    "card_id": 29863101,
@@ -26764,6 +27212,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 30275299,
+   "cid": 22719,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 30275298 (같은 카드명 확인)"
+  },
+  {
    "card_id": 30276969,
    "cid": 7812,
    "link_source": "ygoprodeck_konami_id",
@@ -26912,6 +27367,13 @@
    "cid": 22716,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 30397787,
+   "cid": 22716,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 30397786 (같은 카드명 확인)"
   },
   {
    "card_id": 30398342,
@@ -27094,6 +27556,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 30581602,
+   "cid": 21371,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 30581601 (같은 카드명 확인)"
+  },
+  {
    "card_id": 30583090,
    "cid": 20741,
    "link_source": "ygoprodeck_konami_id",
@@ -27242,6 +27711,13 @@
    "cid": 23497,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 30752325,
+   "cid": 23497,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 30752324 (같은 카드명 확인)"
   },
   {
    "card_id": 30757127,
@@ -27700,6 +28176,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 31305912,
+   "cid": 6000,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 31305911 (같은 카드명 확인)"
+  },
+  {
    "card_id": 31313405,
    "cid": 14666,
    "link_source": "ygoprodeck_konami_id",
@@ -27824,6 +28307,13 @@
    "cid": 11847,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 31444250,
+   "cid": 11847,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 31444249 (같은 카드명 확인)"
   },
   {
    "card_id": 31447217,
@@ -28630,6 +29120,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 32274491,
+   "cid": 4030,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 32274490 (같은 카드명 확인)"
+  },
+  {
    "card_id": 32278723,
    "cid": 20524,
    "link_source": "ygoprodeck_konami_id",
@@ -28868,6 +29365,13 @@
    "cid": 6564,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 32491823,
+   "cid": 6564,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 32491822 (같은 카드명 확인)"
   },
   {
    "card_id": 32519092,
@@ -29162,6 +29666,20 @@
    "cid": 5328,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 32807847,
+   "cid": 5328,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 32807846 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 32807848,
+   "cid": 5328,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 32807846 (같은 카드명 확인)"
   },
   {
    "card_id": 32809211,
@@ -29672,6 +30190,27 @@
    "cid": 4027,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 33396949,
+   "cid": 4027,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 33396948 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 33396950,
+   "cid": 4027,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 33396948 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 33396951,
+   "cid": 4027,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 33396948 (같은 카드명 확인)"
   },
   {
    "card_id": 33407125,
@@ -30910,6 +31449,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 34755995,
+   "cid": 15619,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 34755994 (같은 카드명 확인)"
+  },
+  {
    "card_id": 34761062,
    "cid": 11515,
    "link_source": "ygoprodeck_konami_id",
@@ -31402,6 +31948,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 35269905,
+   "cid": 18214,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 35269904 (같은 카드명 확인)"
+  },
+  {
    "card_id": 35272499,
    "cid": 12923,
    "link_source": "ygoprodeck_konami_id",
@@ -31826,6 +32379,13 @@
    "cid": 6344,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 35809263,
+   "cid": 6344,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 35809262 (같은 카드명 확인)"
   },
   {
    "card_id": 35815783,
@@ -32512,6 +33072,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 36609519,
+   "cid": 15627,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 36609518 (같은 카드명 확인)"
+  },
+  {
    "card_id": 36614113,
    "cid": 14448,
    "link_source": "ygoprodeck_konami_id",
@@ -33166,6 +33733,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 37351134,
+   "cid": 14829,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 37351133 (같은 카드명 확인)"
+  },
+  {
    "card_id": 37354507,
    "cid": 14002,
    "link_source": "ygoprodeck_konami_id",
@@ -33292,6 +33866,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 37458565,
+   "cid": 22707,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 37458564 (같은 카드명 확인)"
+  },
+  {
    "card_id": 37469904,
    "cid": 12977,
    "link_source": "ygoprodeck_konami_id",
@@ -33326,6 +33907,13 @@
    "cid": 17997,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 37495767,
+   "cid": 17997,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 37495766 (같은 카드명 확인)"
   },
   {
    "card_id": 37507488,
@@ -33532,10 +34120,31 @@
    "status": "unverified"
   },
   {
+   "card_id": 37742479,
+   "cid": 7574,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 37742478 (같은 카드명 확인)"
+  },
+  {
    "card_id": 37744402,
    "cid": 6338,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 37744403,
+   "cid": 6338,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 37744402 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 37744404,
+   "cid": 6338,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 37744402 (같은 카드명 확인)"
   },
   {
    "card_id": 37745740,
@@ -33712,6 +34321,20 @@
    "status": "unverified"
   },
   {
+   "card_id": 37970941,
+   "cid": 6335,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 37970940 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 37970942,
+   "cid": 6335,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 37970940 (같은 카드명 확인)"
+  },
+  {
    "card_id": 37972500,
    "cid": 16237,
    "link_source": "ygoprodeck_konami_id",
@@ -33772,6 +34395,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 38033120,
+   "cid": 4766,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 38033121 (같은 카드명 확인)"
+  },
+  {
    "card_id": 38033121,
    "cid": 4766,
    "link_source": "ygoprodeck_konami_id",
@@ -33806,6 +34436,34 @@
    "cid": 4766,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 38033127,
+   "cid": 4766,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 38033121 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 38033128,
+   "cid": 4766,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 38033121 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 38033129,
+   "cid": 4766,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 38033121 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 38033130,
+   "cid": 4766,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 38033121 (같은 카드명 확인)"
   },
   {
    "card_id": 38035986,
@@ -34552,6 +35210,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 38817296,
+   "cid": 23503,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 38817295 (같은 카드명 확인)"
+  },
+  {
    "card_id": 38834303,
    "cid": 6902,
    "link_source": "ygoprodeck_konami_id",
@@ -34724,6 +35389,13 @@
    "cid": 23500,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 39030884,
+   "cid": 23500,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 39030883 (같은 카드명 확인)"
   },
   {
    "card_id": 39033131,
@@ -35794,6 +36466,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 40237840,
+   "cid": 22695,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 40237839 (같은 카드명 확인)"
+  },
+  {
    "card_id": 40240595,
    "cid": 4078,
    "link_source": "ygoprodeck_konami_id",
@@ -36676,6 +37355,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 41232648,
+   "cid": 14765,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 41232647 (같은 카드명 확인)"
+  },
+  {
    "card_id": 41234315,
    "cid": 8066,
    "link_source": "ygoprodeck_konami_id",
@@ -36746,6 +37432,13 @@
    "cid": 22692,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 41350418,
+   "cid": 22692,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 41350417 (같은 카드명 확인)"
   },
   {
    "card_id": 41356845,
@@ -38062,6 +38755,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 42741438,
+   "cid": 16740,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 42741437 (같은 카드명 확인)"
+  },
+  {
    "card_id": 42752141,
    "cid": 9869,
    "link_source": "ygoprodeck_konami_id",
@@ -38474,6 +39174,13 @@
    "cid": 13978,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 43316239,
+   "cid": 13978,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 43316238 (같은 카드명 확인)"
   },
   {
    "card_id": 43318266,
@@ -39148,6 +39855,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 44001994,
+   "cid": 22976,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 44001993 (같은 카드명 확인)"
+  },
+  {
    "card_id": 44009443,
    "cid": 13074,
    "link_source": "ygoprodeck_konami_id",
@@ -39430,6 +40144,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 44330100,
+   "cid": 6558,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 44330098 (같은 카드명 확인)"
+  },
+  {
    "card_id": 44335251,
    "cid": 13011,
    "link_source": "ygoprodeck_konami_id",
@@ -39596,6 +40317,13 @@
    "cid": 7734,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 44508096,
+   "cid": 7734,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 44508094 (같은 카드명 확인)"
   },
   {
    "card_id": 44509529,
@@ -40592,6 +41320,13 @@
    "cid": 11835,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 45627619,
+   "cid": 11835,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 45627618 (같은 카드명 확인)"
   },
   {
    "card_id": 45644898,
@@ -41806,6 +42541,41 @@
    "status": "unverified"
   },
   {
+   "card_id": 46986409,
+   "cid": 4041,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 46986414 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 46986410,
+   "cid": 4041,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 46986414 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 46986411,
+   "cid": 4041,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 46986414 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 46986412,
+   "cid": 4041,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 46986414 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 46986413,
+   "cid": 4041,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 46986414 (같은 카드명 확인)"
+  },
+  {
    "card_id": 46986414,
    "cid": 4041,
    "link_source": "ygoprodeck_konami_id",
@@ -41852,6 +42622,20 @@
    "cid": 4041,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 46986422,
+   "cid": 4041,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 46986414 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 46986423,
+   "cid": 4041,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 46986414 (같은 카드명 확인)"
   },
   {
    "card_id": 46999905,
@@ -42074,6 +42858,13 @@
    "cid": 12456,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 47222537,
+   "cid": 12456,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 47222536 (같은 카드명 확인)"
   },
   {
    "card_id": 47226949,
@@ -42790,6 +43581,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 48063986,
+   "cid": 11500,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 48063985 (같은 카드명 확인)"
+  },
+  {
    "card_id": 48068378,
    "cid": 13752,
    "link_source": "ygoprodeck_konami_id",
@@ -42884,6 +43682,13 @@
    "cid": 22704,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 48171152,
+   "cid": 22704,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 48171151 (같은 카드명 확인)"
   },
   {
    "card_id": 48179391,
@@ -43046,6 +43851,13 @@
    "cid": 22701,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 48393694,
+   "cid": 22701,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 48393693 (같은 카드명 확인)"
   },
   {
    "card_id": 48411996,
@@ -43388,6 +44200,13 @@
    "cid": 12390,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 48770334,
+   "cid": 12390,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 48770333 (같은 카드명 확인)"
   },
   {
    "card_id": 48783998,
@@ -43738,6 +44557,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 49238329,
+   "cid": 14144,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 49238328 (같은 카드명 확인)"
+  },
+  {
    "card_id": 49249907,
    "cid": 11546,
    "link_source": "ygoprodeck_konami_id",
@@ -43862,6 +44688,13 @@
    "cid": 22698,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 49415282,
+   "cid": 22698,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 49415281 (같은 카드명 확인)"
   },
   {
    "card_id": 49417509,
@@ -46042,6 +46875,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 52068433,
+   "cid": 11485,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 52068432 (같은 카드명 확인)"
+  },
+  {
    "card_id": 52077741,
    "cid": 5244,
    "link_source": "ygoprodeck_konami_id",
@@ -47008,6 +47848,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 53183601,
+   "cid": 4773,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 53183600 (같은 카드명 확인)"
+  },
+  {
    "card_id": 53184342,
    "cid": 15586,
    "link_source": "ygoprodeck_konami_id",
@@ -47170,6 +48017,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 53325668,
+   "cid": 14175,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 53325667 (같은 카드명 확인)"
+  },
+  {
    "card_id": 53329234,
    "cid": 19916,
    "link_source": "ygoprodeck_konami_id",
@@ -47294,6 +48148,13 @@
    "cid": 22732,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 53481939,
+   "cid": 22732,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 53481938 (같은 카드명 확인)"
   },
   {
    "card_id": 53485634,
@@ -47564,6 +48425,13 @@
    "cid": 19853,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 53765053,
+   "cid": 19853,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 53765052 (같은 카드명 확인)"
   },
   {
    "card_id": 53770666,
@@ -48340,6 +49208,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 54577951,
+   "cid": 23296,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 54577949 (같은 카드명 확인)"
+  },
+  {
    "card_id": 54578613,
    "cid": 8389,
    "link_source": "ygoprodeck_konami_id",
@@ -48374,6 +49249,13 @@
    "cid": 22729,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 54603526,
+   "cid": 22729,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 54603525 (같은 카드명 확인)"
   },
   {
    "card_id": 54611591,
@@ -48472,6 +49354,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 54693927,
+   "cid": 14742,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 54693926 (같은 카드명 확인)"
+  },
+  {
    "card_id": 54700519,
    "cid": 16101,
    "link_source": "ygoprodeck_konami_id",
@@ -48512,6 +49401,13 @@
    "cid": 22726,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 54725178,
+   "cid": 22726,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 54725177 (같은 카드명 확인)"
   },
   {
    "card_id": 54734082,
@@ -48952,6 +49848,20 @@
    "status": "unverified"
   },
   {
+   "card_id": 55273561,
+   "cid": 16493,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 55273560 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 55273562,
+   "cid": 16493,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 55273560 (같은 카드명 확인)"
+  },
+  {
    "card_id": 55276522,
    "cid": 20597,
    "link_source": "ygoprodeck_konami_id",
@@ -49100,6 +50010,13 @@
    "cid": 12487,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 55410872,
+   "cid": 12487,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 55410871 (같은 카드명 확인)"
   },
   {
    "card_id": 55415564,
@@ -51808,6 +52725,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 58481573,
+   "cid": 11313,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 58481572 (같은 카드명 확인)"
+  },
+  {
    "card_id": 58494728,
    "cid": 9176,
    "link_source": "ygoprodeck_konami_id",
@@ -52462,6 +53386,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 59242459,
+   "cid": 17157,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 59242457 (같은 카드명 확인)"
+  },
+  {
    "card_id": 59251766,
    "cid": 10916,
    "link_source": "ygoprodeck_konami_id",
@@ -52706,6 +53637,13 @@
    "cid": 14908,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 59514117,
+   "cid": 14908,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 59514116 (같은 카드명 확인)"
   },
   {
    "card_id": 59531356,
@@ -53356,6 +54294,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 60303689,
+   "cid": 15239,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 60303688 (같은 카드명 확인)"
+  },
+  {
    "card_id": 60306104,
    "cid": 6746,
    "link_source": "ygoprodeck_konami_id",
@@ -53788,6 +54733,27 @@
    "status": "unverified"
   },
   {
+   "card_id": 60800382,
+   "cid": 7696,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 60800381 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 60800383,
+   "cid": 7696,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 60800381 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 60800384,
+   "cid": 7696,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 60800381 (같은 카드명 확인)"
+  },
+  {
    "card_id": 60802233,
    "cid": 4486,
    "link_source": "ygoprodeck_konami_id",
@@ -54182,6 +55148,13 @@
    "cid": 8091,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 61257790,
+   "cid": 8091,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 61257789 (같은 카드명 확인)"
   },
   {
    "card_id": 61258740,
@@ -55540,6 +56513,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 62962631,
+   "cid": 16195,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 62962630 (같은 카드명 확인)"
+  },
+  {
    "card_id": 62966332,
    "cid": 5392,
    "link_source": "ygoprodeck_konami_id",
@@ -55742,6 +56722,20 @@
    "cid": 13671,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 63166096,
+   "cid": 13671,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 63166095 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 63166097,
+   "cid": 13671,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 63166095 (같은 카드명 확인)"
   },
   {
    "card_id": 63175639,
@@ -56432,6 +57426,13 @@
    "cid": 8709,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 64034256,
+   "cid": 8709,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 64034255 (같은 카드명 확인)"
   },
   {
    "card_id": 64038662,
@@ -57478,6 +58479,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 65302904,
+   "cid": 23504,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 65302903 (같은 카드명 확인)"
+  },
+  {
    "card_id": 65303664,
    "cid": 8597,
    "link_source": "ygoprodeck_konami_id",
@@ -57488,6 +58496,13 @@
    "cid": 11413,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 65305469,
+   "cid": 11413,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 65305468 (같은 카드명 확인)"
   },
   {
    "card_id": 65305978,
@@ -57608,6 +58623,13 @@
    "cid": 23501,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 65424482,
+   "cid": 23501,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 65424481 (같은 카드명 확인)"
   },
   {
    "card_id": 65430555,
@@ -57734,6 +58756,13 @@
    "cid": 22723,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 65541656,
+   "cid": 22723,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 65541655 (같은 카드명 확인)"
   },
   {
    "card_id": 65549080,
@@ -57884,6 +58913,13 @@
    "cid": 14676,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 65741789,
+   "cid": 14676,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 65741786 (같은 카드명 확인)"
   },
   {
    "card_id": 65743242,
@@ -58312,6 +59348,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 66247040,
+   "cid": 23498,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 66247039 (같은 카드명 확인)"
+  },
+  {
    "card_id": 66262416,
    "cid": 13153,
    "link_source": "ygoprodeck_konami_id",
@@ -58628,6 +59671,13 @@
    "cid": 22720,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 66664204,
+   "cid": 22720,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 66664203 (같은 카드명 확인)"
   },
   {
    "card_id": 66668900,
@@ -59734,6 +60784,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 67886896,
+   "cid": 22717,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 67886895 (같은 카드명 확인)"
+  },
+  {
    "card_id": 67901914,
    "cid": 13322,
    "link_source": "ygoprodeck_konami_id",
@@ -60124,6 +61181,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 68337210,
+   "cid": 20588,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 68337209 (같은 카드명 확인)"
+  },
+  {
    "card_id": 68339286,
    "cid": 4094,
    "link_source": "ygoprodeck_konami_id",
@@ -60242,6 +61306,20 @@
    "cid": 15245,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 68468460,
+   "cid": 15245,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 68468459 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 68468461,
+   "cid": 15245,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 68468459 (같은 카드명 확인)"
   },
   {
    "card_id": 68473226,
@@ -61246,6 +62324,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 69680032,
+   "cid": 15242,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 69680031 (같은 카드명 확인)"
+  },
+  {
    "card_id": 69695704,
    "cid": 8371,
    "link_source": "ygoprodeck_konami_id",
@@ -61888,6 +62973,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 70405002,
+   "cid": 22977,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 70405001 (같은 카드명 확인)"
+  },
+  {
    "card_id": 70406920,
    "cid": 8685,
    "link_source": "ygoprodeck_konami_id",
@@ -62204,6 +63296,13 @@
    "cid": 4028,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 70781057,
+   "cid": 4028,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 70781052 (같은 카드명 확인)"
   },
   {
    "card_id": 70786111,
@@ -62794,6 +63893,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 71413902,
+   "cid": 5655,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 71413901 (같은 카드명 확인)"
+  },
+  {
    "card_id": 71415349,
    "cid": 10995,
    "link_source": "ygoprodeck_konami_id",
@@ -62926,6 +64032,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 71564253,
+   "cid": 7397,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 71564252 (같은 카드명 확인)"
+  },
+  {
    "card_id": 71578874,
    "cid": 11959,
    "link_source": "ygoprodeck_konami_id",
@@ -62996,6 +64109,13 @@
    "cid": 4022,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 71625223,
+   "cid": 4022,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 71625222 (같은 카드명 확인)"
   },
   {
    "card_id": 71628381,
@@ -63460,6 +64580,20 @@
    "status": "unverified"
   },
   {
+   "card_id": 72270340,
+   "cid": 19148,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 72270339 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 72270341,
+   "cid": 19148,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 72270339 (같은 카드명 확인)"
+  },
+  {
    "card_id": 72272462,
    "cid": 16223,
    "link_source": "ygoprodeck_konami_id",
@@ -63674,6 +64808,13 @@
    "cid": 6170,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 72443569,
+   "cid": 6170,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 72443568 (같은 카드명 확인)"
   },
   {
    "card_id": 72444406,
@@ -64120,6 +65261,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 72989440,
+   "cid": 5835,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 72989439 (같은 카드명 확인)"
+  },
+  {
    "card_id": 72992744,
    "cid": 8299,
    "link_source": "ygoprodeck_konami_id",
@@ -64412,6 +65560,13 @@
    "cid": 8800,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 73318864,
+   "cid": 8800,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 73318863 (같은 카드명 확인)"
   },
   {
    "card_id": 73320394,
@@ -65056,6 +66211,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 74063035,
+   "cid": 12852,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 74063034 (같은 카드명 확인)"
+  },
+  {
    "card_id": 74064212,
    "cid": 9378,
    "link_source": "ygoprodeck_konami_id",
@@ -65288,6 +66450,20 @@
    "cid": 6336,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 74364660,
+   "cid": 6336,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 74364659 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 74364661,
+   "cid": 6336,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 74364659 (같은 카드명 확인)"
   },
   {
    "card_id": 74367458,
@@ -65548,6 +66724,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 74665151,
+   "cid": 22705,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 74665150 (같은 카드명 확인)"
+  },
+  {
    "card_id": 74665651,
    "cid": 14718,
    "link_source": "ygoprodeck_konami_id",
@@ -65588,6 +66771,34 @@
    "cid": 4088,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 74677428,
+   "cid": 4088,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 74677422 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 74677429,
+   "cid": 4088,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 74677422 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 74677430,
+   "cid": 4088,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 74677422 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 74677431,
+   "cid": 4088,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 74677422 (같은 카드명 확인)"
   },
   {
    "card_id": 74689476,
@@ -66100,6 +67311,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 75286622,
+   "cid": 12849,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 75286621 (같은 카드명 확인)"
+  },
+  {
    "card_id": 75290703,
    "cid": 17411,
    "link_source": "ygoprodeck_konami_id",
@@ -66530,6 +67748,13 @@
    "cid": 22702,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 75787709,
+   "cid": 22702,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 75787708 (같은 카드명 확인)"
   },
   {
    "card_id": 75797046,
@@ -67090,6 +68315,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 76504387,
+   "cid": 22699,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 76504386 (같은 카드명 확인)"
+  },
+  {
    "card_id": 76512652,
    "cid": 4082,
    "link_source": "ygoprodeck_konami_id",
@@ -67214,6 +68446,13 @@
    "cid": 22696,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 76636979,
+   "cid": 22696,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 76636978 (같은 카드명 확인)"
   },
   {
    "card_id": 76641981,
@@ -68500,6 +69739,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 78193833,
+   "cid": 4983,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 78193831 (같은 카드명 확인)"
+  },
+  {
    "card_id": 78199891,
    "cid": 18026,
    "link_source": "ygoprodeck_konami_id",
@@ -68540,6 +69786,13 @@
    "cid": 14766,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 78231356,
+   "cid": 14766,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 78231355 (같은 카드명 확인)"
   },
   {
    "card_id": 78243409,
@@ -71086,6 +72339,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 81260680,
+   "cid": 18017,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 81260679 (같은 카드명 확인)"
+  },
+  {
    "card_id": 81263643,
    "cid": 13913,
    "link_source": "ygoprodeck_konami_id",
@@ -71294,6 +72554,13 @@
    "cid": 17785,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 81497286,
+   "cid": 17785,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 81497285 (같은 카드명 확인)"
   },
   {
    "card_id": 81510157,
@@ -72128,6 +73395,13 @@
    "cid": 22971,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 82344138,
+   "cid": 22971,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 82344137 (같은 카드명 확인)"
   },
   {
    "card_id": 82359538,
@@ -73294,6 +74568,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 83764720,
+   "cid": 4842,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 83764718 (같은 카드명 확인)"
+  },
+  {
    "card_id": 83764996,
    "cid": 5019,
    "link_source": "ygoprodeck_konami_id",
@@ -73480,6 +74761,20 @@
    "status": "unverified"
   },
   {
+   "card_id": 84013239,
+   "cid": 9575,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 84013237 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 84013240,
+   "cid": 9575,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 84013237 (같은 카드명 확인)"
+  },
+  {
    "card_id": 84025439,
    "cid": 12222,
    "link_source": "ygoprodeck_konami_id",
@@ -73628,6 +74923,13 @@
    "cid": 9131,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 84206436,
+   "cid": 9131,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 84206435 (같은 카드명 확인)"
   },
   {
    "card_id": 84211599,
@@ -74536,6 +75838,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 85138717,
+   "cid": 9755,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 85138716 (같은 카드명 확인)"
+  },
+  {
    "card_id": 85150300,
    "cid": 21491,
    "link_source": "ygoprodeck_konami_id",
@@ -75266,6 +76575,13 @@
    "cid": 15032,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 86066373,
+   "cid": 15032,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 86066372 (같은 카드명 확인)"
   },
   {
    "card_id": 86088138,
@@ -76558,6 +77874,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 87758526,
+   "cid": 22693,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 87758525 (같은 카드명 확인)"
+  },
+  {
    "card_id": 87765315,
    "cid": 12333,
    "link_source": "ygoprodeck_konami_id",
@@ -76912,6 +78235,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 88177325,
+   "cid": 10525,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 88177324 (같은 카드명 확인)"
+  },
+  {
    "card_id": 88190453,
    "cid": 6593,
    "link_source": "ygoprodeck_konami_id",
@@ -77230,6 +78560,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 88570004,
+   "cid": 22690,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 88570003 (같은 카드명 확인)"
+  },
+  {
    "card_id": 88581108,
    "cid": 12960,
    "link_source": "ygoprodeck_konami_id",
@@ -77426,6 +78763,13 @@
    "cid": 14182,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 88875133,
+   "cid": 14182,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 88875132 (같은 카드명 확인)"
   },
   {
    "card_id": 88890658,
@@ -78028,6 +79372,48 @@
    "status": "unverified"
   },
   {
+   "card_id": 89631133,
+   "cid": 4007,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89631139 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 89631134,
+   "cid": 4007,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89631139 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 89631135,
+   "cid": 4007,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89631139 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 89631136,
+   "cid": 4007,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89631139 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 89631137,
+   "cid": 4007,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89631139 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 89631138,
+   "cid": 4007,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89631139 (같은 카드명 확인)"
+  },
+  {
    "card_id": 89631139,
    "cid": 4007,
    "link_source": "ygoprodeck_konami_id",
@@ -78074,6 +79460,20 @@
    "cid": 4007,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 89631147,
+   "cid": 4007,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89631139 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 89631148,
+   "cid": 4007,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89631139 (같은 카드명 확인)"
   },
   {
    "card_id": 89642993,
@@ -78268,6 +79668,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 89875647,
+   "cid": 22733,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89875646 (같은 카드명 확인)"
+  },
+  {
    "card_id": 89882100,
    "cid": 10078,
    "link_source": "ygoprodeck_konami_id",
@@ -78344,6 +79751,20 @@
    "cid": 6653,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 89943725,
+   "cid": 6653,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89943723 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 89943726,
+   "cid": 6653,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 89943723 (같은 카드명 확인)"
   },
   {
    "card_id": 89948817,
@@ -78446,6 +79867,13 @@
    "cid": 22730,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 90091225,
+   "cid": 22730,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 90091224 (같은 카드명 확인)"
   },
   {
    "card_id": 90098000,
@@ -78778,6 +80206,20 @@
    "status": "unverified"
   },
   {
+   "card_id": 90448280,
+   "cid": 15524,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 90448279 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 90448282,
+   "cid": 15524,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 90448279 (같은 카드명 확인)"
+  },
+  {
    "card_id": 90452877,
    "cid": 12247,
    "link_source": "ygoprodeck_konami_id",
@@ -78968,6 +80410,13 @@
    "cid": 13669,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 90673289,
+   "cid": 13669,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 90673288 (같은 카드명 확인)"
   },
   {
    "card_id": 90673413,
@@ -79216,6 +80665,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 90960359,
+   "cid": 5450,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 90960358 (같은 카드명 확인)"
+  },
+  {
    "card_id": 90963488,
    "cid": 4135,
    "link_source": "ygoprodeck_konami_id",
@@ -79292,6 +80748,13 @@
    "cid": 18732,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 91073014,
+   "cid": 18732,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 91073013 (같은 카드명 확인)"
   },
   {
    "card_id": 91078716,
@@ -79858,6 +81321,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 91714773,
+   "cid": 22727,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 91714772 (같은 카드명 확인)"
+  },
+  {
    "card_id": 91718579,
    "cid": 11924,
    "link_source": "ygoprodeck_konami_id",
@@ -80098,6 +81568,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 91998122,
+   "cid": 5556,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 91998119 (같은 카드명 확인)"
+  },
+  {
    "card_id": 92001300,
    "cid": 6578,
    "link_source": "ygoprodeck_konami_id",
@@ -80150,6 +81627,13 @@
    "cid": 22721,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 92058903,
+   "cid": 22721,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 92058902 (같은 카드명 확인)"
   },
   {
    "card_id": 92065772,
@@ -80890,6 +82374,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 92936365,
+   "cid": 22724,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 92936364 (같은 카드명 확인)"
+  },
+  {
    "card_id": 92944626,
    "cid": 4107,
    "link_source": "ygoprodeck_konami_id",
@@ -80978,6 +82469,13 @@
    "cid": 19184,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 93039340,
+   "cid": 19184,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 93039339 (같은 카드명 확인)"
   },
   {
    "card_id": 93053159,
@@ -81562,6 +83060,20 @@
    "status": "unverified"
   },
   {
+   "card_id": 93717134,
+   "cid": 9729,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 93717133 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 93717135,
+   "cid": 9729,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 93717133 (같은 카드명 확인)"
+  },
+  {
    "card_id": 93723936,
    "cid": 20532,
    "link_source": "ygoprodeck_konami_id",
@@ -81676,6 +83188,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 93854894,
+   "cid": 14288,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 93854893 (같은 카드명 확인)"
+  },
+  {
    "card_id": 93860227,
    "cid": 20423,
    "link_source": "ygoprodeck_konami_id",
@@ -81686,6 +83205,13 @@
    "cid": 22718,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 93871600,
+   "cid": 22718,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 93871599 (같은 카드명 확인)"
   },
   {
    "card_id": 93877990,
@@ -82418,6 +83944,13 @@
    "cid": 14285,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 94677446,
+   "cid": 14285,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 94677445 (같은 카드명 확인)"
   },
   {
    "card_id": 94681654,
@@ -83188,6 +84721,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 95515790,
+   "cid": 17767,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 95515789 (같은 카드명 확인)"
+  },
+  {
    "card_id": 95519486,
    "cid": 6964,
    "link_source": "ygoprodeck_konami_id",
@@ -83842,6 +85382,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 96363154,
+   "cid": 9122,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 96363153 (같은 카드명 확인)"
+  },
+  {
    "card_id": 96367119,
    "cid": 17827,
    "link_source": "ygoprodeck_konami_id",
@@ -84394,6 +85941,13 @@
    "status": "unverified"
   },
   {
+   "card_id": 97077564,
+   "cid": 4989,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 97077563 (같은 카드명 확인)"
+  },
+  {
    "card_id": 97091969,
    "cid": 15744,
    "link_source": "ygoprodeck_konami_id",
@@ -84544,6 +86098,20 @@
    "status": "unverified"
   },
   {
+   "card_id": 97268403,
+   "cid": 8933,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 97268402 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 97268404,
+   "cid": 8933,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 97268402 (같은 카드명 확인)"
+  },
+  {
    "card_id": 97273514,
    "cid": 13495,
    "link_source": "ygoprodeck_konami_id",
@@ -84692,6 +86260,13 @@
    "cid": 9119,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 97489702,
+   "cid": 9119,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 97489701 (같은 카드명 확인)"
   },
   {
    "card_id": 97518132,
@@ -84848,6 +86423,13 @@
    "cid": 8092,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 97651499,
+   "cid": 8092,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 97651498 (같은 카드명 확인)"
   },
   {
    "card_id": 97661969,
@@ -85544,6 +87126,20 @@
    "cid": 5628,
    "link_source": "ygoprodeck_konami_id",
    "status": "unverified"
+  },
+  {
+   "card_id": 98502116,
+   "cid": 5628,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 98502113 (같은 카드명 확인)"
+  },
+  {
+   "card_id": 98502117,
+   "cid": 5628,
+   "link_source": "card_alias",
+   "status": "unverified",
+   "note": "cards.cdb alias -> 98502113 (같은 카드명 확인)"
   },
   {
    "card_id": 98506199,

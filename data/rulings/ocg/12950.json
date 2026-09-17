@@ -6,7 +6,7 @@
  "name_ja": "灰流うらら",
  "card_text_ja": "このカード名の効果は１ターンに１度しか使用できない。<br>①：以下のいずれかの効果を含む魔法・罠・モンスターの効果が発動した時、このカードを手札から捨てて発動できる。その効果を無効にする。<br>●デッキからカードを手札に加える効果<br>●デッキからモンスターを特殊召喚する効果<br>●デッキからカードを墓地へ送る効果",
  "reported_total": 78,
- "checked_at": "2026-09-17T13:53:10Z",
+ "checked_at": "2026-09-17T13:53:12Z",
  "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=12950&request_locale=ja&page=1&rp=100",
  "error": "",
  "supplement": {
@@ -25,7 +25,7 @@
    "data_type": "card_supplement",
    "game": "ocg",
    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=12950&request_locale=ja&page=1&rp=100",
-   "retrieved_at": "2026-09-17T13:53:10Z"
+   "retrieved_at": "2026-09-17T13:53:12Z"
   },
   "content_hash": "sha256:e31a7bb88922ec400ffe2044d0a12bd931adb5acd64851e4e5caaa33cf157ff4",
   "translations": {}
@@ -57,7 +57,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22687&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:14Z"
    },
    "content_hash": "sha256:e69bcb10a65dd22206754d449a528232c2e88e6d80fe1b3bcdbb457f678471d7",
    "translations": {}
@@ -100,7 +100,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24162&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:17Z"
    },
    "content_hash": "sha256:36e38b4f83702f009196e14325da4b4e4b0d779b260cce4e84c2fe44d643a87e",
    "translations": {}
@@ -235,7 +235,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23815&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:19Z"
    },
    "content_hash": "sha256:a19d00ba288d2eaf6f915a6c3f4257b35a03380d06eb36c5243c562b38aee00e",
    "translations": {}
@@ -292,7 +292,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20586&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:21Z"
    },
    "content_hash": "sha256:709cc3760ce2becb1972e5c8136604ea85f8d372da16174bd09c3717947019cb",
    "translations": {}
@@ -331,7 +331,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23472&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:24Z"
    },
    "content_hash": "sha256:577ded1f6092a28e1dc9f0c622454983d8878f89aa18e3f827c8912b9055d855",
    "translations": {}
@@ -360,7 +360,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24270&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:26Z"
    },
    "content_hash": "sha256:60a9ef46d40d4ddc2dff635002639c07952f5b6f8e05916618c88479c1d7b46d",
    "translations": {}
@@ -417,7 +417,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=7942&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:28Z"
    },
    "content_hash": "sha256:64365416eb3beb0c274051de68f192599683bbea6a53babc14f1a8852ddbf893",
    "translations": {}
@@ -462,7 +462,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24121&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:31Z"
    },
    "content_hash": "sha256:7df3f46103c4f22fdfd8470a72de25b332dc4128d8138076d0b4face0bd0f863",
    "translations": {}
@@ -497,7 +497,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22886&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:33Z"
    },
    "content_hash": "sha256:abcfc4fce741605e72b0a51aea75a41a0fe4b5ed30553a1acdf3a0879a134ca5",
    "translations": {}
@@ -538,7 +538,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21685&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:35Z"
    },
    "content_hash": "sha256:bfe787b3a794fa15cc7aadbb984d047bf288cf11d12eb2c0babec7364ffeadee",
    "translations": {}
@@ -567,7 +567,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23372&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:38Z"
    },
    "content_hash": "sha256:b2dc60f47d6464dddf0d4ee87daed6c4bf0a6548f2bb370f1004e50e99d19aad",
    "translations": {}
@@ -612,7 +612,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24129&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:40Z"
    },
    "content_hash": "sha256:8ae5a6d978367f4cbe663ec4209feffe0c3ec60702bee2cfe0d095aed44ea4d0",
    "translations": {}
@@ -643,7 +643,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22086&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:43Z"
    },
    "content_hash": "sha256:210e470143b090b0b033569846e3ade57777242116e54a475eac2e8bc6800c60",
    "translations": {}
@@ -672,7 +672,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24226&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:45Z"
    },
    "content_hash": "sha256:12533a48720762a15cb20f26261012b8de98d5f9ef6d15987b971fe48c8bc1de",
    "translations": {}
@@ -703,7 +703,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20542&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:51:02Z"
    },
    "content_hash": "sha256:85910d6f2374a88529739f2487c954fb64d98da1a5378203f7ee8ead3b6d1365",
    "translations": {}
@@ -738,7 +738,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22372&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:47Z"
    },
    "content_hash": "sha256:196680ee894694e1c65eba1cab0b2e586dd494277f9b15b5c48a1ef2aebc20e7",
    "translations": {}
@@ -799,7 +799,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23793&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:50Z"
    },
    "content_hash": "sha256:55c526a5833bfd4d9d4f4ac8f8ac27773e760184fdf4377c9cb87ffdf849ff63",
    "translations": {}
@@ -830,7 +830,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=7315&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:52Z"
    },
    "content_hash": "sha256:a483463880a0a988eb9d069046932709addecc7ce359ed131ad99b799ecf6676",
    "translations": {}
@@ -883,7 +883,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24234&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:55Z"
    },
    "content_hash": "sha256:4832097433921b0741d704f0555041e2893e327c1b718c305e07358ed65fd7d2",
    "translations": {}
@@ -920,7 +920,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=12336&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:53:57Z"
    },
    "content_hash": "sha256:4307212e8be21591ce925c12f5fe2236a35a436077fc76a6cddbc39711130598",
    "translations": {}
@@ -949,7 +949,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11022&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:00Z"
    },
    "content_hash": "sha256:c4b52a4f90af5bd8e7e3786d11e2f887a1e81c04d57997b1396db21723849976",
    "translations": {}
@@ -978,7 +978,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20544&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:02Z"
    },
    "content_hash": "sha256:588701c794bf229abc85caf83f53715fce231c2ff79bf129279868b068152397",
    "translations": {}
@@ -1023,7 +1023,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23996&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:04Z"
    },
    "content_hash": "sha256:7d77caa0e327d195a26c52447cf55c9cb723ae3d4be161f3df18949e7070d0b9",
    "translations": {}
@@ -1062,7 +1062,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24112&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:06Z"
    },
    "content_hash": "sha256:01ff1026d4192e45b67b3c87ae5d4ea7866b3850e745eaa33bd63f3cc03fbca4",
    "translations": {}
@@ -1093,7 +1093,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23378&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:09Z"
    },
    "content_hash": "sha256:53c80ea925f9b8c0b16d95ce7510113cece012ca1c561e2fb196abaf5618dc7e",
    "translations": {}
@@ -1124,7 +1124,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20543&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:11Z"
    },
    "content_hash": "sha256:b16de39d9514695d90cec1784645c6c2e3d0775d96f49404356dd47886b0380f",
    "translations": {}
@@ -1159,7 +1159,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23938&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:13Z"
    },
    "content_hash": "sha256:4d8830eddce6197f348fa697081d4c987cbc935fa0a9e1ea80b1effc48fc9081",
    "translations": {}
@@ -1188,7 +1188,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20545&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:16Z"
    },
    "content_hash": "sha256:6284011314b25290fe5b1be8c2021abd677360097565139b08c23394fab00f6b",
    "translations": {}
@@ -1225,7 +1225,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22759&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:38:23Z"
    },
    "content_hash": "sha256:6f39a1929f4eecd0f97311d8037cda60de3dcb939dd5cfb5c12a6cd4296304c8",
    "translations": {}
@@ -1266,7 +1266,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24138&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:18Z"
    },
    "content_hash": "sha256:6c1824bf35ff195e81069c14e022a84a7ab4250888f9d94aff9c2d064828906c",
    "translations": {}
@@ -1295,7 +1295,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23940&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:20Z"
    },
    "content_hash": "sha256:658708780da282eeb33edf4d9c54ab3ef6f42f45e3b0f29d57f15abe5ed342c8",
    "translations": {}
@@ -1326,7 +1326,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23948&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:23Z"
    },
    "content_hash": "sha256:d2d1d0c8591a6a87277f6cd3725e1b83d961ddcd6c9f805a63ffa3afe0d710d4",
    "translations": {}
@@ -1355,7 +1355,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24247&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:25Z"
    },
    "content_hash": "sha256:96f8ea584958805c50148d72f90291bec1e608be5123de818fbea8fffb6d6c11",
    "translations": {}
@@ -1386,7 +1386,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24227&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:28Z"
    },
    "content_hash": "sha256:8d2b85c55b613b491fbbab85bc27a037a64a1767aafd6d0259c33c742e0904e8",
    "translations": {}
@@ -1415,7 +1415,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11993&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:30Z"
    },
    "content_hash": "sha256:62a91285fb65431d752b7923bcac06f6d891c9f5b2e1e43c7ee67cc83aa188c3",
    "translations": {}
@@ -1446,7 +1446,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23240&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:32Z"
    },
    "content_hash": "sha256:d62bede940122044a170d23545a0ce13c065fab8665eda36cbcb7a9cf9a1073b",
    "translations": {}
@@ -1475,7 +1475,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24258&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:35Z"
    },
    "content_hash": "sha256:2ce112df77574eddc8cdd68e49d7209744b67160967310afdf4d591a4e87b0d1",
    "translations": {}
@@ -1506,7 +1506,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20546&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:37Z"
    },
    "content_hash": "sha256:244a5fa8bc8b605045e747d818e12bf2e371c8493695cbec652b73539c20f5f2",
    "translations": {}
@@ -1537,7 +1537,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24085&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:39Z"
    },
    "content_hash": "sha256:607114d111b5c951daf8c780049b9bea3006ae764544897ee6817661d9ffb2a8",
    "translations": {}
@@ -1568,7 +1568,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23105&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:41Z"
    },
    "content_hash": "sha256:bbf061e15184c52ae801dcf84c3a186ca55385ba8643c3bd902c8cb3796e5297",
    "translations": {}
@@ -1599,7 +1599,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=6417&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:44Z"
    },
    "content_hash": "sha256:e4612b13a4f1d7b792aab6dfb98f016b2bf2a68a13985f3db0763bf7af0ff400",
    "translations": {}
@@ -1634,7 +1634,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=12712&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:46Z"
    },
    "content_hash": "sha256:4b75e0d34e68b7deb31cd477043b819d950e9271c80c2a6798b06702c5c1a2e5",
    "translations": {}
@@ -1663,7 +1663,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11507&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:49Z"
    },
    "content_hash": "sha256:961b33bc09d13f0e52222ca7457cabd7fbd0d636bf8d99228602ca7dfa984043",
    "translations": {}
@@ -1694,7 +1694,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21554&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:51Z"
    },
    "content_hash": "sha256:270d4283298a962ca8f8282e6116bf2fbd4713eb52beeba6d16f8358cca24e65",
    "translations": {}
@@ -1725,7 +1725,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23787&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:53Z"
    },
    "content_hash": "sha256:2c0ccaba17ef6c5991c310fd0d86d568409d2c130b65034190a18655f626d460",
    "translations": {}
@@ -1756,7 +1756,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23981&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:56Z"
    },
    "content_hash": "sha256:80d00977f1cd4bc3e40c443ea86983e353d84c01cbe1fe59c89656e61e8d7d2e",
    "translations": {}
@@ -1785,7 +1785,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20550&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:54:58Z"
    },
    "content_hash": "sha256:6dc5b6996b5bcb1b1aaf471e792780c73fa1b014ba0f7eda1621d12c0ebe5936",
    "translations": {}
@@ -1814,7 +1814,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11509&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:00Z"
    },
    "content_hash": "sha256:2a9e483da9c5d00cffcfac3732ccd2fd2cb5c81428b9640474d6f6f37e163405",
    "translations": {}
@@ -1847,7 +1847,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22690&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:03Z"
    },
    "content_hash": "sha256:aa9e5ca3eec65aa18033d6d37c8497de97007c31328865a7b2c506a3b26b6cf4",
    "translations": {}
@@ -1876,7 +1876,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22811&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:05Z"
    },
    "content_hash": "sha256:a917d1e6d68c1412fdeff6f3467b20b46f3d654fa7691f457fc49b097c494795",
    "translations": {}
@@ -1905,7 +1905,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20551&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:08Z"
    },
    "content_hash": "sha256:b4f5f48669d250f13c2cded21c3179edc0cb703cb3aa0c127cf9943b759276c7",
    "translations": {}
@@ -1936,7 +1936,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23557&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:10Z"
    },
    "content_hash": "sha256:ea4528348f4b3d86671ae73e0c63e105e6aa0a0b65e37b52c222134ffcc2f83a",
    "translations": {}
@@ -1965,7 +1965,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=9465&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:12Z"
    },
    "content_hash": "sha256:21b3b3dc1a206beb59064ecb75e0b50590af2fefe097b91326d723c469278a85",
    "translations": {}
@@ -1996,7 +1996,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23169&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:15Z"
    },
    "content_hash": "sha256:8b0073a648aebdcab295bdb4d478b648b2f8e02f89bd243636ab77378f39cbbc",
    "translations": {}
@@ -2025,7 +2025,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=10690&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:17Z"
    },
    "content_hash": "sha256:49b579fc8aea12a566e4725e67b7203433195814a5646a5c56fb2701ced1c05b",
    "translations": {}
@@ -2054,7 +2054,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=12809&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:19Z"
    },
    "content_hash": "sha256:6ec4aaa23a4cfd1a91486e2b31b435b0011791498ea0b46d73f2c59505854b4c",
    "translations": {}
@@ -2083,7 +2083,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20547&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:22Z"
    },
    "content_hash": "sha256:1f777ad8f5bc8e751e6a20988c3a35a6e3968d646ea9e7556c2f90acf6799bce",
    "translations": {}
@@ -2120,7 +2120,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20647&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:39:47Z"
    },
    "content_hash": "sha256:60de7ffb32d9e453c790fab936cdfb9ff197cc495573b1eca9bb6e1a146a1917",
    "translations": {}
@@ -2153,7 +2153,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22475&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:24Z"
    },
    "content_hash": "sha256:1c23dfd5d561a23b79c6f8e5bcae38dc3c2ce671020b6c3c974c4c067ba8e7ad",
    "translations": {}
@@ -2182,7 +2182,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22028&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:27Z"
    },
    "content_hash": "sha256:54d95161d44e6b3360f22c9223038854860a3d3ac998c59dee2b7c3dc569d9a4",
    "translations": {}
@@ -2211,7 +2211,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22441&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:29Z"
    },
    "content_hash": "sha256:b36d15b7f1785cab162e8a64411775445ff1af31f008d8056b8d30735a178dc1",
    "translations": {}
@@ -2240,7 +2240,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=14075&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:32Z"
    },
    "content_hash": "sha256:9fc8709aae7feffc83c4f9f1219fccc3ba7b8308cdeaaad073b71151a8b9cde1",
    "translations": {}
@@ -2271,7 +2271,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23972&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:34Z"
    },
    "content_hash": "sha256:212ed61a8c64892b6dcecc1abc4f78faa99be6a90b6459b8e2b86d1e9b1fee65",
    "translations": {}
@@ -2300,7 +2300,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23466&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:36Z"
    },
    "content_hash": "sha256:b098e5e9c8728e9064a99e1cbc3dc3316f45ed435493a15eee4687d5c05ed3df",
    "translations": {}
@@ -2329,7 +2329,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21910&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:38Z"
    },
    "content_hash": "sha256:ef3dfa2c48bae177595f76637b8ff2df0d8f0b78a173f8d6269909a617c3ddcd",
    "translations": {}
@@ -2358,7 +2358,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22838&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:40Z"
    },
    "content_hash": "sha256:643e6594923798992da7cc252e4d1516f5ee03f7049e251cc6d4fa5f08080760",
    "translations": {}
@@ -2387,7 +2387,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22872&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:43Z"
    },
    "content_hash": "sha256:b95b6c5dd1ecabfb04463408bf530aec2637595cb7558bed95073e24454f2c20",
    "translations": {}
@@ -2418,7 +2418,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22542&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:45Z"
    },
    "content_hash": "sha256:ab93e4d2e1ecebe6f0fa565fd8a5b45b24dedbc8578411460ee9068d9d81bf8d",
    "translations": {}
@@ -2449,7 +2449,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=12320&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:47Z"
    },
    "content_hash": "sha256:c0db1a983abc39fa05d0c1c81d1a808babe4c0a59142d58eabe3a1fb436d3254",
    "translations": {}
@@ -2478,7 +2478,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=20585&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:50Z"
    },
    "content_hash": "sha256:2dd35c1d7fef47542e88eff0fb9577574b2aa9092b82be78bb812a76096213c7",
    "translations": {}
@@ -2507,7 +2507,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22816&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:52Z"
    },
    "content_hash": "sha256:e4dcae35d73507015e81c72cc30433a3cd4f107bcd8af78e13b9b726d36c8045",
    "translations": {}
@@ -2536,7 +2536,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11700&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:54Z"
    },
    "content_hash": "sha256:6a65b1fdd0ecc097208911d55b058e450adfa872a75c1f18a5895ccb4b5fa3c4",
    "translations": {}
@@ -2565,7 +2565,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=21686&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:57Z"
    },
    "content_hash": "sha256:a2259abd93ade803be9d8b1d58f5704f00aa95b21c7b75675a54e20119d5a307",
    "translations": {}
@@ -2594,7 +2594,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22949&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:55:59Z"
    },
    "content_hash": "sha256:a7181983f698f7b592494d80125ca83a3f31eaf648f07cccb27663d417015553",
    "translations": {}
@@ -2623,7 +2623,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=12945&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:56:01Z"
    },
    "content_hash": "sha256:3570c0e699e8b9d246d9f8340da840e88c8695148dd0a7b9fb796872dfa88a42",
    "translations": {}
@@ -2652,7 +2652,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23523&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:56:04Z"
    },
    "content_hash": "sha256:45fffedf92b4affbb8f9eabe4d1e0462a1aad3c091fd940a483e2c46714508e7",
    "translations": {}
@@ -2681,7 +2681,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23667&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:56:06Z"
    },
    "content_hash": "sha256:190defea2e41d50fbe0f2f5c8426609414c56030814c4dcf414d9073d741f151",
    "translations": {}
@@ -2726,7 +2726,7 @@
     "data_type": "card_ruling",
     "game": "ocg",
     "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24163&request_locale=ja",
-    "retrieved_at": "2026-09-17T13:53:10Z"
+    "retrieved_at": "2026-09-17T13:56:08Z"
    },
    "content_hash": "sha256:343297baddba79a3f3c0d78d45c79f84003bbd3a4180fb615dbeb0b0f42b0dac",
    "translations": {}

@@ -109,17 +109,37 @@ _RE_TAG = re.compile(r"<[^>]+>")
 _RE_BR = re.compile(r"<br\s*/?>", re.I)
 
 
+# HTML 이 접어주는 공백. **전각 공백(U+3000)은 여기 없다** — HTML 표준의
+# white space 집합은 space·tab·LF·CR·FF 뿐이라 브라우저도 U+3000 을 접지 않는다.
+_HTML_SPACE = " \t\r\f"
+_RE_HTML_SPACE = re.compile(f"[{_HTML_SPACE}]+")
+
+
 def _to_text(fragment: str) -> str:
     """
-    HTML 조각을 평문으로. 줄바꿈(``<br>``)은 보존한다 — 공식 답변이 문단을
-    나누는 유일한 수단이라 없애면 의미가 뭉개진다.
+    HTML 조각을 **브라우저가 보여주는 그대로**의 평문으로 바꾼다.
+
+    두 가지만 한다.
+
+    - ``<br>`` 를 줄바꿈으로. 공식 답변이 문단을 나누는 유일한 수단이라
+      없애면 (A)/(B) 같은 구분이 통째로 뭉개진다.
+    - HTML 이 어차피 접어버리는 공백(space·tab·CR·FF)만 접는다.
+
+    **전각 공백 U+3000 은 건드리지 않는다.** 공식 카드명에 들어가기 때문이다::
+
+        魔弾の射手　カスパール
+
+    이것을 반각 공백으로 바꾸면 공식 원문이 아니라 우리가 고쳐 쓴 문자열이
+    되고, 카드명 대조도 어긋난다. ``str.strip()`` 은 U+3000 도 지우므로
+    쓰지 않고 :data:`_HTML_SPACE` 만 지정해 벗겨낸다.
     """
     text = _RE_BR.sub("\n", fragment)
     text = _RE_TAG.sub("", text)
     text = html.unescape(text)
-    text = re.sub(r"[ \t　]+", " ", text)
+    text = _RE_HTML_SPACE.sub(" ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
-    return "\n".join(line.strip() for line in text.split("\n")).strip()
+    lines = [line.strip(_HTML_SPACE) for line in text.split("\n")]
+    return "\n".join(lines).strip(_HTML_SPACE + "\n")
 
 
 class RulingFetchError(RuntimeError):
@@ -187,9 +207,22 @@ class OfficialOcgRulingAdapter:
 
     def fetch(self, url: str) -> str:
         """캐시 -> 없으면 요청. 요청 사이에는 반드시 쉰다."""
+        return self.fetch_with_time(url)[0]
+
+    def fetch_with_time(self, url: str) -> tuple[str, str]:
+        """
+        ``(본문, 가져온 시각)``.
+
+        캐시에서 읽었다면 **캐시 파일의 시각**을 돌려준다. 다시 파싱한 시각을
+        ``retrieved_at`` 으로 적으면 "공식 사이트에서 그때 확인했다" 는 거짓
+        기록이 된다 — 실제로는 그때 네트워크를 타지 않았다.
+        """
         path = self._cache_path(url)
         if self.use_cache and path.is_file():
-            return path.read_text(encoding="utf-8")
+            stamp = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+            return path.read_text(encoding="utf-8"), stamp.strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
 
         wait = self.delay - (time.monotonic() - self._last_request)
         if wait > 0:
@@ -205,7 +238,7 @@ class OfficialOcgRulingAdapter:
         if self.use_cache:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             path.write_text(source, encoding="utf-8")
-        return source
+        return source, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # ------------------------------------------------------------------
     # URL
@@ -331,14 +364,14 @@ class OfficialOcgRulingAdapter:
         실패해도 빈 결과를 돌려주지 않는다. ``availability`` 로 세 가지를
         구분한다 — 재정 있음 / 재정 없음 / 확인 실패.
         """
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         list_url = self.list_url(cid, page=1, rows=rows_per_page)
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         result = CardRulingSet(
             official_cid=cid, card_id=card_id, checked_at=now, source_url=list_url
         )
 
         try:
-            first = self.fetch(list_url)
+            first, list_retrieved_at = self.fetch_with_time(list_url)
         except RulingFetchError as error:
             result.availability = RulingAvailability.SOURCE_UNAVAILABLE
             result.error = str(error)
@@ -365,7 +398,7 @@ class OfficialOcgRulingAdapter:
                     data_type="card_supplement",
                     game=RulingGame.OCG,
                     source_url=list_url,
-                    retrieved_at=now,
+                    retrieved_at=list_retrieved_at,
                 ),
             )
 
@@ -388,7 +421,8 @@ class OfficialOcgRulingAdapter:
         for row in rows:
             detail_url = self.detail_url(row.fid)
             try:
-                detail = self.parse_detail(row.fid, self.fetch(detail_url))
+                page_source, detail_retrieved_at = self.fetch_with_time(detail_url)
+                detail = self.parse_detail(row.fid, page_source)
             except RulingFetchError as error:
                 result.availability = RulingAvailability.SOURCE_UNAVAILABLE
                 result.error = f"fid={row.fid} 상세 실패: {error}"
@@ -412,7 +446,7 @@ class OfficialOcgRulingAdapter:
                         data_type="card_ruling",
                         game=RulingGame.OCG,
                         source_url=detail_url,
-                        retrieved_at=now,
+                        retrieved_at=detail_retrieved_at,
                     ),
                 )
             )
@@ -421,6 +455,7 @@ class OfficialOcgRulingAdapter:
             result.supplement.related_card_ids = _map_related(
                 result.supplement.related_card_cids, identity
             )
+        result.checked_at = list_retrieved_at
         result.availability = (
             RulingAvailability.EXISTS
             if result.has_rulings

@@ -187,6 +187,25 @@ class Card:
         """다른 일러스트/에라타 판본인지 (중복 제거 대상)."""
         return self.alias != 0
 
+    @property
+    def has_printed_effect(self) -> bool:
+        """
+        공식 카드 종류상 **효과를 가진 카드**인가.
+
+        통상 몬스터와 토큰은 아니다 (통상 펜듈럼 몬스터는 펜듈럼 효과가 있으므로
+        예외). 마법·함정은 언제나 효과가 있다.
+
+        ``Lua 가 없다`` 와 ``효과가 없다`` 를 가르는 기준이다. 둘을 섞으면
+        듀얼 엔진이 통상 몬스터를 "분석 못 한 카드"로 오해한다.
+        """
+        if self.type_mask & C.TYPE_TOKEN:
+            return False
+        if not self.is_monster:
+            return True
+        if self.type_mask & C.TYPE_NORMAL:
+            return bool(self.type_mask & C.TYPE_PENDULUM)
+        return True
+
     # ------------------------------------------------------------------
     # 레벨 / 랭크 / 링크
     # ------------------------------------------------------------------

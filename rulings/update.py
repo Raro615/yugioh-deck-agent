@@ -98,6 +98,7 @@ def diff_ruling_set(
     """
     plan = RulingUpdatePlan()
     if not after.confirmed:
+        # 실패했든 아예 시도하지 않았든, 둘 다 판단 근거가 없다.
         plan.unavailable.append(after.official_cid)
         return plan
 

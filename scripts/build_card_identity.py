@@ -44,6 +44,69 @@ NOTE = (
 )
 
 
+def expand_aliases(mapping: CardIdentityMapping) -> tuple[int, int]:
+    """
+    다른 일러스트 판본에 원본의 ``cid`` 를 물려준다.
+
+    이것이 없으면 엔진이 다른 일러스트 패스코드를 들고 있을 때 재정을 조용히
+    못 찾는다 (실측 228장).
+
+    **``alias`` 컬럼에는 뜻이 두 가지 있다.** 하나는 "같은 카드의 다른
+    일러스트"이고, 다른 하나는 "룰상 저 카드명으로 취급"이다. 후자는
+    전혀 다른 카드다::
+
+        伝説の都 アトランティス   alias -> 海            (이름이 「海」로 취급될 뿐)
+        ハーピィ・レディ2         alias -> ハーピィ・レディ
+        覇王天龍オッドアイズ…     alias -> 覇王龍ズァーク
+
+    이들에게 원본의 ``cid`` 를 물려주면 **엉뚱한 카드의 공식 재정이 붙는다.**
+    그래서 카드명이 **같을 때만** 물려준다. 일본어명(Lua)이 양쪽에 있으면
+    그것으로, 없으면 공식 DB 의 영어명으로 대조한다. 판단할 수 없으면
+    추가하지 않는다 — 추측하지 않는다.
+
+    ``(추가한 수, 이름이 달라 건너뛴 수)`` 를 돌려준다.
+    """
+    from core.card_repository import CardRepository
+
+    repository = CardRepository.build(script_dir=PROJECT_ROOT)
+    added: list[CardIdentity] = []
+    skipped = 0
+    for card in repository:
+        if card.id in mapping or not card.alias:
+            continue
+        cid = mapping.cid_for(card.alias)
+        if cid is None:
+            continue
+        original = repository.get(card.alias)
+        if original is None:
+            continue
+        variant_ja = card.script.name_ja if card.script else None
+        original_ja = original.script.name_ja if original.script else None
+        if variant_ja and original_ja:
+            identical = same_card_name(variant_ja, original_ja)
+        elif card.name_en and original.name_en:
+            identical = card.name_en == original.name_en
+        else:
+            identical = False          # 대조할 수 없으면 넣지 않는다
+        if not identical:
+            skipped += 1
+            continue
+        added.append(
+            CardIdentity(
+                card_id=card.id,
+                cid=cid,
+                link_source=LinkSource.CARD_ALIAS,
+                status=LinkStatus.UNVERIFIED,
+                note=f"cards.cdb alias -> {card.alias} (같은 카드명 확인)",
+            )
+        )
+    if added:
+        mapping._by_card_id.update({e.card_id: e for e in added})
+        for entry in added:
+            mapping._by_cid.setdefault(entry.cid, []).append(entry)
+    return len(added), skipped
+
+
 def build(cache_path: Path = CID_CACHE) -> CardIdentityMapping:
     if not cache_path.is_file():
         raise SystemExit(
@@ -145,6 +208,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"기존 매핑을 읽었습니다: {mapping.stats()}")
     else:
         print(f"캐시에서 매핑을 만들었습니다: {mapping.stats()}")
+
+    added, skipped = expand_aliases(mapping)
+    if added or skipped:
+        print(
+            f"다른 일러스트 판본 {added:,}장에 원본의 cid 를 물려주었습니다"
+            f" (카드명이 달라 건너뜀 {skipped:,}장)."
+        )
 
     if args.verify or args.verify_card_id:
         target = args.verify_card_id or None

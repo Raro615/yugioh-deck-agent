@@ -86,6 +86,14 @@ class LinkSource(str, Enum):
 
     YGOPRODECK_KONAMI_ID = "ygoprodeck_konami_id"
     """보조 출처의 ``misc_info.konami_id``. **공식 출처가 아니다.**"""
+    CARD_ALIAS = "card_alias"
+    """
+    같은 카드의 다른 일러스트 판본. ``cards.cdb`` 의 ``alias`` 컬럼이 원본
+    패스코드를 가리키므로, 원본의 ``cid`` 를 그대로 물려받는다.
+
+    추론이 아니라 **공식 DB 가 직접 밝힌 동일성**이다. 이것을 넣지 않으면
+    엔진이 다른 일러스트 패스코드를 들고 있을 때 재정을 조용히 못 찾는다.
+    """
     MANUAL = "manual"
     """사람이 직접 확인해 넣은 링크."""
 
@@ -119,6 +127,11 @@ class CardIdentity:
     @property
     def trusted(self) -> bool:
         return self.status is not LinkStatus.CONFLICT
+
+    @property
+    def from_alias(self) -> bool:
+        """공식 DB 의 alias 를 따라 물려받은 링크인가."""
+        return self.link_source is LinkSource.CARD_ALIAS
 
     def to_json(self) -> dict:
         data = {
