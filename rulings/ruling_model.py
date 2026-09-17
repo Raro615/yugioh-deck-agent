@@ -86,6 +86,18 @@ class RulingAvailability(str, Enum):
     """조회를 시도했으나 실패했다. **아무것도 결론 내리지 않는다.**"""
     NOT_CHECKED = "not_checked"
     """조회를 시도한 적이 없다. 실패한 것과 다르다 — 그냥 아직 안 했다."""
+    IDENTITY_UNVERIFIED = "identity_unverified"
+    """
+    이 카드와 공식 ``cid`` 의 연결이 검증되지 않아 **조회하지 않았다.**
+
+    재정이 없다는 뜻도, 사이트가 죽었다는 뜻도 아니다. 물어볼 근거가 아직
+    없다는 뜻이다. 검증되지 않은 ``cid`` 로 물으면 **다른 카드의 공식 재정이
+    이 카드의 것으로 저장된다.**
+    """
+    IDENTITY_CONFLICT = "identity_conflict"
+    """
+    대조 결과 이 카드와 ``cid`` 의 연결이 **틀렸다.** 조회하지 않았다.
+    """
 
 
 class TranslationSource(str, Enum):
@@ -422,6 +434,14 @@ class CardRulingSet:
     card_id: int | None = None
     availability: RulingAvailability = RulingAvailability.NOT_CHECKED
     """기본값은 '아직 안 함' 이다. 채우지 않은 레코드가 '실패' 를 주장하지 않도록."""
+    identity_status: str = "unknown"
+    """
+    이 결과를 가져올 때 쓴 ``card_id`` <-> ``cid`` 링크의 검증 상태
+    (:class:`~core.card_identity.LinkStatus` 의 값, 또는 ``unknown``).
+
+    재정 계층은 식별자 계층을 import 하지 않으므로 수집기가 넣어준다.
+    이 값이 ``verified`` 가 아니면 :attr:`authoritative` 가 거짓이다.
+    """
     name_ja: str | None = None
     """공식 페이지가 보여준 일본어 카드명. 식별자 검증에 쓴다."""
     card_text_ja: str = ""
@@ -448,8 +468,35 @@ class CardRulingSet:
 
     @property
     def attempted(self) -> bool:
-        """조회를 시도라도 해 봤는가. 재시도 대상과 최초 수집 대상을 가른다."""
-        return self.availability is not RulingAvailability.NOT_CHECKED
+        """
+        공식 사이트에 **실제로 물어봤는가.**
+
+        식별자가 막아 세운 경우는 시도한 적이 없다 — 네트워크를 타지 않았다.
+        """
+        return self.availability in (
+            RulingAvailability.EXISTS,
+            RulingAvailability.NOT_FOUND,
+            RulingAvailability.SOURCE_UNAVAILABLE,
+        )
+
+    @property
+    def blocked_by_identity(self) -> bool:
+        """식별자 문제로 조회 자체를 막았는가."""
+        return self.availability in (
+            RulingAvailability.IDENTITY_UNVERIFIED,
+            RulingAvailability.IDENTITY_CONFLICT,
+        )
+
+    @property
+    def authoritative(self) -> bool:
+        """
+        이 결과를 공식 재정으로 인용해도 되는가.
+
+        **정상 조회 + 검증된 식별자**를 둘 다 만족해야 한다. 기존에 수집해 둔
+        데이터라도 식별자가 검증되지 않았다면 여기서 거짓이 된다 — 데이터를
+        지우지 않고 그 사실만 드러낸다.
+        """
+        return self.confirmed and self.identity_status == "verified"
 
     @property
     def complete(self) -> bool:
@@ -468,6 +515,7 @@ class CardRulingSet:
             "official_cid": self.official_cid,
             "card_id": self.card_id,
             "availability": self.availability.value,
+            "identity_status": self.identity_status,
             "name_ja": self.name_ja,
             "card_text_ja": self.card_text_ja,
             "reported_total": self.reported_total,
@@ -487,6 +535,7 @@ class CardRulingSet:
             official_cid=int(raw["official_cid"]),
             card_id=raw.get("card_id"),
             availability=RulingAvailability(raw["availability"]),
+            identity_status=raw.get("identity_status", "unknown"),
             name_ja=raw.get("name_ja"),
             card_text_ja=raw.get("card_text_ja", ""),
             rulings=[CardRuling.from_json(r) for r in raw.get("rulings", ())],
@@ -500,5 +549,6 @@ class CardRulingSet:
     def __str__(self) -> str:
         return (
             f"cid={self.official_cid} {self.availability.value} "
-            f"qa={len(self.rulings)} supplement={'있음' if self.supplement else '없음'}"
+            f"identity={self.identity_status} qa={len(self.rulings)} "
+            f"supplement={'있음' if self.supplement else '없음'}"
         )

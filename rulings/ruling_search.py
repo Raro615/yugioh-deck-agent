@@ -117,6 +117,16 @@ class RulingSearch:
         """**"재정 없음"과 "확인 안 함"을 구분해서** 돌려준다."""
         return self.repository.availability_for_card(card_id)
 
+    def is_authoritative(self, card_id: int) -> bool:
+        """
+        이 카드의 재정을 **공식 재정으로 인용해도 되는가.**
+
+        정상 조회 + 검증된 식별자를 둘 다 만족해야 한다. 수집해 둔 데이터가
+        있어도 식별자가 검증되지 않았다면 거짓이다.
+        """
+        ruling_set = self.repository.by_card_id(card_id)
+        return ruling_set is not None and ruling_set.authoritative
+
     # ------------------------------------------------------------------
     # 카드 이름으로 찾기
     # ------------------------------------------------------------------

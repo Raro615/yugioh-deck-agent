@@ -92,10 +92,11 @@ def test_content_hash_distinguishes_fullwidth_from_halfwidth_space():
 @requires_samples
 def test_four_availability_states_are_all_distinguishable(ruling_repository):
     """
-    확인함 / 없음 / 시도했다 실패 / 시도 안 함 — 넷이 서로 다른 값이어야 한다.
+    확인함 / 없음 / 시도했다 실패 / 시도 안 함 / 식별자 미검증 / 식별자 충돌 —
+    여섯이 서로 다른 값이어야 한다.
     """
     values = {a.value for a in RulingAvailability}
-    assert len(values) == 4
+    assert len(values) == 6      # + 식별자 미검증 / 식별자 충돌
 
     # 실제 데이터에서 두 가지가 나타난다.
     stored = {s.availability for s in ruling_repository.ruling_sets}

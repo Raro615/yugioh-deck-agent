@@ -13,6 +13,9 @@
     python -m scripts.fetch_ocg_rulings --card-id 14558127 --card-id 2511
     python -m scripts.fetch_ocg_rulings --cid 4007
 
+    # 식별자가 검증된 카드만 수집된다. 검증은 별도 명령이다:
+    #   python -m scripts.build_card_identity --verify 500
+
     # 이어받기 — 이미 받은 카드는 건너뛴다
     python -m scripts.fetch_ocg_rulings --all --skip-collected --limit 0
 
@@ -101,6 +104,13 @@ def main(argv: list[str] | None = None) -> int:
                         help="이미 정상 수집한 카드는 다시 확인하지 않는다 (이어받기)")
     parser.add_argument("--refresh", action="store_true",
                         help="HTML 캐시를 무시하고 다시 받는다")
+    parser.add_argument(
+        "--allow-unverified-identity", action="store_true",
+        help=(
+            "식별자가 검증되지 않은 카드도 조회한다. 결과에는 "
+            "identity_status 가 그대로 남아 authoritative 가 거짓이 된다."
+        ),
+    )
     parser.add_argument("--out", default=str(DEFAULT_RULING_DIR))
     parser.add_argument("--dry-run", action="store_true", help="저장하지 않는다")
     args = parser.parse_args(argv)
@@ -118,18 +128,28 @@ def main(argv: list[str] | None = None) -> int:
     existing = RulingRepository.load(out_dir, missing_ok=True)
     adapter = OfficialOcgRulingAdapter(delay=args.delay, use_cache=not args.refresh)
     plan = RulingUpdatePlan()
+    blocked: list[int] = []
 
     for index, (cid, card_id) in enumerate(targets, 1):
         before = existing.ruling_set(cid)
         if args.skip_collected and before is not None and before.confirmed:
             plan.record_unchanged(cid)
             continue
-        result = adapter.fetch_ruling_set(cid, card_id=card_id, identity=identity)
+        result = adapter.fetch_ruling_set(
+            cid,
+            card_id=card_id,
+            identity=identity,
+            allow_unverified_identity=args.allow_unverified_identity,
+        )
         plan.merge(diff_ruling_set(before, result))
         # 번역은 공식 사이트에서 오지 않으므로 재수집하면 사라진다. 옮겨 붙이되
         # 원문이 바뀌었으면 is_stale() 이 참이 되어 낡았다는 것이 드러난다.
         result = merge_translations(before, result)
-        if result.availability is RulingAvailability.SOURCE_UNAVAILABLE:
+        if result.blocked_by_identity:
+            blocked.append(cid)
+            print(f"  [{index}/{len(targets)}] cid={cid} 건너뜀: {result.error}",
+                  file=sys.stderr)
+        elif result.availability is RulingAvailability.SOURCE_UNAVAILABLE:
             print(f"  [{index}/{len(targets)}] cid={cid} 확인 실패: {result.error}",
                   file=sys.stderr)
         else:
@@ -141,6 +161,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"요청 {adapter.request_count}건")
     for line in plan.describe():
         print(line)
+    if blocked:
+        print(
+            "  대조 방법: python -m scripts.build_card_identity "
+            "--verify-card-id <패스코드>"
+        )
     return 0
 
 

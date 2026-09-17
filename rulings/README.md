@@ -29,16 +29,69 @@ Korean Translation        ->  non-authoritative (translations["ko"])
 
 **3. "재정 없음" · "확인 실패" · "확인 안 함"은 전부 다르다.**
 
-| 상태 | 뜻 |
-|---|---|
-| `ruling_exists` | 공식 사이트에서 재정을 실제로 확인했다 |
-| `ruling_not_found` | 정상 조회했고, 이 카드에는 재정이 없다 |
-| `source_unavailable` | 조회를 **시도했으나** 실패했다 (접근·파싱·네트워크) |
-| `not_checked` | 조회를 **시도한 적이 없다** |
+| 상태 | 뜻 | 다음 할 일 |
+|---|---|---|
+| `ruling_exists` | 공식 사이트에서 재정을 실제로 확인했다 | — |
+| `ruling_not_found` | 정상 조회했고, 이 카드에는 재정이 없다 | — |
+| `source_unavailable` | 조회를 **시도했으나** 실패했다 | 재시도 |
+| `not_checked` | 조회를 **시도한 적이 없다** | 수집 |
+| `identity_unverified` | 식별자가 검증되지 않아 **묻지 않았다** | 식별자 대조 |
+| `identity_conflict` | 식별자가 **틀렸다.** 묻지 않았다 | 매핑 수정 |
 
-뒤의 둘을 합치면 "아직 손도 안 댄 14,353장"이 "사이트가 죽어서 못 봤다"로
-둔갑하고, 재시도 대상인지 최초 수집 대상인지도 구분할 수 없게 된다.
-수집한 적 없는 카드를 물으면 `not_checked` 가 나온다.
+합치면 안 되는 이유가 상태마다 다르다. 앞의 둘과 뒤의 넷을 섞으면 "확인 못
+했다"가 "재정이 없다"가 된다. `source_unavailable` 과 `not_checked` 를 합치면
+"아직 손도 안 댄 카드"가 "사이트가 죽어서 못 봤다"로 둔갑한다. 그리고 식별자
+문제를 앞의 넷 중 아무거나로 바꾸면 **원인이 사라져서 무엇을 고쳐야 할지
+알 수 없게 된다.**
+
+## 식별자 신뢰 경계
+
+**검증되지 않은 식별자로는 공식 사이트에 묻지 않는다.**
+
+검증되지 않은 `cid` 로 물으면 **다른 카드의 공식 재정이 이 카드의 것으로
+저장된다.** 한번 섞이면 데이터만 보고는 구분할 수 없다.
+
+```
+VERIFIED    -> trusted -> verified_cid_for() -> 공식 재정 조회
+UNVERIFIED  -> not trusted                   -> 조회 차단 (identity_unverified)
+CONFLICT    -> not trusted                   -> 조회 차단 (identity_conflict)
+```
+
+두 질문의 답이 다르다.
+
+```python
+identity.cid_for(card_id)           # Q1 "cid 후보가 있는가?"      UNVERIFIED 도 값이 나온다
+identity.verified_cid_for(card_id)  # Q2 "공식 조회에 써도 되는가?"  VERIFIED 만 값이 나온다
+```
+
+경계는 두 겹이다. 식별자 계층에서 `trusted` 가 `VERIFIED` 일 때만 참이고,
+**공식 출처에 실제로 요청이 나가는 유일한 지점**인
+`OfficialOcgRulingAdapter.fetch_ruling_set()` 에서 다시 막는다. 막힐 때는
+네트워크를 타지 않는다.
+
+`UNVERIFIED` 는 **틀렸다는 뜻이 아니다.** 후보로 그대로 보존하고
+(`is_candidate`), 지우지도 `VERIFIED` 로 승격하지도 않는다. 승격은 실제 대조를
+거쳐야만 일어난다.
+
+```bash
+python -m scripts.build_card_identity --verify-card-id 89631139
+python -m scripts.build_card_identity --verify 500
+```
+
+### 이미 수집해 둔 데이터
+
+경계를 세우기 전에 수집한 기록은 **지우지 않는다.** 대신 각 레코드가
+`identity_status` 를 들고 있고, 검증되지 않았다면 `authoritative` 가 거짓이
+된다.
+
+```python
+search.by_card_id(89631139)          # 데이터는 그대로 조회된다 (Q&A 88건)
+search.is_authoritative(89631139)    # False — 식별자가 검증되지 않았다
+search.is_authoritative(5318639)     # True
+```
+
+현재 표본 9장 중 6장이 `authoritative`, 3장은 식별자 미검증이다. 그 3장은
+Lua 일본어명이 없어 대조 절차를 돌릴 수 없는 카드다.
 
 ## OCG / TCG
 

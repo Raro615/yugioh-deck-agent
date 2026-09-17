@@ -211,12 +211,22 @@ def test_not_found_and_source_unavailable_are_different():
     assert not not_found.has_rulings and not unavailable.has_rulings
 
 
-def test_availability_has_exactly_four_states():
+def test_availability_states_separate_identity_from_ruling_results():
+    """
+    재정에 대한 답(있음/없음)과 조회 자체의 문제(실패/미조회/식별자)를
+    한 축에 두되 값으로 구분한다. 합치면 "확인 못 했다"가 "재정이 없다"가
+    된다.
+    """
     assert {a.value for a in RulingAvailability} == {
+        # 재정에 대한 답
         "ruling_exists",
         "ruling_not_found",
+        # 조회 자체의 문제
         "source_unavailable",
         "not_checked",
+        # 식별자 문제 — 조회조차 하지 않았다
+        "identity_unverified",
+        "identity_conflict",
     }
 
 

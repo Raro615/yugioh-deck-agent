@@ -45,8 +45,8 @@ def ruling_set(*entries: CardRuling, **kwargs) -> CardRulingSet:
 def test_first_collection_is_all_new():
     plan = diff_ruling_set(None, ruling_set(qa(1, "はい"), qa(2, "いいえ")))
     assert plan.counts() == {
-        "new": 2, "changed": 0, "removed": 0,
-        "unchanged": 0, "unavailable": 0, "skipped": 0,
+        "new": 2, "changed": 0, "removed": 0, "unchanged": 0,
+        "unavailable": 0, "identity_blocked": 0, "skipped": 0,
     }
 
 

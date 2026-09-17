@@ -63,17 +63,33 @@ def test_conflicting_link_is_never_returned():
     )
     mapping = CardIdentityMapping([entry])
     assert mapping.cid_for(89631139) is None
+    assert mapping.verified_cid_for(89631139) is None
     assert mapping.card_ids_for(4007) == []
     assert mapping.identity(89631139) is entry   # 기록 자체는 남는다
     assert not entry.trusted
 
 
 def test_unverified_is_not_the_same_as_conflict():
-    """확인하지 않은 것과 확인해서 틀린 것은 다르다."""
+    """
+    확인하지 않은 것과 확인해서 틀린 것은 다르다.
+
+    다만 **둘 다 공식 재정 조회에는 쓸 수 없다.** 미검증은 후보로 남지만
+    (``is_candidate``), 공식 출처에 물을 근거는 아니다 (``trusted``).
+    """
     unverified = make(1, 10)
+    conflict = make(2, 20, status=LinkStatus.CONFLICT)
+    mapping = CardIdentityMapping([unverified, conflict])
+
     assert unverified.status is LinkStatus.UNVERIFIED
-    assert unverified.trusted
-    assert CardIdentityMapping([unverified]).cid_for(1) == 10
+    assert unverified.is_candidate is True        # 후보로는 남는다
+    assert conflict.is_candidate is False         # 틀린 것으로 판명났다
+
+    assert unverified.trusted is False            # 둘 다 조회 불가
+    assert conflict.trusted is False
+
+    assert mapping.cid_for(1) == 10               # 후보 조회는 값을 준다
+    assert mapping.verified_cid_for(1) is None    # 공식 조회에는 못 쓴다
+    assert mapping.cid_for(2) is None
 
 
 def test_round_trip_json():

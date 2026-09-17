@@ -3,6 +3,7 @@
  "official_cid": 9455,
  "card_id": 23434538,
  "availability": "ruling_exists",
+ "identity_status": "verified",
  "name_ja": "増殖するG",
  "card_text_ja": "このカード名の効果は１ターンに１度しか使用できない。<br>①：自分・相手ターンに、このカードを手札から墓地へ送って発動できる。このターン中、以下の効果を適用する。<br>●相手がモンスターを特殊召喚する度に、自分は１枚ドローする。",
  "reported_total": 35,

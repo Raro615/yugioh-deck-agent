@@ -3,6 +3,7 @@
  "official_cid": 14809,
  "card_id": 10000,
  "availability": "ruling_exists",
+ "identity_status": "verified",
  "name_ja": "万物創世龍",
  "card_text_ja": "このカードは通常召喚できない。攻撃力の合計と守備力の合計が、合わせて１００００以上になるように自分フィールドのモンスターをリリースした場合のみ特殊召喚できる。①：この方法で特殊召喚したこのカードの攻撃力・守備力は１００００になる。",
  "reported_total": null,

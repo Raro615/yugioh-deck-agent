@@ -34,7 +34,14 @@ class RulingUpdatePlan:
     removed: list[str] = field(default_factory=list)
     unchanged: list[str] = field(default_factory=list)
     unavailable: list[int] = field(default_factory=list)
-    """확인하지 못한 카드의 ``cid``. **재정이 없는 것과 다르다.**"""
+    """조회를 시도했으나 실패한 카드의 ``cid``. **재정이 없는 것과 다르다.**"""
+    identity_blocked: list[int] = field(default_factory=list)
+    """
+    식별자가 검증되지 않아 **조회하지 않은** 카드의 ``cid``.
+
+    ``unavailable`` 과 합치면 "사이트가 죽었다" 와 "물어볼 근거가 없다" 가
+    같아 보인다. 전자는 재시도 대상이고 후자는 대조 대상이다.
+    """
     skipped: list[int] = field(default_factory=list)
 
     def record_unchanged(self, cid: int) -> None:
@@ -46,6 +53,7 @@ class RulingUpdatePlan:
         self.removed.extend(other.removed)
         self.unchanged.extend(other.unchanged)
         self.unavailable.extend(other.unavailable)
+        self.identity_blocked.extend(other.identity_blocked)
         self.skipped.extend(other.skipped)
         return self
 
@@ -56,6 +64,7 @@ class RulingUpdatePlan:
             "removed": len(self.removed),
             "unchanged": len(self.unchanged),
             "unavailable": len(self.unavailable),
+            "identity_blocked": len(self.identity_blocked),
             "skipped": len(self.skipped),
         }
 
@@ -75,6 +84,11 @@ class RulingUpdatePlan:
             lines.append(
                 f"확인 실패: 카드 {counts['unavailable']}장 "
                 "— 재정이 없다는 뜻이 아니다"
+            )
+        if counts["identity_blocked"]:
+            lines.append(
+                f"식별자 미검증으로 조회 안 함: 카드 {counts['identity_blocked']}장 "
+                "— 재정이 없다는 뜻도, 조회에 실패했다는 뜻도 아니다"
             )
         return lines
 
@@ -97,6 +111,10 @@ def diff_ruling_set(
     사이트가 잠깐 죽었을 뿐인데 재정이 사라졌다고 기록하게 된다.
     """
     plan = RulingUpdatePlan()
+    if after.blocked_by_identity:
+        # 물어볼 근거가 없어 묻지 않았다. 재시도 대상이 아니라 대조 대상이다.
+        plan.identity_blocked.append(after.official_cid)
+        return plan
     if not after.confirmed:
         # 실패했든 아예 시도하지 않았든, 둘 다 판단 근거가 없다.
         plan.unavailable.append(after.official_cid)

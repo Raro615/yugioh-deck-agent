@@ -357,18 +357,52 @@ class OfficialOcgRulingAdapter:
         card_id: int | None = None,
         rows_per_page: int = DEFAULT_ROWS_PER_PAGE,
         identity=None,
+        allow_unverified_identity: bool = False,
     ) -> CardRulingSet:
         """
         카드 하나의 재정 전부를 가져온다.
 
-        실패해도 빈 결과를 돌려주지 않는다. ``availability`` 로 세 가지를
-        구분한다 — 재정 있음 / 재정 없음 / 확인 실패.
+        **식별자 방어선.** ``card_id`` 와 ``identity`` 가 둘 다 주어지면,
+        그 링크가 검증된 경우에만 공식 사이트에 요청한다. 검증되지 않았거나
+        충돌이면 **네트워크를 타지 않고** ``IDENTITY_UNVERIFIED`` /
+        ``IDENTITY_CONFLICT`` 를 돌려준다.
+
+        검증되지 않은 ``cid`` 로 물으면 다른 카드의 공식 재정이 이 카드의
+        것으로 저장된다. 식별자 계층에서 한 번 막고 여기서 또 막는 이유는,
+        이 경계가 **공식 출처에 실제로 요청이 나가는 유일한 지점**이기
+        때문이다.
+
+        ``allow_unverified_identity`` 는 의도적으로 검증 전 데이터를 다루는
+        도구(캐시 재파싱 등)를 위한 것이고, 그때도 결과의
+        ``identity_status`` 에 사실이 남아 ``authoritative`` 가 거짓이 된다.
+
+        실패해도 빈 결과를 돌려주지 않는다. ``availability`` 가 여섯 가지를
+        구분한다 — 재정 있음 / 없음 / 조회 실패 / 미조회 / 식별자 미검증 /
+        식별자 충돌.
         """
         list_url = self.list_url(cid, page=1, rows=rows_per_page)
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        identity_status = _identity_status(identity, card_id)
         result = CardRulingSet(
-            official_cid=cid, card_id=card_id, checked_at=now, source_url=list_url
+            official_cid=cid,
+            card_id=card_id,
+            checked_at=now,
+            source_url=list_url,
+            identity_status=identity_status,
         )
+
+        if identity is not None and card_id is not None and identity_status != "verified":
+            if not allow_unverified_identity:
+                result.availability = (
+                    RulingAvailability.IDENTITY_CONFLICT
+                    if identity_status == "conflict"
+                    else RulingAvailability.IDENTITY_UNVERIFIED
+                )
+                result.error = (
+                    f"card_id={card_id} 와 cid={cid} 의 연결이 "
+                    f"{identity_status} 입니다. 공식 사이트에 묻지 않았습니다."
+                )
+                return result
 
         try:
             first, list_retrieved_at = self.fetch_with_time(list_url)
@@ -462,6 +496,17 @@ class OfficialOcgRulingAdapter:
             else RulingAvailability.NOT_FOUND
         )
         return result
+
+
+def _identity_status(identity, card_id: int | None) -> str:
+    """
+    이 패스코드의 링크 검증 상태를 문자열로. 재정 계층이 식별자 계층을
+    import 하지 않으므로 값만 옮긴다.
+    """
+    if identity is None or card_id is None:
+        return "unknown"
+    status = identity.status_for(card_id)
+    return status.value if status is not None else "unknown"
 
 
 def _map_related(cids: list[int], identity) -> list[int]:

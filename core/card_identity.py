@@ -126,6 +126,24 @@ class CardIdentity:
 
     @property
     def trusted(self) -> bool:
+        """
+        **공식 재정 조회에 써도 되는 링크인가.**
+
+        ``VERIFIED`` 일 때만 참이다. ``UNVERIFIED`` 는 틀렸다는 뜻이 아니지만
+        맞다는 뜻도 아니므로, 공식 출처에 "이 카드의 재정을 달라" 고 물을
+        근거가 되지 못한다. 엉뚱한 ``cid`` 로 물으면 **다른 카드의 공식 재정이
+        이 카드의 것으로 저장된다.**
+        """
+        return self.status is LinkStatus.VERIFIED
+
+    @property
+    def is_candidate(self) -> bool:
+        """
+        링크 후보로 볼 수 있는가 (충돌로 판명나지 않았는가).
+
+        :attr:`trusted` 와 **다른 질문이다.** 후보가 있다는 것과 그 후보를
+        공식 조회에 써도 된다는 것은 별개다.
+        """
         return self.status is not LinkStatus.CONFLICT
 
     @property
@@ -194,21 +212,54 @@ class CardIdentityMapping:
     # 조회
     # ------------------------------------------------------------------
     def cid_for(self, card_id: int) -> int | None:
-        """패스코드 -> ``cid``. 충돌로 표시된 링크는 돌려주지 않는다."""
+        """
+        패스코드 -> **``cid`` 후보.** 충돌로 판명난 링크는 돌려주지 않는다.
+
+        .. warning::
+           돌려준 값이 **검증되었다는 뜻이 아니다.** 공식 사이트에 재정을
+           물으려면 :meth:`verified_cid_for` 를 쓴다. 이 메서드는
+           "후보가 존재하는가" 에만 답한다.
+        """
+        entry = self._by_card_id.get(card_id)
+        return entry.cid if entry is not None and entry.is_candidate else None
+
+    def verified_cid_for(self, card_id: int) -> int | None:
+        """
+        패스코드 -> **공식 재정 조회에 써도 되는 ``cid``.**
+
+        대조를 마친 링크에서만 값이 나온다. 대조하지 않았으면 ``None`` 이다 —
+        틀렸다는 뜻이 아니라, 이 값으로 공식 출처에 물을 근거가 아직 없다는
+        뜻이다.
+        """
         entry = self._by_card_id.get(card_id)
         return entry.cid if entry is not None and entry.trusted else None
+
+    def status_for(self, card_id: int) -> LinkStatus | None:
+        """이 패스코드의 링크 상태. 매핑 자체가 없으면 ``None``."""
+        entry = self._by_card_id.get(card_id)
+        return entry.status if entry is not None else None
 
     def identity(self, card_id: int) -> CardIdentity | None:
         return self._by_card_id.get(card_id)
 
     def card_ids_for(self, cid: int) -> list[int]:
-        """``cid`` -> 패스코드 목록 (일러스트 판본이 여럿일 수 있다)."""
-        return sorted(e.card_id for e in self._by_cid.get(cid, ()) if e.trusted)
+        """
+        ``cid`` -> 패스코드 **후보** 목록 (일러스트 판본이 여럿일 수 있다).
+
+        검증 여부를 묻지 않는다. 이 방향은 "공식 재정을 달라" 는 요청이 아니라
+        "공식이 링크한 이 ``cid`` 가 우리 쪽 어느 카드인가" 라는 표시용
+        조회이기 때문이다. 충돌 링크만 제외한다.
+        """
+        return sorted(e.card_id for e in self._by_cid.get(cid, ()) if e.is_candidate)
 
     def primary_card_id(self, cid: int) -> int | None:
-        """``cid`` 를 대표하는 패스코드 하나 (가장 작은 값으로 고정한다)."""
+        """``cid`` 를 대표하는 패스코드 후보 하나 (가장 작은 값으로 고정한다)."""
         card_ids = self.card_ids_for(cid)
         return card_ids[0] if card_ids else None
+
+    def verified_card_ids(self) -> list[int]:
+        """공식 재정 조회에 쓸 수 있는 패스코드 전부."""
+        return sorted(e.card_id for e in self._by_card_id.values() if e.trusted)
 
     def __contains__(self, card_id: object) -> bool:
         return isinstance(card_id, int) and card_id in self._by_card_id
