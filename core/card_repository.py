@@ -69,6 +69,7 @@ class CardRepository:
         constant_dir: str | os.PathLike[str] | None = None,
         use_cache: bool = True,
         korean_source=None,
+        use_korean: bool = True,
     ) -> CardRepository:
         """
         공식 DB 와 Lua 스크립트를 읽어 리포지토리를 만든다.
@@ -79,8 +80,12 @@ class CardRepository:
             cache_dir: Lua 파싱 캐시 위치.
             constant_dir: CARD_*/SET_* 상수 파일 디렉터리.
             use_cache: Lua 파싱 결과 캐시 사용 여부.
-            korean_source: 한국어 카드명/텍스트 오버레이 소스(선택).
+            korean_source: 한국어 카드명/텍스트 오버레이 소스.
+                생략하면 ``use_korean`` 에 따라 자동으로 찾는다.
+            use_korean: 참이면 한국어 데이터를 자동 탐색해 적용한다.
+                진입점에 따라 표시 언어가 달라지지 않도록 기본값은 참이다.
         """
+        from sources.korean_names import KoreanTextSource
         from sources.lua_loader import LuaScriptSource
         from sources.official_db import OfficialDatabaseSource
         from sources.script_constants import ScriptConstants
@@ -100,7 +105,9 @@ class CardRepository:
         constants = ScriptConstants.load(constant_dir)
         cls._resolve_script_constants(cards, constants)
 
-        if korean_source is not None:
+        if korean_source is None and use_korean:
+            korean_source = KoreanTextSource.autoload()
+        if korean_source:
             korean_source.apply(cards)
 
         return cls(cards, constants=constants)

@@ -169,6 +169,7 @@ class OfficialDatabaseSource:
             alias=row["alias"] or 0,
             ot=row["ot"] or 0,
             desc=row["desc"] or "",
+            desc_en=row["desc"] or "",
             strings=strings,
             sources={CardSource.OFFICIAL_DB},
         )

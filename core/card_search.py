@@ -281,7 +281,10 @@ class CardSearchEngine:
             elif not any(key in n for n in names):
                 return False
         for keyword in f.text_keywords:
-            haystack = f"{card.desc} {' '.join(card.strings)}".casefold()
+            # 한국어 텍스트와 원문을 모두 대상으로 한다.
+            haystack = (
+                f"{card.desc} {card.desc_en} {' '.join(card.strings)}".casefold()
+            )
             if keyword.casefold() not in haystack:
                 return False
 
@@ -315,13 +318,22 @@ class CardSearchEngine:
 
     @staticmethod
     def _supports_race(card: Card, race_bit: int) -> bool:
-        """해당 종족이거나, 카드 텍스트 원문이 그 종족을 언급하는지."""
+        """
+        해당 종족이거나, 카드 텍스트가 그 종족을 언급하는지.
+
+        한국어 데이터가 적용되면 ``desc`` 가 한국어로 바뀌므로 두 언어를 모두 본다.
+        한국어 텍스트는 "마법사족", 영어 원문은 "Spellcaster" 로 표기한다.
+        """
         if card.race_mask & race_bit:
             return True
-        text = card.desc
-        if not text:
-            return False
-        return any(term in text for term in C.RACE_TEXT_EN.get(race_bit, ()))
+        korean = C.RACE_KO.get(race_bit)
+        if korean and card.desc and f"{korean}족" in card.desc:
+            return True
+        english = C.RACE_TEXT_EN.get(race_bit, ())
+        for text in (card.desc_en, card.desc):
+            if text and any(term in text for term in english):
+                return True
+        return False
 
     # ------------------------------------------------------------------
     def _sort(self, cards: list[Card], f: SearchFilters) -> list[Card]:

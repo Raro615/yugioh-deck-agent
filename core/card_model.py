@@ -133,7 +133,9 @@ class Card:
     """0 이 아니면 이 카드는 alias 대상 카드의 다른 일러스트/에라타판이다."""
     ot: int = 0
     desc: str = ""
-    """공식 카드 텍스트. 임의 번역하지 않고 원문을 보존한다."""
+    """표시용 카드 텍스트. 한국어 데이터가 적용되면 한국어, 아니면 공식 DB 원문."""
+    desc_en: str = ""
+    """공식 DB 의 원문 카드 텍스트. 한국어로 덮어써도 여기에 남는다."""
     strings: list[str] = field(default_factory=list)
     """cdb texts.str1~str16 (효과 선택지 문구 등)"""
 

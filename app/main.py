@@ -26,7 +26,6 @@ from core.card_model import Card  # noqa: E402
 from core.card_repository import CardRepository  # noqa: E402
 from core.card_search import CardSearchEngine, SearchFilters  # noqa: E402
 from core.query_parser import KoreanQueryParser  # noqa: E402
-from sources.korean_names import KoreanTextSource  # noqa: E402
 from sources.official_db import OfficialDatabaseNotFound  # noqa: E402
 
 
@@ -46,12 +45,11 @@ class DeckAgent:
         default_limit: int | None = 20,
         use_cache: bool = True,
     ) -> DeckAgent:
-        korean = KoreanTextSource.autoload()
+        # 한국어 데이터는 리포지토리가 자동으로 찾아 적용한다.
         repository = CardRepository.build(
             db_path=db_path,
             script_dir=script_dir,
             use_cache=use_cache,
-            korean_source=korean if korean else None,
         )
         return cls(repository, default_limit=default_limit)
 
@@ -122,8 +120,13 @@ def print_card_detail(agent: DeckAgent, card: Card) -> None:
     if card.is_link:
         print(f"  링크마커: {', '.join(card.link_markers)}")
     if card.desc:
-        print("  카드 텍스트(원문):")
+        label = "카드 텍스트(한국어)" if card.name_ko else "카드 텍스트"
+        print(f"  {label}:")
         for line in card.desc.splitlines():
+            print(f"    {line}")
+    if card.desc_en and card.desc_en != card.desc:
+        print("  카드 텍스트(원문):")
+        for line in card.desc_en.splitlines():
             print(f"    {line}")
     if card.effects:
         print(f"  Lua 효과 블록 {len(card.effects)}개:")
@@ -161,6 +164,7 @@ def card_to_dict(agent: DeckAgent, card: Card) -> dict:
         "def": card.defense,
         "archetypes": agent.repository.archetype_name(card),
         "desc": card.desc,
+        "desc_en": card.desc_en,
         "effects": [
             {
                 "index": e.index,

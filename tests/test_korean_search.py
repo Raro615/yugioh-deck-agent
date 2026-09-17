@@ -35,9 +35,20 @@ def test_korean_names_are_applied(agent):
     card = agent.repository.get(89631139)  # Blue-Eyes White Dragon
     assert card.name_ko == "푸른 눈의 백룡"
     assert card.display_name() == "푸른 눈의 백룡"
-    # 원문은 지우지 않는다.
+    # 공식 DB 원문은 지우지 않는다.
     assert card.name_en == "Blue-Eyes White Dragon"
-    assert card.name_ja == "青眼の白龍"
+    # 일반 몬스터는 Lua 스크립트가 없어 일본어명도 없다 (주석에서 오기 때문).
+    assert card.script is None
+    assert card.name_ja is None
+
+
+@requires_korean_data
+def test_korean_name_coexists_with_japanese_name_from_script(agent):
+    """스크립트가 있는 카드는 세 언어 표기를 모두 유지해야 한다."""
+    card = agent.repository.get(2511)  # Labrynth Cooclock
+    assert card.name_ko == "라뷰린스 쿠클락"
+    assert card.name_en == "Labrynth Cooclock"
+    assert card.name_ja == "白銀の城の狂時計"
 
 
 @requires_korean_data
@@ -95,3 +106,32 @@ def test_example_queries_still_work_with_korean_names(agent):
     ]:
         _, result = agent.search_korean(query)
         assert result.total > 0, query
+
+
+@requires_korean_data
+def test_original_card_text_survives_korean_overlay(agent):
+    """한국어 텍스트를 덮어써도 원문은 desc_en 에 남아야 한다."""
+    card = agent.repository.get(46986414)  # Dark Magician
+    assert any("가" <= ch <= "힣" for ch in card.desc)
+    assert card.desc_en == "The ultimate wizard in terms of attack and defense."
+
+
+@requires_korean_data
+def test_support_race_still_matches_after_korean_overlay(agent):
+    """
+    종족 서포트 판정은 카드 텍스트를 근거로 한다. 텍스트가 한국어로 바뀌어도
+    한국어 표기("마법사족")나 보존된 원문("Spellcaster") 중 하나로 잡혀야 한다.
+    """
+    from core import constants as C
+    from core.card_search import SearchFilters
+
+    result = agent.engine.search(
+        SearchFilters(support_races=[C.RACE_SPELLCASTER], effect_categories=["DRAW"])
+    )
+    assert result.total >= 50
+    for card in result.cards[:40]:
+        assert (
+            card.race_mask & C.RACE_SPELLCASTER
+            or "마법사족" in card.desc
+            or "Spellcaster" in card.desc_en
+        )

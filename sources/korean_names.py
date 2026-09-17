@@ -146,8 +146,9 @@ class KoreanTextSource:
         """
         카드 집합에 한국어 데이터를 덧씌운다. 적용된 카드 수를 돌려준다.
 
-        원문 이름(``name_en``/``name_ja``)은 지우지 않고 그대로 둔다.
-        검색은 한국어·영어·일본어 이름을 모두 대조하기 때문이다.
+        원문 이름(``name_en``/``name_ja``)과 원문 카드 텍스트(``desc_en``)는
+        지우지 않고 그대로 둔다. 검색이 세 언어의 이름과 두 언어의 카드
+        텍스트를 모두 대조하기 때문이다.
         """
         applied = 0
         for card_id, entry in self.entries.items():
@@ -160,6 +161,10 @@ class KoreanTextSource:
                 card.name = name
             desc = entry.get("desc", "").strip()
             if desc:
+                # 원문은 desc_en 에 남겨 둔다. 영어 카드 텍스트를 근거로 하는
+                # 검색(종족 서포트 판정 등)이 계속 동작해야 하기 때문이다.
+                if card.desc_en == "" and card.desc:
+                    card.desc_en = card.desc
                 card.desc = desc
             card.sources.add(CardSource.KOREAN_OVERLAY)
             applied += 1

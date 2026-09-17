@@ -94,13 +94,19 @@ def test_support_race_matches_own_race_or_text_reference(engine):
     result = engine.search(filters)
     assert result.total > 0
     for card in result.cards[:50]:
-        assert card.race_mask & C.RACE_SPELLCASTER or "Spellcaster" in card.desc
+        # 한국어 데이터가 적용되면 desc 가 한국어가 되므로 양쪽을 모두 본다.
+        assert (
+            card.race_mask & C.RACE_SPELLCASTER
+            or "마법사족" in card.desc
+            or "Spellcaster" in card.desc_en
+        )
 
 
 def test_archetype_combines_official_setcode_and_script_series(repository):
     cards = repository.by_archetype("LABRYNTH")
     assert len(cards) >= 10
-    names = {c.name for c in cards}
+    # 표시명은 한국어 데이터 적용 여부에 따라 달라지므로 원문으로 확인한다.
+    names = {c.name_en for c in cards}
     assert "Labrynth Cooclock" in names
     # 상수 접두사가 있든 없든 같은 결과를 준다.
     assert {c.id for c in cards} == {c.id for c in repository.by_archetype("SET_LABRYNTH")}
@@ -110,7 +116,7 @@ def test_named_card_constants_are_resolved_into_relations(repository):
     # CARD_DARK_MAGICIAN 상수가 실제 ID 46986414 로 해석되어야 관계가 잡힌다.
     referencing = repository.referenced_by(46986414)
     assert len(referencing) > 20
-    assert any("Dark Magic Attack" == c.name for c in referencing)
+    assert any(c.name_en == "Dark Magic Attack" for c in referencing)
 
 
 def test_results_are_deduplicated_by_default(repository, engine):
