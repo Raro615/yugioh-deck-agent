@@ -196,7 +196,60 @@ class CardRepository:
         if korean_source:
             korean_source.apply(cards)
 
+        cls._record_provenance(cards)
         return cls(cards, constants=constants)
+
+    @staticmethod
+    def _record_provenance(cards: dict[int, Card]) -> None:
+        """
+        카드마다 어떤 소스가 무엇을 채웠는지 기록한다.
+
+        카드 전체에 점수 하나를 매기지 않고 필드별로 남긴다. Lua 가 없는
+        신규 카드도 여기서 '효과 분석 없음' 으로 표시될 뿐, 카드로서는
+        온전히 등록된다.
+        """
+        from core.provenance import (
+            AnalysisStatus,
+            CardProvenance,
+            FieldStatus,
+            SourceKind,
+        )
+
+        for card in cards.values():
+            record = CardProvenance(card_id=card.id)
+            availability = record.availability
+
+            if CardSource.OFFICIAL_DB in card.sources:
+                availability.cdb_available = True
+                record.record("basic_info", SourceKind.OFFICIAL_DB)
+                record.record("card_name", SourceKind.OFFICIAL_DB)
+            if card.desc_en:
+                availability.official_text_available = True
+                record.record("effect_text", SourceKind.OFFICIAL_TEXT)
+            if card.name_ko:
+                availability.korean_available = True
+                record.record("card_name", SourceKind.KOREAN_DB)
+                record.record("effect_text", SourceKind.KOREAN_DB)
+            if card.script is not None:
+                availability.lua_available = True
+                availability.effect_analysis_available = True
+                record.record("effect_analysis", SourceKind.LUA)
+                record.analysis_status = AnalysisStatus.LUA_VERIFIED
+            elif card.desc:
+                # Lua 가 없으면 텍스트에서 유추할 수 있을 뿐이다.
+                # 실제 게임 처리와 어긋날 수 있으므로 상태를 달리 표시한다.
+                availability.text_analysis_available = True
+                record.record(
+                    "effect_analysis",
+                    SourceKind.OFFICIAL_TEXT,
+                    status=FieldStatus.SUPPLEMENTARY,
+                    detail="Lua 없음 — 텍스트 유래",
+                )
+                record.analysis_status = AnalysisStatus.TEXT_DERIVED
+            else:
+                record.analysis_status = AnalysisStatus.UNAVAILABLE
+
+            card.provenance = record
 
     @staticmethod
     def _resolve_script_constants(cards: dict[int, Card], constants) -> None:

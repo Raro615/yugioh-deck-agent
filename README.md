@@ -486,6 +486,86 @@ $ python -m app.main analyze 2511
 - 액션이 없는 45% 중 실제 미구조화는 15.1% (나머지는 처리 함수가 없는 지속 효과)
 - 남은 UNKNOWN 비용 246건 (전체 비용의 4.9%)
 
+## 카드 데이터 업데이트
+
+신규 카드가 나와도 `core/` 와 `analysis/` 를 고치지 않는다. 소스가 늘면
+`sources/adapters.py` 에 어댑터를 하나 붙이면 된다.
+
+```bash
+python -m scripts.update_cards --check           # 무엇이 바뀌었는지만 본다
+python -m scripts.update_cards --update          # 변경을 반영한다
+python -m scripts.update_cards --source lua      # 특정 소스만
+```
+
+흐름: 수집 → 변경 감지 → 병합 → 분석 → 인덱스 → 검증
+
+### 데이터의 네 가지 성격
+
+| 성격 | 대상 | 커밋 |
+|---|---|---|
+| **원본** | `c*.lua` 12,702개, `data/ko/ko-KR.json` | ✅ |
+| **수집** | `data/cards.cdb`, `data/constants/` | ❌ 스크립트로 내려받음 |
+| **생성** | `data/cache/`, `data/ko/.cache/` | ❌ |
+| **상태** | `data/state/sources.json` (변경 감지용 지문) | ❌ |
+| **인덱스** | `CardRepository` 의 메모리 인덱스 | — |
+
+### 소스별 역할과 우선순위
+
+| 소스 | 주요 역할 |
+|---|---|
+| `cards.cdb` | 카드 ID · 종류 · 레벨/랭크/링크 · 속성 · 종족 · 공수 |
+| 공식 텍스트 | 공식 카드명과 효과 텍스트 |
+| 한국어 DB | 한국어 카드명과 효과 텍스트 |
+| Lua | 실제 게임 처리 로직 |
+| 보조 자료 | 카드군 관계, 수록 정보 등 **사실 항목만** |
+
+필드마다 우선순위가 다르다. 표시용 이름과 텍스트는 한국어 공식 데이터가
+앞서고(원문은 `name_en`/`desc_en` 에 남는다), **효과 분석은 Lua 가 최상위**다.
+보조 자료는 어느 필드에서도 공식 데이터를 덮어쓰지 못하며, 사용자 평가·추천
+같은 주관적 서술은 아예 저장하지 않는다.
+
+값이 다르면 **조용히 덮어쓰지 않는다.** 밀려난 소스는 `conflicts` 에 남는다.
+
+### 카드마다 무엇이 확보됐는지 추적한다
+
+카드 전체에 점수 하나를 매기지 않고 필드별로 기록한다.
+
+```
+카드 2511 · ✓CDB ✓공식텍스트 ✓한국어 ✓Lua ✓효과분석
+  효과 분석: lua_verified
+  basic_info      : official_db (confirmed)
+  card_name       : korean_db  (confirmed) · 충돌 1건
+  effect_analysis : lua        (confirmed)
+```
+
+### Lua 가 없는 카드도 사라지지 않는다
+
+이것이 이 구조의 핵심 규칙이다. 현재 **1,440장이 Lua 없이** 등록되어 있고,
+검색·기본 정보·카드군 조회가 모두 정상이다. 효과 분석만 상태가 다르다.
+
+| 상태 | 뜻 |
+|---|---|
+| `lua_verified` | 실제 스크립트에서 구조화 (12,687장) |
+| `text_derived` | 공식 텍스트에서 유추 — 게임 처리와 어긋날 수 있음 (1,440장) |
+| `unavailable` | 분석 근거 없음 |
+
+텍스트 유래 분석은 별도 클래스(`analysis/text_effect_analyzer.py`)에 두어
+Lua 분석과 섞이지 않게 한다. 효과가 없는 일반 몬스터의 설정 문구는
+효과로 읽지 않는다.
+
+### 증분 업데이트
+
+소스별 지문을 이전 실행과 비교해 신규·변경·삭제만 골라낸다.
+
+```
+official_db      new=1  changed=0  removed=0  unchanged=14,514
+lua              new=1  changed=0  removed=0  unchanged=0
+→ 다시 처리할 카드: [99900001]
+```
+
+Lua 가 나중에 추가되면 그 카드만 다시 분석되고 `text_derived` 가
+`lua_verified` 로 바뀐다.
+
 ## 테스트
 
 ```bash

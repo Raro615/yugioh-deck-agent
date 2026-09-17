@@ -144,6 +144,9 @@ class Card:
 
     # --- 출처 ---
     sources: set[CardSource] = field(default_factory=set)
+    provenance: object | None = None
+    """필드별 출처와 상태 (:class:`~core.provenance.CardProvenance`).
+    데이터가 덜 모인 카드도 검색에서 빠지지 않으며, 무엇이 없는지만 여기 남는다."""
 
     # ------------------------------------------------------------------
     # 카드 종류 판별

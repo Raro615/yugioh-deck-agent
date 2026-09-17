@@ -3,6 +3,7 @@
 data/cards.cdb
 data/constants/
 data/cache/
+data/state/
 
 # 한국어 카드 데이터는 저장소에 포함한다 (data/ko/ko-KR.json).
 # 수집 과정의 페이지 캐시만 제외한다.
