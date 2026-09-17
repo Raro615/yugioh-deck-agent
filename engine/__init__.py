@@ -11,6 +11,9 @@ Duel Engine.
 - **Phase 2-B-1** — 조건을 표현하고 평가하는 계층 (``condition/``).
   ``TRUE`` / ``FALSE`` / ``UNKNOWN`` 삼치 논리이고, 조건은 질문이지 명령이
   아니다. ``docs/phase2b1-condition.md`` 참고.
+- **Phase 2-B-2** — Action 을 판정하는 계층 (``action_validation.py``).
+  관측만 읽고 확실한 위반을 잡아내되, 아직 **어떤 행위도 허가하지 않는다**.
+  ``docs/phase2b2-action-validator.md`` 참고.
 
 ``PlayerActionKind`` 는 ``analysis.effect_model.ActionKind`` 와 **다른
 어휘**다. 전자는 고르는 주체가 고르는 행위, 후자는 효과가 하는 일이다

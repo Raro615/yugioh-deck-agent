@@ -148,6 +148,18 @@ class CardDefinitionView:
     race_name: str | None
     type_names: tuple[str, ...]
     setcodes: tuple[int, ...]
+    effect_count: int = 0
+    """
+    ``EffectRef`` 로 **지목할 수 있는** 효과의 개수.
+
+    스크립트 내용을 내보내지 않고 개수만 싣는다. ``EffectRef(card_id, n)``
+    의 ``n`` 이 범위를 벗어나는지 판정하는 데 쓴다.
+
+    **0 은 "효과가 없다" 를 뜻하지 않는다.** 통상 몬스터도 0 이지만,
+    공유 라이브러리 팩토리(``Fusion.CreateSummonEff`` 등)로 효과를 만드는
+    카드 195장도 0 이다 (ADR-006). 둘을 구분할 수 없으므로, 0 일 때는
+    "이 효과가 존재하는가" 를 **모른다**고 답해야 한다.
+    """
 
     # ------------------------------------------------------------------
     # 수치의 세 상태
@@ -165,6 +177,16 @@ class CardDefinitionView:
     def atk_is_question(self) -> bool:
         """공격력이 ``?`` 인가. 수치가 없는 것과 다르다."""
         return self.atk == STAT_QUESTION
+
+    @property
+    def effects_are_addressable(self) -> bool:
+        """
+        이 카드의 효과 목록을 믿을 수 있는가.
+
+        거짓이면 "몇 번째 효과" 라는 질문에 답할 수 없다 — 효과가 없어서인지
+        파서가 못 읽어서인지 구분되지 않기 때문이다.
+        """
+        return self.effect_count > 0
 
     @property
     def defense_is_question(self) -> bool:
@@ -202,6 +224,7 @@ class CardDefinitionView:
             race_name=card.race_name,
             type_names=tuple(card.type_names),
             setcodes=tuple(card.setcodes),
+            effect_count=len(card.script.effects) if card.script is not None else 0,
         )
 
     def canonical_state(self) -> tuple:
@@ -224,6 +247,7 @@ class CardDefinitionView:
             self.race_name,
             self.type_names,
             self.setcodes,
+            self.effect_count,
         )
 
     def to_dict(self) -> dict:
@@ -253,6 +277,7 @@ class CardDefinitionView:
             "race_name": self.race_name,
             "type_names": list(self.type_names),
             "setcodes": list(self.setcodes),
+            "effect_count": self.effect_count,
         }
 
     def __str__(self) -> str:  # pragma: no cover - 표시용

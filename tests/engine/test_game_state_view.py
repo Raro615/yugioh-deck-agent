@@ -481,7 +481,7 @@ def test_an_action_can_be_built_from_what_the_view_shows(state, mine):
     assert summonable.is_targetable
     action = PlayerAction.normal_summon(actor=mine.viewer, source=summonable.instance_id)
 
-    result = ActionValidator().validate(state, action)
+    result = ActionValidator(mine).validate(action)
     assert result.validity is ActionValidity.UNKNOWN  # 구조는 맞고, 규칙은 아직 없다
     assert not result.permits_execution
     assert state.state_hash() == before  # 아무 일도 일어나지 않았다

@@ -14,6 +14,7 @@ from engine.action_target import ActionTarget
 from engine.action_validation import (
     ActionValidator,
     ActionValidity,
+    ValidationCode,
     ValidationResult,
 )
 from engine.game_state_view import GameStateView
@@ -36,8 +37,12 @@ def state() -> GameState:
 
 
 @pytest.fixture
-def validator() -> ActionValidator:
-    return ActionValidator()
+def validator(state) -> ActionValidator:
+    """
+    검증기는 **관측**을 받는다. ``GameState`` 를 주면 상대의 패와 덱이
+    보이고, 판정이 "없다" 와 "안 보인다" 를 구분해 버려 정보가 샌다.
+    """
+    return ActionValidator(GameStateView.from_state(state, viewer=0))
 
 
 # ----------------------------------------------------------------------
@@ -47,7 +52,7 @@ def validator() -> ActionValidator:
 
 def test_missing_source_is_a_structural_failure(validator, state):
     action = PlayerAction(kind=PlayerActionKind.NORMAL_SUMMON, actor=0)
-    result = validator.validate(state, action)
+    result = validator.validate(action)
 
     assert result.validity is ActionValidity.INVALID
     assert "source" in result.reason
@@ -58,7 +63,7 @@ def test_activate_effect_without_an_effect_ref_is_invalid(validator, state):
     action = PlayerAction(
         kind=PlayerActionKind.ACTIVATE_EFFECT, actor=0, source=InstanceId(0)
     )
-    result = validator.validate(state, action)
+    result = validator.validate(action)
 
     assert result.validity is ActionValidity.INVALID
     assert "effect_ref" in result.reason
@@ -66,7 +71,7 @@ def test_activate_effect_without_an_effect_ref_is_invalid(validator, state):
 
 def test_change_phase_without_a_phase_is_invalid(validator, state):
     action = PlayerAction(kind=PlayerActionKind.CHANGE_PHASE, actor=0)
-    assert validator.validate(state, action).validity is ActionValidity.INVALID
+    assert validator.validate(action).validity is ActionValidity.INVALID
 
 
 def test_fields_that_do_not_belong_to_the_kind_are_invalid(validator, state):
@@ -75,7 +80,6 @@ def test_fields_that_do_not_belong_to_the_kind_are_invalid(validator, state):
     # end_phase 에 카드가 붙어 있다.
     assert (
         validator.validate(
-            state,
             PlayerAction(
                 kind=PlayerActionKind.END_PHASE, actor=0, source=card.instance_id
             ),
@@ -85,7 +89,6 @@ def test_fields_that_do_not_belong_to_the_kind_are_invalid(validator, state):
     # 일반 소환에 페이즈가 붙어 있다.
     assert (
         validator.validate(
-            state,
             PlayerAction(
                 kind=PlayerActionKind.NORMAL_SUMMON,
                 actor=0,
@@ -98,7 +101,6 @@ def test_fields_that_do_not_belong_to_the_kind_are_invalid(validator, state):
     # 일반 소환에 effect_ref 가 붙어 있다.
     assert (
         validator.validate(
-            state,
             PlayerAction(
                 kind=PlayerActionKind.NORMAL_SUMMON,
                 actor=0,
@@ -116,7 +118,7 @@ def test_attack_needs_exactly_one_target(validator, state):
     none_at_all = PlayerAction(
         kind=PlayerActionKind.ATTACK, actor=0, source=card.instance_id
     )
-    assert validator.validate(state, none_at_all).validity is ActionValidity.INVALID
+    assert validator.validate(none_at_all).validity is ActionValidity.INVALID
 
     two = PlayerAction(
         kind=PlayerActionKind.ATTACK,
@@ -127,7 +129,7 @@ def test_attack_needs_exactly_one_target(validator, state):
             ActionTarget.instance(InstanceId(1)),
         ),
     )
-    assert validator.validate(state, two).validity is ActionValidity.INVALID
+    assert validator.validate(two).validity is ActionValidity.INVALID
 
 
 def test_attacking_a_zone_is_a_structural_failure(validator, state):
@@ -135,18 +137,33 @@ def test_attacking_a_zone_is_a_structural_failure(validator, state):
     action = PlayerAction.attack(
         0, card.instance_id, ActionTarget.zone_target(1, Zone.MZONE, 0)
     )
-    result = validator.validate(state, action)
+    result = validator.validate(action)
 
     assert result.validity is ActionValidity.INVALID
     assert "몬스터" in result.reason
 
 
-def test_pointing_at_a_card_that_is_not_in_the_duel_is_invalid(validator, state):
-    result = validator.validate(
-        state, PlayerAction.normal_summon(0, InstanceId(99999))
-    )
-    assert result.validity is ActionValidity.INVALID
-    assert "없습니다" in result.reason
+def test_pointing_at_a_card_the_viewer_cannot_see_is_unknown(validator, state):
+    """
+    Phase 2-A 는 ``GameState`` 를 직접 읽어 이것을 INVALID 라고 단정했다.
+    그런데 그러려면 **상대의 패와 덱까지 들여다봐야** 한다. 검증을 반복하는
+    것만으로 상대 손패를 탐지할 수 있게 되므로, 관측만 보고 판정한다.
+
+    관측에 없는 카드는 이 듀얼에 없는 것일 수도, 가려진 존에 있는 것일
+    수도 있다. **구분할 수 없으므로 UNKNOWN 이다.**
+    """
+    result = validator.validate(PlayerAction.normal_summon(0, InstanceId(99999)))
+    assert result.validity is ActionValidity.UNKNOWN
+    assert result.code is ValidationCode.HIDDEN_CARD
+    assert not result.permits_execution
+
+
+def test_a_card_hidden_in_the_opponent_hand_is_also_unknown(validator, state):
+    """같은 이유로, 실제로 존재하지만 안 보이는 카드도 UNKNOWN 이다."""
+    hidden = state.player(1).hand[0].instance_id
+    result = validator.validate(PlayerAction.normal_summon(0, hidden))
+    assert result.validity is ActionValidity.UNKNOWN
+    assert result.code is ValidationCode.HIDDEN_CARD
 
 
 def test_effect_ref_must_belong_to_the_source_card(validator, state):
@@ -158,13 +175,13 @@ def test_effect_ref_must_belong_to_the_source_card(validator, state):
     wrong = PlayerAction.activate_effect(
         0, card.instance_id, EffectRef(card.card_id + 1, 0)
     )
-    result = validator.validate(state, wrong)
+    result = validator.validate(wrong)
 
     assert result.validity is ActionValidity.INVALID
     assert "effect_ref" in result.reason
 
     right = PlayerAction.activate_effect(0, card.instance_id, EffectRef(card.card_id, 0))
-    assert validator.validate(state, right).validity is ActionValidity.UNKNOWN
+    assert validator.validate(right).validity is ActionValidity.UNKNOWN
 
 
 # ----------------------------------------------------------------------
@@ -177,7 +194,7 @@ def test_a_well_formed_action_is_unknown_not_valid(validator, state):
     Phase 2-A 에는 적법성 계층이 없다. **모른다고 말하는 것이 정직하다.**
     """
     card = state.player(0).monster_zone[0]
-    result = validator.validate(state, PlayerAction.change_position(0, card.instance_id))
+    result = validator.validate(PlayerAction.change_position(0, card.instance_id))
 
     assert result.validity is ActionValidity.UNKNOWN
     assert result.missing_rule is not None
@@ -215,9 +232,18 @@ def test_every_action_kind_reports_which_rule_layer_is_missing(validator, state)
     assert set(samples) == set(PlayerActionKind), "새 행위가 생겼으면 여기도 채우세요."
 
     for kind, action in samples.items():
-        result = validator.validate(state, action)
-        assert result.validity is ActionValidity.UNKNOWN, f"{kind}: {result}"
-        assert result.missing_rule, f"{kind} 가 무엇이 없어서 모르는지 말하지 않습니다."
+        result = validator.validate(action)
+        assert result.validity is not ActionValidity.VALID, (
+            f"{kind} 가 허가를 받았습니다. 아직 어떤 행위도 실행 가능하다고 "
+            f"말할 수 없습니다: {result}"
+        )
+        # 판정이 무엇이든 **이유를 말해야** 한다.
+        assert result.code is not ValidationCode.OK, f"{kind}: {result}"
+        assert result.reason, f"{kind} 가 이유를 말하지 않습니다."
+        if result.code is ValidationCode.RULE_NOT_IMPLEMENTED:
+            assert result.missing_rule, f"{kind} 가 어느 규칙 계층이 없는지 말하지 않습니다."
+        if result.code is ValidationCode.INFORMATION_UNAVAILABLE:
+            assert result.notes, f"{kind} 가 무엇을 모르는지 말하지 않습니다."
 
 
 def test_structure_check_alone_says_valid(validator, state):
@@ -228,15 +254,18 @@ def test_structure_check_alone_says_valid(validator, state):
     card = state.player(0).monster_zone[0]
     action = PlayerAction.change_position(0, card.instance_id)
 
-    assert validator.validate_structure(state, action).validity is ActionValidity.VALID
-    assert validator.validate(state, action).validity is ActionValidity.UNKNOWN
+    assert validator.validate_structure(action).validity is ActionValidity.VALID
+    assert validator.validate(action).validity is ActionValidity.UNKNOWN
 
 
-def test_structure_can_be_checked_without_a_state(validator):
-    """참조 무결성만 빼면 상태 없이도 모양을 볼 수 있다."""
+def test_structure_is_checked_without_looking_at_the_board(validator):
+    """
+    모양 검사는 판을 보지 않는다. 있지도 않은 카드를 가리켜도 **모양은**
+    올바르다 — 그것이 실제로 소환 가능한지는 다음 층의 질문이다.
+    """
     assert (
         validator.validate_structure(
-            None, PlayerAction.normal_summon(0, InstanceId(9999))
+            PlayerAction.normal_summon(0, InstanceId(9999))
         ).validity
         is ActionValidity.VALID
     )
@@ -250,9 +279,9 @@ def test_structure_can_be_checked_without_a_state(validator):
 def test_unknown_is_not_invalid(validator, state):
     card = state.player(0).monster_zone[0]
 
-    unknown = validator.validate(state, PlayerAction.change_position(0, card.instance_id))
+    unknown = validator.validate(PlayerAction.change_position(0, card.instance_id))
     invalid = validator.validate(
-        state, PlayerAction(kind=PlayerActionKind.NORMAL_SUMMON, actor=0)
+        PlayerAction(kind=PlayerActionKind.NORMAL_SUMMON, actor=0)
     )
 
     assert unknown.validity is not invalid.validity
@@ -266,8 +295,18 @@ def test_unknown_never_grants_permission():
     ``if result.validity is not INVALID: execute`` 를 쓰면 UNKNOWN 이 허가로
     새어 나간다. ``permits_execution`` 은 VALID 하나에만 참이다.
     """
-    assert ValidationResult.unknown("모름", "rule").permits_execution is False
-    assert ValidationResult.invalid("틀림").permits_execution is False
+    assert (
+        ValidationResult.unknown(
+            ValidationCode.RULE_NOT_IMPLEMENTED, "모름", "rule"
+        ).permits_execution
+        is False
+    )
+    assert (
+        ValidationResult.invalid(
+            ValidationCode.SOURCE_REQUIRED, "틀림"
+        ).permits_execution
+        is False
+    )
     assert ValidationResult.valid().permits_execution is True
 
 
@@ -284,7 +323,7 @@ def test_no_action_kind_can_be_executed_in_phase_2a(validator, state):
         PlayerAction.end_phase(0),
         PlayerAction.passing(0),
     ):
-        assert not validator.validate(state, action).permits_execution
+        assert not validator.validate(action).permits_execution
 
 
 # ----------------------------------------------------------------------
@@ -328,11 +367,11 @@ def test_validating_does_not_touch_the_state(validator, state):
     before = _snapshot(state)
     card = state.player(0).monster_zone[0]
 
-    validator.validate(state, PlayerAction.normal_summon(0, state.player(0).hand[0].instance_id))
-    validator.validate(state, PlayerAction.attack_directly(0, card.instance_id))
-    validator.validate(state, PlayerAction.change_phase(0, Phase.MAIN1))
-    validator.validate(state, PlayerAction(kind=PlayerActionKind.NORMAL_SUMMON, actor=0))
-    validator.validate_structure(state, PlayerAction.end_phase(1))
+    validator.validate(PlayerAction.normal_summon(0, state.player(0).hand[0].instance_id))
+    validator.validate(PlayerAction.attack_directly(0, card.instance_id))
+    validator.validate(PlayerAction.change_phase(0, Phase.MAIN1))
+    validator.validate(PlayerAction(kind=PlayerActionKind.NORMAL_SUMMON, actor=0))
+    validator.validate_structure(PlayerAction.end_phase(1))
 
     assert _snapshot(state) == before
 
@@ -343,10 +382,11 @@ def test_validator_holds_no_state_of_its_own(validator, state):
     낸다. 판정은 결정론적이어야 한다.
     """
     action = PlayerAction.end_phase(0)
-    first = validator.validate(state, action)
+    first = validator.validate(action)
     for _ in range(5):
-        assert validator.validate(state, action).canonical_state() == first.canonical_state()
-    assert ActionValidator().validate(state, action).canonical_state() == first.canonical_state()
+        assert validator.validate(action).canonical_state() == first.canonical_state()
+    fresh = ActionValidator(GameStateView.from_state(state, viewer=0))
+    assert fresh.validate(action).canonical_state() == first.canonical_state()
 
 
 def test_validator_exposes_no_mutation_path(validator):
