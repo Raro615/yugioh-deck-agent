@@ -81,14 +81,21 @@ python -m app.main repl
 core/
   constants.py        EDOPro 비트마스크 상수 + 한국어 게임 용어 어휘
   card_model.py       통합 Card 모델, 효과 블록(EffectSpec)
+  card_identity.py    패스코드 ↔ 공식 cid 식별자 매핑
   card_repository.py  두 소스 병합 · 정규화 · 중복 제거 · 인덱싱
   card_search.py      필터 조합 및 실행, 관련도 정렬
   query_parser.py     한국어 자연어 → SearchFilters
 sources/
   lua_loader.py       c*.lua 파서 (효과 블록 단위)
+  ocg_ruling_adapter.py 공식 OCG 재정 사이트 어댑터 (HTML 구조 격리)
   official_db.py      cards.cdb 어댑터
   script_constants.py CARD_* / SET_* 상수 해석
   korean_names.py     한국어 카드명·텍스트 오버레이
+rulings/
+  ruling_model.py     공식 카드별 재정 (CardRuling · CardRulingSupplement)
+  ruling_repository.py 재정 적재 · 조회
+  ruling_search.py    재정 검색 (카드 검색과 별도 계층)
+  update.py           재정 증분 갱신
 rules/
   rule_model.py       룰북 원문 모델 (RuleDocument · RuleSection · RuleRef)
   rule_repository.py  규칙 적재 · Rule ID 조회
@@ -104,6 +111,8 @@ app/
 scripts/
   fetch_official_db.py  공식 데이터 내려받기
   extract_rulebook.py   공식 룰북 PDF → data/rules/documents/
+  build_card_identity.py 패스코드 ↔ 공식 cid 매핑
+  fetch_ocg_rulings.py   공식 OCG Q&A 수집
 ```
 
 ### 효과 블록 단위 파싱
@@ -620,6 +629,37 @@ pip install pymupdf
 python -m scripts.extract_rulebook path/to/SD_RuleBook_EN_10.pdf
 ```
 
+## 카드별 재정 계층 (rulings/)
+
+공식 코나미 OCG 데이터베이스의 **카드별 Q&A 와 補足情報**. 일반 규칙(`rules/`)과
+섞지 않는다 — 룰북은 "체인이 어떻게 쌓이는가"를, 재정은 "이 카드에서는 어떻게
+되는가"를 말한다. 자세한 내용은 [`rulings/README.md`](rulings/README.md).
+
+```
+한국어 Card Data  +  일본어 Official Q&A  ->  Card Ruling Layer
+```
+
+한국어와 일본어 카드명은 문자열이 전혀 다르므로(`라뷰린스 쿠클락` ↔
+`白銀の城の狂時計` — 공통 글자가 없다) **숫자 식별자로만** 잇는다.
+
+```python
+from rulings import RulingRepository, RulingSearch
+
+search = RulingSearch(RulingRepository.load())
+search.by_card_id(89631139)                   # 이 카드의 공식 재정
+search.search("ダメージステップ", field="question")
+search.availability(46986414)                 # 확인 안 함 / 없음 / 있음을 구분
+```
+
+일본어 원문만 authoritative 하고 번역은 별도 타입으로 붙는다. 그리고
+"재정 없음"(`ruling_not_found`)과 "확인 실패"(`source_unavailable`)를 절대
+같이 취급하지 않는다.
+
+```bash
+python -m scripts.build_card_identity          # 식별자 매핑
+python -m scripts.fetch_ocg_rulings --sample   # 검증용 표본
+```
+
 ## 데이터 출처
 
 - [Project Ignis BabelCDB](https://github.com/ProjectIgnis/BabelCDB) — `cards.cdb`
@@ -628,3 +668,4 @@ python -m scripts.extract_rulebook path/to/SD_RuleBook_EN_10.pdf
 - [YGOPRODeck](https://db.ygoprodeck.com/api-guide/) — 코나미 `cid` ↔ 패스코드 매핑
 - 저장소에 포함된 `c*.lua` — 카드 스크립트 (원본 데이터, 수정하지 않는다)
 - [Yu-Gi-Oh! TCG 공식 룰북](https://www.yugioh-card.com/en/rulebook) — 게임 규칙 (Konami Digital Entertainment, Inc.)
+- [遊戯王ニューロン 공식 OCG 카드 데이터베이스](https://www.db.yugioh-card.com/yugiohdb/) — 카드별 공식 재정(Q&A · 補足情報)

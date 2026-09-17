@@ -1,0 +1,34 @@
+{
+ "schema_version": 1,
+ "official_cid": 14809,
+ "card_id": 10000,
+ "availability": "ruling_exists",
+ "name_ja": "万物創世龍",
+ "card_text_ja": "このカードは通常召喚できない。攻撃力の合計と守備力の合計が、合わせて１００００以上になるように自分フィールドのモンスターをリリースした場合のみ特殊召喚できる。①：この方法で特殊召喚したこのカードの攻撃力・守備力は１００００になる。",
+ "reported_total": null,
+ "checked_at": "2026-09-17T13:56:48Z",
+ "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=14809&request_locale=ja&page=1&rp=100",
+ "error": "",
+ "supplement": {
+  "ruling_id": "OCG-SUP-14809",
+  "card_id": 10000,
+  "official_cid": 14809,
+  "kind": "supplement",
+  "text_original": "■『このカードは通常召喚できない。攻撃力の合計と守備力の合計が、合わせて１００００以上になるように自分フィールドのモンスターをリリースした場合のみ特殊召喚できる』は効果の扱いではありません。特殊召喚モンスターの特殊召喚の手順となります。（特殊召喚の手順として、自分のモンスターゾーンのモンスターをリリースしますので、リリースと、特殊召喚は同時に行われたことにはなりません。裏側守備表示のモンスターもリリースできます。）<br>■他の効果によって墓地から特殊召喚することはできません。テキストに記載された方法によって手札からのみ特殊召喚できます。<br>■『①：この方法で特殊召喚したこのカードの攻撃力・守備力は１００００になる』モンスター効果は永続効果です。",
+  "published_or_updated_at": "2019-10-12",
+  "related_card_cids": [],
+  "related_card_ids": [],
+  "provenance": {
+   "source": "konami_ocg_database",
+   "language": "ja",
+   "authority": "official",
+   "data_type": "card_supplement",
+   "game": "ocg",
+   "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=14809&request_locale=ja&page=1&rp=100",
+   "retrieved_at": "2026-09-17T13:56:48Z"
+  },
+  "content_hash": "sha256:430a4744616467289cdfae0921172c49132e6351a7f501ef784d789120761361",
+  "translations": {}
+ },
+ "rulings": []
+}

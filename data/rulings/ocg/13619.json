@@ -1,0 +1,380 @@
+{
+ "schema_version": 1,
+ "official_cid": 13619,
+ "card_id": 24224830,
+ "availability": "ruling_exists",
+ "name_ja": "墓穴の指名者",
+ "card_text_ja": "①：相手の墓地のモンスター１体を対象として発動できる。そのモンスターを除外する。次のターンの終了時まで、この効果で除外したモンスター及びそのモンスターと元々のカード名が同じモンスターの効果は無効化される。",
+ "reported_total": 11,
+ "checked_at": "2026-09-17T13:56:25Z",
+ "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=13619&request_locale=ja&page=1&rp=100",
+ "error": "",
+ "supplement": {
+  "ruling_id": "OCG-SUP-13619",
+  "card_id": 24224830,
+  "official_cid": 13619,
+  "kind": "supplement",
+  "text_original": "【①の効果について】<br>■ダメージステップには発動できません。<br>■通常モンスターを対象として発動することもできます。<br>■処理時に、対象のモンスターを除外します。除外した場合、ただちに『次のターンの終了時まで、この効果で除外したモンスター及びそのモンスターと元々のカード名が同じモンスターの効果は無効化される』効果を適用します。<br>■該当の元々のカード名を持つ、お互いのモンスターの効果が無効化されます。（モンスターが魔法・罠カードの効果として発動・適用可能な効果を持っている場合、その効果は無効化されません。）<br>■該当の元々のカード名を持つモンスターが発動した効果、およびチェーンブロックを作らずにモンスターゾーン（表側表示）で適用する効果が無効化されます。<br>■手札や墓地、フィールドで裏側表示でチェーンブロックを作らずに適用する効果は無効になりません。",
+  "published_or_updated_at": "2025-02-21",
+  "related_card_cids": [],
+  "related_card_ids": [],
+  "provenance": {
+   "source": "konami_ocg_database",
+   "language": "ja",
+   "authority": "official",
+   "data_type": "card_supplement",
+   "game": "ocg",
+   "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=13619&request_locale=ja&page=1&rp=100",
+   "retrieved_at": "2026-09-17T13:56:25Z"
+  },
+  "content_hash": "sha256:1a0573b7f0f842dd083623ac35143f5ad13de5607f21508d7a10c89ae673d1e9",
+  "translations": {}
+ },
+ "rulings": [
+  {
+   "ruling_id": "OCG-QA-24250",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "「墓穴の指名者」の効果によって「白き竜の落胤」を除外したターンと次のターン、発動した「アルバスの落胤」の効果は無効化されますか？\n\nまた、「墓穴の指名者」の効果によって「アルバスの落胤」を除外したターンと次のターン、発動した「白き竜の落胤」の効果は無効化されますか？",
+   "answer_original": "どちらの場合でも無効化されます。\n\n「ライトウォーター・ドラゴン」と「ウォーター・ドラゴン」の場合や、「覇王天龍オッドアイズ・アークレイ・ドラゴン」と「覇王龍ズァーク」のモンスター効果の場合も同様です。",
+   "published_or_updated_at": "2025-11-01",
+   "ruling_category": "魔法",
+   "related_card_cids": [
+    6481,
+    12953,
+    13619,
+    15245,
+    19172,
+    21623,
+    22127
+   ],
+   "related_card_ids": [
+    6218704,
+    13331639,
+    24224830,
+    68468459,
+    73819701,
+    82616239,
+    85066822
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24250&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:3f6be8f218ab978f8613fd0b06cfc0656ac81af5728c953ae2d837d1f5669e4b",
+   "translations": {}
+  },
+  {
+   "ruling_id": "OCG-QA-10973",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "相手が「増殖するG」の『①：このカードを手札から墓地へ送って発動できる。このターン、以下の効果を適用する。●相手がモンスターの特殊召喚に成功する度に、自分はデッキから１枚ドローする』モンスター効果を発動しました。\n\nこのターンに、墓地の「増殖するG」を対象として「墓穴の指名者」の『①：相手の墓地のモンスター１体を対象として発動できる。そのモンスターを除外する。次のターンの終了時まで、この効果で除外したモンスター及びそのモンスターと元々のカード名が同じモンスターの効果は無効化される』効果を発動した場合、どうなりますか？",
+   "answer_original": "「増殖するG」の効果の発動にチェーンして「墓穴の指名者」を発動したのか、「増殖するG」の効果のチェーンブロックの処理が完了した後で「墓穴の指名者」を発動したのかによって、結果が異なります。\n\n「増殖するG」の効果の発動にチェーンして「墓穴の指名者」を発動した場合、「増殖するG」の効果のチェーンブロックの処理が無効になります。そのため、そのターンに特殊召喚が行われてもドローすることはありません。\n\n「増殖するG」の効果のチェーンブロックの処理が完了した後で「墓穴の指名者」を発動した場合でも、既に適用されている「増殖するG」の効果が無効化されることはありません。（「墓穴の指名者」は、除外したモンスターと同じ元々のカード名を持つモンスターが発動した効果、およびチェーンブロックを作らずにモンスターゾーンで適用する効果を無効化しますが、既に適用されている「増殖するG」の●の処理は、このいずれにも該当しません。）そのため、引き続き特殊召喚が行われるたびにドローすることになります。",
+   "published_or_updated_at": "2023-06-04",
+   "ruling_category": "モンスター",
+   "related_card_cids": [
+    9455,
+    13619
+   ],
+   "related_card_ids": [
+    23434538,
+    24224830
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=10973&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:5d9f6c5578fd7e4b303fecc57c06d674797282b21ace31a7da081cb45434434f",
+   "translations": {}
+  },
+  {
+   "ruling_id": "OCG-QA-24167",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "自分が「閃刀姫－レイ」の①の効果を発動した時に、相手がチェーン２で「閃刀姫－レイ」を対象に「墓穴の指名者」を発動し、さらに自分がチェーン３で墓地の「閃刀姫－レイ」、「閃刀起動－エンゲージ」を対象に「閃刀亜式－レムニスゲート」を発動しました。\nチェーン３の処理により「閃刀姫－レイ」と「閃刀起動－エンゲージ」をデッキに戻し、チェーン２の処理は何も行われず、チェーン１の処理によりエクストラデッキから「閃刀姫」リンクモンスター１体を特殊召喚しました。\nこの場合、チェーン３で発動し、その後墓地へ送られた「閃刀亜式－レムニスゲート」の②の効果を発動することはできますか？",
+   "answer_original": "発動できません。\n\nチェーン２以降で発動した速攻魔法・通常罠カードは、その効果処理が終わっても魔法＆罠ゾーンに残り続け、一連のチェーン処理が全て終わってから同時に墓地へ送られます。\nしたがって、質問の状況では「閃刀姫－レイ」の効果によって「閃刀姫」リンクモンスターを特殊召喚してから「閃刀亜式－レムニスゲート」と「墓穴の指名者」が墓地へ送られるため、『このカードが墓地に存在する状態で、自分フィールドに「閃刀」モンスターが特殊召喚された』という条件を満たしていないことになります。",
+   "published_or_updated_at": "2025-04-26",
+   "ruling_category": "魔法",
+   "related_card_cids": [
+    13619,
+    13670,
+    13671,
+    21480
+   ],
+   "related_card_ids": [
+    24224830,
+    26077387,
+    34433770,
+    63166095
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24167&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:069255d67d073de52e198713e3ddbd9a73cb3d51cea81fa268533bae817d1676",
+   "translations": {}
+  },
+  {
+   "ruling_id": "OCG-QA-10677",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "相手が「幽鬼うさぎ」の『①：フィールドのモンスターの効果が発動した時、またはフィールドの既に表側表示で存在している魔法・罠カードの効果が発動した時、自分の手札・フィールドのこのカードを墓地へ送って発動できる。フィールドのそのカードを破壊する』モンスター効果を発動した時、自分がチェーンして「墓穴の指名者」を発動し、相手の墓地の「幽鬼うさぎ」を対象としました。\n\nさらに、その発動にチェーンして相手が「戦線復帰」の『①：自分の墓地のモンスター１体を対象として発動できる。そのモンスターを守備表示で特殊召喚する』効果を発動し、その「幽鬼うさぎ」を特殊召喚した場合、「墓穴の指名者」の効果処理はどうなりますか？",
+   "answer_original": "「墓穴の指名者」の効果処理は、対象として選択したモンスターを、相手の墓地から除外した場合、『次のターンの終了時まで、この効果で除外したモンスター及びそのモンスターと元々のカード名が同じモンスターの効果は無効化される』処理も適用される事になります。\n\n質問の状況の場合、「墓穴の指名者」の対象に選択された「幽鬼うさぎ」は「戦線復帰」の効果によって特殊召喚され、墓地に存在しなくなっていますので、「墓穴の指名者」の効果によって除外されず、『次のターンの終了時まで、この効果で除外したモンスター及びそのモンスターと元々のカード名が同じモンスターの効果は無効化される』処理も適用されません。",
+   "published_or_updated_at": "2018-04-05",
+   "ruling_category": "チェーン",
+   "related_card_cids": [
+    11708,
+    13116,
+    13619
+   ],
+   "related_card_ids": [
+    24224830,
+    59438930,
+    59919307
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=10677&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:ad12c39fe75ae94fbd02ba66d4fc55b47e2ca6fbadddc3291c13f261b1a4cbd4",
+   "translations": {}
+  },
+  {
+   "ruling_id": "OCG-QA-24077",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "自分は「インフェルノイド・デカトロン」の『①：このカードが召喚・特殊召喚した場合に発動できる。デッキから「インフェルノイド・デカトロン」以外の「インフェルノイド」モンスター１体を墓地へ送る。このカードは、レベルがそのモンスターのレベル分だけ上がり、そのモンスターの元々のカード名・効果と同じカード名・効果を得る』効果を発動し、「インフェルノイド・ルキフグス」のカード名と効果を得ています。\n\nこの「インフェルノイド・デカトロン」をリリースし、『②：相手ターンに１度、自分フィールドのモンスター１体をリリースし、相手の墓地のカード１枚を対象として発動できる。そのカードを除外する』効果を発動しました。\n\nこの時、相手がチェーンして以下のカードを対象として「墓穴の指名者」を発動した場合、『そのカードを除外する』処理は無効化されますか？\n\n（A）「インフェルノイド・デカトロン」\n\n（B）「インフェルノイド・ルキフグス」",
+   "answer_original": "（A）無効になります。\n\n（B）無効になりません。\n\n「墓穴の指名者」の効果は、除外したカードの元々のカード名を参照し、元々のカード名が同じであるモンスターの効果を無効化します。",
+   "published_or_updated_at": "2024-06-28",
+   "ruling_category": "魔法",
+   "related_card_cids": [
+    11534,
+    11823,
+    13619
+   ],
+   "related_card_ids": [
+    24224830,
+    52038272,
+    58446973
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=24077&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:1d0c353e39b103fce5a4e70423e3b2b99b2738cf1bf80f13102e7dc9962998f6",
+   "translations": {}
+  },
+  {
+   "ruling_id": "OCG-QA-23373",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "自分が「D-HERO デストロイフェニックスガイ」の『③』の『このカードが戦闘・効果で破壊された場合に発動できる。次のターンのスタンバイフェイズに、自分の墓地から「D-HERO」モンスター１体を選んで特殊召喚する』効果を発動し、相手がチェーンして墓地の「D-HERO デストロイフェニックスガイ」を対象に「墓穴の指名者」を発動しました。\n\n「墓穴の指名者」の処理によって墓地の「D-HERO デストロイフェニックスガイ」が除外された場合、次のスタンバイフェイズに『「D-HERO」モンスター１体を選んで特殊召喚する』処理は行われますか？",
+   "answer_original": "行われません。\n\nなお、「D-HERO デストロイフェニックスガイ」の『③』の効果が適用された後、次のスタンバイフェイズまでに「D-HERO デストロイフェニックスガイ」が「墓穴の指名者」によって除外された場合には、『次のターンのスタンバイフェイズに、自分の墓地から「D-HERO」モンスター１体を選んで特殊召喚する』処理は行われます。",
+   "published_or_updated_at": "2021-10-15",
+   "ruling_category": "モンスター",
+   "related_card_cids": [
+    13619,
+    16524
+   ],
+   "related_card_ids": [
+    24224830,
+    60461804
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23373&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:d5dc4bef3e757b5e8bf1f14d48be4f5184c527e2f67f25c306d9e496229e5a1e",
+   "translations": {}
+  },
+  {
+   "ruling_id": "OCG-QA-22471",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "相手の発動した「墓穴の指名者」の『①：相手の墓地のモンスター１体を対象として発動できる。そのモンスターを除外する。次のターンの終了時まで、この効果で除外したモンスター及びそのモンスターと元々のカード名が同じモンスターの効果は無効化される』効果によって、「Sin パラドクスギア」が除外されているターンです。\n\nそのターンに、モンスターゾーンまたは墓地に存在する「Sin パラドクスギア」の『②：自分の手札の「Sin」モンスターを、自身の方法で特殊召喚するためにモンスターを除外する場合、そのモンスターの代わりにフィールド・墓地のこのカードを除外できる』モンスター効果を適用して、「Sin 青眼の白龍」を特殊召喚する事はできますか？",
+   "answer_original": "質問の状況のように、「墓穴の指名者」の効果で「Sin パラドクスギア」が除外され、その効果が適用されている場合、自分のモンスターゾーンに表側表示で存在する「Sin パラドクスギア」のモンスター効果は無効化されていますので、『そのモンスターの代わりにフィールド・墓地のこのカードを除外できる』モンスター効果を適用する事はできません。\n\nなお、墓地にて適用される「Sin パラドクスギア」のモンスター効果は「墓穴の指名者」の効果によって無効化されませんので、『そのモンスターの代わりにフィールド・墓地のこのカードを除外できる』モンスター効果を適用し、「Sin パラドクスギア」を代わりに除外して、「Sin 青眼の白龍」を特殊召喚する事はできます。",
+   "published_or_updated_at": "2022-12-30",
+   "ruling_category": "モンスター",
+   "related_card_cids": [
+    8864,
+    13619,
+    14379
+   ],
+   "related_card_ids": [
+    9433350,
+    24224830,
+    48829461
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22471&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:2c4dc0ec34d439b191d2d61d74455a135c151dec46787ab59bda90f6c9e46c15",
+   "translations": {}
+  },
+  {
+   "ruling_id": "OCG-QA-22672",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "相手の発動した「墓穴の指名者」の『①：相手の墓地のモンスター１体を対象として発動できる。そのモンスターを除外する。次のターンの終了時まで、この効果で除外したモンスター及びそのモンスターと元々のカード名が同じモンスターの効果は無効化される』効果によって、「空牙団の剣士 ビート」が除外されているターンです。\n\nこの状況で、自分がモンスターゾーンに表側表示で存在する「空牙団の剣士 ビート」の『①：自分メインフェイズに発動できる』モンスター効果を発動し、その発動にチェーンして発動した効果によって、「空牙団の剣士 ビート」を裏側守備表示にした場合、その効果は無効化されますか？",
+   "answer_original": "無効化されます。",
+   "published_or_updated_at": "2025-09-14",
+   "ruling_category": "モンスター",
+   "related_card_cids": [
+    13619,
+    13658
+   ],
+   "related_card_ids": [
+    24224830,
+    93850652
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22672&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:e294607e02f2fb21c0dc29c51f426abfb5caf5cb04aed3e7da4d4daa465f46d0",
+   "translations": {}
+  },
+  {
+   "ruling_id": "OCG-QA-22294",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "相手の発動した「墓穴の指名者」の『①：相手の墓地のモンスター１体を対象として発動できる。そのモンスターを除外する。次のターンの終了時まで、この効果で除外したモンスター及びそのモンスターと元々のカード名が同じモンスターの効果は無効化される』効果によって、「雷獣龍－サンダー・ドラゴン」が除外されている状況です。\n\nこの状況で、自分は「轟雷機龍－サンダー・ドラゴン」の『①：このカードがリンク召喚されている場合、自分の墓地のモンスター及び除外されている自分のモンスターの中から、「サンダー・ドラゴン」モンスター１体を対象として発動できる。そのモンスターに記された、自身を手札から捨てて発動する効果を適用する。その後、そのモンスターをデッキの一番上または一番下に戻す』モンスター効果を発動し、「雷獣龍－サンダー・ドラゴン」を対象とする事はできますか？",
+   "answer_original": "「轟雷機龍－サンダー・ドラゴン」の『そのモンスターに記された、自身を手札から捨てて発動する効果を適用する』モンスター効果は、対象としたモンスターが効果を発動する扱いではありません。\n\n質問の状況の場合、「墓穴の指名者」の効果が適用されていますので、次のターンの終了時まで、「雷獣龍－サンダー・ドラゴン」の発動する効果などは無効化されますが、「轟雷機龍－サンダー・ドラゴン」のモンスター効果は無効化されません。\n\nしたがって、この場合、「轟雷機龍－サンダー・ドラゴン」は『自分の墓地のカード及び除外されている自分のカードの中から、「雷獣龍－サンダー・ドラゴン」以外の「サンダー・ドラゴン」カード１枚を選んで手札に加える』処理を適用し、『その後、そのモンスターをデッキの一番上または一番下に戻す』処理によって、対象の「雷獣龍－サンダー・ドラゴン」をデッキの一番上か一番下に戻します。",
+   "published_or_updated_at": "2022-12-30",
+   "ruling_category": "リンク",
+   "related_card_cids": [
+    13619,
+    13908,
+    14195
+   ],
+   "related_card_ids": [
+    12081875,
+    24224830,
+    29596581
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=22294&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:cafe73b11e4e0b81fb51f9e13cb1bd98ae25441dd0a49ac2890dae9190831d3e",
+   "translations": {}
+  },
+  {
+   "ruling_id": "OCG-QA-23981",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "チェーン１で自分が「サブテラーの導師」の①の効果を発動し、その「サブテラーの導師」を対象としてチェーン２で相手が「灰流うらら」の効果を発動しました。さらに自分はチェーン３で「サブテラーの決戦」を『●このターン、「サブテラー」カードの発動する効果は無効化されない』を選択して発動し、相手はチェーン４で、墓地の別の「サブテラーの導師」を対象として「墓穴の指名者」を発動しました。\n\nこのチェーン４からチェーン２までの処理が行われた場合、チェーン１の「サブテラーの導師」の効果の処理はどうなりますか？",
+   "answer_original": "「サブテラーの導師」の効果の処理は適用されます。\n\n『発動する効果は無効化されない』効果が適用されている状況で、チェーンブロックの効果の処理を行う場合、その効果を無効にする別の効果の適用があったとしても、無効化されずにその処理が適用されます。\n\nなお、『無効にする効果』と『無効化されない』効果が適用された順番を問わず、効果処理を開始する時点で『発動する効果は無効化されない』効果が適用されているのであれば、この結果になります。",
+   "published_or_updated_at": "2023-06-04",
+   "ruling_category": "モンスター",
+   "related_card_cids": [
+    12950,
+    13459,
+    13619
+   ],
+   "related_card_ids": [
+    14558127,
+    16428514,
+    24224830
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23981&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:80d00977f1cd4bc3e40c443ea86983e353d84c01cbe1fe59c89656e61e8d7d2e",
+   "translations": {}
+  },
+  {
+   "ruling_id": "OCG-QA-23972",
+   "card_id": 24224830,
+   "official_cid": 13619,
+   "kind": "qa",
+   "question_original": "自分フィールドにカードが存在しない状況で、自分は「ライディング・デュエル！アクセラレーション！」を発動し、チェーン２で相手が「灰流うらら」の効果を発動しました。さらにチェーン３で自分は相手の墓地の「灰流うらら」を対象に「墓穴の指名者」を発動しました。その後、チェーン３の「墓穴の指名者」の処理によって「灰流うらら」が除外され、チェーン２の「灰流うらら」の効果は適用されませんでした。\n\nその場合、チェーン１の「ライディング・デュエル！アクセラレーション！」の①の処理時に、『デッキから「シンクロン」モンスター１体を手札に加える』処理を適用できますか？",
+   "answer_original": "適用できません。\n\n「ライディング・デュエル！アクセラレーション！」の①については、このカードの発動のチェーンブロックの処理時に『自分フィールドに他のカードが存在しない』かどうかを確認し、存在しないのであれば、『デッキから「シンクロン」モンスター１体を手札に加える』処理を適用できます。\n\n上記の状況では、「ライディング・デュエル！アクセラレーション！」のチェーンブロックの処理時にはまだ「墓穴の指名者」はフィールドに存在しています。（カードの発動を行った通常魔法・速攻魔法・通常罠・カウンター罠は、一連のチェーン処理が全て終わるまでフィールドに残り、一連のチェーン処理後に墓地へ送られます。）したがって、適用の条件である『自分フィールドに他のカードが存在しない場合』が満たされていません。",
+   "published_or_updated_at": "2023-05-20",
+   "ruling_category": "魔法",
+   "related_card_cids": [
+    12950,
+    13619,
+    17250
+   ],
+   "related_card_ids": [
+    14558127,
+    24224830,
+    31006879
+   ],
+   "provenance": {
+    "source": "konami_ocg_database",
+    "language": "ja",
+    "authority": "official",
+    "data_type": "card_ruling",
+    "game": "ocg",
+    "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=23972&request_locale=ja",
+    "retrieved_at": "2026-09-17T13:56:25Z"
+   },
+   "content_hash": "sha256:212ed61a8c64892b6dcecc1abc4f78faa99be6a90b6459b8e2b86d1e9b1fee65",
+   "translations": {}
+  }
+ ]
+}

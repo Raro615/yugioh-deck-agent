@@ -5,6 +5,10 @@ data/constants/
 data/cache/
 data/state/
 
+# 공식 사이트에서 받은 HTML 원본 캐시. 재파싱용이라 다시 받을 수 있고 크다.
+# 정규화된 재정(data/rulings/ocg/)만 커밋한다.
+data/rulings/.cache/
+
 # 원본 룰북 PDF 는 저작물이라 저장소에 넣지 않는다.
 # 추출 결과(data/rules/documents/)만 커밋하고, 원본은 각자 두고 쓴다.
 # 받는 곳: https://www.yugioh-card.com/en/rulebook
