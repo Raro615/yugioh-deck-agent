@@ -5,6 +5,11 @@ data/constants/
 data/cache/
 data/state/
 
+# 원본 룰북 PDF 는 저작물이라 저장소에 넣지 않는다.
+# 추출 결과(data/rules/documents/)만 커밋하고, 원본은 각자 두고 쓴다.
+# 받는 곳: https://www.yugioh-card.com/en/rulebook
+data/rules/sources/
+
 # 한국어 카드 데이터는 저장소에 포함한다 (data/ko/ko-KR.json).
 # 수집 과정의 페이지 캐시만 제외한다.
 data/ko/.cache/

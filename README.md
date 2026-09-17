@@ -89,10 +89,21 @@ sources/
   official_db.py      cards.cdb 어댑터
   script_constants.py CARD_* / SET_* 상수 해석
   korean_names.py     한국어 카드명·텍스트 오버레이
+rules/
+  rule_model.py       룰북 원문 모델 (RuleDocument · RuleSection · RuleRef)
+  rule_repository.py  규칙 적재 · Rule ID 조회
+  rule_search.py      규칙 검색 (카드 검색과 별도 계층)
+  structured.py       구조화 규칙 (턴 · 존 · 체인 · 소환법)
+  concept_map.py      룰 개념 ↔ 엔진 개념 ↔ 조건 술어
+engine/
+  vocabulary.py       ScriptConstants 를 Zone/Position/Phase 로 노출
+  ids.py              InstanceId · EffectRef
+  state/              GameState · CardInstance · ZoneContainer · PlayerState
 app/
   main.py             CLI
 scripts/
   fetch_official_db.py  공식 데이터 내려받기
+  extract_rulebook.py   공식 룰북 PDF → data/rules/documents/
 ```
 
 ### 효과 블록 단위 파싱
@@ -575,6 +586,40 @@ python -m pytest tests/ -q
 
 `cards.cdb` 가 없으면 통합 테스트는 자동으로 건너뛴다.
 
+## 규칙 지식 계층 (rules/)
+
+공식 룰북에서 온 **게임 자체의 규칙**. 카드 데이터와 분리된 세 번째 지식
+원천이며, 카드 효과를 대체하지 않는다. 자세한 내용은 [`rules/README.md`](rules/README.md).
+
+```
+게임 규칙          Official Rulebook          <- rules/
+카드의 실제 처리    Lua (authoritative)
+카드 공식 문구      Official card text
+한국어 표시         Korean DB
+보조 정보           Supplementary sources
+```
+
+```python
+from rules import RuleRepository, RuleSearch
+
+search = RuleSearch(RuleRepository.load())
+for hit in search.search("체인이 어떻게 처리되는가?", limit=3):
+    print(hit.rule_id, hit.section.title, hit.section.source_reference.describe())
+# RULE-CHAIN-001 WHAT IS A CHAIN?   sd-rulebook-en-v10 p.44
+# RULE-CHAIN-007 How a Chain Works  sd-rulebook-en-v10 p.46
+```
+
+원문(`data/rules/documents/`)과 구조화 데이터(`data/rules/structured/`)를
+파일 단위로 분리한다. 구조화 항목은 전부 `rule_id` 로 원문을 가리키고,
+룰북이 말하지 않는 값은 `None` 으로 두고 `not_stated` 에 적는다.
+
+원본 PDF 는 저작물이라 저장소에 넣지 않는다. 다시 추출하려면:
+
+```bash
+pip install pymupdf
+python -m scripts.extract_rulebook path/to/SD_RuleBook_EN_10.pdf
+```
+
 ## 데이터 출처
 
 - [Project Ignis BabelCDB](https://github.com/ProjectIgnis/BabelCDB) — `cards.cdb`
@@ -582,3 +627,4 @@ python -m pytest tests/ -q
 - [코나미 공식 카드 데이터베이스](https://www.db.yugioh-card.com/yugiohdb/) — 한국어 카드명 / 카드 텍스트
 - [YGOPRODeck](https://db.ygoprodeck.com/api-guide/) — 코나미 `cid` ↔ 패스코드 매핑
 - 저장소에 포함된 `c*.lua` — 카드 스크립트 (원본 데이터, 수정하지 않는다)
+- [Yu-Gi-Oh! TCG 공식 룰북](https://www.yugioh-card.com/en/rulebook) — 게임 규칙 (Konami Digital Entertainment, Inc.)

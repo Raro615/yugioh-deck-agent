@@ -1,0 +1,467 @@
+{
+ "schema_version": 1,
+ "doc_id": "sd-rulebook-en-v10",
+ "_comment": "구조화 규칙. 모든 항목은 rules 로 원문 절을 가리킨다. 룰북이 말하지 않는 값은 null 로 두고 not_stated 에 이름을 적는다. 값을 지어내지 않는다.",
+ "phases": [
+  {
+   "name": "Draw Phase",
+   "engine_phase": "DRAW",
+   "order": 1,
+   "main_actions": ["Draw 1 Card (except for the very 1st turn of the Duel)."],
+   "other_actions": ["Activate Trap Cards, Quick-Play Spell Cards, etc."],
+   "first_turn_restriction": "The player who goes first cannot draw during the Draw Phase of their first turn.",
+   "notes": "A player with no cards left in their Deck and unable to draw loses the Duel.",
+   "rules": ["RULE-TURN-002", "RULE-TURN-001"]
+  },
+  {
+   "name": "Standby Phase",
+   "engine_phase": "STANDBY",
+   "order": 2,
+   "main_actions": ["Resolve card effects that happen in this phase"],
+   "other_actions": ["Activate Trap Cards, Quick-Play Spell Cards, etc."],
+   "rules": ["RULE-TURN-003", "RULE-TURN-001"]
+  },
+  {
+   "name": "Main Phase 1",
+   "engine_phase": "MAIN1",
+   "order": 3,
+   "main_actions": [
+    "Summon or Set a Monster",
+    "Change Your Monsters' Battle Positions",
+    "Activate a Card or Effect",
+    "Set Spell Cards and Trap Cards"
+   ],
+   "other_actions": [],
+   "not_stated": ["other_actions"],
+   "rules": ["RULE-TURN-004", "RULE-TURN-001"]
+  },
+  {
+   "name": "Battle Phase",
+   "engine_phase": "BATTLE",
+   "order": 4,
+   "main_actions": ["Battle with monsters"],
+   "other_actions": ["Activate Trap Cards and Quick-Play Spell Cards"],
+   "steps": ["Start Step", "Battle Step", "Damage Step", "End Step"],
+   "first_turn_restriction": "The player who goes first cannot conduct their Battle Phase on their first turn.",
+   "notes": "You do not have to conduct a Battle Phase every turn. The Battle Step and Damage Step are repeated each time you attack with a monster.",
+   "rules": ["RULE-TURN-005", "RULE-BATTLE-001", "RULE-BATTLE-002", "RULE-BATTLE-003", "RULE-BATTLE-004", "RULE-TURN-001"]
+  },
+  {
+   "name": "Main Phase 2",
+   "engine_phase": "MAIN2",
+   "order": 5,
+   "main_actions": [
+    "Summon or Set a monster",
+    "Change your monsters' battle positions",
+    "Activate a card or effect",
+    "Set Spell Cards and Trap Cards"
+   ],
+   "other_actions": [],
+   "not_stated": ["other_actions"],
+   "notes": "If the player already did something in Main Phase 1 that has a limit to the number of times it can be done, the player cannot do it again in Main Phase 2.",
+   "rules": ["RULE-TURN-006", "RULE-TURN-001"]
+  },
+  {
+   "name": "End Phase",
+   "engine_phase": "END",
+   "order": 6,
+   "main_actions": [
+    "Resolve card effects which activate in this phase",
+    "Discard if you have more than 6 cards in hand"
+   ],
+   "other_actions": ["Activate Trap Cards and Quick-Play Spell Cards"],
+   "rules": ["RULE-TURN-007", "RULE-TURN-001"]
+  }
+ ],
+ "zones": [
+  {
+   "name": "Main Monster Zone",
+   "engine_zone": "MZONE",
+   "capacity": 5,
+   "visibility": "public",
+   "ordering": null,
+   "default_face": null,
+   "movement": [
+    "face-up Attack Position",
+    "face-up Defense Position",
+    "face-down Defense Position"
+   ],
+   "not_stated": ["ordering", "default_face"],
+   "rules": ["RULE-ZONE-001"]
+  },
+  {
+   "name": "Spell & Trap Zone",
+   "engine_zone": "SZONE",
+   "capacity": 5,
+   "visibility": "public",
+   "ordering": null,
+   "default_face": null,
+   "movement": ["placed face-up to activate", "placed face-down"],
+   "not_stated": ["ordering", "default_face"],
+   "notes": "Pendulum Monster Cards can be activated in the leftmost and rightmost zones as Spells. This causes the zone you use to also become a Pendulum Zone for as long as the Pendulum Monster Card is there.",
+   "rules": ["RULE-ZONE-001"]
+  },
+  {
+   "name": "Graveyard",
+   "engine_zone": "GRAVE",
+   "capacity": null,
+   "visibility": "public",
+   "ordering": "fixed",
+   "default_face": "face-up",
+   "movement": ["Monster Cards sent here when destroyed", "Spell & Trap Cards sent here when used"],
+   "not_stated": ["capacity"],
+   "notes": "The order of the cards in the Graveyard should not be changed.",
+   "rules": ["RULE-ZONE-001", "RULE-MISC-002"]
+  },
+  {
+   "name": "Deck",
+   "engine_zone": "DECK",
+   "capacity": 60,
+   "visibility": "count_public",
+   "ordering": null,
+   "default_face": "face-down",
+   "movement": ["draw cards from here to add to your hand"],
+   "not_stated": ["ordering"],
+   "notes": "The Deck must be 40 to 60 cards. If a card effect requires you to reveal cards from your Deck, or look through it, shuffle it and put it back in this space afterwards.",
+   "rules": ["RULE-ZONE-001", "RULE-DECK-002", "RULE-MISC-002"]
+  },
+  {
+   "name": "Field Zone",
+   "engine_zone": "FZONE",
+   "capacity": 1,
+   "visibility": "public",
+   "ordering": null,
+   "default_face": null,
+   "movement": ["To use another Field Spell, send your previous one to the Graveyard."],
+   "counts_toward": "does not count towards the 5-card limit of your Spell & Trap Zone",
+   "not_stated": ["ordering", "default_face"],
+   "notes": "These cards may be placed face-down in the Field Zone, but are not active until flipped face-up.",
+   "rules": ["RULE-ZONE-001", "RULE-SPELLTRAP-006"]
+  },
+  {
+   "name": "Extra Deck",
+   "engine_zone": "EXTRA",
+   "capacity": 15,
+   "visibility": "owner_only",
+   "ordering": null,
+   "default_face": "face-down",
+   "movement": [
+    "Extra Deck Monsters may be Summoned to the field from here using special methods",
+    "Pendulum Monster Cards that would be sent from the field to the Graveyard are placed face-up here"
+   ],
+   "not_stated": ["ordering"],
+   "rules": ["RULE-ZONE-001", "RULE-DECK-003"]
+  },
+  {
+   "name": "Extra Monster Zone",
+   "engine_zone": null,
+   "capacity": 1,
+   "visibility": "public",
+   "ordering": null,
+   "default_face": null,
+   "movement": ["monsters Summoned to the field by special methods from the Extra Deck"],
+   "counts_toward": "does not count towards the 5-monster limit of your Main Monster Zone",
+   "not_stated": ["ordering", "default_face", "engine_zone"],
+   "notes": "Normally, each player can only use 1 of these zones. engine.vocabulary 에는 LOCATION_EMZONE 상수가 있으나 Phase 1 의 PLAYER_ZONES 에는 아직 없다.",
+   "rules": ["RULE-ZONE-001", "RULE-MONSTER-004"]
+  },
+  {
+   "name": "Pendulum Zone",
+   "engine_zone": "PZONE",
+   "capacity": 2,
+   "visibility": "public",
+   "ordering": null,
+   "default_face": "face-up",
+   "movement": ["activate Pendulum Monster Cards as Spell Cards in your leftmost and rightmost Spell & Trap Zones"],
+   "not_stated": ["ordering"],
+   "rules": ["RULE-ZONE-001", "RULE-SUMMON-003"]
+  },
+  {
+   "name": "Banished",
+   "engine_zone": "REMOVED",
+   "capacity": null,
+   "visibility": null,
+   "ordering": null,
+   "default_face": null,
+   "movement": ["a card which is banished is separated from the field instead of being sent to the Graveyard"],
+   "not_stated": ["capacity", "visibility", "ordering", "default_face"],
+   "notes": "룰북은 제외 존의 공개 여부나 순서를 규정하지 않는다.",
+   "rules": ["RULE-TERM-002"]
+  },
+  {
+   "name": "Hand",
+   "engine_zone": "HAND",
+   "capacity": 6,
+   "visibility": "count_public",
+   "ordering": null,
+   "default_face": null,
+   "movement": ["draw 5 cards from the top of your Deck at the start of the Duel"],
+   "not_stated": ["ordering", "default_face"],
+   "notes": "capacity 6 은 엔드 페이즈 종료 시점의 상한이다 — 그 외 시점의 상한은 룰북에 없다. 장수만 공개이고 내용은 공개가 아니다.",
+   "rules": ["RULE-TURN-007", "RULE-MISC-002", "RULE-GAME-005"]
+  }
+ ],
+ "chain": {
+  "activation_order": "The first effect activated is Chain Link 1. The next effect is Chain Link 2, and so on.",
+  "resolution_order": "Once the Chain is completed, the outcome is resolved starting with the most recent card to be activated at the top of the Chain and proceeding down to Chain Link 1.",
+  "response_requirement": "You can only respond with an effect if it is Spell Speed 2 or higher, and has an equal or greater Spell Speed than the effect on the Chain Link before it.",
+  "cannot_chain_to": [
+   "Summoning a monster",
+   "Tributing",
+   "changing a monster’s battle position",
+   "paying costs"
+  ],
+  "simultaneous_order": [
+   "turn player's mandatory effects, in any order",
+   "opponent's mandatory effects, in any order",
+   "turn player's optional effects, in any order",
+   "opponent's optional effects, in any order"
+  ],
+  "notes": "You can only create a Chain by responding to the activation of a card or effect.",
+  "rules": ["RULE-CHAIN-001", "RULE-CHAIN-007", "RULE-CHAIN-011", "RULE-CHAIN-010"],
+  "spell_speeds": [
+   {
+    "speed": 1,
+    "card_types": [
+     "Spells (Normal, Equip, Continuous, Field, Ritual)",
+     "Effect Monster’s effects (Ignition, Trigger, and Flip)"
+    ],
+    "can_respond_to": [],
+    "notes": "These cards cannot be activated in response to any other effects. Typically, these effects cannot be Chain Link 2 or higher, unless multiple Spell Speed 1 effects are activated simultaneously.",
+    "rules": ["RULE-CHAIN-004", "RULE-CHAIN-003"]
+   },
+   {
+    "speed": 2,
+    "card_types": [
+     "Traps (Normal, Continuous)",
+     "Quick-Play Spells",
+     "Effect Monster’s Quick Effects"
+    ],
+    "can_respond_to": [1, 2],
+    "notes": "can typically be activated during any phase.",
+    "rules": ["RULE-CHAIN-005", "RULE-CHAIN-003"]
+   },
+   {
+    "speed": 3,
+    "card_types": ["Counter Trap"],
+    "can_respond_to": [1, 2, 3],
+    "notes": "Only another Spell Speed 3 card may be used to respond to these cards.",
+    "rules": ["RULE-CHAIN-006", "RULE-CHAIN-003"]
+   }
+  ]
+ },
+ "summons": [
+  {
+   "summon_type": "Normal Summon",
+   "engine_summon_type": "NORMAL",
+   "is_special_summon": false,
+   "once_per_turn": true,
+   "procedure": ["Play a Monster Card from your hand onto the field in face-up Attack Position."],
+   "restrictions": [
+    "You can only Normal Summon OR Normal Set once per turn.",
+    "All Normal Monsters, and most Effect Monsters (unless they have a specific restriction), can be Summoned in this way."
+   ],
+   "default_positions": ["face-up Attack Position"],
+   "rules": ["RULE-SUMMON-009", "RULE-SUMMON-008"]
+  },
+  {
+   "summon_type": "Normal Set",
+   "engine_summon_type": null,
+   "is_special_summon": false,
+   "once_per_turn": true,
+   "procedure": ["Play a Monster Card from your hand in face-down Defense Position."],
+   "restrictions": [
+    "A monster Normal Set on the field is NOT considered Summoned.",
+    "You cannot play a monster from your hand onto the field in face-up Defense Position."
+   ],
+   "default_positions": ["face-down Defense Position"],
+   "not_stated": ["engine_summon_type"],
+   "rules": ["RULE-SUMMON-010", "RULE-SUMMON-008"]
+  },
+  {
+   "summon_type": "Tribute Summon",
+   "engine_summon_type": "TRIBUTE",
+   "is_special_summon": false,
+   "once_per_turn": true,
+   "procedure": [
+    "For monsters that are Level 5 or higher, you must Tribute at least 1 monster you control before the Normal Summon/Set.",
+    "Monsters that are Level 5 or 6 require 1 Tribute.",
+    "Monsters that are Level 7 or higher require 2 Tributes."
+   ],
+   "restrictions": [
+    "If you Tribute Summon in face-down Defense Position, it is called a Tribute Set, and a monster Tribute Set on the field is NOT considered Summoned."
+   ],
+   "rules": ["RULE-SUMMON-011", "RULE-SUMMON-008"]
+  },
+  {
+   "summon_type": "Flip Summon",
+   "engine_summon_type": "FLIP",
+   "is_special_summon": false,
+   "once_per_turn": false,
+   "procedure": ["Change a face-down Defense Position monster into face-up Attack Position, without using a card effect."],
+   "restrictions": [
+    "When you Flip Summon, you cannot change the monster to face-up Defense Position, only to face-up Attack Position.",
+    "A Monster Card cannot be Flip Summoned in the same turn that it was Set onto the field."
+   ],
+   "default_positions": ["face-up Attack Position"],
+   "rules": ["RULE-SUMMON-012", "RULE-SUMMON-008"]
+  },
+  {
+   "summon_type": "Special Summon",
+   "engine_summon_type": "SPECIAL",
+   "is_special_summon": true,
+   "once_per_turn": false,
+   "procedure": ["Some monsters can be played onto the field without being Normal Summoned or Set."],
+   "restrictions": [
+    "You cannot use a card effect to Special Summon those monsters from your hand, Deck, or the Graveyard unless it was properly Special Summoned first."
+   ],
+   "default_positions": ["face-up Attack Position", "face-up Defense Position"],
+   "notes": "Pendulum Summons, Xyz Summons, Synchro Summons, Fusion Summons and Ritual Summons are all Special Summons.",
+   "rules": ["RULE-SUMMON-013", "RULE-SUMMON-014", "RULE-SUMMON-008"]
+  },
+  {
+   "summon_type": "Link Summon",
+   "engine_summon_type": "LINK",
+   "is_special_summon": true,
+   "once_per_turn": false,
+   "procedure": [
+    "Check the materials of the Link Monster you want to Summon.",
+    "During your Main Phase, declare that you are Link Summoning, send a number of face-up monsters from your field to the Graveyard equal to the Link Rating of that Link Monster.",
+    "Place the Link Monster from your Extra Deck in the Extra Monster Zone, or one of your Main Monster Zones that another Link Monster is pointing to."
+   ],
+   "restrictions": [
+    "Link Monsters have no DEF and cannot ever be in Defense Position.",
+    "The materials must match the material requirements listed in the monster’s recipe."
+   ],
+   "rules": ["RULE-SUMMON-001", "RULE-SUMMON-002", "RULE-MONSTER-005"]
+  },
+  {
+   "summon_type": "Xyz Summon",
+   "engine_summon_type": "XYZ",
+   "is_special_summon": true,
+   "once_per_turn": false,
+   "procedure": [
+    "Choose an Xyz Monster from your Extra Deck that you have the right Xyz Materials for.",
+    "During your Main Phase, declare that you are Xyz Summoning and stack the Xyz Materials on top of each other.",
+    "Take the Xyz Monster from your Extra Deck and put it on top of the stacked Xyz Materials in the Extra Monster Zone in face-up Attack or Defense Position."
+   ],
+   "restrictions": ["Xyz Materials must be face-up before you can use them.", "Tokens cannot be used as an Xyz Material."],
+   "default_positions": ["face-up Attack Position", "face-up Defense Position"],
+   "rules": ["RULE-SUMMON-004", "RULE-MONSTER-007", "RULE-MONSTER-011"]
+  },
+  {
+   "summon_type": "Synchro Summon",
+   "engine_summon_type": "SYNCHRO",
+   "is_special_summon": true,
+   "once_per_turn": false,
+   "procedure": [
+    "During your Main Phase, declare a Synchro Summon when the combined total Levels of 1 face-up Tuner monster and any number of other face-up monsters you control are equal to the Level of the Synchro Monster.",
+    "Send the face-up Synchro Materials from your field to the Graveyard.",
+    "Take the Synchro Monster from your Extra Deck and play it in the Extra Monster Zone in face-up Attack or Defense Position."
+   ],
+   "restrictions": ["You need 1 Tuner.", "The sum of the materials' Levels must be exactly equal to the Level of the Synchro Monster."],
+   "default_positions": ["face-up Attack Position", "face-up Defense Position"],
+   "rules": ["RULE-SUMMON-005", "RULE-MONSTER-008"]
+  },
+  {
+   "summon_type": "Fusion Summon",
+   "engine_summon_type": "FUSION",
+   "is_special_summon": true,
+   "once_per_turn": false,
+   "procedure": [
+    "Activate your Summoning card by placing it in your Spell & Trap Zone.",
+    "Send the Fusion Materials to the Graveyard, then take the appropriate Fusion Monster from your Extra Deck and play it in the Extra Monster Zone in either face-up Attack or Defense Position.",
+    "Finally, place your Summoning card in the Graveyard."
+   ],
+   "restrictions": ["You must have all the Fusion Materials listed on the Fusion Monster Card, in the places specified on your Summoning card."],
+   "default_positions": ["face-up Attack Position", "face-up Defense Position"],
+   "rules": ["RULE-SUMMON-006", "RULE-MONSTER-009"]
+  },
+  {
+   "summon_type": "Ritual Summon",
+   "engine_summon_type": "RITUAL",
+   "is_special_summon": true,
+   "once_per_turn": false,
+   "procedure": [
+    "Activate the Ritual Spell Card, placing it in the Spell & Trap Zone.",
+    "Tribute monsters by sending them from your hand or the field to the Graveyard.",
+    "Play the Ritual Monster Card in your Main Monster Zone in either face-up Attack or Defense Position, then place the Ritual Spell Card in the Graveyard."
+   ],
+   "restrictions": ["Ritual Monster Cards are placed in the Main Deck and cannot be Summoned unless you have all the proper cards together in your hand or on the field."],
+   "default_positions": ["face-up Attack Position", "face-up Defense Position"],
+   "rules": ["RULE-SUMMON-007", "RULE-MONSTER-010"]
+  },
+  {
+   "summon_type": "Pendulum Summon",
+   "engine_summon_type": "PENDULUM",
+   "is_special_summon": true,
+   "once_per_turn": true,
+   "procedure": [
+    "During your Main Phase, activate Pendulum Monster Cards as Spell Cards in your leftmost and rightmost Spell & Trap Zones.",
+    "After you have one in each Pendulum Zone, once per turn during your Main Phase, declare that you're Pendulum Summoning.",
+    "Check the Pendulum Scales, then Special Summon as many monsters as you want from your hand and as many face-up Pendulum Monsters from your Extra Deck, whose Levels are in between those Pendulum Scales."
+   ],
+   "restrictions": ["Monsters Pendulum Summoned from the Extra Deck must be Summoned to the Extra Monster Zone or your Main Monster Zone pointed to by a Link Monster."],
+   "rules": ["RULE-SUMMON-003", "RULE-MONSTER-006"]
+  }
+ ],
+ "effect_types": [
+  {
+   "name": "Continuous Effect",
+   "spell_speed": 1,
+   "activation_timing": null,
+   "has_activation": false,
+   "notes": "This effect is active while the Effect Monster Card is face-up on the field. There is no trigger for its activation.",
+   "rules": ["RULE-EFFECT-001", "RULE-CHAIN-004"]
+  },
+  {
+   "name": "Ignition Effect",
+   "spell_speed": 1,
+   "activation_timing": "your Main Phase",
+   "has_activation": true,
+   "notes": "You use this type of effect just by declaring its activation during your Main Phase.",
+   "rules": ["RULE-EFFECT-002", "RULE-CHAIN-004"]
+  },
+  {
+   "name": "Quick Effect",
+   "spell_speed": 2,
+   "activation_timing": null,
+   "has_activation": true,
+   "not_stated": ["activation_timing"],
+   "notes": "These are special monster effects that you can activate even during your opponent’s turn. 룰북은 구체적 발동 시점을 카드별로 맡긴다.",
+   "rules": ["RULE-EFFECT-003", "RULE-CHAIN-005"]
+  },
+  {
+   "name": "Trigger Effect",
+   "spell_speed": 1,
+   "activation_timing": "specific times, such as during the Standby Phase or when this monster is destroyed",
+   "has_activation": true,
+   "rules": ["RULE-EFFECT-004", "RULE-CHAIN-004"]
+  },
+  {
+   "name": "Flip Effect",
+   "spell_speed": 1,
+   "activation_timing": "when a face-down card is flipped face-up",
+   "has_activation": true,
+   "notes": "Flip effect is a part of the Trigger Effect. This can happen when it is Flip Summoned, attacked while face-down, or flipped face-up by a card effect.",
+   "rules": ["RULE-EFFECT-005", "RULE-CHAIN-004"]
+  }
+ ],
+ "win_conditions": [
+  {
+   "condition": "Reduce your opponent’s LP to 0.",
+   "applies_to": "opponent",
+   "rules": ["RULE-GAME-004"]
+  },
+  {
+   "condition": "Your opponent is unable to draw a card when they are supposed to draw.",
+   "applies_to": "opponent",
+   "rules": ["RULE-GAME-004", "RULE-TURN-002"]
+  },
+  {
+   "condition": "Win with a card’s special effect.",
+   "applies_to": "card_effect",
+   "rules": ["RULE-GAME-004"]
+  }
+ ]
+}

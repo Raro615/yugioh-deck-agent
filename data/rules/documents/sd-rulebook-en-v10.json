@@ -1,0 +1,2803 @@
+{
+ "schema_version": 1,
+ "document": {
+  "doc_id": "sd-rulebook-en-v10",
+  "title": "Yu-Gi-Oh! TRADING CARD GAME Official Rulebook",
+  "source": "Konami Digital Entertainment, Inc. — Starter Deck Rulebook (English)",
+  "version": "10",
+  "language": "en",
+  "retrieved_at": "2026-09-17T13:06:15Z",
+  "document_hash": "sha256:82be14641b2b7940467034a5b14b0d4037835831866537738d34fd9df5a0f444",
+  "source_file": "fe449aa2-SD_RuleBook_EN_10.pdf",
+  "extractor": "scripts/extract_rulebook.py",
+  "printed_page_range": [
+   1,
+   55
+  ],
+  "section_count": 117
+ },
+ "sections": [
+  {
+   "rule_id": "RULE-GAME-001",
+   "title": "ABOUT THE GAME",
+   "title_source": "heading",
+   "anchor": "ABOUT THE GAME",
+   "category": "GAME",
+   "category_title": "게임 목적 · 승패 · 듀얼 준비",
+   "chapter": 1,
+   "chapter_title": "Getting Started",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     1,
+     2
+    ],
+    "pdf_pages": [
+     3,
+     4
+    ]
+   },
+   "text": "ABOUT THE GAME\nCREATE YOUR OWN DECK\nWith thousands of cards to choose from, you can create and\ncustomize your own Deck with your favorite cards. Every Duelist\nwill have their own unique Deck, completely different from every\nother Duelist’s Deck, which makes it really exciting to play!\nBATTLE WITH FANTASTIC MONSTERS & GREAT COMBOS\nEven if a card does not have enough power on its own,\nit may become powerful when combined\nwith other cards. It’s fun to collect all the\ndifferent cards available and create your\nown combos, then unleash them in a Duel.\nPOWER UP YOUR DECK WITH BOOSTER PACKS\nBooster Packs are released every few months,\nbringing new cards and new combos to add new\nstrength to your Deck. Duels evolve every time\na new Booster Pack is released, keeping your\nDuels cool and exciting.\n1\nGetting Started"
+  },
+  {
+   "rule_id": "RULE-DECK-001",
+   "title": "Things you need to Duel",
+   "title_source": "heading",
+   "anchor": "Things you need to Duel",
+   "category": "DECK",
+   "category_title": "덱 구성과 매수 제한",
+   "chapter": 1,
+   "chapter_title": "Getting Started",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-DECK-002",
+    "RULE-DECK-003",
+    "RULE-DECK-004"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     2
+    ],
+    "pdf_pages": [
+     4
+    ]
+   },
+   "text": "Things you need to Duel\nDeck ................................................(40 to 60 cards)"
+  },
+  {
+   "rule_id": "RULE-DECK-002",
+   "title": "Deck (40 to 60 cards)",
+   "title_source": "editorial",
+   "anchor": "Assemble your favorite cards into a Deck that follows these rules:",
+   "category": "DECK",
+   "category_title": "덱 구성과 매수 제한",
+   "chapter": 1,
+   "chapter_title": "Getting Started",
+   "level": 2,
+   "parent": "RULE-DECK-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     2
+    ],
+    "pdf_pages": [
+     4
+    ]
+   },
+   "text": "Assemble your favorite cards into a Deck that follows these rules:\nlThe Deck must be 40 to 60 cards.\nlYou can only have up to 3 copies of the same card in your Deck,\nExtra Deck and Side Deck combined.\nAlso, some cards are Forbidden, Limited or Semi-Limited in ofﬁcial\ntournaments. (See page 45 for details.)\nTry to keep your Deck close to the 40-card minimum. Having a Deck\nwith too many cards makes it hard to draw your best cards when you\nneed them. This Deck is called your Main Deck.\nExtra Deck ..........................................(0 to 15 cards)"
+  },
+  {
+   "rule_id": "RULE-DECK-003",
+   "title": "Extra Deck (0 to 15 cards)",
+   "title_source": "editorial",
+   "anchor": "This Deck consists of Xyz Monsters, Synchro Monsters and Fusion",
+   "category": "DECK",
+   "category_title": "덱 구성과 매수 제한",
+   "chapter": 1,
+   "chapter_title": "Getting Started",
+   "level": 2,
+   "parent": "RULE-DECK-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     2
+    ],
+    "pdf_pages": [
+     4
+    ]
+   },
+   "text": "This Deck consists of Xyz Monsters, Synchro Monsters and Fusion\nMonsters, which can be used during the game if you meet certain\nrequirements. The rules for Extra Decks are:\nlYou can have up to 15 cards in the Extra Deck.\nlThe Extra Deck can contain Xyz Monsters, Synchro Monsters and\nFusion Monsters, in any combination.\nlThese cards are not counted towards the 40-card minimum limit \\\nof your Main Deck.\nSide Deck ...........................................(0 to 15 cards)"
+  },
+  {
+   "rule_id": "RULE-DECK-004",
+   "title": "Side Deck (0 to 15 cards)",
+   "title_source": "editorial",
+   "anchor": "This is a separate Deck of cards you can use to change your Deck",
+   "category": "DECK",
+   "category_title": "덱 구성과 매수 제한",
+   "chapter": 1,
+   "chapter_title": "Getting Started",
+   "level": 2,
+   "parent": "RULE-DECK-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     2
+    ],
+    "pdf_pages": [
+     4
+    ]
+   },
+   "text": "This is a separate Deck of cards you can use to change your Deck\nduring a Match. After each Duel in a Match, you can swap any card\nfrom your Side Deck with a card from your Deck and/or Extra Deck to\ncustomize your strategy against your opponent. The number of cards in\nyour Side Decks must not exceed 15. The number of cards in your Side\nDeck before and after you swap any cards must be exactly the same."
+  },
+  {
+   "rule_id": "RULE-MISC-001",
+   "title": "Additional items you may need",
+   "title_source": "heading",
+   "anchor": "Additional items you may need",
+   "category": "MISC",
+   "category_title": "그 밖의 규칙",
+   "chapter": 1,
+   "chapter_title": "Getting Started",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     3
+    ],
+    "pdf_pages": [
+     4
+    ]
+   },
+   "text": "Additional items you may need\nCoin\nSome cards require a coin toss. If you\nplay with these, have a coin ready to\nﬂip.\nCounters\nSome cards will require markers\n(called counters) to keep track of\nthings like the number of turns, or a\ncard’s power level. You can use small\nobjects like glass beads, paper clips,\nor pennies for the counters, which are\nthen placed on these face-up cards.\nItems which can help during a Duel\nCalculator\nLP changes quickly during a Duel. It’s\nsmart to use a calculator to keep track\nof your LP. During important Duels,\nyou should track your LP on paper as\nwell to be extra-careful.\nDice\nJust like the coin, there are some\ncards that need a die roll. If you play\nwith these, have a standard die ready\nwith numbers 1 through 6.\nMonster Tokens\nTokens are used to represent\nmonsters that can be created by card\neffects. Any object used for a Token\nneeds to have two distinct ways to\nplace it that can clearly indicate the\nmonster’s battle position. (See page\n45 for details.)\nCard Sleeves\nPlastic sleeves can prevent your cards\nfrom getting bent or scratched. If you\nuse card sleeves, they all have to be\nthe same so your cards aren’t marked."
+  },
+  {
+   "rule_id": "RULE-ZONE-001",
+   "title": "THE GAME MAT",
+   "title_source": "heading",
+   "anchor": "THE GAME MAT",
+   "category": "ZONE",
+   "category_title": "필드와 존",
+   "chapter": 1,
+   "chapter_title": "Getting Started",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     4,
+     5,
+     6
+    ],
+    "pdf_pages": [
+     5,
+     6
+    ]
+   },
+   "text": "THE GAME MAT\n5\nThe Game Mat helps you organize your cards\nduring a Duel. When you use your cards you place\nthem on the Game Mat. Different kinds of cards\nare placed in different Zones.\nEach Duelist needs their own Game Mat; place\nthem together while Dueling. This combined space\n6\nis known as “the ﬁeld.” The Game Mat contained\nin this product is just for your half of the ﬁeld.\nThe cards you “control” are the cards on your side\nof the ﬁeld.\nYou can also Duel without using the Game Mat as\nlong as you remember where to place the cards.\nThis is where you put your monsters when they’re played.\n1\nYou can have up to 5 cards here. There are 3 ways to\nposition your Monster Cards: face-up Attack Position,\nMain Monster\nface-up Defense Position, and face-down Defense Position.\nPlace the card upright for Attack Position, and sideways\nZone\nfor Defense Position.\nThis is where you put Spell & Trap Cards. You can have up to\n2\n5 cards here. You place them here face-up to activate them,\nor place them face-down. Pendulum Monster Cards can be\nactivated in the leftmost and rightmost zones as Spells. This\nSpell & Trap\ncauses the zone you use to also become a Pendulum Zone\nZone\nfor as long as the Pendulum Monster Card is there. (See\nPendulum Zone\npage 23 for details on Pendulum Monster Cards.)\nWhen Monster Cards are destroyed, and when Spell &\n3\nTrap Cards are used, they’re sent face-up to this space.\nThe contents of both players’ Graveyards are public\nknowledge, and your opponent can look through yours at\nGraveyard\nany time during the Duel. The order of the cards in the\nGraveyard should not be changed. Graveyard is shortened\n(GY)\nin the card text to “GY”.\n7\n4\nDeck\n5\nField Zone\n6\nExtra Deck\n7\nExtra Monster\nZone\n3\n1\n4\n2\nYour Deck is placed face-down in this space. You draw cards\nfrom here to add to your hand. If a card effect requires you\nto reveal cards from your Deck, or look through it, shufﬂe\nit and put it back in this space afterwards.\nSpecial Spell Cards called Field Spell Cards are played here.\nEach player can have 1 Field Spell Card on their own side\nof the ﬁeld. To use another Field Spell, send your previous\none to the Graveyard. Field Spell Cards do not count\ntowards the 5-card limit of your Spell & Trap Zone.\nPlace your Extra Deck face-down in this space. You can\nlook at the cards in your own Extra Deck during the game.\nDuring a Duel, Extra Deck Monsters may be Summoned\nto the ﬁeld from here using special methods. Pendulum\nMonster Cards that would be sent from the ﬁeld to the\nGraveyard are placed face-up here.\nThis is where you put your monsters that are Summoned to\nthe ﬁeld by special methods from the Extra Deck, like Link\nMonsters and Fusion Monsters. Normally, each player can\nonly use 1 of these zones. A monster placed in this zone\ndoes not count towards the 5-monster limit of your Main\nMonster Zone.\n2\nGame Cards\nMonster Cards"
+  },
+  {
+   "rule_id": "RULE-CARD-001",
+   "title": "Monster Cards - How to Read a Card",
+   "title_source": "editorial",
+   "anchor": "HOW TO READ A CARD",
+   "category": "CARD",
+   "category_title": "카드 읽는 법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     6,
+     7
+    ],
+    "pdf_pages": [
+     6
+    ]
+   },
+   "text": "HOW TO READ A CARD\n1\nCard Name\n7\nCard\nDescription\n4\nType\n1\nCard Name\nThis is the card’s name. When a\ncard name is mentioned in card\ntext it appears in quotations. If\ncards have the same name, they\nare considered to be the same\ncard.\n3\nAttribute\n2\nLevel\n5\nCard Number\n6\nATK (Attack Points)\nDEF (Defense Points)\n2\nLevel\nCount the number of stars here\nto ﬁnd out the monster’s Level.\nFor Xyz Monsters, the number\nof stars is the Rank of the\nmonster, and is on left.\n3\nAttribute\nDARK EARTH\nFIRE\nEvery monster has an Attribute.\nThis Attribute is sometimes\nimportant for card effects.\nLIGHT WATER WIND\n4\nType\nMonsters are divided into various Types. Some monsters with\nspeciﬁc abilities will have additional information here too, next to\ntheir Type.\n5\nCard Number\nA card’s identiﬁcation number is found here. This number is useful\nfor collecting, and for sorting your collection.\n6\nATK (Attack Points) / DEF (Defense Points)\nATK is a monster’s Attack Points and DEF is a monster’s Defense\nPoints. High Attack and Defense Points are good when battling!\n7\nCard Description\nCard effects are written here, describing the monster’s special\nabilities and how to use them. Normally, the effects of monsters\ncannot be used while they are Set face-down on the ﬁeld. Yellow\nNormal Monster Cards do not have effects, and have a description\nof them written here that does not affect the game."
+  },
+  {
+   "rule_id": "RULE-MONSTER-001",
+   "title": "WHAT IS A MONSTER CARD?",
+   "title_source": "heading",
+   "anchor": "WHAT IS A MONSTER CARD?",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-MONSTER-002",
+    "RULE-MONSTER-003",
+    "RULE-EFFECT-001",
+    "RULE-EFFECT-002",
+    "RULE-EFFECT-003",
+    "RULE-EFFECT-004",
+    "RULE-EFFECT-005"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     8
+    ],
+    "pdf_pages": [
+     7
+    ]
+   },
+   "text": "WHAT IS A MONSTER CARD?\nMonster Cards are used to battle and defeat your opponent. Battles\nbetween Monster Cards are the foundation of any Duel.\nThere are many kinds of Monster Cards. This game is more than a\nsimple slugfest, so monsters with high Attack and Defense Points will\nnot be enough. There are also monsters with strong special effects\neven though their ATK and DEF points are low. Therefore, your\nsuccess in a Duel depends on how skillfully you can make use of the\ndifferent kinds of cards. Let’s take a look at the different kinds of\nmonsters."
+  },
+  {
+   "rule_id": "RULE-MONSTER-002",
+   "title": "Normal Monsters",
+   "title_source": "editorial",
+   "anchor": "<<<Normal Monsters",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     8
+    ],
+    "pdf_pages": [
+     7
+    ]
+   },
+   "text": "<<<Normal Monsters\nThese are basic Monster Cards\nwithout special abilities. Many\nNormal Monsters have higher\nAttack Points and Defense\nPoints than Effect Monsters,\ninstead of having special\nabilities."
+  },
+  {
+   "rule_id": "RULE-MONSTER-003",
+   "title": "Effect Monsters",
+   "title_source": "editorial",
+   "anchor": "<<<Effect Monsters",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     9
+    ],
+    "pdf_pages": [
+     7
+    ]
+   },
+   "text": "<<<Effect Monsters\nAn Effect Monster is a monster\nthat has special abilities.\nThe effects of these monsters\nare split into four categories:\n• Continuous Effect\n• Ignition Effect\n• Quick Effect\n• Trigger Effect (including Flip)"
+  },
+  {
+   "rule_id": "RULE-EFFECT-001",
+   "title": "Continuous Effect",
+   "title_source": "heading",
+   "anchor": "Continuous Effect",
+   "category": "EFFECT",
+   "category_title": "효과 분류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     9
+    ],
+    "pdf_pages": [
+     7
+    ]
+   },
+   "text": "Continuous Effect\nThis effect is active while the Effect Monster Card is face-up on\nthe ﬁeld. The effect starts when the face-up monster appears\non the ﬁeld, and ends once that monster is gone or is no longer\nface-up; there is no trigger for its activation. These monsters\nare most useful if you have a strategy to protect them while\nthey are on the ﬁeld.\nMonsters with 2000 or less ATK cannot declare\nExample\nan attack."
+  },
+  {
+   "rule_id": "RULE-EFFECT-002",
+   "title": "Ignition Effect",
+   "title_source": "heading",
+   "anchor": "Ignition Effect",
+   "category": "EFFECT",
+   "category_title": "효과 분류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     10
+    ],
+    "pdf_pages": [
+     8
+    ]
+   },
+   "text": "Ignition Effect\nYou use this type of effect just by declaring its activation during\nyour Main Phase. (See Turn Structure, page 30.) There are some\nIgnition Effects that have a cost to activate, like discarding cards\nfrom your hand, Tributing a monster, or paying LP. Because you\ncan choose when to activate this type of effect, it’s easy to\ncreate combos with them.\nYou can Tribute this card, then target 1 monster\nExample\non the ﬁeld; destroy that target."
+  },
+  {
+   "rule_id": "RULE-EFFECT-003",
+   "title": "Quick Effect",
+   "title_source": "heading",
+   "anchor": "Quick Effect",
+   "category": "EFFECT",
+   "category_title": "효과 분류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     10
+    ],
+    "pdf_pages": [
+     8
+    ]
+   },
+   "text": "Quick Effect\nThese are special monster effects that you can activate even\nduring your opponent’s turn. These types of effects have a\nSpell Speed of 2, even though all other monster effects have a\nSpell Speed of 1. (See Spell Speed, page 41.) Since it’s difﬁcult for\nyour opponent to predict these cards, they can give them an\nunexpected surprise.\n(Formerly called Multi-Trigger Effects.)\nWhen an effect is activated (Quick Effect):\nExample\nYou can target 1 card in your Graveyard; Special Summon it."
+  },
+  {
+   "rule_id": "RULE-EFFECT-004",
+   "title": "Trigger Effect",
+   "title_source": "heading",
+   "anchor": "Trigger Effect",
+   "category": "EFFECT",
+   "category_title": "효과 분류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     11
+    ],
+    "pdf_pages": [
+     8
+    ]
+   },
+   "text": "Trigger Effect\nThese effects are activated at speciﬁc times, such as “during\nthe Standby Phase” or “when this monster is destroyed”. These\ncards can make for some great combos, but it’s easier for your\nopponent to predict what will happen, so they might try to stop\nyou.\nWhen this card is destroyed by battle and sent to the\nExample\nGraveyard: Target 1 card on the ﬁeld; destroy that target."
+  },
+  {
+   "rule_id": "RULE-EFFECT-005",
+   "title": "Flip Effect",
+   "title_source": "heading",
+   "anchor": "Flip Effect",
+   "category": "EFFECT",
+   "category_title": "효과 분류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     11
+    ],
+    "pdf_pages": [
+     8
+    ]
+   },
+   "text": "Flip Effect\nFlip effect is a part of the Trigger Effect.\nThis is an effect that is activated when a face-down card is\nﬂipped face-up. This can happen when it is Flip Summoned,\nattacked while face-down, or ﬂipped face-up by a card effect.\nThese effects start with the word “FLIP:” on the card. When\nyou have a face-down monster, your opponent must be wary\nbecause they don’t know if it has a Flip effect or not.\nFLIP: Draw 1 card.\nExample"
+  },
+  {
+   "rule_id": "RULE-MONSTER-004",
+   "title": "LINK MONSTERS",
+   "title_source": "heading",
+   "anchor": "LINK MONSTERS",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-SUMMON-001",
+    "RULE-SUMMON-002",
+    "RULE-MONSTER-005"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     12
+    ],
+    "pdf_pages": [
+     9
+    ]
+   },
+   "text": "LINK MONSTERS\nA Link Monster is a new kind of\nmonster with the ability to increase\nthe number of monsters you can\nSummon from your Extra Deck.\nIn addition to the 1 Extra Monster\nZone you can usually use, you can\nalso Summon monsters from the\nExtra Deck to any of your Main\nMonster Zones that has a Link\nMonster’s red arrow pointing to it.\nLink Arrows - A Link Monster can apply\nits effects on cards or zones that its lit-up,\nred Link Arrows point to. When a Link\nMonster’s red arrow points to a monster,\nthose monsters are “linked”. When two\nLink Monsters have red arrows that point\nat each other, they are “co-linked”.\nLink Materials - These are the Link\nMaterials you need to Summon this\nMonster. Use this “recipe” printed here\nto Link Summon this monster.\nLINK Rating - This is the number of Link\nArrows that monster has and the number\nof monsters needed to Summon it."
+  },
+  {
+   "rule_id": "RULE-SUMMON-001",
+   "title": "HOW TO LINK SUMMON",
+   "title_source": "heading",
+   "anchor": "HOW TO LINK SUMMON",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-004",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     13
+    ],
+    "pdf_pages": [
+     9
+    ]
+   },
+   "text": "HOW TO LINK SUMMON\n1\nCheck the materials of the Link Monster you want to Summon.\nDuring your Main Phase, declare that you are Link Summoning,\nsend a number of face-up monsters from your ﬁeld to the\n2\nGraveyard equal to the Link Rating of that Link Monster. They\nmust also match the material requirements listed in the monster’s\n“recipe” written on the card.\n3\nPlace the Link Monster from your Extra Deck in the Extra Monster\nZone, or one of your Main Monster Zones that another Link\nMonster is pointing to.\nIf 2 Extra Monster Zones are available, you can choose either one to\nSummon your monster.\nIf there is a Link Monster already on the ﬁeld, you can Link Summon a\nmonster in one of your zones it points to."
+  },
+  {
+   "rule_id": "RULE-SUMMON-002",
+   "title": "LINK MONSTER BONUSES",
+   "title_source": "heading",
+   "anchor": "LINK MONSTER BONUSES",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-004",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     14
+    ],
+    "pdf_pages": [
+     10
+    ]
+   },
+   "text": "LINK MONSTER BONUSES\nSpecial Summon to\nthe Main Monster Zones\nMonsters Summoned from the\nExtra Deck normally have to go in\nthe Extra Monster Zone. But Link\nMonsters open up more zones\nSpecial Summon monsters from\nfor you to use, because every\nyour Extra Deck in these zones!\nMain Monster Zone that a Link\nMonster points to can also be\nused to Summon monsters from your Extra Deck. Monsters that\nstarted in the Extra Deck, but later end up in the Graveyard (or\nare banished) and are Summoned from there, also go in the Main\nMonster Zones (and don’t need a Link Monster to point to them).\nLink Monsters already on the ﬁeld make great material!\nNormally, 1 monster equals 1 Link Material. But when you use a\nLink Monster as material for another Link Summon, you can count\nit as either 1 monster, or as a number of monsters equal to its\nLink Rating. For example, if you want to Summon a Link 3 monster\nthat requires 2 or more materials in its “recipe”, you can either\nuse 3 monsters (each counts as 1 material) or else a Link 2 Link\nMonster (counts as 1 or 2 materials) and a second monster (counts\nas 1 material).\nOR"
+  },
+  {
+   "rule_id": "RULE-MONSTER-005",
+   "title": "MORE ABOUT LINK MONSTERS",
+   "title_source": "heading",
+   "anchor": "MORE ABOUT LINK MONSTERS",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-004",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     15
+    ],
+    "pdf_pages": [
+     10
+    ]
+   },
+   "text": "MORE ABOUT LINK MONSTERS\nLink Monsters have no DEF and cannot ever be in Defense Position.\nThey can’t be changed to Defense Position by a card effect. They\ncan’t even be ﬂipped into face-down Defense Position.\nIf your opponent has a monster in the Extra Monster Zone, it’s still\na monster they control so you can’t attack directly. You have to\nbattle and destroy all their monsters ﬁrst, including the one in the\nExtra Monster Zone.\nIf you take control of your opponent’s monster in the Extra Monster\nZone, it moves to your Main Monster Zone. When it goes back to\nyour opponent, it goes to their Main Monster Zone, not the Extra\nMonster Zone.\nAs long as the materials meet the requirements of the Link Monster\nyou want to Summon, you can use a Token or Trap Card that is\ntreated as a monster as the Link Material.\nRemember that when you Link Summon, you need to meet 3 goals:\n•\nThe amount of materials you use matches the Link Rating (Link\nMonsters count as 1 OR their own Link Rating).\n•\nThe number of materials you use meets the number speciﬁed in\nthe materials line or “recipe”.\n•\nThe materials match any other requirements in the materials line\n(such as only Effect Monsters, or only a speciﬁc Type of monster)."
+  },
+  {
+   "rule_id": "RULE-MONSTER-006",
+   "title": "PENDULUM MONSTER CARDS",
+   "title_source": "heading",
+   "anchor": "PENDULUM MONSTER CARDS",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-SUMMON-003"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     16
+    ],
+    "pdf_pages": [
+     11
+    ]
+   },
+   "text": "PENDULUM MONSTER CARDS\nPendulum Monster Cards\nare a unique kind of card\nthat blurs the line between\nMonsters and Spells! They can\nbe Summoned as monsters to\nattack or defend, or you can\nactivate them as Spell Cards\nin your Pendulum Zones to\nactivate extra special abilities\nand allow you to Pendulum\nSummon!\nPendulum Effect- When you play this\ncard as a Spell Card in your Pendulum\nZone, this is its effect. Some Pendulum\nMonster Cards may not have Pendulum\nEffects.\nPendulum Scale- Pendulum Scale is a\nnumber that determines which monsters\nyou can Special Summon during a\nPendulum Summon. The Pendulum Scale\nof this card is 1.\nMonster Effect- When you play this\ncard as a regular Monster Card, this is\nits effect. Some Pendulum Monster Cards\nmay not have monster effects."
+  },
+  {
+   "rule_id": "RULE-SUMMON-003",
+   "title": "HOW TO PENDULUM SUMMON",
+   "title_source": "heading",
+   "anchor": "HOW TO PENDULUM SUMMON",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-006",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     17
+    ],
+    "pdf_pages": [
+     11
+    ]
+   },
+   "text": "HOW TO PENDULUM SUMMON\nDuring your Main Phase, activate Pendulum Monster\n1\nCards as Spell Cards in your leftmost and rightmost Spell\n& Trap Zones. These Spell & Trap Zones also become\nPendulum Zones.\nAfter you have one in each Pendulum Zone, once\n2\nper turn during your Main Phase, declare that you’re\nPendulum Summoning.\nCheck the Pendulum Scales on the sides of your 2\nPendulum Monster Cards, then Special Summon as many\n3\nmonsters as you want from your hand and as many face-\nup Pendulum Monsters from your Extra Deck, whose\nLevels are in between those Pendulum Scales.\nYou can Special Summon\nmonsters with\nLevels 2, 3, 4, 5, 6 and 7.\nWhenever one of your Pendulum Monster Cards on the ﬁeld\n(regardless of which Zone it is in, or even if it is a monster or\nnot) would be sent to the Graveyard, place it face-up on your\nExtra Deck instead. You can Pendulum Summon it back to the ﬁeld\nlater! Monsters Pendulum Summoned from the Extra Deck must be\nSummoned to the Extra Monster Zone or your Main Monster Zone\npointed to by a Link Monster."
+  },
+  {
+   "rule_id": "RULE-MONSTER-007",
+   "title": "XYZ MONSTERS",
+   "title_source": "heading",
+   "anchor": "XYZ MONSTERS",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-SUMMON-004"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     18
+    ],
+    "pdf_pages": [
+     12
+    ]
+   },
+   "text": "XYZ MONSTERS\nMaterials needed for an Xyz Summon\nXyz Monster’s Rank -\nThis is the Rank of your Xyz\nMonster. Xyz Monsters have\nRanks instead of Levels.\nStronger Xyz Monsters have\nhigher Ranks. This is a Rank\n4 Xyz Monster.\nXyz Materials -\nThese are the Xyz Materials\nyou need to Summon this\nmonster. You use 2 Level 4\nMonsters as the Xyz Materials\nto Summon this monster. Xyz\nMaterials must be face-up\nbefore you can use them.\nXyz Monsters (pronounced “ik-\nseez”) are a powerful kind of\nmonster! You can Summon an\nXyz Monster whenever you\ncontrol monsters that are the\nsame Level. Xyz Monsters start\nin your Extra Deck, not in your\nMain Deck, and wait for you to\ncall them into action."
+  },
+  {
+   "rule_id": "RULE-SUMMON-004",
+   "title": "HOW TO XYZ SUMMON",
+   "title_source": "heading",
+   "anchor": "HOW TO XYZ SUMMON",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-007",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     19
+    ],
+    "pdf_pages": [
+     12
+    ]
+   },
+   "text": "HOW TO XYZ SUMMON\nXyz Summoning is your cool and easy way to Special Summon\nXyz Monsters from your Extra Deck. Here’s how to do it!\nChoose an Xyz Monster from your Extra Deck\n1\nthat you have the right Xyz Materials for. The\nXyz Materials should be face-up on your ﬁeld.\nDuring your Main Phase, declare that you are\n2\nXyz Summoning and stack the Xyz Materials on\ntop of each other.\nTake the Xyz Monster from your Extra Deck and\n3\nput it on top of the stacked Xyz Materials in the\nExtra Monster Zone in face-up Attack or Defense\nPosition.\nIf there is a Link Monster on the ﬁeld, you can Xyz Summon a monster in\none of your zones it points to.\nLEVEL 4\nXyz Summon!\nWhen an Xyz Monster tells you to “detach” a material, take one of the\nstacked Xyz Material cards beneath your Xyz Monster and put it in the\nGraveyard."
+  },
+  {
+   "rule_id": "RULE-MONSTER-008",
+   "title": "SYNCHRO MONSTERS",
+   "title_source": "heading",
+   "anchor": "SYNCHRO MONSTERS",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-SUMMON-005"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     20
+    ],
+    "pdf_pages": [
+     13
+    ]
+   },
+   "text": "SYNCHRO MONSTERS\nSynchro Monsters are placed in the\nExtra Deck, separate from the Main\nDeck. You can Special Summon a\npowerful Synchro Monster to the\nﬁeld in an instant just by using the\nLevels of your monsters. They can\nbe Synchro Summoned from the\nExtra Deck by sending 1 face-up\n“Tuner” monster and any number\nof face-up non-Tuner monsters from\nyour ﬁeld to the Graveyard, when\nthe sum of all their Levels is exactly\nequal to the Level of the Synchro\nMonster.\nTUNER MONSTERS FOR SYNCHRO SUMMON\nIn order to Synchro Summon\na Synchro Monster, you need\n1 Tuner (look for “Tuner” next\nto its Type). The Tuner monster\nand other face-up monsters you\nuse for the Synchro Summon are\ncalled Synchro Materials. The\nsum of their Levels is the Level\nof Synchro Monster you can\nSummon."
+  },
+  {
+   "rule_id": "RULE-SUMMON-005",
+   "title": "HOW TO SYNCHRO SUMMON",
+   "title_source": "heading",
+   "anchor": "HOW TO SYNCHRO SUMMON",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     21
+    ],
+    "pdf_pages": [
+     13
+    ]
+   },
+   "text": "HOW TO SYNCHRO SUMMON\nDuring your Main Phase, you can declare a Synchro Summon when\nthe combined total Levels of 1 face-up Tuner monster and any\n1\nnumber of other face-up monsters you control are equal to the\nLevel of the Synchro Monster you want to Synchro Summon.\nAfter double-checking the Level of the Synchro Monster you\nwant, send the face-up Synchro Materials from your ﬁeld to the\n2\nGraveyard.\nAfter sending the Synchro Materials from the ﬁeld to the\nGraveyard, take the Synchro Monster from your Extra Deck and\n3\nplay it in the Extra Monster Zone in face-up Attack or Defense\nPosition.\nIf there is a Link Monster on the ﬁeld, you can Synchro Summon a\nmonster in one of your zones it points to.\nLEVEL 3\nLEVEL 2\nLEVEL 5\n+\n=\nTuner\nNon-Tuner Monster\nSynchro Summon!"
+  },
+  {
+   "rule_id": "RULE-MONSTER-009",
+   "title": "FUSION MONSTERS",
+   "title_source": "heading",
+   "anchor": "FUSION MONSTERS",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-SUMMON-006"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     22
+    ],
+    "pdf_pages": [
+     14
+    ]
+   },
+   "text": "FUSION MONSTERS\nFusion Monsters are also placed\nin your Extra Deck (not in your\nMain Deck). They are Summoned\nby using the speciﬁc monsters\nlisted on the card (called\nFusion Materials) combined\nwith a Summoning card like\nPolymerization. They usually\nhave special abilities and very\nhigh Attack Points as well. Since\nFusion Summons require speciﬁc\ncards, be sure and include those\nnecessary cards in your Main\nDeck!"
+  },
+  {
+   "rule_id": "RULE-SUMMON-006",
+   "title": "HOW TO FUSION SUMMON",
+   "title_source": "heading",
+   "anchor": "HOW TO FUSION SUMMON",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-009",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     22
+    ],
+    "pdf_pages": [
+     14
+    ]
+   },
+   "text": "HOW TO FUSION SUMMON\nIf you have all the Fusion Materials listed\non the Fusion Monster Card, in the places\n1\nspeciﬁed on your Summoning card, you can\nactivate your Summoning card by placing it in\nyour Spell & Trap Zone.\nSend the Fusion Materials to the Graveyard, then\ntake the appropriate Fusion Monster from your\n2\nExtra Deck and play it in the Extra Monster Zone\nin either face-up Attack or Defense Position.\nFinally, place your Summoning card in the\nGraveyard. (If another card effect causes your\n3\nFusion Materials to be sent to a place other\nPolymerization\nthan the Graveyard when your Summoning card\nresolves, send them to that other place, but the Fusion Summon still\nhappens anyway.)\nIf there is a Link Monster on the ﬁeld, you can Fusion Summon a\nmonster in one of your zones it points to."
+  },
+  {
+   "rule_id": "RULE-MONSTER-010",
+   "title": "RITUAL MONSTERS",
+   "title_source": "heading",
+   "anchor": "RITUAL MONSTERS",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-SUMMON-007"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     23
+    ],
+    "pdf_pages": [
+     14
+    ]
+   },
+   "text": "RITUAL MONSTERS\nRitual Monsters are special monsters\nthat are Special Summoned with a\nspeciﬁc Ritual Spell Card, along with\na required Tribute. Ritual Monster\nCards are placed in the Main Deck and\ncannot be Summoned unless you have\nall the proper cards together in your\nhand or on the ﬁeld. Ritual Monsters\ngenerally have high ATK and DEF and\nsome have special abilities, just like\nFusion Monsters."
+  },
+  {
+   "rule_id": "RULE-SUMMON-007",
+   "title": "HOW TO RITUAL SUMMON",
+   "title_source": "heading",
+   "anchor": "HOW TO RITUAL SUMMON",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-MONSTER-010",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     23
+    ],
+    "pdf_pages": [
+     14
+    ]
+   },
+   "text": "HOW TO RITUAL SUMMON\nWhen you have a Ritual Spell Card, along with the matching Ritual\nMonster Card, in your hand, along with the required Tribute (as\n1\nlisted on the Ritual Spell Card), you can activate the Ritual Spell Card,\nplacing it in the Spell & Trap Zone.\nIf the activation of the Ritual Spell Card is successful,\n2\nTribute monsters by sending them from your hand or\nthe ﬁeld to the Graveyard. The Ritual Spell Card will\nlist the required amount to Tribute.\nAfter sending the Tributed monsters to the Graveyard,\nplay the Ritual Monster Card in your Main Monster\n3\nZone in either face-up Attack or Defense Position.\nFinally, place the Ritual Spell Card in the Graveyard.\nRitual Spell Card"
+  },
+  {
+   "rule_id": "RULE-SUMMON-008",
+   "title": "Summoning Monster Cards",
+   "title_source": "heading",
+   "anchor": "Summoning Monster Cards",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-SUMMON-009",
+    "RULE-SUMMON-010",
+    "RULE-SUMMON-011",
+    "RULE-SUMMON-012",
+    "RULE-SUMMON-013",
+    "RULE-SUMMON-014"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     24
+    ],
+    "pdf_pages": [
+     15
+    ]
+   },
+   "text": "Summoning Monster Cards\nThere are several ways to play monsters onto the ﬁeld. These ways\ncan be categorized into 2 groups: actions that can be done only once\nper turn, and actions that can be done multiple times per turn."
+  },
+  {
+   "rule_id": "RULE-SUMMON-009",
+   "title": "Normal Summon",
+   "title_source": "heading",
+   "anchor": "Normal Summon",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SUMMON-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     24
+    ],
+    "pdf_pages": [
+     15
+    ]
+   },
+   "text": " Normal Summon\nThis is the most common way to Summon a monster. Simply play\na Monster Card from your hand onto the ﬁeld in face-up Attack\nPosition. All Normal Monsters, and most Effect Monsters (unless\nthey have a speciﬁc restriction), can be Summoned in this way."
+  },
+  {
+   "rule_id": "RULE-SUMMON-010",
+   "title": "Normal Set",
+   "title_source": "heading",
+   "anchor": "Normal Set",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SUMMON-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     24
+    ],
+    "pdf_pages": [
+     15
+    ]
+   },
+   "text": " Normal Set\nTo play a Monster Card from your hand in face-down Defense\nYou can do one of these once per turn\nPosition is called a Normal Set. A monster Normal Set on the\nﬁeld is NOT considered Summoned. It has been Normal Set, and\ncan be Summoned with a Flip Summon or ﬂipped face-up by an\nattack or card effect. Remember, you can only Normal Summon\nOR Normal Set (Normal Summon/Set, in short), once per turn, so\nif you Normal Set a monster you cannot also Normal Summon a\nmonster that turn.\nNote: You cannot play a monster from your hand onto the ﬁeld\nin face-up Defense Position."
+  },
+  {
+   "rule_id": "RULE-SUMMON-011",
+   "title": "Tribute Summon",
+   "title_source": "heading",
+   "anchor": "Tribute Summon",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SUMMON-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     24,
+     25
+    ],
+    "pdf_pages": [
+     15
+    ]
+   },
+   "text": " Tribute Summon\nFor monsters that are Level 5 or higher, you must Tribute at least\n1 monster you control before the Normal Summon/Set. This is\ncalled a Tribute Summon. Monsters that are Level 5 or 6 require\n1 Tribute and Monsters that are Level 7 or higher require 2 Tributes.\nLevel 5, 6\nLevel 7 or higher\n1 Tribute\n2 Tributes\nIf you Tribute Summon in face-down Defense Position, it is called\na Tribute Set. A monster Tribute Set on the ﬁeld is NOT considered\nSummoned.\nNote: When a card explains a special method to Tribute Summon a\nmonster, you can also Tribute Set the monster by the same method."
+  },
+  {
+   "rule_id": "RULE-SUMMON-012",
+   "title": "Flip Summon",
+   "title_source": "heading",
+   "anchor": "Flip Summon",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SUMMON-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     25
+    ],
+    "pdf_pages": [
+     15
+    ]
+   },
+   "text": " Flip Summon\nYou can change a face-down Defense Position monster into face-\nup Attack Position, without using a card effect. This is called a Flip\nSummon. When you Flip Summon, you cannot change the monster to\nYou can do as many of these during a turn as you want\nface-up Defense Position, only to face-up Attack Position. A Monster\nCard cannot be Flip Summoned in the same turn that it was Set onto\nthe ﬁeld. You cannot use most monsters’ effects until they are face-up."
+  },
+  {
+   "rule_id": "RULE-SUMMON-013",
+   "title": "Special Summon",
+   "title_source": "heading",
+   "anchor": "Special Summon",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SUMMON-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     25
+    ],
+    "pdf_pages": [
+     15
+    ]
+   },
+   "text": " Special Summon\nSome monsters can be played onto the ﬁeld without being Normal\nSummoned or Set. This is called a Special Summon. Pendulum Summons,\nXyz Summons, Synchro Summons, Fusion Summons and Ritual Summons\nare all Special Summons. Some Effect Monsters also have speciﬁc\nconditions that allow you to Special Summon them. Unless otherwise\nspeciﬁed, a Special Summoned monster is played onto the ﬁeld in your\nchoice of face-up Attack Position or face-up Defense Position."
+  },
+  {
+   "rule_id": "RULE-SUMMON-014",
+   "title": "Special Summon with a Card’s Effect",
+   "title_source": "heading",
+   "anchor": "Special Summon with a Card’s Effect",
+   "category": "SUMMON",
+   "category_title": "소환법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SUMMON-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     25,
+     26
+    ],
+    "pdf_pages": [
+     15,
+     16
+    ]
+   },
+   "text": " Special Summon with a Card’s Effect\nMonsters can also be Special Summoned onto the ﬁeld through the effect\nof another card. This is different from “Special Summon Monsters.” You\ncannot use a card effect to Special Summon those monsters from your\nhand, Deck, or the Graveyard unless it was properly Special Summoned\nﬁrst. For example, if a Synchro Monster is sent from your Extra Deck\nto the Graveyard without being Synchro Summoned, you cannot use a\nSpell Card to Special Summon it from the Graveyard, because Synchro\nMonsters have to be properly Special Summoned ﬁrst, before they can\nbe Special Summoned by another card’s effect.\nSpell & Trap Cards\n4\nCard Description\nTrap Card"
+  },
+  {
+   "rule_id": "RULE-CARD-002",
+   "title": "Spell & Trap Cards - How to Read a Card",
+   "title_source": "editorial",
+   "anchor": "HOW TO READ A CARD",
+   "category": "CARD",
+   "category_title": "카드 읽는 법",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     26,
+     27
+    ],
+    "pdf_pages": [
+     16
+    ]
+   },
+   "text": "HOW TO READ A CARD\n1\nCard Name\n3\nIcon\n5\nCard Number\nSpell Card\n2\nType\n1\nCard Name\nRemember, cards with the same\nname are considered to be the\nsame card, and you can only\nhave up to 3 copies of the same\ncard in your Main Deck and Side\nDeck combined.\n3\nIcon\nThere are 6 types of icons that represent special properties a Spell or\nTrap Card may have. Spell and Trap Cards without an icon are called\nNormal Spell Cards or Normal Trap Cards.\nEquip\nRitual\n4\nCard Description\nEach card’s\nconditions and effects are\nprovided here. Read the card\ndescription carefully and follow\nthe instructions.\n2\nType\nInstead of having an Attribute\nsymbol like Monster Cards, a\nSpell Card has the “SPELL 魔”\nsymbol and a Trap Card has the\n“TRAP 罠” symbol.\nField\nQuick-Play\nContinuous\nCounter\n5\nCard Number\nactivation A card’s identiﬁcation number is\nfound here. This number is useful\nfor collecting, and for sorting\nyour collection."
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-001",
+   "title": "Spell Cards",
+   "title_source": "editorial",
+   "anchor": "<<<Spell Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-SPELLTRAP-002",
+    "RULE-SPELLTRAP-003",
+    "RULE-SPELLTRAP-004",
+    "RULE-SPELLTRAP-005",
+    "RULE-SPELLTRAP-006",
+    "RULE-SPELLTRAP-007"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     28
+    ],
+    "pdf_pages": [
+     17
+    ]
+   },
+   "text": "<<<Spell Cards\nSpell Cards can normally be\nactivated only during your Main\nPhase, and help you out with\ndifferent effects. Spell Cards\nhave many powerful effects,\nlike destroying other cards or\nstrengthening monsters. Save\nthese cards in your hand until\nyou can get the best results out\nof them."
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-002",
+   "title": "Normal Spell Cards",
+   "title_source": "heading",
+   "anchor": "Normal Spell Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SPELLTRAP-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     28
+    ],
+    "pdf_pages": [
+     17
+    ]
+   },
+   "text": "Normal Spell Cards\nNormal Spell Cards have single-use effects. To use a Normal Spell Card,\nannounce its activation to your opponent, placing it face-up on the ﬁeld.\nIf the activation succeeds, then you resolve the effect written on the card.\nAfter resolving the effect, send the card to the Graveyard."
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-003",
+   "title": "Ritual Spell Cards",
+   "title_source": "heading",
+   "anchor": "Ritual Spell Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SPELLTRAP-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     28
+    ],
+    "pdf_pages": [
+     17
+    ]
+   },
+   "text": "Ritual Spell Cards\nThese Spell Cards are used to perform Ritual Summons. Use these cards\nin the same way as you would use Normal Spell Cards."
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-004",
+   "title": "Continuous Spell Cards",
+   "title_source": "heading",
+   "anchor": "Continuous Spell Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SPELLTRAP-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     29
+    ],
+    "pdf_pages": [
+     17
+    ]
+   },
+   "text": "Continuous Spell Cards\nThese cards remain on the ﬁeld once they are activated, and their effect\ncontinues while the card stays face-up on the ﬁeld. By using Continuous Spell\nCards, you can create lasting positive effects with a single card, which is great\nbut there’s the chance that the opponent will remove it from the ﬁeld before\nyou beneﬁt from the effect."
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-005",
+   "title": "Equip Spell Cards",
+   "title_source": "heading",
+   "anchor": "Equip Spell Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SPELLTRAP-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     29
+    ],
+    "pdf_pages": [
+     17
+    ]
+   },
+   "text": "Equip Spell Cards"
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-006",
+   "title": "Field Spell Cards",
+   "title_source": "heading",
+   "anchor": "Field Spell Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SPELLTRAP-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     29
+    ],
+    "pdf_pages": [
+     17
+    ]
+   },
+   "text": "Field Spell Cards\nThese cards give an extra effect to\nThese cards go in your Field Zone\n1 face-up monster of your choice\nand stay there. Each player can have\n(either your own or your opponent’s,\n1 Field Spell Card on their own side\ndepending on the card). They remain\nof the ﬁeld. To use another Field\non the ﬁeld after they are activated.\nSpell, send your previous one to the\nThe Equip Spell Card affects only\nGraveyard. Many Field Spell effects\n1 monster (called the equipped\napply to BOTH players.\nmonster), but still occupies one of\nyour Spell & Trap Zones. If possible,\nThese cards may be placed face-\nplace it in the zone directly behind\ndown in the Field Zone, but are not\nthe equipped monster to help you\nactive until ﬂipped face-up.\nremember. If the equipped monster\nis destroyed, ﬂipped face-down, or\nremoved from the ﬁeld, its Equip\nCards are destroyed."
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-007",
+   "title": "Quick-Play Spell Cards",
+   "title_source": "heading",
+   "anchor": "Quick-Play Spell Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SPELLTRAP-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     29
+    ],
+    "pdf_pages": [
+     17
+    ]
+   },
+   "text": "Quick-Play Spell Cards\nThese are special Spell Cards that can be activated during any Phase of\nyour turn, not just your Main Phase. You can also activate them during your\nopponent’s turn if you Set the card face-down ﬁrst, but then you cannot\nactivate the card in the same turn you Set it."
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-008",
+   "title": "Trap Cards",
+   "title_source": "editorial",
+   "anchor": "<<<  Trap Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-SPELLTRAP-009",
+    "RULE-SPELLTRAP-010",
+    "RULE-SPELLTRAP-011",
+    "RULE-SPELLTRAP-012"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     30
+    ],
+    "pdf_pages": [
+     18
+    ]
+   },
+   "text": "<<<  Trap Cards\nTrap Cards will help you out with\ndifferent effects, just like Spell\nCards. The big difference between\nthem is that you can activate Trap\nCards during your opponent’s turn.\nMany Spell Cards have effects useful\nfor offense, but Trap Cards have\nthe ability to surprise the opponent\nby disrupting their attacks and\nstrategies. Using Trap Cards can\nsometimes be tricky, since your\nopponent might have to do certain\nthings before you can unleash them."
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-009",
+   "title": "Normal Trap Cards",
+   "title_source": "heading",
+   "anchor": "Normal Trap Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SPELLTRAP-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     30
+    ],
+    "pdf_pages": [
+     18
+    ]
+   },
+   "text": "Normal Trap Cards\nBefore you can activate a Trap Card, you must Set it on the ﬁeld ﬁrst.\nYou cannot activate a Trap in the same turn that you Set it, but you\ncan activate it at any time after that—starting from the beginning of\nthe next turn.\nNormal Trap Cards have single-use effects and once their effects are\nresolved, they will be sent to the Graveyard, just like Normal Spell\nCards. They are also similar to Normal Spell Cards because once\nactivated, their effects are not likely to be stopped. However, your\nopponent can destroy your face-down Trap Cards on the turn they were\nSet, or before the time is right to activate them. Because of this, you\nmust be smart about how you use your Trap Cards."
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-010",
+   "title": "Continuous Trap Cards",
+   "title_source": "heading",
+   "anchor": "Continuous Trap Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SPELLTRAP-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     31
+    ],
+    "pdf_pages": [
+     18
+    ]
+   },
+   "text": "Continuous Trap Cards\nJust like Continuous Spell Cards, Continuous Trap Cards remain on the ﬁeld\nonce they are activated and their effects continue while they are face-up on the\nﬁeld. Some Continuous Trap Cards have abilities similar to the Ignition Effects or\nTrigger Effects that can be found on Effect Monster Cards.\nContinuous Trap Cards can have effects that limit your opponent’s options, or\nthat slowly damage your opponent’s LP."
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-011",
+   "title": "Counter Trap Cards",
+   "title_source": "heading",
+   "anchor": "Counter Trap Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SPELLTRAP-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     31
+    ],
+    "pdf_pages": [
+     18
+    ]
+   },
+   "text": "Counter Trap Cards\nThese Trap Cards are normally activated in response to the activation of other\ncards, and may have abilities like negating the effects of those cards. These\ntypes of Traps are effective against Normal Spell Cards or Normal Trap Cards,\nwhich are otherwise hard to stop, however many Counter Trap Cards require\na cost to activate them.\n"
+  },
+  {
+   "rule_id": "RULE-SPELLTRAP-012",
+   "title": "The Difference between Set Spell Cards and Set Trap Cards",
+   "title_source": "heading",
+   "anchor": "The Difference between Set Spell Cards and Set Trap Cards",
+   "category": "SPELLTRAP",
+   "category_title": "마법 · 함정 카드",
+   "chapter": 2,
+   "chapter_title": "Game Cards",
+   "level": 2,
+   "parent": "RULE-SPELLTRAP-008",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     31,
+     32
+    ],
+    "pdf_pages": [
+     18,
+     19
+    ]
+   },
+   "text": "The Difference between Set Spell Cards and Set Trap Cards\nSpell Cards can be Set face-down on the ﬁeld like Trap Cards.\nHowever, the rules for the two types of cards are different.\nSpell Cards can be activated during the Main Phases even in the\nsame turn that you Set them (except for Quick-Play Spell Cards).\nSetting them does not allow you to use them on your opponent’s\nturn; they still can only be activated during your Main Phase.\nYou can Set a Spell Card face-down on the ﬁeld to bluff your\nopponent into thinking you have a powerful Trap.\n3\nHow to Play"
+  },
+  {
+   "rule_id": "RULE-GAME-002",
+   "title": "Let the Duel Begin!",
+   "title_source": "heading",
+   "anchor": "Let the Duel Begin!",
+   "category": "GAME",
+   "category_title": "게임 목적 · 승패 · 듀얼 준비",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-GAME-003",
+    "RULE-GAME-004"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     32
+    ],
+    "pdf_pages": [
+     19
+    ]
+   },
+   "text": "Let the Duel Begin!\n"
+  },
+  {
+   "rule_id": "RULE-GAME-003",
+   "title": "How to Duel and How to Win",
+   "title_source": "heading",
+   "anchor": "How to Duel and How to Win",
+   "category": "GAME",
+   "category_title": "게임 목적 · 승패 · 듀얼 준비",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 2,
+   "parent": "RULE-GAME-002",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     32
+    ],
+    "pdf_pages": [
+     19
+    ]
+   },
+   "text": "How to Duel and How to Win\nA single game is called a Duel, and a Duel ends when one player wins\nor the game ends in a draw. Duels are played in sets of 3 called a\nMatch, and the winner of best 2-out-of-3 wins the Match.\n"
+  },
+  {
+   "rule_id": "RULE-GAME-004",
+   "title": "Winning a Duel",
+   "title_source": "heading",
+   "anchor": "Winning a Duel",
+   "category": "GAME",
+   "category_title": "게임 목적 · 승패 · 듀얼 준비",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 2,
+   "parent": "RULE-GAME-002",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     32
+    ],
+    "pdf_pages": [
+     19
+    ]
+   },
+   "text": "Winning a Duel\nEach player starts a Duel with 8000 LP (Life Points). You win a Duel\nif: you reduce your opponent’s LP to 0; if your opponent is unable\nto draw a card; or if a card’s special effect says you win. If you and\nyour opponent both reach 0 LP at the same time, the Duel is declared\na draw.\nVictory Conditions\n• Reduce your opponent’s LP to 0.\n• Your opponent is unable to draw a card when they are supposed\nto draw.\n• Win with a card’s special effect."
+  },
+  {
+   "rule_id": "RULE-GAME-005",
+   "title": "Preparing to Duel",
+   "title_source": "heading",
+   "anchor": "Preparing to Duel",
+   "category": "GAME",
+   "category_title": "게임 목적 · 승패 · 듀얼 준비",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     33
+    ],
+    "pdf_pages": [
+     19
+    ]
+   },
+   "text": "Preparing to Duel\nBefore starting a Duel, follow these 4 steps. Also, make sure you\nhave all your extra items that your Deck might need, like a coin or\ncounters.\nAfter greeting your opponent, shufﬂe your Deck thoroughly. Then you may\nshufﬂe and cut your opponent’s Deck (be careful when touching your opponent’s\n1\ncards).\nAfter cutting, place the Decks face-down in the proper Deck Zones on the ﬁeld.\nIf using an Extra Deck with Xyz Monsters, Synchro Monsters or Fusion Monsters,\n2\nplace it face-down in the Extra Deck Zone.\nBoth players show each other their Side Decks, and record the number of cards in\nit, also conﬁrming that they have 15 or fewer cards (the cards should be counted\n3\nface-down). If you exchange cards between your Side and Main Decks after a\nDuel, count the cards of your Side Deck for your opponent again to show that the\nnumber of your cards remain the same.\nPlay rock-paper-scissors or ﬂip a coin. The winner decides to go ﬁrst or second\nin the Duel. For your next Duels, the loser of the previous Duel decides who goes\n4\nﬁrst. If the previous Duel ended in a tie, determine who starts ﬁrst in the next\nDuel with another coin toss, etc.\nFinally, draw 5 cards from the top of your Deck; this is your starting hand.\nStarting with the ﬁrst player, it’s time to Duel!"
+  },
+  {
+   "rule_id": "RULE-TURN-001",
+   "title": "Turn Structure",
+   "title_source": "heading",
+   "anchor": "Turn Structure",
+   "category": "TURN",
+   "category_title": "턴과 페이즈",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-TURN-002",
+    "RULE-TURN-003",
+    "RULE-TURN-004",
+    "RULE-TURN-005",
+    "RULE-TURN-006",
+    "RULE-TURN-007"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     34
+    ],
+    "pdf_pages": [
+     20
+    ]
+   },
+   "text": "Turn Structure\nA Duel progresses in a series of turns which are divided into phases.\nPrepare to Duel\n1st Player’s turn\nDraw Phase\nStandby Phase\nMain Phase 1\nIf no battles are conducted\nBattle Phase\nMain Phase 2\nEnd Phase\n2nd Player’s turn"
+  },
+  {
+   "rule_id": "RULE-TURN-002",
+   "title": "Draw Phase",
+   "title_source": "heading",
+   "anchor": "Draw Phase",
+   "category": "TURN",
+   "category_title": "턴과 페이즈",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 2,
+   "parent": "RULE-TURN-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     35
+    ],
+    "pdf_pages": [
+     20
+    ]
+   },
+   "text": "Draw Phase\nThis is the ﬁrst phase. The player whose turn it is (the “turn player”)\ndraws 1 card from the top of their Deck. A player with no cards left in\ntheir Deck and unable to draw loses the Duel. After you draw, Trap\nCards or Quick-Play Spell Cards can be activated before proceeding\nto the Standby Phase.\nIMPORTANT: The player who goes ﬁrst cannot draw during the\nDraw Phase of their ﬁrst turn.\nDraw 1 Card (except for the very\nMain Action in this Phase\n1st turn of the Duel).\nActivate Trap Cards, Quick-Play\nPossible Other Actions\nSpell Cards, etc."
+  },
+  {
+   "rule_id": "RULE-TURN-003",
+   "title": "Standby Phase",
+   "title_source": "heading",
+   "anchor": "Standby Phase",
+   "category": "TURN",
+   "category_title": "턴과 페이즈",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 2,
+   "parent": "RULE-TURN-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     35
+    ],
+    "pdf_pages": [
+     20
+    ]
+   },
+   "text": "Standby Phase\nSome cards have effects that activate, or costs you must pay, in the\nStandby Phase. If you do not have any of these cards on the ﬁeld, you\ncan still activate Trap Cards or Quick-Play Spell Cards before moving\non to your Main Phase 1.\nResolve card effects that happen\nMain Action in this Phase\nin this phase\nActivate Trap Cards, Quick-Play\nPossible Other Actions\nSpell Cards, etc."
+  },
+  {
+   "rule_id": "RULE-TURN-004",
+   "title": "Main Phase 1",
+   "title_source": "heading",
+   "anchor": "Main Phase 1",
+   "category": "TURN",
+   "category_title": "턴과 페이즈",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 2,
+   "parent": "RULE-TURN-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     36
+    ],
+    "pdf_pages": [
+     21
+    ]
+   },
+   "text": "Main Phase 1\nThis is when you play most of your cards: you can Normal Summon,\nSet, or change the battle position of a monster, activate a card’s\neffect, and Set Spell and Trap Cards. These actions can be done in\nany order you want, but some actions have restrictions.\nPossible Actions in this Phase\nSummon or Set a Monster\nThere is no limit to the number of times you can Flip Summon or\nSpecial Summon during a turn, but you can only Normal Summon\nor Set a monster (including a Tribute Summon) once per turn.\nChange Your Monsters’ Battle Positions\nThis includes Flip Summoning a monster, or changing the position\nof a face-up monster to face-up Attack or Defense Position. You\ncan change the position of each monster you control, except in\nthree cases.  1. You cannot change the battle position of a monster\nthat was played onto the ﬁeld this turn.  2. You cannot change it\nin Main Phase 2 if the monster attacked during the Battle Phase.\n3. You cannot change it if you have already changed its battle\nposition once this turn.\nActive a Card or Effect\nYou can activate Spell and Trap Cards, or the effects of Spell, Trap,\nor Effect Monster Cards as many times as you want during this\nphase, as long as you can keep paying any costs involved.\nSet Spell Cards and Trap Cards\nYou can Set Spell and Trap Cards face-down in your Spell & Trap\nZone during this phase, as long as you have space."
+  },
+  {
+   "rule_id": "RULE-TURN-005",
+   "title": "Battle Phase",
+   "title_source": "heading",
+   "anchor": "Battle Phase",
+   "category": "TURN",
+   "category_title": "턴과 페이즈",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 2,
+   "parent": "RULE-TURN-001",
+   "subsections": [
+    "RULE-BATTLE-001",
+    "RULE-BATTLE-002",
+    "RULE-BATTLE-003",
+    "RULE-BATTLE-004",
+    "RULE-BATTLE-005"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     37
+    ],
+    "pdf_pages": [
+     21
+    ]
+   },
+   "text": "Battle Phase\nNow it’s time to battle with your Monster Cards! This phase is divided\ninto steps.\nYou do not have to conduct a Battle Phase every turn, even if you\nhave a monster on the ﬁeld.\nIMPORTANT: The player who goes ﬁrst cannot conduct their\nBattle Phase on their ﬁrst turn.\nPossible Actions in\nthis Phase\nStart step\nBattle Step\nEnd Step\nBattle with monsters\nActivate Trap Cards and Quick-\nPlay Spell Cards\nFlow of the\nBattle Phase\nDamage Step\nThe Battle Phase is split into\n4 steps and is conducted in the\norder shown in the diagram. The\nBattle Step and Damage Step are\nrepeated each time you attack\nwith a monster."
+  },
+  {
+   "rule_id": "RULE-BATTLE-001",
+   "title": "Start Step",
+   "title_source": "heading",
+   "anchor": "Start Step",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 3,
+   "parent": "RULE-TURN-005",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     38
+    ],
+    "pdf_pages": [
+     22
+    ]
+   },
+   "text": "Start Step\nThis step starts the Battle Phase. The turn player should\nannounce “I’m entering the Battle Phase.” Remember, the player\nwho goes ﬁrst cannot conduct a Battle Phase in their very ﬁrst\nturn."
+  },
+  {
+   "rule_id": "RULE-BATTLE-002",
+   "title": "Battle Step",
+   "title_source": "heading",
+   "anchor": "Battle Step",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 3,
+   "parent": "RULE-TURN-005",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     38
+    ],
+    "pdf_pages": [
+     22
+    ]
+   },
+   "text": "Battle Step\nSelect 1 monster on your side of the ﬁeld to attack with, and 1 of\nyour opponent’s monsters as your attack target, and then declare\nthe attack. If your opponent does not have any monsters on the\nﬁeld, you can attack directly. Play then proceeds to the Damage\nStep. Afterwards, the attacking player returns to the Battle Step,\nand repeats this procedure. Each face-up Attack Position monster\nyou control is allowed 1 attack per turn. You do not have to attack\nwith a monster if you don’t want to."
+  },
+  {
+   "rule_id": "RULE-BATTLE-003",
+   "title": "Damage Step",
+   "title_source": "heading",
+   "anchor": "Damage Step",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 3,
+   "parent": "RULE-TURN-005",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     38
+    ],
+    "pdf_pages": [
+     22
+    ]
+   },
+   "text": "Damage Step\nIn this step, the players calculate the result of the battle and\nwhatever damage is done. (See “Monster Battle Rules”, page 37.)\nAfter ﬁnishing the Damage Step, return to the Battle Step."
+  },
+  {
+   "rule_id": "RULE-BATTLE-004",
+   "title": "End Step",
+   "title_source": "heading",
+   "anchor": "End Step",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 3,
+   "parent": "RULE-TURN-005",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     38
+    ],
+    "pdf_pages": [
+     22
+    ]
+   },
+   "text": "End Step\nAfter you’ve resolved all your battles by repeating the Battle and\nDamage Steps, and you have no more monsters you want to attack\nwith, announce to your opponent that you are ending your Battle\nPhase."
+  },
+  {
+   "rule_id": "RULE-BATTLE-005",
+   "title": "Replay Rules during the Battle Step",
+   "title_source": "heading",
+   "anchor": "Replay Rules during the Battle Step",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 3,
+   "parent": "RULE-TURN-005",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     39
+    ],
+    "pdf_pages": [
+     22
+    ]
+   },
+   "text": " Replay Rules during the Battle Step\nAfter you’ve announced your\nattacking monster and the attack\nDeclare your attacking\ntarget monster during a Battle\nmonster and your attack\nStep, the attack target might be\ntarget monster.\nremoved from the ﬁeld, or a new\nmonster may be played onto the\nopponent’s side of the ﬁeld before\nthe Damage Step, due to a card’s\neffect. This causes a “Replay.”\nThe\nWhen this occurs, you can choose\nmonsters\nto attack with the same monster\nyour opponent\nagain, or choose to attack with a\ncontrols change\ndifferent monster, or choose not\nbefore the Damage\nto attack at all. Note that if you\nStep.\nattack with a different monster,\nthe ﬁrst monster is still considered\nto have declared an attack, and it\ncannot attack again this turn.\nA replay happens!\nRe-select a target monster."
+  },
+  {
+   "rule_id": "RULE-TURN-006",
+   "title": "Main Phase 2",
+   "title_source": "heading",
+   "anchor": "Main Phase 2",
+   "category": "TURN",
+   "category_title": "턴과 페이즈",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 2,
+   "parent": "RULE-TURN-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     40
+    ],
+    "pdf_pages": [
+     23
+    ]
+   },
+   "text": "Main Phase 2\nIf you conducted your Battle Phase, your turn moves to Main Phase 2\nafterwards. The actions a player can perform in this phase are the same\nas in Main Phase 1. However, if the player already did something in Main\nPhase 1 that has a limit to the number of times it can be done, the player\ncannot do it again in Main Phase 2. Consider if you want to activate and\nSet Spell & Trap Cards, or Summon or Set a monster (if you didn’t do that\nin Main Phase 1) based on your situation after the Battle Phase. Use this\nphase to prepare for the opponent’s turn.\nPossible Actions in this Phase\nSummon or Set a monster\nChange your monsters’ battle positions\nActive a card or effect\nSet Spell Cards and Trap Cards"
+  },
+  {
+   "rule_id": "RULE-TURN-007",
+   "title": "End Phase",
+   "title_source": "heading",
+   "anchor": "End Phase",
+   "category": "TURN",
+   "category_title": "턴과 페이즈",
+   "chapter": 3,
+   "chapter_title": "How to Play",
+   "level": 2,
+   "parent": "RULE-TURN-001",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     40,
+     41
+    ],
+    "pdf_pages": [
+     23
+    ]
+   },
+   "text": "End Phase\nAnnounce the end of your turn, and if there are any cards on the\nﬁeld which say “…during the End Phase…” in their text, resolve\nthose effects in this phase. If you have more than 6 cards in your\nhand at the end of this phase, select and discard cards to the\nGraveyard until you only have 6 cards in your hand.\nResolve card effects which\nactivate in this phase\nActions in this Phase\nDiscard if you have more than\n6 cards in hand\nPossible Other Actions\nActivate Trap Cards and Quick-Play\nin this Phase\nSpell Cards\n4\nBattles and Chains\nMonster Battle Rules"
+  },
+  {
+   "rule_id": "RULE-BATTLE-006",
+   "title": "DAMAGE STEP RULES",
+   "title_source": "heading",
+   "anchor": "DAMAGE STEP RULES",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-BATTLE-007",
+    "RULE-BATTLE-008",
+    "RULE-BATTLE-009"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     41
+    ],
+    "pdf_pages": [
+     23
+    ]
+   },
+   "text": "DAMAGE STEP RULES\nDuring the Damage Step, there are limits on what cards you can\nactivate. Also, during the Damage Step, Flip effects resolve a bit\ndifferently than they normally do."
+  },
+  {
+   "rule_id": "RULE-BATTLE-007",
+   "title": "Limitations on Activating Cards",
+   "title_source": "heading",
+   "anchor": "Limitations on Activating Cards",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 2,
+   "parent": "RULE-BATTLE-006",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     41
+    ],
+    "pdf_pages": [
+     23
+    ]
+   },
+   "text": " Limitations on Activating Cards\nDuring the Damage Step, you can only activate Counter Trap Cards,\nor cards with effects that directly change a monster’s ATK or DEF.\nAlso, these cards can only be activated up until the start of damage\ncalculation."
+  },
+  {
+   "rule_id": "RULE-BATTLE-008",
+   "title": "Attacking a Face-Down Card",
+   "title_source": "heading",
+   "anchor": "Attacking a Face-Down Card",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 2,
+   "parent": "RULE-BATTLE-006",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     41
+    ],
+    "pdf_pages": [
+     23
+    ]
+   },
+   "text": " Attacking a Face-Down Card\nIf you attack a face-down Defense Position monster, ﬂip the card to\nface-up Defense Position in the Damage Step. Now you can see the\nmonster’s DEF and then calculate damage."
+  },
+  {
+   "rule_id": "RULE-BATTLE-009",
+   "title": "Activation of a Flip Effect",
+   "title_source": "heading",
+   "anchor": "Activation of a Flip Effect",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 2,
+   "parent": "RULE-BATTLE-006",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     41
+    ],
+    "pdf_pages": [
+     23
+    ]
+   },
+   "text": " Activation of a Flip Effect\nWhen an attacked monster is ﬂipped face-up, any Flip effects are\nactivated and resolved after damage calculation. If you need to select\na monster for the Flip effect to target, you cannot target a monster\nthat has already been destroyed during damage calculation.\nFor more info on the Damage Step, please visit:\nwww.yugioh-card.com/en/gameplay/damage_step/"
+  },
+  {
+   "rule_id": "RULE-BATTLE-010",
+   "title": "DETERMINING DAMAGE",
+   "title_source": "heading",
+   "anchor": "DETERMINING DAMAGE",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-BATTLE-011",
+    "RULE-BATTLE-012",
+    "RULE-BATTLE-013"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     42
+    ],
+    "pdf_pages": [
+     24
+    ]
+   },
+   "text": "DETERMINING DAMAGE\nYou calculate battle damage based on the battle position of the\nmonster you are attacking. If you attack an Attack Position monster,\ncompare ATK vs. ATK. If you attack a Defense Position monster,\ncompare your monster’s ATK vs. the attacked monster’s DEF."
+  },
+  {
+   "rule_id": "RULE-BATTLE-011",
+   "title": "When You Attack an Attack Position Monster",
+   "title_source": "heading",
+   "anchor": "When You Attack an Attack Position Monster",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 2,
+   "parent": "RULE-BATTLE-010",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     42
+    ],
+    "pdf_pages": [
+     24
+    ]
+   },
+   "text": "When You Attack an Attack Position Monster\nVS.\nATK of Attacking\nATK of Opponent’s\nMonster\nWhen your attacking monster’s ATK is higher than the ATK of\nthe opponent’s monster, the attacking monster destroys the\nopponent’s monster and sends it to the Graveyard.\nWIN\nThe amount that your attacking monster’s ATK exceeds the\nATK of your opponent’s monster is subtracted from your\nopponent’s LP as battle damage.\nWhen your attacking monster’s ATK is equal to the ATK of the\nopponent’s monster, the result is considered a tie, and both\nTIE\nmonsters are destroyed.\nNeither player takes any battle damage.\nWhen your attacking monster’s ATK is lower than the ATK of\nthe opponent’s monster, the attacking monster is destroyed\nLOSE\nand sent to the Graveyard.\nThe amount that the opponent’s monster’s ATK exceeds the\nATK of your attacking monster is subtracted from your LP as\nbattle damage."
+  },
+  {
+   "rule_id": "RULE-BATTLE-012",
+   "title": "When You Attack a Defense Position Monster",
+   "title_source": "heading",
+   "anchor": "When You Attack a Defense Position Monster",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 2,
+   "parent": "RULE-BATTLE-010",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     43
+    ],
+    "pdf_pages": [
+     24
+    ]
+   },
+   "text": "When You Attack a Defense Position Monster\nVS.\nATK of Attacking\nDEF of Opponent’s\nMonster\nWhen your attacking monster’s ATK is higher than the DEF of\nthe opponent’s monster, the attacking monster destroys the\nWIN\nopponent’s monster and sends it to the Graveyard.\nNeither player takes any battle damage.\nWhen your attacking monster’s ATK is equal to the DEF of the\nopponent’s monster, neither monster is destroyed.\nTIE\nNeither player takes any battle damage.\nWhen your attacking monster’s ATK is lower than the DEF of\nthe opponent’s monster, neither monster is destroyed.\nLOSE\nThe amount that the opponent’s monster’s DEF exceeds the\nATK of your attacking monster is subtracted from your LP as\nbattle damage."
+  },
+  {
+   "rule_id": "RULE-BATTLE-013",
+   "title": "If Your Opponent Has No Monsters",
+   "title_source": "heading",
+   "anchor": "If Your Opponent Has No Monsters",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 2,
+   "parent": "RULE-BATTLE-010",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     43,
+     44
+    ],
+    "pdf_pages": [
+     24,
+     25
+    ]
+   },
+   "text": "If Your Opponent Has No Monsters\nIf there are no monsters on your opponent’s side of the ﬁeld, you\ncan attack directly. The full amount of your attacking monster’s ATK\nis subtracted from the opponent’s LP as battle damage.\nChains and Spell Speed"
+  },
+  {
+   "rule_id": "RULE-CHAIN-001",
+   "title": "WHAT IS A CHAIN?",
+   "title_source": "heading",
+   "anchor": "WHAT IS A CHAIN?",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     44
+    ],
+    "pdf_pages": [
+     25
+    ]
+   },
+   "text": "WHAT IS A CHAIN?\nChains are a way to order the resolution of multiple card effects.\nThey are used when the effects of more than 1 card are activated\nat once (see page 46), or when a player wants to use an effect after\na card has been played, but BEFORE that card has an effect on the\ngame.\nIf a card’s effect is activated, the opponent is always given a chance\nto respond with a card effect of their own, creating a Chain. If your\nopponent responds with an effect, then you can choose to respond\nand add another effect to the Chain. If your opponent does not\nrespond, you may activate a second effect and create a Chain to\nyour own card’s activation. Both players continue to add effects to\nthe Chain until they both wish to add nothing else, then you resolve\nthe outcome in reverse order – starting with the last card that was\nactivated.\nYou must always be careful not to resolve the effects of your cards\nbefore asking your opponent if they wish to make a Chain."
+  },
+  {
+   "rule_id": "RULE-CHAIN-002",
+   "title": "SPELL SPEED",
+   "title_source": "heading",
+   "anchor": "SPELL SPEED",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 1,
+   "parent": null,
+   "subsections": [
+    "RULE-CHAIN-003"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     44
+    ],
+    "pdf_pages": [
+     25
+    ]
+   },
+   "text": "SPELL SPEED\nEvery type of card effect has a Spell Speed between 1 and 3. If you\nwant to respond to a card effect in a Chain, you have to use an effect\nwith Spell Speed 2 or higher, and it cannot have a lower Spell Speed\nthan the effect you are responding to. Please see page 41 for an\nintroduction to each type of card’s Spell Speed."
+  },
+  {
+   "rule_id": "RULE-CHAIN-003",
+   "title": "Spell Speeds",
+   "title_source": "heading",
+   "anchor": "Spell Speeds",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 2,
+   "parent": "RULE-CHAIN-002",
+   "subsections": [
+    "RULE-CHAIN-004",
+    "RULE-CHAIN-005",
+    "RULE-CHAIN-006"
+   ],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     45
+    ],
+    "pdf_pages": [
+     25
+    ]
+   },
+   "text": "Spell Speeds\nSpell, Trap, and Effect Monster effects have different Spell Speeds.\nThere are Spell Speeds from 1 to 3. You can only respond with an\neffect if it is Spell Speed 2 or higher, and has an equal or greater Spell\nSpeed than the effect on the Chain Link before it."
+  },
+  {
+   "rule_id": "RULE-CHAIN-004",
+   "title": "Spell Speed 1",
+   "title_source": "heading",
+   "anchor": "Spell Speed 1",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 3,
+   "parent": "RULE-CHAIN-003",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     45
+    ],
+    "pdf_pages": [
+     25
+    ]
+   },
+   "text": " Spell Speed 1\nSpells (Normal, Equip, Continuous, Field, Ritual),\nEffect Monster’s effects (Ignition, Trigger, and Flip)\nThis is the slowest of all Spell Speeds. These cards cannot be\nactivated in response to any other effects. Typically, these effects\ncannot be Chain Link 2 or higher, unless multiple Spell Speed 1\neffects are activated simultaneously."
+  },
+  {
+   "rule_id": "RULE-CHAIN-005",
+   "title": "Spell Speed 2",
+   "title_source": "heading",
+   "anchor": "Spell Speed 2",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 3,
+   "parent": "RULE-CHAIN-003",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     45
+    ],
+    "pdf_pages": [
+     25
+    ]
+   },
+   "text": " Spell Speed 2\nTraps (Normal, Continuous), Quick-Play Spells,\nEffect Monster’s Quick Effects\nThese cards can be used to respond to a Spell Speed 1 or 2 effect, and\ncan typically be activated during any phase."
+  },
+  {
+   "rule_id": "RULE-CHAIN-006",
+   "title": "Spell Speed 3",
+   "title_source": "heading",
+   "anchor": "Spell Speed 3",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 3,
+   "parent": "RULE-CHAIN-003",
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     45
+    ],
+    "pdf_pages": [
+     25
+    ]
+   },
+   "text": " Spell Speed 3\nCounter Trap\nThis is the fastest of all Spell Speeds and can be used to respond to\na card of any Spell Speed. Only another Spell Speed 3 card may be\nused to respond to these cards."
+  },
+  {
+   "rule_id": "RULE-CHAIN-007",
+   "title": "How a Chain Works",
+   "title_source": "heading",
+   "anchor": "How a Chain Works",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     46
+    ],
+    "pdf_pages": [
+     26
+    ]
+   },
+   "text": "How a Chain Works\nOrder of resolution\n[Chain Complete]\n[Chain Link 4]\nSpell Speed 2 or 3 card used\nagainst Chain Link 3\n[Chain Link 3]\nSpell Speed 2 or 3 card used\nagainst Chain Link 2\n[Chain Link 2]\nOrder of activation\nSpell Speed 2 or 3 card used\nagainst Chain Link 1\n[Chain Link 1]\nSpell Speed 1 or 2 card that’s\nused\nAs shown in the diagram above, the ﬁrst effect activated is Chain\nLink 1. The next effect is Chain Link 2, and so on. Every time a new\nChain Link is made, they are stacked up in the order that the cards\nare activated. Once the Chain is completed, the outcome is resolved\nstarting with the most recent card to be activated at the top of the\nChain and proceeding down to Chain Link 1."
+  },
+  {
+   "rule_id": "RULE-CHAIN-008",
+   "title": "EXAMPLE OF A CHAIN",
+   "title_source": "heading",
+   "anchor": "EXAMPLE OF A CHAIN",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     47
+    ],
+    "pdf_pages": [
+     26
+    ]
+   },
+   "text": "EXAMPLE OF A CHAIN\nPlayer A plays “Heavy Storm” and Player B responds by activating\ntheir Set “Threatening Roar.” Then, Player A responds to that by\nactivating “Seven Tools of the Bandit.”\nIn this case, Chain Links are stacked up as seen below.\nChain Link\n“Seven Tools of the Bandit”\nSpell Speed 3\n3\nNegates the effect of “Threatening Roar”\nChain Link\nSpell Speed 2 “Threatening Roar”\n2\nPrevents the opponent from declaring attacks this turn.\nChain Link\nSpell Speed 1 “Heavy Storm”\n1\nDestroys all Spell and Trap Cards on the ﬁeld.\n”Seven Tools of the Bandit” (Chain Link 3) is resolved ﬁrst and\nnegates the activation of “Threatening Roar.”\n“Threatening Roar” (Chain Link 2) would then be resolved, but the\neffect of “Seven Tools of the Bandit” stops its activation. The turn\nplayer will still be able to declare attacks.\nThen the effect of “Heavy Storm” (Chain Link 1) is resolved\nsuccessfully, destroying all Spell and Trap Cards on the ﬁeld,\nallowing the turn player to attack without interference from Spell\nor Trap Cards."
+  },
+  {
+   "rule_id": "RULE-CHAIN-009",
+   "title": "TURN PLAYER’S PRIORITY",
+   "title_source": "heading",
+   "anchor": "TURN PLAYER’S PRIORITY",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 4,
+   "chapter_title": "Battles and Chains",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     48,
+     49
+    ],
+    "pdf_pages": [
+     27
+    ]
+   },
+   "text": "TURN PLAYER’S PRIORITY\nThe turn player always starts with Priority, or the choice to\nactivate a card first, in each phase or step of their turn. As long as\nthe turn player has Priority, the opponent cannot activate cards\nor effects, except for effects that activate automatically, like\nTrigger or Flip effects.\nThe turn player can either:\n• Use Priority to play a card or activate an effect OR\n• Pass Priority to the opponent so they can activate an effect.\nA player must pass Priority to the opponent when moving on to\nthe next phase or step. Strictly speaking, you would always declare\nthat you’re passing Priority before the end of every phase and\nstep, and ask your opponent if they wish to play a card. However,\nfor ease of play, announcing the end of your phases or steps\nimplies giving up Priority. Therefore, when announcing the end of\na phase, your opponent can just say “Before the end of your phase,\nI activate this card” and use a card.\n• The turn player starts with Priority to activate a card or effect\nﬁrst.\n• After a card’s activation, and at the end of each phase or step,\nPriority passes to the opponent.\n5\nOther Rules"
+  },
+  {
+   "rule_id": "RULE-DECK-005",
+   "title": "Forbidden & Limited Cards",
+   "title_source": "heading",
+   "anchor": "Forbidden & Limited Cards",
+   "category": "DECK",
+   "category_title": "덱 구성과 매수 제한",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     49
+    ],
+    "pdf_pages": [
+     27
+    ]
+   },
+   "text": " Forbidden & Limited Cards\nNormally, your Deck (including Extra Deck and Side Deck) can\ncontain up to 3 copies of a card that has the same name. However,\ncertain cards have speciﬁc quantity restrictions that further limit the\nnumber that can be included in a Deck.\nThere are 3 types of restrictions: Limited cards are restricted to\n1 copy in a Deck, while Semi-Limited cards are restricted to 2 copies\nin a Deck. Forbidden cards are not allowed to be included at all.\nThe list of Forbidden and Limited cards is updated regularly and is\nposted on the Yu-Gi-Oh! TCG Ofﬁcial Website.\nThis list is applied to ofﬁcial tournaments so please check it before\nparticipating.\nOfﬁcial Website: www.yugioh-card.com"
+  },
+  {
+   "rule_id": "RULE-MONSTER-011",
+   "title": "Monster Tokens",
+   "title_source": "heading",
+   "anchor": "Monster Tokens",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     49
+    ],
+    "pdf_pages": [
+     27
+    ]
+   },
+   "text": " Monster Tokens\nMonster Tokens are monsters that appear on the ﬁeld as the result\nof a card’s effect. They are not included in the Deck, and cannot be\nsent anywhere other than the ﬁeld, such as the hand or Graveyard.\nWhen a Token is destroyed or returned to the hand or Deck, they are\nsimply removed from the ﬁeld instead.\nYou can use ofﬁcial Token cards or use coins,\ncard sleeves, or any similar marker (as long\nas it can indicate Attack Position or Defense\nPosition) as Monster Tokens and play them in\nMonster Zones. Each Monster Token takes up 1\nof your 5 Monster Zones. Their battle position\nis always either face-up Attack Position or face-\nup Defense Position. Tokens cannot be used as\nan Xyz Material. Tokens on the ﬁeld are treated\nas Normal Monsters."
+  },
+  {
+   "rule_id": "RULE-MISC-002",
+   "title": "Public Knowledge",
+   "title_source": "heading",
+   "anchor": "Public Knowledge",
+   "category": "MISC",
+   "category_title": "그 밖의 규칙",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     50
+    ],
+    "pdf_pages": [
+     28
+    ]
+   },
+   "text": " Public Knowledge\nThe number of cards in a player’s hand and Decks, the cards in their\nGraveyards, and each player’s current LP are all public knowledge\nand both players can verify these things at any time. If asked, you\nmust answer these things to your opponent truthfully. You are\nallowed to pick up and verify the cards in your opponent’s Graveyard\nbut you must ask their permission ﬁrst. Also, you may not change the\norder of the cards when verifying their Graveyard."
+  },
+  {
+   "rule_id": "RULE-MISC-003",
+   "title": "If both players conduct actions simultaneously",
+   "title_source": "heading",
+   "anchor": "If both players conduct actions simultaneously",
+   "category": "MISC",
+   "category_title": "그 밖의 규칙",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     50
+    ],
+    "pdf_pages": [
+     28
+    ]
+   },
+   "text": " If both players conduct actions simultaneously\nFor cases like “Each player targets 1 monster,” where both players\nresolve an effect simultaneously, the turn player resolves the effect\nﬁrst. In this example, after the turn player makes their selection, the\nother player makes theirs."
+  },
+  {
+   "rule_id": "RULE-CHAIN-010",
+   "title": "When multiple cards are activated simultaneously",
+   "title_source": "heading",
+   "anchor": "When multiple cards are activated simultaneously",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     50
+    ],
+    "pdf_pages": [
+     28
+    ]
+   },
+   "text": " When multiple cards are activated simultaneously\nIf effects of Spell Speed 1 cards (like Trigger Effects) are activated at\nthe same time, they will be resolved in a special Chain. This Chain is\nmade starting with the turn player’s mandatory effects. If there is only\n1 effect, that will be Chain Link 1. If there are 2 or more effects, the turn\nplayer builds the Chain starting with their mandatory effects, in any\norder. Then the opponent continues the Chain with their mandatory\neffects in any order. Afterwards, the turn player adds their optional\neffects in any order, and ﬁnally the opponent adds their optional\neffects in any order."
+  },
+  {
+   "rule_id": "RULE-BATTLE-014",
+   "title": "0 ATK monsters",
+   "title_source": "heading",
+   "anchor": "0 ATK monsters",
+   "category": "BATTLE",
+   "category_title": "전투와 데미지",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     50
+    ],
+    "pdf_pages": [
+     28
+    ]
+   },
+   "text": " 0 ATK monsters\nMonsters with 0 ATK cannot destroy anything by battle. If two Attack\nPosition monsters with 0 ATK battle each other, neither monster is\ndestroyed."
+  },
+  {
+   "rule_id": "RULE-MISC-004",
+   "title": "Rules vs. Card Effects",
+   "title_source": "heading",
+   "anchor": "Rules vs. Card Effects",
+   "category": "MISC",
+   "category_title": "그 밖의 규칙",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     50
+    ],
+    "pdf_pages": [
+     28
+    ]
+   },
+   "text": " Rules vs. Card Effects\nIf there is a discrepancy between the basic rules and a card’s effect, the\ncard effect takes precedence. For example, a monster can only attack\nonce per turn, but with a card effect, it is possible to attack twice."
+  },
+  {
+   "rule_id": "RULE-MISC-005",
+   "title": "Counters",
+   "title_source": "heading",
+   "anchor": "Counters",
+   "category": "MISC",
+   "category_title": "그 밖의 규칙",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     51
+    ],
+    "pdf_pages": [
+     28
+    ]
+   },
+   "text": " Counters\nYou may need to place these on cards for some card effects. You\ncannot place counters unless a card effect allows it. Cards may have\neffects that change with the number of counters on them, or require\nyou to remove counters as a cost. Some counters have speciﬁc\nnames, such as “Spell Counter” or “Clock Counter.” Other than their\nnames, each individual counter itself does not have any effects."
+  },
+  {
+   "rule_id": "RULE-CHAIN-011",
+   "title": "Actions which cannot be Chained to",
+   "title_source": "heading",
+   "anchor": "Actions which cannot be Chained to",
+   "category": "CHAIN",
+   "category_title": "체인 · 스펠 스피드 · 우선권",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     51
+    ],
+    "pdf_pages": [
+     28
+    ]
+   },
+   "text": " Actions which cannot be Chained to\nYou can only create a Chain by responding to the activation of a card\nor effect. Summoning a monster, Tributing, changing a monster’s\nbattle position and paying costs are not effect activations and\ntherefore you cannot respond to those actions using a Chain."
+  },
+  {
+   "rule_id": "RULE-MONSTER-012",
+   "title": "Xyz Materials",
+   "title_source": "heading",
+   "anchor": "Xyz Materials",
+   "category": "MONSTER",
+   "category_title": "몬스터 카드 종류",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     51
+    ],
+    "pdf_pages": [
+     28
+    ]
+   },
+   "text": " Xyz Materials\nMonsters that are used to Xyz Summon are called “Xyz Materials”,\nand are placed underneath the Xyz Monster, to show that they are\nattached to it. Monsters that have become Xyz Materials are not\ntreated as cards on the ﬁeld. When an Xyz Monster leaves the ﬁeld,\nall of the Xyz Materials attached to it are sent to the Graveyard. If\nan Xyz Monster is ﬂipped face-down, or becomes controlled by the\nopponent, the Xyz Materials are not sent to the Graveyard. They\nremain attached to the Xyz Monster."
+  },
+  {
+   "rule_id": "RULE-MISC-006",
+   "title": "Leaves the Field",
+   "title_source": "heading",
+   "anchor": "Leaves the Field",
+   "category": "MISC",
+   "category_title": "그 밖의 규칙",
+   "chapter": 5,
+   "chapter_title": "Other Rules",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     51
+    ],
+    "pdf_pages": [
+     28
+    ]
+   },
+   "text": " Leaves the Field\nSome monsters have effects that activate when they “leave the ﬁeld”.\nFor example, these effects activate when the monster is sent to\nthe Graveyard, or is banished, or is returned to the hand or Extra\nDeck. When a monster on the ﬁeld is shufﬂed into the Main Deck, or\nbecomes an Xyz Material, it is no longer a card on the ﬁeld, however\nits effects that activate when it “leaves the ﬁeld” will not activate."
+  },
+  {
+   "rule_id": "RULE-TERM-001",
+   "title": "Attack Directly",
+   "title_source": "heading",
+   "anchor": "lAttack Directly",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     52
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lAttack Directly\nAttacking directly means that a monster attacks a player instead of\nattacking a monster. In this case, the damage to the player will be equal\nto the monster’s ATK. Some monsters have an effect that allows them to\nattack directly even if the opponent controls a monster."
+  },
+  {
+   "rule_id": "RULE-TERM-002",
+   "title": "Banished Cards (Previously Remove from Play)",
+   "title_source": "heading",
+   "anchor": "lBanished Cards (Previously Remove from Play)",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     52
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lBanished Cards (Previously Remove from Play)\nAlthough a card that has been used is normally sent to the Graveyard,\na card which is banished is separated from the ﬁeld instead. You must\nreturn your banished cards so you can use them for the next Duel."
+  },
+  {
+   "rule_id": "RULE-TERM-003",
+   "title": "Battle / Battled",
+   "title_source": "heading",
+   "anchor": "lBattle / Battled",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     52
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lBattle / Battled\nA monster “battles” (and is “battling”) starting from when it attacks or\nis attacked. This includes both monsters attacking other monsters, and\nmonsters attacking a player’s Life Points directly. When a card requires a\nmonster to have “battled” (past tense), the attack had to have reached the\ndamage calculation portion of the Damage Step in order for the monster to\nhave “battled”. If the attack stops before damage calculation, the monster\ndid not “battle”. (Note that an attack was still declared, however, so in\nmost cases the attacking monster cannot declare another attack."
+  },
+  {
+   "rule_id": "RULE-TERM-004",
+   "title": "Battle Damage",
+   "title_source": "heading",
+   "anchor": "lBattle Damage",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     52
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lBattle Damage\nBattle damage is damage inﬂicted to a player by an attacking monster,\nor by a battle between two monsters. This is different from damage from\nthe effect of an Effect Monster, Spell Card or Trap Card."
+  },
+  {
+   "rule_id": "RULE-TERM-005",
+   "title": "Cards on the Field",
+   "title_source": "heading",
+   "anchor": "lCards on the Field",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     52
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lCards on the Field\nWhen “cards on the ﬁeld” is written in card text, it means all the cards on\nthe Game Mat other than the Graveyard, Deck, and Extra Deck."
+  },
+  {
+   "rule_id": "RULE-TERM-006",
+   "title": "Colon (:) and Semi-colon (;)",
+   "title_source": "heading",
+   "anchor": "lColon (:) and Semi-colon (;)",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     52
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lColon (:) and Semi-colon (;)\nCard effects are sometimes separated with a colon (:) and/or semi-colon (;).\nText before the colon gives information on conditions to activate the effect,\nand timing on when it happens. Text before a semi-colon is what you do\nwhen the effect is activated. Text at the end of a sentence, after all colons\nand semi-colons, is what you do at resolution of the effect."
+  },
+  {
+   "rule_id": "RULE-TERM-007",
+   "title": "Control / Possess",
+   "title_source": "heading",
+   "anchor": "lControl / Possess",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     53
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lControl / Possess\nCards you “control” are the cards in your Monster Zone, Spell & Trap Zone,\nField Zone, and Pendulum Zone. Cards in your “possession” include all cards\nyou control, plus the cards in your hand, Deck, Extra Deck, Graveyard, your\nbanished cards, cards in the middle of being Summoned to your side of the\nﬁeld, and Xyz Materials attached to monsters you control. If a player takes\ncontrol of a card from their opponent, move it to the new controller’s side\nof the ﬁeld. If sent to the Graveyard, or returned to the hand or Deck, it\nis always returned to the Graveyard / hand / Deck of the original owner."
+  },
+  {
+   "rule_id": "RULE-TERM-008",
+   "title": "Destroy",
+   "title_source": "heading",
+   "anchor": "lDestroy",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     53
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lDestroy\nA card is destroyed when it is sent to the Graveyard due to battle\nbetween monsters or by an effect that destroys a card. A card that\nis returned from the ﬁeld to the hand or Deck, or, that is sent to\nthe Graveyard as a cost or Tribute, is NOT considered “destroyed.”"
+  },
+  {
+   "rule_id": "RULE-TERM-009",
+   "title": "Discard",
+   "title_source": "heading",
+   "anchor": "lDiscard",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     53
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lDiscard\nDiscard means to send a card from your hand to the Graveyard.\nThis can happen because of a card effect or by adjusting the\nnumber of cards in your hand during the End Phase."
+  },
+  {
+   "rule_id": "RULE-TERM-010",
+   "title": "Effects of Cards",
+   "title_source": "heading",
+   "anchor": "lEffects of Cards",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     53
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lEffects of Cards\nThe effect of a card is the special ability written on it, like the effect\nof a Spell, Trap, or Effect Monster. Costs that are needed to activate\nan ability are not part of the effect. The conditions that describe\nhow to play a “Special Summon Monster” are also not an effect."
+  },
+  {
+   "rule_id": "RULE-TERM-011",
+   "title": "Equip Cards",
+   "title_source": "heading",
+   "anchor": "lEquip Cards",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     53
+    ],
+    "pdf_pages": [
+     29
+    ]
+   },
+   "text": "lEquip Cards\nIn addition to Equip Spell Cards, sometimes Trap Cards or Monster Cards\ncan become equipped to a monster. Equipped Traps remain Trap Cards, but\nequipped monsters are considered to be Equip Spells. The term “Equip Card”\nincludes all 3 kinds (standard Equip Spells, equipped Traps, and monsters\nequipped to other monsters).If a Monster Card is equipped to another\nmonster, it remains equipped to that monster and cannot be moved to a\ndifferent target, even by card effects that would normally be able to do so.\nEXCEPTION: Union monsters equipped by their own effects can be moved\nby appropriate card effects."
+  },
+  {
+   "rule_id": "RULE-TERM-012",
+   "title": "Equipped Monster",
+   "title_source": "heading",
+   "anchor": "lEquipped Monster",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     54
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lEquipped Monster\nA monster that is equipped with an Equip Card is an “equipped monster.”\nWhen this monster is destroyed or ﬂipped face-down, the equipped\ncard loses its target, and is destroyed and sent to the Graveyard."
+  },
+  {
+   "rule_id": "RULE-TERM-013",
+   "title": "Excavate",
+   "title_source": "heading",
+   "anchor": "lExcavate",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     54
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lExcavate\nWhen a card says to “excavate” cards from your Deck, you reveal those\ncards to both players. Then, before you do anything else, apply the\ninstructions from the card effect that excavated them. Cards that are\nbeing excavated are still treated as being in the Deck until sent elsewhere\nby the card instructions."
+  },
+  {
+   "rule_id": "RULE-TERM-014",
+   "title": "Original ATK (or DEF)",
+   "title_source": "heading",
+   "anchor": "lOriginal ATK (or DEF)",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     54
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lOriginal ATK (or DEF)\nThe Original ATK (or DEF) is the number of ATK (or DEF) points printed on\nthe Monster Card. This does not include an increase from an Equip Spell\nCard or other card effect."
+  },
+  {
+   "rule_id": "RULE-TERM-015",
+   "title": "Pay a Cost",
+   "title_source": "heading",
+   "anchor": "lPay a Cost",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     54
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lPay a Cost\nTo pay a cost is an action required by a player in order to activate a card,\nan effect, or to Summon a monster. Tributing to Tribute Summon a Level\n5 monster is an example of a cost. Other common costs are discarding,\npaying LP, or banishing cards. You have to pay any costs before you\ndeclare the activation of the card. Even if the activation of the card is\nnegated, you cannot get a refund of the cost that you have paid."
+  },
+  {
+   "rule_id": "RULE-TERM-016",
+   "title": "Piercing Battle Damage",
+   "title_source": "heading",
+   "anchor": "lPiercing Battle Damage",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     54
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lPiercing Battle Damage\nSome monsters can inﬂict piercing battle damage when they attack a\nDefense Position monster. This means that you inﬂict damage to your\nopponent’s LP equal to the difference between the attacking monster’s\nATK and the defending monster’s DEF."
+  },
+  {
+   "rule_id": "RULE-TERM-017",
+   "title": "Random",
+   "title_source": "heading",
+   "anchor": "lRandom",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     54
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lRandom\nWhen a card effect says to choose a card randomly, there is no ofﬁcial\nway of doing so, it is ﬁne as long as neither player has a way of knowing\nwhich card is being chosen."
+  },
+  {
+   "rule_id": "RULE-TERM-018",
+   "title": "Reveal",
+   "title_source": "heading",
+   "anchor": "lReveal",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     55
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lReveal\nWhen an effect says to reveal a card, you show it to both players. You\nmay have to reveal a face-down card, a card from your hand, or from the\ntop of your Deck. Revealing a card does not activate the card or its Flip\neffect. Normally, revealed cards are returned to their original position\nafter being looked at by both players."
+  },
+  {
+   "rule_id": "RULE-TERM-019",
+   "title": "Search your Deck",
+   "title_source": "heading",
+   "anchor": "lSearch your Deck",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     55
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lSearch your Deck\nWhenever an effect instructs you to add a card from your Deck to your\nhand, or to Special Summon a monster from your Deck, you can pick\nup your Deck and search through it for the appropriate card. You must\nshufﬂe your Deck after any time you search it and let your opponent\nshufﬂe or cut. You cannot activate an effect to search your Deck for a\ncard if there are no cards that meet the requirements in your Deck."
+  },
+  {
+   "rule_id": "RULE-TERM-020",
+   "title": "Send to the Graveyard",
+   "title_source": "heading",
+   "anchor": "lSend to the Graveyard",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     55
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lSend to the Graveyard\nA card can be sent to the Graveyard in various ways. Destroying a card,\ndiscarding, and Tributing a monster are all actions that send a card to\nthe Graveyard, and will normally activate “When this card is sent to the\nGraveyard…” Trigger Effects.\nEXCEPTION: When a banished card is moved to the Graveyard, it is not\nconsidered to be “sent to the Graveyard”."
+  },
+  {
+   "rule_id": "RULE-TERM-021",
+   "title": "Set",
+   "title_source": "heading",
+   "anchor": "lSet",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     55
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lSet\nPlaying a card face-down is called a Set. For Monster Cards, playing it in\nface-down Defense Position is called a Set. Any card that is face-down\non the ﬁeld is a Set card."
+  },
+  {
+   "rule_id": "RULE-TERM-022",
+   "title": "Shuff le",
+   "title_source": "heading",
+   "anchor": "lShuff le",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     55
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lShuff le\nThere is no rule for how to shufﬂe, but while shufﬂing you cannot look at\nthe cards you are shufﬂing, or arrange the cards and then shufﬂe them."
+  },
+  {
+   "rule_id": "RULE-TERM-023",
+   "title": "Tribute",
+   "title_source": "heading",
+   "anchor": "lTribute",
+   "category": "TERM",
+   "category_title": "용어",
+   "chapter": 6,
+   "chapter_title": "Glossary",
+   "level": 1,
+   "parent": null,
+   "subsections": [],
+   "source_reference": {
+    "document": "sd-rulebook-en-v10",
+    "printed_pages": [
+     55
+    ],
+    "pdf_pages": [
+     30
+    ]
+   },
+   "text": "lTribute\nTributing is sending a monster you control to the Graveyard. You can\nTribute a face-up or face-down monster, unless otherwise speciﬁed.\nTributing a monster is one possible cost for Summoning a monster or\nactivating an effect. A monster sent to the Graveyard by Tributing is not\ntreated as “destroyed.”"
+  }
+ ]
+}
