@@ -59,3 +59,17 @@ def test_missing_directory_yields_empty_source_not_an_error(tmp_path):
 def test_display_name_falls_back_when_no_korean_data():
     card = Card(id=1, name="Some Card", name_en="Some Card")
     assert card.display_name() == "Some Card"
+
+
+def test_autoload_honours_ygo_ko_dir_env_var(tmp_path, monkeypatch):
+    """YGO_KO_DIR 로 한국어 데이터 위치를 지정할 수 있어야 한다."""
+    (tmp_path / "ko.csv").write_text(
+        "id,name,desc\n46986414,표시명,본문\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("YGO_KO_DIR", str(tmp_path))
+    source = KoreanTextSource.autoload()
+    assert len(source) == 1
+
+    cards = _sample_cards()
+    source.apply(cards)
+    assert cards[46986414].name_ko == "표시명"

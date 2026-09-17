@@ -158,6 +158,33 @@ GitHub 만 열려 있어 `cards.cdb`(영어)와 스크립트 상수는 받을 �
 코드 변경은 필요 없다. `sources/korean_names.py` 가 `Card.name_ko` 와
 `desc` 를 덮어쓰고, 이름 검색은 한국어·영어·일본어를 모두 대조한다.
 
+## 클라우드 세션 설정 (Claude Code on the web)
+
+`.claude/hooks/session-start.sh` 가 세션 시작 시 자동으로 실행된다.
+개발 의존성 설치, 공식 카드 데이터 내려받기, Lua 파싱 캐시 예열,
+한국어 데이터 소스 도달 가능 여부 점검을 한 번에 처리한다.
+로컬 세션에서는 `CLAUDE_CODE_REMOTE` 검사로 즉시 종료하므로 아무 영향이 없다.
+
+측정값: 데이터가 없는 첫 세션 약 11초, 이후 세션 약 1.6초.
+
+환경 대화상자(claude.ai/code 의 환경 선택기)에는 다음을 넣는다.
+
+**Network access**: `Custom`, 허용 도메인에 `*.yugioh-card.com`,
+그리고 **"Also include default list of common package managers" 체크**
+(체크하지 않으면 `raw.githubusercontent.com` 과 PyPI 까지 차단된다).
+
+**Environment variables**:
+
+```
+PYTHONUNBUFFERED=1
+PYTHONDONTWRITEBYTECODE=1
+PIP_DISABLE_PIP_VERSION_CHECK=1
+PIP_ROOT_USER_ACTION=ignore
+```
+
+`YGO_CARDS_CDB` 는 훅이 실제 경로로 직접 써 넣으므로 여기 적을 필요가 없다.
+한국어 데이터를 다른 위치에 두려면 `YGO_KO_DIR` 로 지정한다.
+
 ## 테스트
 
 ```bash

@@ -76,10 +76,15 @@ class KoreanTextSource:
         cls, directory: str | os.PathLike[str] | None = None
     ) -> KoreanTextSource:
         """
-        ``data/ko/`` 안의 한국어 데이터 파일을 자동으로 찾는다.
-        없으면 비어 있는 소스를 돌려준다(오류가 아니다).
+        한국어 데이터 파일을 자동으로 찾는다. 없으면 비어 있는 소스를
+        돌려준다(오류가 아니다).
+
+        탐색 위치 우선순위:
+        1. 호출자가 넘긴 ``directory``
+        2. ``YGO_KO_DIR`` 환경 변수
+        3. 프로젝트의 ``data/ko/``
         """
-        ko_dir = Path(directory or DEFAULT_KO_DIR)
+        ko_dir = Path(directory or os.environ.get("YGO_KO_DIR") or DEFAULT_KO_DIR)
         if not ko_dir.is_dir():
             return cls()
         for pattern in ("*.cdb", "*.json", "*.csv"):
