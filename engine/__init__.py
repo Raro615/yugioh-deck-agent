@@ -17,6 +17,9 @@ Duel Engine.
 - **Phase 2-C** — 비용과 선택 (``cost/``). 후보를 세고 선택을 검사하되
   **아무것도 치르지 않고 아무것도 고르지 않는다**.
   ``docs/phase2c-cost-choice.md`` 참고.
+- **Phase 2-D-1** — 효과 모델과 해결 계약 (``effect/``). 효과가 무엇을
+  요구하고 무엇을 하는지 정의하되 **실행하지 않는다**.
+  ``docs/phase2d1-effect-model.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 

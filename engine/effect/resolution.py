@@ -1,0 +1,294 @@
+"""
+해결 **계약** — 실행기가 지켜야 할 약속.
+
+실행기를 만들지 않는다. "실행기가 무엇을 받고 무엇을 돌려줘야 하는가" 만
+고정한다.
+
+    EffectDefinition  +  ResolutionContext  +  GameStateView
+        ↓  EffectResolver.resolve()
+    EffectResult
+        ↓  (Phase 2-D-2)
+    StateDelta  →  GameState
+
+마지막 화살표는 **아직 없다.** ``StateDelta`` 는 ADR-008 이 Phase 2-E 로
+미뤄 두었고, 여기서도 만들지 않는다.
+
+지금 유일한 실행기
+------------------
+:class:`UnimplementedResolver` 는 언제나 ``NOT_IMPLEMENTED`` 를 돌려준다.
+자리표시가 아니라 **지금 엔진의 정직한 상태**다 — 등록된 구현이 하나도 없다.
+이것이 있어서 "계약이 지켜지는가" 를 실제로 테스트할 수 있다.
+
+문맥은 안정적인 식별자만 담는다
+-------------------------------
+``ResolutionContext`` 에 ``CardInstance`` 나 ``GameState`` 를 담지 않는다.
+담으면 문맥이 특정 판에 묶이고, 직렬화도 replay 도 불가능해진다.
+
+체인 · 트리거 · 타이밍은 **자리도 만들지 않았다.** 그 시스템이 없는데
+칸을 비워 두면 모양을 미리 못박게 된다.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Protocol, runtime_checkable
+
+from engine.condition import ConditionContext
+from engine.cost import Selection
+from engine.effect.definition import (
+    EffectDefinition,
+    ExecutionAvailability,
+    execution_availability,
+)
+from engine.game_state_view import GameStateView
+from engine.ids import EffectRef, InstanceId
+from engine.validation import ValidationCode
+
+
+@dataclass(frozen=True, slots=True)
+class ResolutionContext:
+    """
+    효과 하나를 해결할 때의 문맥. **불변**이고 값 타입만 담는다.
+
+    ``controller`` 는 효과를 발동한 플레이어다. 카드의 ``owner`` /
+    ``controller`` 와 다를 수 있다 — 컨트롤을 빼앗긴 카드의 효과는
+    빼앗은 쪽이 쓴다.
+    """
+
+    effect_ref: EffectRef
+    controller: int
+    source: InstanceId | None = None
+    """효과를 발동한 카드. 필드를 떠난 뒤에도 해결되는 효과가 있으므로 없을 수 있다."""
+    targets: Selection = field(default_factory=Selection)
+    """대상 지정 · 선택의 결과. 빈 것은 **"대상이 없다" 가 아니라 "고른 것이 없다"** 다."""
+    cost_selections: tuple[Selection, ...] = ()
+    """비용으로 내놓기로 한 카드들. 비용 순서대로다."""
+
+    def __post_init__(self) -> None:
+        if self.controller not in (0, 1):
+            raise ValueError(f"controller 는 0 또는 1 입니다: {self.controller}")
+        if not isinstance(self.cost_selections, tuple):
+            raise TypeError(
+                "cost_selections 는 tuple 이어야 합니다 — 문맥은 불변입니다."
+            )
+
+    @property
+    def opponent(self) -> int:
+        return 1 - self.controller
+
+    def condition_context(self) -> ConditionContext:
+        """
+        조건 계층으로 넘길 문맥. 같은 식별자를 그대로 옮긴다.
+
+        조건 계층이 자기 문맥 타입을 갖고 있으므로, 여기서 변환해 준다.
+        두 타입을 합치지 않는 이유는 담는 것이 다르기 때문이다 — 조건은
+        비용 선택을 알 필요가 없다.
+        """
+        return ConditionContext(
+            player=self.controller,
+            source=self.source,
+            effect_ref=self.effect_ref,
+            targets=self.targets.chosen,
+        )
+
+    def canonical_state(self) -> tuple:
+        return (
+            (self.effect_ref.card_id, self.effect_ref.ordinal),
+            self.controller,
+            self.source.value if self.source is not None else None,
+            self.targets.canonical_state(),
+            tuple(s.canonical_state() for s in self.cost_selections),
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {
+            "effect_ref": {
+                "card_id": self.effect_ref.card_id,
+                "ordinal": self.effect_ref.ordinal,
+            },
+            "controller": self.controller,
+            "targets": self.targets.to_dict(),
+        }
+        if self.source is not None:
+            data["source"] = self.source.value
+        if self.cost_selections:
+            data["cost_selections"] = [s.to_dict() for s in self.cost_selections]
+        return data
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return f"<Resolution {self.effect_ref} P{self.controller}>"
+
+
+class ResolutionStatus(str, Enum):
+    """해결 시도의 결과."""
+
+    RESOLVED = "resolved"
+    """
+    해결되었다. **지금 이 값을 내는 실행기는 없다** — 등록된 구현이 없기
+    때문이다. Phase 2-D-2 가 실제 실행기를 넣을 때 쓴다.
+    """
+    NOT_IMPLEMENTED = "not_implemented"
+    """이 효과의 실행 구현이 없다. 판은 그대로다."""
+    FORBIDDEN = "forbidden"
+    """출처가 실행을 금지한다 (``TEXT_DERIVED``). 판은 그대로다."""
+    INVALID_CONTEXT = "invalid_context"
+    """문맥이 정의와 맞지 않는다. 판은 그대로다."""
+    UNKNOWN = "unknown"
+    """해결할 수 있는지 판단할 수 없다. 판은 그대로다."""
+
+
+@dataclass(frozen=True, slots=True)
+class EffectResult:
+    """
+    해결 시도의 결과. **불변**이다.
+
+    :attr:`changed_state` 는 이 시도가 판을 바꿨는지 말한다. ``RESOLVED``
+    가 아니면 언제나 거짓이고, 지금은 어떤 실행기도 ``RESOLVED`` 를 내지
+    않으므로 **언제나 거짓**이다.
+
+    상태 변화 자체(``StateDelta``)는 여기 없다. ADR-008 이 Phase 2-E 로
+    미뤄 두었고, 그때 이 자리에 붙인다.
+    """
+
+    status: ResolutionStatus
+    code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED
+    reason: str = ""
+    missing: str | None = None
+    """무엇이 없어서 해결하지 못했는가."""
+
+    @property
+    def changed_state(self) -> bool:
+        return self.status is ResolutionStatus.RESOLVED
+
+    def __bool__(self) -> bool:
+        raise TypeError(
+            "EffectResult 를 참/거짓으로 쓸 수 없습니다. 해결되지 않은 것이 "
+            "조용히 성공으로 읽히는 것을 막기 위해서입니다. "
+            "`result.status is ResolutionStatus.RESOLVED` 로 비교하세요."
+        )
+
+    def canonical_state(self) -> tuple:
+        return (self.status.value, self.code.value, self.reason, self.missing)
+
+    def to_dict(self) -> dict:
+        data: dict = {
+            "status": self.status.value,
+            "code": self.code.value,
+            "reason": self.reason,
+        }
+        if self.missing is not None:
+            data["missing"] = self.missing
+        return data
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return f"{self.status.value}[{self.code.value}]: {self.reason}"
+
+
+@runtime_checkable
+class EffectResolver(Protocol):
+    """
+    실행기가 지켜야 할 계약.
+
+    구현은 다음을 **반드시** 지킨다.
+
+    1. :meth:`resolve` 는 :class:`~engine.game_state_view.GameStateView` 를
+       받는다. ``GameState`` 를 받지 않는다.
+    2. :func:`~engine.effect.definition.execution_availability` 가
+       ``EXECUTABLE`` 이 아니면 **아무것도 하지 않고** 그 사실을 돌려준다.
+    3. ``RESOLVED`` 가 아닌 결과를 돌려줄 때 판은 **바뀌지 않은 상태**여야
+       한다. 반쯤 실행해 놓고 실패를 알리지 않는다.
+    4. 같은 정의 · 같은 문맥 · 같은 관측이면 같은 결과를 돌려준다.
+    """
+
+    def resolve(
+        self,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        view: GameStateView,
+    ) -> EffectResult:
+        ...  # pragma: no cover - 프로토콜
+
+
+class UnimplementedResolver:
+    """
+    지금 엔진의 **유일한 실행기.** 언제나 실패를 돌려주고 판을 바꾸지 않는다.
+
+    자리표시가 아니다. 등록된 효과 구현이 하나도 없다는 것이 지금의 사실이고,
+    이것이 그 사실을 정직하게 표현한다. 덕분에 계약이 지켜지는지 실제로
+    테스트할 수 있다.
+    """
+
+    __slots__ = ("_lookup",)
+
+    def __init__(self, lookup=None):
+        self._lookup = lookup
+
+    def resolve(
+        self,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        view: GameStateView,
+    ) -> EffectResult:
+        """
+        계약대로 판정만 하고 **아무것도 바꾸지 않는다.**
+
+        문맥이 정의와 다른 효과를 가리키면 그것부터 거부한다 — 그 상태에서
+        무엇을 하든 잘못된 카드를 건드리게 된다.
+        """
+        if not isinstance(view, GameStateView):
+            raise TypeError(
+                "실행기는 GameStateView 만 받습니다. GameState 를 직접 넘기면 "
+                "해결 계약이 판을 바꿀 수 있게 됩니다."
+            )
+        if context.effect_ref != definition.effect_ref:
+            return EffectResult(
+                ResolutionStatus.INVALID_CONTEXT,
+                ValidationCode.EFFECT_REF_CARD_MISMATCH,
+                f"문맥이 가리키는 효과({context.effect_ref})가 정의"
+                f"({definition.effect_ref})와 다릅니다.",
+            )
+        availability = execution_availability(definition, self._lookup)
+        if availability is ExecutionAvailability.FORBIDDEN_SOURCE:
+            return EffectResult(
+                ResolutionStatus.FORBIDDEN,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                "공식 텍스트에서 유추한 효과는 실행하지 않습니다 (ADR-004).",
+                missing="executable implementation from official script",
+            )
+        if availability is ExecutionAvailability.UNVERIFIED:
+            return EffectResult(
+                ResolutionStatus.UNKNOWN,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                "의미가 공식 근거에서 확인되지 않았습니다.",
+                missing="verified semantics",
+            )
+        if availability is not ExecutionAvailability.EXECUTABLE:
+            return EffectResult(
+                ResolutionStatus.NOT_IMPLEMENTED,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{definition.effect_ref} 의 실행 구현이 등록되어 있지 "
+                "않습니다.",
+                missing="effect implementation registry (Phase 2-D-2)",
+            )
+        # 여기까지 오는 경우는 아직 없다 — 구현을 등록할 수단이 없기 때문이다.
+        # 실제 실행은 Phase 2-D-2 의 실행기가 맡는다.
+        return EffectResult(
+            ResolutionStatus.NOT_IMPLEMENTED,
+            ValidationCode.RULE_NOT_IMPLEMENTED,
+            "구현이 등록되어 있으나 이 실행기는 실행하지 않습니다 "
+            "(Phase 2-D-1 은 계약만 정의합니다).",
+            missing="effect executor (Phase 2-D-2)",
+        )
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return "<UnimplementedResolver>"
+
+
+__all__ = [
+    "ResolutionContext",
+    "ResolutionStatus",
+    "EffectResult",
+    "EffectResolver",
+    "UnimplementedResolver",
+]
