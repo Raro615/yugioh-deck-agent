@@ -295,11 +295,15 @@ def test_draw_to_the_opponent_uses_the_opponents_deck(state):
 def test_a_draw_that_would_empty_the_deck_is_refused_not_half_done(state):
     """
     덱이 모자랄 때의 규칙(덱 데스)이 없다. 절반만 뽑아 놓고 끝내지 않는다.
+
+    "실행기가 못 하는 일" 이 아니라 **"지금 판에 카드가 모자라다"** 이므로
+    상태와 코드가 따로 있다.
     """
     definition = make_definition(DrawOperation(99))
     result, before, after = run(state, definition, make_context(definition))
 
-    assert result.status is ResolutionStatus.UNSUPPORTED_OPERATION
+    assert result.status is ResolutionStatus.INSUFFICIENT_CARDS
+    assert result.code is ValidationCode.INSUFFICIENT_DECK
     assert result.missing == "deck-out rule (Phase 2-G)"
     assert after == before
 
@@ -919,7 +923,7 @@ def test_a_later_failure_does_not_apply_the_earlier_operations(state):
 
     result, before, after = run(state, definition, make_context(definition, target))
 
-    assert result.status is ResolutionStatus.UNSUPPORTED_OPERATION
+    assert result.status is ResolutionStatus.INSUFFICIENT_CARDS
     assert after == before
     assert state.find_instance(target).zone is Zone.MZONE
 

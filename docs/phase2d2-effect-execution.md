@@ -1,6 +1,7 @@
 # Phase 2-D-2 — Effect Execution
 
 기준 커밋: `4615f2f` (Phase 2-D-1 fix: Operation ↔ Target link)
+Hotfix: `7feb37b` 이후 — mutation 경계 두 곳 (§7 · §8)
 
 이 단계에서 엔진이 **처음으로 효과 때문에 판을 바꾼다.** 지금까지의 모든
 계층은 읽거나 판정하기만 했다.
@@ -175,7 +176,7 @@ ResolutionContext.selections  @primary → #7
 
 ---
 
-## 7. 주인 ≠ 컨트롤러 — 실행기가 명시해야 하는 이유
+## 7. 주인 ≠ 컨트롤러 — 일마다 적어 둔다
 
 `GameState.move` 의 `to_player` 기본값은 **컨트롤러**다.
 
@@ -184,26 +185,70 @@ owner = to_player if to_player is not None else card.controller
 ```
 
 컨트롤을 빼앗긴 카드를 그대로 옮기면 **빼앗은 쪽의 묘지로 간다.** 규칙상
-카드는 언제나 **주인의** 존으로 돌아간다. 그래서 실행기는 명시한다.
+카드는 언제나 **주인의** 존으로 돌아간다.
+
+그래서 실행기는 기본값을 쓰지 않는다. 그리고 `card.owner` 를 한 줄로 쓰지도
+않는다 — **일마다 표에 적는다.**
 
 ```python
-state.move(card, destination, to_player=card.owner)
+DESTINATION_OWNER = {
+    OperationKind.DESTROY:        DestinationOwner.OWNER,
+    OperationKind.SEND_TO_GRAVE:  DestinationOwner.OWNER,
+    OperationKind.RELEASE:        DestinationOwner.OWNER,
+    OperationKind.DISCARD:        DestinationOwner.OWNER,
+    OperationKind.BANISH:         DestinationOwner.OWNER,
+    OperationKind.RETURN_TO_HAND: DestinationOwner.OWNER,
+    OperationKind.RETURN_TO_DECK: DestinationOwner.OWNER,
+}
 ```
 
-`move_card` 가 컨트롤러를 그 존의 주인으로 되돌리므로, 이 한 줄이 주인과
-컨트롤 양쪽을 맞춘다. 테스트
-`test_a_stolen_card_goes_to_its_owners_graveyard` 가 이것을 지킨다.
+지금은 전부 `OWNER` 인데, 그것은 우연이 아니라 **지원하는 일들이 모두
+소유권 기반 존으로 보내기 때문**이다. 소환 · 세트처럼 *필드로* 보내는 일이
+들어오면 그것은 `CONTROLLER` 이고, 그때 이 표에 줄이 늘어난다. 한 줄로
+`card.owner` 를 쓰고 있으면 그 날 조용히 틀린다.
+
+`DESTROY` 도 적어 두었다. 파괴된 카드가 주인의 묘지로 간다는 것은 이미
+정해진 사실이고, 실행하지 않는 이유는 목적지가 아니라 **파괴 의미**(내성 ·
+대체 · 트리거)가 없기 때문이다 (§3).
+
+주인 결정은 **계획 단계**에서 끝난다. `_Step.owners` 가 `instances` 와 짝을
+이루어 카드마다 목적지의 주인을 들고 있고, 적용 단계는 그것을 그대로 넘긴다.
+한 번의 해결에서 양쪽 카드를 옮길 때 첫 장의 주인으로 전부 보내는 실수가
+구조적으로 불가능하다.
+
+옮긴 뒤에는 카드가 실제로 그 존, 그 플레이어 쪽에 있는지 확인한다. 아니면
+`EffectExecutionError` 이고 `EXECUTION_ERROR` 로 올라간다 — 존과 인스턴스가
+서로 다른 말을 하는 상태로 계속 가지 않는다.
+
+**소유권 자체는 바뀌지 않는다.** 실행기는 `owner` 를 쓰지 않고 읽기만 한다.
+`controller` 는 기존 규칙 그대로 `ZoneContainer._sync_from` 이 존의 주인으로
+맞춘다.
 
 ---
 
 ## 8. 덱이 모자란 드로우
 
-`DRAW` 는 계획 단계에서 덱 장수를 먼저 본다. 모자라면 `UNSUPPORTED_OPERATION`
-과 `missing="deck-out rule (Phase 2-G)"` 를 돌려주고 **한 장도 뽑지 않는다.**
-
 `GameState.draw` 자체는 있는 만큼만 옮기고 멈춘다 (Phase 1 의 primitive 는
 규칙을 모른다). 그것을 그대로 쓰면 "3장 드로우" 가 1장 드로우로 조용히
-줄어든다. 덱 데스 규칙이 없는데 절반만 실행하지 않는다.
+줄어들고, 결과는 성공처럼 보인다. **부분 적용 후 성공**이 가장 나쁜 실패다.
+
+그래서 `DRAW` 는 계획 단계에서 세 가지를 순서대로 본다.
+
+| 검사 | 결과 | 코드 |
+|------|------|------|
+| `count <= 0` | `INVALID_OPERATION` | `INVALID_AMOUNT` |
+| `len(deck) < count` | `INSUFFICIENT_CARDS` | `INSUFFICIENT_DECK` |
+| 통과 | (적용) | |
+
+`INSUFFICIENT_CARDS` 를 `UNSUPPORTED_OPERATION` 과 합치지 않는다. 실행기는
+드로우를 할 줄 알고, 다만 **지금 덱이 모자랄 뿐**이다. 둘은 다른 사실이다.
+모자랄 때 무슨 일이 일어나는가(덱 데스)가 없어서 거절한다는 것은
+`missing="deck-out rule (Phase 2-G)"` 에 그대로 남는다.
+
+`count <= 0` 은 `DrawOperation.__post_init__` 이 **생성 시점에** 막는 것이
+1차 방어다. 실행기의 검사는 그 방어를 우회해서 들어온 값을 위한 것이고,
+`INVALID_OPERATION` 은 "이 실행기가 못 한다"(`UNSUPPORTED_OPERATION`)와
+달리 **그 일이 애초에 말이 되지 않는다**는 뜻이다.
 
 ---
 
@@ -285,5 +330,16 @@ AppliedOperation(
 | Determinism | 같은 입력 → 같은 결과 · 같은 해시 · 직렬화 |
 | Failure atomicity | 다섯 가지 실패에서 해시 동일 · 뒤의 실패가 앞의 일을 취소 |
 
-전체 회귀: **1088 passed, 4 skipped** (Phase 2-D-1 기준 1040 + 48).
-기존 테스트는 하나도 삭제·수정하지 않았다.
+`tests/engine/test_effect_mutation_safety.py` — 28개 (Hotfix).
+
+| 묶음 | 보는 것 |
+|------|---------|
+| Owner / controller | 표가 일마다 적혀 있는가 · 빼앗은 카드의 5개 목적지 · 버리기 · 소유권 불변 · 컨트롤러 정책 불변 · 내 카드 · 한 해결에서 양쪽 카드 · **기본값을 쓰면 틀린다는 것 자체** · 가려진 존으로 사라짐 |
+| Draw | 덱에 맞는 드로우 · 부족 → 명시적 실패 · 해시/패/덱 동일 · 빈 덱 · 상대 덱을 센다 · `count<=0` 생성 거부 · 실행 거부 |
+| 순서 | 뒤의 드로우가 걸리면 앞의 제외도 없다 · 뒤의 대상이 틀리면 앞의 드로우도 없다 · operation identity 유지 |
+
+전체 회귀: **1116 passed, 4 skipped** (Phase 2-D-2 기준 1088 + 28).
+
+Hotfix 에서 기존 테스트 2개의 단언을 **더 정확한 쪽으로** 바꿨다 (드로우
+부족이 `UNSUPPORTED_OPERATION` → `INSUFFICIENT_CARDS`). 약화가 아니라
+강화이고, 그 외 기존 테스트는 하나도 삭제·수정하지 않았다.

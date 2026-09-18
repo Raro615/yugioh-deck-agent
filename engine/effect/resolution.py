@@ -189,6 +189,22 @@ class ResolutionStatus(str, Enum):
     """문맥이 정의와 맞지 않는다. 판은 그대로다."""
     INVALID_TARGET = "invalid_target"
     """대상이 없거나, 고르지 않았거나, 판에 존재하지 않는다. 판은 그대로다."""
+    INVALID_OPERATION = "invalid_operation"
+    """
+    일 자체가 의미를 갖지 못한다 (0장 드로우처럼). 판은 그대로다.
+
+    ``UNSUPPORTED_OPERATION`` 과 다르다 — 그쪽은 "이 실행기가 못 한다" 이고,
+    이쪽은 **그 일이 애초에 말이 되지 않는다** 이다.
+    """
+    INSUFFICIENT_CARDS = "insufficient_cards"
+    """
+    요청한 만큼의 카드가 판에 없다. 판은 **그대로다** — 있는 만큼만 하고
+    끝내지 않는다.
+
+    ``UNSUPPORTED_OPERATION`` 과 합치지 않는다. 실행기는 드로우를 할 줄
+    알고, 다만 지금 덱이 모자랄 뿐이다. 모자랄 때의 규칙(덱 데스)이 없어서
+    거절하는 것이고, 그 사실은 :attr:`EffectResult.missing` 에 남는다.
+    """
     CONDITION_FALSE = "condition_false"
     """발동 조건이 **거짓**이다. 판은 그대로다."""
     CONDITION_UNKNOWN = "condition_unknown"

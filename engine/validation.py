@@ -100,6 +100,19 @@ class ValidationCode(str, Enum):
     INSUFFICIENT_LIFE = "insufficient_life"
     COST_NOT_IMPLEMENTED = "cost_not_implemented"
 
+    # --- 효과 실행 (Phase 2-D-2) ---------------------------------------
+    INSUFFICIENT_DECK = "insufficient_deck"
+    """
+    요청한 만큼 뽑을 카드가 덱에 없다.
+
+    ``RULE_NOT_IMPLEMENTED`` 와 합치지 않는다 — 전자는 "이 엔진이 못 한다",
+    이것은 "지금 판에 카드가 모자라다" 로 서로 다른 사실이다. 덱이 모자랄
+    때 무슨 일이 일어나는가(덱 데스)는 아직 없으므로, 모자라면 **한 장도
+    뽑지 않고** 이 코드로 거절한다.
+    """
+    INVALID_AMOUNT = "invalid_amount"
+    """수치가 의미를 갖지 못한다 (0장 드로우 · 음수 드로우 등)."""
+
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:

@@ -48,10 +48,14 @@ from engine.effect.operation import (
 )
 from engine.effect.executor import (
     DESTINATION,
+    DESTINATION_OWNER,
     SUPPORTED,
     UNSUPPORTED_REASON,
+    DestinationOwner,
+    EffectExecutionError,
     EffectExecutor,
     EffectImplementationRegistry,
+    destination_player,
 )
 from engine.effect.resolution import (
     AppliedOperation,
@@ -107,8 +111,13 @@ __all__ = [
     "UnimplementedResolver",
     # 실행
     "EffectExecutor",
+    "EffectExecutionError",
     "EffectImplementationRegistry",
     "DESTINATION",
     "SUPPORTED",
     "UNSUPPORTED_REASON",
+    # 목적지의 주인
+    "DestinationOwner",
+    "DESTINATION_OWNER",
+    "destination_player",
 ]

@@ -41,8 +41,8 @@ Phase 2-E 의 몫이다 (ADR-008).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Callable
+from dataclasses import dataclass
+from enum import Enum
 
 from engine.condition import ConditionEvaluator, ConditionResult
 from engine.effect.definition import (
@@ -85,6 +85,55 @@ DESTINATION: dict[OperationKind, Zone] = {
     OperationKind.RETURN_TO_DECK: Zone.DECK,
 }
 
+
+class DestinationOwner(str, Enum):
+    """
+    옮겨진 카드가 **누구의** 존으로 가는가.
+
+    존은 플레이어마다 따로 있으므로, 목적지를 정할 때 존 종류만으로는
+    부족하다. 누구의 묘지인지까지 정해야 한다.
+    """
+
+    OWNER = "owner"
+    """카드의 **주인** 쪽. 소유권 기반 존(묘지 · 제외 · 패 · 덱)이 전부 이쪽이다."""
+    CONTROLLER = "controller"
+    """카드를 **지금 쓰는 쪽**. 필드(MZONE · SZONE …)가 이쪽이다."""
+
+
+#: 일마다 목적지의 주인을 어떻게 정하는가. **명시적으로** 적는다.
+#:
+#: 지금은 전부 :attr:`DestinationOwner.OWNER` 인데, 그것은 우연이 아니라
+#: 지원하는 일들이 모두 소유권 기반 존으로 보내기 때문이다. 소환 · 세트
+#: 처럼 **필드로** 보내는 일이 들어오면 그것은 ``CONTROLLER`` 이고, 그때
+#: 이 표에 줄이 늘어난다. 한 줄로 ``card.owner`` 를 쓰고 있으면 그 날
+#: 조용히 틀린다.
+#:
+#: ``DESTROY`` 도 적어 둔다 — 파괴된 카드가 주인의 묘지로 간다는 것은
+#: 이미 정해진 사실이다. 실행하지 않는 이유는 목적지가 아니라 **파괴
+#: 의미**(내성 · 대체 · 트리거)가 없기 때문이다.
+DESTINATION_OWNER: dict[OperationKind, DestinationOwner] = {
+    OperationKind.DESTROY: DestinationOwner.OWNER,
+    OperationKind.SEND_TO_GRAVE: DestinationOwner.OWNER,
+    OperationKind.RELEASE: DestinationOwner.OWNER,
+    OperationKind.DISCARD: DestinationOwner.OWNER,
+    OperationKind.BANISH: DestinationOwner.OWNER,
+    OperationKind.RETURN_TO_HAND: DestinationOwner.OWNER,
+    OperationKind.RETURN_TO_DECK: DestinationOwner.OWNER,
+}
+
+
+def destination_player(kind: OperationKind, card) -> int:
+    """
+    이 카드가 **누구의** 존으로 가는가. 표를 따른다.
+
+    ``GameState.move`` 의 ``to_player`` 기본값은 **컨트롤러**다. 그 기본값에
+    기대면 컨트롤을 빼앗긴 카드가 빼앗은 쪽의 묘지로 간다. 그래서 실행기는
+    기본값을 쓰지 않고 언제나 여기서 정한 값을 넘긴다.
+    """
+    rule = DESTINATION_OWNER[kind]
+    return card.owner if rule is DestinationOwner.OWNER else card.controller
+
+
 #: 이 실행기가 다룰 수 있는 일.
 #:
 #: ``DESTROY`` 가 **없다.** 유희왕의 "파괴" 는 묘지로 보내는 것과 다르고
@@ -104,14 +153,32 @@ UNSUPPORTED_REASON: dict[OperationKind, str] = {
 }
 
 
+class EffectExecutionError(RuntimeError):
+    """
+    적용 중에 판이 예상과 다르게 움직였다.
+
+    :attr:`ResolutionStatus.EXECUTION_ERROR` 로 올라간다. 일어나서는 안
+    되는 경우이고, 일어났다면 결함이다.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class _Step:
     """계획 단계에서 확정한 **할 일 하나.** 적용 단계가 그대로 수행한다."""
 
     operation: Operation
     instances: tuple[InstanceId, ...] = ()
+    owners: tuple[int, ...] = ()
+    """``instances`` 와 짝을 이루는 **목적지의 주인.** 계획 단계에서 정한다."""
     amount: int | None = None
     player: int | None = None
+
+    def __post_init__(self) -> None:
+        if len(self.owners) != len(self.instances):
+            raise ValueError(
+                "카드마다 목적지의 주인이 정해져 있어야 합니다: "
+                f"{len(self.instances)}장, 주인 {len(self.owners)}개"
+            )
 
     def record(self) -> AppliedOperation:
         return AppliedOperation(
@@ -347,16 +414,26 @@ class EffectExecutor:
         operation: Operation,
     ) -> "_Step | EffectResult":
         if isinstance(operation, DrawOperation):
+            if operation.count <= 0:
+                # :class:`DrawOperation` 이 생성 시점에 막지만, 그 방어를
+                # 우회해서 들어온 값도 조용히 통과시키지 않는다.
+                return _fail(
+                    ResolutionStatus.INVALID_OPERATION,
+                    ValidationCode.INVALID_AMOUNT,
+                    f"{operation.count}장 드로우는 의미가 없습니다.",
+                )
             player = _resolve_player(operation.who, context)
             available = len(state.player(player).deck)
             if available < operation.count:
-                # 덱이 모자랄 때의 규칙(덱 데스)이 아직 없다. 절반만 뽑아
-                # 놓고 끝내지 않는다.
+                # **뽑기 전에** 센다. 덱이 모자랄 때의 규칙(덱 데스)이 아직
+                # 없으므로, 있는 만큼만 뽑아 놓고 성공처럼 끝내지 않는다.
+                # ``GameState.draw`` 는 있는 만큼만 옮기고 멈추는 primitive
+                # 라서, 그대로 부르면 "3장 드로우" 가 조용히 1장이 된다.
                 return _fail(
-                    ResolutionStatus.UNSUPPORTED_OPERATION,
-                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    ResolutionStatus.INSUFFICIENT_CARDS,
+                    ValidationCode.INSUFFICIENT_DECK,
                     f"덱이 {available}장뿐이라 {operation.count}장을 뽑을 수 "
-                    "없습니다.",
+                    "없습니다. 한 장도 뽑지 않습니다.",
                     missing="deck-out rule (Phase 2-G)",
                 )
             return _Step(operation, amount=operation.count, player=player)
@@ -410,6 +487,7 @@ class EffectExecutor:
             )
 
         instances: list[InstanceId] = []
+        owners: list[int] = []
         for instance in selection.chosen:
             card = state.find_instance(instance)
             if card is None:
@@ -428,6 +506,8 @@ class EffectExecutor:
                     f"(현재 {card.zone.value}).",
                 )
             instances.append(instance)
+            # 주인 결정은 **바꾸기 전에** 끝낸다 (계획 단계).
+            owners.append(destination_player(operation.kind, card))
 
         if not instances:
             return _fail(
@@ -435,7 +515,7 @@ class EffectExecutor:
                 ValidationCode.TOO_FEW_SELECTED,
                 f"{ref} 에 고른 카드가 없습니다.",
             )
-        return _Step(operation, instances=tuple(instances))
+        return _Step(operation, instances=tuple(instances), owners=tuple(owners))
 
     # ==================================================================
     # 2단계 — 적용. 기존 primitive 만 부른다.
@@ -459,12 +539,19 @@ class EffectExecutor:
             return step.record()
 
         destination = DESTINATION[operation.kind]
-        for instance in step.instances:
+        for instance, to_player in zip(step.instances, step.owners):
             card = state.find_instance(instance)
             assert card is not None  # 계획 단계가 확인했다
-            # **소유자의** 존으로 간다. 컨트롤을 빼앗긴 카드도 주인의 묘지로
-            # 돌아가고, ``move_card`` 가 컨트롤러를 그 존의 주인으로 되돌린다.
-            state.move(card, destination, to_player=card.owner)
+            # 계획 단계가 정한 주인에게 **명시적으로** 보낸다.
+            # ``GameState.move`` 의 기본값(컨트롤러)에 절대 기대지 않는다 —
+            # 기대면 컨트롤을 빼앗긴 카드가 빼앗은 쪽의 묘지로 간다.
+            state.move(card, destination, to_player=to_player)
+            if card.zone is not destination or card.controller != to_player:
+                # 존과 인스턴스가 서로 다른 말을 하는 상태로 계속 가지 않는다.
+                raise EffectExecutionError(
+                    f"{instance} 를 P{to_player} 의 {destination.value} 로 "
+                    f"보냈는데 {card.zone.value}/P{card.controller} 에 있습니다."
+                )
         return step.record()
 
     def __repr__(self) -> str:  # pragma: no cover - 표시용
@@ -487,8 +574,12 @@ def _resolve_player(who, context: ResolutionContext) -> int:
 
 __all__ = [
     "EffectExecutor",
+    "EffectExecutionError",
     "EffectImplementationRegistry",
+    "DestinationOwner",
     "DESTINATION",
+    "DESTINATION_OWNER",
+    "destination_player",
     "SUPPORTED",
     "UNSUPPORTED_REASON",
 ]
