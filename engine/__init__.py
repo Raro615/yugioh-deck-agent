@@ -55,6 +55,11 @@ Duel Engine.
   비용 가능성을 **관문별로** 따로 판정하고 합친다. 비용을 치르지 않고
   체인에 넣지도 않으며, **아직 보지 않은 규칙을 ``unchecked_rules`` 로
   남긴다**. ``docs/phase2f3b-trigger-eligibility.md`` 참고.
+- **Phase 2-F-3-C** — 체인에 넣기 전의 정리와 순서 (``trigger_order.py``).
+  ``ELIGIBLE`` 만 컨트롤러별로 묶고, ``UNKNOWN`` 은 제외가 아니라 **따로**
+  보존한다. 순서는 재현 가능할 뿐 **규칙상의 순서가 아니며**
+  (``is_rule_ordered`` 는 언제나 거짓), 정할 수 없는 것은
+  ``unresolved_rules`` 로 남긴다. ``docs/phase2f3c-trigger-order.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
