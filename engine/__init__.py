@@ -32,8 +32,16 @@ Duel Engine.
   :class:`~engine.effect.journal.EventJournal` 에 사건으로 적는다.
   **기록은 판을 바꾸지 않는다** — 되돌리기도 재생도 아직 없다 (ADR-008).
   ``docs/phase2d3-delta-journal.md`` 참고.
+- **Phase 2-E** — 비용 지불 (``payment.py``).
+  :class:`~engine.payment.CostPayer` 가 **비용이 판을 바꾸는 유일한 문**이다.
+  묶음 전체를 먼저 확인하고 (AND 관계이므로 중간까지만 내놓지 않는다),
+  버리기 · 릴리스 · 라이프 지불만 치른다. 나머지는 지어내지 않고
+  ``UNSUPPORTED_COST`` 다. ``docs/phase2e-cost-payment.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
+비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
+변경이고, 변경을 적으려면 ``effect.delta`` 가 필요한데 ``effect`` 가 이미
+``cost`` 를 읽기 때문이다.
 
 ``PlayerActionKind`` 는 ``analysis.effect_model.ActionKind`` 와 **다른
 어휘**다. 전자는 고르는 주체가 고르는 행위, 후자는 효과가 하는 일이다

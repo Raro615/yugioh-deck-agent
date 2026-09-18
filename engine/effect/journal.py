@@ -1,5 +1,9 @@
 """
-EventJournal — 실행된 효과와 그 변화를 **순서대로** 적어 두는 append-only 기록.
+EventJournal — 판을 바꾼 사건을 **순서대로** 적어 두는 append-only 기록.
+
+효과 해결과 비용 지불은 **다른 사건**이다 (:class:`EventKind`). "이 카드를
+버리고 발동한다" 의 버리기는 비용이고, 해결 중의 "카드 1장을 묘지로
+보낸다" 는 효과다. 한 줄에 섞으면 "비용으로 버려졌을 때" 를 구분할 수 없다.
 
     executor.execute()
         ↓  GameState mutation
@@ -40,9 +44,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from enum import Enum
 from typing import Iterator
 
+from engine.cost import CostPayment
 from engine.effect.delta import StateDelta, canonical_deltas
 from engine.effect.resolution import AppliedOperation
 from engine.ids import EffectRef, InstanceId
@@ -52,8 +58,64 @@ class JournalError(RuntimeError):
     """기록이 순서를 잃었다. 고치는 것이 아니라 멈추는 쪽이 맞다."""
 
 
+class EventKind(str, Enum):
+    """
+    무엇이 판을 바꿨는가.
+
+    **비용 지불과 효과 해결은 다른 사건이다** — "이 카드를 버리고 발동한다"
+    의 버리기는 비용이고, 해결 중의 "카드 1장을 묘지로 보낸다" 는 효과다.
+    문구가 비슷하다고 합치면 "비용으로 버려졌을 때" 트리거를 영영 구분할 수
+    없다.
+    """
+
+    EFFECT = "effect"
+    COST_PAYMENT = "cost_payment"
+
+
 @dataclass(frozen=True, slots=True)
-class EffectEvent:
+class JournalEvent:
+    """
+    기록에 들어가는 사건의 공통 기반. **불변**이다.
+
+    :attr:`sequence` 가 identity 다. 무작위 식별자를 쓰지 않는 이유는
+    단순하다 — 같은 듀얼을 같은 입력으로 다시 돌렸을 때 기록이 달라지면
+    그 기록으로는 아무것도 증명할 수 없다.
+    """
+
+    @property
+    def kind(self) -> EventKind:
+        raise NotImplementedError  # pragma: no cover - 추상
+
+    def canonical_state(self) -> tuple:
+        raise NotImplementedError  # pragma: no cover - 추상
+
+    def to_dict(self) -> dict:
+        raise NotImplementedError  # pragma: no cover - 추상
+
+    def describe_ko(self) -> str:
+        raise NotImplementedError  # pragma: no cover - 추상
+
+    @property
+    def changed_state(self) -> bool:
+        """이 사건이 판을 바꿨는가."""
+        return bool(self.deltas)
+
+    @property
+    def instances(self) -> tuple[InstanceId, ...]:
+        """이 사건이 건드린 카드들. 변화 순서대로, 중복 없이."""
+        seen: list[InstanceId] = []
+        for delta in self.deltas:
+            instance = getattr(delta, "instance", None)
+            if isinstance(instance, InstanceId) and instance not in seen:
+                seen.append(instance)
+        return tuple(seen)
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.describe_ko()
+
+
+@dataclass(frozen=True, slots=True)
+class EffectEvent(JournalEvent):
     """
     효과 하나가 해결되어 판이 달라진 **사건 하나.** 불변이다.
 
@@ -78,31 +140,15 @@ class EffectEvent:
     """효과를 발동한 카드. 필드를 떠난 뒤 해결되는 효과가 있으므로 없을 수 있다."""
 
     def __post_init__(self) -> None:
-        if self.sequence < 0:
-            raise ValueError(f"sequence 는 0 이상입니다: {self.sequence}")
-        if self.actor not in (0, 1):
-            raise ValueError(f"actor 는 0 또는 1 입니다: {self.actor}")
-        for name in ("applied", "deltas"):
-            if not isinstance(getattr(self, name), tuple):
-                raise TypeError(f"{name} 는 tuple 이어야 합니다 — 사건은 불변입니다.")
+        _check_event(self.sequence, self.actor, ("applied", self.applied), ("deltas", self.deltas))
 
     @property
-    def changed_state(self) -> bool:
-        """이 사건이 판을 바꿨는가."""
-        return bool(self.deltas)
-
-    @property
-    def instances(self) -> tuple[InstanceId, ...]:
-        """이 사건이 건드린 카드들. 변화 순서대로, 중복 없이."""
-        seen: list[InstanceId] = []
-        for delta in self.deltas:
-            instance = getattr(delta, "instance", None)
-            if isinstance(instance, InstanceId) and instance not in seen:
-                seen.append(instance)
-        return tuple(seen)
+    def kind(self) -> EventKind:
+        return EventKind.EFFECT
 
     def canonical_state(self) -> tuple:
         return (
+            EventKind.EFFECT.value,
             self.sequence,
             (self.effect_ref.card_id, self.effect_ref.ordinal),
             self.actor,
@@ -113,6 +159,7 @@ class EffectEvent:
 
     def to_dict(self) -> dict:
         data: dict = {
+            "kind": EventKind.EFFECT.value,
             "sequence": self.sequence,
             "effect_ref": {
                 "card_id": self.effect_ref.card_id,
@@ -130,8 +177,85 @@ class EffectEvent:
         changes = ", ".join(delta.describe_ko() for delta in self.deltas) or "변화 없음"
         return f"#{self.sequence} {self.effect_ref} P{self.actor}: {changes}"
 
-    def __str__(self) -> str:  # pragma: no cover - 표시용
-        return self.describe_ko()
+
+@dataclass(frozen=True, slots=True)
+class CostPaymentEvent(JournalEvent):
+    """
+    비용이 치러져 판이 달라진 **사건 하나.** 불변이다.
+
+    :class:`EffectEvent` 와 합치지 않는다. 담는 것부터 다르다 — 저쪽은
+    ``applied`` (어떤 일을 했는가), 이쪽은 ``payments`` (무엇을 냈는가) 다.
+    하나의 타입에 두 payload 를 넣으면 읽는 쪽이 언제나 둘 다 확인해야 한다.
+
+    ``effect_ref`` 는 **없을 수 있다.** 비용은 어떤 효과의 발동 비용일 때가
+    대부분이지만, 그 연결을 아직 만들지 않았다 (ActionExecutor 는 다음
+    단계다). 모르는 것을 지어내지 않는다.
+    """
+
+    sequence: int
+    actor: int
+    """비용을 치른 플레이어."""
+    payments: tuple[CostPayment, ...] = ()
+    """무엇을 냈는가."""
+    deltas: tuple[StateDelta, ...] = ()
+    """그 지불로 판이 **어떻게 달라졌는가.** 순서가 곧 사실이다."""
+    effect_ref: EffectRef | None = None
+    """어느 효과의 비용이었는가. 아직 잇지 않았으면 ``None``."""
+    source: InstanceId | None = None
+
+    def __post_init__(self) -> None:
+        _check_event(
+            self.sequence, self.actor, ("payments", self.payments), ("deltas", self.deltas)
+        )
+
+    @property
+    def kind(self) -> EventKind:
+        return EventKind.COST_PAYMENT
+
+    def canonical_state(self) -> tuple:
+        return (
+            EventKind.COST_PAYMENT.value,
+            self.sequence,
+            (self.effect_ref.card_id, self.effect_ref.ordinal)
+            if self.effect_ref is not None
+            else None,
+            self.actor,
+            self.source.value if self.source is not None else None,
+            tuple(p.canonical_state() for p in self.payments),
+            canonical_deltas(self.deltas),
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {
+            "kind": EventKind.COST_PAYMENT.value,
+            "sequence": self.sequence,
+            "actor": self.actor,
+            "payments": [p.to_dict() for p in self.payments],
+            "deltas": [d.to_dict() for d in self.deltas],
+        }
+        if self.effect_ref is not None:
+            data["effect_ref"] = {
+                "card_id": self.effect_ref.card_id,
+                "ordinal": self.effect_ref.ordinal,
+            }
+        if self.source is not None:
+            data["source"] = self.source.value
+        return data
+
+    def describe_ko(self) -> str:
+        paid = ", ".join(p.describe_ko() for p in self.payments) or "낸 것 없음"
+        return f"#{self.sequence} 비용 P{self.actor}: {paid}"
+
+
+def _check_event(sequence: int, actor: int, *tuples) -> None:
+    """사건이 갖춰야 할 최소 모양. 두 사건 타입이 함께 쓴다."""
+    if sequence < 0:
+        raise ValueError(f"sequence 는 0 이상입니다: {sequence}")
+    if actor not in (0, 1):
+        raise ValueError(f"actor 는 0 또는 1 입니다: {actor}")
+    for name, value in tuples:
+        if not isinstance(value, tuple):
+            raise TypeError(f"{name} 는 tuple 이어야 합니다 — 사건은 불변입니다.")
 
 
 class EventJournal:
@@ -145,8 +269,8 @@ class EventJournal:
 
     __slots__ = ("_events",)
 
-    def __init__(self, events: "tuple[EffectEvent, ...] | None" = None):
-        self._events: list[EffectEvent] = []
+    def __init__(self, events: "tuple[JournalEvent, ...] | None" = None):
+        self._events: list[JournalEvent] = []
         for event in events or ():
             self.append(event)
 
@@ -160,8 +284,8 @@ class EventJournal:
         번호가 어긋나면 **거부한다.** 조용히 다시 매기지 않는다 — 번호를
         고쳐 주면 기록과 실제 실행 순서가 달라진 것을 아무도 모르게 된다.
         """
-        if not isinstance(event, EffectEvent):
-            raise TypeError(f"EffectEvent 가 필요합니다: {type(event).__name__}")
+        if not isinstance(event, JournalEvent):
+            raise TypeError(f"JournalEvent 가 필요합니다: {type(event).__name__}")
         if event.sequence != len(self._events):
             raise JournalError(
                 f"다음 번호는 {len(self._events)} 인데 {event.sequence} 가 "
@@ -190,11 +314,31 @@ class EventJournal:
             )
         )
 
+    def record_payment(
+        self,
+        actor: int,
+        payments: "tuple[CostPayment, ...]" = (),
+        deltas: "tuple[StateDelta, ...]" = (),
+        effect_ref: EffectRef | None = None,
+        source: InstanceId | None = None,
+    ) -> CostPaymentEvent:
+        """비용 지불 사건을 적는다. :class:`~engine.payment.CostPayer` 가 쓴다."""
+        return self.append(
+            CostPaymentEvent(
+                sequence=len(self._events),
+                actor=actor,
+                payments=payments,
+                deltas=deltas,
+                effect_ref=effect_ref,
+                source=source,
+            )
+        )
+
     # ------------------------------------------------------------------
     # 읽기
     # ------------------------------------------------------------------
     @property
-    def events(self) -> tuple[EffectEvent, ...]:
+    def events(self) -> tuple[JournalEvent, ...]:
         """기록 전체. **tuple 이다** — 밖에서 덧붙이거나 지울 수 없다."""
         return tuple(self._events)
 
@@ -212,11 +356,15 @@ class EventJournal:
     def __len__(self) -> int:
         return len(self._events)
 
-    def __iter__(self) -> Iterator[EffectEvent]:
+    def __iter__(self) -> Iterator[JournalEvent]:
         return iter(self._events)
 
-    def __getitem__(self, index: int) -> EffectEvent:
+    def __getitem__(self, index: int) -> JournalEvent:
         return self._events[index]
+
+    def of_kind(self, kind: EventKind) -> tuple[JournalEvent, ...]:
+        """그 종류의 사건만. 비용과 효과를 갈라서 볼 때 쓴다."""
+        return tuple(event for event in self._events if event.kind is kind)
 
     def __eq__(self, other: object) -> bool:
         return (
@@ -248,4 +396,11 @@ class EventJournal:
         return f"<EventJournal {len(self._events)}건>"
 
 
-__all__ = ["EffectEvent", "EventJournal", "JournalError"]
+__all__ = [
+    "EventKind",
+    "JournalEvent",
+    "EffectEvent",
+    "CostPaymentEvent",
+    "EventJournal",
+    "JournalError",
+]

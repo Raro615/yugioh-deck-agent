@@ -16,7 +16,7 @@
 
 지키는 구분
 -----------
-``Cost`` ≠ ``CostPayment`` · ``ChoiceSpec`` ≠ ``Selection`` ·
+``Cost`` ≠ ``CostPayment`` (청구서 ≠ 영수증) · ``ChoiceSpec`` ≠ ``Selection`` ·
 ``CandidateSet`` ≠ ``Selection`` · 릴리스 ≠ 묘지로 보내기 ≠ 파괴.
 
 자세한 것은 ``docs/phase2c-cost-choice.md``.
@@ -32,6 +32,7 @@ from engine.cost.model import (
     LifeCost,
     UnimplementedCost,
 )
+from engine.cost.receipt import CostPayment
 from engine.cost.resolver import CandidateResolver
 from engine.cost.validation import CostValidator, SelectionValidator
 
@@ -42,6 +43,7 @@ __all__ = [
     "LifeCost",
     "UnimplementedCost",
     "CostGroup",
+    "CostPayment",
     "FIELD_MONSTER_ZONES",
     "CandidateSource",
     "ChoiceSpec",

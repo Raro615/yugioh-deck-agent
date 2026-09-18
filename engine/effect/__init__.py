@@ -58,7 +58,14 @@ from engine.effect.operation import (
     OperationKind,
     UnimplementedOperation,
 )
-from engine.effect.journal import EffectEvent, EventJournal, JournalError
+from engine.effect.journal import (
+    CostPaymentEvent,
+    EffectEvent,
+    EventJournal,
+    EventKind,
+    JournalError,
+    JournalEvent,
+)
 from engine.effect.executor import (
     DESTINATION,
     DESTINATION_OWNER,
@@ -140,8 +147,11 @@ __all__ = [
     "CardDrawn",
     "LifeChanged",
     "canonical_deltas",
-    # 기록 (Phase 2-D-3)
+    # 기록 (Phase 2-D-3 · 2-E)
+    "EventKind",
+    "JournalEvent",
     "EffectEvent",
+    "CostPaymentEvent",
     "EventJournal",
     "JournalError",
 ]
