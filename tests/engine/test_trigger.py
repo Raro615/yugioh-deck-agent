@@ -882,14 +882,36 @@ def test_triggers_do_not_touch_priority(view):
 def test_triggers_pay_no_costs(view):
     """
     비용은 후보 단계 뒤의 일이다 — Action → 비용 검증/지불 → ``ChainLink``.
+
+    후보 자체는 비용을 담지도 부르지도 않는다. **지불기(``CostPayer``)를
+    import 하지 않는지**로 확인한다 — 이름이 설명문에 나오는 것과 실제로
+    쓰는 것은 다르다 (Phase 2-F-3-B 가 ``CostValidator`` 는 쓴다).
     """
+    import ast
+
+    import engine.trigger as module
+
     spec = TriggerSpec(EffectRef(WATCHER, 0), TimingPoint.CARD_DRAWN)
     candidate = collector(view, spec).collect(drawn_event()).candidates[0]
 
-    source = __import__("pathlib").Path("engine/trigger.py").read_text(encoding="utf-8")
-    assert "CostPayer" not in source
-    assert "from engine.payment" not in source
-    assert "import engine.payment" not in source
+    tree = ast.parse(
+        __import__("pathlib").Path("engine/trigger.py").read_text(encoding="utf-8")
+    )
+    imported = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+    }
+    modules = {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+    }
+
+    assert "CostPayer" not in imported
+    assert not hasattr(module, "CostPayer")
+    assert not any(name.startswith("engine.payment") for name in modules)
     for forbidden in ("payments", "cost", "pay"):
         assert not hasattr(candidate, forbidden), forbidden
 

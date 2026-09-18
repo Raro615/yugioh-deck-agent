@@ -118,6 +118,14 @@ class ValidationCode(str, Enum):
     """지금 결정할 기회 자체가 열려 있지 않다. 누구도 행동할 차례가 아니다."""
     NOT_PRIORITY_HOLDER = "not_priority_holder"
     """기회는 열려 있지만 **이 플레이어의 차례가 아니다.**"""
+    EXECUTION_FORBIDDEN = "execution_forbidden"
+    """
+    출처가 실행을 금지한다 (``TEXT_DERIVED``, ADR-004).
+
+    ``INVALID`` 중에서도 **따로 구분한다** — "조건이 거짓" 과 "이 근거로는
+    절대 실행하지 않는다" 는 전혀 다른 말이고, 후자는 판이 바뀌어도
+    달라지지 않는다.
+    """
     CHAIN_EMPTY = "chain_empty"
     """체인에 쌓인 것이 없다. "다 해결했다" 와 다른 사실이다."""
     CHAIN_DEFINITION_UNAVAILABLE = "chain_definition_unavailable"

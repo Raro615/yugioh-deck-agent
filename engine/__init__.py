@@ -50,6 +50,11 @@ Duel Engine.
   **후보 발견과 체인에 넣기를 분리한다** — ``ELIGIBLE`` 은 "타이밍이 맞고
   조건이 참" 일 뿐이고 발동 합법성은 보지 않는다. 볼 수 없는 곳은
   ``unchecked`` 로 남긴다. ``docs/phase2f3a-trigger.md`` 참고.
+- **Phase 2-F-3-B** — 트리거 발동 가능성 판정 (``trigger.py`` 의
+  ``TriggerEligibilityJudge``). 사건 관계 · 발동 자리 · 조건 · 실행 권위 ·
+  비용 가능성을 **관문별로** 따로 판정하고 합친다. 비용을 치르지 않고
+  체인에 넣지도 않으며, **아직 보지 않은 규칙을 ``unchecked_rules`` 로
+  남긴다**. ``docs/phase2f3b-trigger-eligibility.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은

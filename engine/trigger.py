@@ -53,16 +53,20 @@ from engine.condition import (
     ConditionEvaluator,
     ConditionResult,
 )
+from engine.cost import CostValidator
 from engine.effect.definition import (
     EffectDefinition,
     EffectDefinitionSource,
+    EffectImplementationLookup,
+    ExecutionAvailability,
+    execution_availability,
 )
 from engine.effect.delta import CardDrawn, CardMovement, LifeChanged, StateDelta, ZoneMoved
 from engine.effect.journal import CostPaymentEvent, EffectEvent, JournalEvent
 from engine.effect.operation import OperationKind
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
-from engine.validation import ValidationCode
+from engine.validation import ActionValidity, ValidationCode, ValidationResult
 from engine.vocabulary import Zone
 
 
@@ -358,6 +362,15 @@ class TriggerSpec:
     """``CARD_MOVED`` 에서 어떤 의미의 이동에만 반응하는가. ``None`` 이면 전부."""
     from_zones: frozenset[Zone] | None = None
     to_zones: frozenset[Zone] | None = None
+    activates_from: frozenset[Zone] | None = None
+    """
+    **어느 자리에서 발동할 수 있는가.**
+
+    ``None`` 이면 선언하지 않았다는 뜻이고, 그때
+    :class:`TriggerEligibilityJudge` 는 자리 관문을 ``UNKNOWN`` 으로 둔다 —
+    적지 않은 것을 "어디서든 발동 가능" 으로 읽지 않는다. 덱 맨 밑의
+    몬스터와 필드의 몬스터를 같게 다루면 조용히 틀린다.
+    """
     condition: Condition | None = None
     """
     타이밍이 맞은 뒤 추가로 만족해야 할 조건.
@@ -368,7 +381,7 @@ class TriggerSpec:
     """
 
     def __post_init__(self) -> None:
-        for name in ("operations", "from_zones", "to_zones"):
+        for name in ("operations", "from_zones", "to_zones", "activates_from"):
             value = getattr(self, name)
             if value is not None and not isinstance(value, frozenset):
                 raise TypeError(
@@ -410,6 +423,7 @@ class TriggerSpec:
             _sorted_values(self.operations),
             _sorted_values(self.from_zones),
             _sorted_values(self.to_zones),
+            _sorted_values(self.activates_from),
             self.condition.canonical_state() if self.condition is not None else None,
         )
 
@@ -423,7 +437,7 @@ class TriggerSpec:
             "requirement": self.requirement.value,
             "wording": self.wording.value,
         }
-        for name in ("operations", "from_zones", "to_zones"):
+        for name in ("operations", "from_zones", "to_zones", "activates_from"):
             value = getattr(self, name)
             if value is not None:
                 data[name] = list(_sorted_values(value))
@@ -511,6 +525,13 @@ class TriggerCandidate:
     controller: int
     """지금 그 카드를 쓰는 쪽. 발동 주체가 될 사람이다."""
     status: TriggerStatus = TriggerStatus.UNKNOWN
+    """
+    **수집 단계까지 알아낸 것**. 타이밍과 조건만 본 값이다.
+
+    발동 가능성 전체는 :class:`TriggerEligibility` 가 답한다 — 자리 · 실행
+    권위 · 비용까지 합친 결과는 이 값과 **다를 수 있다.** 여기만 보고
+    "발동할 수 있다" 고 읽지 않는다.
+    """
     requirement: TriggerRequirement = TriggerRequirement.UNKNOWN
     wording: TriggerWording = TriggerWording.UNKNOWN
     code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED
@@ -884,6 +905,516 @@ class TriggerCollector:
         return f"<TriggerCollector {self._registry!r}>"
 
 
+# ======================================================================
+# 발동 가능성 — 관문을 **따로** 두고 합친다
+# ======================================================================
+
+
+class EligibilityGate(str, Enum):
+    """
+    발동 가능성을 가르는 **관문 하나**.
+
+    관문을 이름별로 나눠 두는 이유는 하나다 — 앞으로 규칙이 들어올 때
+    기존 판정을 다시 쓰지 않고 **관문만 추가**하면 되게 하려는 것이다.
+    하나의 불리언으로 뭉개면 "무엇 때문에 안 되는가" 가 사라진다.
+    """
+
+    EVENT_RELATION = "event_relation"
+    """이 트리거가 그 사건에 반응하는가 (:meth:`TriggerSpec.matches`)."""
+    ACTIVATION_ZONE = "activation_zone"
+    """지금 있는 자리에서 발동할 수 있는가."""
+    TRIGGER_CONDITION = "trigger_condition"
+    """선언된 조건과 정의의 발동 조건이 참인가."""
+    EXECUTION_AUTHORITY = "execution_authority"
+    """출처와 등록된 구현이 실행을 허용하는가 (ADR-004 · ADR-006)."""
+    COST_FEASIBILITY = "cost_feasibility"
+    """비용을 **치를 수 있는가.** 치르지는 않는다."""
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.value
+
+
+#: **아직 아무 관문도 보지 않는 규칙들.**
+#:
+#: 이것이 목록으로 남아 있는 것이 이 단계의 정직한 상태다.
+#: :attr:`TriggerEligibility.unchecked_rules` 가 이 목록을 그대로 실어
+#: 나르므로, ``ELIGIBLE`` 을 받은 쪽도 "무엇을 아직 안 봤는가" 를 알 수 있다.
+UNCHECKED_RULES: tuple[str, ...] = (
+    "timing window (놓친 타이밍 · 열린 타이밍)",
+    "WHEN/IF 처리 규칙",
+    "spell speed",
+    "activation limit (턴 1회 · 카드명 제약)",
+    "SEGOC 및 동시 트리거 순서",
+    "chain 삽입 가능성 및 체인 상한",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class GateVerdict:
+    """
+    관문 하나의 판정. :class:`~engine.validation.ValidationResult` 를 그대로
+    싣는다 — 새 판정 어휘를 만들지 않는다.
+    """
+
+    gate: EligibilityGate
+    result: ValidationResult
+
+    @property
+    def validity(self) -> ActionValidity:
+        return self.result.validity
+
+    @property
+    def code(self) -> ValidationCode:
+        return self.result.code
+
+    @property
+    def passed(self) -> bool:
+        """**``VALID`` 일 때만 참.** ``UNKNOWN`` 이 통과로 새지 않는다."""
+        return self.result.validity is ActionValidity.VALID
+
+    @property
+    def forbids(self) -> bool:
+        """출처가 실행을 금지했는가. 판이 바뀌어도 달라지지 않는 거부다."""
+        return self.result.code is ValidationCode.EXECUTION_FORBIDDEN
+
+    def canonical_state(self) -> tuple:
+        return (self.gate.value, self.result.canonical_state())
+
+    def to_dict(self) -> dict:
+        return {"gate": self.gate.value, **self.result.to_dict()}
+
+    def describe_ko(self) -> str:
+        return f"{self.gate.value}: {self.result.validity.value} — {self.result.reason}"
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.describe_ko()
+
+
+@dataclass(frozen=True, slots=True)
+class TriggerEligibility:
+    """
+    후보 하나의 **발동 가능성 판정**. 관문별 결과를 그대로 들고 있다.
+
+    :attr:`status` 는 :attr:`TriggerCandidate.status` 와 **다를 수 있다.**
+    저쪽은 타이밍과 조건까지만 본 값이고, 이쪽은 자리 · 실행 권위 · 비용을
+    합친 값이다. 둘을 한 곳에 뭉개지 않는 이유는 "수집 단계에서 알 수 있던
+    것" 과 "지금 발동할 수 있는가" 가 다른 질문이기 때문이다.
+
+    ``ELIGIBLE`` 이어도 **완전한 발동 가능성이 아니다.**
+    :attr:`unchecked_rules` 에 아직 보지 않은 규칙이 남아 있다.
+    """
+
+    candidate: TriggerCandidate
+    status: TriggerStatus
+    gates: tuple[GateVerdict, ...] = ()
+    unchecked_rules: tuple[str, ...] = UNCHECKED_RULES
+
+    def __post_init__(self) -> None:
+        for name in ("gates", "unchecked_rules"):
+            if not isinstance(getattr(self, name), tuple):
+                raise TypeError(f"{name} 는 tuple 이어야 합니다 — 판정은 불변입니다.")
+        seen: list[EligibilityGate] = []
+        for verdict in self.gates:
+            if verdict.gate in seen:
+                raise TriggerError(f"관문 {verdict.gate.value} 이 두 번 들어왔습니다.")
+            seen.append(verdict.gate)
+
+    # ------------------------------------------------------------------
+    @classmethod
+    def fold(
+        cls, candidate: TriggerCandidate, gates: "tuple[GateVerdict, ...]"
+    ) -> "TriggerEligibility":
+        """
+        관문 결과들을 하나의 상태로 접는다. **순서가 곧 원칙이다.**
+
+        1. 출처 금지가 하나라도 있으면 ``FORBIDDEN`` — 다른 관문이 전부
+           통과해도 실행하지 않는다 (ADR-004).
+        2. 확실한 거부가 있으면 ``INELIGIBLE``.
+        3. 판정 불가가 있으면 ``UNKNOWN`` — **거부보다 약하고 통과보다
+           약하다.** 모르는 것을 거짓으로도 참으로도 접지 않는다.
+        4. 전부 통과하면 ``ELIGIBLE``.
+        """
+        if any(verdict.forbids for verdict in gates):
+            status = TriggerStatus.FORBIDDEN
+        elif any(verdict.validity is ActionValidity.INVALID for verdict in gates):
+            status = TriggerStatus.INELIGIBLE
+        elif any(verdict.validity is ActionValidity.UNKNOWN for verdict in gates):
+            status = TriggerStatus.UNKNOWN
+        else:
+            status = TriggerStatus.ELIGIBLE
+        return cls(candidate=candidate, status=status, gates=gates)
+
+    # ------------------------------------------------------------------
+    @property
+    def may_activate(self) -> bool:
+        """
+        ``ELIGIBLE`` 일 때만 참.
+
+        **"규칙상 발동할 수 있다" 는 뜻이 아니다** —
+        :attr:`unchecked_rules` 가 비어 있지 않은 동안은 언제나 "지금까지
+        본 관문을 전부 통과했다" 까지만 뜻한다.
+        """
+        return self.status.is_candidate
+
+    @property
+    def fully_checked(self) -> bool:
+        """
+        모든 규칙을 본 판정인가. **지금은 언제나 거짓이다** — 그것이 이
+        단계의 사실이고, 참이 되는 날 타이밍 계층이 완성된 것이다.
+        """
+        return not self.unchecked_rules
+
+    @property
+    def blocking(self) -> tuple[GateVerdict, ...]:
+        """통과하지 못한 관문들. 순서는 검사 순서 그대로다."""
+        return tuple(verdict for verdict in self.gates if not verdict.passed)
+
+    @property
+    def requirement(self) -> TriggerRequirement:
+        """강제/임의. **판정에 쓰이지 않고 그대로 실려 나간다** (SEGOC 용)."""
+        return self.candidate.requirement
+
+    @property
+    def wording(self) -> TriggerWording:
+        """"때"/"경우". 어휘만 보존한다."""
+        return self.candidate.wording
+
+    def gate(self, gate: EligibilityGate) -> GateVerdict | None:
+        for verdict in self.gates:
+            if verdict.gate is gate:
+                return verdict
+        return None
+
+    def canonical_state(self) -> tuple:
+        return (
+            self.candidate.canonical_state(),
+            self.status.value,
+            tuple(verdict.canonical_state() for verdict in self.gates),
+            self.unchecked_rules,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "candidate": self.candidate.to_dict(),
+            "status": self.status.value,
+            "gates": [verdict.to_dict() for verdict in self.gates],
+            "unchecked_rules": list(self.unchecked_rules),
+        }
+
+    def describe_ko(self) -> str:
+        blocked = ", ".join(v.gate.value for v in self.blocking) or "없음"
+        return (
+            f"{self.candidate.key} → {self.status.value} "
+            f"(막힌 관문: {blocked}, 미검사 규칙 {len(self.unchecked_rules)}개)"
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.describe_ko()
+
+
+class TriggerEligibilityJudge:
+    """
+    후보 하나가 지금 발동 가능한가를 **관문별로** 판정한다.
+
+    **판을 바꾸지 않는다.** 관측과 조건 평가기, 그리고 기존 비용 검증기만
+    쓴다 — 비용을 *치르지* 않고 *치를 수 있는지*만 본다
+    (:class:`~engine.cost.CostValidator`, Phase 2-C).
+
+    체인에 넣지도 않는다. ``Chain.push`` 를 부르지 않고 ``engine.chain`` 을
+    import 하지도 않는다.
+    """
+
+    __slots__ = ("_view", "_definitions", "_implementations", "_evaluator", "_costs")
+
+    def __init__(
+        self,
+        view: GameStateView,
+        definitions: EffectDefinitionSource | None = None,
+        implementations: EffectImplementationLookup | None = None,
+    ):
+        if not isinstance(view, GameStateView):
+            raise TypeError(
+                "TriggerEligibilityJudge 는 GameStateView 만 받습니다. "
+                "GameState 를 직접 넘기면 판정이 판을 바꿀 수 있게 됩니다."
+            )
+        if definitions is not None and not hasattr(definitions, "definition_for"):
+            raise TypeError("정의를 찾을 수 있는 것이 필요합니다 (definition_for).")
+        if implementations is not None and not hasattr(
+            implementations, "has_implementation"
+        ):
+            raise TypeError("구현을 찾을 수 있는 것이 필요합니다 (has_implementation).")
+        self._view = view
+        self._definitions = definitions
+        self._implementations = implementations
+        self._evaluator = ConditionEvaluator(view)
+        self._costs = CostValidator(view)
+
+    @property
+    def view(self) -> GameStateView:
+        return self._view
+
+    # ------------------------------------------------------------------
+    def judge(
+        self, candidate: TriggerCandidate, spec: TriggerSpec, event: TimingEvent
+    ) -> TriggerEligibility:
+        """
+        관문을 순서대로 통과시켜 본다. **하나가 막혀도 나머지를 계속 본다** —
+        무엇이 막혔는지 전부 알아야 다음 단계가 판단할 수 있다.
+        """
+        if candidate.effect_ref != spec.effect_ref:
+            raise TriggerError(
+                f"후보({candidate.effect_ref})와 선언({spec.effect_ref})이 "
+                "다른 효과를 가리킵니다."
+            )
+        definition = (
+            self._definitions.definition_for(spec.effect_ref)
+            if self._definitions is not None
+            else None
+        )
+        gates = (
+            self._event_relation(spec, event),
+            self._activation_zone(candidate, spec),
+            self._trigger_condition(candidate, spec, definition),
+            self._execution_authority(spec, definition),
+            self._cost_feasibility(candidate, definition),
+        )
+        return TriggerEligibility.fold(candidate, gates)
+
+    def judge_all(
+        self, collection: TriggerCollection, registry: TriggerRegistry
+    ) -> tuple[TriggerEligibility, ...]:
+        """
+        수집 결과 전체를 판정한다. 순서는 후보 순서(= ``identity`` 순) 그대로고,
+        **규칙상의 발동 순서가 아니다** (SEGOC 는 이 단계에 없다).
+        """
+        specs = {spec.effect_ref: spec for spec in registry.watching(collection.event)}
+        judged: list[TriggerEligibility] = []
+        for candidate in collection.candidates:
+            spec = specs.get(candidate.effect_ref)
+            if spec is None:  # pragma: no cover - 같은 사건이면 일어나지 않는다
+                raise TriggerError(
+                    f"{candidate.effect_ref} 의 선언을 이 사건에서 찾을 수 "
+                    "없습니다. 후보와 등록소가 어긋났습니다."
+                )
+            judged.append(self.judge(candidate, spec, collection.event))
+        return tuple(judged)
+
+    # ------------------------------------------------------------------
+    # 관문들
+    # ------------------------------------------------------------------
+    def _event_relation(self, spec: TriggerSpec, event: TimingEvent) -> GateVerdict:
+        """이 사건에 반응하는가. 선언이 적어 둔 것만 본다."""
+        if spec.matches(event):
+            return _gate(
+                EligibilityGate.EVENT_RELATION,
+                ActionValidity.VALID,
+                ValidationCode.OK,
+                f"{event.point.value} 사건에 반응하는 선언입니다.",
+            )
+        return _gate(
+            EligibilityGate.EVENT_RELATION,
+            ActionValidity.INVALID,
+            ValidationCode.RULE_NOT_IMPLEMENTED,
+            f"이 선언은 {event.point.value} 사건에 반응하지 않습니다.",
+        )
+
+    def _activation_zone(
+        self, candidate: TriggerCandidate, spec: TriggerSpec
+    ) -> GateVerdict:
+        """
+        지금 있는 자리에서 발동할 수 있는가.
+
+        선언하지 않았으면 ``UNKNOWN`` 이다 — **적지 않은 것을 "어디서든
+        발동 가능" 으로 읽지 않는다.**
+        """
+        if spec.activates_from is None:
+            return _gate(
+                EligibilityGate.ACTIVATION_ZONE,
+                ActionValidity.UNKNOWN,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                "발동할 수 있는 자리가 선언되지 않았습니다.",
+                notes=("activates_from 미선언",),
+            )
+        card = self._view.find(candidate.source)
+        if card is None:
+            return _gate(
+                EligibilityGate.ACTIVATION_ZONE,
+                ActionValidity.UNKNOWN,
+                ValidationCode.HIDDEN_CARD,
+                f"{candidate.source} 가 관측에 보이지 않아 자리를 확인할 수 "
+                "없습니다.",
+            )
+        if card.zone in spec.activates_from:
+            return _gate(
+                EligibilityGate.ACTIVATION_ZONE,
+                ActionValidity.VALID,
+                ValidationCode.OK,
+                f"{card.zone.value} 에서 발동할 수 있습니다.",
+            )
+        return _gate(
+            EligibilityGate.ACTIVATION_ZONE,
+            ActionValidity.INVALID,
+            ValidationCode.SOURCE_WRONG_ZONE,
+            f"{card.zone.value} 는 발동할 수 있는 자리가 아닙니다 "
+            f"({'/'.join(sorted(z.value for z in spec.activates_from))}).",
+        )
+
+    def _trigger_condition(
+        self,
+        candidate: TriggerCandidate,
+        spec: TriggerSpec,
+        definition: EffectDefinition | None,
+    ) -> GateVerdict:
+        """
+        선언된 조건과 정의의 발동 조건. 기존 평가기를 그대로 쓴다.
+
+        **조건(trigger condition)과 사건 관계(event relation)를 따로 둔다** —
+        "무엇이 일어났을 때" 와 "그때 무엇이 참이어야 하는가" 는 다른
+        질문이고, WHEN/IF 규칙이 들어올 때 나뉜 자리가 필요하다.
+        """
+        conditions = [
+            condition
+            for condition in (
+                spec.condition,
+                definition.activation if definition is not None else None,
+            )
+            if condition is not None
+        ]
+        if not conditions:
+            if self._definitions is not None and definition is None:
+                return _gate(
+                    EligibilityGate.TRIGGER_CONDITION,
+                    ActionValidity.UNKNOWN,
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    f"{spec.effect_ref} 의 정의가 없어 조건을 확인할 수 없습니다.",
+                    notes=("정의 미등록",),
+                )
+            return _gate(
+                EligibilityGate.TRIGGER_CONDITION,
+                ActionValidity.VALID,
+                ValidationCode.OK,
+                "걸린 조건이 없습니다.",
+            )
+        context = ConditionContext(
+            player=candidate.controller,
+            source=candidate.source,
+            effect_ref=spec.effect_ref,
+        )
+        verdicts = [
+            self._evaluator.evaluate(condition, context) for condition in conditions
+        ]
+        combined = ConditionResult.all_of(verdict.result for verdict in verdicts)
+        described = " 그리고 ".join(verdict.description for verdict in verdicts)
+        if combined is ConditionResult.TRUE:
+            return _gate(
+                EligibilityGate.TRIGGER_CONDITION,
+                ActionValidity.VALID,
+                ValidationCode.OK,
+                f"조건이 참입니다: {described}",
+            )
+        if combined is ConditionResult.FALSE:
+            return _gate(
+                EligibilityGate.TRIGGER_CONDITION,
+                ActionValidity.INVALID,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"조건이 거짓입니다: {described}",
+            )
+        return _gate(
+            EligibilityGate.TRIGGER_CONDITION,
+            ActionValidity.UNKNOWN,
+            ValidationCode.INFORMATION_UNAVAILABLE,
+            f"조건을 판정할 수 없습니다: {described}",
+            notes=tuple(
+                reason for verdict in verdicts for reason in verdict.unknown_reasons
+            ),
+        )
+
+    def _execution_authority(
+        self, spec: TriggerSpec, definition: EffectDefinition | None
+    ) -> GateVerdict:
+        """
+        출처와 구현이 실행을 허용하는가. :func:`execution_availability` 를
+        그대로 쓴다 — 판정 순서(출처 금지가 가장 먼저)까지 재사용한다.
+        """
+        if definition is None:
+            return _gate(
+                EligibilityGate.EXECUTION_AUTHORITY,
+                ActionValidity.UNKNOWN,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{spec.effect_ref} 의 정의가 없어 실행 권위를 확인할 수 "
+                "없습니다.",
+                notes=("정의 미등록",),
+            )
+        availability = execution_availability(definition, self._implementations)
+        if availability is ExecutionAvailability.EXECUTABLE:
+            return _gate(
+                EligibilityGate.EXECUTION_AUTHORITY,
+                ActionValidity.VALID,
+                ValidationCode.OK,
+                "출처가 허용하고 구현이 등록되어 있습니다.",
+            )
+        if availability is ExecutionAvailability.FORBIDDEN_SOURCE:
+            return _gate(
+                EligibilityGate.EXECUTION_AUTHORITY,
+                ActionValidity.INVALID,
+                ValidationCode.EXECUTION_FORBIDDEN,
+                "공식 텍스트에서 유추한 효과는 실행하지 않습니다 (ADR-004).",
+            )
+        return _gate(
+            EligibilityGate.EXECUTION_AUTHORITY,
+            ActionValidity.UNKNOWN,
+            ValidationCode.RULE_NOT_IMPLEMENTED,
+            f"실행할 수 있는지 확인되지 않았습니다: {availability.value}.",
+            notes=(availability.value,),
+        )
+
+    def _cost_feasibility(
+        self, candidate: TriggerCandidate, definition: EffectDefinition | None
+    ) -> GateVerdict:
+        """
+        비용을 **치를 수 있는가.** 치르지 않는다 — 지불은
+        :class:`~engine.payment.CostPayer` 의 일이고 이 계층은 그것을
+        부르지도, import 하지도 않는다.
+        """
+        if definition is None:
+            return _gate(
+                EligibilityGate.COST_FEASIBILITY,
+                ActionValidity.UNKNOWN,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                "정의가 없어 비용을 확인할 수 없습니다.",
+                notes=("정의 미등록",),
+            )
+        if definition.cost.is_free:
+            return _gate(
+                EligibilityGate.COST_FEASIBILITY,
+                ActionValidity.VALID,
+                ValidationCode.OK,
+                "치를 비용이 없습니다.",
+            )
+        context = ConditionContext(
+            player=candidate.controller,
+            source=candidate.source,
+            effect_ref=candidate.effect_ref,
+        )
+        result = self._costs.validate_group(definition.cost, context)
+        return GateVerdict(EligibilityGate.COST_FEASIBILITY, result)
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return f"<TriggerEligibilityJudge {self._view}>"
+
+
+def _gate(
+    gate: EligibilityGate,
+    validity: ActionValidity,
+    code: ValidationCode,
+    reason: str,
+    notes: tuple[str, ...] = (),
+) -> GateVerdict:
+    return GateVerdict(
+        gate, ValidationResult(validity, code, reason, notes=notes)
+    )
+
+
 def _sorted_values(values) -> tuple:
     """열거형 묶음을 **정렬된 값 튜플**로. set 순회 순서에 의존하지 않는다."""
     if values is None:
@@ -904,4 +1435,9 @@ __all__ = [
     "TriggerCandidate",
     "TriggerCollection",
     "TriggerCollector",
+    "EligibilityGate",
+    "GateVerdict",
+    "TriggerEligibility",
+    "TriggerEligibilityJudge",
+    "UNCHECKED_RULES",
 ]
