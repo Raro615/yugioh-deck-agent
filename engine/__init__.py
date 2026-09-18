@@ -45,6 +45,11 @@ Duel Engine.
   해결된다. 효과를 적용하는 것은 여전히 ``EffectExecutor`` 뿐이고, 체인은
   "무엇을 언제" 만 정한다. 트리거 · 타이밍 · 스펠 스피드는 아직 없다.
   ``docs/phase2f2-chain.md`` 참고.
+- **Phase 2-F-3-A** — 타이밍과 트리거의 후보 수집 (``trigger.py``).
+  ``StateDelta`` · ``JournalEvent`` → ``TimingEvent`` → ``TriggerCandidate``.
+  **후보 발견과 체인에 넣기를 분리한다** — ``ELIGIBLE`` 은 "타이밍이 맞고
+  조건이 참" 일 뿐이고 발동 합법성은 보지 않는다. 볼 수 없는 곳은
+  ``unchecked`` 로 남긴다. ``docs/phase2f3a-trigger.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
