@@ -99,6 +99,15 @@ from engine.effect.target import (
     TargetSpec,
 )
 
+from engine.effect.library import (
+    EFFECT_LIBRARY,
+    LibraryEntry,
+    availability,
+    build_executor,
+    definition_registry,
+    implementation_registry,
+)
+
 __all__ = [
     # 정의
     "EffectDefinition",
@@ -153,6 +162,12 @@ __all__ = [
     "ZoneMoved",
     "CardDrawn",
     "LifeChanged",
+    "LibraryEntry",
+    "EFFECT_LIBRARY",
+    "definition_registry",
+    "implementation_registry",
+    "build_executor",
+    "availability",
     "PhaseChanged",
     "SummonKind",
     "MonsterSummoned",
