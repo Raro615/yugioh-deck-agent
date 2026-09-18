@@ -66,6 +66,7 @@ from engine.effect.operation import (
     CardOperation,
     DrawOperation,
     LifeChangeOperation,
+    MoveOperation,
     Operation,
     OperationKind,
 )
@@ -141,6 +142,12 @@ def destination_player(kind: OperationKind, card) -> int:
     기대면 컨트롤을 빼앗긴 카드가 빼앗은 쪽의 묘지로 간다. 그래서 실행기는
     기본값을 쓰지 않고 언제나 여기서 정한 값을 넘긴다.
     """
+    if kind is OperationKind.MOVE:
+        raise KeyError(
+            "MOVE 의 목적지 주인은 표가 아니라 MoveOperation.to_owner 가 "
+            "정합니다. 의미가 없는 이동이라 '이 일은 주인에게 간다' 는 "
+            "규칙 자체가 없기 때문입니다."
+        )
     rule = DESTINATION_OWNER[kind]
     return card.owner if rule is DestinationOwner.OWNER else card.controller
 
@@ -153,6 +160,7 @@ def destination_player(kind: OperationKind, card) -> int:
 SUPPORTED: frozenset[OperationKind] = frozenset(DESTINATION) | {
     OperationKind.DRAW,
     OperationKind.CHANGE_LIFE,
+    OperationKind.MOVE,
 }
 
 #: 지원하지 않는 일과, 무엇이 없어서 못 하는가.
@@ -486,7 +494,7 @@ class EffectExecutor:
                 player=_resolve_player(operation.who, context),
             )
 
-        if isinstance(operation, CardOperation):
+        if isinstance(operation, (CardOperation, MoveOperation)):
             return self._plan_card_operation(state, definition, context, operation)
 
         return _fail(
@@ -500,7 +508,7 @@ class EffectExecutor:
         state: GameState,
         definition: EffectDefinition,
         context: ResolutionContext,
-        operation: CardOperation,
+        operation: "CardOperation | MoveOperation",
     ) -> "_Step | EffectResult":
         """
         대상 이름을 실제 카드로 푼다.
@@ -548,7 +556,11 @@ class EffectExecutor:
                 )
             instances.append(instance)
             # 주인 결정은 **바꾸기 전에** 끝낸다 (계획 단계).
-            owners.append(destination_player(operation.kind, card))
+            if isinstance(operation, MoveOperation):
+                # 의미가 없는 이동이므로 표를 볼 수 없다. 조작이 직접 말한다.
+                owners.append(card.owner if operation.to_owner else card.controller)
+            else:
+                owners.append(destination_player(operation.kind, card))
 
         if not instances:
             return _fail(
@@ -605,7 +617,13 @@ class EffectExecutor:
                 LifeChanged(player=step.player, before=before, after=after),
             )
 
-        destination = DESTINATION[operation.kind]
+        # ``MOVE`` 는 목적지를 **조작이 들고 있다.** 나머지는 의미가 목적지를
+        # 정한다 (파괴 → 묘지). 그 차이가 이 한 줄이다.
+        destination = (
+            operation.destination
+            if isinstance(operation, MoveOperation)
+            else DESTINATION[operation.kind]
+        )
         changes = []
         for instance, to_player in zip(step.instances, step.owners):
             card = state.find_instance(instance)

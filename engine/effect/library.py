@@ -51,7 +51,11 @@ from engine.effect.definition import (
 )
 from engine.effect.executor import EffectExecutor, EffectImplementationRegistry
 from engine.effect.journal import EventJournal
-from engine.effect.operation import DrawOperation
+from engine.effect.operation import (
+    DrawOperation,
+    LifeChangeOperation,
+    OperationKind,
+)
 from engine.ids import EffectRef
 from engine.vocabulary import Zone
 
@@ -102,6 +106,20 @@ class LibraryEntry:
                 "가능으로 표시되어 있습니다. 빈 효과를 실행하면 '아무 일도 "
                 "없었는데 해결됐다' 가 됩니다."
             )
+        meaningless = [
+            operation
+            for operation in self.definition.operations
+            if operation.kind is OperationKind.MOVE
+        ]
+        if meaningless:
+            raise EffectDefinitionError(
+                f"{self.effect_ref} 가 MOVE 로 적혀 있습니다. MOVE 는 **게임 "
+                "의미가 없는 저수준 이동**이라 실제 카드의 효과가 될 수 "
+                "없습니다 — 파괴 · 묘지로 보내기 · 버리기 · 릴리스 · 제외 · "
+                "되돌리기 중 무엇인지 말해야 합니다 (ADR-002). 그 의미를 "
+                "아직 옮길 수 없다면 executable=False 로 두고 이유를 "
+                "적으세요."
+            )
 
     @property
     def effect_ref(self) -> EffectRef:
@@ -142,6 +160,7 @@ class LibraryEntry:
 # ======================================================================
 
 POT_OF_GREED = 55144522
+RAIN_OF_MERCY = 66719324
 DARK_HOLE = 53129443
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
@@ -197,9 +216,35 @@ _DARK_HOLE_ENTRY = LibraryEntry(
     ),
 )
 
+#: 은혜의 단비 — "양쪽의 플레이어는 1000 라이프 포인트를 회복한다."
+#:
+#: 스크립트가 두 줄이고 둘 다 상수다. 대상도 비용도 조건도 없다.
+#: **두 개의 일**로 적는다 — 한 줄로 합치면 "누가 얼마를 회복했는가" 가
+#: 하나로 뭉개지고, 나중에 한쪽만 막는 효과를 표현할 수 없다.
+_RAIN_OF_MERCY_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(RAIN_OF_MERCY, 0),
+        source_card_id=RAIN_OF_MERCY,
+        operations=(
+            LifeChangeOperation(delta=1000, who=PlayerRef.CONTROLLER),
+            LifeChangeOperation(delta=1000, who=PlayerRef.OPPONENT),
+        ),
+        provenance=EffectProvenance.official_lua(
+            "c66719324.lua 의 s.operation 을 그대로 옮겼다."
+        ),
+    ),
+    lua_file="c66719324.lua",
+    lua_excerpt=(
+        "Duel.Recover(tp,1000,REASON_EFFECT); "
+        "Duel.Recover(1-tp,1000,REASON_EFFECT)"
+    ),
+    executable=True,
+)
+
 #: 이 엔진이 들고 있는 효과 정의 전부. **이것이 전부라는 것이 사실이다.**
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _POT_OF_GREED_ENTRY,
+    _RAIN_OF_MERCY_ENTRY,
     _DARK_HOLE_ENTRY,
 )
 
@@ -279,6 +324,7 @@ __all__ = [
     "LibraryEntry",
     "EFFECT_LIBRARY",
     "POT_OF_GREED",
+    "RAIN_OF_MERCY",
     "DARK_HOLE",
     "entry_for",
     "definition_registry",

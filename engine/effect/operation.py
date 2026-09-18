@@ -65,6 +65,7 @@ from enum import Enum
 
 from engine.condition import PlayerRef
 from engine.effect.target import TargetRef
+from engine.vocabulary import Zone
 
 
 class OperationKind(str, Enum):
@@ -88,6 +89,19 @@ class OperationKind(str, Enum):
     RETURN_TO_DECK = "return_to_deck"
     DRAW = "draw"
     CHANGE_LIFE = "change_life"
+    MOVE = "move"
+    """
+    카드를 다른 존으로 옮긴다. **게임 의미가 없는 저수준 조작이다.**
+
+    파괴도 · 묘지로 보내기도 · 버리기도 · 릴리스도 · 제외도 · 되돌리기도
+    **아니다.** 그래서 :data:`REASON_NAMES` 에서 아무 ``REASON_*`` 도
+    주장하지 않는다 — 이유를 말할 수 없는 이동이라는 뜻이다.
+
+    실제 카드의 효과는 이것을 쓰지 않는다 (:class:`
+    ~engine.effect.library.LibraryEntry` 가 거부한다). 이것은 의미 계층이
+    아직 없는 일을 정직하게 옮기기 위한 원시 조작이고, 앞으로 생길
+    파괴 · 보내기 계층이 **공유할 바닥**이다.
+    """
     UNKNOWN = "unknown"
     """무엇을 하는지 구조화하지 못했다."""
 
@@ -106,6 +120,10 @@ REASON_NAMES: dict[OperationKind, tuple[str, ...]] = {
     OperationKind.RETURN_TO_DECK: ("RETURN", "EFFECT"),
     OperationKind.DRAW: ("DRAW", "EFFECT"),
     OperationKind.CHANGE_LIFE: ("EFFECT",),
+    # **비어 있는 것이 사실이다.** 이유를 말할 수 없는 이동이므로
+    # ``REASON_EFFECT`` 조차 주장하지 않는다. 여기에 이유를 적는 순간
+    # 트리거 계층이 이것을 "효과로 묘지에 갔다" 로 읽게 된다.
+    OperationKind.MOVE: (),
     OperationKind.UNKNOWN: (),
 }
 
@@ -120,6 +138,20 @@ CARD_OPERATION_KINDS: frozenset[OperationKind] = frozenset(
         OperationKind.RETURN_TO_HAND,
         OperationKind.RETURN_TO_DECK,
     }
+)
+
+#: **의미를 주장하는** 카드 조작. ``MOVE`` 는 여기 없다 — 목적지만 말하고
+#: 무슨 일인지는 말하지 않기 때문이다 (ADR-002).
+SEMANTIC_CARD_KINDS: frozenset[OperationKind] = CARD_OPERATION_KINDS
+
+
+#: :class:`MoveOperation` 이 갈 수 있는 곳.
+#:
+#: 전부 **칸이 없는 순서 존**이다 — 넣을 자리를 고를 필요가 없으므로 계획을
+#: 통과한 이동이 적용 중에 거부되지 않는다. 필드는 여기 없다: 칸 선택과
+#: 표시 형식은 소환 절차의 일이다.
+MOVABLE_DESTINATIONS: frozenset[Zone] = frozenset(
+    {Zone.GRAVE, Zone.REMOVED, Zone.HAND, Zone.DECK}
 )
 
 
@@ -350,6 +382,87 @@ class LifeChangeOperation(Operation):
 
 
 @dataclass(frozen=True, slots=True)
+class MoveOperation(Operation):
+    """
+    카드를 **지정한 존으로** 옮긴다. 그 이상은 말하지 않는다.
+
+    ``CardOperation`` 과 무엇이 다른가
+    ----------------------------------
+    ============================  =========================================
+    ``CardOperation``              **무슨 일인가**를 말한다. 목적지는 그
+                                   의미가 정한다 (파괴 → 묘지)
+    ``MoveOperation``              **어디로 가는가**만 말한다. 무슨 일인지는
+                                   말하지 않는다
+    ============================  =========================================
+
+    그래서 이것으로 "파괴한다" 를 흉내 낼 수 없다. 흉내 내면
+    :attr:`reason_names` 가 비어 있으므로 트리거 계층이 **아무 사건도 보지
+    못한다** — 조용히 틀리는 대신 눈에 보이게 비어 있다.
+
+    갈 수 있는 곳
+    -------------
+    :data:`MOVABLE_DESTINATIONS` 뿐이다. 필드(``MZONE`` · ``SZONE`` …)로는
+    옮기지 않는다 — 칸 선택과 표시 형식이 필요하고, 그것은 소환 절차의
+    일이다 (Phase 2-I).
+    """
+
+    destination: "Zone"
+    target_ref: TargetRef
+    to_owner: bool = True
+    """
+    주인 쪽으로 보내는가. 거짓이면 컨트롤러 쪽이다.
+
+    기본값이 주인인 이유는 갈 수 있는 곳이 전부 소유권 기반 존이기
+    때문이다 (묘지 · 제외 · 패 · 덱).
+    """
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target_ref, TargetRef):
+            raise TypeError(
+                "MoveOperation 에는 TargetRef 가 필요합니다. 어느 카드인지 "
+                f"말하지 않는 이동은 일이 아닙니다: {self.target_ref!r}"
+            )
+        if self.destination not in MOVABLE_DESTINATIONS:
+            raise ValueError(
+                f"{self.destination} 로는 옮길 수 없습니다. 갈 수 있는 곳: "
+                + ", ".join(sorted(z.value for z in MOVABLE_DESTINATIONS))
+                + " (필드로 보내는 것은 소환 절차의 일입니다)"
+            )
+
+    @property
+    def kind(self) -> OperationKind:
+        return OperationKind.MOVE
+
+    @property
+    def target_refs(self) -> tuple[TargetRef, ...]:
+        return (self.target_ref,)
+
+    def canonical_state(self) -> tuple:
+        return (
+            "move",
+            self.destination.value,
+            self.target_ref.name,
+            self.to_owner,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "move",
+            "destination": self.destination.value,
+            "target_ref": self.target_ref.name,
+            "to_owner": self.to_owner,
+            "reasons": list(self.reason_names),
+        }
+
+    def describe_ko(self) -> str:
+        whose = "주인" if self.to_owner else "컨트롤러"
+        return (
+            f"{self.target_ref} 을 {whose} 의 {self.destination.value} 로 "
+            "이동 (의미 없음)"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class UnimplementedOperation(Operation):
     """
     **아직 표현할 수 없는 일.**
@@ -378,9 +491,12 @@ __all__ = [
     "OperationKind",
     "REASON_NAMES",
     "CARD_OPERATION_KINDS",
+    "SEMANTIC_CARD_KINDS",
+    "MOVABLE_DESTINATIONS",
     "Operation",
     "CardOperation",
     "DrawOperation",
     "LifeChangeOperation",
+    "MoveOperation",
     "UnimplementedOperation",
 ]
