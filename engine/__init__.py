@@ -37,6 +37,10 @@ Duel Engine.
   묶음 전체를 먼저 확인하고 (AND 관계이므로 중간까지만 내놓지 않는다),
   버리기 · 릴리스 · 라이프 지불만 치른다. 나머지는 지어내지 않고
   ``UNSUPPORTED_COST`` 다. ``docs/phase2e-cost-payment.md`` 참고.
+- **Phase 2-F-1** — 우선권과 응답 기회 (``priority.py``).
+  "지금 누가 다음 선택을 할 차례인가" 만 표현한다. 그 사람이 **무엇을** 할
+  수 있는지는 답하지 않는다 — 체인 · 트리거 · 타이밍 · 스펠 스피드는 전부
+  이후 단계다. ``docs/phase2f1-priority.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은

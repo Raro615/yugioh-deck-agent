@@ -113,6 +113,19 @@ class ValidationCode(str, Enum):
     INVALID_AMOUNT = "invalid_amount"
     """수치가 의미를 갖지 못한다 (0장 드로우 · 음수 드로우 등)."""
 
+    # --- 우선권 · 응답 기회 (Phase 2-F-1) --------------------------------
+    NO_RESPONSE_WINDOW = "no_response_window"
+    """지금 결정할 기회 자체가 열려 있지 않다. 누구도 행동할 차례가 아니다."""
+    NOT_PRIORITY_HOLDER = "not_priority_holder"
+    """기회는 열려 있지만 **이 플레이어의 차례가 아니다.**"""
+    PRIORITY_STATE_STALE = "priority_state_stale"
+    """
+    우선권 상태가 지금 판과 맞지 않는다 (턴 플레이어 · 페이즈가 다르다).
+
+    ``INVALID`` 가 아니라 ``UNKNOWN`` 에 쓴다 — 어느 쪽이 낡았는지 모르는
+    상태에서 "안 된다" 고 단정하지 않는다.
+    """
+
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
