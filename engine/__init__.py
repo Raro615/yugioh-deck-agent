@@ -60,6 +60,11 @@ Duel Engine.
   보존한다. 순서는 재현 가능할 뿐 **규칙상의 순서가 아니며**
   (``is_rule_ordered`` 는 언제나 거짓), 정할 수 없는 것은
   ``unresolved_rules`` 로 남긴다. ``docs/phase2f3c-trigger-order.md`` 참고.
+- **Phase 2-F-3-D** — 트리거와 체인을 잇는 통합 (``trigger_chain.py``).
+  정리된 후보를 ``ChainLink`` 로 **만들 수 있을 때만** 만든다 — 대상 선택과
+  비용 영수증이 없으면 빈 값으로 채우지 않고 삽입 불가로 남긴다. 체인에
+  넣는 것과 **해결하는 것은 따로**이고, 여기서는 아무것도 실행하지 않는다.
+  ``docs/phase2f3d-trigger-chain.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
