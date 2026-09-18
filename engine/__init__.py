@@ -94,6 +94,12 @@ Duel Engine.
   말하는 그 제약을 아직 읽지 못한다. 소환권은 카드 효과의 "1턴에 1번" 과
   **다른 표**(``RuleUsageRegistry``)에 적는다.
   ``docs/phase2i-normal-summon.md`` 참고.
+- **Phase 2-J** — 사건 파이프라인 (``event_pipeline.py``).
+  판이 바뀐 결과(``StateDelta``)를 **관찰 가능한 사건**으로 옮겨 기존
+  수집기(2-F-3-A)에 넣는다. ``MonsterSummoned`` · ``PhaseChanged`` 가
+  드디어 ``TimingPoint`` 를 갖는다. 실행기는 이 파일을 **모른다** —
+  상태를 바꾸는 일과 사건을 관찰하는 일을 붙이지 않는다. 체인도 효과도
+  여기서 일어나지 않는다. ``docs/phase2j-event-pipeline.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은

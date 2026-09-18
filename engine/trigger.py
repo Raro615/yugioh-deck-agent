@@ -61,7 +61,15 @@ from engine.effect.definition import (
     ExecutionAvailability,
     execution_availability,
 )
-from engine.effect.delta import CardDrawn, CardMovement, LifeChanged, StateDelta, ZoneMoved
+from engine.effect.delta import (
+    CardDrawn,
+    CardMovement,
+    LifeChanged,
+    MonsterSummoned,
+    PhaseChanged,
+    StateDelta,
+    ZoneMoved,
+)
 from engine.effect.journal import CostPaymentEvent, EffectEvent, JournalEvent
 from engine.effect.operation import OperationKind
 from engine.game_state_view import GameStateView
@@ -78,10 +86,14 @@ class TimingPoint(str, Enum):
     """
     게임에서 **무엇이 일어난 시점**인가.
 
-    지금 엔진이 실제로 만들어 낼 수 있는 사건만 있다. 소환 · 전투 ·
-    데미지 스텝은 **넣지 않았다** — 그 계층이 아예 없어서 어떤 경로로도
-    생길 수 없는 이름을 미리 못박으면, 나중에 실제 모양과 어긋난다.
-    그것들은 각자의 계층과 함께 들어온다.
+    지금 엔진이 실제로 만들어 낼 수 있는 사건만 있다. **전투 · 데미지 스텝은
+    아직 없다** — 그 계층이 아예 없어서 어떤 경로로도 생길 수 없는 이름을
+    미리 못박으면, 나중에 실제 모양과 어긋난다. 그것들은 각자의 계층과
+    함께 들어온다.
+
+    ``MONSTER_SUMMONED`` 와 ``PHASE_CHANGED`` 는 그 규칙대로 **계층이 생긴
+    뒤에** 들어왔다 (Phase 2-I · 2-H). 이제 실제로 그 변화를 만들어 내는
+    코드가 있고, :meth:`TimingEvent.from_delta` 가 그것을 옮긴다.
     """
 
     CARD_MOVED = "card_moved"
@@ -94,6 +106,25 @@ class TimingPoint(str, Enum):
     """효과 하나가 해결을 마쳤다 (``EffectEvent``)."""
     COST_PAID = "cost_paid"
     """비용이 치러졌다 (``CostPaymentEvent``). 효과 해결과 다른 사건이다."""
+    MONSTER_SUMMONED = "monster_summoned"
+    """
+    몬스터가 소환되었다 (``MonsterSummoned``).
+
+    ``CARD_MOVED`` 와 **합치지 않는다.** 카드가 패에서 필드로 움직인 것은
+    맞지만, "소환되었을 때" 와 "필드로 보내졌을 때" 는 유희왕에서 전혀
+    다른 사건이다. 합치면 트리거 계층이 그 둘을 영영 구분할 수 없다
+    (ADR-002 가 파괴와 묘지로 보내기를 가른 것과 같은 이유).
+
+    어떤 소환인지는 ``MonsterSummoned.summon`` 이 말한다. 지금 나올 수 있는
+    값은 일반 소환뿐이다.
+    """
+    PHASE_CHANGED = "phase_changed"
+    """
+    페이즈가 (때로는 턴까지) 바뀌었다 (``PhaseChanged``).
+
+    **"스탠바이 페이즈에" · "엔드 페이즈에" 같은 타이밍 규칙은 여기 없다.**
+    사건이 일어났다는 사실만 옮긴다.
+    """
     UNIMPLEMENTED = "unimplemented"
     """
     엔진이 아직 만들어 내지 못하는 시점.
@@ -222,6 +253,15 @@ class TimingEvent:
             return cls(TimingPoint.CARD_DRAWN, delta=delta, actor=delta.player)
         if isinstance(delta, LifeChanged):
             return cls(TimingPoint.LIFE_CHANGED, delta=delta, actor=delta.player)
+        if isinstance(delta, MonsterSummoned):
+            return cls(
+                TimingPoint.MONSTER_SUMMONED, delta=delta, actor=delta.player
+            )
+        if isinstance(delta, PhaseChanged):
+            # **일으킨 사람을 적지 않는다.** 페이즈 전이는 규칙이 하는 일이고,
+            # 누가 그것을 선언했는가는 우선권 계층의 질문이다. 턴 플레이어를
+            # 적어 넣으면 "그 사람이 한 일" 로 읽히게 된다.
+            return cls(TimingPoint.PHASE_CHANGED, delta=delta)
         raise TriggerError(
             f"이 변화를 시점으로 옮길 수 없습니다: {type(delta).__name__}. "
             "지어내지 않고 TimingEvent.unimplemented 를 쓰세요."
@@ -266,9 +306,17 @@ class TimingEvent:
 
     @property
     def instance(self) -> InstanceId | None:
-        """이 사건이 건드린 카드. 수치만 바뀐 사건이면 ``None``."""
+        """
+        이 사건이 건드린 카드. 카드가 없는 사건(라이프 · 페이즈)이면 ``None``.
+
+        **이동한 사건만 보지 않는다.** 소환은 ``CardMovement`` 가 아니지만
+        (소환은 효과의 어휘를 쓰지 않는다) 분명히 카드 한 장의 사건이다.
+        """
         movement = self.movement
-        return movement.instance if movement is not None else None
+        if movement is not None:
+            return movement.instance
+        found = getattr(self.delta, "instance", None)
+        return found if isinstance(found, InstanceId) else None
 
     @property
     def operation(self) -> OperationKind | None:

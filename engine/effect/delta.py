@@ -422,7 +422,8 @@ class SummonKind(str, Enum):
 
     특수 소환 · 반전 소환 · 제물 소환은 그 절차가 생길 때 함께 들어온다.
     계층이 없는 이름을 미리 못박으면 나중에 실제 모양과 어긋난다
-    (:class:`~engine.trigger.TimingPoint` 가 소환을 넣지 않은 이유와 같다).
+    (:class:`~engine.trigger.TimingPoint` 가 전투 · 데미지를 아직 넣지 않은
+    이유와 같다 — 소환은 이 절차가 생긴 뒤에야 그쪽에도 이름이 생겼다).
     """
 
     NORMAL = "normal"

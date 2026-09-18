@@ -208,15 +208,20 @@ def test_a_cost_payment_is_a_different_timing_point_than_an_effect():
     assert paid.point is not TimingPoint.EFFECT_RESOLVED
 
 
-def test_summon_and_battle_are_not_pretended_to_exist():
+def test_battle_is_not_pretended_to_exist():
     """
-    소환 · 전투 계층이 **아예 없다.** 어떤 경로로도 생길 수 없는 시점
+    전투 · 데미지 계층이 **아직 없다.** 어떤 경로로도 생길 수 없는 시점
     이름을 미리 못박지 않는다. 대신 무엇을 표현할 수 없는지 적는다.
+
+    소환은 반대다 — Phase 2-I 가 실제로 ``MonsterSummoned`` 를 만들어 내게
+    된 **뒤에** 이름이 생겼다. 그것이 이 규칙의 지키는 방식이다: 계층이
+    먼저고 이름이 나중이다.
     """
     names = {point.value for point in TimingPoint}
-    assert "summoned" not in names
     assert "battle_event" not in names
     assert "damage_step" not in names
+    assert "attack_declared" not in names
+    assert "monster_summoned" in names  # 만들어 내는 계층이 생긴 뒤에 들어왔다
 
     honest = TimingEvent.unimplemented("일반 소환 (소환 계층 없음)", actor=MINE)
     assert honest.point is TimingPoint.UNIMPLEMENTED
