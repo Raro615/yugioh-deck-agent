@@ -118,6 +118,10 @@ class ValidationCode(str, Enum):
     """지금 결정할 기회 자체가 열려 있지 않다. 누구도 행동할 차례가 아니다."""
     NOT_PRIORITY_HOLDER = "not_priority_holder"
     """기회는 열려 있지만 **이 플레이어의 차례가 아니다.**"""
+    CHAIN_EMPTY = "chain_empty"
+    """체인에 쌓인 것이 없다. "다 해결했다" 와 다른 사실이다."""
+    CHAIN_DEFINITION_UNAVAILABLE = "chain_definition_unavailable"
+    """체인 링크가 가리키는 효과의 정의를 찾을 수 없다. 해결할 수 없다."""
     PRIORITY_STATE_STALE = "priority_state_stale"
     """
     우선권 상태가 지금 판과 맞지 않는다 (턴 플레이어 · 페이즈가 다르다).

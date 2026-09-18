@@ -365,6 +365,73 @@ class EmptyImplementationLookup:
         return "<EmptyImplementationLookup>"
 
 
+@runtime_checkable
+class EffectDefinitionSource(Protocol):
+    """
+    ``EffectRef`` 로 **정의**를 찾을 수 있는 것.
+
+    :class:`EffectImplementationLookup` 과 **다른 질문**이다.
+
+    =============================  ====================================
+    ``EffectDefinitionSource``      이 효과가 무엇을 하는지 적혀 있는가
+    ``EffectImplementationLookup``  그것을 실행해도 되는가
+    =============================  ====================================
+
+    정의를 찾을 수 있다고 실행할 수 있는 것이 아니다 (ADR-006). 둘을 한
+    인터페이스로 합치면 그 구분이 무너진다.
+    """
+
+    def definition_for(self, effect_ref: EffectRef) -> "EffectDefinition | None":
+        """그 효과의 정의. **없으면 ``None``.**"""
+        ...  # pragma: no cover - 프로토콜
+
+
+class EffectDefinitionRegistry:
+    """
+    손으로 등록한 정의 목록.
+
+    ``analysis`` → :class:`EffectDefinition` 컴파일러는 **아직 없다**
+    (STRUCTURAL-7). 그 경계를 넘을 때 ``TEXT_DERIVED`` 차단을 다시 확인해야
+    하므로, 그때까지 정의는 손으로 등록한다. 자동 생성이 아니라는 것이
+    지금의 사실이고 이것이 그 사실을 정직하게 표현한다.
+
+    **등록은 실행 허가가 아니다.** 실행에는 구현 등록
+    (:class:`EffectImplementationLookup`) 이 따로 필요하고, 출처가
+    ``TEXT_DERIVED`` 면 그마저도 소용없다.
+    """
+
+    __slots__ = ("_definitions",)
+
+    def __init__(self, definitions: "tuple[EffectDefinition, ...] | None" = None):
+        self._definitions: dict[EffectRef, EffectDefinition] = {}
+        for definition in definitions or ():
+            self.register(definition)
+
+    def register(self, definition: "EffectDefinition") -> "EffectDefinitionRegistry":
+        """
+        정의를 등록한다. 같은 ``EffectRef`` 를 두 번 등록하면 거부한다 —
+        조용히 덮어쓰면 어느 정의가 실행되는지 알 수 없게 된다.
+        """
+        if definition.effect_ref in self._definitions:
+            raise EffectDefinitionError(
+                f"{definition.effect_ref} 의 정의가 이미 등록되어 있습니다."
+            )
+        self._definitions[definition.effect_ref] = definition
+        return self
+
+    def definition_for(self, effect_ref: EffectRef) -> "EffectDefinition | None":
+        return self._definitions.get(effect_ref)
+
+    def __len__(self) -> int:
+        return len(self._definitions)
+
+    def __contains__(self, effect_ref: object) -> bool:
+        return effect_ref in self._definitions
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return f"<EffectDefinitionRegistry n={len(self._definitions)}>"
+
+
 def execution_availability(
     definition: EffectDefinition,
     lookup: EffectImplementationLookup | None = None,
@@ -398,6 +465,8 @@ __all__ = [
     "EffectDefinitionError",
     "EffectDefinition",
     "ExecutionAvailability",
+    "EffectDefinitionSource",
+    "EffectDefinitionRegistry",
     "EffectImplementationLookup",
     "EmptyImplementationLookup",
     "execution_availability",

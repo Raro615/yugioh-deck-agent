@@ -41,6 +41,10 @@ Duel Engine.
   "지금 누가 다음 선택을 할 차례인가" 만 표현한다. 그 사람이 **무엇을** 할
   수 있는지는 답하지 않는다 — 체인 · 트리거 · 타이밍 · 스펠 스피드는 전부
   이후 단계다. ``docs/phase2f1-priority.md`` 참고.
+- **Phase 2-F-2** — 체인 (``chain.py``). ``ChainLink`` 가 쌓이고 **역순으로**
+  해결된다. 효과를 적용하는 것은 여전히 ``EffectExecutor`` 뿐이고, 체인은
+  "무엇을 언제" 만 정한다. 트리거 · 타이밍 · 스펠 스피드는 아직 없다.
+  ``docs/phase2f2-chain.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
@@ -69,8 +73,11 @@ Phase 1 에서 의도적으로 만들지 않은 것 (TODO)
 - **이동에 따른 이벤트** — ``move_card`` 는 ``previous`` 만 남기고 이벤트를
   만들지 않는다. ``GameEvent`` / ``EventJournal`` 은 Phase 2 다.
 - **``chain`` / ``pending`` / ``journal``** — :class:`~engine.state.game_state.GameState`
-  에 자리만 있다. 내용이 생기면 ``clone()`` 과 ``canonical_state()`` 양쪽에
-  함께 넣어야 한다.
+  에 자리만 있고 **앞으로도 채우지 않는다.** ``EventJournal`` (Phase 2-D-3),
+  ``PriorityState`` (2-F-1), ``Chain`` (2-F-2) 은 모두 판 **밖**에 산다 —
+  전부 판의 *모양*이 아니라 흐름의 위치이고, ``state_hash()`` 에 섞으면
+  "같은 판은 경로와 무관하게 같은 해시" 가 깨진다. ``pending`` 은 이벤트
+  대기열이 생길 때 다시 본다.
 - **횟수 제한 판정** — :class:`~engine.state.use_registry.UseRegistry` 는 횟수를
   세기만 한다. "몇 번까지 허용인가" 는 Phase 4 다.
 - **사용 횟수 · 턴 플래그의 초기화 시점** — ``UseRegistry.clear()`` 와

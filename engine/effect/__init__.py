@@ -41,6 +41,8 @@ from engine.effect.definition import (
     FORBIDDEN_SOURCES,
     EffectDefinition,
     EffectDefinitionError,
+    EffectDefinitionRegistry,
+    EffectDefinitionSource,
     EffectImplementationLookup,
     EffectProvenance,
     EffectSource,
@@ -103,6 +105,8 @@ __all__ = [
     "FORBIDDEN_SOURCES",
     # 실행 권위
     "ExecutionAvailability",
+    "EffectDefinitionSource",
+    "EffectDefinitionRegistry",
     "EffectImplementationLookup",
     "EmptyImplementationLookup",
     "execution_availability",
