@@ -70,6 +70,14 @@ Duel Engine.
   ``TimingCoordinator`` 가 앞 계층을 **부르기만** 한다. 체인을 해결하지도
   효과를 실행하지도 않고, **우선권을 돌리지 않고 확인만 한다** — 누구에게
   넘어가는가는 아직 규칙이 없다. ``docs/phase2f4-timing-priority.md`` 참고.
+- **Phase 2-G** — Action 실행의 입구 (``action_execution.py``).
+  ``ActionExecutor`` 는 **검증하지 않고** 검증 결과를 확인만 한다 —
+  ``ValidationResult.permits_execution`` 이 참일 때만 손으로 등록된
+  ``ActionHandler`` 에게 넘긴다. 규칙 계층이 아직 ``VALID`` 를 내주지
+  않으므로 **오늘 실행되는 Action 은 하나도 없다**; ``UNKNOWN`` 을 허가로
+  바꾸지 않는 것이 이 계층의 존재 이유다. 소환 · 전투 · 턴 진행은
+  여기 들어오지 않고 각자의 Executor 로 간다.
+  ``docs/phase2g-action-executor.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
