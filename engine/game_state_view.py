@@ -50,6 +50,11 @@ Phase 2-A 가 내보내지 않는 것
 AI 가 알 필요가 없고, 엔진 내부 구현을 관측에 묶으면 나중에 바꿀 수 없다.
 "이 효과를 이번 턴에 썼는가" 는 정당한 공개 정보지만, 그것을 **질의로**
 노출하는 것은 Condition 계층(Phase 2-B)이 모양을 정한 뒤에 한다.
+
+Phase 2-I 가 하나를 열었다: :attr:`GameStateView.normal_summons_used`.
+카드 효과의 사용 횟수가 아니라 **규칙이 정한 소환권**이고, 소환은 공개된
+자리에서 일어나므로 양쪽 다 보는 사실이다. 효과 쪽 ``UseRegistry`` 는
+여전히 내보내지 않는다.
 """
 
 from __future__ import annotations
@@ -58,6 +63,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from engine.ids import InstanceId
+from engine.state.rule_usage import RuleActionKind
 from engine.vocabulary import (
     PLAYER_ZONES,
     Phase,
@@ -581,6 +587,13 @@ class GameStateView:
     players: tuple[PlayerView, PlayerView]
     winner: int | None = None
     result_reason: str = ""
+    normal_summons_used: tuple[int, int] = (0, 0)
+    """
+    **이번 턴에** 각 플레이어가 일반 소환권을 쓴 횟수.
+
+    가릴 것이 없는 정보다 — 소환은 공개된 자리에서 일어나고, 상대가 이번
+    턴에 소환을 했는지는 양쪽 다 본다. 지난 턴의 기록은 싣지 않는다.
+    """
 
     # ------------------------------------------------------------------
     # 만들기
@@ -606,6 +619,14 @@ class GameStateView:
             ),
             winner=state.result.winner if state.result is not None else None,
             result_reason=state.result.reason if state.result is not None else "",
+            normal_summons_used=(
+                state.rule_uses.count(
+                    state.turn.turn_number, 0, RuleActionKind.NORMAL_SUMMON
+                ),
+                state.rule_uses.count(
+                    state.turn.turn_number, 1, RuleActionKind.NORMAL_SUMMON
+                ),
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -666,6 +687,7 @@ class GameStateView:
             tuple(p.canonical_state() for p in self.players),
             self.winner,
             self.result_reason,
+            self.normal_summons_used,
         )
 
     def to_dict(self) -> dict:
@@ -678,6 +700,7 @@ class GameStateView:
             "players": [p.to_dict() for p in self.players],
             "winner": self.winner,
             "result_reason": self.result_reason,
+            "normal_summons_used": list(self.normal_summons_used),
         }
 
     def __str__(self) -> str:

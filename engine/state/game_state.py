@@ -30,6 +30,7 @@ from engine.ids import InstanceId, InstanceIdAllocator
 from engine.state.card_instance import CardInstance
 from engine.state.player import DEFAULT_LIFE_POINTS, PlayerState
 from engine.state.turn import TurnState
+from engine.state.rule_usage import RuleUsageRegistry
 from engine.state.use_registry import UseRegistry
 from engine.state.zones import ZoneContainer, move_card
 from engine.vocabulary import PLAYER_ZONES, Position, Zone
@@ -58,6 +59,7 @@ class GameState:
         "players",
         "turn",
         "uses",
+        "rule_uses",
         "chain",
         "pending",
         "journal",
@@ -76,6 +78,7 @@ class GameState:
         allocator: InstanceIdAllocator | None = None,
         result: DuelResult | None = None,
         uses: UseRegistry | None = None,
+        rule_uses: RuleUsageRegistry | None = None,
         seed: int | None = None,
         rng: random.Random | None = None,
     ):
@@ -97,6 +100,13 @@ class GameState:
         # 플레이어마다 따로 둘 이유가 없고, 따로 두면 "상대 카드명 제약" 같은
         # 것을 표현할 때 두 곳을 봐야 한다.
         self.uses: UseRegistry = uses if uses is not None else UseRegistry()
+
+        # 규칙이 정한 1턴 1회 (일반 소환권 등) 는 **따로** 센다. 카드 효과의
+        # "1턴에 1번" 과 키도 리셋 시점도 다르기 때문이다
+        # (:mod:`engine.state.rule_usage`).
+        self.rule_uses: RuleUsageRegistry = (
+            rule_uses if rule_uses is not None else RuleUsageRegistry()
+        )
 
         # 무작위는 주입된 seed 에서만 나온다. seed 가 없으면 rng 도 없고,
         # 셔플을 요청하면 거부한다 (:meth:`create`).
@@ -362,6 +372,7 @@ class GameState:
             allocator=self._allocator.clone(),
             result=self.result,  # frozen
             uses=self.uses.clone(),
+            rule_uses=self.rule_uses.clone(),
             seed=self._seed,
             rng=rng,
         )
@@ -430,6 +441,7 @@ class GameState:
             tuple(player.canonical_state(key) for player in self.players),
             self.turn.canonical_state(),
             self.uses.canonical_state(key),
+            self.rule_uses.canonical_state(),
             self.result.as_tuple() if self.result else None,
         )
 

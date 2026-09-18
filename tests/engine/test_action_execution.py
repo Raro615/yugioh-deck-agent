@@ -173,11 +173,14 @@ def test_handlers_can_be_given_at_construction():
 @pytest.mark.parametrize("kind", list(PlayerActionKind))
 def test_no_action_is_authorized_today(state, kind):
     """
-    **이 단계의 가장 중요한 사실이다.** 검증기가 어떤 Action 에도 ``VALID``
-    를 주지 않으므로, 실행기는 열 종류 전부를 거절한다.
+    Phase 2-G 시점의 사실: 검증기가 어떤 Action 에도 ``VALID`` 를 주지
+    않으므로 실행기는 열 종류 전부를 거절한다.
 
-    이것은 결함이 아니라 정직한 상태다 — 규칙 계층이 생기면 이 파일을
-    고치지 않고도 실행된다.
+    **Phase 2-I 가 일반 소환에 허가를 열었다.** 그래도 이 판은 그대로
+    거절된다 — 여기 쓰는 카드는 저장소 없이 만든 것이라 정의를 읽을 수
+    없고, 소환 절차를 판정할 수 없는 카드는 ``UNKNOWN`` 이기 때문이다.
+    "모른다" 가 허가로 새지 않는다는 것이 이 테스트가 지키는 것이고,
+    실제 카드로 허가가 나는 경로는 ``test_normal_summon.py`` 가 본다.
     """
     action = _sample_action(state, kind)
     verdict = ActionValidator(

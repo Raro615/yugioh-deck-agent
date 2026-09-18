@@ -70,7 +70,9 @@ from engine.condition import (
     PlayerRef,
     ZoneHasFreeSlot,
 )
+from engine.condition.model import _resolve_definition
 from engine.game_state_view import CardDefinitionView, CardView, GameStateView
+from engine.summon_rules import SummonAssessment, assess_normal_summon
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
 from engine.ids import InstanceId
 from engine.vocabulary import Phase, Zone
@@ -80,6 +82,10 @@ MONSTER_ZONES: frozenset[Zone] = frozenset({Zone.MZONE, Zone.EMZONE})
 
 #: 배틀 페이즈. ``TURN_PHASE_ORDER`` 는 ``BATTLE`` 하나만 담지만, 내부 스텝
 #: 이름도 함께 인정한다 — Phase 1 이 ``set_phase`` 로 직접 지정할 수 있다.
+#: 메인 페이즈. 소환 · 세트 · 표시 형식 변경이 여기서 일어난다
+#: (룰북 RULE-TURN-004 · RULE-TURN-006: "Summon or Set a Monster").
+MAIN_PHASES: tuple[Phase, ...] = (Phase.MAIN1, Phase.MAIN2)
+
 BATTLE_PHASES: tuple[Phase, ...] = (
     Phase.BATTLE,
     Phase.BATTLE_START,
@@ -106,7 +112,6 @@ class Requirement:
 #: 종류별로 "어떤 규칙 계층이 더 있어야 **허가**까지 갈 수 있는가".
 #: 전부 차 있다는 것은 지금 어떤 Action 도 VALID 가 될 수 없다는 뜻이다.
 _MISSING_RULE: dict[PlayerActionKind, str] = {
-    PlayerActionKind.NORMAL_SUMMON: "summon-procedure (Phase 2-G)",
     PlayerActionKind.SET_MONSTER: "summon-procedure (Phase 2-G)",
     PlayerActionKind.SET_SPELL_TRAP: "set-timing (Phase 2-G)",
     PlayerActionKind.ACTIVATE_CARD: "activation-timing (Phase 2-C/2-F)",
@@ -117,6 +122,22 @@ _MISSING_RULE: dict[PlayerActionKind, str] = {
     PlayerActionKind.END_PHASE: "turn-progression (Phase 2-G)",
     PlayerActionKind.PASS: "priority (Phase 2-F)",
 }
+
+#: 요구를 **전부** 통과하면 허가가 되는 종류.
+#:
+#: Phase 2-I 이전에는 비어 있었다 — 어떤 Action 도 마지막 한 걸음을 확인할
+#: 수 없었기 때문이다. 일반 소환만 그 걸음이 채워졌다: 페이즈 · 턴 플레이어 ·
+#: 자리 · 카드 종류 · 소환권 · 절차가 모두 판정된다.
+#:
+#: **여기 넣는 것은 "이 종류의 적법성을 끝까지 볼 수 있다" 는 선언이다.**
+#: 요구 목록이 비어 있는 종류를 넣으면 아무것도 확인하지 않고 허가가 난다.
+_COMPLETE_RULES: frozenset[PlayerActionKind] = frozenset(
+    {PlayerActionKind.NORMAL_SUMMON}
+)
+
+assert not (_COMPLETE_RULES & set(_MISSING_RULE)), (
+    "한 종류가 '끝까지 본다' 와 '규칙이 없다' 를 동시에 말할 수 없습니다."
+)
 
 
 class ActionValidator:
@@ -262,8 +283,13 @@ class ActionValidator:
         if verdict is not None:
             return verdict
 
-        # 여기까지 왔다면 확인할 수 있는 것은 전부 통과했다. 그래도 허가는
-        # 아니다 — 마지막 한 걸음을 볼 규칙 계층이 없다.
+        # 여기까지 왔다면 확인할 수 있는 것은 전부 통과했다.
+        if action.kind in _COMPLETE_RULES:
+            return ValidationResult.valid(
+                f"{action.kind.value} 의 요구를 전부 통과했습니다."
+            )
+
+        # 나머지는 통과해도 허가가 아니다 — 마지막 한 걸음을 볼 규칙 계층이 없다.
         return ValidationResult.unknown(
             ValidationCode.RULE_NOT_IMPLEMENTED,
             f"{action.kind.value} 의 남은 적법성을 판정할 규칙 계층이 아직 "
@@ -298,6 +324,7 @@ class ActionValidator:
         나머지를 몰라도 거부다. 순서가 고정이므로 결과도 결정론적이다.
         """
         pending: list[str] = []
+        missing: str | None = None
         for requirement in requirements:
             verdict = self._evaluator.evaluate(requirement.condition, context)
             if verdict.result is ConditionResult.FALSE:
@@ -307,7 +334,20 @@ class ActionValidator:
                 # 다시 추측하지 않고 그대로 전한다.
                 why = "; ".join(verdict.unknown_reasons) or verdict.description
                 pending.append(f"{requirement.detail} ({why})")
+                # "정보가 없어서" 와 "규칙이 없어서" 는 다른 사실이다.
+                # 조건 자신이 안다 — 검증기가 추측하지 않는다.
+                rules = requirement.condition.missing_rules(self._view, context)
+                if missing is None and rules:
+                    missing = rules[0]
         if pending:
+            if missing is not None:
+                # 정보가 없어서가 아니라 **규칙 계층이 없어서** 모른다.
+                return ValidationResult.unknown(
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    "아직 구현하지 않은 규칙이 걸려 있습니다.",
+                    missing_rule=missing,
+                    notes=tuple(pending),
+                )
             return ValidationResult.unknown(
                 ValidationCode.INFORMATION_UNAVAILABLE,
                 "판정에 필요한 정보가 없습니다.",
@@ -429,6 +469,42 @@ def _summon_like(validator: ActionValidator, action: PlayerAction) -> tuple[Requ
             ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.MZONE),
             ValidationCode.ZONE_FULL,
             "몬스터 존에 빈 칸이 없습니다.",
+        ),
+    )
+
+
+def _normal_summon(
+    validator: ActionValidator, action: PlayerAction
+) -> tuple[Requirement, ...]:
+    """
+    일반 소환. **이 목록을 전부 통과하면 허가가 난다** (``_COMPLETE_RULES``).
+
+    공식 규칙 (``data/rules/documents/sd-rulebook-en-v10.json``):
+
+    - RULE-TURN-004 · RULE-TURN-006 — 소환은 메인 페이즈의 행위다.
+    - RULE-SUMMON-009 — 패에서 필드로, 앞면 공격 표시로.
+    - RULE-SUMMON-009 — "You can only Normal Summon OR Normal Set once per
+      turn."
+
+    세트(``SET_MONSTER``)는 아직 이 목록을 쓰지 않는다 — 세트 절차를 이번
+    단계에서 구현하지 않았고, 소환권을 함께 쓰는 규칙도 세트가 실행될 수
+    있을 때 이어야 한다.
+    """
+    return _summon_like(validator, action) + (
+        Requirement(
+            PhaseIs(MAIN_PHASES),
+            ValidationCode.WRONG_PHASE,
+            "메인 페이즈가 아닙니다.",
+        ),
+        Requirement(
+            _NormalSummonRightAvailable(),
+            ValidationCode.NORMAL_SUMMON_ALREADY_USED,
+            "이번 턴의 일반 소환권을 이미 썼습니다.",
+        ),
+        Requirement(
+            _NormalSummonProcedure(action.source),
+            ValidationCode.CANNOT_NORMAL_SUMMON,
+            "이 카드는 일반 소환으로 필드에 나오지 않습니다.",
         ),
     )
 
@@ -577,7 +653,7 @@ def _turn_progression(
 _REQUIREMENT_BUILDERS: dict[
     PlayerActionKind, Callable[[ActionValidator, PlayerAction], tuple[Requirement, ...]]
 ] = {
-    PlayerActionKind.NORMAL_SUMMON: _summon_like,
+    PlayerActionKind.NORMAL_SUMMON: _normal_summon,
     PlayerActionKind.SET_MONSTER: _summon_like,
     PlayerActionKind.SET_SPELL_TRAP: _set_spell_trap,
     PlayerActionKind.CHANGE_POSITION: _change_position,
@@ -596,6 +672,93 @@ _REQUIREMENT_BUILDERS: dict[
 #
 # 조건 계층에 있으면 좋겠지만 아직 카드 효과가 쓸 일이 없는 것들이다.
 # 실제로 필요해지면 engine/condition/model.py 로 옮긴다.
+
+
+@dataclass(frozen=True, slots=True)
+class _NormalSummonRightAvailable(Condition):
+    """
+    이번 턴의 일반 소환권이 남아 있는가 (RULE-SUMMON-009).
+
+    **관측에서 읽는다.** 소환은 공개된 자리에서 일어나므로 가려진 정보가
+    아니고, 따라서 ``UNKNOWN`` 이 나오지 않는다.
+    """
+
+    def evaluate(self, view, context) -> ConditionResult:
+        used = view.normal_summons_used[context.player]
+        return ConditionResult.from_bool(used == 0)
+
+    def canonical_state(self) -> tuple:
+        return ("normal_summon_right_available",)
+
+    def to_dict(self) -> dict:
+        return {"kind": "normal_summon_right_available"}
+
+    def describe_ko(self) -> str:
+        return "이번 턴의 일반 소환권이 남아 있다"
+
+
+@dataclass(frozen=True, slots=True)
+class _NormalSummonProcedure(Condition):
+    """
+    이 카드가 일반 소환 **절차**를 밟을 수 있는가.
+
+    판정은 :func:`~engine.summon_rules.assess_normal_summon` 하나가 한다 —
+    검증기와 실행기가 같은 답을 쓰게 하려면 판정이 한 곳에만 있어야 한다.
+
+    세 갈래가 그대로 보존된다.
+
+    - ``ORDINARY`` → ``TRUE``
+    - ``FORBIDDEN`` → ``FALSE`` (엑스트라 덱 · 의식 · 토큰)
+    - ``NEEDS_TRIBUTE`` · ``UNDETERMINED`` → ``UNKNOWN``
+
+    제물이 필요한 몬스터를 ``FALSE`` 로 적지 않는다. 실제 규칙에서는 제물을
+    바치면 소환할 수 있고, 없는 것은 그 절차뿐이다.
+    """
+
+    instance: InstanceId | None = None
+
+    def evaluate(self, view, context) -> ConditionResult:
+        assessment = self._assess(view, context)
+        if assessment.permits_procedure:
+            return ConditionResult.TRUE
+        if assessment.is_refusal:
+            return ConditionResult.FALSE
+        return ConditionResult.UNKNOWN
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        if assessment.permits_procedure or assessment.is_refusal:
+            return ()
+        return (assessment.reason,)
+
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        """
+        **왜 모르는가가 두 가지다.** 제물 절차가 없어서 모르는 것과, 카드
+        정의를 못 읽어서 모르는 것은 다른 사실이다. 앞의 것만 규칙 이름을
+        돌려준다.
+        """
+        rule = self._assess(view, context).missing_rule
+        return (rule,) if rule else ()
+
+    def _assess(self, view, context) -> SummonAssessment:
+        definition, _ = _resolve_definition(view, context, self.instance)
+        return assess_normal_summon(definition)
+
+    def canonical_state(self) -> tuple:
+        return (
+            "normal_summon_procedure",
+            self.instance.value if self.instance else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "normal_summon_procedure"}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 가 일반 소환 절차를 밟을 수 있다"
 
 
 @dataclass(frozen=True, slots=True)

@@ -482,6 +482,7 @@ def test_an_action_can_be_built_from_what_the_view_shows(state, mine):
     action = PlayerAction.normal_summon(actor=mine.viewer, source=summonable.instance_id)
 
     result = ActionValidator(mine).validate(action)
-    assert result.validity is ActionValidity.UNKNOWN  # 구조는 맞고, 규칙은 아직 없다
+    # 이 판은 드로우 페이즈다 — 소환은 메인 페이즈의 행위이므로 거절된다.
+    assert result.validity is ActionValidity.INVALID
     assert not result.permits_execution
-    assert state.state_hash() == before  # 아무 일도 일어나지 않았다
+    assert state.state_hash() == before  # 판정은 아무것도 바꾸지 않는다

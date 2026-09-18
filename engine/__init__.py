@@ -85,6 +85,15 @@ Duel Engine.
   보지 않은 규칙은 ``UNRESOLVED_PROGRESSION_RULES`` 로 함께 남는다.
   **우선권을 건드리지 않고**, 트리거도 만들지 않는다 — 남기는 것은
   ``PhaseChanged`` 하나다. ``docs/phase2h-turn-progression.md`` 참고.
+- **Phase 2-I** — 일반 소환 (``summon_rules.py`` · ``normal_summon.py``).
+  **이 프로젝트에서 처음으로 ``VALID`` 가 나오는 행위다.** 절차 판정은
+  ``assess_normal_summon`` 한 곳에 있고, 실행은
+  ``NormalSummonHandler`` 가 ``ActionExecutor`` 에 등록되어 한다.
+  제물이 필요한 몬스터와 효과 몬스터는 ``UNKNOWN`` 이다 — 룰북이
+  "most Effect Monsters (unless they have a specific restriction)" 라고
+  말하는 그 제약을 아직 읽지 못한다. 소환권은 카드 효과의 "1턴에 1번" 과
+  **다른 표**(``RuleUsageRegistry``)에 적는다.
+  ``docs/phase2i-normal-summon.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은

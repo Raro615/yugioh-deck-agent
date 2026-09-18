@@ -39,10 +39,11 @@ AppliedOperation 과 다르다
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 from engine.effect.operation import REASON_NAMES, OperationKind
 from engine.ids import InstanceId
-from engine.vocabulary import Phase, Zone
+from engine.vocabulary import Phase, Position, Zone
 
 
 @dataclass(frozen=True, slots=True)
@@ -415,6 +416,118 @@ class PhaseChanged(StateDelta):
         )
 
 
+class SummonKind(str, Enum):
+    """
+    어떤 소환인가. **지금 있는 것은 일반 소환뿐이다.**
+
+    특수 소환 · 반전 소환 · 제물 소환은 그 절차가 생길 때 함께 들어온다.
+    계층이 없는 이름을 미리 못박으면 나중에 실제 모양과 어긋난다
+    (:class:`~engine.trigger.TimingPoint` 가 소환을 넣지 않은 이유와 같다).
+    """
+
+    NORMAL = "normal"
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.value
+
+
+@dataclass(frozen=True, slots=True)
+class MonsterSummoned(StateDelta):
+    """
+    몬스터가 **소환되었다.**
+
+    왜 :class:`CardMovement` 가 아닌가
+    ----------------------------------
+    카드가 패에서 몬스터 존으로 움직인 것은 맞다. 그런데
+    :attr:`CardMovement.operation` 은 :class:`
+    ~engine.effect.operation.OperationKind` — **효과가 하는 일**의 어휘다
+    (``REASON_NAMES`` 가 전부 ``EFFECT`` 를 달고 있다). 소환은 효과가 아니라
+    규칙에 따른 플레이어의 행위이므로, 그 어휘에 끼워 넣으면 "효과로
+    묘지에 보내졌다" 와 "일반 소환되었다" 가 같은 표를 쓰게 된다.
+
+    그래서 움직임의 정보(:attr:`from_zone` · :attr:`to_zone` ·
+    :attr:`to_index`)는 그대로 들고, 의미는 :attr:`summon` 이 말한다.
+
+    제물은 여기 없다
+    ----------------
+    제물을 바치는 것은 **다른 카드들이 필드를 떠나는** 별개의 변화다. 빈
+    ``tributes`` 칸을 미리 만들어 두면 그 칸이 "이 소환이 제물을 소유한다"
+    고 말하게 된다. 제물 절차가 생기면 그때 자기 변화를 따로 적는다.
+    """
+
+    summon: SummonKind
+    card: InstanceId
+    player: int
+    """소환한 사람. 소환된 몬스터의 컨트롤러다."""
+    owner: int
+    """카드의 주인. 컨트롤러와 **다를 수 있다** (ADR: Owner ≠ Controller)."""
+    from_zone: Zone
+    to_zone: Zone
+    to_index: int
+    """놓인 칸 번호. 몬스터 존은 칸이 밀리지 않으므로 자리가 곧 사실이다."""
+    position: Position
+
+    def __post_init__(self) -> None:
+        for name in ("player", "owner"):
+            if getattr(self, name) not in (0, 1):
+                raise ValueError(f"{name} 는 0 또는 1 입니다: {getattr(self, name)}")
+        if self.to_index < 0:
+            raise ValueError(f"칸 번호는 음수일 수 없습니다: {self.to_index}")
+        if self.from_zone is self.to_zone:
+            raise ValueError(
+                "소환은 다른 존으로 나오는 것입니다: "
+                f"{self.from_zone.value} → {self.to_zone.value}"
+            )
+
+    @property
+    def kind(self) -> str:
+        return "monster_summoned"
+
+    @property
+    def instance(self) -> InstanceId:
+        return self.card
+
+    @property
+    def changed_side(self) -> bool:
+        """주인이 아닌 쪽이 소환했는가. 지금은 언제나 거짓이다."""
+        return self.owner != self.player
+
+    def canonical_state(self) -> tuple:
+        return (
+            "monster_summoned",
+            self.summon.value,
+            self.card.value,
+            self.player,
+            self.owner,
+            self.from_zone.value,
+            self.to_zone.value,
+            self.to_index,
+            self.position.value,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "monster_summoned",
+            "summon": self.summon.value,
+            "instance": self.card.value,
+            "player": self.player,
+            "owner": self.owner,
+            "from": {"zone": self.from_zone.value},
+            "to": {
+                "zone": self.to_zone.value,
+                "index": self.to_index,
+                "position": self.position.value,
+            },
+        }
+
+    def describe_ko(self) -> str:
+        return (
+            f"P{self.player} 가 {self.card} 를 {self.from_zone.value} 에서 "
+            f"{self.to_zone.value}[{self.to_index}] 로 "
+            f"{self.summon.value} 소환 ({self.position.value})"
+        )
+
+
 def canonical_deltas(deltas) -> tuple:
     """변화 묶음의 정규 표현. **순서를 지킨다** — 순서가 곧 사실이다."""
     return tuple(delta.canonical_state() for delta in deltas)
@@ -427,5 +540,7 @@ __all__ = [
     "CardDrawn",
     "LifeChanged",
     "PhaseChanged",
+    "SummonKind",
+    "MonsterSummoned",
     "canonical_deltas",
 ]

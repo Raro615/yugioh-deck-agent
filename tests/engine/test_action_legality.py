@@ -5,8 +5,10 @@ Phase 2-A 는 Action 의 **모양**만 봤다. 이제 관측을 읽고 확실한
 잡아낸다 — 남의 카드를 소환하려 한다, 필드의 카드를 다시 소환하려 한다,
 메인 페이즈에 공격을 선언한다, 몬스터 존이 꽉 찼다.
 
-**아직 ``VALID`` 는 나오지 않는다.** 소환 절차 · 타이밍 · 체인이 없어서
-마지막 한 걸음을 확인할 수 없기 때문이다. 그것이 정직한 상태다.
+Phase 2-B-2 시점에는 **``VALID`` 가 하나도 나오지 않았다** — 소환 절차 ·
+타이밍 · 체인이 없어서 마지막 한 걸음을 확인할 수 없었기 때문이다.
+Phase 2-I 가 그중 하나를 채웠다: 제물이 필요 없는 일반 소환은 이제 허가가
+난다. 나머지는 그대로 ``UNKNOWN`` 이고, 그것이 정직한 상태다.
 """
 
 import dataclasses
@@ -362,15 +364,24 @@ def test_normal_summon_rejects_the_non_turn_player(state):
 
 
 @requires_official_db
-def test_a_legitimate_normal_summon_is_unknown_not_valid(validator, my_hand_monster):
+def test_a_normal_summon_that_needs_a_tribute_is_unknown_not_valid(
+    state, my_hand_monster
+):
     """
-    확인할 수 있는 것은 전부 통과했다. 그래도 허가가 아니다 — 릴리스 ·
-    소환 제한 · 소환권을 판정할 계층이 아직 없다.
+    확인할 수 있는 것은 전부 통과했다. 그래도 허가가 아니다 — 이 카드는
+    레벨 8 이라 제물이 필요한데 (RULE-SUMMON-011), 제물을 치르는 절차가
+    아직 없다.
+
+    **``INVALID`` 가 아니다.** 실제 규칙에서는 제물을 바치면 소환할 수
+    있고, 없는 것은 그 절차뿐이다.
     """
+    state.turn.set_phase(Phase.MAIN1)
+    validator = ActionValidator(GameStateView.from_state(state, viewer=0))
+
     result = validator.validate(PlayerAction.normal_summon(0, my_hand_monster))
     assert result.validity is ActionValidity.UNKNOWN
     assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert "summon-procedure" in result.missing_rule
+    assert "tribute" in result.missing_rule
     assert not result.permits_execution
 
 
@@ -583,8 +594,11 @@ def test_nothing_is_allowed_once_the_duel_is_over(state, my_hand_monster):
 @requires_official_db
 def test_no_action_kind_can_be_executed_yet(state, my_monster, my_hand_monster):
     """
-    Phase 2-B-2 의 정의상, 어떤 Action 도 허가를 받지 못한다. 하나라도
-    통과하면 실행 계층이 없는데 실행이 열린 것이다.
+    배틀 페이즈에서는 어느 것도 허가를 받지 못한다. 하나라도 통과하면
+    실행 계층이 없는데 실행이 열린 것이다.
+
+    (Phase 2-I 부터 메인 페이즈의 일반 소환만 허가가 난다. 여기는 배틀
+    페이즈이므로 그것도 막힌다.)
     """
     _battle(state)
     view = GameStateView.from_state(state, viewer=0)
@@ -615,6 +629,7 @@ def test_information_unknown_is_not_confused_with_rule_unknown(state):
     no_repo = GameState.create(decks=([1000], []))
     card = no_repo.player(0).deck[0]
     no_repo.move(card, Zone.HAND)
+    no_repo.turn.set_phase(Phase.MAIN1)  # 페이즈 위반이 먼저 걸리지 않도록
     view = GameStateView.from_state(no_repo, viewer=0)
     information = ActionValidator(view).validate(
         PlayerAction.normal_summon(0, card.instance_id)

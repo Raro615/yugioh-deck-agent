@@ -79,6 +79,17 @@ class Condition:
             return ()
         return (self.describe_ko(),)
 
+    def missing_rules(
+        self, view: "GameStateView", context: ConditionContext
+    ) -> tuple[str, ...]:
+        """
+        ``UNKNOWN`` 의 원인이 **없는 규칙 계층**이라면 그 이름들.
+
+        비어 있으면 "정보가 없어서 모른다" 는 뜻이다. 둘은 다른 사실이고,
+        앞의 것은 판이 바뀌면 풀리지만 뒤의 것은 코드가 생겨야 풀린다.
+        """
+        return ()
+
     def to_dict(self) -> dict:
         """JSON 으로 바로 나갈 수 있는 형태."""
         raise NotImplementedError  # pragma: no cover - 추상
@@ -137,6 +148,9 @@ class UnimplementedRule(Condition):
     def unknown_reasons(self, view, context) -> tuple[str, ...]:
         return (f"규칙 미구현: {self.rule}",)
 
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        return (self.rule,)
+
     def canonical_state(self) -> tuple:
         return ("unimplemented", self.rule)
 
@@ -178,6 +192,14 @@ class And(Condition):
             reasons.extend(child.unknown_reasons(view, context))
         return tuple(reasons)
 
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        if self.evaluate(view, context) is not ConditionResult.UNKNOWN:
+            return ()
+        rules: list[str] = []
+        for child in self.children:
+            rules.extend(child.missing_rules(view, context))
+        return tuple(rules)
+
     def canonical_state(self) -> tuple:
         return ("and", tuple(c.canonical_state() for c in self.children))
 
@@ -218,6 +240,14 @@ class Or(Condition):
             reasons.extend(child.unknown_reasons(view, context))
         return tuple(reasons)
 
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        if self.evaluate(view, context) is not ConditionResult.UNKNOWN:
+            return ()
+        rules: list[str] = []
+        for child in self.children:
+            rules.extend(child.missing_rules(view, context))
+        return tuple(rules)
+
     def canonical_state(self) -> tuple:
         return ("or", tuple(c.canonical_state() for c in self.children))
 
@@ -241,6 +271,9 @@ class Not(Condition):
 
     def unknown_reasons(self, view, context) -> tuple[str, ...]:
         return self.child.unknown_reasons(view, context)
+
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        return self.child.missing_rules(view, context)
 
     def canonical_state(self) -> tuple:
         return ("not", self.child.canonical_state())

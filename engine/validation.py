@@ -130,6 +130,22 @@ class ValidationCode(str, Enum):
     """체인에 쌓인 것이 없다. "다 해결했다" 와 다른 사실이다."""
     CHAIN_DEFINITION_UNAVAILABLE = "chain_definition_unavailable"
     """체인 링크가 가리키는 효과의 정의를 찾을 수 없다. 해결할 수 없다."""
+    # --- 일반 소환 (Phase 2-I) -----------------------------------------
+    CANNOT_NORMAL_SUMMON = "cannot_normal_summon"
+    """
+    이 카드는 일반 소환으로 필드에 나올 수 없다 (엑스트라 덱 · 의식 · 토큰).
+
+    ``SOURCE_WRONG_CARD_TYPE`` 과 합치지 않는다 — 그쪽은 "몬스터가 아니다",
+    이것은 "몬스터지만 이 방법으로는 나오지 않는다" 로 다른 사실이다.
+    """
+    NORMAL_SUMMON_ALREADY_USED = "normal_summon_already_used"
+    """
+    이번 턴의 소환권을 이미 썼다 (RULE-SUMMON-009).
+
+    카드 효과의 "1턴에 1번" 과 다른 제약이다 — 그쪽은 카드마다, 이쪽은
+    플레이어마다 하나다.
+    """
+
     PRIORITY_STATE_STALE = "priority_state_stale"
     """
     우선권 상태가 지금 판과 맞지 않는다 (턴 플레이어 · 페이즈가 다르다).
