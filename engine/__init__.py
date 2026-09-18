@@ -78,6 +78,13 @@ Duel Engine.
   바꾸지 않는 것이 이 계층의 존재 이유다. 소환 · 전투 · 턴 진행은
   여기 들어오지 않고 각자의 Executor 로 간다.
   ``docs/phase2g-action-executor.md`` 참고.
+- **Phase 2-H** — 게임 시간의 진행 (``turn_progression.py``).
+  ``TurnProgressor`` 가 ``TURN_PHASE_ORDER`` 위에서 다음 자리를 계산하고,
+  엔드 페이즈에서는 **다음 턴의 첫 페이즈**로 넘긴다 (턴 번호 · 턴
+  플레이어가 함께 바뀐다). ``VALID`` 는 "진행 순서와 맞다" 는 뜻일 뿐이고,
+  보지 않은 규칙은 ``UNRESOLVED_PROGRESSION_RULES`` 로 함께 남는다.
+  **우선권을 건드리지 않고**, 트리거도 만들지 않는다 — 남기는 것은
+  ``PhaseChanged`` 하나다. ``docs/phase2h-turn-progression.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
@@ -115,6 +122,8 @@ Phase 1 에서 의도적으로 만들지 않은 것 (TODO)
   세기만 한다. "몇 번까지 허용인가" 는 Phase 4 다.
 - **사용 횟수 · 턴 플래그의 초기화 시점** — ``UseRegistry.clear()`` 와
   ``TurnState.begin_next_turn()`` 은 있지만, 언제 부를지는 정하지 않았다.
-  턴 진행 규칙은 Phase 4 의 타이밍 계층이다.
+  Phase 2-H 가 턴을 넘기면서도 **아무것도 지우지 않는다** — 무엇이 언제
+  지워지는가는 규칙이고, 규칙 없이 지우면 되돌릴 수 없다. 지워야 할 것의
+  목록만 ``turn_progression.TURN_BOUNDARY_RESETS`` 에 남아 있다.
 - **``AppliedEffect``** — 일시 효과를 보관만 하고 해석하지 않는다. Phase 8.
 """

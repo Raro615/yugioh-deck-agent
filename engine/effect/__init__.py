@@ -33,6 +33,7 @@ from engine.effect.delta import (
     CardDrawn,
     CardMovement,
     LifeChanged,
+    PhaseChanged,
     StateDelta,
     ZoneMoved,
     canonical_deltas,
@@ -150,6 +151,7 @@ __all__ = [
     "ZoneMoved",
     "CardDrawn",
     "LifeChanged",
+    "PhaseChanged",
     "canonical_deltas",
     # 기록 (Phase 2-D-3 · 2-E)
     "EventKind",

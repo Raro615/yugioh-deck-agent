@@ -42,7 +42,7 @@ from dataclasses import dataclass
 
 from engine.effect.operation import REASON_NAMES, OperationKind
 from engine.ids import InstanceId
-from engine.vocabulary import Zone
+from engine.vocabulary import Phase, Zone
 
 
 @dataclass(frozen=True, slots=True)
@@ -329,6 +329,92 @@ class LifeChanged(StateDelta):
         return f"P{self.player} 라이프 {self.before} → {self.after}"
 
 
+@dataclass(frozen=True, slots=True)
+class PhaseChanged(StateDelta):
+    """
+    게임의 시간이 움직였다 — 페이즈가, 때로는 턴까지 바뀌었다.
+
+    **턴 바뀜을 따로 만들지 않는다.** 턴이 넘어가는 것은 언제나 엔드
+    페이즈에서 다음 턴의 드로우 페이즈로 가는 *한 번의* 이동이고, 그것을
+    ``PhaseChanged`` 와 ``TurnChanged`` 두 장으로 적으면 세는 쪽이 한 사건을
+    두 번 센다 (``ZoneMoved`` 와 ``CardDrawn`` 을 갈라놓은 이유와 정반대의
+    이유다 — 저쪽은 두 사건이고 이쪽은 한 사건이다). 턴이 함께 바뀌었는지는
+    :attr:`changes_turn` 이 말한다.
+
+    카드가 움직이지 않으므로 :class:`CardMovement` 가 아니다.
+    """
+
+    from_turn: int
+    from_player: int
+    from_phase: Phase
+    to_turn: int
+    to_player: int
+    to_phase: Phase
+
+    def __post_init__(self) -> None:
+        for name in ("from_player", "to_player"):
+            if getattr(self, name) not in (0, 1):
+                raise ValueError(f"{name} 는 0 또는 1 입니다: {getattr(self, name)}")
+        for name in ("from_turn", "to_turn"):
+            if getattr(self, name) < 1:
+                raise ValueError(f"{name} 은 1 이상이어야 합니다: {getattr(self, name)}")
+        if self.to_turn < self.from_turn:
+            raise ValueError(
+                f"턴은 되감기지 않습니다: {self.from_turn} → {self.to_turn}"
+            )
+        if self.canonical_state()[1:4] == self.canonical_state()[4:]:
+            raise ValueError(
+                "달라진 것이 없는데 변화로 적을 수 없습니다. 아무 일도 "
+                "일어나지 않았다면 Delta 를 만들지 않습니다."
+            )
+
+    @property
+    def kind(self) -> str:
+        return "phase_changed"
+
+    @property
+    def changes_turn(self) -> bool:
+        """턴까지 넘어갔는가. 턴 번호가 곧 사실이다."""
+        return self.to_turn != self.from_turn
+
+    @property
+    def changes_turn_player(self) -> bool:
+        return self.to_player != self.from_player
+
+    def canonical_state(self) -> tuple:
+        return (
+            "phase_changed",
+            self.from_turn,
+            self.from_player,
+            self.from_phase.value,
+            self.to_turn,
+            self.to_player,
+            self.to_phase.value,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "phase_changed",
+            "from": {
+                "turn": self.from_turn,
+                "player": self.from_player,
+                "phase": self.from_phase.value,
+            },
+            "to": {
+                "turn": self.to_turn,
+                "player": self.to_player,
+                "phase": self.to_phase.value,
+            },
+            "changes_turn": self.changes_turn,
+        }
+
+    def describe_ko(self) -> str:
+        return (
+            f"T{self.from_turn} P{self.from_player} {self.from_phase.value} → "
+            f"T{self.to_turn} P{self.to_player} {self.to_phase.value}"
+        )
+
+
 def canonical_deltas(deltas) -> tuple:
     """변화 묶음의 정규 표현. **순서를 지킨다** — 순서가 곧 사실이다."""
     return tuple(delta.canonical_state() for delta in deltas)
@@ -340,5 +426,6 @@ __all__ = [
     "ZoneMoved",
     "CardDrawn",
     "LifeChanged",
+    "PhaseChanged",
     "canonical_deltas",
 ]
