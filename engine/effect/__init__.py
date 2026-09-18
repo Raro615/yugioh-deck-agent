@@ -16,6 +16,10 @@
 등록된 구현이 있고, 조건이 참이고, 대상이 다 풀렸을 때만이다.
 :class:`UnimplementedResolver` 는 계약을 보여주는 쪽으로 남아 있다.
 
+실행이 판을 바꾸면 그 변화를 :class:`StateDelta` 로 남기고, 받아 둔
+:class:`EventJournal` 에 사건으로 적는다 (Phase 2-D-3). 기록은 판을 바꾸지
+않는다 — 되돌리기도 재생도 여기 없다 (ADR-008).
+
 지키는 구분
 -----------
 ``EffectDefinition`` ≠ ``analysis.EffectSpec`` ·
@@ -25,6 +29,14 @@
 자세한 것은 ``docs/phase2d1-effect-model.md``.
 """
 
+from engine.effect.delta import (
+    CardDrawn,
+    CardMovement,
+    LifeChanged,
+    StateDelta,
+    ZoneMoved,
+    canonical_deltas,
+)
 from engine.effect.definition import (
     FORBIDDEN_SOURCES,
     EffectDefinition,
@@ -46,6 +58,7 @@ from engine.effect.operation import (
     OperationKind,
     UnimplementedOperation,
 )
+from engine.effect.journal import EffectEvent, EventJournal, JournalError
 from engine.effect.executor import (
     DESTINATION,
     DESTINATION_OWNER,
@@ -120,4 +133,15 @@ __all__ = [
     "DestinationOwner",
     "DESTINATION_OWNER",
     "destination_player",
+    # 상태 변화 (Phase 2-D-3)
+    "StateDelta",
+    "CardMovement",
+    "ZoneMoved",
+    "CardDrawn",
+    "LifeChanged",
+    "canonical_deltas",
+    # 기록 (Phase 2-D-3)
+    "EffectEvent",
+    "EventJournal",
+    "JournalError",
 ]

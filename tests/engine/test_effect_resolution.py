@@ -226,9 +226,36 @@ def test_an_empty_target_selection_is_not_the_same_as_no_target(definition):
 
 
 def test_a_result_that_is_not_resolved_never_claims_a_state_change():
+    """
+    ``resolved`` 와 ``changed_state`` 는 **다른 질문**이다 (Phase 2-D-3).
+
+    - ``resolved`` — 해결되었는가
+    - ``changed_state`` — 판이 실제로 달라졌는가
+
+    해결되지 않은 결과는 둘 다 거짓이다. 해결된 결과라도 바꾼 것이 없으면
+    (하는 일이 적혀 있지 않은 정의) 변화는 없다.
+    """
     for status in ResolutionStatus:
         result = EffectResult(status)
-        assert result.changed_state is (status is ResolutionStatus.RESOLVED)
+        assert result.resolved is (status is ResolutionStatus.RESOLVED)
+        # 변화 기록이 없으므로 어느 상태든 "판이 달라졌다" 고 말하지 않는다.
+        assert result.changed_state is False
+        assert result.deltas == ()
+
+
+def test_only_a_resolved_result_may_carry_changes():
+    """실패했는데 변화 기록이 붙어 있는 결과는 **만들어지지 않는다.**"""
+    from engine.effect import CardDrawn
+
+    drawn = (CardDrawn(0, InstanceId(3)),)
+    ok = EffectResult(ResolutionStatus.RESOLVED, deltas=drawn)
+    assert ok.changed_state is True
+
+    for status in ResolutionStatus:
+        if status is ResolutionStatus.RESOLVED:
+            continue
+        with pytest.raises(ValueError):
+            EffectResult(status, deltas=drawn)
 
 
 def test_a_result_cannot_be_used_as_a_boolean():

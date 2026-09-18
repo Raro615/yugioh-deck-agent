@@ -104,8 +104,15 @@ class GameState:
         self._rng = rng
 
         # --- 이후 Phase 용 자리표시 --------------------------------------
-        # Phase 2 에서 GameEvent / EventJournal 이, Phase 5 에서 ChainState 가
-        # 들어온다. 지금은 구조만 잡아두고 아무것도 넣지 않는다.
+        # Phase 5 에서 ChainState 가 들어온다. 지금은 구조만 잡아두고
+        # 아무것도 넣지 않는다.
+        #
+        # ``journal`` 은 **채우지 않는다.** Phase 2-D-3 의
+        # :class:`~engine.effect.journal.EventJournal` 은 판이 소유하지 않고
+        # 실행기가 받아 둔다 — 여기에 넣으면 :meth:`state_hash` 가 "판이
+        # 어떤 모양인가" 가 아니라 "어떤 경로로 왔는가" 를 뜻하게 되고,
+        # "같은 판은 만들어진 경로와 무관하게 같은 해시" 가 깨진다.
+        # 판의 해시와 역사의 해시는 다른 질문이므로 따로 둔다.
         self.chain: Any = None
         self.pending: list[Any] = []
         self.journal: list[Any] = []
@@ -356,8 +363,9 @@ class GameState:
             seed=self._seed,
             rng=rng,
         )
-        # Phase 2 / 5 에서 chain · pending · journal 이 실제 내용을 갖게 되면
-        # 여기서도 함께 복제해야 한다.
+        # Phase 5 에서 chain · pending 이 실제 내용을 갖게 되면 여기서도
+        # 함께 복제해야 한다. ``journal`` 은 판이 소유하지 않으므로 대상이
+        # 아니다 (Phase 2-D-3).
         return copy
 
     # ------------------------------------------------------------------
@@ -409,8 +417,10 @@ class GameState:
         넣는다. 덕분에 "같은 판" 은 만들어진 경로와 무관하게 같은 해시를
         갖는다.
 
-        ``chain`` / ``pending`` / ``journal`` 은 Phase 1 에서 항상 비어 있으므로
-        포함하지 않는다. 내용이 생기는 Phase 2 · 5 에서 함께 넣는다.
+        ``chain`` / ``pending`` 은 아직 항상 비어 있으므로 포함하지 않는다.
+        내용이 생기는 Phase 5 에서 함께 넣는다. ``journal`` 은 **앞으로도
+        넣지 않는다** — 역사는 판의 모양이 아니고, 넣으면 같은 판이 경로에
+        따라 다른 해시를 갖게 된다 (Phase 2-D-3).
         ``allocator`` 와 난수원도 논리적 판 상태가 아니므로 제외한다 — 같은
         판이면 어떤 seed 로 도달했든 같은 해시다.
         """

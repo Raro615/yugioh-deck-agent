@@ -26,6 +26,12 @@ Duel Engine.
   대상이 다 풀렸을 때만 바꾼다. 파괴는 아직 실행하지 않는다 —
   파괴 내성 · 파괴 대체 · 파괴 트리거가 없기 때문이다.
   ``docs/phase2d2-effect-execution.md`` 참고.
+- **Phase 2-D-3** — 상태 변화의 기록 (``effect/delta.py``,
+  ``effect/journal.py``). 실행이 판을 바꾸면 그 변화를
+  :class:`~engine.effect.delta.StateDelta` 로 남기고
+  :class:`~engine.effect.journal.EventJournal` 에 사건으로 적는다.
+  **기록은 판을 바꾸지 않는다** — 되돌리기도 재생도 아직 없다 (ADR-008).
+  ``docs/phase2d3-delta-journal.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 

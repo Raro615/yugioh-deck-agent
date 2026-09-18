@@ -36,6 +36,7 @@ from typing import Protocol, runtime_checkable
 
 from engine.condition import ConditionContext
 from engine.cost import Selection
+from engine.effect.delta import StateDelta, canonical_deltas
 from engine.effect.definition import (
     EffectDefinition,
     ExecutionAvailability,
@@ -289,9 +290,38 @@ class EffectResult:
     """무엇이 없어서 해결하지 못했는가."""
     applied: tuple[AppliedOperation, ...] = ()
     """실제로 적용된 일들. 순서대로다. 실패하면 비어 있다."""
+    deltas: tuple[StateDelta, ...] = ()
+    """
+    그 실행으로 판이 **어떻게 달라졌는가.** 순서대로다.
+
+    :attr:`applied` 와 다른 것을 말한다 — 저쪽은 "무슨 일을 했는가", 이쪽은
+    "판이 어떻게 달라졌는가" 다. 일 하나가 변화 여럿을 낳는다.
+
+    **실패한 결과는 언제나 비어 있다.** 판을 바꾸지 않았으므로 적을 변화도
+    없다. 반대로 비어 있다고 실패인 것은 아니다 — 하는 일이 하나도 적혀
+    있지 않은 정의는 성공하고도 아무것도 바꾸지 않는다.
+    """
+
+    def __post_init__(self) -> None:
+        if self.status is not ResolutionStatus.RESOLVED and self.deltas:
+            raise ValueError(
+                f"{self.status.value} 인데 변화 기록이 있습니다. 해결되지 "
+                "않은 실행은 판을 바꾸지 않습니다."
+            )
 
     @property
     def changed_state(self) -> bool:
+        """
+        판이 실제로 달라졌는가.
+
+        ``RESOLVED`` 인 것만으로는 부족하다 — 하는 일이 없는 정의도
+        해결되기 때문이다. 변화가 있어야 달라진 것이다.
+        """
+        return bool(self.deltas)
+
+    @property
+    def resolved(self) -> bool:
+        """해결되었는가. 판을 바꿨는지와는 다른 질문이다."""
         return self.status is ResolutionStatus.RESOLVED
 
     def __bool__(self) -> bool:
@@ -308,6 +338,7 @@ class EffectResult:
             self.reason,
             self.missing,
             tuple(a.canonical_state() for a in self.applied),
+            canonical_deltas(self.deltas),
         )
 
     def to_dict(self) -> dict:
@@ -320,6 +351,8 @@ class EffectResult:
             data["missing"] = self.missing
         if self.applied:
             data["applied"] = [a.to_dict() for a in self.applied]
+        if self.deltas:
+            data["deltas"] = [d.to_dict() for d in self.deltas]
         return data
 
     def __str__(self) -> str:  # pragma: no cover - 표시용

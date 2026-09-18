@@ -28,6 +28,15 @@ Operation 이 스스로 판을 바꾸지 않는다
 경우이고, 일어났다면 결함이다. 원자적 되돌리기는 ``StateDelta`` 가 들어오는
 Phase 2-E 의 몫이다 (ADR-008).
 
+무엇이 달라졌는지 적어 둔다
+---------------------------
+판을 바꾼 뒤에는 그 변화를 :class:`~engine.effect.delta.StateDelta` 로
+남기고, :class:`~engine.effect.journal.EventJournal` 을 받았으면 거기에도
+적는다. 기록은 판을 바꾸지 않는다 — 방향은 실행 → 기록 한 쪽뿐이다.
+
+되돌리기는 여전히 없다 (ADR-008). Delta 는 *기록*이지 *계획*이 아니다.
+
+
 관측과 변경을 섞지 않는다
 -------------------------
 조건 평가는 :class:`~engine.game_state_view.GameStateView` 로 하고, 변경은
@@ -45,6 +54,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from engine.condition import ConditionEvaluator, ConditionResult
+from engine.effect.delta import CardDrawn, LifeChanged, StateDelta, ZoneMoved
 from engine.effect.definition import (
     EffectDefinition,
     EffectImplementationLookup,
@@ -59,6 +69,7 @@ from engine.effect.operation import (
     Operation,
     OperationKind,
 )
+from engine.effect.journal import EventJournal
 from engine.effect.resolution import (
     AppliedOperation,
     EffectResult,
@@ -229,10 +240,21 @@ class EffectExecutor:
     그것이 기본 상태이고, 그 상태에서는 어떤 효과도 실행되지 않는다.
     """
 
-    __slots__ = ("_lookup",)
+    __slots__ = ("_lookup", "_journal")
 
-    def __init__(self, lookup: EffectImplementationLookup | None = None):
+    def __init__(
+        self,
+        lookup: EffectImplementationLookup | None = None,
+        journal: EventJournal | None = None,
+    ):
         self._lookup = lookup if lookup is not None else EmptyImplementationLookup()
+        # 기록은 **선택**이다. 없으면 아무것도 적지 않고, 있어도 실행
+        # 결과는 달라지지 않는다 — 기록이 판정에 끼어들면 기록이 아니다.
+        self._journal = journal
+
+    @property
+    def journal(self) -> EventJournal | None:
+        return self._journal
 
     # ==================================================================
     # 진입점
@@ -260,9 +282,17 @@ class EffectExecutor:
         if isinstance(plan, EffectResult):
             return plan  # 계획 실패 — 판은 그대로다
 
+        applied: list[AppliedOperation] = []
+        deltas: list[StateDelta] = []
         try:
-            applied = tuple(self._apply(state, step) for step in plan)
+            for step in plan:
+                record, changes = self._apply(state, step)
+                applied.append(record)
+                deltas.extend(changes)
         except Exception as error:  # pragma: no cover - 일어나서는 안 된다
+            # 여기서는 변화 기록을 돌려주지 않는다. 판이 반쯤 바뀌어 있을 수
+            # 있고, 반쪽짜리 기록은 없는 것보다 나쁘다 — 그것을 근거로
+            # 되감으면 틀린 판이 된다.
             return EffectResult(
                 ResolutionStatus.EXECUTION_ERROR,
                 ValidationCode.RULE_NOT_IMPLEMENTED,
@@ -270,12 +300,23 @@ class EffectExecutor:
                 "있습니다.",
             )
 
-        return EffectResult(
+        result = EffectResult(
             ResolutionStatus.RESOLVED,
             ValidationCode.OK,
             f"{definition.effect_ref} 를 적용했습니다 ({len(applied)}건).",
-            applied=applied,
+            applied=tuple(applied),
+            deltas=tuple(deltas),
         )
+        if self._journal is not None and result.deltas:
+            # 판을 바꾼 해결만 적는다. 바꾼 것이 없으면 역사도 없다.
+            self._journal.record(
+                effect_ref=definition.effect_ref,
+                actor=context.controller,
+                applied=result.applied,
+                deltas=result.deltas,
+                source=context.source,
+            )
+        return result
 
     # ==================================================================
     # 1단계 — 계획. 판을 읽기만 한다.
@@ -520,28 +561,57 @@ class EffectExecutor:
     # ==================================================================
     # 2단계 — 적용. 기존 primitive 만 부른다.
     # ==================================================================
-    def _apply(self, state: GameState, step: _Step) -> AppliedOperation:
+    def _apply(
+        self, state: GameState, step: _Step
+    ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
+        """
+        일 하나를 수행하고 **(무슨 일을 했는가, 판이 어떻게 달라졌는가)** 를
+        돌려준다.
+
+        변화는 바꾸기 **직전·직후**를 실제로 읽어서 적는다. 계획한 값을
+        그대로 옮겨 적지 않는다 — 그러면 기록이 판과 어긋나도 알 수 없다.
+        """
         operation = step.operation
+
         if operation.kind is OperationKind.DRAW:
             assert step.player is not None and step.amount is not None
             drawn = state.draw(step.player, step.amount)
-            return AppliedOperation(
+            if len(drawn) != step.amount:  # pragma: no cover - 계획이 막는다
+                raise EffectExecutionError(
+                    f"{step.amount}장을 뽑기로 했는데 {len(drawn)}장만 "
+                    "옮겨졌습니다."
+                )
+            record = AppliedOperation(
                 kind=OperationKind.DRAW,
                 reason_names=operation.reason_names,
                 instances=tuple(card.instance_id for card in drawn),
                 amount=step.amount,
                 player=step.player,
             )
+            changes = tuple(
+                CardDrawn(player=step.player, card=card.instance_id) for card in drawn
+            )
+            return record, changes
 
         if operation.kind is OperationKind.CHANGE_LIFE:
             assert step.player is not None and step.amount is not None
-            state.player(step.player).change_life(step.amount)
-            return step.record()
+            player = state.player(step.player)
+            before = player.life_points
+            after = player.change_life(step.amount)
+            if after == before:
+                # 실제로 달라진 것이 없으면 변화도 없다 (0 에서 더 깎는 경우).
+                return step.record(), ()
+            return step.record(), (
+                LifeChanged(player=step.player, before=before, after=after),
+            )
 
         destination = DESTINATION[operation.kind]
+        changes = []
         for instance, to_player in zip(step.instances, step.owners):
             card = state.find_instance(instance)
             assert card is not None  # 계획 단계가 확인했다
+            # 출발지는 **옮기기 전에** 읽어야 한다.
+            from_player, from_zone = card.controller, card.zone
             # 계획 단계가 정한 주인에게 **명시적으로** 보낸다.
             # ``GameState.move`` 의 기본값(컨트롤러)에 절대 기대지 않는다 —
             # 기대면 컨트롤을 빼앗긴 카드가 빼앗은 쪽의 묘지로 간다.
@@ -552,10 +622,21 @@ class EffectExecutor:
                     f"{instance} 를 P{to_player} 의 {destination.value} 로 "
                     f"보냈는데 {card.zone.value}/P{card.controller} 에 있습니다."
                 )
-        return step.record()
+            changes.append(
+                ZoneMoved(
+                    movement=operation.kind,
+                    card=instance,
+                    source_player=from_player,
+                    source_zone=from_zone,
+                    destination_player=to_player,
+                    destination_zone=destination,
+                )
+            )
+        return step.record(), tuple(changes)
 
     def __repr__(self) -> str:  # pragma: no cover - 표시용
-        return f"<EffectExecutor lookup={self._lookup!r}>"
+        journal = "없음" if self._journal is None else f"{len(self._journal)}건"
+        return f"<EffectExecutor lookup={self._lookup!r} journal={journal}>"
 
 
 def _fail(
