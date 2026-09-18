@@ -65,6 +65,11 @@ Duel Engine.
   비용 영수증이 없으면 빈 값으로 채우지 않고 삽입 불가로 남긴다. 체인에
   넣는 것과 **해결하는 것은 따로**이고, 여기서는 아무것도 실행하지 않는다.
   ``docs/phase2f3d-trigger-chain.md`` 참고.
+- **Phase 2-F-4** — 타이밍 창과 우선권의 통합 (``timing.py``).
+  ``TimingWindow`` 가 사건 · 턴 · 우선권 · 체인을 한 스냅숏으로 묶고,
+  ``TimingCoordinator`` 가 앞 계층을 **부르기만** 한다. 체인을 해결하지도
+  효과를 실행하지도 않고, **우선권을 돌리지 않고 확인만 한다** — 누구에게
+  넘어가는가는 아직 규칙이 없다. ``docs/phase2f4-timing-priority.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
