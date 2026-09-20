@@ -39,7 +39,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from engine.condition import PlayerRef, ZoneCountAtLeast
+from engine.condition import IsSpellTrap, PlayerRef, ZoneCountAtLeast
+from engine.cost import CandidateSource, ChoiceSpec
 from engine.effect.definition import (
     EffectDefinition,
     EffectDefinitionError,
@@ -52,10 +53,13 @@ from engine.effect.definition import (
 from engine.effect.executor import EffectExecutor, EffectImplementationRegistry
 from engine.effect.journal import EventJournal
 from engine.effect.operation import (
+    CardOperation,
     DrawOperation,
     LifeChangeOperation,
     OperationKind,
 )
+from engine.effect.semantics import FIELD_ZONES, DestructionRuling
+from engine.effect.target import PRIMARY_TARGET, TargetBinding, TargetSpec
 from engine.ids import EffectRef
 from engine.vocabulary import Zone
 
@@ -162,6 +166,7 @@ class LibraryEntry:
 POT_OF_GREED = 55144522
 RAIN_OF_MERCY = 66719324
 DARK_HOLE = 53129443
+MYSTICAL_SPACE_TYPHOON = 5318639
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -241,10 +246,74 @@ _RAIN_OF_MERCY_ENTRY = LibraryEntry(
     executable=True,
 )
 
+#: 싸이크론 — "①: 필드의 마법 / 함정 카드 1장을 대상으로 하고 발동할 수
+#: 있다. 그 카드를 파괴한다."
+#:
+#: **이 목록에서 처음으로 대상을 지정하는 효과다.** 스크립트의 네 줄이
+#: 정의의 네 부분을 그대로 정한다.
+#:
+#: ====================================  ==================================
+#: ``EFFECT_FLAG_CARD_TARGET``            :meth:`TargetSpec.targeting`
+#:                                        (고르기가 아니라 **대상 지정**)
+#: ``s.filter = c:IsSpellTrap()``         ``require=IsSpellTrap()``
+#: ``LOCATION_ONFIELD`` (양쪽)            ``zones=FIELD_ZONES, owner=None``
+#: ``SelectTarget(..., 1, 1, ...)``       ``minimum=1, maximum=1``
+#: ``..., e:GetHandler())`` (마지막 인자)  ``exclude_source=True``
+#: ``Duel.Destroy(tc,REASON_EFFECT)``     ``CardOperation.destroy``
+#: ====================================  ==================================
+#:
+#: ``tc:IsRelateToEffect(e)`` 는 **옮기지 못했다.** "대상이 발동 후에도
+#: 그대로 있는가" 를 묻는 검사인데, 이 엔진에는 대상이 자리를 옮겼는지
+#: 추적하는 계층이 없다 (STRUCTURAL-50). 실행 직전에
+#: :class:`~engine.effect.targeting.TargetResolver` 가 다시 판정하므로 자리를
+#: 벗어난 대상은 거기서 걸리지만, 그것은 ``IsRelateToEffect`` 와 **같은 검사가
+#: 아니다** — 같은 자리로 돌아온 카드를 구분하지 못한다.
+#:
+#: ``SetHintTiming`` 과 퀵플레이 발동 타이밍은 발동 계층의 일이고 여기 없다.
+#: 이 항목은 **해결될 때 무엇을 하는가**만 말한다.
+_MYSTICAL_SPACE_TYPHOON_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(MYSTICAL_SPACE_TYPHOON, 0),
+        source_card_id=MYSTICAL_SPACE_TYPHOON,
+        targets=TargetBinding.single(
+            TargetSpec.targeting(
+                ChoiceSpec(
+                    source=CandidateSource(
+                        zones=FIELD_ZONES,
+                        # ``LOCATION_ONFIELD, LOCATION_ONFIELD`` — 자신과
+                        # 상대 양쪽이다. 주인을 가리지 않는다.
+                        owner=None,
+                        require=IsSpellTrap(),
+                        # ``chkc~=e:GetHandler()`` — 자기 자신은 대상이
+                        # 아니다. 싸이크론도 필드의 마법 카드이므로, 이것이
+                        # 없으면 자기 자신을 고를 수 있게 된다.
+                        exclude_source=True,
+                    ),
+                    minimum=1,
+                    maximum=1,
+                )
+            )
+        ),
+        operations=(CardOperation.destroy(PRIMARY_TARGET),),
+        provenance=EffectProvenance.official_lua(
+            "c5318639.lua 의 s.target 과 s.activate 를 옮겼다. "
+            "s.activate 의 IsRelateToEffect 검사는 옮기지 못했다."
+        ),
+    ),
+    lua_file="c5318639.lua",
+    lua_excerpt=(
+        "Duel.SelectTarget(tp,s.filter,tp,LOCATION_ONFIELD,LOCATION_ONFIELD,"
+        "1,1,e:GetHandler()); Duel.Destroy(tc,REASON_EFFECT)  "
+        "-- s.filter = c:IsSpellTrap()"
+    ),
+    executable=True,
+)
+
 #: 이 엔진이 들고 있는 효과 정의 전부. **이것이 전부라는 것이 사실이다.**
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _POT_OF_GREED_ENTRY,
     _RAIN_OF_MERCY_ENTRY,
+    _MYSTICAL_SPACE_TYPHOON_ENTRY,
     _DARK_HOLE_ENTRY,
 )
 
@@ -293,14 +362,24 @@ def implementation_registry(
 def build_executor(
     journal: EventJournal | None = None,
     entries: "tuple[LibraryEntry, ...]" = EFFECT_LIBRARY,
+    destruction: DestructionRuling | None = None,
 ) -> EffectExecutor:
     """
     이 목록의 구현을 아는 실행기.
 
+    ``destruction`` 을 주지 않으면 **어떤 파괴도 일어나지 않는다.** 실행기의
+    기본값이 :class:`~engine.effect.semantics.UnknownDestructionRuling` 이고,
+    여기서 그것을 몰래 바꾸지 않는다 — 목록에 실렸다는 사실이 파괴 판정을
+    대신하지 못한다 (Phase 2-M · STRUCTURAL-47).
+
     체인 해결기는 만들어 주지 않는다 — :class:`~engine.chain.ChainResolver`
     는 이 실행기와 정의 저장소를 받아 **부르는 쪽이** 만든다.
     """
-    return EffectExecutor(lookup=implementation_registry(entries), journal=journal)
+    return EffectExecutor(
+        lookup=implementation_registry(entries),
+        journal=journal,
+        destruction=destruction,
+    )
 
 
 def availability(
@@ -326,6 +405,7 @@ __all__ = [
     "POT_OF_GREED",
     "RAIN_OF_MERCY",
     "DARK_HOLE",
+    "MYSTICAL_SPACE_TYPHOON",
     "entry_for",
     "definition_registry",
     "implementation_registry",

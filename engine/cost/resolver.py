@@ -96,8 +96,12 @@ class CandidateResolver:
                         )
                     continue
                 for card in zone_view.cards:
-                    if card is not None and card.instance_id is not None:
-                        visible.append(card)
+                    if card is None or card.instance_id is None:
+                        continue
+                    if source.exclude_source and card.instance_id == context.source:
+                        # "이 카드 이외의" — 발동한 카드는 후보가 아니다.
+                        continue
+                    visible.append(card)
 
         visible.sort(key=_sort_key)
         missed = tuple(sorted(unchecked))

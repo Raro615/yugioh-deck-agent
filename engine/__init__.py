@@ -130,6 +130,14 @@ Duel Engine.
   ``CandidateResolver`` 를 그대로 쓴다. 의미 계층을 **모른다** — 같은
   규칙이 파괴에도 보내기에도 쓰인다. ``docs/phase2n-target-selection.md``
   참고.
+- **Phase 2-O** — 대상 지정 효과의 통합 (``effect/library.py`` 의
+  싸이크론). 2-M 의 의미 · 2-N 의 대상 · 2-J 의 사건 통로를 **실제 카드
+  하나로** 이어 붙인다: ``c5318639.lua`` 의 ``SelectTarget`` 이
+  ``TargetSpec.targeting`` 이 되고 ``Duel.Destroy`` 가
+  ``CardOperation.destroy`` 가 된다. 새 계층은 없다 — 새로 생긴 것은
+  ``IsSpellTrap`` 조건 하나뿐이고, 그것도 ``s.filter`` 를 그대로 옮긴
+  것이다. 무엇을 고를지는 **엔진이 정하지 않는다**; 부르는 쪽이 값으로
+  준다. ``docs/phase2o-targeted-effect.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은

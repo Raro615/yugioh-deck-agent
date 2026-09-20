@@ -37,6 +37,14 @@ class CandidateSource:
     owner: PlayerRef | None = PlayerRef.CONTROLLER
     require: Condition | None = None
     """후보가 추가로 만족해야 하는 조건. 후보마다 따로 판정한다."""
+    exclude_source: bool = False
+    """
+    **발동한 카드 자신을 후보에서 뺀다.**
+
+    "이 카드 이외의" 를 표현한다 (싸이크론의 ``chkc~=e:GetHandler()``).
+    기본값이 거짓인 이유는 대부분의 효과가 자기 자신을 가리지 않기
+    때문이고, 적지 않은 것을 "뺀다" 로 읽으면 안 되기 때문이다.
+    """
 
     def __post_init__(self) -> None:
         if not isinstance(self.zones, frozenset):
@@ -49,6 +57,7 @@ class CandidateSource:
             tuple(sorted(z.value for z in self.zones)),
             self.owner.value if self.owner is not None else None,
             self.require.canonical_state() if self.require is not None else None,
+            self.exclude_source,
         )
 
     def to_dict(self) -> dict:
@@ -57,13 +66,16 @@ class CandidateSource:
             data["owner"] = self.owner.value
         if self.require is not None:
             data["require"] = self.require.to_dict()
+        if self.exclude_source:
+            data["exclude_source"] = True
         return data
 
     def describe_ko(self) -> str:
         who = str(self.owner) if self.owner is not None else "양쪽"
         where = "/".join(sorted(z.value for z in self.zones))
         what = f" ({self.require.describe_ko()})" if self.require is not None else ""
-        return f"{who} {where}{what}"
+        mine = " (자신 제외)" if self.exclude_source else ""
+        return f"{who} {where}{what}{mine}"
 
 
 @dataclass(frozen=True, slots=True)

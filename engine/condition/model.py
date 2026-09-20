@@ -617,6 +617,46 @@ class IsMonster(Condition):
 
 
 @dataclass(frozen=True, slots=True)
+class IsSpellTrap(Condition):
+    """
+    그 카드가 **마법 또는 함정**인가.
+
+    스크립트의 ``c:IsSpellTrap()`` 을 그대로 옮긴 것이다.
+    :class:`NotMonster` 와 값이 같아 보이지만 **같은 질문이 아니다** —
+    저쪽은 "몬스터가 아니다" 이고 이쪽은 "마법이거나 함정이다" 다. 토큰처럼
+    셋 중 어디에도 안 들어가는 것이 생기면 두 답이 갈린다. 원문이
+    ``IsSpellTrap`` 이라고 적혀 있으므로 그대로 적는다.
+
+    정의를 못 읽으면 ``UNKNOWN`` 이다 — 거짓이 아니다.
+    """
+
+    instance: InstanceId | None = None
+
+    def evaluate(self, view, context) -> ConditionResult:
+        definition, _ = _resolve_definition(view, context, self.instance)
+        if definition is None:
+            return ConditionResult.UNKNOWN
+        return ConditionResult.from_bool(definition.is_spell or definition.is_trap)
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        _, reason = _resolve_definition(view, context, self.instance)
+        return (reason,) if reason else ()
+
+    def canonical_state(self) -> tuple:
+        return ("is_spell_trap", self.instance.value if self.instance else None)
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "is_spell_trap"}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 가 마법 / 함정"
+
+
+@dataclass(frozen=True, slots=True)
 class LevelAtLeast(Condition):
     """
     레벨이 이 값 이상인가.
