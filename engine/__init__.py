@@ -170,6 +170,22 @@ Duel Engine.
   에 ``UNKNOWN`` 을 돌려주므로(발동 타이밍 계층이 없다), 명시적인 ``VALID``
   를 건네지 않으면 ``UNAUTHORIZED`` 다 — ``UNKNOWN`` 을 허가로 바꾸지
   않는다. ``docs/phase2q-effect-activation.md`` 참고.
+- **Phase 2-R** — 체인 응답 루프 (``response.py``).
+  ``Chain`` 과 ``PriorityState`` 를 **나란히 담기만** 하는
+  :class:`~engine.response.ResponseState` 하나로 "지금 누가 체인에 무엇을
+  더할 차례인가" 를 표현한다. 어느 쪽에도 새 칸을 만들지 않았다 —
+  Phase 2-F-2 가 "둘을 잇는 것은 이후 단계의 몫" 이라고 남겨 둔 자리다.
+
+  응답은 ``PASS`` 와 ``ACTIVATE_EFFECT`` 둘뿐이다. 패스는 **효과가 아니라**
+  우선권만 옮기고, 발동은 Phase 2-Q 의 ``EffectActivator`` 를 그대로
+  부른다. 거절은 차례를 빼앗지 않는다. 양쪽이 연속으로 패스하면
+  ``ResponseStep.RESOLVE`` 이고, 그때만 기존 ``ChainResolver`` 로 넘어가
+  **LIFO** 로 풀린다.
+
+  **트리거와 합치지 않는다.** 하나의 사건 때문에 여럿이 동시에 후보가 되는
+  것(2-F-3)과 우선권을 쥔 한 사람이 하나를 얹는 것은 다른 개념이고, 이
+  모듈은 ``engine.trigger*`` 를 import 하지 않는다.
+  ``docs/phase2r-chain-response.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
