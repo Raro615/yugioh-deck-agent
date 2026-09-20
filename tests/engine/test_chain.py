@@ -42,6 +42,7 @@ from engine.cost import (
 from engine.effect import (
     PRIMARY_TARGET,
     CardOperation,
+    UnimplementedOperation,
     DrawOperation,
     EffectDefinition,
     EffectDefinitionRegistry,
@@ -498,14 +499,15 @@ def test_a_link_without_a_registered_definition_cannot_resolve(state):
 
 
 def test_an_unsupported_effect_is_not_silently_a_success(state):
-    """파괴는 실행기가 다루지 못한다. 체인이 임의로 성공 처리하지 않는다."""
-    engine = Engine(definition(0, CardOperation.destroy(PRIMARY_TARGET)))
-    target = state.player(MINE).monster_zone[0].instance_id
-    chain = Chain().activate(
-        MINE,
-        EffectRef(CARD, 0),
-        selections=(TargetSelection(PRIMARY_TARGET, Selection.of(target)),),
-    )
+    """
+    구조화하지 못한 일은 실행기가 다루지 못한다. 체인이 임의로 성공 처리하지
+    않는다.
+
+    (표본이 파괴에서 '표현 불가' 로 바뀌었다 — 파괴는 Phase 2-M 부터
+    실행된다. 이 테스트가 지키는 사실은 그대로다.)
+    """
+    engine = Engine(definition(0, UnimplementedOperation("특수 소환")))
+    chain = Chain().activate(MINE, EffectRef(CARD, 0))
     before = state.state_hash()
 
     resolution = engine.resolver.resolve_top(state, chain)
@@ -513,7 +515,6 @@ def test_an_unsupported_effect_is_not_silently_a_success(state):
     assert resolution.status is ChainResolutionStatus.UNSUPPORTED_EFFECT
     assert resolution.resolved is False
     assert resolution.result.status is ResolutionStatus.UNSUPPORTED_OPERATION
-    assert "destruction semantics" in (resolution.result.missing or "")
     assert resolution.chain.resolved_count == 0
     assert state.state_hash() == before
     assert len(engine.journal) == 0
@@ -580,13 +581,10 @@ def test_resolve_all_stops_at_the_first_link_it_cannot_resolve(state):
     """
     engine = Engine(
         definition(0, DrawOperation(1)),
-        definition(1, CardOperation.destroy(PRIMARY_TARGET)),
+        definition(1, UnimplementedOperation("특수 소환")),
     )
-    target = state.player(MINE).monster_zone[0].instance_id
     chain = Chain().activate(MINE, EffectRef(CARD, 0)).activate(
-        THEIRS,
-        EffectRef(CARD, 1),
-        selections=(TargetSelection(PRIMARY_TARGET, Selection.of(target)),),
+        THEIRS, EffectRef(CARD, 1)
     )
     hand = len(state.player(MINE).hand)
 

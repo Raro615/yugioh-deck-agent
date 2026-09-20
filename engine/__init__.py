@@ -115,6 +115,13 @@ Duel Engine.
   자기 의미를 들고 다니는 ``CardOperation`` 이고, ``MOVE`` 는 그것들이
   앞으로 공유할 바닥일 뿐이다 (ADR-002).
   ``docs/phase2l-operation-layer.md`` 참고.
+- **Phase 2-M** — 의미 계층 (``effect/semantics.py``).
+  ``DESTROY`` · ``SEND_TO_GRAVE`` · ``DISCARD`` 가 전부 묘지로 가면서도
+  **서로 다른 일로 기록된다** (ADR-002). 파괴가 실행되기 시작했지만
+  파괴 **규칙**을 옮긴 것이 아니다 — 내성 · 대체 · 트리거를 보지 않았다는
+  사실을 결과가 ``unchecked_rules`` 로 그대로 들고 나온다. 실행하면서
+  보지 않은 것은 거짓말이 아니라 미완성이고, 그 차이는 적어 두는가
+  하나다. ``docs/phase2m-semantic-effects.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은

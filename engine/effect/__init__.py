@@ -109,6 +109,14 @@ from engine.effect.library import (
     implementation_registry,
 )
 
+from engine.effect.semantics import (
+    SEMANTIC_KINDS,
+    UNCHECKED_SEMANTIC_RULES,
+    is_semantic,
+    origin_rule,
+    unchecked_rules,
+)
+
 __all__ = [
     # 정의
     "EffectDefinition",
@@ -130,6 +138,11 @@ __all__ = [
     "DrawOperation",
     "LifeChangeOperation",
     "MoveOperation",
+    "SEMANTIC_KINDS",
+    "UNCHECKED_SEMANTIC_RULES",
+    "is_semantic",
+    "unchecked_rules",
+    "origin_rule",
     "UnimplementedOperation",
     "REASON_NAMES",
     "CARD_OPERATION_KINDS",

@@ -301,12 +301,28 @@ class EffectResult:
     없다. 반대로 비어 있다고 실패인 것은 아니다 — 하는 일이 하나도 적혀
     있지 않은 정의는 성공하고도 아무것도 바꾸지 않는다.
     """
+    unchecked_rules: tuple[str, ...] = ()
+    """
+    이 실행이 **보지 않은 규칙들** (Phase 2-M).
+
+    의미를 주장하는 일(파괴 · 묘지로 보내기 · 버리기)을 수행했지만 그
+    의미의 규칙을 전부 옮기지는 못했을 때, 무엇을 보지 않았는지 그대로
+    싣는다 (:data:`~engine.effect.semantics.UNCHECKED_SEMANTIC_RULES`).
+
+    **비어 있다고 "규칙을 전부 봤다" 는 뜻이 아니다** — 드로우처럼 주장할
+    의미가 없는 일도 비어 있다. 비어 있지 않으면 확실히 **미완성**이다.
+    """
 
     def __post_init__(self) -> None:
         if self.status is not ResolutionStatus.RESOLVED and self.deltas:
             raise ValueError(
                 f"{self.status.value} 인데 변화 기록이 있습니다. 해결되지 "
                 "않은 실행은 판을 바꾸지 않습니다."
+            )
+        if self.unchecked_rules and not self.applied:
+            raise ValueError(
+                "아무 일도 하지 않았는데 '보지 않은 규칙' 이 있습니다. "
+                "무엇을 보지 않았는가는 무엇을 했는가에서 나옵니다."
             )
 
     @property
@@ -337,6 +353,7 @@ class EffectResult:
             self.code.value,
             self.reason,
             self.missing,
+            self.unchecked_rules,
             tuple(a.canonical_state() for a in self.applied),
             canonical_deltas(self.deltas),
         )
@@ -349,6 +366,8 @@ class EffectResult:
         }
         if self.missing is not None:
             data["missing"] = self.missing
+        if self.unchecked_rules:
+            data["unchecked_rules"] = list(self.unchecked_rules)
         if self.applied:
             data["applied"] = [a.to_dict() for a in self.applied]
         if self.deltas:

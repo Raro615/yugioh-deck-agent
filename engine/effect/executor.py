@@ -71,6 +71,7 @@ from engine.effect.operation import (
     OperationKind,
 )
 from engine.effect.journal import EventJournal
+from engine.effect.semantics import collect_unchecked, origin_rule
 from engine.effect.resolution import (
     AppliedOperation,
     EffectResult,
@@ -89,6 +90,7 @@ from engine.vocabulary import Zone
 #: 버리기가 전부 묘지로 가지만 서로 다른 사건이고, 그 구분은
 #: ``AppliedOperation.kind`` 와 ``reason_names`` 가 지킨다 (ADR-002).
 DESTINATION: dict[OperationKind, Zone] = {
+    OperationKind.DESTROY: Zone.GRAVE,
     OperationKind.SEND_TO_GRAVE: Zone.GRAVE,
     OperationKind.RELEASE: Zone.GRAVE,
     OperationKind.DISCARD: Zone.GRAVE,
@@ -154,9 +156,12 @@ def destination_player(kind: OperationKind, card) -> int:
 
 #: 이 실행기가 다룰 수 있는 일.
 #:
-#: ``DESTROY`` 가 **없다.** 유희왕의 "파괴" 는 묘지로 보내는 것과 다르고
-#: (파괴 내성 · 파괴 대체 · "파괴되었을 때" 트리거), 그 계층이 아직 없다.
-#: 목적지가 묘지라는 이유로 구현했다고 말하지 않는다.
+#: Phase 2-M 이 ``DESTROY`` 를 넣었다. **파괴 규칙을 전부 옮겼다는 뜻이
+#: 아니다** — 내성도 대체도 트리거도 여전히 없다. 다만 "못 한다" 고 거절하는
+#: 대신, 파괴라는 **의미를 붙든 채** 수행하고 보지 않은 규칙을 결과에
+#: 적어 내보낸다 (:data:`~engine.effect.semantics.UNCHECKED_SEMANTIC_RULES`).
+#: 목적지가 묘지라는 이유로 파괴를 구현했다고 말하는 것이 아니라, 파괴와
+#: 묘지送り가 **다른 일로 기록되도록** 만드는 것이 그 차이다.
 SUPPORTED: frozenset[OperationKind] = frozenset(DESTINATION) | {
     OperationKind.DRAW,
     OperationKind.CHANGE_LIFE,
@@ -165,9 +170,6 @@ SUPPORTED: frozenset[OperationKind] = frozenset(DESTINATION) | {
 
 #: 지원하지 않는 일과, 무엇이 없어서 못 하는가.
 UNSUPPORTED_REASON: dict[OperationKind, str] = {
-    OperationKind.DESTROY: (
-        "destruction semantics — 파괴 내성 · 파괴 대체 · 파괴 트리거 (Phase 2-E~)"
-    ),
     OperationKind.UNKNOWN: "표현되지 않은 일",
 }
 
@@ -314,6 +316,9 @@ class EffectExecutor:
             f"{definition.effect_ref} 를 적용했습니다 ({len(applied)}건).",
             applied=tuple(applied),
             deltas=tuple(deltas),
+            # 의미를 주장한 일들이 **보지 않은 규칙**을 그대로 들고 나간다.
+            # 성공했다고 규칙을 전부 본 것이 아니다 (Phase 2-M).
+            unchecked_rules=collect_unchecked(record.kind for record in applied),
         )
         if self._journal is not None and result.deltas:
             # 판을 바꾼 해결만 적는다. 바꾼 것이 없으면 역사도 없다.
@@ -545,14 +550,24 @@ class EffectExecutor:
                     ValidationCode.CANDIDATE_NOT_FOUND,
                     f"{instance} 가 이 듀얼에 없습니다.",
                 )
-            if operation.kind is OperationKind.DISCARD and card.zone is not Zone.HAND:
-                # 버리기는 패에서만 일어난다. 필드의 카드를 "버렸다" 고
-                # 기록하면 트리거 계층이 틀린 사건을 보게 된다.
+            rule = origin_rule(operation.kind)
+            if rule is not None and not rule.allows(card.zone):
+                # 출발 자리가 어긋났다. **"안 된다" 와 "모른다" 를 나눈다** —
+                # 버리기가 패 밖에서 일어나지 않는다는 것은 규칙이고,
+                # 필드 밖 파괴는 이 엔진이 아직 안 옮긴 것이다.
+                if rule.known:
+                    return _fail(
+                        ResolutionStatus.INVALID_TARGET,
+                        ValidationCode.SOURCE_WRONG_ZONE,
+                        f"{instance} 가 패에 없어 버릴 수 없습니다 "
+                        f"(현재 {card.zone.value}). {rule.detail}.",
+                    )
                 return _fail(
-                    ResolutionStatus.INVALID_TARGET,
-                    ValidationCode.SOURCE_WRONG_ZONE,
-                    f"{instance} 가 패에 없어 버릴 수 없습니다 "
-                    f"(현재 {card.zone.value}).",
+                    ResolutionStatus.UNSUPPORTED_OPERATION,
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    f"{instance} 는 {card.zone.value} 에 있습니다. "
+                    f"{rule.detail}.",
+                    missing=rule.missing,
                 )
             instances.append(instance)
             # 주인 결정은 **바꾸기 전에** 끝낸다 (계획 단계).

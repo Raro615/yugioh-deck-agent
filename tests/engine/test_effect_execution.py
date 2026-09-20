@@ -218,10 +218,14 @@ def test_a_failed_execution_carries_no_applied_record(state):
     assert after == before
 
 
-def test_destroy_is_unsupported_not_silently_a_trip_to_the_graveyard(state):
+def test_destroy_is_never_silently_a_trip_to_the_graveyard(state):
     """
-    파괴는 묘지로 보내기가 **아니다.** 파괴 내성 · 파괴 대체 · 파괴 트리거가
-    없는 상태에서 "묘지로 옮겼으니 구현했다" 고 말하지 않는다 (ADR-002).
+    파괴는 묘지로 보내기가 **아니다** (ADR-002).
+
+    Phase 2-M 이 파괴를 실행할 수 있게 했지만, 그것은 "묘지로 옮겼으니
+    구현했다" 는 뜻이 아니다. 카드가 실제로 움직여도 기록은 끝까지
+    **파괴**라고 말하고, 보지 않은 규칙(내성 · 대체 · 트리거)을 결과가
+    그대로 들고 나온다.
     """
     definition = make_definition(CardOperation.destroy(PRIMARY_TARGET))
     target = their_monster(state)
@@ -229,11 +233,19 @@ def test_destroy_is_unsupported_not_silently_a_trip_to_the_graveyard(state):
 
     result, before, after = run(state, definition, context)
 
-    assert result.status is ResolutionStatus.UNSUPPORTED_OPERATION
-    assert "destruction semantics" in (result.missing or "")
-    assert after == before
-    assert state.find_instance(target).zone is Zone.MZONE
-    assert OperationKind.DESTROY not in SUPPORTED
+    assert result.status is ResolutionStatus.RESOLVED
+    assert after != before
+    assert state.find_instance(target).zone is Zone.GRAVE
+
+    # 움직인 것은 같아도 **같은 사건이 아니다.**
+    assert result.applied[0].kind is OperationKind.DESTROY
+    assert result.applied[0].kind is not OperationKind.SEND_TO_GRAVE
+    assert result.deltas[0].operation is OperationKind.DESTROY
+    assert "DESTROY" in result.deltas[0].reason_names
+
+    # 그리고 **무엇을 보지 않았는지** 말한다.
+    assert result.unchecked_rules
+    assert any("내성" in rule for rule in result.unchecked_rules)
 
 
 def test_an_unrepresented_operation_is_unsupported(state):
@@ -862,8 +874,10 @@ def failure_cases(state: GameState):
         DrawOperation(1),
         provenance=EffectProvenance.text_derived(),
     )
+    # 파괴는 Phase 2-M 부터 실행된다. "실행기가 못 하는 일" 의 표본은
+    # 여전히 구조화하지 못한 일이다 — 이 표본이 가리키는 사실은 그대로다.
     unsupported = make_definition(
-        CardOperation.destroy(PRIMARY_TARGET), DrawOperation(1), ordinal=1
+        UnimplementedOperation("특수 소환"), DrawOperation(1), ordinal=1
     )
     false_condition = make_definition(
         CardOperation.banish(PRIMARY_TARGET),
@@ -930,7 +944,8 @@ def test_a_later_failure_does_not_apply_the_earlier_operations(state):
 
 def test_a_refusal_never_touches_the_other_players_board(state):
     definition = make_definition(
-        CardOperation.destroy(PRIMARY_TARGET), provenance=EffectProvenance.official_lua()
+        UnimplementedOperation("특수 소환"),
+        provenance=EffectProvenance.official_lua(),
     )
     context = make_context(definition, their_monster(state), controller=0)
     theirs_before = state.player(1).canonical_state()

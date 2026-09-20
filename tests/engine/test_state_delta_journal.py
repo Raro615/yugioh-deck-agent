@@ -25,6 +25,7 @@ from engine.effect import (
     CardDrawn,
     CardMovement,
     CardOperation,
+    UnimplementedOperation,
     DrawOperation,
     EffectDefinition,
     EffectEvent,
@@ -493,7 +494,9 @@ def test_an_effect_that_does_nothing_succeeds_and_changes_nothing(state, journal
             id="forbidden-source",
         ),
         pytest.param(
-            lambda: (make_definition(CardOperation.destroy(PRIMARY_TARGET)), "chosen"),
+            # 파괴는 Phase 2-M 부터 실행된다. "실행기가 못 하는 일" 의
+            # 표본만 바뀌고, 이 표본이 지키는 사실은 그대로다.
+            lambda: (make_definition(UnimplementedOperation("특수 소환")), "chosen"),
             id="unsupported",
         ),
         pytest.param(
@@ -746,7 +749,7 @@ def test_an_unregistered_effect_leaves_no_delta_and_no_event(state, journal):
 
 
 def test_an_unsupported_operation_leaves_no_delta_and_no_event(state, journal):
-    definition = make_definition(CardOperation.destroy(PRIMARY_TARGET))
+    definition = make_definition(UnimplementedOperation("특수 소환"))
     before = state.state_hash()
 
     result = run(state, definition, make_context(definition, my_monster(state)), journal)

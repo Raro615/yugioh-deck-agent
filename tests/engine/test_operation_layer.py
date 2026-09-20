@@ -438,13 +438,20 @@ def test_a_move_has_no_place_in_the_destination_table():
         destination_player(OperationKind.MOVE, object())
 
 
-def test_destroy_is_still_not_executable():
+def test_a_move_to_the_graveyard_is_still_not_a_destruction():
     """
-    파괴는 여전히 지원하지 않는다. 목적지가 묘지라는 이유로 ``MOVE`` 를
-    파괴라고 부르지 않는다.
+    Phase 2-M 이 파괴를 실행할 수 있게 했다. 그래도 **목적지가 묘지라는
+    이유로 ``MOVE`` 를 파괴라고 부르지 않는다** — 둘은 끝까지 다른 일이다.
     """
-    assert OperationKind.DESTROY not in SUPPORTED
     assert OperationKind.MOVE in SUPPORTED
+    assert OperationKind.DESTROY in SUPPORTED  # Phase 2-M
+
+    move = MoveOperation(Zone.GRAVE, PRIMARY)
+    destroy = CardOperation.destroy(PRIMARY)
+
+    assert move.kind is not destroy.kind
+    assert move.reason_names == ()
+    assert "DESTROY" in destroy.reason_names
 
 
 def test_a_real_card_effect_can_never_be_a_bare_move():
