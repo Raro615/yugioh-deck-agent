@@ -73,10 +73,14 @@ A_SEAT, B_SEAT = 0, 1  # A = 턴 플레이어, B = 상대
 
 FEATHERMAN = 21844576
 DARK_HOLE = 53129443  # A 의 패에만 있는 카드 — 정보 경계 시험용
+QUICKPLAY = 5318639  # 싸이크론 — 속공 마법. 발동하는 카드의 **종류**만 쓴다
 LAB = 2511  # synthetic 정의의 **껍데기**. 이 카드의 의미를 주장하지 않는다
 ALPHA, BETA = 1000, 1001  # 트리거 시험용 synthetic 카드 번호
 
 PRIMARY = PRIMARY_TARGET
+
+#: 판 없이 링크의 **모양**만 볼 때 쓰는 자리표시. 어떤 카드도 가리키지 않는다.
+SOME_CARD = InstanceId(7)
 
 #: **테스트가 명시적으로 건네는 발동 허가.** 발동 타이밍 계층을 대신하지
 #: 않는다 (Phase 2-Q 와 같은 자리).
@@ -97,20 +101,28 @@ def new_state(repository) -> GameState:
     """
     game = GameState.create(
         repository,
-        # A 의 패에는 **필드 어디에도 없는** 카드가 섞여 있다 — 정보 경계를
-        # 시험하려면 새어 나올 카드 번호가 판에서 유일해야 한다.
-        decks=([FEATHERMAN] * 2 + [DARK_HOLE] * 18, [FEATHERMAN] * 20),
+        # 발동하는 카드는 **속공 마법**이다 — 응답 루프가 성립하려면 응수하는
+        # 카드가 실제로 응수할 수 있는 종류여야 한다 (Phase 2-S 의 스펠
+        # 스피드 관문). A 의 패에는 **필드 어디에도 없는** 카드가 섞여
+        # 있다: 정보 경계를 시험하려면 새어 나올 번호가 유일해야 한다.
+        decks=(
+            [FEATHERMAN, QUICKPLAY] + [DARK_HOLE] * 18,
+            [FEATHERMAN, QUICKPLAY] + [FEATHERMAN] * 18,
+        ),
     )
     game.draw(A_SEAT, 4)
     game.draw(B_SEAT, 4)
-    game.move(
-        game.player(A_SEAT).hand[0], Zone.MZONE, to_player=A_SEAT,
-        position=Position.FACEUP_ATTACK,
-    )
-    game.move(
-        game.player(B_SEAT).hand[0], Zone.MZONE, to_player=B_SEAT,
-        position=Position.FACEUP_ATTACK,
-    )
+    for seat in (A_SEAT, B_SEAT):
+        game.move(
+            game.player(seat).hand[0], Zone.MZONE, to_player=seat,
+            position=Position.FACEUP_ATTACK,
+        )
+        # 발동할 속공 마법은 **앞면으로** 놓는다. 뒷면이면 상대가 그 링크의
+        # 스펠 스피드를 판정할 수 없고, 그것은 다른 시험이다.
+        game.move(
+            game.player(seat).hand[0], Zone.SZONE, to_player=seat,
+            position=Position.FACEUP,
+        )
     game.turn.set_phase(Phase.MAIN1)
     return game
 
@@ -129,11 +141,13 @@ def b_monster(state: GameState) -> InstanceId:
 
 
 def a_card(state: GameState) -> InstanceId:
-    return state.player(A_SEAT).hand[0].instance_id
+    """A 가 발동에 쓰는 카드 — 필드의 **앞면 속공 마법**."""
+    return state.player(A_SEAT).spell_zone[0].instance_id
 
 
 def b_card(state: GameState) -> InstanceId:
-    return state.player(B_SEAT).hand[0].instance_id
+    """B 가 응수에 쓰는 카드 — 필드의 **앞면 속공 마법**."""
+    return state.player(B_SEAT).spell_zone[0].instance_id
 
 
 def destroy_effect(ordinal: int, *, cost: CostGroup | None = None) -> EffectDefinition:
@@ -226,13 +240,13 @@ def test_a_an_empty_chain_has_nothing_to_respond_to():
 
 
 def test_a_a_standing_chain_awaits_a_response():
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=SOME_CARD)
 
     assert opened(chain, B_SEAT).step is ResponseStep.AWAIT_RESPONSE
 
 
 def test_a_two_consecutive_passes_mean_resolve():
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=SOME_CARD)
     response = opened(chain, B_SEAT)
 
     after = response.with_priority(response.priority.passed().passed())
@@ -259,7 +273,7 @@ def test_a_the_state_holds_the_two_values_side_by_side():
     ``Chain`` 에도 ``PriorityState`` 에도 새 칸을 만들지 않았다 — 나란히
     담기만 한다.
     """
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=SOME_CARD)
     response = ResponseState(chain, PriorityState.idle(turn_player=A_SEAT))
 
     assert response.chain is chain
@@ -381,7 +395,7 @@ def test_b_the_link_order_is_activation_order_not_resolution_order(state):
 @requires_official_db
 def test_c_passing_changes_nothing_but_priority(state):
     """§5 — GameState mutation 과 우선권 전이를 구분한다."""
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state))
     response = opened(chain, B_SEAT)
     before = state.state_hash()
 
@@ -399,7 +413,7 @@ def test_c_passing_changes_nothing_but_priority(state):
 def test_c_passing_counts_up_and_activating_resets_it(state):
     """연속 패스는 **누가 무엇을 하면** 끊긴다."""
     machine = loop()
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state))
     passed = machine.act(state, opened(chain, B_SEAT), PlayerAction.passing(B_SEAT))
 
     assert passed.priority.consecutive_passes == 1
@@ -418,7 +432,7 @@ def test_c_passing_counts_up_and_activating_resets_it(state):
 @requires_official_db
 def test_c_a_pass_out_of_turn_is_refused(state):
     """차례가 아닌 사람의 패스는 차례를 넘기지 못한다."""
-    response = opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X), B_SEAT)
+    response = opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state)), B_SEAT)
 
     result = loop().act(state, response, PlayerAction.passing(A_SEAT))
 
@@ -431,7 +445,7 @@ def test_c_a_pass_out_of_turn_is_refused(state):
 def test_c_resolving_before_both_passed_is_refused(state):
     """§9 — 한 명만 패스했으면 아직 풀 때가 아니다."""
     machine = loop()
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state))
     passed = machine.act(state, opened(chain, B_SEAT), PlayerAction.passing(B_SEAT))
     before = state.state_hash()
 
@@ -454,7 +468,7 @@ def test_d_a_response_reuses_the_phase_2q_activator(state):
     """§6 — 발동 규칙을 여기서 다시 만들지 않는다."""
     result = loop().act(
         state,
-        opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X), B_SEAT),
+        opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state)), B_SEAT),
         activate(B_SEAT, b_card(state), EFFECT_Y),
         picked(a_monster(state)),
         authorization=GRANTED,
@@ -476,7 +490,7 @@ def test_d_a_response_cost_is_paid_at_activation_not_at_resolution(state):
 
     result = machine.act(
         state,
-        opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X), B_SEAT),
+        opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state)), B_SEAT),
         activate(B_SEAT, b_card(state), EFFECT_Y),
         picked(a_monster(state)),
         authorization=GRANTED,
@@ -512,7 +526,7 @@ def test_d_the_response_loop_does_not_execute_effects():
 @requires_official_db
 def test_d_the_loop_only_knows_pass_and_activate(state):
     """§11 — 그 이상의 행위는 이 루프의 질문이 아니다."""
-    response = opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X), A_SEAT)
+    response = opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state)), A_SEAT)
 
     result = loop().act(
         state, response, PlayerAction.normal_summon(actor=A_SEAT, source=a_card(state))
@@ -666,7 +680,7 @@ def test_f_test_b_a_standing_chain_gets_one_response_from_one_player(state):
     **Test B — 응답.** 이미 쌓인 체인에 **우선권을 쥔 한 사람**이 하나를
     얹는다. 사건이 아니라 결정이 이유다.
     """
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state))
 
     result = loop().act(
         state,
@@ -739,7 +753,7 @@ def test_f_the_trigger_layer_never_asks_who_has_priority():
 def test_g_a_refused_response_leaves_everything_alone(
     state, name, seat, target_of, kind, authorize
 ):
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state))
     response = opened(chain, B_SEAT)
     before = state.state_hash()
     targets = {
@@ -779,7 +793,7 @@ def test_g_a_text_derived_response_never_reaches_the_chain(state):
         operations=destroy_effect(1).operations,
         provenance=EffectProvenance.text_derived("텍스트에서 유추했다고 치자"),
     )
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state))
     before = state.state_hash()
 
     result = loop(EffectDefinitionRegistry((destroy_effect(0), forged))).act(
@@ -800,7 +814,7 @@ def test_g_a_text_derived_response_never_reaches_the_chain(state):
 def test_g_an_unregistered_response_never_reaches_the_chain(state):
     """해결기가 거절할 효과를 체인에 얹지 않는다 (ADR-006)."""
     machine = ResponseLoop(EffectActivator(definitions()))  # 구현 등록 없음
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state))
 
     result = machine.act(
         state,
@@ -824,7 +838,7 @@ def test_g_an_unpayable_response_cost_leaves_the_chain_alone(state):
             destroy_effect(1, cost=CostGroup((LifeCost(amount=999_999),))),
         )
     )
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state))
     before = state.state_hash()
 
     result = loop(registry).act(
@@ -847,7 +861,7 @@ def test_g_a_refusal_does_not_cost_the_player_their_turn(state):
     §12 — 거절은 "아무 일도 일어나지 않았다" 이므로 차례도 그대로다.
     실패를 패스로 바꾸면 되돌릴 수 없는 차례가 조용히 날아간다.
     """
-    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X)
+    chain = Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state))
     response = opened(chain, B_SEAT)
     machine = loop()
 
@@ -954,7 +968,7 @@ def test_h_responding_on_a_clone_leaves_the_original_alone(state):
 
     result = loop(registry).act(
         copy,
-        opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X), B_SEAT),
+        opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state)), B_SEAT),
         activate(B_SEAT, b_card(copy), EFFECT_Y),
         picked(a_monster(copy)),
         authorization=GRANTED,
@@ -969,7 +983,7 @@ def test_h_responding_on_a_clone_leaves_the_original_alone(state):
 @requires_official_db
 def test_h_asking_whose_turn_it_is_never_changes_anything(state):
     machine = loop()
-    response = opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X), B_SEAT)
+    response = opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state)), B_SEAT)
     before = state.state_hash()
 
     for _ in range(3):
@@ -994,7 +1008,7 @@ def test_i_a_refusal_names_no_hidden_card(state):
 
     result = loop().act(
         state,
-        opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X), B_SEAT),
+        opened(Chain().activate(actor=A_SEAT, effect_ref=EFFECT_X, source=a_card(state)), B_SEAT),
         activate(B_SEAT, b_card(state), EFFECT_Y),
         picked(hidden.instance_id),
         authorization=GRANTED,
@@ -1016,8 +1030,13 @@ def test_i_every_observation_is_built_from_the_deciding_seat():
 
     assert viewers
     for value in viewers:
-        assert isinstance(value, ast.Name), ast.dump(value)
-        assert value.id == "seat", ast.dump(value)
+        # ``seat`` 이거나 ``action.actor`` — 둘 다 **결정하는 자리**다.
+        # 상대 자리나 전지적 시점으로 만든 관측이 하나도 없어야 한다.
+        if isinstance(value, ast.Name):
+            assert value.id == "seat", ast.dump(value)
+        else:
+            assert isinstance(value, ast.Attribute), ast.dump(value)
+            assert value.attr == "actor", ast.dump(value)
 
 
 def test_i_no_second_chain_or_priority_system_was_built():

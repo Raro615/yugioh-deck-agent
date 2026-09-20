@@ -146,6 +146,20 @@ class ValidationCode(str, Enum):
     플레이어마다 하나다.
     """
 
+    # --- 발동 타이밍 · 스펠 스피드 (Phase 2-S) --------------------------
+    SPELL_SPEED_TOO_LOW = "spell_speed_too_low"
+    """
+    체인에 응수하기에 스펠 스피드가 모자라다 (RULE-CHAIN-003 · 004).
+
+    ``NO_RESPONSE_WINDOW`` 와 합치지 않는다 — 그쪽은 "기회 자체가 없다",
+    이쪽은 **기회는 있는데 이 카드로는 응수할 수 없다** 이다.
+    ``WRONG_PHASE`` 와도 다르다: 페이즈가 아니라 체인의 문제다.
+
+    스펠 스피드를 **판정할 수 없는** 경우에는 쓰지 않는다. 그때는
+    ``RULE_NOT_IMPLEMENTED`` 또는 ``INFORMATION_UNAVAILABLE`` 이고, 모르는
+    것을 위반으로 접지 않는다.
+    """
+
     PRIORITY_STATE_STALE = "priority_state_stale"
     """
     우선권 상태가 지금 판과 맞지 않는다 (턴 플레이어 · 페이즈가 다르다).

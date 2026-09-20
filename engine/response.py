@@ -63,6 +63,7 @@ from enum import Enum
 
 from engine.action import PlayerAction, PlayerActionKind
 from engine.activation import ActivationResult, ActivationStatus, EffectActivator
+from engine.activation_timing import ActivationTiming, ActivationTimingChecker
 from engine.chain import Chain, ChainResolution, ChainResolver
 from engine.cost import CostPayment
 from engine.effect.delta import StateDelta
@@ -220,6 +221,13 @@ class ResponseResult:
     reason: str = ""
     activation: ActivationResult | None = None
     """``ACTIVATE_EFFECT`` 였다면 Phase 2-Q 가 내놓은 결과 그대로."""
+    timing: ValidationResult | None = None
+    """
+    스펠 스피드 관문(Phase 2-S)의 판정. **어느 관문이 막았는지** 구분된다.
+
+    ``timing`` 만 있고 ``activation`` 이 없으면 타이밍에서 멈춘 것이고,
+    둘 다 있으면 타이밍은 통과한 뒤 발동에서 멈춘 것이다.
+    """
     missing: str | None = None
 
     def __post_init__(self) -> None:
@@ -280,6 +288,7 @@ class ResponseResult:
             self.code.value,
             self.reason,
             self.activation.canonical_state() if self.activation is not None else None,
+            self.timing.canonical_state() if self.timing is not None else None,
             self.missing,
         )
 
@@ -293,6 +302,8 @@ class ResponseResult:
         }
         if self.activation is not None:
             data["activation"] = self.activation.to_dict()
+        if self.timing is not None:
+            data["timing"] = self.timing.to_dict()
         if self.missing is not None:
             data["missing"] = self.missing
         return data
@@ -478,6 +489,21 @@ class ResponseLoop:
             state, response, action, selections, cost_selections, authorization
         )
 
+    def check_timing(
+        self, state: GameState, response: ResponseState, action: PlayerAction
+    ) -> ValidationResult:
+        """
+        스펠 스피드가 이 발동을 막는가. **판을 읽기만 한다.**
+
+        판정은 :class:`~engine.activation_timing.ActivationTimingChecker`
+        하나가 한다 — 여기서 스펠 스피드 표를 다시 만들면 두 벌이 갈린다.
+        관측은 **행위자의 시점**으로 만든다.
+        """
+        view = GameStateView.from_state(state, viewer=action.actor)
+        return ActivationTimingChecker(view).check(
+            ActivationTiming(response.chain, response.priority), action
+        )
+
     def may_act(
         self, state: GameState, response: ResponseState, seat: int
     ) -> ValidationResult:
@@ -520,12 +546,29 @@ class ResponseLoop:
         authorization: ValidationResult | None,
     ) -> ResponseResult:
         """
-        Phase 2-Q 의 발동 계층을 **그대로** 부른다. 여기서 발동 규칙을 다시
-        만들지 않는다.
+        **관문이 둘이다.** 스펠 스피드(Phase 2-S)를 먼저 보고, 그 다음에
+        Phase 2-Q 의 발동 계층을 그대로 부른다. 여기서 규칙을 다시 만들지
+        않는다.
+
+        타이밍 관문은 **좁히기만 한다** — 통과했다고 발동이 허가되는 것이
+        아니고, ``authorization`` 은 여전히 따로 받아야 한다.
 
         성공하면 우선권이 **상대에게** 간다 — 그것이 응답 루프의 모양이다.
         연속 패스는 끊긴다 (:meth:`~engine.priority.PriorityState.acted`).
         """
+        allowed = self.check_timing(state, response, action)
+        if not allowed.permits_execution:
+            # **비용을 치르기 전에** 멈춘다. 발동 계층을 부르지도 않는다.
+            return ResponseResult(
+                ResponseOutcome.REFUSED,
+                action,
+                response,
+                allowed.code,
+                f"이 시점에 발동할 수 없습니다: {allowed.reason}",
+                timing=allowed,
+                missing=allowed.missing_rule,
+            )
+
         activation = self._activator.activate(
             state,
             response.chain,
@@ -544,6 +587,7 @@ class ResponseLoop:
                 activation.code,
                 f"응답 발동이 거절되었습니다: {activation.reason}",
                 activation=activation,
+                timing=allowed,
                 missing=activation.missing,
             )
 
@@ -555,6 +599,7 @@ class ResponseLoop:
             ValidationCode.OK,
             f"체인 {activation.link.chain_number} 로 응답했습니다.",
             activation=activation,
+            timing=allowed,
         )
 
     # ==================================================================
