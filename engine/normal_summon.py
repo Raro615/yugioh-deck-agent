@@ -49,6 +49,7 @@ from engine.effect.delta import MonsterSummoned, StateDelta, SummonKind
 from engine.ids import InstanceId
 from engine.state.game_state import GameState
 from engine.state.rule_usage import RuleActionKind, RuleUsageRegistry
+from engine.summon import SummonError, SummonPlacement, SummonProcedure
 from engine.vocabulary import Position, Zone
 
 #: 일반 소환이 나오는 자리 (RULE-SUMMON-009).
@@ -61,8 +62,19 @@ SUMMON_TO_ZONE: Zone = Zone.MZONE
 SUMMON_POSITION: Position = Position.FACEUP_ATTACK
 
 
-class NormalSummonError(RuntimeError):
+class NormalSummonError(SummonError):
     """지시를 수행할 수 없다. **판에 손대기 전에** 던진다."""
+
+
+#: 일반 소환 절차. 특수 소환과 **같은 클래스**의 다른 값이다 (Phase 2-T).
+NORMAL_SUMMON_PROCEDURE = SummonProcedure(
+    kind=PlayerActionKind.NORMAL_SUMMON,
+    summon=SummonKind.NORMAL,
+    from_zones=frozenset({SUMMON_FROM_ZONE}),
+    to_zone=SUMMON_TO_ZONE,
+    position=SUMMON_POSITION,
+    error=NormalSummonError,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,51 +130,36 @@ class NormalSummonExecutor:
         """
         지시를 수행할 수 있는지 보고 계획을 만든다.
 
+        자리 · 칸 · 주인 찾기는 :class:`~engine.summon.SummonProcedure` 가
+        한다 — 특수 소환과 **같은 코드**다 (Phase 2-T). 여기서 더하는 것은
+        일반 소환만의 것, **소환권을 적을 자리** 하나뿐이다.
+
         수행할 수 없으면 :class:`NormalSummonError` 다. **적법성 판정이
         아니다** — 그것은 이미 끝났고, 여기서 걸리는 것은 허가와 판이
         어긋났다는 뜻이다.
         """
-        if not isinstance(state, GameState):
-            raise TypeError(
-                "NormalSummonExecutor 는 GameState 를 받습니다. "
-                "관측(GameStateView)은 읽기 전용이라 소환할 수 없습니다."
-            )
-        if action.kind is not PlayerActionKind.NORMAL_SUMMON:
-            raise NormalSummonError(
-                f"{action.kind.value} 는 일반 소환이 아닙니다."
-            )
-        if action.source is None:
-            raise NormalSummonError("소환할 카드가 지목되지 않았습니다.")
-
-        card = state.find_instance(action.source)
-        if card is None:
-            raise NormalSummonError(f"{action.source} 를 이 판에서 찾을 수 없습니다.")
-        if card.controller != action.actor:
-            raise NormalSummonError(
-                f"{action.source} 는 P{card.controller} 의 카드입니다 "
-                f"(P{action.actor} 가 소환하려 했습니다)."
-            )
-
-        source_zone = state.locate(action.source)
-        if source_zone is None or source_zone.zone is not SUMMON_FROM_ZONE:
-            where = source_zone.zone.value if source_zone else "어디에도"
-            raise NormalSummonError(
-                f"{action.source} 는 패에 없습니다 ({where})."
-            )
-
-        free = state.zone(action.actor, SUMMON_TO_ZONE).free_slots()
-        if not free:
-            raise NormalSummonError("몬스터 존에 빈 칸이 없습니다.")
-
+        placement = NORMAL_SUMMON_PROCEDURE.plan(state, action)
         return NormalSummonPlan(
-            card=action.source,
-            player=action.actor,
-            owner=card.owner,
-            slot=free[0],
+            card=placement.card,
+            player=placement.player,
+            owner=placement.owner,
+            slot=placement.slot,
             # 지금 만들어 둔다. 적용 중에 키가 잘못되어 멈추는 일이 없도록.
             usage_key=RuleUsageRegistry.key(
                 state.turn.turn_number, action.actor, RuleActionKind.NORMAL_SUMMON
             ),
+        )
+
+    def placement(self, plan: "NormalSummonPlan") -> SummonPlacement:
+        """계획을 공통 배치로 되돌린다. 소환권 칸만 빠진다."""
+        return SummonPlacement(
+            card=plan.card,
+            player=plan.player,
+            owner=plan.owner,
+            from_zone=SUMMON_FROM_ZONE,
+            to_zone=SUMMON_TO_ZONE,
+            slot=plan.slot,
+            position=SUMMON_POSITION,
         )
 
     # ==================================================================
@@ -180,14 +177,7 @@ class NormalSummonExecutor:
         """
         plan = self.plan(state, action)
 
-        state.move(
-            plan.card,
-            SUMMON_TO_ZONE,
-            to_player=plan.player,
-            index=plan.slot,
-            position=SUMMON_POSITION,
-        )
-        self._verify(state, plan)
+        NORMAL_SUMMON_PROCEDURE.place(state, self.placement(plan))
         state.rule_uses.record(
             state.turn.turn_number, plan.player, RuleActionKind.NORMAL_SUMMON
         )
@@ -197,25 +187,8 @@ class NormalSummonExecutor:
     # 내부
     # ------------------------------------------------------------------
     def _verify(self, state: GameState, plan: NormalSummonPlan) -> None:
-        """
-        계획한 자리에 놓였는가. 어긋나면 기록을 남기지 않고 멈춘다.
-
-        같은 카드가 두 존에 동시에 있는 상태는 ``ZoneContainer`` 가 이미
-        막지만 (``place`` 가 거부한다), 그래도 **떠났는지**를 함께 본다 —
-        틀린 기록은 없는 것보다 나쁘다.
-        """
-        landed = state.zone(plan.player, SUMMON_TO_ZONE)
-        card = state.find_instance(plan.card)
-        if card is None or landed.slot(plan.slot) is not card:
-            raise NormalSummonError(
-                f"{plan.card} 가 MZONE[{plan.slot}] 에 없습니다."
-            )
-        if card.position is not SUMMON_POSITION:
-            raise NormalSummonError(
-                f"{plan.card} 의 표시 형식이 {card.position} 입니다."
-            )
-        if card in state.zone(plan.player, SUMMON_FROM_ZONE):
-            raise NormalSummonError(f"{plan.card} 가 아직 패에 남아 있습니다.")
+        """계획한 자리에 놓였는가. 판정은 공통 절차가 한다."""
+        NORMAL_SUMMON_PROCEDURE.verify(state, self.placement(plan))
 
     def __repr__(self) -> str:  # pragma: no cover - 표시용
         return "<NormalSummonExecutor>"
@@ -254,6 +227,7 @@ def summoning_executor() -> ActionExecutor:
 
 
 __all__ = [
+    "NORMAL_SUMMON_PROCEDURE",
     "SUMMON_FROM_ZONE",
     "SUMMON_TO_ZONE",
     "SUMMON_POSITION",

@@ -202,6 +202,24 @@ Duel Engine.
   허가가 아니므로 체인에 얹히지 않는다. 통과(``VALID``)도 "발동해도 된다"
   가 아니다 — 보지 않은 규칙이 결과에 함께 실려 나간다.
   ``docs/phase2s-activation-timing.md`` 참고.
+- **Phase 2-T** — 특수 소환 (``summon.py`` · ``special_summon.py``).
+  특수 소환이라는 **상태 변화가 지나갈 공통 길**을 낸다. 소환법을 구현한
+  것이 아니다 — "이 카드를 특수 소환할 수 있는가" 는 카드마다 다르고, 그
+  조건을 읽는 계층이 없으므로 ``ActionValidator`` 는 언제나 ``UNKNOWN`` 을
+  돌려준다.
+
+  일반 소환과 **같은 코드**를 쓴다. 자리 찾기 · 빈 칸 찾기 · 이동 · 착지
+  확인은 :class:`~engine.summon.SummonProcedure` 하나이고, 다른 것만 값으로
+  적는다 — 출발 자리 · ``SummonKind`` · **소환권**. 마지막 것은 공통 파일에
+  아예 없다: ``special_summon.py`` 에 ``RuleUsageRegistry`` 라는 이름이
+  나오지 않으므로, 특수 소환이 일반 소환권을 먹는 일이 **구조적으로**
+  불가능하다.
+
+  사건은 ``MonsterSummoned(summon=SPECIAL)`` 하나로 남기고 거기서 멈춘다 —
+  트리거 수집도 체인도 이 계층의 일이 아니다. 어떤 특수 소환법인가는
+  말하지 않는다: 융합 · 싱크로 · 엑시즈 · 링크는 각자의 절차가 생길 때
+  이름을 갖는다 (STRUCTURAL-62).
+  ``docs/phase2t-special-summon.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은

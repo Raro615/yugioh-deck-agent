@@ -51,6 +51,17 @@ class PlayerActionKind(str, Enum):
 
     NORMAL_SUMMON = "normal_summon"
     """이번 턴의 일반 소환권을 써서 앞면 공격 표시로 소환한다."""
+    SPECIAL_SUMMON = "special_summon"
+    """
+    특수 소환한다. **일반 소환권을 쓰지 않는다.**
+
+    ``NORMAL_SUMMON`` 과 합치지 않는다 — 소환권 · 페이즈 · 절차가 전부
+    다르고, 합치면 "1턴에 한 번" 이 특수 소환까지 묶어 버린다.
+
+    **어떤 특수 소환법인가는 여기서 말하지 않는다.** 융합 · 싱크로 · 엑시즈 ·
+    링크는 각자 재료를 고르는 절차가 있고, 그 절차가 생길 때 어떻게
+    표현할지 정한다.
+    """
     SET_MONSTER = "set_monster"
     """일반 소환권을 써서 뒷면 수비 표시로 세트한다."""
     SET_SPELL_TRAP = "set_spell_trap"
@@ -75,6 +86,7 @@ class PlayerActionKind(str, Enum):
 _NEEDS_SOURCE: frozenset[PlayerActionKind] = frozenset(
     {
         PlayerActionKind.NORMAL_SUMMON,
+        PlayerActionKind.SPECIAL_SUMMON,
         PlayerActionKind.SET_MONSTER,
         PlayerActionKind.SET_SPELL_TRAP,
         PlayerActionKind.ACTIVATE_CARD,
@@ -111,6 +123,7 @@ _NEEDS_PHASE: frozenset[PlayerActionKind] = frozenset(
 #: 대상을 **몇 개** 가져야 하는가. ``None`` 이면 제한 없음.
 _TARGET_COUNT: dict[PlayerActionKind, int | None] = {
     PlayerActionKind.NORMAL_SUMMON: 0,
+    PlayerActionKind.SPECIAL_SUMMON: 0,
     PlayerActionKind.SET_MONSTER: 0,
     PlayerActionKind.SET_SPELL_TRAP: 0,
     PlayerActionKind.CHANGE_POSITION: 0,
@@ -167,6 +180,17 @@ class PlayerAction:
     @classmethod
     def normal_summon(cls, actor: int, source: InstanceId) -> "PlayerAction":
         return cls(kind=PlayerActionKind.NORMAL_SUMMON, actor=actor, source=source)
+
+    @classmethod
+    def special_summon(cls, actor: int, source: InstanceId) -> "PlayerAction":
+        """
+        그 카드를 특수 소환한다. **고수준 의도**다.
+
+        어느 칸에 · 어떤 표시 형식으로 놓을지는 여기서 말하지 않는다 —
+        고르는 계층이 아직 없고, 지금 칸을 적으면 그것이 규칙처럼 굳는다
+        (STRUCTURAL-41 · 61).
+        """
+        return cls(kind=PlayerActionKind.SPECIAL_SUMMON, actor=actor, source=source)
 
     @classmethod
     def set_monster(cls, actor: int, source: InstanceId) -> "PlayerAction":

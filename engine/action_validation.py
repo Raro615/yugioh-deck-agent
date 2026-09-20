@@ -68,6 +68,7 @@ from engine.condition import (
     NotMonster,
     PhaseIs,
     PlayerRef,
+    UnimplementedRule,
     ZoneHasFreeSlot,
 )
 from engine.condition.model import _resolve_definition
@@ -112,6 +113,7 @@ class Requirement:
 #: 종류별로 "어떤 규칙 계층이 더 있어야 **허가**까지 갈 수 있는가".
 #: 전부 차 있다는 것은 지금 어떤 Action 도 VALID 가 될 수 없다는 뜻이다.
 _MISSING_RULE: dict[PlayerActionKind, str] = {
+    PlayerActionKind.SPECIAL_SUMMON: "special-summon-condition (카드마다 다르다)",
     PlayerActionKind.SET_MONSTER: "summon-procedure (Phase 2-G)",
     PlayerActionKind.SET_SPELL_TRAP: "set-timing (Phase 2-G)",
     PlayerActionKind.ACTIVATE_CARD: "activation-timing (Phase 2-C/2-F)",
@@ -509,6 +511,76 @@ def _normal_summon(
     )
 
 
+#: 특수 소환 조건을 읽는 계층이 없다는 사실. ``missing_rule`` 에 그대로 실린다.
+SPECIAL_SUMMON_CONDITION_RULE = "special-summon-condition (카드마다 다르다)"
+
+
+def _special_summon(
+    validator: ActionValidator, action: PlayerAction
+) -> tuple[Requirement, ...]:
+    """
+    특수 소환. **이 목록을 전부 통과해도 허가가 나지 않는다.**
+
+    "이 카드를 특수 소환할 수 있는가" 는 카드마다 다르고 (융합 · 싱크로 ·
+    "패에서 특수 소환할 수 있다" · "1턴에 1번" · 소생 제한 …), 그 조건을 읽는
+    계층이 아직 없다. 그래서 마지막 요구가 언제나 ``UNKNOWN`` 이다 —
+    **모르는 것을 허가로 바꾸지 않는다.**
+
+    페이즈 제약도 넣지 않았다. 특수 소환은 메인 페이즈에만 일어나는 것이
+    아니고 (상대 턴의 유발즉시 효과로도 나온다), 언제 되는지는 그 효과가
+    정한다. 지금 메인 페이즈로 못박으면 틀린 채로 굳는다.
+
+    일반 소환과 달리 **소환권을 보지 않는다** — 특수 소환은 그 권리를 쓰지
+    않는다.
+    """
+    # 순환 import 를 피하려고 여기서 읽는다: special_summon → summon →
+    # action_execution → action_validation 으로 돌아온다.
+    from engine.special_summon import SPECIAL_SUMMON_FROM_ZONES
+
+    requirements = [
+        Requirement(
+            ControllerIs(PlayerRef.CONTROLLER, action.source),
+            ValidationCode.SOURCE_NOT_CONTROLLED,
+            "자신이 쥐고 있는 카드가 아닙니다.",
+        ),
+        Requirement(
+            IsMonster(action.source),
+            ValidationCode.SOURCE_WRONG_CARD_TYPE,
+            "몬스터가 아닙니다.",
+        ),
+        Requirement(
+            ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.MZONE),
+            ValidationCode.ZONE_FULL,
+            "몬스터 존에 빈 칸이 없습니다.",
+        ),
+    ]
+
+    # 어느 자리에서 나오는가. **여기 없는 자리는 "안 된다" 가 아니라
+    # "아직 옮기지 못했다" 다** — 덱 · 제외 · 엑스트라 덱에서 나오는 특수
+    # 소환은 실제로 있고, 그것을 ``INVALID`` 로 적으면 거짓이 된다.
+    card = validator.view.find(action.source) if action.source is not None else None
+    if card is not None and card.zone not in SPECIAL_SUMMON_FROM_ZONES:
+        requirements.append(
+            Requirement(
+                UnimplementedRule(
+                    f"special summon from {card.zone.value} (Phase 2-T 범위 밖)"
+                ),
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{card.zone.value} 에서 나오는 특수 소환은 아직 옮기지 "
+                "않았습니다.",
+            )
+        )
+
+    requirements.append(
+        Requirement(
+            UnimplementedRule(SPECIAL_SUMMON_CONDITION_RULE),
+            ValidationCode.RULE_NOT_IMPLEMENTED,
+            "이 카드를 특수 소환할 수 있는지 판정할 규칙이 없습니다.",
+        )
+    )
+    return tuple(requirements)
+
+
 def _set_spell_trap(
     validator: ActionValidator, action: PlayerAction
 ) -> tuple[Requirement, ...]:
@@ -654,6 +726,7 @@ _REQUIREMENT_BUILDERS: dict[
     PlayerActionKind, Callable[[ActionValidator, PlayerAction], tuple[Requirement, ...]]
 ] = {
     PlayerActionKind.NORMAL_SUMMON: _normal_summon,
+    PlayerActionKind.SPECIAL_SUMMON: _special_summon,
     PlayerActionKind.SET_MONSTER: _summon_like,
     PlayerActionKind.SET_SPELL_TRAP: _set_spell_trap,
     PlayerActionKind.CHANGE_POSITION: _change_position,

@@ -209,6 +209,9 @@ def test_every_action_kind_reports_which_rule_layer_is_missing(validator, state)
         PlayerActionKind.NORMAL_SUMMON: PlayerAction.normal_summon(
             0, hand_card.instance_id
         ),
+        PlayerActionKind.SPECIAL_SUMMON: PlayerAction.special_summon(
+            0, hand_card.instance_id
+        ),
         PlayerActionKind.SET_MONSTER: PlayerAction.set_monster(
             0, hand_card.instance_id
         ),

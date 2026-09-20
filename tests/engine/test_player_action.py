@@ -127,10 +127,14 @@ def test_player_action_kind_is_not_the_analysis_vocabulary():
     assert PlayerActionKind is not ActionKind
     assert PlayerActionKind.NORMAL_SUMMON is not ActionKind.NORMAL_SUMMON
 
-    # 겹치는 이름은 normal_summon 하나뿐이고, 그것도 뜻이 다르다.
+    # 겹치는 이름은 소환 둘뿐이고, **그것도 뜻이 다르다.** 이쪽은 "플레이어가
+    # 고르는 행위", 저쪽은 "효과가 하는 일" 이다 — 효과가 몬스터를 특수
+    # 소환하는 것과 플레이어가 특수 소환을 선언하는 것은 다른 사건이고,
+    # 그래서 두 enum 은 끝까지 다른 타입으로 남는다 (Phase 2-T).
     engine_names = {m.value for m in PlayerActionKind}
     analysis_names = {m.value for m in ActionKind}
-    assert engine_names & analysis_names == {"normal_summon"}
+    assert engine_names & analysis_names == {"normal_summon", "special_summon"}
+    assert PlayerActionKind.SPECIAL_SUMMON is not ActionKind.SPECIAL_SUMMON
 
 
 # ----------------------------------------------------------------------

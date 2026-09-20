@@ -201,6 +201,9 @@ def _sample_action(state, kind: PlayerActionKind) -> PlayerAction:
     hand, monster = my_hand(state), my_monster(state)
     return {
         PlayerActionKind.NORMAL_SUMMON: lambda: PlayerAction.normal_summon(MINE, hand),
+        PlayerActionKind.SPECIAL_SUMMON: lambda: PlayerAction.special_summon(
+            MINE, hand
+        ),
         PlayerActionKind.SET_MONSTER: lambda: PlayerAction.set_monster(MINE, hand),
         PlayerActionKind.SET_SPELL_TRAP: lambda: PlayerAction(
             kind=PlayerActionKind.SET_SPELL_TRAP, actor=MINE, source=hand
