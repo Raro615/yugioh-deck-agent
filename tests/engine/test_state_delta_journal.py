@@ -83,11 +83,17 @@ def journal() -> EventJournal:
     return EventJournal()
 
 
-def anywhere() -> ChoiceSpec:
+def anywhere(maximum: int = 3) -> ChoiceSpec:
+    """
+    ``maximum`` 은 Phase 2-N 때문이다 — 대상 계층이 생긴 뒤로 "1장" 이라고
+    적어 놓고 여러 장을 고르면 거절된다. 이 테스트들은 실제로 여러 장을
+    옮기므로 명세도 그렇게 말해야 한다.
+    """
     return ChoiceSpec(
         source=CandidateSource(
             zones=frozenset({Zone.MZONE, Zone.EMZONE, Zone.HAND}), owner=None
-        )
+        ),
+        maximum=maximum,
     )
 
 

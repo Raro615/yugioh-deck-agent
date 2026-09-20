@@ -49,13 +49,20 @@ MINE, THEIRS = 0, 1
 # ======================================================================
 
 
-def anywhere() -> ChoiceSpec:
-    """주인을 가리지 않고 찾는다. 빼앗은 카드도 후보가 되어야 한다."""
+def anywhere(maximum: int = 3) -> ChoiceSpec:
+    """
+    주인을 가리지 않고 찾는다. 빼앗은 카드도 후보가 되어야 한다.
+
+    ``maximum`` 을 적어 두는 이유는 Phase 2-N 이다 — 대상 계층이 생긴 뒤로
+    "1장" 이라고 적어 놓고 2장을 고르면 거절된다. 이 테스트들이 실제로
+    여러 장을 옮기므로 명세도 그렇게 말해야 한다.
+    """
     return ChoiceSpec(
         source=CandidateSource(
             zones=frozenset({Zone.MZONE, Zone.EMZONE, Zone.HAND, Zone.SZONE}),
             owner=None,
-        )
+        ),
+        maximum=maximum,
     )
 
 
@@ -509,7 +516,10 @@ def test_a_bad_target_after_a_valid_draw_applies_neither(state):
     executor = EffectExecutor(EffectImplementationRegistry([definition.effect_ref]))
     result = executor.execute(state, definition, context)
 
-    assert result.status is ResolutionStatus.INVALID_TARGET
+    # **없는 것과 보이지 않는 것을 구분하지 못한다** (Phase 2-N). 관측에
+    # 없는 카드를 "이 듀얼에 없다" 고 단정하는 것 자체가 정보이므로,
+    # 대상 계층은 UNKNOWN 으로 남긴다. 판이 그대로인 것은 변함없다.
+    assert result.status is ResolutionStatus.UNCHECKED_TARGET
     assert len(state.player(MINE).hand) == hand
     assert state.state_hash() == before
 

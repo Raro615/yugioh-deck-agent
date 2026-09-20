@@ -122,6 +122,13 @@ from engine.effect.semantics import (
     unchecked_rules,
 )
 
+from engine.effect.targeting import (
+    TargetLegality,
+    TargetResolver,
+    TargetValidation,
+    TargetVerdict,
+)
+
 __all__ = [
     # 정의
     "EffectDefinition",
@@ -148,6 +155,10 @@ __all__ = [
     "is_semantic",
     "unchecked_rules",
     "origin_rule",
+    "TargetLegality",
+    "TargetVerdict",
+    "TargetValidation",
+    "TargetResolver",
     "RULE_GATED",
     "is_rule_gated",
     "DestructionRuling",

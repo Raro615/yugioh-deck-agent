@@ -79,6 +79,7 @@ from engine.effect.operation import (
     OperationKind,
 )
 from engine.effect.journal import EventJournal
+from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.effect.semantics import (
     MISSING_GATE,
     DestructionRuling,
@@ -554,7 +555,7 @@ class EffectExecutor:
         """
         ref = operation.target_ref
         try:
-            definition.target_spec(ref)
+            spec = definition.target_spec(ref)
         except KeyError:
             return _fail(
                 ResolutionStatus.INVALID_CONTEXT,
@@ -570,6 +571,12 @@ class EffectExecutor:
                 ValidationCode.TOO_FEW_SELECTED,
                 f"{ref} 에 고른 카드가 없습니다.",
             )
+
+        # **고른 것이 규칙에 맞는지 먼저 본다** (Phase 2-N). 여기가 없으면
+        # 자리도 주인도 조건도 맞지 않는 카드가 그대로 실행된다.
+        legal = self._check_target(state, spec, selection, context, ref)
+        if legal is not None:
+            return legal
 
         instances: list[InstanceId] = []
         owners: list[int] = []
@@ -619,6 +626,43 @@ class EffectExecutor:
                 f"{ref} 에 고른 카드가 없습니다.",
             )
         return _Step(operation, instances=tuple(instances), owners=tuple(owners))
+
+    def _check_target(
+        self,
+        state: GameState,
+        spec,
+        selection,
+        context: ResolutionContext,
+        ref,
+    ) -> "EffectResult | None":
+        """
+        고른 대상이 규칙에 맞는가. 맞으면 ``None``.
+
+        판정은 :class:`~engine.effect.targeting.TargetResolver` 하나가 한다 —
+        실행기가 자리와 주인을 다시 따지면 두 벌이 갈린다.
+
+        **``UNKNOWN`` 을 ``INVALID`` 로 접지 않는다.** 가려진 정보 때문에
+        판정할 수 없는 것과 규칙상 틀린 것은 다른 사실이고, 어느 쪽이든
+        판은 건드리지 않는다.
+        """
+        view = GameStateView.from_state(state, viewer=context.controller)
+        verdict = TargetResolver(view).validate(
+            spec, selection, context.condition_context(), ref
+        )
+        if verdict.permits_selection:
+            return None
+        if verdict.legality is TargetLegality.ILLEGAL:
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                verdict.code,
+                f"{ref} 의 대상이 적법하지 않습니다: {verdict.reason}",
+            )
+        return _fail(
+            ResolutionStatus.UNCHECKED_TARGET,
+            verdict.code,
+            f"{ref} 의 대상이 적법한지 판정할 수 없습니다: {verdict.reason}",
+            missing="; ".join(verdict.unchecked) or None,
+        )
 
     def _check_rule_gate(
         self, kind: OperationKind, instance: InstanceId

@@ -146,17 +146,27 @@ class CandidateSet:
         정의를 읽을 수 없는 경우다. 세어서도 안 되고 버려서도 안 된다.
     ``reasons``
         왜 모르는지. 조건 계층이 한 말을 그대로 전한다.
+    ``unchecked``
+        **아예 들여다보지 못한 곳들.** 상대의 패나 덱처럼 통째로 가려진
+        존이다. 거기 후보가 있는지 없는지 알 수 없으므로, 비어 있다고
+        "후보가 없다" 고 말할 수 없다.
 
     ``undecided`` 를 ``eligible`` 에 넣으면 못 치를 비용을 치를 수 있다고
     하게 되고, 버리면 치를 수 있는 비용을 못 치른다고 하게 된다.
+
+    ``unchecked`` 는 ``undecided`` 와 **다른 사실**이다. 저쪽은 "이 카드가
+    후보인지 모른다" 이고 이쪽은 "저기를 못 봤다" 다. 가려진 존의 카드는
+    지목할 수조차 없으므로 ``InstanceId`` 로 적을 수 없고, 그래서 자리
+    이름만 남긴다.
     """
 
     eligible: tuple[InstanceId, ...] = ()
     undecided: tuple[InstanceId, ...] = ()
     reasons: tuple[str, ...] = ()
+    unchecked: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        for name in ("eligible", "undecided", "reasons"):
+        for name in ("eligible", "undecided", "reasons", "unchecked"):
             if not isinstance(getattr(self, name), tuple):
                 raise TypeError(f"{name} 은 tuple 이어야 합니다 — 후보는 불변입니다.")
         overlap = set(self.eligible) & set(self.undecided)
@@ -179,6 +189,15 @@ class CandidateSet:
     def has_undecided(self) -> bool:
         return bool(self.undecided)
 
+    @property
+    def fully_checked(self) -> bool:
+        """
+        **볼 수 있는 곳을 전부 봤는가.**
+
+        거짓이면 "후보가 없다" 고 말할 수 없다 — 못 본 곳에 있을 수 있다.
+        """
+        return not self.unchecked
+
     def contains(self, instance: InstanceId) -> bool:
         """확실한 후보에 들어 있는가."""
         return instance in self.eligible
@@ -188,6 +207,7 @@ class CandidateSet:
             tuple(i.value for i in self.eligible),
             tuple(i.value for i in self.undecided),
             self.reasons,
+            self.unchecked,
         )
 
     def to_dict(self) -> dict:
@@ -195,6 +215,7 @@ class CandidateSet:
             "eligible": [i.value for i in self.eligible],
             "undecided": [i.value for i in self.undecided],
             "reasons": list(self.reasons),
+            "unchecked": list(self.unchecked),
         }
 
     def __len__(self) -> int:

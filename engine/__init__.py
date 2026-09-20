@@ -123,6 +123,13 @@ Duel Engine.
   아니다**; 보지 않았다고 적어 두는 것만으로는 내성을 가진 카드가
   파괴되는 것을 막지 못한다.
   ``docs/phase2m-semantic-effects.md`` 참고.
+- **Phase 2-N** — 대상 선택 (``effect/targeting.py``).
+  ``TargetSpec`` 이 말한 규칙에 **고른 카드가 맞는지** 판정한다 —
+  ``LEGAL`` · ``ILLEGAL`` · ``UNKNOWN`` 셋이 끝까지 갈리고, 가려진 정보
+  때문에 모르는 것은 ``UNKNOWN`` 으로 남는다. 후보 찾기는 Phase 2-C 의
+  ``CandidateResolver`` 를 그대로 쓴다. 의미 계층을 **모른다** — 같은
+  규칙이 파괴에도 보내기에도 쓰인다. ``docs/phase2n-target-selection.md``
+  참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은

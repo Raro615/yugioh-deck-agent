@@ -424,6 +424,7 @@ STATUS_MAP: dict[ResolutionStatus, ChainResolutionStatus] = {
     ResolutionStatus.EXECUTION_ERROR: ChainResolutionStatus.EFFECT_RESOLUTION_ERROR,
     ResolutionStatus.NOT_IMPLEMENTED: ChainResolutionStatus.EFFECT_NOT_APPLIED,
     ResolutionStatus.UNCHECKED_RULES: ChainResolutionStatus.EFFECT_NOT_APPLIED,
+    ResolutionStatus.UNCHECKED_TARGET: ChainResolutionStatus.EFFECT_NOT_APPLIED,
     ResolutionStatus.CONDITION_FALSE: ChainResolutionStatus.EFFECT_NOT_APPLIED,
     ResolutionStatus.CONDITION_UNKNOWN: ChainResolutionStatus.EFFECT_NOT_APPLIED,
     ResolutionStatus.INSUFFICIENT_CARDS: ChainResolutionStatus.EFFECT_NOT_APPLIED,

@@ -139,8 +139,11 @@ def synthetic(*operations, ordinal: int = 0) -> EffectDefinition:
                         source=CandidateSource(
                             zones=frozenset(
                                 {Zone.HAND, Zone.MZONE, Zone.GRAVE, Zone.DECK}
-                            )
-                        )
+                            ),
+                            # 주인을 가리지 않는다 — 상대 몬스터도 대상이 된다.
+                            owner=None,
+                        ),
+                        maximum=2,
                     )
                 ),
             ),
@@ -617,8 +620,10 @@ def test_a_missing_card_stops_every_meaning(state, factory):
 
     result = run(state, synthetic(factory(PRIMARY)), InstanceId(9999))
 
-    assert result.status is ResolutionStatus.INVALID_TARGET
-    assert result.code is ValidationCode.CANDIDATE_NOT_FOUND
+    # **없는 것과 보이지 않는 것을 구분하지 못한다** (Phase 2-N).
+    # 관측에 없는 카드를 "이 듀얼에 없다" 고 단정하면 그것 자체가 정보다.
+    assert result.status is ResolutionStatus.UNCHECKED_TARGET
+    assert result.code is ValidationCode.HIDDEN_CARD
     assert result.applied == ()
     assert result.deltas == ()
     assert state.state_hash() == before

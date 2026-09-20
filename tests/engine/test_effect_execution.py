@@ -507,8 +507,13 @@ def test_a_card_that_is_not_in_this_duel_cannot_be_chosen(state):
 
     result, before, after = run(state, definition, context)
 
-    assert result.status is ResolutionStatus.INVALID_TARGET
-    assert result.code is ValidationCode.CANDIDATE_NOT_FOUND
+    # **없는 것과 보이지 않는 것을 구분하지 못한다** (Phase 2-N). 관측에
+    # 없는 카드를 "이 듀얼에 없다" 고 단정하는 것 자체가 정보이므로,
+    # 대상 계층은 UNKNOWN 으로 남긴다. 판이 그대로인 것은 변함없다.
+    assert result.status is ResolutionStatus.UNCHECKED_TARGET
+    assert result.code is ValidationCode.HIDDEN_CARD
+    assert result.applied == ()
+    assert result.deltas == ()
     assert after == before
 
 

@@ -78,6 +78,7 @@ class CandidateResolver:
         )
 
         visible: list[CardView] = []
+        unchecked: list[str] = []
         for player_id in owners:
             player = self._view.player(player_id)
             for zone in source.zones:
@@ -85,18 +86,28 @@ class CandidateResolver:
                 if zone_view.concealed:
                     # 내용이 통째로 가려진 존이다. 장수는 알지만 어느 카드가
                     # 조건을 만족하는지는 알 수 없고, 지목할 수도 없다.
+                    #
+                    # **조용히 건너뛰지 않는다.** 건너뛰고 빈 목록을 돌려주면
+                    # "후보가 없다" 와 "못 봤다" 가 같은 답이 되고, 그것이
+                    # 모르는 것을 거짓으로 접는 일이다 (STRUCTURAL-15).
+                    if zone_view.size:
+                        unchecked.append(
+                            f"P{player_id} {zone.value} {zone_view.size}장"
+                        )
                     continue
                 for card in zone_view.cards:
                     if card is not None and card.instance_id is not None:
                         visible.append(card)
 
         visible.sort(key=_sort_key)
+        missed = tuple(sorted(unchecked))
 
         if source.require is None:
             return CandidateSet(
                 eligible=tuple(
                     card.instance_id for card in visible if card.instance_id
-                )
+                ),
+                unchecked=missed,
             )
 
         eligible: list[InstanceId] = []
@@ -119,6 +130,7 @@ class CandidateResolver:
             eligible=tuple(eligible),
             undecided=tuple(undecided),
             reasons=tuple(reasons),
+            unchecked=missed,
         )
 
     def __repr__(self) -> str:  # pragma: no cover - 표시용
