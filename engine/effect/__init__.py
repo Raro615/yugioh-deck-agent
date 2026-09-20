@@ -110,8 +110,13 @@ from engine.effect.library import (
 )
 
 from engine.effect.semantics import (
+    RULE_GATED,
     SEMANTIC_KINDS,
     UNCHECKED_SEMANTIC_RULES,
+    DeclaredDestructionRuling,
+    DestructionRuling,
+    UnknownDestructionRuling,
+    is_rule_gated,
     is_semantic,
     origin_rule,
     unchecked_rules,
@@ -143,6 +148,11 @@ __all__ = [
     "is_semantic",
     "unchecked_rules",
     "origin_rule",
+    "RULE_GATED",
+    "is_rule_gated",
+    "DestructionRuling",
+    "UnknownDestructionRuling",
+    "DeclaredDestructionRuling",
     "UnimplementedOperation",
     "REASON_NAMES",
     "CARD_OPERATION_KINDS",

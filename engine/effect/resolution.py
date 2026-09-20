@@ -206,6 +206,22 @@ class ResolutionStatus(str, Enum):
     알고, 다만 지금 덱이 모자랄 뿐이다. 모자랄 때의 규칙(덱 데스)이 없어서
     거절하는 것이고, 그 사실은 :attr:`EffectResult.missing` 에 남는다.
     """
+    UNCHECKED_RULES = "unchecked_rules"
+    """
+    그 일의 **규칙을 판정할 수 없어** 수행하지 않았다. 판은 그대로다.
+
+    파괴처럼 "내성이 있는가 · 대체 효과가 있는가" 를 먼저 알아야 하는 일이
+    있는데, 그것을 답할 계층이 없을 때다. **``UNKNOWN`` 은 허가가 아니므로
+    수행하지 않는다** — 적어 두는 것만으로는 내성을 가진 카드가 파괴되는 것을
+    막지 못한다.
+
+    ``UNSUPPORTED_OPERATION`` 과 합치지 않는다. 실행기는 파괴를 **할 줄
+    안다** — 해도 되는지를 모를 뿐이다. ``CONDITION_UNKNOWN`` 과도 다르다:
+    그쪽은 효과의 **발동 조건**이고 이쪽은 그 일의 **규칙**이다.
+
+    무엇을 판정하지 못했는지는 :attr:`EffectResult.unchecked_rules` 에
+    그대로 남는다.
+    """
     CONDITION_FALSE = "condition_false"
     """발동 조건이 **거짓**이다. 판은 그대로다."""
     CONDITION_UNKNOWN = "condition_unknown"
@@ -305,9 +321,12 @@ class EffectResult:
     """
     이 실행이 **보지 않은 규칙들** (Phase 2-M).
 
-    의미를 주장하는 일(파괴 · 묘지로 보내기 · 버리기)을 수행했지만 그
-    의미의 규칙을 전부 옮기지는 못했을 때, 무엇을 보지 않았는지 그대로
-    싣는다 (:data:`~engine.effect.semantics.UNCHECKED_SEMANTIC_RULES`).
+    두 자리에서 나온다.
+
+    1. 의미를 주장하는 일을 **수행했지만** 그 의미의 규칙을 전부 옮기지는
+       못했을 때 (묘지로 보내기 · 버리기).
+    2. 규칙을 판정하지 못해 **수행하지 않았을 때**
+       (:attr:`ResolutionStatus.UNCHECKED_RULES`, 파괴).
 
     **비어 있다고 "규칙을 전부 봤다" 는 뜻이 아니다** — 드로우처럼 주장할
     의미가 없는 일도 비어 있다. 비어 있지 않으면 확실히 **미완성**이다.
@@ -319,10 +338,15 @@ class EffectResult:
                 f"{self.status.value} 인데 변화 기록이 있습니다. 해결되지 "
                 "않은 실행은 판을 바꾸지 않습니다."
             )
-        if self.unchecked_rules and not self.applied:
+        if (
+            self.unchecked_rules
+            and not self.applied
+            and self.status is not ResolutionStatus.UNCHECKED_RULES
+        ):
             raise ValueError(
                 "아무 일도 하지 않았는데 '보지 않은 규칙' 이 있습니다. "
-                "무엇을 보지 않았는가는 무엇을 했는가에서 나옵니다."
+                "무엇을 보지 않았는가는 무엇을 **했는가**, 또는 무엇을 "
+                "판정하지 못해 **멈췄는가**(UNCHECKED_RULES)에서 나옵니다."
             )
 
     @property

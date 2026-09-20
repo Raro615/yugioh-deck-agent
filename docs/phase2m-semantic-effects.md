@@ -53,23 +53,30 @@ EffectResult.unchecked_rules   ← 무엇을 **보지 않았는가**
 
 ---
 
-## 3. DESTROY — 실행하되, 무엇을 안 봤는지 말한다
+## 3. DESTROY — 판정을 받아야만 실행된다
 
-Phase 2-D-2 는 파괴를 거절했다. 이유는 정당했다 — 내성 · 대체 · 트리거가
-없는데 "묘지로 옮겼으니 구현했다" 고 말할 수 없었다.
+> **정정 (blocker fix, 커밋 `7cfd17f` 이후).**
+> 처음 쓴 2-M 은 "파괴를 실행하되 보지 않은 규칙을 적어 둔다" 였다. 그것이
+> STRUCTURAL-47 이었고, **적어 두는 것은 막는 것이 아니다** — 내성을
+> 판정할 수 없는데 파괴하면 내성을 가진 카드가 실제로 파괴된다. 아래가
+> 고친 뒤의 사실이다.
 
-이번 단계가 바꾼 것은 **그 말을 하지 않아도 되게 만든 것**이다.
+파괴는 **판정을 받아야만** 수행된다 (`RULE_GATED`). 판정기는
+`DestructionRuling` 이고, 기본값은 아무것도 판정하지 못하는
+`UnknownDestructionRuling` 이다.
+
+| 판정 | 결과 |
+|---|---|
+| `UNKNOWN` (기본값) | `UNCHECKED_RULES` — **판이 그대로다.** `unchecked_rules` 는 결과에 그대로 남는다 |
+| `FALSE` | `INVALID_TARGET` + `CANDIDATE_NOT_ELIGIBLE` — 판정했고 안 된다 |
+| `TRUE` | 수행한다. 기록은 끝까지 **파괴**이고, `unchecked_rules` 는 여전히 실린다 |
 
 ```python
+# 판정기를 받았을 때만
 result.applied[0].kind        # OperationKind.DESTROY
-result.deltas[0].operation    # OperationKind.DESTROY
 result.deltas[0].reason_names # ("DESTROY", "EFFECT")
-result.unchecked_rules        # ("파괴 내성 …", "파괴 대체 효과 …", …) 다섯 줄
+result.unchecked_rules        # 다섯 줄 — 성공해도 규칙 전체를 본 것은 아니다
 ```
-
-실행이 성공해도 `unchecked_rules` 가 비어 있지 않으면 **규칙 전체를 본 것이
-아니다.** 실행하면서 보지 않은 것은 거짓말이 아니라 미완성이고, 그 차이는
-적어 두는가 하나다.
 
 **출발 자리**: 파괴는 필드에서만 다룬다. 필드 밖의 카드를 파괴하라고 하면
 `UNSUPPORTED_OPERATION` + `missing="off-field destruction"` 이다 —
@@ -218,17 +225,23 @@ SEGOC 도 하지 않는다.
   `EventJournal` 에 적히는 사건에는 들어가지 않아서, 나중에 기록만 보고
   "이 파괴가 규칙을 얼마나 본 것인가" 를 되짚을 수 없다. 기록 구조를
   넓히는 것은 이번 단계의 범위가 아니라 남긴다.
-- **🟠 STRUCTURAL-47** — 파괴가 실행되므로, 앞으로 실제 카드가 파괴 효과를
-  갖게 되면 **내성을 가진 카드도 파괴된다.** `unchecked_rules` 가 그 사실을
-  말하지만 *막지는* 않는다. 실제 카드에 파괴를 붙이기 전에 내성 계층이
-  필요하다.
+- **🔴 STRUCTURAL-47 → BLOCKER, 수정됨** — 파괴가 내성 판정 없이 실행되던
+  문제. 판정을 받아야만 실행되도록 고쳤다 (위 §3). 남은 것은
+  STRUCTURAL-48 · -49 다.
+- **🟠 STRUCTURAL-48** — `SEND_TO_GRAVE` 와 `DISCARD` 는 아직 관문이 없다.
+  둘도 판정되지 않은 규칙을 안고 실행된다 (Phase 2-D-2 부터의 상태).
+  **알면서 남겨 둔 것이지 괜찮다고 판단한 것이 아니다.**
+- **🟠 STRUCTURAL-49** — 한 장이라도 판정받지 못하면 효과 **전체**가
+  멈춘다. 실제 규칙에서는 내성을 가진 한 장만 남고 나머지는 파괴되지만,
+  그 부분 적용 규칙을 아직 옮기지 못했으므로 안전한 쪽으로 통째로 멈춘다.
 - Phase 2-L 의 STRUCTURAL-45(`MOVE` 사건에 아무도 반응할 수 없다) 그대로.
 
 ---
 
 ## 14. 앞으로 만들면 좋은 것
 
-1. **파괴 내성 · 대체 효과** — STRUCTURAL-47 을 닫는 유일한 길.
+1. **파괴 내성 · 대체 효과** — `DestructionRuling` 의 실제 구현.
+   그것이 생기기 전까지 파괴는 손으로 선언한 판정으로만 일어난다.
 2. **대상 선택 계층** — 실제 카드로 이 경로를 시험할 수 있게 된다.
 3. `unchecked_rules` 를 `EventJournal` 까지 (STRUCTURAL-46).
 4. `RELEASE` · `BANISH` · `RETURN_*` 의 의미 표 — 같은 모양으로 늘린다.

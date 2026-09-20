@@ -46,6 +46,14 @@ Phase 2-E 의 몫이다 (ADR-008).
 ---------------
 ``TEXT_DERIVED`` 는 구현이 등록되어 있어도 실행하지 않는다. ``LUA_VERIFIED``
 라고 해서 자동으로 실행되지도 않는다 — 등록된 구현이 있어야 한다 (ADR-006).
+
+할 줄 아는 것 ≠ 해도 되는 것
+----------------------------
+구현이 등록되어 있어도, 그 일의 **규칙**을 판정할 수 없으면 수행하지
+않는다. 파괴가 그렇다 — 내성과 대체 효과를 답할
+:class:`~engine.effect.semantics.DestructionRuling` 이 없으면
+:attr:`~engine.effect.resolution.ResolutionStatus.UNCHECKED_RULES` 로 멈추고
+판은 한 글자도 바뀌지 않는다. **``UNKNOWN`` 은 허가가 아니다.**
 """
 
 from __future__ import annotations
@@ -71,7 +79,16 @@ from engine.effect.operation import (
     OperationKind,
 )
 from engine.effect.journal import EventJournal
-from engine.effect.semantics import collect_unchecked, origin_rule
+from engine.effect.semantics import (
+    MISSING_GATE,
+    DestructionRuling,
+    UnknownDestructionRuling,
+    collect_unchecked,
+    gating_rules,
+    is_rule_gated,
+    origin_rule,
+    unchecked_rules,
+)
 from engine.effect.resolution import (
     AppliedOperation,
     EffectResult,
@@ -123,8 +140,9 @@ class DestinationOwner(str, Enum):
 #: 조용히 틀린다.
 #:
 #: ``DESTROY`` 도 적어 둔다 — 파괴된 카드가 주인의 묘지로 간다는 것은
-#: 이미 정해진 사실이다. 실행하지 않는 이유는 목적지가 아니라 **파괴
-#: 의미**(내성 · 대체 · 트리거)가 없기 때문이다.
+#: 이미 정해진 사실이다. 파괴가 멈추는 이유는 목적지가 아니라 **파괴해도
+#: 되는지를 판정할 수 없기** 때문이다 (:class:`
+#: ~engine.effect.semantics.DestructionRuling`).
 DESTINATION_OWNER: dict[OperationKind, DestinationOwner] = {
     OperationKind.DESTROY: DestinationOwner.OWNER,
     OperationKind.SEND_TO_GRAVE: DestinationOwner.OWNER,
@@ -154,14 +172,16 @@ def destination_player(kind: OperationKind, card) -> int:
     return card.owner if rule is DestinationOwner.OWNER else card.controller
 
 
-#: 이 실행기가 다룰 수 있는 일.
+#: 이 실행기가 **할 줄 아는** 일.
 #:
-#: Phase 2-M 이 ``DESTROY`` 를 넣었다. **파괴 규칙을 전부 옮겼다는 뜻이
-#: 아니다** — 내성도 대체도 트리거도 여전히 없다. 다만 "못 한다" 고 거절하는
-#: 대신, 파괴라는 **의미를 붙든 채** 수행하고 보지 않은 규칙을 결과에
-#: 적어 내보낸다 (:data:`~engine.effect.semantics.UNCHECKED_SEMANTIC_RULES`).
-#: 목적지가 묘지라는 이유로 파괴를 구현했다고 말하는 것이 아니라, 파괴와
-#: 묘지送り가 **다른 일로 기록되도록** 만드는 것이 그 차이다.
+#: ``DESTROY`` 가 여기 있는 것은 "파괴 규칙을 전부 옮겼다" 는 뜻이 아니라
+#: **"파괴를 어떻게 수행하는지는 안다"** 는 뜻이다. 해도 되는지는 다른
+#: 질문이고, 그것은 :class:`~engine.effect.semantics.DestructionRuling` 이
+#: 답한다 — 답을 못 받으면 수행하지 않는다
+#: (:attr:`~engine.effect.resolution.ResolutionStatus.UNCHECKED_RULES`).
+#:
+#: 할 줄 아는 것과 해도 되는 것을 한 집합에 넣지 않는다. 넣으면 "지원한다"
+#: 가 곧 "허가한다" 가 된다.
 SUPPORTED: frozenset[OperationKind] = frozenset(DESTINATION) | {
     OperationKind.DRAW,
     OperationKind.CHANGE_LIFE,
@@ -250,21 +270,32 @@ class EffectExecutor:
     그것이 기본 상태이고, 그 상태에서는 어떤 효과도 실행되지 않는다.
     """
 
-    __slots__ = ("_lookup", "_journal")
+    __slots__ = ("_lookup", "_journal", "_destruction")
 
     def __init__(
         self,
         lookup: EffectImplementationLookup | None = None,
         journal: EventJournal | None = None,
+        destruction: DestructionRuling | None = None,
     ):
         self._lookup = lookup if lookup is not None else EmptyImplementationLookup()
         # 기록은 **선택**이다. 없으면 아무것도 적지 않고, 있어도 실행
         # 결과는 달라지지 않는다 — 기록이 판정에 끼어들면 기록이 아니다.
         self._journal = journal
+        # 파괴 판정은 **선택이 아니다.** 주지 않으면 아무것도 판정하지 못하는
+        # 판정기가 들어가고, 그러면 어떤 파괴도 일어나지 않는다.
+        # ``EmptyImplementationLookup`` 과 같은 자리다 (ADR-006).
+        self._destruction = (
+            destruction if destruction is not None else UnknownDestructionRuling()
+        )
 
     @property
     def journal(self) -> EventJournal | None:
         return self._journal
+
+    @property
+    def destruction(self) -> DestructionRuling:
+        return self._destruction
 
     # ==================================================================
     # 진입점
@@ -569,6 +600,10 @@ class EffectExecutor:
                     f"{rule.detail}.",
                     missing=rule.missing,
                 )
+            gate = self._check_rule_gate(operation.kind, instance)
+            if gate is not None:
+                return gate
+
             instances.append(instance)
             # 주인 결정은 **바꾸기 전에** 끝낸다 (계획 단계).
             if isinstance(operation, MoveOperation):
@@ -584,6 +619,43 @@ class EffectExecutor:
                 f"{ref} 에 고른 카드가 없습니다.",
             )
         return _Step(operation, instances=tuple(instances), owners=tuple(owners))
+
+    def _check_rule_gate(
+        self, kind: OperationKind, instance: InstanceId
+    ) -> "EffectResult | None":
+        """
+        **판정을 받아야만 실행되는 일**의 관문. 통과하면 ``None``.
+
+        ``UNKNOWN`` 을 허가로 바꾸지 않는다 — 내성을 판정할 수 없는데
+        파괴하면 내성을 가진 카드가 실제로 파괴된다. 적어 두는 것만으로는
+        그것을 막지 못한다 (Phase 2-M 의 STRUCTURAL-47).
+
+        판정을 못 받으면 **판에 손대기 전에** 멈춘다. 이 효과 전체가
+        멈추고, 한 장만 파괴되는 부분 적용은 일어나지 않는다 — "내성을 가진
+        한 장만 남고 나머지는 파괴된다" 는 규칙을 아직 옮기지 못했으므로,
+        안전한 쪽으로 통째로 멈춘다 (STRUCTURAL-49).
+        """
+        if not is_rule_gated(kind):
+            return None
+
+        verdict = self._destruction.may_be_destroyed(instance)
+        if verdict is ConditionResult.TRUE:
+            return None
+        if verdict is ConditionResult.FALSE:
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                f"{instance} 는 파괴되지 않는다고 판정되었습니다.",
+            )
+        return _fail(
+            ResolutionStatus.UNCHECKED_RULES,
+            ValidationCode.RULE_NOT_IMPLEMENTED,
+            f"{instance} 를 파괴해도 되는지 판정할 수 없습니다: "
+            + " · ".join(gating_rules(kind))
+            + ". 판정할 수 없는 것을 허가로 바꾸지 않습니다.",
+            missing=MISSING_GATE[kind],
+            unchecked=unchecked_rules(kind),
+        )
 
     # ==================================================================
     # 2단계 — 적용. 기존 primitive 만 부른다.
@@ -677,8 +749,9 @@ def _fail(
     code: ValidationCode,
     reason: str,
     missing: str | None = None,
+    unchecked: tuple[str, ...] = (),
 ) -> EffectResult:
-    return EffectResult(status, code, reason, missing)
+    return EffectResult(status, code, reason, missing, unchecked_rules=unchecked)
 
 
 def _resolve_player(who, context: ResolutionContext) -> int:

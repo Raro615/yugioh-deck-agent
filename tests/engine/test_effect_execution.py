@@ -222,10 +222,11 @@ def test_destroy_is_never_silently_a_trip_to_the_graveyard(state):
     """
     파괴는 묘지로 보내기가 **아니다** (ADR-002).
 
-    Phase 2-M 이 파괴를 실행할 수 있게 했지만, 그것은 "묘지로 옮겼으니
-    구현했다" 는 뜻이 아니다. 카드가 실제로 움직여도 기록은 끝까지
-    **파괴**라고 말하고, 보지 않은 규칙(내성 · 대체 · 트리거)을 결과가
-    그대로 들고 나온다.
+    실행기는 파괴를 **할 줄 안다.** 다만 해도 되는지를 모른다 — 내성도
+    대체 효과도 판정할 계층이 없다. 그래서 기본 실행기로는 파괴가
+    일어나지 않는다. **``UNKNOWN`` 은 허가가 아니다.**
+
+    무엇을 판정하지 못했는지는 결과가 그대로 들고 나온다.
     """
     definition = make_definition(CardOperation.destroy(PRIMARY_TARGET))
     target = their_monster(state)
@@ -233,19 +234,19 @@ def test_destroy_is_never_silently_a_trip_to_the_graveyard(state):
 
     result, before, after = run(state, definition, context)
 
-    assert result.status is ResolutionStatus.RESOLVED
-    assert after != before
-    assert state.find_instance(target).zone is Zone.GRAVE
+    assert result.status is ResolutionStatus.UNCHECKED_RULES
+    assert after == before
+    assert state.find_instance(target).zone is Zone.MZONE
+    assert result.applied == ()
+    assert result.deltas == ()
 
-    # 움직인 것은 같아도 **같은 사건이 아니다.**
-    assert result.applied[0].kind is OperationKind.DESTROY
-    assert result.applied[0].kind is not OperationKind.SEND_TO_GRAVE
-    assert result.deltas[0].operation is OperationKind.DESTROY
-    assert "DESTROY" in result.deltas[0].reason_names
-
-    # 그리고 **무엇을 보지 않았는지** 말한다.
+    # 멈췄지만 **무엇을 판정하지 못했는지** 말한다.
     assert result.unchecked_rules
     assert any("내성" in rule for rule in result.unchecked_rules)
+    assert "destruction-legality" in (result.missing or "")
+
+    # 그리고 파괴는 여전히 이 실행기가 **아는** 일이다.
+    assert OperationKind.DESTROY in SUPPORTED
 
 
 def test_an_unrepresented_operation_is_unsupported(state):

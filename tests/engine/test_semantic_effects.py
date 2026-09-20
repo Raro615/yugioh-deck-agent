@@ -26,6 +26,7 @@ import pathlib
 import pytest
 
 from engine.chain import Chain, ChainLink, ChainResolutionStatus, ChainResolver
+from engine.condition import ConditionResult
 from engine.cost import CandidateSource, ChoiceSpec, Selection
 from engine.effect.definition import (
     EffectDefinition,
@@ -55,11 +56,17 @@ from engine.effect.resolution import (
 )
 from engine.effect.semantics import (
     FIELD_ZONES,
+    GATING_RULES,
     ORIGIN_RULES,
+    RULE_GATED,
     SEMANTIC_KINDS,
     UNCHECKED_SEMANTIC_RULES,
+    DeclaredDestructionRuling,
+    DestructionRuling,
     OriginRule,
+    UnknownDestructionRuling,
     collect_unchecked,
+    is_rule_gated,
     is_semantic,
     origin_rule,
     unchecked_rules,
@@ -150,9 +157,26 @@ def synthetic(*operations, ordinal: int = 0) -> EffectDefinition:
     )
 
 
-def run(state: GameState, definition: EffectDefinition, *chosen: InstanceId):
+def confirmed(*instances: InstanceId) -> DeclaredDestructionRuling:
+    """
+    **사람이 확인했다고 선언한** 파괴 판정.
+
+    내성 계층을 대신하지 않는다 — "이 카드에 대해서는 확인했다" 를 값으로
+    적는 것뿐이고, 적히지 않은 카드는 여전히 ``UNKNOWN`` 이라 파괴되지
+    않는다. 구현 등록을 손으로만 받는 ADR-006 과 같은 자리다.
+    """
+    return DeclaredDestructionRuling(destructible=frozenset(instances))
+
+
+def run(
+    state: GameState,
+    definition: EffectDefinition,
+    *chosen: InstanceId,
+    destruction: DestructionRuling | None = None,
+):
     executor = EffectExecutor(
-        lookup=EffectImplementationRegistry((definition.effect_ref,))
+        lookup=EffectImplementationRegistry((definition.effect_ref,)),
+        destruction=destruction,
     )
     selections = (
         (TargetSelection(PRIMARY, Selection(chosen=tuple(chosen))),) if chosen else ()
@@ -183,7 +207,12 @@ def my_hand_card(state: GameState) -> InstanceId:
 def test_destroy_actually_removes_the_monster_from_the_field(state):
     target = my_monster(state)
 
-    result = run(state, synthetic(CardOperation.destroy(PRIMARY)), target)
+    result = run(
+        state,
+        synthetic(CardOperation.destroy(PRIMARY)),
+        target,
+        destruction=confirmed(target),
+    )
 
     assert result.status is ResolutionStatus.RESOLVED
     assert state.locate(target).zone is Zone.GRAVE
@@ -194,7 +223,12 @@ def test_destroy_actually_removes_the_monster_from_the_field(state):
 def test_a_destruction_is_recorded_as_a_destruction(state):
     target = my_monster(state)
 
-    result = run(state, synthetic(CardOperation.destroy(PRIMARY)), target)
+    result = run(
+        state,
+        synthetic(CardOperation.destroy(PRIMARY)),
+        target,
+        destruction=confirmed(target),
+    )
 
     assert result.applied[0].kind is DESTROY
     assert result.applied[0].reason_names == ("DESTROY", "EFFECT")
@@ -208,7 +242,13 @@ def test_a_destruction_says_which_rules_it_did_not_look_at(state):
     **이 단계의 핵심이다.** 파괴를 실행하면서 내성을 보지 않은 것은
     거짓말이 아니라 미완성이고, 그 차이는 적어 두는가 하나다.
     """
-    result = run(state, synthetic(CardOperation.destroy(PRIMARY)), my_monster(state))
+    target = my_monster(state)
+    result = run(
+        state,
+        synthetic(CardOperation.destroy(PRIMARY)),
+        target,
+        destruction=confirmed(target),
+    )
 
     assert result.status is ResolutionStatus.RESOLVED
     assert result.unchecked_rules == UNCHECKED_SEMANTIC_RULES[DESTROY]
@@ -239,7 +279,12 @@ def test_the_opponents_monster_can_be_destroyed_and_goes_to_its_owner(state):
     """파괴된 카드는 **주인의** 묘지로 간다 (Owner ≠ Controller)."""
     target = state.player(THEIRS).monster_zone[0].instance_id
 
-    run(state, synthetic(CardOperation.destroy(PRIMARY)), target)
+    run(
+        state,
+        synthetic(CardOperation.destroy(PRIMARY)),
+        target,
+        destruction=confirmed(target),
+    )
 
     card = state.find_instance(target)
     assert card.zone is Zone.GRAVE
@@ -365,7 +410,12 @@ def test_three_meanings_land_in_the_same_place_and_stay_different(state):
                 state.find_instance(cards[index]), Zone.MZONE, to_player=MINE,
                 position=Position.FACEUP_ATTACK,
             )
-        result = run(state, synthetic(operation, ordinal=index), cards[index])
+        result = run(
+            state,
+            synthetic(operation, ordinal=index),
+            cards[index],
+            destruction=confirmed(cards[index]),
+        )
         assert result.status is ResolutionStatus.RESOLVED, operation
         assert state.locate(cards[index]).zone is Zone.GRAVE
         kinds.append(result.applied[0].kind)
@@ -455,7 +505,13 @@ def test_the_meaning_survives_all_the_way_to_the_timing_event(state):
     """
     사건이 트리거 계층에 닿을 때까지 **왜 움직였는가**가 남아 있어야 한다.
     """
-    result = run(state, synthetic(CardOperation.destroy(PRIMARY)), my_monster(state))
+    target = my_monster(state)
+    result = run(
+        state,
+        synthetic(CardOperation.destroy(PRIMARY)),
+        target,
+        destruction=confirmed(target),
+    )
 
     event = TimingEvent.from_delta(result.deltas[0])
 
@@ -503,7 +559,10 @@ def test_a_trigger_declaration_can_tell_destruction_from_sending(state):
         )
     )
     destroyed = run(
-        state, synthetic(CardOperation.destroy(PRIMARY)), my_monster(state)
+        state,
+        synthetic(CardOperation.destroy(PRIMARY)),
+        my_monster(state),
+        destruction=confirmed(my_monster(state)),
     )
     sent = run(
         state,
@@ -520,7 +579,9 @@ def test_the_journal_keeps_the_meaning_too(state):
     journal = EventJournal()
     definition = synthetic(CardOperation.destroy(PRIMARY))
     executor = EffectExecutor(
-        lookup=EffectImplementationRegistry((definition.effect_ref,)), journal=journal
+        lookup=EffectImplementationRegistry((definition.effect_ref,)),
+        journal=journal,
+        destruction=confirmed(my_monster(state)),
     )
 
     executor.execute(
@@ -579,6 +640,7 @@ def test_a_later_failure_undoes_nothing_because_nothing_started(state):
         state,
         synthetic(CardOperation.destroy(PRIMARY), DrawOperation(count=2)),
         target,
+        destruction=confirmed(target),
     )
 
     assert result.status is ResolutionStatus.INSUFFICIENT_CARDS
@@ -691,20 +753,36 @@ def test_the_same_board_and_meaning_give_the_same_board(repository):
     assert first.state_hash() == second.state_hash()
 
     for board in (first, second):
-        run(board, synthetic(CardOperation.destroy(PRIMARY)), my_monster(board))
+        target = my_monster(board)
+        run(
+            board,
+            synthetic(CardOperation.destroy(PRIMARY)),
+            target,
+            destruction=confirmed(target),
+        )
 
     assert first.state_hash() == second.state_hash()
 
 
 @requires_official_db
 def test_the_unchecked_rules_are_the_same_value_every_time(state):
-    first = run(state, synthetic(CardOperation.destroy(PRIMARY)), my_monster(state))
+    first_target = my_monster(state)
+    first = run(
+        state,
+        synthetic(CardOperation.destroy(PRIMARY)),
+        first_target,
+        destruction=confirmed(first_target),
+    )
     state.move(
         state.player(MINE).hand[0], Zone.MZONE, to_player=MINE,
         position=Position.FACEUP_ATTACK,
     )
+    second_target = my_monster(state)
     second = run(
-        state, synthetic(CardOperation.destroy(PRIMARY), ordinal=1), my_monster(state)
+        state,
+        synthetic(CardOperation.destroy(PRIMARY), ordinal=1),
+        second_target,
+        destruction=confirmed(second_target),
     )
 
     assert first.unchecked_rules == second.unchecked_rules
@@ -715,7 +793,12 @@ def test_a_clone_is_destroyed_on_its_own(state):
     copy = state.clone()
     before = state.state_hash()
 
-    run(copy, synthetic(CardOperation.destroy(PRIMARY)), my_monster(copy))
+    run(
+        copy,
+        synthetic(CardOperation.destroy(PRIMARY)),
+        my_monster(copy),
+        destruction=confirmed(my_monster(copy)),
+    )
 
     assert state.state_hash() == before
     assert len(state.player(MINE).monster_zone) == 1
@@ -728,13 +811,14 @@ def test_a_chain_link_can_destroy(state):
     from engine.effect.definition import EffectDefinitionRegistry
 
     definition = synthetic(CardOperation.destroy(PRIMARY))
+    target = my_monster(state)
     resolver = ChainResolver(
         EffectExecutor(
-            lookup=EffectImplementationRegistry((definition.effect_ref,))
+            lookup=EffectImplementationRegistry((definition.effect_ref,)),
+            destruction=confirmed(target),
         ),
         EffectDefinitionRegistry((definition,)),
     )
-    target = my_monster(state)
     chain = Chain(
         links=(
             ChainLink(
@@ -802,7 +886,246 @@ def test_the_card_definition_is_untouched_by_a_destruction(state, repository):
     definition = repository.get(FEATHERMAN)
     before = (definition.name, definition.type_mask, definition.atk)
 
-    run(state, synthetic(CardOperation.destroy(PRIMARY)), my_monster(state))
+    target = my_monster(state)
+    run(
+        state,
+        synthetic(CardOperation.destroy(PRIMARY)),
+        target,
+        destruction=confirmed(target),
+    )
 
     assert (definition.name, definition.type_mask, definition.atk) == before
     assert repository.get(FEATHERMAN) is definition
+
+
+# ======================================================================
+# I. 관문 — UNKNOWN 은 허가가 아니다 (STRUCTURAL-47 수정)
+# ======================================================================
+
+
+@requires_official_db
+def test_a_destruction_that_cannot_be_judged_does_not_happen(state):
+    """
+    **이 수정의 핵심이다.**
+
+    내성을 판정할 수 없는데 파괴하면 내성을 가진 카드가 실제로 파괴된다.
+    "보지 않았다" 고 적어 두는 메모는 그것을 막지 못한다.
+    """
+    target = my_monster(state)
+    before = state.state_hash()
+
+    result = run(state, synthetic(CardOperation.destroy(PRIMARY)), target)
+
+    assert result.status is ResolutionStatus.UNCHECKED_RULES
+    assert result.applied == ()
+    assert result.deltas == ()
+    assert state.state_hash() == before
+    assert state.locate(target).zone is Zone.MZONE
+    assert len(state.player(MINE).monster_zone) == 1
+
+
+@requires_official_db
+def test_the_refusal_still_says_what_it_could_not_judge(state):
+    """멈췄다고 정보가 사라지지 않는다 (§1)."""
+    result = run(state, synthetic(CardOperation.destroy(PRIMARY)), my_monster(state))
+
+    assert result.unchecked_rules == UNCHECKED_SEMANTIC_RULES[DESTROY]
+    assert "destruction-legality" in (result.missing or "")
+    assert any("내성" in rule for rule in GATING_RULES[DESTROY])
+    assert any("내성" in text for text in (result.reason,))
+
+
+def test_the_default_ruling_judges_nothing():
+    """
+    판정기를 주지 않으면 아무것도 판정하지 못하는 것이 들어간다 —
+    ``EmptyImplementationLookup`` 과 같은 자리다 (ADR-006).
+    """
+    executor = EffectExecutor()
+
+    assert isinstance(executor.destruction, UnknownDestructionRuling)
+    assert isinstance(executor.destruction, DestructionRuling)
+    assert executor.destruction.may_be_destroyed(InstanceId(1)) is (
+        ConditionResult.UNKNOWN
+    )
+
+
+@requires_official_db
+def test_a_confirmed_ruling_is_what_lets_the_destruction_happen(state):
+    """
+    같은 판 · 같은 효과인데 **판정기만 다르다.** 그것이 갈림길이다.
+    """
+    target = my_monster(state)
+    definition = synthetic(CardOperation.destroy(PRIMARY))
+    copy = state.clone()
+
+    refused = run(state, definition, target)
+    allowed = run(copy, definition, target, destruction=confirmed(target))
+
+    assert refused.status is ResolutionStatus.UNCHECKED_RULES
+    assert allowed.status is ResolutionStatus.RESOLVED
+    assert state.locate(target).zone is Zone.MZONE
+    assert copy.locate(target).zone is Zone.GRAVE
+
+
+@requires_official_db
+def test_a_card_judged_indestructible_is_not_destroyed(state):
+    """
+    ``FALSE`` 는 ``UNKNOWN`` 과 다른 답이다 — "판정했고 안 된다" 이므로
+    "판정하지 못했다" 로 적지 않는다.
+    """
+    target = my_monster(state)
+    before = state.state_hash()
+    ruling = DeclaredDestructionRuling(protected=frozenset({target}))
+
+    result = run(
+        state, synthetic(CardOperation.destroy(PRIMARY)), target, destruction=ruling
+    )
+
+    assert result.status is ResolutionStatus.INVALID_TARGET
+    assert result.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    assert result.status is not ResolutionStatus.UNCHECKED_RULES
+    assert result.deltas == ()
+    assert state.state_hash() == before
+
+
+def test_a_card_cannot_be_both_destructible_and_protected():
+    instance = InstanceId(1)
+    with pytest.raises(ValueError):
+        DeclaredDestructionRuling(
+            destructible=frozenset({instance}), protected=frozenset({instance})
+        )
+
+
+@requires_official_db
+def test_one_unjudged_card_stops_the_whole_destruction(state):
+    """
+    **부분 파괴를 만들지 않는다.** "내성을 가진 한 장만 남고 나머지는
+    파괴된다" 는 규칙을 아직 옮기지 못했으므로, 안전한 쪽으로 통째로
+    멈춘다 (STRUCTURAL-49).
+    """
+    state.move(
+        state.player(MINE).hand[0], Zone.MZONE, to_player=MINE,
+        position=Position.FACEUP_ATTACK,
+    )
+    judged, unjudged = (card.instance_id for card in state.player(MINE).monster_zone)
+    before = state.state_hash()
+
+    result = run(
+        state,
+        synthetic(CardOperation.destroy(PRIMARY)),
+        judged,
+        unjudged,
+        destruction=confirmed(judged),
+    )
+
+    assert result.status is ResolutionStatus.UNCHECKED_RULES
+    assert result.deltas == ()
+    assert state.state_hash() == before
+    assert len(state.player(MINE).monster_zone) == 2
+
+
+@requires_official_db
+def test_a_permissive_ruling_cannot_unlock_a_text_derived_effect(state):
+    """
+    **판정기는 출처 금지를 뚫지 못한다** (ADR-004). 권위 확인이 먼저다.
+    """
+    target = my_monster(state)
+    definition = EffectDefinition(
+        effect_ref=EffectRef(LAB, 8),
+        source_card_id=LAB,
+        operations=(CardOperation.destroy(PRIMARY),),
+        targets=synthetic(CardOperation.destroy(PRIMARY)).targets,
+        provenance=EffectProvenance.text_derived("텍스트에서 유추"),
+    )
+    executor = EffectExecutor(
+        lookup=EffectImplementationRegistry((definition.effect_ref,)),
+        destruction=confirmed(target),
+    )
+    before = state.state_hash()
+
+    result = executor.execute(
+        state,
+        definition,
+        ResolutionContext(
+            effect_ref=definition.effect_ref,
+            controller=MINE,
+            selections=(TargetSelection(PRIMARY, Selection(chosen=(target,))),),
+        ),
+    )
+
+    assert result.status is ResolutionStatus.FORBIDDEN
+    assert state.state_hash() == before
+
+
+@requires_official_db
+def test_the_chain_does_not_advance_on_an_unjudged_destruction(state):
+    """체인이 해결하지 못한 링크를 해결한 것으로 치지 않는다."""
+    from engine.effect.definition import EffectDefinitionRegistry
+
+    definition = synthetic(CardOperation.destroy(PRIMARY))
+    target = my_monster(state)
+    resolver = ChainResolver(
+        EffectExecutor(
+            lookup=EffectImplementationRegistry((definition.effect_ref,))
+        ),
+        EffectDefinitionRegistry((definition,)),
+    )
+    chain = Chain(
+        links=(
+            ChainLink(
+                sequence=0,
+                actor=MINE,
+                effect_ref=definition.effect_ref,
+                source=target,
+                selections=(TargetSelection(PRIMARY, Selection(chosen=(target,))),),
+            ),
+        )
+    )
+    before = state.state_hash()
+
+    resolution = resolver.resolve_top(state, chain)
+
+    assert resolution.status is ChainResolutionStatus.EFFECT_NOT_APPLIED
+    assert resolution.result.status is ResolutionStatus.UNCHECKED_RULES
+    assert resolution.chain.resolved_count == 0
+    assert state.state_hash() == before
+
+
+def test_only_destruction_is_gated_for_now():
+    """
+    보내기와 버리기는 아직 관문이 없다. **알면서 남겨 둔 것**이고
+    (STRUCTURAL-48), 괜찮다고 판단한 것이 아니다.
+    """
+    assert RULE_GATED == {DESTROY}
+    assert is_rule_gated(DESTROY)
+    assert not is_rule_gated(SEND)
+    assert not is_rule_gated(DISCARD)
+    assert not is_rule_gated(MOVE)
+
+
+@requires_official_db
+def test_sending_and_discarding_still_run_without_a_ruling(state):
+    """관문을 더했다고 다른 의미가 막히지 않는다."""
+    for index, operation in enumerate(
+        (CardOperation.send_to_grave(PRIMARY), CardOperation.discard(PRIMARY))
+    ):
+        card = my_hand_card(state)
+        result = run(state, synthetic(operation, ordinal=index), card)
+
+        assert result.status is ResolutionStatus.RESOLVED, operation
+        assert state.locate(card).zone is Zone.GRAVE
+
+
+@requires_official_db
+def test_the_refusal_is_the_same_value_every_time(repository):
+    first, second = new_state(repository), new_state(repository)
+
+    left = run(
+        first, synthetic(CardOperation.destroy(PRIMARY)), my_monster(first)
+    )
+    right = run(
+        second, synthetic(CardOperation.destroy(PRIMARY)), my_monster(second)
+    )
+
+    assert left.canonical_state() == right.canonical_state()
+    assert first.state_hash() == second.state_hash()

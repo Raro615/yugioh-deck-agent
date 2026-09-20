@@ -11,16 +11,30 @@
 사라지면 "파괴되었을 때" 와 "묘지로 보내졌을 때" 를 영영 나눌 수 없다
 (ADR-002). 이 파일은 그 구분을 **값으로** 들고 있는 곳이다.
 
-여기서 하는 일은 셋뿐이다
+여기서 하는 일은 넷뿐이다
 -------------------------
 1. 어떤 일이 **의미를 주장하는가** (:data:`SEMANTIC_KINDS`).
 2. 그 의미가 **어디서 출발할 수 있는가** (:data:`ORIGIN_RULES`).
 3. 그 의미의 규칙 중 **아직 보지 않은 것**이 무엇인가
    (:data:`UNCHECKED_SEMANTIC_RULES`).
+4. 그 의미 중 **판정 없이는 실행할 수 없는 것**이 무엇인가
+   (:data:`RULE_GATED`).
 
-세 번째가 이 단계의 핵심이다. 파괴를 실행하면서 파괴 내성을 보지 않는 것은
-**거짓말이 아니라 미완성**이고, 그 둘의 차이는 "보지 않았다고 적어 두는가"
-하나다. 적어 두지 않으면 다음 사람이 완성된 것으로 읽는다.
+적어 두는 것과 막는 것은 다르다
+-------------------------------
+Phase 2-M 은 세 번째까지만 했다 — 파괴를 실행하면서 "내성을 보지 않았다" 고
+**적어 두었다.** 그것으로 충분하지 않다.
+
+    UNKNOWN 은 허가가 아니다.
+
+내성을 판정할 수 없는데 파괴를 수행하면, 내성을 가진 카드가 실제로
+파괴된다. 적어 둔 메모는 그것을 막지 못한다. 그래서 :data:`RULE_GATED` 에
+든 의미는 **판정을 받아야만** 실행된다 (:class:`DestructionRuling`).
+
+판정기가 없으면 어떤 파괴도 일어나지 않는다. 그것이
+:class:`UnknownDestructionRuling` 이고, 지금 엔진의 기본값이다 —
+``EmptyImplementationLookup`` 이 "등록된 구현이 없다" 를 기본값으로 삼은
+것과 같은 자리다 (ADR-006).
 
 여기서 하지 않는 것
 -------------------
@@ -31,9 +45,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Protocol, runtime_checkable
 
+from engine.condition import ConditionResult
 from engine.effect.operation import OperationKind
+from engine.ids import InstanceId
 from engine.vocabulary import Zone
 
 #: 필드. 파괴가 일어날 수 있는 자리다.
@@ -133,6 +150,104 @@ ORIGIN_RULES: dict[OperationKind, OriginRule] = {
 }
 
 
+#: **판정을 받아야만 실행되는** 의미들.
+#:
+#: 여기 든 일은 :data:`UNCHECKED_SEMANTIC_RULES` 를 적어 두는 것으로 끝나지
+#: 않는다. 실행 **전에** 판정을 받아야 하고, 받지 못하면 판을 건드리지
+#: 않는다.
+#:
+#: ``SEND_TO_GRAVE`` 와 ``DISCARD`` 는 아직 여기 없다. 둘도 판정되지 않은
+#: 규칙을 안고 실행되고 있으며 (STRUCTURAL-48), 같은 원칙이 적용되어야
+#: 한다. 다만 그 둘은 Phase 2-D-2 부터의 상태이고 이번 수정의 범위가
+#: 아니다 — **알면서 남겨 둔 것이지 괜찮다고 판단한 것이 아니다.**
+RULE_GATED: frozenset[OperationKind] = frozenset({OperationKind.DESTROY})
+
+#: 관문을 통과하려면 무엇이 판정되어야 하는가.
+GATING_RULES: dict[OperationKind, tuple[str, ...]] = {
+    OperationKind.DESTROY: (
+        "이 카드가 파괴될 수 있는가 (파괴 내성)",
+        "파괴 대신 다른 일이 일어나는가 (대체 효과)",
+    ),
+}
+
+#: 관문을 여는 계층의 이름. 결과의 ``missing`` 에 그대로 실린다.
+MISSING_GATE: dict[OperationKind, str] = {
+    OperationKind.DESTROY: "destruction-legality (파괴 내성 · 대체 효과 판정)",
+}
+
+
+@runtime_checkable
+class DestructionRuling(Protocol):
+    """
+    "이 카드를 파괴해도 되는가" 에 답하는 것.
+
+    세 값을 돌려준다 — ``TRUE`` · ``FALSE`` · ``UNKNOWN``. **``UNKNOWN`` 은
+    허가가 아니다**: 실행기는 ``TRUE`` 일 때만 파괴한다.
+    """
+
+    def may_be_destroyed(self, instance: InstanceId) -> ConditionResult:
+        ...  # pragma: no cover - 프로토콜
+
+
+class UnknownDestructionRuling:
+    """
+    **아무것도 판정하지 못한다.** 지금 엔진의 실제 상태다.
+
+    내성도 대체 효과도 읽을 수 없으므로 모든 카드에 ``UNKNOWN`` 이고,
+    따라서 이 판정기로는 **어떤 파괴도 일어나지 않는다.** 그것이 결함이
+    아니라 정직한 상태다 — 모르는 것을 허가로 바꾸지 않는다.
+    """
+
+    __slots__ = ()
+
+    def may_be_destroyed(self, instance: InstanceId) -> ConditionResult:
+        return ConditionResult.UNKNOWN
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return "<UnknownDestructionRuling>"
+
+
+@dataclass(frozen=True, slots=True)
+class DeclaredDestructionRuling:
+    """
+    **손으로 선언한** 판정. 적히지 않은 카드는 ``UNKNOWN`` 이다.
+
+    내성 계층을 대신하지 않는다 — "이 카드에 대해서는 사람이 확인했다" 를
+    값으로 적어 두는 것뿐이고, 그래서 기본값은 여전히 "모른다" 다
+    (``EffectImplementationRegistry`` 가 손 등록만 받는 것과 같다).
+    """
+
+    destructible: frozenset[InstanceId] = field(default_factory=frozenset)
+    """파괴해도 된다고 **확인된** 카드들."""
+    protected: frozenset[InstanceId] = field(default_factory=frozenset)
+    """파괴되지 않는다고 **확인된** 카드들."""
+
+    def __post_init__(self) -> None:
+        both = self.destructible & self.protected
+        if both:
+            raise ValueError(
+                f"같은 카드가 파괴 가능이면서 불가능일 수 없습니다: "
+                f"{sorted(i.value for i in both)}"
+            )
+
+    def may_be_destroyed(self, instance: InstanceId) -> ConditionResult:
+        if instance in self.protected:
+            return ConditionResult.FALSE
+        if instance in self.destructible:
+            return ConditionResult.TRUE
+        return ConditionResult.UNKNOWN
+
+
+def is_rule_gated(kind: OperationKind) -> bool:
+    """실행 전에 판정을 받아야 하는 의미인가."""
+    return kind in RULE_GATED
+
+
+def gating_rules(kind: OperationKind) -> tuple[str, ...]:
+    """관문이 요구하는 판정들. 관문이 없으면 빈 튜플."""
+    return GATING_RULES.get(kind, ())
+
+
 def is_semantic(kind: OperationKind) -> bool:
     """이 일이 **의미를 주장하는가.** ``MOVE`` 는 거짓이다."""
     return kind in SEMANTIC_KINDS
@@ -170,6 +285,14 @@ def collect_unchecked(kinds) -> tuple[str, ...]:
 
 __all__ = [
     "FIELD_ZONES",
+    "RULE_GATED",
+    "GATING_RULES",
+    "MISSING_GATE",
+    "DestructionRuling",
+    "UnknownDestructionRuling",
+    "DeclaredDestructionRuling",
+    "is_rule_gated",
+    "gating_rules",
     "SEMANTIC_KINDS",
     "UNCHECKED_SEMANTIC_RULES",
     "OriginRule",
