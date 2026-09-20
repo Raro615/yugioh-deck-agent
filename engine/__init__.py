@@ -155,6 +155,21 @@ Duel Engine.
   판을 건드리지 않고, 그중 **여덟 개**의 답으로 갈린다: "애초에 부적법한
   대상" 과 "고른 뒤 자리를 떠난 대상" 이 아직 같은 답이다
   (STRUCTURAL-53). ``docs/phase2p-effect-scenarios.md`` 참고.
+- **Phase 2-Q** — 효과 발동 (``activation.py``).
+  ``ACTIVATE_EFFECT`` 를 **체인 링크 하나**로 바꾼다. 이 모듈이 하는 일은
+  넷뿐이다: 발동할 수 있는지 판정하고, 비용을 치르고(Phase 2-E 의
+  ``CostPayer`` 그대로), ``ChainLink`` 를 만들고, 체인에 쌓는다.
+
+  **``EffectExecutor`` 를 가져오지도 않는다.** 발동이 곧 해결이면 체인이
+  존재할 이유가 없다 — 카드가 움직이는 것은 ``ChainResolver`` 가 링크를
+  풀 때뿐이다. 순서도 규칙이다: 읽기만 하는 검사를 **전부** 끝내고 체인이
+  링크를 받을 수 있는지까지 확인한 뒤에야 비용을 치른다. 치른 뒤에 거절당하면
+  되돌릴 방법이 없기 때문이다 (ADR-008).
+
+  허가는 **밖에서** 온다. ``ActionValidator`` 는 오늘 ``ACTIVATE_EFFECT``
+  에 ``UNKNOWN`` 을 돌려주므로(발동 타이밍 계층이 없다), 명시적인 ``VALID``
+  를 건네지 않으면 ``UNAUTHORIZED`` 다 — ``UNKNOWN`` 을 허가로 바꾸지
+  않는다. ``docs/phase2q-effect-activation.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
