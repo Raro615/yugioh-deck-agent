@@ -53,7 +53,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from engine.action import PlayerAction, PlayerActionKind
-from engine.action_execution import ActionExecutor
 from engine.effect.delta import MonsterSummoned, SummonKind
 from engine.ids import InstanceId
 from engine.state.game_state import GameState
@@ -83,6 +82,14 @@ class SummonPlacement:
     """소환하는 사람. 놓인 몬스터의 컨트롤러가 된다."""
     owner: int
     """카드의 주인. **소환한다고 주인이 바뀌지 않는다** (ADR: Owner ≠ Controller)."""
+    from_player: int
+    """
+    카드가 **어느 쪽의** 자리에서 나왔는가.
+
+    :attr:`player` 와 다를 수 있다 — 효과가 상대의 묘지에서 자신 필드로
+    소환하는 경우다 (죽은 자의 소생). 이 칸이 없으면 "떠났는가" 를 엉뚱한
+    쪽에서 확인하게 된다.
+    """
     from_zone: Zone
     to_zone: Zone
     slot: int
@@ -112,6 +119,7 @@ class SummonPlacement:
             self.card.value,
             self.player,
             self.owner,
+            self.from_player,
             self.from_zone.value,
             self.to_zone.value,
             self.slot,
@@ -120,8 +128,8 @@ class SummonPlacement:
 
     def describe_ko(self) -> str:
         return (
-            f"P{self.player} 가 {self.card} 를 {self.from_zone.value} 에서 "
-            f"{self.to_zone.value}[{self.slot}] 로"
+            f"P{self.player} 가 {self.card} 를 P{self.from_player} 의 "
+            f"{self.from_zone.value} 에서 {self.to_zone.value}[{self.slot}] 로"
         )
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
@@ -187,6 +195,9 @@ class SummonProcedure:
         if action.source is None:
             raise self.error("소환할 카드가 지목되지 않았습니다.")
 
+        # **자기 카드만 선언할 수 있다.** 이 검사는 행위 경로의 것이다 —
+        # 효과는 상대의 묘지에서도 소환하므로 (죽은 자의 소생),
+        # :meth:`plan_for` 에 두면 그 경로를 영영 막는다.
         card = state.find_instance(action.source)
         if card is None:
             raise self.error(f"{action.source} 를 이 판에서 찾을 수 없습니다.")
@@ -195,23 +206,48 @@ class SummonProcedure:
                 f"{action.source} 는 P{card.controller} 의 카드입니다 "
                 f"(P{action.actor} 가 소환하려 했습니다)."
             )
+        return self.plan_for(state, action.source, action.actor)
 
-        located = state.locate(action.source)
+    def plan_for(
+        self, state: GameState, card_id: InstanceId, player: int
+    ) -> SummonPlacement:
+        """
+        **식별자만으로** 배치를 정한다. ``PlayerAction`` 을 모른다.
+
+        효과 해결 중의 소환(Phase 2-U)이 이 문을 쓴다 —
+        :class:`~engine.action.PlayerAction` 은 고르는 주체의 어휘이고
+        효과 해결에는 그런 것이 없기 때문이다 (ADR-001). 두 경로가 **같은
+        절차**를 쓰게 하려고 여기서 갈라 둔다.
+        """
+        if not isinstance(state, GameState):
+            raise TypeError(
+                f"{type(self).__name__} 는 GameState 를 받습니다. "
+                "관측(GameStateView)은 읽기 전용이라 소환할 수 없습니다."
+            )
+        if player not in (0, 1):
+            raise self.error(f"소환하는 사람은 0 또는 1 입니다: {player}")
+
+        card = state.find_instance(card_id)
+        if card is None:
+            raise self.error(f"{card_id} 를 이 판에서 찾을 수 없습니다.")
+
+        located = state.locate(card_id)
         if located is None or located.zone not in self.from_zones:
             where = located.zone.value if located else "어디에도"
             allowed = " · ".join(sorted(z.value for z in self.from_zones))
             raise self.error(
-                f"{action.source} 가 {allowed} 에 없습니다 (현재 {where})."
+                f"{card_id} 가 {allowed} 에 없습니다 (현재 {where})."
             )
 
-        free = state.zone(action.actor, self.to_zone).free_slots()
+        free = state.zone(player, self.to_zone).free_slots()
         if not free:
             raise self.error(f"{self.to_zone.value} 에 빈 칸이 없습니다.")
 
         return SummonPlacement(
-            card=action.source,
-            player=action.actor,
+            card=card_id,
+            player=player,
             owner=card.owner,
+            from_player=card.controller,
             from_zone=located.zone,
             to_zone=self.to_zone,
             slot=free[0],
@@ -249,10 +285,10 @@ class SummonProcedure:
             raise self.error(
                 f"{placement.card} 의 표시 형식이 {card.position} 입니다."
             )
-        if card in state.zone(placement.player, placement.from_zone):
+        if card in state.zone(placement.from_player, placement.from_zone):
             raise self.error(
-                f"{placement.card} 가 아직 {placement.from_zone.value} 에 "
-                "남아 있습니다."
+                f"{placement.card} 가 아직 P{placement.from_player} 의 "
+                f"{placement.from_zone.value} 에 남아 있습니다."
             )
 
     def describe_ko(self) -> str:
@@ -263,7 +299,7 @@ class SummonProcedure:
         return self.describe_ko()
 
 
-def summon_executor() -> ActionExecutor:
+def summon_executor() -> "ActionExecutor":
     """
     일반 소환과 특수 소환을 **둘 다** 아는 실행기.
 
@@ -272,6 +308,9 @@ def summon_executor() -> ActionExecutor:
     :func:`~engine.normal_summon.summoning_executor` 또는
     :func:`~engine.special_summon.special_summoning_executor` 를 쓴다.
     """
+    # 여기서 읽는다 — 이 모듈이 실행기 계층에 의존하면 효과 실행기가
+    # 소환 절차를 쓸 때 import 고리가 생긴다 (Phase 2-U).
+    from engine.action_execution import ActionExecutor
     from engine.normal_summon import NormalSummonHandler
     from engine.special_summon import SpecialSummonHandler
 

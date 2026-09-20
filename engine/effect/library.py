@@ -167,6 +167,7 @@ POT_OF_GREED = 55144522
 RAIN_OF_MERCY = 66719324
 DARK_HOLE = 53129443
 MYSTICAL_SPACE_TYPHOON = 5318639
+MONSTER_REBORN = 83764718
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -309,12 +310,52 @@ _MYSTICAL_SPACE_TYPHOON_ENTRY = LibraryEntry(
     executable=True,
 )
 
+#: 죽은 자의 소생 — "①: 자신 또는 상대의 묘지의 몬스터 1장을 대상으로 하고
+#: 발동할 수 있다. 그 몬스터를 자신 필드에 특수 소환한다."
+#:
+#: **일부러 실행하지 않는다.** Phase 2-U 가 효과 → 특수 소환 경로를 열었고
+#: 이 카드의 모양은 그 경로에 정확히 맞는데도 그렇다. 옮길 수 없는 것이
+#: 둘이기 때문이다.
+#:
+#: 1. ``s.filter`` 가 ``c:IsCanBeSpecialSummoned(e, SUMMON_WITH_MONSTER_REBORN,
+#:    tp, false, false)`` 다 — **"이 몬스터를 특수 소환할 수 있는가"** 이고,
+#:    그것은 카드마다 다른 소환 조건(소생 제한 · 융합/싱크로/엑시즈의 정규
+#:    소환 여부 · "특수 소환할 수 없다" 제약)이다. 이 엔진에 그 계층이
+#:    없으므로 후보 조건을 **추측 없이는 옮길 수 없다.**
+#: 2. ``POS_FACEUP`` — 앞면 공격과 앞면 수비 중 **고를 수 있다.** 표시 형식을
+#:    고르는 계층이 없다 (STRUCTURAL-61).
+#:
+#: 첫 번째가 결정적이다. 그것을 "아무 몬스터나" 로 옮기면 소생 제한을 무시한
+#: 소환이 판에 올라온다. 그래서 하는 일을 **적지 않은 채로** 싣는다 —
+#: 빼 버리면 "왜 못 하는가" 가 사라진다 (블랙홀과 같은 자리).
+_MONSTER_REBORN_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(MONSTER_REBORN, 0),
+        source_card_id=MONSTER_REBORN,
+        operations=(),
+        provenance=EffectProvenance.official_lua(
+            "c83764718.lua 를 읽었으나 후보 조건을 옮기지 못했다."
+        ),
+    ),
+    lua_file="c83764718.lua",
+    lua_excerpt=(
+        "Duel.SpecialSummon(tc,SUMMON_WITH_MONSTER_REBORN,tp,tp,false,false,"
+        "POS_FACEUP)  -- s.filter = c:IsCanBeSpecialSummoned(...)"
+    ),
+    executable=False,
+    note=(
+        "소환 조건 판정(IsCanBeSpecialSummoned)과 표시 형식 선택"
+        "(POS_FACEUP, STRUCTURAL-61)이 둘 다 없다"
+    ),
+)
+
 #: 이 엔진이 들고 있는 효과 정의 전부. **이것이 전부라는 것이 사실이다.**
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _POT_OF_GREED_ENTRY,
     _RAIN_OF_MERCY_ENTRY,
     _MYSTICAL_SPACE_TYPHOON_ENTRY,
     _DARK_HOLE_ENTRY,
+    _MONSTER_REBORN_ENTRY,
 )
 
 
@@ -406,6 +447,7 @@ __all__ = [
     "RAIN_OF_MERCY",
     "DARK_HOLE",
     "MYSTICAL_SPACE_TYPHOON",
+    "MONSTER_REBORN",
     "entry_for",
     "definition_registry",
     "implementation_registry",

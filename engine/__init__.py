@@ -220,6 +220,24 @@ Duel Engine.
   말하지 않는다: 융합 · 싱크로 · 엑시즈 · 링크는 각자의 절차가 생길 때
   이름을 갖는다 (STRUCTURAL-62).
   ``docs/phase2t-special-summon.md`` 참고.
+- **Phase 2-U** — 효과에 의한 특수 소환 (``effect/operation.py`` 의
+  ``SpecialSummonOperation``). 효과 해결이 Phase 2-T 의 소환 절차를 **그대로**
+  부른다 — 플레이어가 선언한 소환과 같은 코드로 같은 자리에 놓이고, 다른
+  것은 기록뿐이다 (``reason_names`` 에 ``SPSUMMON`` · ``EFFECT``).
+
+  ``CardOperation`` 이 **아니다.** 저쪽은 목적지가 표로 정해지지만 소환은
+  칸과 표시 형식이 필요하고 남기는 변화도 ``MonsterSummoned`` 다. 같은 표에
+  넣으면 "몬스터 존으로 옮겼다" 와 "특수 소환되었다" 가 한 기록이 된다.
+  ``PlayerActionKind.SPECIAL_SUMMON`` 과도 다른 어휘다 (ADR-001).
+
+  **관문이 있다.** "이 카드를 특수 소환할 수 있는가" 는 카드마다 다르고
+  (소생 제한 · 정규 소환 여부 · 턴 1회), 그 계층이 없으므로 기본
+  ``UnknownSummonRuling`` 으로는 **어떤 특수 소환도 일어나지 않는다**
+  (``UNCHECKED_RULES``). Phase 2-M 의 파괴 관문과 같은 구조다.
+
+  죽은 자의 소생(83764718)을 목록에 실었다 — ``executable=False`` 로.
+  모양은 맞지만 후보 조건이 ``IsCanBeSpecialSummoned`` 라 추측 없이는
+  옮길 수 없다. ``docs/phase2u-effect-special-summon.md`` 참고.
 
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은

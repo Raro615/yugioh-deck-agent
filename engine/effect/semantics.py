@@ -67,6 +67,10 @@ SEMANTIC_KINDS: frozenset[OperationKind] = frozenset(
         OperationKind.DESTROY,
         OperationKind.SEND_TO_GRAVE,
         OperationKind.DISCARD,
+        # 특수 소환도 **의미를 주장한다** (Phase 2-U). 카드가 몬스터 존에
+        # 들어가는 것과 "특수 소환되었다" 는 다른 사실이고, 뒤의 것이
+        # 트리거를 낳는다.
+        OperationKind.SPECIAL_SUMMON,
     }
 )
 
@@ -93,6 +97,14 @@ UNCHECKED_SEMANTIC_RULES: dict[OperationKind, tuple[str, ...]] = {
         "버려진 카드가 묘지 이외로 가는 대체 효과",
         "'버려졌을 때' 유발 효과",
         "무작위로 버리는 경우",
+    ),
+    OperationKind.SPECIAL_SUMMON: (
+        "이 카드를 특수 소환할 수 있는가 (카드마다 다른 소환 조건)",
+        "소생 제한 (정규 소환을 거쳤는가)",
+        "특수 소환 무효 · 특수 소환할 수 없다는 제약",
+        "'특수 소환되었을 때' 유발 효과",
+        "어느 특수 소환법인가 (융합 · 싱크로 · 엑시즈 · 링크 …)",
+        "표시 형식 선택 (앞면 공격 · 앞면 수비)",
     ),
 }
 
@@ -160,7 +172,9 @@ ORIGIN_RULES: dict[OperationKind, OriginRule] = {
 #: 규칙을 안고 실행되고 있으며 (STRUCTURAL-48), 같은 원칙이 적용되어야
 #: 한다. 다만 그 둘은 Phase 2-D-2 부터의 상태이고 이번 수정의 범위가
 #: 아니다 — **알면서 남겨 둔 것이지 괜찮다고 판단한 것이 아니다.**
-RULE_GATED: frozenset[OperationKind] = frozenset({OperationKind.DESTROY})
+RULE_GATED: frozenset[OperationKind] = frozenset(
+    {OperationKind.DESTROY, OperationKind.SPECIAL_SUMMON}
+)
 
 #: 관문을 통과하려면 무엇이 판정되어야 하는가.
 GATING_RULES: dict[OperationKind, tuple[str, ...]] = {
@@ -168,11 +182,18 @@ GATING_RULES: dict[OperationKind, tuple[str, ...]] = {
         "이 카드가 파괴될 수 있는가 (파괴 내성)",
         "파괴 대신 다른 일이 일어나는가 (대체 효과)",
     ),
+    OperationKind.SPECIAL_SUMMON: (
+        "이 카드를 특수 소환할 수 있는가 (소환 조건)",
+        "지금 특수 소환해도 되는가 (소생 제한 · 제약)",
+    ),
 }
 
 #: 관문을 여는 계층의 이름. 결과의 ``missing`` 에 그대로 실린다.
 MISSING_GATE: dict[OperationKind, str] = {
     OperationKind.DESTROY: "destruction-legality (파괴 내성 · 대체 효과 판정)",
+    OperationKind.SPECIAL_SUMMON: (
+        "special-summon-legality (소환 조건 · 소생 제한 판정)"
+    ),
 }
 
 
@@ -238,6 +259,72 @@ class DeclaredDestructionRuling:
         return ConditionResult.UNKNOWN
 
 
+@runtime_checkable
+class SummonRuling(Protocol):
+    """
+    "이 카드를 특수 소환해도 되는가" 에 답하는 것.
+
+    :class:`DestructionRuling` 과 **같은 모양**이다 — 세 값을 돌려주고,
+    ``UNKNOWN`` 은 허가가 아니다. 다른 질문이므로 다른 이름을 갖지만,
+    관문의 구조는 하나다 (Phase 2-M 의 STRUCTURAL-47 과 같은 자리).
+    """
+
+    def may_be_special_summoned(self, instance: InstanceId) -> ConditionResult:
+        ...  # pragma: no cover - 프로토콜
+
+
+class UnknownSummonRuling:
+    """
+    **아무것도 판정하지 못한다.** 지금 엔진의 실제 상태다.
+
+    "이 카드를 특수 소환할 수 있는가" 는 카드마다 다르고 (융합 몬스터는
+    정규 소환을 거쳐야 묘지에서 되살아난다, "패에서 특수 소환할 수 있다",
+    턴 1회 제약 …), 그것을 읽는 계층이 없다.
+
+    그래서 이 판정기로는 **어떤 특수 소환도 일어나지 않는다.** 결함이
+    아니라 정직한 상태다 — 모르는 것을 허가로 바꾸면 "특수 소환할 수 없는
+    카드" 가 판에 올라온다.
+    """
+
+    __slots__ = ()
+
+    def may_be_special_summoned(self, instance: InstanceId) -> ConditionResult:
+        return ConditionResult.UNKNOWN
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return "<UnknownSummonRuling>"
+
+
+@dataclass(frozen=True, slots=True)
+class DeclaredSummonRuling:
+    """
+    **손으로 선언한** 소환 판정. 적히지 않은 카드는 ``UNKNOWN`` 이다.
+
+    소환 조건 계층을 대신하지 않는다 — "이 카드에 대해서는 사람이
+    확인했다" 를 값으로 적는 것뿐이다.
+    """
+
+    summonable: frozenset[InstanceId] = field(default_factory=frozenset)
+    """특수 소환해도 된다고 **확인된** 카드들."""
+    forbidden: frozenset[InstanceId] = field(default_factory=frozenset)
+    """특수 소환할 수 없다고 **확인된** 카드들."""
+
+    def __post_init__(self) -> None:
+        both = self.summonable & self.forbidden
+        if both:
+            raise ValueError(
+                "같은 카드가 특수 소환 가능이면서 불가능일 수 없습니다: "
+                f"{sorted(i.value for i in both)}"
+            )
+
+    def may_be_special_summoned(self, instance: InstanceId) -> ConditionResult:
+        if instance in self.forbidden:
+            return ConditionResult.FALSE
+        if instance in self.summonable:
+            return ConditionResult.TRUE
+        return ConditionResult.UNKNOWN
+
+
 def is_rule_gated(kind: OperationKind) -> bool:
     """실행 전에 판정을 받아야 하는 의미인가."""
     return kind in RULE_GATED
@@ -295,6 +382,9 @@ __all__ = [
     "gating_rules",
     "SEMANTIC_KINDS",
     "UNCHECKED_SEMANTIC_RULES",
+    "SummonRuling",
+    "UnknownSummonRuling",
+    "DeclaredSummonRuling",
     "OriginRule",
     "ORIGIN_RULES",
     "is_semantic",

@@ -429,8 +429,16 @@ def test_three_meanings_land_in_the_same_place_and_stay_different(state):
     assert len(set(reasons)) == 3
 
 
-def test_the_semantic_kinds_are_exactly_the_three():
-    assert SEMANTIC_KINDS == {DESTROY, SEND, DISCARD}
+def test_every_semantic_kind_carries_its_unchecked_rules():
+    """
+    의미를 주장하는 일은 **무엇을 보지 않았는지 함께 들고 다닌다.**
+
+    Phase 2-M 때는 셋이었고 Phase 2-U 가 특수 소환을 더했다 — 카드가 몬스터
+    존에 들어가는 것과 "특수 소환되었다" 는 다른 사실이고, 뒤의 것이
+    트리거를 낳는다. 목록이 늘어나는 것 자체는 문제가 아니고, **늘어난
+    것이 규칙을 들고 오지 않는 것**이 문제다.
+    """
+    assert SEMANTIC_KINDS == {DESTROY, SEND, DISCARD, OperationKind.SPECIAL_SUMMON}
     for kind in SEMANTIC_KINDS:
         assert is_semantic(kind)
         assert unchecked_rules(kind)
@@ -1096,13 +1104,18 @@ def test_the_chain_does_not_advance_on_an_unjudged_destruction(state):
     assert state.state_hash() == before
 
 
-def test_only_destruction_is_gated_for_now():
+def test_sending_and_discarding_are_still_ungated():
     """
     보내기와 버리기는 아직 관문이 없다. **알면서 남겨 둔 것**이고
     (STRUCTURAL-48), 괜찮다고 판단한 것이 아니다.
+
+    Phase 2-U 가 특수 소환을 관문에 더했다 — "이 카드를 특수 소환할 수
+    있는가" 를 모르는 채로 소환하면 소생 제한을 무시한 몬스터가 판에
+    올라온다. 파괴 내성과 같은 자리다.
     """
-    assert RULE_GATED == {DESTROY}
+    assert RULE_GATED == {DESTROY, OperationKind.SPECIAL_SUMMON}
     assert is_rule_gated(DESTROY)
+    assert is_rule_gated(OperationKind.SPECIAL_SUMMON)
     assert not is_rule_gated(SEND)
     assert not is_rule_gated(DISCARD)
     assert not is_rule_gated(MOVE)

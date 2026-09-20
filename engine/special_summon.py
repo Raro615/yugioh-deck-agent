@@ -58,7 +58,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from engine.action import PlayerAction, PlayerActionKind
-from engine.action_execution import ActionExecutor
 from engine.effect.delta import StateDelta, SummonKind
 from engine.summon import SummonError, SummonPlacement, SummonProcedure
 from engine.vocabulary import Position, Zone
@@ -153,13 +152,17 @@ class SpecialSummonHandler:
         return self.executor.apply(state, action)
 
 
-def special_summoning_executor() -> ActionExecutor:
+def special_summoning_executor() -> "ActionExecutor":
     """
     특수 소환을 **아는** 실행기.
 
     기본 ``ActionExecutor`` 는 여전히 빈 채로 둔다 (ADR-006). 둘 다 필요하면
     :func:`~engine.summon.summon_executor` 를 쓴다.
     """
+    # 여기서 읽는다 — 이 모듈을 효과 실행기가 쓰므로, 실행기 계층에
+    # 의존하면 import 고리가 생긴다 (Phase 2-U).
+    from engine.action_execution import ActionExecutor
+
     return ActionExecutor().register(
         PlayerActionKind.SPECIAL_SUMMON, SpecialSummonHandler()
     )

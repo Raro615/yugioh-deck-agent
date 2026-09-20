@@ -156,6 +156,8 @@ class NormalSummonExecutor:
             card=plan.card,
             player=plan.player,
             owner=plan.owner,
+            # 일반 소환은 **자기 패에서만** 나온다 (RULE-SUMMON-009).
+            from_player=plan.player,
             from_zone=SUMMON_FROM_ZONE,
             to_zone=SUMMON_TO_ZONE,
             slot=plan.slot,

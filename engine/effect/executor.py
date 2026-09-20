@@ -77,13 +77,16 @@ from engine.effect.operation import (
     MoveOperation,
     Operation,
     OperationKind,
+    SpecialSummonOperation,
 )
 from engine.effect.journal import EventJournal
 from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.effect.semantics import (
     MISSING_GATE,
     DestructionRuling,
+    SummonRuling,
     UnknownDestructionRuling,
+    UnknownSummonRuling,
     collect_unchecked,
     gating_rules,
     is_rule_gated,
@@ -98,7 +101,9 @@ from engine.effect.resolution import (
 )
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
+from engine.special_summon import SPECIAL_SUMMON_PROCEDURE
 from engine.state.game_state import GameState
+from engine.summon import SummonError, SummonPlacement
 from engine.validation import ValidationCode
 from engine.vocabulary import Zone
 
@@ -187,6 +192,10 @@ SUPPORTED: frozenset[OperationKind] = frozenset(DESTINATION) | {
     OperationKind.DRAW,
     OperationKind.CHANGE_LIFE,
     OperationKind.MOVE,
+    # 특수 소환은 ``DESTINATION`` 표에 들어가지 않는다 — 목적지만이 아니라
+    # 칸과 표시 형식이 필요하고, 남기는 변화도 ``MonsterSummoned`` 다
+    # (Phase 2-U). 절차는 Phase 2-T 의 ``SummonProcedure`` 가 그대로 한다.
+    OperationKind.SPECIAL_SUMMON,
 }
 
 #: 지원하지 않는 일과, 무엇이 없어서 못 하는가.
@@ -214,6 +223,8 @@ class _Step:
     """``instances`` 와 짝을 이루는 **목적지의 주인.** 계획 단계에서 정한다."""
     amount: int | None = None
     player: int | None = None
+    placements: tuple[SummonPlacement, ...] = ()
+    """소환이 확정한 배치들. 소환이 아닌 일에는 비어 있다 (Phase 2-U)."""
 
     def __post_init__(self) -> None:
         if len(self.owners) != len(self.instances):
@@ -271,13 +282,14 @@ class EffectExecutor:
     그것이 기본 상태이고, 그 상태에서는 어떤 효과도 실행되지 않는다.
     """
 
-    __slots__ = ("_lookup", "_journal", "_destruction")
+    __slots__ = ("_lookup", "_journal", "_destruction", "_summoning")
 
     def __init__(
         self,
         lookup: EffectImplementationLookup | None = None,
         journal: EventJournal | None = None,
         destruction: DestructionRuling | None = None,
+        summoning: SummonRuling | None = None,
     ):
         self._lookup = lookup if lookup is not None else EmptyImplementationLookup()
         # 기록은 **선택**이다. 없으면 아무것도 적지 않고, 있어도 실행
@@ -289,6 +301,12 @@ class EffectExecutor:
         self._destruction = (
             destruction if destruction is not None else UnknownDestructionRuling()
         )
+        # 소환 판정도 **선택이 아니다.** 주지 않으면 어떤 특수 소환도
+        # 일어나지 않는다 — "이 카드를 특수 소환할 수 있는가" 는 카드마다
+        # 다르고 그것을 읽는 계층이 없다 (Phase 2-U).
+        self._summoning = (
+            summoning if summoning is not None else UnknownSummonRuling()
+        )
 
     @property
     def journal(self) -> EventJournal | None:
@@ -297,6 +315,10 @@ class EffectExecutor:
     @property
     def destruction(self) -> DestructionRuling:
         return self._destruction
+
+    @property
+    def summoning(self) -> SummonRuling:
+        return self._summoning
 
     # ==================================================================
     # 진입점
@@ -531,6 +553,9 @@ class EffectExecutor:
                 player=_resolve_player(operation.who, context),
             )
 
+        if isinstance(operation, SpecialSummonOperation):
+            return self._plan_summon_operation(state, definition, context, operation)
+
         if isinstance(operation, (CardOperation, MoveOperation)):
             return self._plan_card_operation(state, definition, context, operation)
 
@@ -627,6 +652,96 @@ class EffectExecutor:
             )
         return _Step(operation, instances=tuple(instances), owners=tuple(owners))
 
+    def _plan_summon_operation(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        operation: SpecialSummonOperation,
+    ) -> "_Step | EffectResult":
+        """
+        고른 몬스터를 어디에 놓을지 **Phase 2-T 의 절차에게 묻는다.**
+
+        자리 찾기 · 빈 칸 찾기는 여기서 다시 하지 않는다 — 플레이어가
+        선언한 특수 소환과 **같은 코드**를 쓴다
+        (:data:`~engine.special_summon.SPECIAL_SUMMON_PROCEDURE`).
+
+        순서가 규칙이다. 대상이 적법한가(Phase 2-N) → 특수 소환해도
+        되는가(관문) → 어디에 놓을 수 있는가. **판에 손대기 전에** 전부
+        끝낸다.
+        """
+        selected = self._resolve_selection(definition, context, operation)
+        if isinstance(selected, EffectResult):
+            return selected
+        ref, selection = selected
+
+        legal = self._check_target(state, definition.target_spec(ref), selection, context, ref)
+        if legal is not None:
+            return legal
+
+        placements: list[SummonPlacement] = []
+        for instance in selection.chosen:
+            gate = self._check_rule_gate(operation.kind, instance)
+            if gate is not None:
+                return gate
+            try:
+                placements.append(
+                    SPECIAL_SUMMON_PROCEDURE.plan_for(
+                        state, instance, context.controller
+                    )
+                )
+            except SummonError as error:
+                # 지시를 수행할 수 없다. **적법성 위반이 아니다** — 자리가
+                # 어긋났거나 놓을 칸이 없다는 뜻이고, 판은 그대로다.
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                    f"{instance} 를 특수 소환할 수 없습니다: {error}",
+                )
+
+        if not placements:
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.TOO_FEW_SELECTED,
+                f"{ref} 에 고른 카드가 없습니다.",
+            )
+        return _Step(
+            operation,
+            instances=tuple(p.card for p in placements),
+            owners=tuple(p.owner for p in placements),
+            placements=tuple(placements),
+        )
+
+    def _resolve_selection(
+        self,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        operation: Operation,
+    ):
+        """
+        일이 가리키는 이름과 이번에 골라진 것. 실패하면 :class:`EffectResult`.
+
+        ``_plan_card_operation`` 과 같은 검사를 두 번 적지 않으려고 뽑아냈다.
+        """
+        ref = operation.target_refs[0]
+        try:
+            definition.target_spec(ref)
+        except KeyError:
+            return _fail(
+                ResolutionStatus.INVALID_CONTEXT,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{operation.kind.value} 가 선언되지 않은 대상 {ref} 를 "
+                "가리킵니다.",
+            )
+        selection = context.selection_for(ref)
+        if selection is None:
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.TOO_FEW_SELECTED,
+                f"{ref} 에 고른 카드가 없습니다.",
+            )
+        return ref, selection
+
     def _check_target(
         self,
         state: GameState,
@@ -682,19 +797,28 @@ class EffectExecutor:
         if not is_rule_gated(kind):
             return None
 
-        verdict = self._destruction.may_be_destroyed(instance)
+        if kind is OperationKind.SPECIAL_SUMMON:
+            verdict = self._summoning.may_be_special_summoned(instance)
+            refusal = f"{instance} 는 특수 소환할 수 없다고 판정되었습니다."
+            unknown = f"{instance} 를 특수 소환해도 되는지 판정할 수 없습니다"
+        else:
+            verdict = self._destruction.may_be_destroyed(instance)
+            refusal = f"{instance} 는 파괴되지 않는다고 판정되었습니다."
+            unknown = f"{instance} 를 파괴해도 되는지 판정할 수 없습니다"
+
         if verdict is ConditionResult.TRUE:
             return None
         if verdict is ConditionResult.FALSE:
             return _fail(
                 ResolutionStatus.INVALID_TARGET,
                 ValidationCode.CANDIDATE_NOT_ELIGIBLE,
-                f"{instance} 는 파괴되지 않는다고 판정되었습니다.",
+                refusal,
             )
         return _fail(
             ResolutionStatus.UNCHECKED_RULES,
             ValidationCode.RULE_NOT_IMPLEMENTED,
-            f"{instance} 를 파괴해도 되는지 판정할 수 없습니다: "
+            unknown
+            + ": "
             + " · ".join(gating_rules(kind))
             + ". 판정할 수 없는 것을 허가로 바꾸지 않습니다.",
             missing=MISSING_GATE[kind],
@@ -747,6 +871,17 @@ class EffectExecutor:
             return step.record(), (
                 LifeChanged(player=step.player, before=before, after=after),
             )
+
+        if operation.kind is OperationKind.SPECIAL_SUMMON:
+            # 놓는 일은 **Phase 2-T 의 절차**가 한다. 여기서 ``state.move`` 를
+            # 직접 부르면 칸과 표시 형식이 두 곳에서 정해진다.
+            changes = []
+            for placement in step.placements:
+                SPECIAL_SUMMON_PROCEDURE.place(state, placement)
+                changes.append(
+                    placement.to_delta(SPECIAL_SUMMON_PROCEDURE.summon)
+                )
+            return step.record(), tuple(changes)
 
         # ``MOVE`` 는 목적지를 **조작이 들고 있다.** 나머지는 의미가 목적지를
         # 정한다 (파괴 → 묘지). 그 차이가 이 한 줄이다.

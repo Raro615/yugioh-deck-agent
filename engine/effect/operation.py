@@ -87,6 +87,20 @@ class OperationKind(str, Enum):
     DISCARD = "discard"
     RETURN_TO_HAND = "return_to_hand"
     RETURN_TO_DECK = "return_to_deck"
+    SPECIAL_SUMMON = "special_summon"
+    """
+    몬스터를 **특수 소환한다** (Phase 2-U).
+
+    ``MOVE`` 로 필드에 놓는 것과 **다르다.** 카드가 몬스터 존에 들어가는 것은
+    같지만, 소환은 칸 · 표시 형식 · 소환 조건을 요구하고 "특수 소환되었을
+    때" 트리거를 낳는다. 목적지만 같은 것을 같은 일로 적으면 그 구분이
+    영영 사라진다 (ADR-002 가 파괴와 묘지로 보내기를 가른 것과 같은 이유).
+
+    ``PlayerActionKind.SPECIAL_SUMMON`` 과도 **다른 어휘**다. 저쪽은 고르는
+    주체가 고르는 행위이고, 이쪽은 효과 해결 중에 수행되는 일이다
+    (ADR-001). 둘이 같은 절차(:class:`~engine.summon.SummonProcedure`)를
+    쓰지만 같은 enum 은 아니다.
+    """
     DRAW = "draw"
     CHANGE_LIFE = "change_life"
     MOVE = "move"
@@ -118,6 +132,9 @@ REASON_NAMES: dict[OperationKind, tuple[str, ...]] = {
     OperationKind.DISCARD: ("DISCARD", "EFFECT"),
     OperationKind.RETURN_TO_HAND: ("RETURN", "EFFECT"),
     OperationKind.RETURN_TO_DECK: ("RETURN", "EFFECT"),
+    # 효과로 특수 소환되었다는 사실을 **기존 이유 모델로** 적는다
+    # (Phase 2-U §4). ``SpecialSummonReason`` 같은 새 체계를 만들지 않는다.
+    OperationKind.SPECIAL_SUMMON: ("SPSUMMON", "EFFECT"),
     OperationKind.DRAW: ("DRAW", "EFFECT"),
     OperationKind.CHANGE_LIFE: ("EFFECT",),
     # **비어 있는 것이 사실이다.** 이유를 말할 수 없는 이동이므로
@@ -463,6 +480,63 @@ class MoveOperation(Operation):
 
 
 @dataclass(frozen=True, slots=True)
+class SpecialSummonOperation(Operation):
+    """
+    대상으로 고른 몬스터를 **특수 소환한다.**
+
+    ``CardOperation`` 이 아닌 이유
+    ------------------------------
+    ``CardOperation`` 의 일들은 목적지가 **의미가 정하는 한 자리**이고
+    (파괴 → 묘지), 실행기가 ``DESTINATION`` 표를 보고 그대로 옮긴다. 소환은
+    그 모양이 아니다 — 칸 번호와 표시 형식이 필요하고, 남기는 변화도
+    ``ZoneMoved`` 가 아니라 :class:`~engine.effect.delta.MonsterSummoned` 다.
+
+    그 표에 끼워 넣으면 "몬스터 존으로 옮겼다" 와 "특수 소환되었다" 가 같은
+    기록이 되고, "특수 소환되었을 때" 트리거를 영영 구분할 수 없다.
+
+    **어떤 특수 소환법인가는 말하지 않는다.** 융합 · 싱크로 · 엑시즈 · 링크는
+    재료를 고르는 절차가 각자 있고, 그 절차가 생길 때 이름을 갖는다
+    (STRUCTURAL-62).
+
+    고르는 일은 여기서 하지 않는다
+    ------------------------------
+    ``target_ref`` 는 **이름**이고, 실제로 어느 카드가 골라졌는지는
+    :class:`~engine.effect.resolution.ResolutionContext` 에 있다. 실행기가
+    임의로 고르지 않는다 (Phase 2-U §6).
+    """
+
+    target_ref: TargetRef
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target_ref, TargetRef):
+            raise TypeError(
+                "SpecialSummonOperation 에는 TargetRef 가 필요합니다. 어느 "
+                f"카드인지 말하지 않는 소환은 일이 아닙니다: {self.target_ref!r}"
+            )
+
+    @property
+    def kind(self) -> OperationKind:
+        return OperationKind.SPECIAL_SUMMON
+
+    @property
+    def target_refs(self) -> tuple[TargetRef, ...]:
+        return (self.target_ref,)
+
+    def canonical_state(self) -> tuple:
+        return ("special_summon", self.target_ref.name)
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "special_summon",
+            "target_ref": self.target_ref.name,
+            "reasons": list(self.reason_names),
+        }
+
+    def describe_ko(self) -> str:
+        return f"{self.target_ref} 를 특수 소환"
+
+
+@dataclass(frozen=True, slots=True)
 class UnimplementedOperation(Operation):
     """
     **아직 표현할 수 없는 일.**
@@ -498,5 +572,6 @@ __all__ = [
     "DrawOperation",
     "LifeChangeOperation",
     "MoveOperation",
+    "SpecialSummonOperation",
     "UnimplementedOperation",
 ]
