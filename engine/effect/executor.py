@@ -60,6 +60,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Callable
 
 from engine.condition import ConditionEvaluator, ConditionResult
 from engine.effect.delta import CardDrawn, LifeChanged, StateDelta, ZoneMoved
@@ -188,15 +189,11 @@ def destination_player(kind: OperationKind, card) -> int:
 #:
 #: 할 줄 아는 것과 해도 되는 것을 한 집합에 넣지 않는다. 넣으면 "지원한다"
 #: 가 곧 "허가한다" 가 된다.
-SUPPORTED: frozenset[OperationKind] = frozenset(DESTINATION) | {
-    OperationKind.DRAW,
-    OperationKind.CHANGE_LIFE,
-    OperationKind.MOVE,
-    # 특수 소환은 ``DESTINATION`` 표에 들어가지 않는다 — 목적지만이 아니라
-    # 칸과 표시 형식이 필요하고, 남기는 변화도 ``MonsterSummoned`` 다
-    # (Phase 2-U). 절차는 Phase 2-T 의 ``SummonProcedure`` 가 그대로 한다.
-    OperationKind.SPECIAL_SUMMON,
-}
+#: 이 실행기가 **할 줄 아는** 일. :data:`OPERATION_HANDLERS` 에서 세운다 —
+#: 목록을 따로 적어 두면 표와 어긋나는 날이 온다 (Phase 2-V).
+#:
+#: 모듈 끝에서 정의된다. 표가 클래스 뒤에 와야 하기 때문이다.
+SUPPORTED: frozenset[OperationKind]
 
 #: 지원하지 않는 일과, 무엇이 없어서 못 하는가.
 UNSUPPORTED_REASON: dict[OperationKind, str] = {
@@ -521,48 +518,78 @@ class EffectExecutor:
         context: ResolutionContext,
         operation: Operation,
     ) -> "_Step | EffectResult":
-        if isinstance(operation, DrawOperation):
-            if operation.count <= 0:
-                # :class:`DrawOperation` 이 생성 시점에 막지만, 그 방어를
-                # 우회해서 들어온 값도 조용히 통과시키지 않는다.
-                return _fail(
-                    ResolutionStatus.INVALID_OPERATION,
-                    ValidationCode.INVALID_AMOUNT,
-                    f"{operation.count}장 드로우는 의미가 없습니다.",
-                )
-            player = _resolve_player(operation.who, context)
-            available = len(state.player(player).deck)
-            if available < operation.count:
-                # **뽑기 전에** 센다. 덱이 모자랄 때의 규칙(덱 데스)이 아직
-                # 없으므로, 있는 만큼만 뽑아 놓고 성공처럼 끝내지 않는다.
-                # ``GameState.draw`` 는 있는 만큼만 옮기고 멈추는 primitive
-                # 라서, 그대로 부르면 "3장 드로우" 가 조용히 1장이 된다.
-                return _fail(
-                    ResolutionStatus.INSUFFICIENT_CARDS,
-                    ValidationCode.INSUFFICIENT_DECK,
-                    f"덱이 {available}장뿐이라 {operation.count}장을 뽑을 수 "
-                    "없습니다. 한 장도 뽑지 않습니다.",
-                    missing="deck-out rule (Phase 2-G)",
-                )
-            return _Step(operation, amount=operation.count, player=player)
+        """
+        일 하나를 **표에 따라** 계획기에게 넘긴다.
 
-        if isinstance(operation, LifeChangeOperation):
-            return _Step(
-                operation,
-                amount=operation.delta,
-                player=_resolve_player(operation.who, context),
+        ``isinstance`` 사슬을 두지 않는다 — 계획과 적용이 서로 다른 것으로
+        갈라지면 (한쪽은 클래스, 한쪽은 ``kind``) 새 일을 더할 때 한 곳만
+        고쳐도 조용히 지나간다. 표 하나가 두 쪽을 함께 들고 있다
+        (Phase 2-V).
+        """
+        handler = OPERATION_HANDLERS.get(operation.kind)
+        if handler is None:
+            return _fail(
+                ResolutionStatus.UNSUPPORTED_OPERATION,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"이 실행기는 {operation.kind.value} 를 다루지 못합니다 "
+                f"({type(operation).__name__}).",
+                missing=UNSUPPORTED_REASON.get(
+                    operation.kind, f"{operation.kind.value} 실행"
+                ),
             )
+        return handler.plan(self, state, definition, context, operation)
 
-        if isinstance(operation, SpecialSummonOperation):
-            return self._plan_summon_operation(state, definition, context, operation)
+    # ------------------------------------------------------------------
+    # 종류별 계획기 — 표가 부른다
+    # ------------------------------------------------------------------
+    def _plan_draw(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        operation: DrawOperation,
+    ) -> "_Step | EffectResult":
+        """
+        표는 ``kind`` 로 찾지만 여기서는 :class:`DrawOperation` 의 값을
+        읽는다. 그래도 되는 이유는 **조작 스스로가 자기 종류를 제한하기**
+        때문이다 — :class:`CardOperation` 은 ``DRAW`` 로 만들어지지 않는다
+        (생성 시점에 ``ValueError``). 종류가 곧 부류다.
+        """
+        if operation.count <= 0:
+            # :class:`DrawOperation` 이 생성 시점에 막지만, 그 방어를
+            # 우회해서 들어온 값도 조용히 통과시키지 않는다.
+            return _fail(
+                ResolutionStatus.INVALID_OPERATION,
+                ValidationCode.INVALID_AMOUNT,
+                f"{operation.count}장 드로우는 의미가 없습니다.",
+            )
+        player = _resolve_player(operation.who, context)
+        available = len(state.player(player).deck)
+        if available < operation.count:
+            # **뽑기 전에** 센다. 덱이 모자랄 때의 규칙(덱 데스)이 아직
+            # 없으므로, 있는 만큼만 뽑아 놓고 성공처럼 끝내지 않는다.
+            # ``GameState.draw`` 는 있는 만큼만 옮기고 멈추는 primitive
+            # 라서, 그대로 부르면 "3장 드로우" 가 조용히 1장이 된다.
+            return _fail(
+                ResolutionStatus.INSUFFICIENT_CARDS,
+                ValidationCode.INSUFFICIENT_DECK,
+                f"덱이 {available}장뿐이라 {operation.count}장을 뽑을 수 "
+                "없습니다. 한 장도 뽑지 않습니다.",
+                missing="deck-out rule (Phase 2-G)",
+            )
+        return _Step(operation, amount=operation.count, player=player)
 
-        if isinstance(operation, (CardOperation, MoveOperation)):
-            return self._plan_card_operation(state, definition, context, operation)
-
-        return _fail(
-            ResolutionStatus.UNSUPPORTED_OPERATION,
-            ValidationCode.RULE_NOT_IMPLEMENTED,
-            f"알 수 없는 일입니다: {type(operation).__name__}",
+    def _plan_life_change(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        operation: LifeChangeOperation,
+    ) -> "_Step | EffectResult":
+        return _Step(
+            operation,
+            amount=operation.delta,
+            player=_resolve_player(operation.who, context),
         )
 
     def _plan_card_operation(
@@ -832,57 +859,73 @@ class EffectExecutor:
         self, state: GameState, step: _Step
     ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
         """
-        일 하나를 수행하고 **(무슨 일을 했는가, 판이 어떻게 달라졌는가)** 를
-        돌려준다.
+        일 하나를 **표에 따라** 수행기에게 넘긴다.
 
-        변화는 바꾸기 **직전·직후**를 실제로 읽어서 적는다. 계획한 값을
-        그대로 옮겨 적지 않는다 — 그러면 기록이 판과 어긋나도 알 수 없다.
+        계획과 **같은 표**를 쓴다 — 두 dispatch 가 서로 다른 것으로 갈라지면
+        (계획은 클래스로, 적용은 ``kind`` 로) 새 일을 더할 때 한 곳만 고쳐도
+        조용히 지나간다 (Phase 2-V).
         """
+        handler = OPERATION_HANDLERS.get(step.operation.kind)
+        if handler is None:  # pragma: no cover - 계획 단계가 막는다
+            raise EffectExecutionError(
+                f"{step.operation.kind.value} 를 수행할 수 없는데 계획이 "
+                "통과했습니다."
+            )
+        return handler.apply(self, state, step)
+
+    # ------------------------------------------------------------------
+    # 종류별 수행기 — 표가 부른다. **기존 primitive 만 부른다.**
+    # ------------------------------------------------------------------
+    def _apply_draw(
+        self, state: GameState, step: _Step
+    ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
+        assert step.player is not None and step.amount is not None
+        drawn = state.draw(step.player, step.amount)
+        if len(drawn) != step.amount:  # pragma: no cover - 계획이 막는다
+            raise EffectExecutionError(
+                f"{step.amount}장을 뽑기로 했는데 {len(drawn)}장만 옮겨졌습니다."
+            )
+        record = AppliedOperation(
+            kind=OperationKind.DRAW,
+            reason_names=step.operation.reason_names,
+            instances=tuple(card.instance_id for card in drawn),
+            amount=step.amount,
+            player=step.player,
+        )
+        changes = tuple(
+            CardDrawn(player=step.player, card=card.instance_id) for card in drawn
+        )
+        return record, changes
+
+    def _apply_life_change(
+        self, state: GameState, step: _Step
+    ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
+        assert step.player is not None and step.amount is not None
+        player = state.player(step.player)
+        before = player.life_points
+        after = player.change_life(step.amount)
+        if after == before:
+            # 실제로 달라진 것이 없으면 변화도 없다 (0 에서 더 깎는 경우).
+            return step.record(), ()
+        return step.record(), (
+            LifeChanged(player=step.player, before=before, after=after),
+        )
+
+    def _apply_special_summon(
+        self, state: GameState, step: _Step
+    ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
+        # 놓는 일은 **Phase 2-T 의 절차**가 한다. 여기서 ``state.move`` 를
+        # 직접 부르면 칸과 표시 형식이 두 곳에서 정해진다.
+        changes = []
+        for placement in step.placements:
+            SPECIAL_SUMMON_PROCEDURE.place(state, placement)
+            changes.append(placement.to_delta(SPECIAL_SUMMON_PROCEDURE.summon))
+        return step.record(), tuple(changes)
+
+    def _apply_card_movement(
+        self, state: GameState, step: _Step
+    ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
         operation = step.operation
-
-        if operation.kind is OperationKind.DRAW:
-            assert step.player is not None and step.amount is not None
-            drawn = state.draw(step.player, step.amount)
-            if len(drawn) != step.amount:  # pragma: no cover - 계획이 막는다
-                raise EffectExecutionError(
-                    f"{step.amount}장을 뽑기로 했는데 {len(drawn)}장만 "
-                    "옮겨졌습니다."
-                )
-            record = AppliedOperation(
-                kind=OperationKind.DRAW,
-                reason_names=operation.reason_names,
-                instances=tuple(card.instance_id for card in drawn),
-                amount=step.amount,
-                player=step.player,
-            )
-            changes = tuple(
-                CardDrawn(player=step.player, card=card.instance_id) for card in drawn
-            )
-            return record, changes
-
-        if operation.kind is OperationKind.CHANGE_LIFE:
-            assert step.player is not None and step.amount is not None
-            player = state.player(step.player)
-            before = player.life_points
-            after = player.change_life(step.amount)
-            if after == before:
-                # 실제로 달라진 것이 없으면 변화도 없다 (0 에서 더 깎는 경우).
-                return step.record(), ()
-            return step.record(), (
-                LifeChanged(player=step.player, before=before, after=after),
-            )
-
-        if operation.kind is OperationKind.SPECIAL_SUMMON:
-            # 놓는 일은 **Phase 2-T 의 절차**가 한다. 여기서 ``state.move`` 를
-            # 직접 부르면 칸과 표시 형식이 두 곳에서 정해진다.
-            changes = []
-            for placement in step.placements:
-                SPECIAL_SUMMON_PROCEDURE.place(state, placement)
-                changes.append(
-                    placement.to_delta(SPECIAL_SUMMON_PROCEDURE.summon)
-                )
-            return step.record(), tuple(changes)
-
         # ``MOVE`` 는 목적지를 **조작이 들고 있다.** 나머지는 의미가 목적지를
         # 정한다 (파괴 → 묘지). 그 차이가 이 한 줄이다.
         destination = (
@@ -923,6 +966,75 @@ class EffectExecutor:
         return f"<EffectExecutor lookup={self._lookup!r} journal={journal}>"
 
 
+@dataclass(frozen=True, slots=True)
+class OperationHandler:
+    """
+    한 종류의 일을 **계획하고 수행하는 한 쌍.**
+
+    둘을 한 값에 묶는 이유는 하나다 — 따로 두면 계획만 더하고 수행을
+    빠뜨릴 수 있고, 그 실수는 실행 중에야 드러난다. 여기에 줄을 더하는 것이
+    "이 일을 할 줄 안다" 는 **유일한** 선언이다 (:data:`SUPPORTED` 도 이
+    표에서 세운다).
+    """
+
+    plan: Callable[
+        [
+            "EffectExecutor",
+            GameState,
+            EffectDefinition,
+            ResolutionContext,
+            Operation,
+        ],
+        "_Step | EffectResult",
+    ]
+    apply: Callable[
+        ["EffectExecutor", GameState, "_Step"],
+        "tuple[AppliedOperation, tuple[StateDelta, ...]]",
+    ]
+    note: str = ""
+    """이 일이 어떤 계층을 쓰는가. 사람이 읽는 설명이다."""
+
+
+#: 종류 → (계획기, 수행기). **이 실행기가 아는 것의 전부다.**
+#:
+#: 거대한 ``if/elif`` 하나로 모든 일을 처리하지 않는다 (Phase 2-V §3).
+#: 더 중요한 것은 **dispatch 가 하나**라는 점이다 — 예전에는 계획이
+#: ``isinstance`` 로, 적용이 ``kind`` 로 갈라져 있어서 새 일을 더할 때 한
+#: 곳만 고쳐도 조용히 지나갔다.
+OPERATION_HANDLERS: dict[OperationKind, OperationHandler] = {
+    OperationKind.DRAW: OperationHandler(
+        EffectExecutor._plan_draw,
+        EffectExecutor._apply_draw,
+        "GameState.draw",
+    ),
+    OperationKind.CHANGE_LIFE: OperationHandler(
+        EffectExecutor._plan_life_change,
+        EffectExecutor._apply_life_change,
+        "PlayerState.change_life",
+    ),
+    OperationKind.SPECIAL_SUMMON: OperationHandler(
+        EffectExecutor._plan_summon_operation,
+        EffectExecutor._apply_special_summon,
+        "SummonProcedure (Phase 2-T)",
+    ),
+    OperationKind.MOVE: OperationHandler(
+        EffectExecutor._plan_card_operation,
+        EffectExecutor._apply_card_movement,
+        "GameState.move — 의미 없는 이동 (Phase 2-L)",
+    ),
+    **{
+        kind: OperationHandler(
+            EffectExecutor._plan_card_operation,
+            EffectExecutor._apply_card_movement,
+            f"GameState.move → {zone.value} (의미: {kind.value})",
+        )
+        for kind, zone in DESTINATION.items()
+    },
+}
+
+SUPPORTED = frozenset(OPERATION_HANDLERS)
+
+
 def _fail(
     status: ResolutionStatus,
     code: ValidationCode,
@@ -946,6 +1058,8 @@ __all__ = [
     "DESTINATION",
     "DESTINATION_OWNER",
     "destination_player",
+    "OperationHandler",
+    "OPERATION_HANDLERS",
     "SUPPORTED",
     "UNSUPPORTED_REASON",
 ]

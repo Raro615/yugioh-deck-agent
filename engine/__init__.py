@@ -239,6 +239,33 @@ Duel Engine.
   모양은 맞지만 후보 조건이 ``IsCanBeSpecialSummoned`` 라 추측 없이는
   옮길 수 없다. ``docs/phase2u-effect-special-summon.md`` 참고.
 
+- **Phase 2-V** — 일 실행의 통합 (``effect/executor.py`` 의
+  ``OPERATION_HANDLERS``). 새 일을 더하지 않았다. 대신 **dispatch 를
+  하나로** 만들었다.
+
+  예전에는 계획이 ``isinstance`` 로, 적용이 ``kind`` 로 갈라져 있었고
+  ``SUPPORTED`` 는 손으로 적은 세 번째 목록이었다. "이 실행기가 무엇을 할
+  줄 아는가" 를 말하는 자리가 셋이었으므로, 새 일을 더할 때 한 곳만 고쳐도
+  조용히 지나갔다 — 그리고 그 실수는 **판을 이미 건드린 뒤**에 드러났다.
+
+  이제 ``OperationHandler(plan, apply, note)`` 한 쌍을 표에 넣는 것이 그
+  선언의 **전부**이고, ``SUPPORTED`` 도 그 표에서 센다. ``_plan_operation``
+  과 ``_apply`` 는 표를 찾아 넘기는 세 줄이다.
+
+  종류별 코드는 거대한 ``if/elif`` 가 아니라 이름 있는 계획기/수행기로
+  흩어져 있다. 카드 이동 여덟 가지(``move`` + 의미 있는 이동 일곱)는
+  **한 쌍을 나눠 쓴다** — 의미는 ``kind`` 가 들고 다니고(``DESTINATION`` ·
+  ``REASON_NAMES``) 코드가 갈라지지 않는다. ADR-002("파괴 ≠ 묘지로
+  보내기")는 분기가 아니라 **값의 차이**로 유지된다.
+
+  표를 ``kind`` 로 키잡아도 되는 이유는 **조작이 스스로 자기 종류를
+  제한하기** 때문이다 — ``CardOperation(OperationKind.DRAW, ...)`` 는 생성
+  시점에 ``ValueError`` 다. 종류와 부류가 1:1 이라는 것을 테스트가
+  ``OperationKind`` 전체에 대해 확인한다.
+
+  **행동은 달라지지 않았다.** 기존 테스트 2222개가 하나도 수정되지 않은
+  채로 통과한다. ``docs/phase2v-operation-integration.md`` 참고.
+
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
 변경이고, 변경을 적으려면 ``effect.delta`` 가 필요한데 ``effect`` 가 이미
