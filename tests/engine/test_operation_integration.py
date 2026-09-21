@@ -870,6 +870,11 @@ def test_h_no_real_card_uses_move_or_special_summon_yet():
     §13 의 정직한 결과: MOVE 는 **설계상** 실제 카드가 될 수 없고
     (``LibraryEntry`` 가 거부한다), 특수 소환은 소환 조건 계층이 없어서
     아직 실행 가능한 카드가 없다 (Phase 2-U · STRUCTURAL-64).
+
+    목록이 늘어나면 이 단언이 깨지도록 되어 있다 — 그것이 이 테스트의
+    일이다. Phase 2-W 에서 실제 카드 다섯 장이 더해지며 실제로 깨졌고,
+    ``SEND_TO_GRAVE`` · ``DISCARD`` 가 여기 들어왔다. 요점(MOVE 와 특수
+    소환에는 아직 실제 카드가 없다)은 그대로다.
     """
     from engine.effect.library import EFFECT_LIBRARY
 
@@ -884,6 +889,8 @@ def test_h_no_real_card_uses_move_or_special_summon_yet():
         OperationKind.DRAW,
         OperationKind.CHANGE_LIFE,
         OperationKind.DESTROY,
+        OperationKind.SEND_TO_GRAVE,  # Phase 2-W — 육신보살
+        OperationKind.DISCARD,  # Phase 2-W — 벌금
     }
     assert OperationKind.MOVE not in kinds
     assert OperationKind.SPECIAL_SUMMON not in kinds

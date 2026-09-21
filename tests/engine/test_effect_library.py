@@ -703,11 +703,33 @@ def test_the_library_makes_no_decisions_about_whether_to_use_an_effect():
     """
     "이 효과를 쓸 것인가" 는 AI 의 질문이다. 목록은 "쓰기로 했다면 무엇이
     일어나는가" 만 안다.
+
+    **낱말이 아니라 코드를 본다.** 예전에는 원문에 ``"choose"`` 가 있는지
+    보았는데, 그 검사는 ``ChoiceSpec(chooser=...)`` 처럼 **누가 고르는가를
+    규칙으로 적은 자리**까지 잡는다 (``chooser`` 안에 ``choose`` 가 있다).
+    고르는 주체를 명세에 적는 것은 목록이 고르는 것이 아니라 카드가 그렇게
+    적혀 있다는 뜻이므로, 정의하거나 부르는 **함수 이름**만 본다.
     """
-    source = pathlib.Path("engine/effect/library.py").read_text("utf-8")
+    tree = ast.parse(pathlib.Path("engine/effect/library.py").read_text("utf-8"))
+
+    names = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    }
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        if isinstance(callee, ast.Name):
+            names.add(callee.id)
+        elif isinstance(callee, ast.Attribute):
+            names.add(callee.attr)
 
     for forbidden in ("choose", "select_best", "evaluate_value", "score", "policy"):
-        assert forbidden not in source
+        assert not any(forbidden in name for name in names), forbidden
+    # 무작위도 없다 — 목록은 결정론적이다.
+    assert "random" not in pathlib.Path("engine/effect/library.py").read_text("utf-8")
 
 
 @requires_official_db

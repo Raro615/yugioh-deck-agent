@@ -266,6 +266,38 @@ Duel Engine.
   **행동은 달라지지 않았다.** 기존 테스트 2222개가 하나도 수정되지 않은
   채로 통과한다. ``docs/phase2v-operation-integration.md`` 참고.
 
+- **Phase 2-W** — 실제 카드 실행 범위 (``effect/library.py``).
+  **엔진 코드를 바꾸지 않았다.** 지금까지 쌓인 경로가 실제 카드에서도
+  같은 경계를 지키는지만 본다.
+
+  공식 스크립트 12,702개를 실제로 읽어서 걸렀다. 판을 바꾸는 호출이 전부
+  옮길 수 있는 것인 카드가 1,377장 남았고, 거기서 **후보 조건이 판정
+  가능한 것**만 다시 골랐다. 가르는 선은 언제나 같은 술어다 —
+  ``Card.IsAbleToHand`` · ``IsAbleToRemove`` · ``IsAbleToDeck`` ·
+  ``IsCanBeSpecialSummoned``. 전부 **규칙 관문**이고 이 엔진에 그 계층이
+  없으므로, 없는 채로 실행하면 추측이 된다.
+
+  그래서 실제 카드 다섯 장이 더해지고 (치료의 신 다이안 켓 84257639 ·
+  욕망의 선물 5915629 · 갑부 고블린 70368879 · 육신보살 15103313 ·
+  벌금 92595643) 실행 가능한 실제 카드가 여덟 장이 되었다. ``DRAW`` ·
+  ``CHANGE_LIFE`` 에 더해 ``SEND_TO_GRAVE`` 와 ``DISCARD`` 가 처음으로
+  실제 카드로 실행된다.
+
+  **두 장은 일부러 실행하지 않는 채로 실었다** — 강제 탈출 장치
+  (94192409, ``IsAbleToHand``)와 로스트 (24623598, ``IsAbleToRemove``).
+  ``BANISH`` 와 ``RETURN_TO_HAND`` 가 실제 카드로 검증되지 않은 까닭을
+  코드 안에 남겨 두기 위해서다. 목록에서 빼면 "왜 못 하는가" 가 사라진다
+  (블랙홀 · 죽은 자의 소생과 같은 자리).
+
+  조사가 STRUCTURAL-48 의 **크기**를 재 주었다: RETURN_TO_HAND 후보
+  81장 중 80장, BANISH 14장 전부, SPECIAL_SUMMON 67장 전부가 같은 관문에
+  막혀 있다 (STRUCTURAL-68).
+
+  실제 카드 테스트는 ``@pytest.mark.real_card`` 로 synthetic 과 갈라져
+  있다 — 앞은 카드의 *의미*를 주장하고 뒤는 경로의 *모양*을 시험하므로,
+  하나가 다른 하나를 대체하지 않는다.
+  ``docs/phase2w-real-card-execution.md`` 참고.
+
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
 변경이고, 변경을 적으려면 ``effect.delta`` 가 필요한데 ``effect`` 가 이미

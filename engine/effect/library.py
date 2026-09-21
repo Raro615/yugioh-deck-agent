@@ -168,6 +168,14 @@ RAIN_OF_MERCY = 66719324
 DARK_HOLE = 53129443
 MYSTICAL_SPACE_TYPHOON = 5318639
 MONSTER_REBORN = 83764718
+# Phase 2-W 에서 더한 것들
+DIAN_KETO = 84257639
+THE_GIFT_OF_GREED = 5915629
+UPSTART_GOBLIN = 70368879
+SELF_MUMMIFICATION = 15103313
+FINE = 92595643
+COMPULSORY_EVACUATION_DEVICE = 94192409
+DISAPPEAR = 24623598
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -349,13 +357,265 @@ _MONSTER_REBORN_ENTRY = LibraryEntry(
     ),
 )
 
+# ----------------------------------------------------------------------
+# Phase 2-W — 실제 카드 실행 범위 넓히기
+#
+# 고른 기준은 "쉬워 보인다" 가 아니다. 스크립트 전체를 읽고 **추측 없이
+# 옮길 수 있는 것만** 실었다. 특히 ``IsAbleToHand`` · ``IsAbleToRemove`` ·
+# ``IsAbleToDeck`` · ``IsCanBeSpecialSummoned`` 같은 술어가 후보 조건에
+# 있으면 그것은 **규칙 관문**이고, 이 엔진에 그 계층이 없으므로 실행
+# 가능으로 올리지 않는다 (STRUCTURAL-48 · 64).
+# ----------------------------------------------------------------------
+
+#: 치료의 신 다이안 켓 — "①: 자신은 1000 LP 회복한다."
+#:
+#: 이 목록에서 **가장 단순한 항목**이다. 대상도 비용도 조건도 없고
+#: (``s.tg`` 의 ``chk==0`` 가 무조건 ``true``), 하는 일이 상수 하나다.
+_DIAN_KETO_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(DIAN_KETO, 0),
+        source_card_id=DIAN_KETO,
+        operations=(LifeChangeOperation(delta=1000, who=PlayerRef.CONTROLLER),),
+        provenance=EffectProvenance.official_lua(
+            "c84257639.lua 의 s.op 을 그대로 옮겼다."
+        ),
+    ),
+    lua_file="c84257639.lua",
+    lua_excerpt="Duel.Recover(p,d,REASON_EFFECT)  -- p = tp, d = Duel.SetTargetParam(1000)",
+    executable=True,
+)
+
+#: 욕망의 선물 — "상대는 덱에서 카드를 2장 드로우한다."
+#:
+#: 욕망의 항아리와 **같은 일을 다른 사람에게** 한다
+#: (``Duel.SetTargetPlayer(1-tp)``). 같은 ``DrawOperation`` 이 ``who`` 하나로
+#: 갈린다 — 드로우하는 주체를 조작 밖에 두지 않았기 때문에 새 일을 만들지
+#: 않고도 표현된다.
+_THE_GIFT_OF_GREED_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(THE_GIFT_OF_GREED, 0),
+        source_card_id=THE_GIFT_OF_GREED,
+        operations=(DrawOperation(count=2, who=PlayerRef.OPPONENT),),
+        # ``Duel.IsPlayerCanDraw(1-tp,2)`` 중 **덱 장수 부분만** 옮겼다
+        # (욕망의 항아리와 같은 이유 — 드로우를 막는 효과 계층이 없다).
+        activation=ZoneCountAtLeast(PlayerRef.OPPONENT, Zone.DECK, 2),
+        provenance=EffectProvenance.official_lua(
+            "c5915629.lua 의 s.target 과 s.activate 를 옮겼다."
+        ),
+    ),
+    lua_file="c5915629.lua",
+    lua_excerpt=(
+        "Duel.SetTargetPlayer(1-tp); Duel.SetTargetParam(2); "
+        "Duel.Draw(p,d,REASON_EFFECT)"
+    ),
+    executable=True,
+)
+
+#: 갑부 고블린 — "①: 자신은 덱에서 1장 드로우한다. 그 후, 상대는 1000 LP
+#: 회복한다."
+#:
+#: **한 효과가 서로 다른 두 종류의 일을 한다.** 이 목록에서 처음이다
+#: (은혜의 단비는 같은 종류 두 번이었다). ``EffectDefinition.operations`` 가
+#: 순서 있는 튜플이므로 "그 후" 가 그대로 담긴다.
+#:
+#: ``if Duel.Draw(...)>0 then`` 의 **조건부 연결은 옮기지 못했다.** 이
+#: 실행기는 계획을 전부 마친 뒤에 적용하므로 드로우가 부분적으로 성공하는
+#: 일이 없다 — 덱이 모자라면 ``INSUFFICIENT_CARDS`` 로 **둘 다** 일어나지
+#: 않는다. 두 모델이 갈리는 경우는 "드로우를 막는 효과" 가 있을 때뿐이고
+#: 그 계층이 이 엔진에 없다. 생기면 여기를 다시 봐야 한다 (STRUCTURAL-67).
+_UPSTART_GOBLIN_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(UPSTART_GOBLIN, 0),
+        source_card_id=UPSTART_GOBLIN,
+        operations=(
+            DrawOperation(count=1, who=PlayerRef.CONTROLLER),
+            LifeChangeOperation(delta=1000, who=PlayerRef.OPPONENT),
+        ),
+        activation=ZoneCountAtLeast(PlayerRef.CONTROLLER, Zone.DECK, 1),
+        provenance=EffectProvenance.official_lua(
+            "c70368879.lua 의 s.activate 를 옮겼다. "
+            "Duel.Draw(...)>0 조건부 연결은 옮기지 못했다."
+        ),
+    ),
+    lua_file="c70368879.lua",
+    lua_excerpt=(
+        "if Duel.Draw(p,d,REASON_EFFECT)>0 then Duel.BreakEffect(); "
+        "Duel.Recover(1-tp,1000,REASON_EFFECT) end"
+    ),
+    executable=True,
+)
+
+#: 육신보살 — "자신 필드 위에 존재하는 몬스터 1장을 선택하고 묘지로 보낸다."
+#:
+#: **이 목록에서 처음으로 파괴가 아닌 카드 이동을 실행한다.**
+#: ``Duel.SendtoGrave`` 이지 ``Duel.Destroy`` 가 아니므로
+#: ``OperationKind.SEND_TO_GRAVE`` 이고, ``REASON_NAMES`` 에 ``DESTROY`` 가
+#: 없다 (ADR-002). 같은 묘지로 가지만 다른 사건이다.
+#:
+#: **관문 없이 실행해도 되는 이유가 있다.** 스크립트의 후보 조건이
+#: ``nil`` 이다 — ``Duel.SelectTarget(tp,nil,tp,LOCATION_MZONE,0,1,1,nil)``.
+#: 강제 탈출 장치의 ``Card.IsAbleToHand`` 나 로스트의 ``Card.IsAbleToRemove``
+#: 같은 술어가 **원본에 아예 없다.** 그러므로 여기서 관문을 건너뛰는 것은
+#: 추측이 아니라 원본을 그대로 옮긴 결과다.
+#:
+#: ``tc:IsRelateToEffect(e)`` 와 해결 시점의 ``tc:IsControler(tp)`` 재확인은
+#: 싸이크론과 같은 이유로 옮기지 못했다 (STRUCTURAL-50). 실행 직전
+#: ``TargetResolver`` 가 다시 판정하므로 자리를 벗어난 대상은 거기서 걸린다.
+_SELF_MUMMIFICATION_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(SELF_MUMMIFICATION, 0),
+        source_card_id=SELF_MUMMIFICATION,
+        targets=TargetBinding.single(
+            TargetSpec.targeting(
+                ChoiceSpec(
+                    source=CandidateSource(
+                        # ``LOCATION_MZONE, 0`` — 자신 쪽만이다.
+                        zones=frozenset({Zone.MZONE}),
+                        owner=PlayerRef.CONTROLLER,
+                        # ``s.target`` 의 필터가 ``nil`` 이다. 조건 없음.
+                    ),
+                    minimum=1,
+                    maximum=1,
+                )
+            )
+        ),
+        operations=(CardOperation.send_to_grave(PRIMARY_TARGET),),
+        provenance=EffectProvenance.official_lua(
+            "c15103313.lua 의 s.target 과 s.activate 를 옮겼다. "
+            "IsRelateToEffect 재확인은 옮기지 못했다."
+        ),
+    ),
+    lua_file="c15103313.lua",
+    lua_excerpt=(
+        "Duel.SelectTarget(tp,nil,tp,LOCATION_MZONE,0,1,1,nil); "
+        "Duel.SendtoGrave(tc,REASON_EFFECT)"
+    ),
+    executable=True,
+)
+
+#: 벌금 — "자신은 패를 2장 버린다."
+#:
+#: **대상 지정이 아니라 고르기다.** 스크립트에 ``EFFECT_FLAG_CARD_TARGET``
+#: 이 없으므로 :meth:`TargetSpec.choosing` 이다 — 규칙상 "대상으로 한다" 와
+#: 다르고, 그 구분은 대상 내성 · "대상이 되었을 때" 트리거에서 갈린다.
+#:
+#: **여러 장을 한 번에** 다루는 첫 실제 카드다 (``minimum=maximum=2``).
+#: 발동 조건 ``IsExistingMatchingCard(nil,tp,LOCATION_HAND,0,2,e:GetHandler())``
+#: 는 "자기 자신을 뺀 자신의 패가 2장 이상" 이고, 발동 시점에 이 카드는
+#: 마법 / 함정 존에 있으므로 제외는 결과를 바꾸지 않는다 —
+#: :class:`ZoneCountAtLeast` 로 **정확히** 옮겨진다.
+_FINE_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(FINE, 0),
+        source_card_id=FINE,
+        targets=TargetBinding.single(
+            TargetSpec.choosing(
+                ChoiceSpec(
+                    source=CandidateSource(
+                        zones=frozenset({Zone.HAND}),
+                        owner=PlayerRef.CONTROLLER,
+                        # ``Duel.DiscardHand(p,nil,...)`` — 필터가 ``nil`` 이다.
+                    ),
+                    minimum=2,
+                    maximum=2,
+                    chooser=PlayerRef.CONTROLLER,
+                )
+            )
+        ),
+        operations=(CardOperation.discard(PRIMARY_TARGET),),
+        activation=ZoneCountAtLeast(PlayerRef.CONTROLLER, Zone.HAND, 2),
+        provenance=EffectProvenance.official_lua(
+            "c92595643.lua 의 s.target 과 s.activate 를 그대로 옮겼다."
+        ),
+    ),
+    lua_file="c92595643.lua",
+    lua_excerpt=(
+        "Duel.SetTargetPlayer(tp); "
+        "Duel.DiscardHand(p,nil,2,2,REASON_EFFECT|REASON_DISCARD)"
+    ),
+    executable=True,
+)
+
+#: 강제 탈출 장치 — "①: 필드의 몬스터 1장을 대상으로 하고 발동할 수 있다.
+#: 그 몬스터를 패로 되돌린다."
+#:
+#: **일부러 실행하지 않는다.** 모양은 싸이크론과 똑같고
+#: ``OperationKind.RETURN_TO_HAND`` 도 실행기가 지원한다. 막는 것은 후보
+#: 조건 하나다 — ``Card.IsAbleToHand``.
+#:
+#: 그것은 "이 카드가 패로 갈 수 있는가" 이고, 토큰 · 엑스트라 덱 몬스터 ·
+#: "패로 되돌릴 수 없다" 제약이 전부 거기서 갈린다. 이 엔진에 그 계층이
+#: 없다 (STRUCTURAL-48 — 되돌리기에는 관문이 없다). 없는 채로 실행하면
+#: 토큰이 패로 올라간다.
+#:
+#: 죽은 자의 소생이 ``IsCanBeSpecialSummoned`` 때문에 멈춘 것과 **같은
+#: 자리**다. 하는 일을 적지 않은 채로 싣는다.
+_COMPULSORY_EVACUATION_DEVICE_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(COMPULSORY_EVACUATION_DEVICE, 0),
+        source_card_id=COMPULSORY_EVACUATION_DEVICE,
+        operations=(),
+        provenance=EffectProvenance.official_lua(
+            "c94192409.lua 를 읽었으나 후보 조건을 옮기지 못했다."
+        ),
+    ),
+    lua_file="c94192409.lua",
+    lua_excerpt=(
+        "Duel.SelectTarget(tp,Card.IsAbleToHand,tp,LOCATION_MZONE,"
+        "LOCATION_MZONE,1,1,nil); Duel.SendtoHand(tc,nil,REASON_EFFECT)"
+    ),
+    executable=False,
+    note="패로 되돌릴 수 있는가(IsAbleToHand)를 판정할 계층이 없다 (STRUCTURAL-48)",
+)
+
+#: 로스트 — "상대의 묘지의 카드 1장을 게임에서 제외한다."
+#:
+#: **일부러 실행하지 않는다.** 후보 조건이 ``c:IsAbleToRemove() and
+#: aux.SpElimFilter(c)`` 다 — 앞은 "제외될 수 있는가" 라는 관문이고
+#: (STRUCTURAL-48), 뒤는 EDOPro 의 보조 함수라 그 안을 읽지 않고는 무슨
+#: 조건인지 말할 수 없다.
+#:
+#: 이 항목이 실린 이유는 **BANISH 가 실제 카드로 검증되지 않은 까닭을 한
+#: 곳에 적어 두기 위해서**다. 제외 계열 후보 14장이 전부 같은 이유로
+#: 걸린다 (Phase 2-W §1).
+_DISAPPEAR_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(DISAPPEAR, 0),
+        source_card_id=DISAPPEAR,
+        operations=(),
+        provenance=EffectProvenance.official_lua(
+            "c24623598.lua 를 읽었으나 후보 조건을 옮기지 못했다."
+        ),
+    ),
+    lua_file="c24623598.lua",
+    lua_excerpt=(
+        "s.rmfilter = c:IsAbleToRemove() and aux.SpElimFilter(c); "
+        "Duel.Remove(tc,POS_FACEUP,REASON_EFFECT)"
+    ),
+    executable=False,
+    note=(
+        "제외될 수 있는가(IsAbleToRemove)를 판정할 계층이 없고 "
+        "aux.SpElimFilter 의 내용을 읽지 않았다 (STRUCTURAL-48)"
+    ),
+)
+
+
 #: 이 엔진이 들고 있는 효과 정의 전부. **이것이 전부라는 것이 사실이다.**
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
+    # Phase 2-K ~ 2-U
     _POT_OF_GREED_ENTRY,
     _RAIN_OF_MERCY_ENTRY,
     _MYSTICAL_SPACE_TYPHOON_ENTRY,
     _DARK_HOLE_ENTRY,
     _MONSTER_REBORN_ENTRY,
+    # Phase 2-W
+    _DIAN_KETO_ENTRY,
+    _THE_GIFT_OF_GREED_ENTRY,
+    _UPSTART_GOBLIN_ENTRY,
+    _SELF_MUMMIFICATION_ENTRY,
+    _FINE_ENTRY,
+    _COMPULSORY_EVACUATION_DEVICE_ENTRY,
+    _DISAPPEAR_ENTRY,
 )
 
 
