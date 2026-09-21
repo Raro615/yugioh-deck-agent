@@ -718,6 +718,24 @@ class EffectActivator:
             action, tuple(i for s in selections for i in s.selection.chosen)
         )
         for binding in definition.targets:
+            if binding.spec.is_random:
+                # **발동 시점에 정하지 않는다** (Phase 2-AB). 무작위 선택은
+                # 해결 중에 일어난다 — 공식 스크립트도 ``s.target`` 이
+                # 아니라 ``s.activate`` 에서 ``RandomSelect`` 를 부른다.
+                #
+                # 밖에서 골라 보내는 것도 막는다. 고르는 사람이 없는
+                # 선택에 누가 고른 결과가 들어오면 무작위가 아니다.
+                if chosen.get(binding.ref) is not None:
+                    return self._fail(
+                        ActivationStatus.INVALID_TARGET,
+                        action,
+                        chain,
+                        ValidationCode.TARGET_COUNT_MISMATCH,
+                        f"{binding.ref} 는 무작위로 정해집니다. 고른 결과를 "
+                        "밖에서 넣을 수 없습니다.",
+                        authorization=verdict,
+                    )
+                continue
             # 규칙마다 들여다보는 자리가 다르므로 **규칙마다** 관측을
             # 만든다 (Phase 2-Y). 하나로 합쳐서 전부 열면, 덱을 보는
             # 효과가 같은 판의 다른 규칙에까지 덱을 열어 준다.

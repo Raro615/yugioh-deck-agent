@@ -813,6 +813,7 @@ def test_j_coin_and_dice_were_deliberately_left_out():
     }
     assert public == {
         "choose",
+        "choose_many",  # Phase 2-AB — 한 장을 고르는 것의 수가 늘었을 뿐이다
         "shuffle",
         "next_index",
         "next_permutation",

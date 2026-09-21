@@ -266,6 +266,51 @@ class RandomSource:
             selected=(ordered[index],),
         )
 
+    def choose_many(
+        self,
+        candidates: Sequence[InstanceId],
+        count: int,
+        replacement: bool = False,
+        purpose: RandomPurpose = RandomPurpose.RANDOM_SELECTION,
+    ) -> RandomOutcome:
+        """
+        후보 중 ``count`` 개를 무작위로 고른다 (Phase 2-AB).
+
+        ``replacement`` 가 거짓이면 같은 카드를 두 번 고르지 않는다 — 한
+        장의 카드를 두 번 버릴 수는 없다. 참이면 같은 것이 다시 나올 수
+        있다 (주사위처럼 **뽑고 되돌리는** 경우).
+
+        **한 번 부를 때 ``count`` 만큼 꺼낸다.** 재현 좌표(:attr:`draw`)는
+        첫 꺼냄의 번호이고, 되짚을 때 그 번호부터 ``count`` 번 꺼내면 같은
+        답이 나온다.
+
+        :meth:`choose` 와 같은 일을 하되 수가 늘었을 뿐이다 — 한 장을 고르는
+        것은 ``count=1`` 이다.
+        """
+        ordered = tuple(candidates)
+        if count < 0:
+            raise ValueError(f"고를 수는 음수일 수 없습니다: {count}")
+        if not replacement and count > len(ordered):
+            raise RandomError(
+                f"{len(ordered)}개 중에서 {count}개를 **겹치지 않게** 고를 수 "
+                "없습니다. 없는 것을 있는 척 고르지 않습니다."
+            )
+        draw = self._draws
+        picked: list[InstanceId] = []
+        if replacement:
+            for _ in range(count):
+                picked.append(ordered[self.next_index(len(ordered))])
+        else:
+            remaining = list(ordered)
+            for _ in range(count):
+                picked.append(remaining.pop(self.next_index(len(remaining))))
+        return RandomOutcome(
+            purpose=purpose,
+            draw=draw,
+            candidates=ordered,
+            selected=tuple(picked),
+        )
+
     def shuffle(
         self,
         cards: Sequence[InstanceId],

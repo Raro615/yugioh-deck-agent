@@ -1121,18 +1121,59 @@ def test_j_a_refusal_names_no_hidden_card(state):
 
 @requires_official_db
 def test_j_the_observation_boundary_is_the_actors(state):
-    """관측은 행위자의 시점으로만 만든다."""
+    """
+    관측은 행위자의 시점으로만 만든다.
+
+    **Phase 2-AB 가 하나의 예외를 열었고, 그 예외를 여기서 좁힌다.**
+    무작위 선택에는 고르는 사람이 없으므로 후보를 **자리 주인의 눈으로**
+    센다 (``_authoritative_candidates``). 그 관측은 세는 데만 쓰이고
+    **밖으로 나가지 않는다** — 그것까지 확인해야 예외가 구멍이 되지
+    않는다.
+    """
     tree = ast.parse(pathlib.Path("engine/effect/executor.py").read_text("utf-8"))
+
+    counting = {
+        node
+        for parent in ast.walk(tree)
+        if isinstance(parent, ast.FunctionDef)
+        and parent.name == "_authoritative_candidates"
+        for node in ast.walk(parent)
+    }
+
     viewers = [
-        node.value
+        (node, node.value)
         for node in ast.walk(tree)
         if isinstance(node, ast.keyword) and node.arg == "viewer"
     ]
-
     assert viewers
-    for value in viewers:
+
+    for node, value in viewers:
+        if node in counting:
+            # 세는 자리에서만 허용되는 예외. 이름까지 고정한다.
+            assert isinstance(value, ast.Name), ast.dump(value)
+            assert value.id == "owner", ast.dump(value)
+            continue
         assert isinstance(value, ast.Attribute), ast.dump(value)
         assert value.attr == "controller", ast.dump(value)
+
+    # 그 관측이 **밖으로 나가지 않는다.**
+    (function,) = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_authoritative_candidates"
+    ]
+    for node in ast.walk(function):
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Name):
+            assert node.value.id != "view", ast.dump(node)
+        # ``self`` 에 붙여 두지도 않는다.
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                assert not (
+                    isinstance(target, ast.Attribute)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id == "self"
+                ), ast.dump(node)
 
 
 # ======================================================================

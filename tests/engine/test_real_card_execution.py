@@ -42,6 +42,7 @@ from engine.effect.journal import EventJournal
 from engine.effect.library import (
     COMPULSORY_EVACUATION_DEVICE,
     FOOLISH_BURIAL,
+    RUTHLESS_DENIAL,
     DARK_HOLE,
     DIAN_KETO,
     DISAPPEAR,
@@ -291,13 +292,14 @@ def resolve_directly(
 # ======================================================================
 
 
-def test_a_the_library_is_exactly_thirteen_real_cards():
+def test_a_the_library_is_exactly_fourteen_real_cards():
     """
     **이것이 전부라는 것이 사실이다.** 14,127장 중 여기 있는 것만
     실행되고, 늘어나면 이 단언이 깨진다 — 그것이 이 테스트의 일이다.
-    Phase 2-X 에서 어리석은 매장(81439173)이 더해지며 실제로 깨졌다.
+    Phase 2-X 에서 어리석은 매장(81439173)이, Phase 2-AB 에서 무정의
+    말살(73148972)이 더해지며 실제로 깨졌다.
     """
-    assert len(EFFECT_LIBRARY) == 13
+    assert len(EFFECT_LIBRARY) == 14
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -305,16 +307,17 @@ def test_a_the_library_is_exactly_thirteen_real_cards():
         SELF_MUMMIFICATION, FINE,
         COMPULSORY_EVACUATION_DEVICE, DISAPPEAR,
         FOOLISH_BURIAL,  # Phase 2-X — 관문을 선언하는 첫 실제 카드
+        RUTHLESS_DENIAL,  # Phase 2-AB — 플레이어 선택과 무작위 선택을 함께 쓴다
     }
 
 
-def test_a_nine_real_effect_refs_are_executable():
+def test_a_ten_real_effect_refs_are_executable():
     """
     §1 — ``LUA_VERIFIED`` + ``EffectRef`` + 등록된 구현. **이 셋이 다
     맞을 때만** ``EXECUTABLE`` 이다 (ADR-006).
 
     ``EXECUTABLE`` 은 "실행 권위가 있다" 이지 "해결이 성공한다" 가
-    아니다. 아홉 장 중 싸이크론은 파괴 관문에서, 어리석은 매장은 덱을
+    아니다. 열 장 중 싸이크론은 파괴 관문에서, 어리석은 매장은 덱을
     관측할 수 없어서 멈춘다 — 둘 다 ``EXECUTABLE`` 이다.
     """
     executable = {
@@ -324,9 +327,10 @@ def test_a_nine_real_effect_refs_are_executable():
     }
 
     assert executable == {
-        EffectRef(cid, 0) for cid in OLD_CARDS + NEW_CARDS + (FOOLISH_BURIAL,)
+        EffectRef(cid, 0)
+        for cid in OLD_CARDS + NEW_CARDS + (FOOLISH_BURIAL, RUTHLESS_DENIAL)
     }
-    assert len(executable) == 9
+    assert len(executable) == 10
 
 
 def test_a_every_declined_card_says_what_is_missing():

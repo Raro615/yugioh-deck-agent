@@ -728,8 +728,25 @@ def test_the_library_makes_no_decisions_about_whether_to_use_an_effect():
 
     for forbidden in ("choose", "select_best", "evaluate_value", "score", "policy"):
         assert not any(forbidden in name for name in names), forbidden
+
     # 무작위도 없다 — 목록은 결정론적이다.
-    assert "random" not in pathlib.Path("engine/effect/library.py").read_text("utf-8")
+    #
+    # **낱말이 아니라 코드를 본다** (Phase 2-AB). 원문에 ``"random"`` 이
+    # 있는지 보는 검사는 ``TargetRef("random")`` 까지 잡는데, 그것은 목록이
+    # 무작위를 **쓰는** 것이 아니라 카드의 스크립트가 무작위로 고른다고
+    # **적어 둔 것**이다. 금지해야 하는 것은 목록이 전역 난수를 부르는
+    # 일이다.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            assert all(alias.name != "random" for alias in node.names)
+        if isinstance(node, ast.ImportFrom):
+            assert node.module != "random"
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "random"
+        ):
+            raise AssertionError(ast.dump(node))
 
 
 @requires_official_db

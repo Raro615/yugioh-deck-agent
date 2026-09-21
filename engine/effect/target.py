@@ -50,7 +50,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from engine.cost import ChoiceSpec, Selection
+from engine.cost import CandidateSource, ChoiceSpec, Selection
 
 
 class TargetRequirement(str, Enum):
@@ -68,6 +68,105 @@ class TargetRequirement(str, Enum):
     고르기는 하지만 **대상 지정은 아니다.** 해결 시점에 고른다.
     "대상을 지정하지 않는 제거" 가 여기에 해당한다.
     """
+    RANDOM = "random"
+    """
+    **아무도 고르지 않는다.** 무작위가 정한다 (Phase 2-AB).
+
+    앞의 둘과 결정적으로 다르다. ``TARGETING`` · ``CHOOSING`` 은 "누가
+    고르는가" 가 있고, 그 사람은 후보를 **볼 수 있어야** 한다. 무작위
+    선택에는 고르는 사람이 없으므로 아무도 볼 필요가 없다 — "상대 패에서
+    무작위로 1장" 이 성립하는 이유다.
+
+        "상대 패에서 1장을 고른다"        → CHOOSING (고르는 사람이 본다)
+        "상대 패에서 무작위로 1장"        → RANDOM   (아무도 보지 않는다)
+
+    그래서 명세도 다르다 (:class:`RandomSelectionSpec` 에는 ``chooser``
+    칸이 없다).
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class RandomSelectionSpec:
+    """
+    "후보 중 무작위로 N 개" 라는 **요구** (Phase 2-AB).
+
+    :class:`~engine.cost.ChoiceSpec` 과 **후보 규칙(**:class:`
+    ~engine.cost.CandidateSource`**)만 공유한다.** 나머지는 다르다.
+
+    ==================  ==========================  =====================
+    ..                  ``ChoiceSpec``              ``RandomSelectionSpec``
+    ==================  ==========================  =====================
+    누가 고르는가         ``chooser``                 **없다** (무작위)
+    몇 장                 ``minimum`` ~ ``maximum``    ``count`` 하나
+    후보를 봐야 하는가     그렇다                       아니다
+    ==================  ==========================  =====================
+
+    ``chooser`` 칸을 **일부러 두지 않았다.** 두면 "무작위인데 누가
+    고른다" 가 되고, 그 순간 플레이어 선택과 무작위 선택의 구분이 이름만
+    남는다.
+
+    ``minimum``/``maximum`` 을 property 로 내주는 것은 기존
+    :class:`~engine.effect.targeting.TargetResolver` 가 장수를 그 이름으로
+    묻기 때문이다 — 판정기를 두 벌 만들지 않으려고 맞춰 준다.
+    """
+
+    source: CandidateSource
+    count: int = 1
+    replacement: bool = False
+    """
+    같은 카드가 두 번 뽑힐 수 있는가. **거의 언제나 거짓이다** — 한 장의
+    카드를 두 번 버릴 수는 없다.
+    """
+
+    def __post_init__(self) -> None:
+        if self.count < 1:
+            raise ValueError(
+                f"무작위로 고를 수는 1 이상이어야 합니다: {self.count}. "
+                "0장을 무작위로 고르는 것은 고르지 않는 것입니다."
+            )
+
+    @property
+    def minimum(self) -> int:
+        return self.count
+
+    @property
+    def maximum(self) -> int:
+        return self.count
+
+    def looked_at_zones(self) -> "frozenset[Zone]":
+        """
+        **비어 있다.** 무작위 선택에는 고르는 사람이 없으므로 아무도
+        들여다보지 않는다 (Phase 2-Y 의 ``looked_at`` 은 "고르려면 봐야
+        한다" 였다).
+
+        후보를 세는 것은 **엔진**이고, 엔진이 아는 것과 플레이어가 보는
+        것은 계속 다른 것이다.
+        """
+        return frozenset()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "random",
+            self.source.canonical_state(),
+            self.count,
+            self.replacement,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {
+            "kind": "random",
+            "source": self.source.to_dict(),
+            "count": self.count,
+        }
+        if self.replacement:
+            data["replacement"] = True
+        return data
+
+    def describe_ko(self) -> str:
+        return f"{self.source.describe_ko()} 중 무작위로 {self.count}장"
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.describe_ko()
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +179,7 @@ class TargetSpec:
     """
 
     requirement: TargetRequirement = TargetRequirement.NONE
-    choice: ChoiceSpec | None = None
+    choice: "ChoiceSpec | RandomSelectionSpec | None" = None
 
     def __post_init__(self) -> None:
         if self.requirement is TargetRequirement.NONE:
@@ -88,9 +187,20 @@ class TargetSpec:
                 raise ValueError(
                     "대상을 요구하지 않는데 선택 명세가 붙어 있습니다."
                 )
-        elif self.choice is None:
+            return
+        if self.choice is None:
             raise ValueError(
                 f"{self.requirement.value} 에는 선택 명세(ChoiceSpec)가 필요합니다."
+            )
+        # **명세와 요구가 어긋나지 않는다.** 무작위인데 고르는 사람이
+        # 적혀 있거나, 고르기인데 고르는 사람이 없으면 둘 중 하나가 거짓말이다.
+        random_spec = isinstance(self.choice, RandomSelectionSpec)
+        if (self.requirement is TargetRequirement.RANDOM) is not random_spec:
+            raise ValueError(
+                f"{self.requirement.value} 에 "
+                f"{type(self.choice).__name__} 이 붙어 있습니다. 무작위 선택은 "
+                "RandomSelectionSpec 이고 (고르는 사람이 없다), 플레이어가 "
+                "고르는 것은 ChoiceSpec 입니다 (고르는 사람이 있다)."
             )
 
     # ------------------------------------------------------------------
@@ -111,6 +221,11 @@ class TargetSpec:
         """고르지만 대상 지정은 아닌 효과."""
         return cls(requirement=TargetRequirement.CHOOSING, choice=choice)
 
+    @classmethod
+    def at_random(cls, choice: "RandomSelectionSpec") -> "TargetSpec":
+        """**아무도 고르지 않는다.** 무작위가 정한다 (Phase 2-AB)."""
+        return cls(requirement=TargetRequirement.RANDOM, choice=choice)
+
     # ------------------------------------------------------------------
     # 조회
     # ------------------------------------------------------------------
@@ -124,6 +239,14 @@ class TargetSpec:
         if self.choice is None:
             return frozenset()
         return self.choice.looked_at_zones()
+
+    @property
+    def is_random(self) -> bool:
+        """
+        **무작위가 정하는가.** 참이면 밖에서 고른 것을 받지 않는다 —
+        실행기가 난수원에서 직접 정한다.
+        """
+        return self.requirement is TargetRequirement.RANDOM
 
     @property
     def requires_selection(self) -> bool:
@@ -141,8 +264,12 @@ class TargetSpec:
 
         대상을 요구하지 않는 효과는 언제나 거짓이다 — 고를 것이 없으므로
         기다릴 것도 없다. 이것이 §11 의 구분이다.
+
+        **무작위 선택도 거짓이다** (Phase 2-AB). 기다릴 사람이 없다 —
+        해결 중에 난수원이 정하므로 "아직 안 골랐다" 라는 상태가 아예
+        없다.
         """
-        if not self.requires_selection:
+        if not self.requires_selection or self.is_random:
             return False
         if selection is None:
             return True
@@ -263,6 +390,7 @@ class TargetSelection:
 __all__ = [
     "TargetRequirement",
     "TargetSpec",
+    "RandomSelectionSpec",
     "TargetRef",
     "PRIMARY_TARGET",
     "TargetBinding",

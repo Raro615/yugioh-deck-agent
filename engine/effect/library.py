@@ -39,7 +39,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from engine.condition import IsMonster, IsSpellTrap, PlayerRef, ZoneCountAtLeast
+from engine.condition import (
+    And,
+    IsMonster,
+    IsSpellTrap,
+    PlayerRef,
+    ZoneCountAtLeast,
+)
 from engine.cost import CandidateSource, ChoiceSpec
 from engine.effect.definition import (
     EffectDefinition,
@@ -59,7 +65,13 @@ from engine.effect.operation import (
     OperationKind,
 )
 from engine.effect.semantics import FIELD_ZONES, DestructionRuling, MovementRuling
-from engine.effect.target import PRIMARY_TARGET, TargetBinding, TargetSpec
+from engine.effect.target import (
+    PRIMARY_TARGET,
+    RandomSelectionSpec,
+    TargetBinding,
+    TargetRef,
+    TargetSpec,
+)
 from engine.ids import EffectRef
 from engine.vocabulary import Zone
 
@@ -168,6 +180,11 @@ RAIN_OF_MERCY = 66719324
 DARK_HOLE = 53129443
 MYSTICAL_SPACE_TYPHOON = 5318639
 MONSTER_REBORN = 83764718
+
+#: 무작위로 고르는 대상의 이름 (Phase 2-AB).
+#: ``@primary`` 와 **다른 이름**이어야 한다 — 한 카드가 플레이어 선택과
+#: 무작위 선택을 둘 다 할 수 있기 때문이다.
+RANDOM_TARGET = TargetRef("random")
 # Phase 2-W 에서 더한 것들
 DIAN_KETO = 84257639
 THE_GIFT_OF_GREED = 5915629
@@ -178,6 +195,8 @@ COMPULSORY_EVACUATION_DEVICE = 94192409
 DISAPPEAR = 24623598
 # Phase 2-X
 FOOLISH_BURIAL = 81439173
+# Phase 2-AB
+RUTHLESS_DENIAL = 73148972
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -669,6 +688,91 @@ _FOOLISH_BURIAL_ENTRY = LibraryEntry(
 )
 
 
+#: 무정의 말살 — "자신 필드 위에 존재하는 몬스터 1장을 선택하고 묘지로
+#: 보낸다. 그리고 상대 패에서 무작위로 카드 1장을 묘지로 보낸다."
+#:
+#: **한 카드 안에 두 가지 선택이 나란히 있다** (Phase 2-AB). 이 목록에서
+#: 처음이고, 이것이 이 카드를 고른 이유다.
+#:
+#: ====================  ==========================================
+#: ``@primary``           ``Duel.SelectTarget(tp,nil,tp,LOCATION_MZONE,0,1,1,nil)``
+#:                        → **플레이어가 고른다** (``TargetSpec.targeting``)
+#: ``@random``            ``Duel.GetFieldGroup(tp,0,LOCATION_HAND):RandomSelect(tp,1)``
+#:                        → **아무도 고르지 않는다** (``TargetSpec.at_random``)
+#: ====================  ==========================================
+#:
+#: 앞은 고르는 사람이 후보를 봐야 하고, 뒤는 볼 필요가 없다 — 상대 패에서
+#: 무작위로 뽑는 것이 성립하는 이유가 그것이다. 두 선택이 같은 API 였다면
+#: 이 카드를 옮길 수 없다.
+#:
+#: 관문은 **양쪽 다 없다.** ``Duel.SendtoGrave`` 앞에 ``IsAbleToGrave`` 가
+#: 원본에 적혀 있지 않고, 후보 조건도 둘 다 ``nil`` 이다 (육신보살
+#: 15103313 과 같은 자리, Phase 2-X).
+#:
+#: ``tc:IsRelateToEffect(e)`` 와 해결 시점의 ``tc:IsControler(tp)`` 재확인은
+#: 싸이크론과 같은 이유로 옮기지 못했다 (STRUCTURAL-50).
+_RUTHLESS_DENIAL_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(RUTHLESS_DENIAL, 0),
+        source_card_id=RUTHLESS_DENIAL,
+        targets=(
+            TargetBinding(
+                PRIMARY_TARGET,
+                TargetSpec.targeting(
+                    ChoiceSpec(
+                        source=CandidateSource(
+                            # ``LOCATION_MZONE, 0`` — 자신 쪽만이다.
+                            zones=frozenset({Zone.MZONE}),
+                            owner=PlayerRef.CONTROLLER,
+                        ),
+                        minimum=1,
+                        maximum=1,
+                    )
+                ),
+            ),
+            TargetBinding(
+                RANDOM_TARGET,
+                TargetSpec.at_random(
+                    RandomSelectionSpec(
+                        source=CandidateSource(
+                            # ``GetFieldGroup(tp, 0, LOCATION_HAND)`` —
+                            # 앞의 ``0`` 이 자신 쪽 없음, 뒤가 상대 패다.
+                            zones=frozenset({Zone.HAND}),
+                            owner=PlayerRef.OPPONENT,
+                        ),
+                        count=1,
+                    )
+                ),
+            ),
+        ),
+        operations=(
+            CardOperation.send_to_grave(PRIMARY_TARGET),
+            CardOperation.send_to_grave(RANDOM_TARGET),
+        ),
+        # ``IsExistingTarget(nil,tp,LOCATION_MZONE,0,1,nil)`` 와
+        # ``GetFieldGroupCount(tp,0,LOCATION_HAND)>0`` 둘 다 옮겼다.
+        activation=And(
+            (
+                ZoneCountAtLeast(PlayerRef.CONTROLLER, Zone.MZONE, 1),
+                ZoneCountAtLeast(PlayerRef.OPPONENT, Zone.HAND, 1),
+            )
+        ),
+        provenance=EffectProvenance.official_lua(
+            "c73148972.lua 의 s.target 과 s.activate 를 옮겼다. "
+            "IsRelateToEffect · 해결 시점 IsControler 재확인은 옮기지 못했다."
+        ),
+    ),
+    lua_file="c73148972.lua",
+    lua_excerpt=(
+        "Duel.SelectTarget(tp,nil,tp,LOCATION_MZONE,0,1,1,nil); "
+        "Duel.SendtoGrave(tc,REASON_EFFECT); "
+        "Duel.GetFieldGroup(tp,0,LOCATION_HAND):RandomSelect(tp,1); "
+        "Duel.SendtoGrave(g,REASON_EFFECT)"
+    ),
+    executable=True,
+)
+
+
 #: 이 엔진이 들고 있는 효과 정의 전부. **이것이 전부라는 것이 사실이다.**
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
@@ -687,6 +791,8 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _DISAPPEAR_ENTRY,
     # Phase 2-X
     _FOOLISH_BURIAL_ENTRY,
+    # Phase 2-AB
+    _RUTHLESS_DENIAL_ENTRY,
 )
 
 

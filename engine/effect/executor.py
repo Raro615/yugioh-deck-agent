@@ -62,7 +62,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
 
-from engine.condition import ConditionEvaluator, ConditionResult
+from engine.condition import (
+    ConditionContext,
+    ConditionEvaluator,
+    ConditionResult,
+    PlayerRef,
+)
+from engine.cost import CandidateSource, ChoiceSpec, Selection
+from engine.cost.resolver import CandidateResolver
 from engine.effect.delta import (
     CardDrawn,
     LifeChanged,
@@ -678,19 +685,24 @@ class EffectExecutor:
                 "가리킵니다.",
             )
 
-        selection = context.selection_for(ref)
-        if selection is None:
-            return _fail(
-                ResolutionStatus.INVALID_TARGET,
-                ValidationCode.TOO_FEW_SELECTED,
-                f"{ref} 에 고른 카드가 없습니다.",
-            )
+        resolved = self._resolve_selection(state, definition, context, operation)
+        if isinstance(resolved, EffectResult):
+            return resolved
+        _, selection = resolved
 
-        # **고른 것이 규칙에 맞는지 먼저 본다** (Phase 2-N). 여기가 없으면
-        # 자리도 주인도 조건도 맞지 않는 카드가 그대로 실행된다.
-        legal = self._check_target(state, spec, selection, context, ref)
-        if legal is not None:
-            return legal
+        if spec is not None and spec.is_random:
+            # **다시 판정하지 않는다** (Phase 2-AB). 무작위 선택은 바로 앞
+            # 단계에서 후보를 **권위 있게** 세면서 자리 · 주인 · 조건을 이미
+            # 확인했다. 여기서 컨트롤러의 관측으로 다시 보면 상대 패의
+            # 카드가 "안 보인다" 는 이유로 거절된다 — 아무도 고르지 않은
+            # 선택에 고르는 사람의 시야를 요구하는 셈이다.
+            pass
+        else:
+            # **고른 것이 규칙에 맞는지 먼저 본다** (Phase 2-N). 여기가
+            # 없으면 자리도 주인도 조건도 맞지 않는 카드가 그대로 실행된다.
+            legal = self._check_target(state, spec, selection, context, ref)
+            if legal is not None:
+                return legal
 
         instances: list[InstanceId] = []
         owners: list[int] = []
@@ -759,7 +771,7 @@ class EffectExecutor:
         되는가(관문) → 어디에 놓을 수 있는가. **판에 손대기 전에** 전부
         끝낸다.
         """
-        selected = self._resolve_selection(definition, context, operation)
+        selected = self._resolve_selection(state, definition, context, operation)
         if isinstance(selected, EffectResult):
             return selected
         ref, selection = selected
@@ -803,6 +815,7 @@ class EffectExecutor:
 
     def _resolve_selection(
         self,
+        state: GameState,
         definition: EffectDefinition,
         context: ResolutionContext,
         operation: Operation,
@@ -811,10 +824,13 @@ class EffectExecutor:
         일이 가리키는 이름과 이번에 골라진 것. 실패하면 :class:`EffectResult`.
 
         ``_plan_card_operation`` 과 같은 검사를 두 번 적지 않으려고 뽑아냈다.
+
+        **무작위 선택이면 밖에서 받지 않는다** (Phase 2-AB). 고르는 사람이
+        없으므로 받을 곳이 없고, 난수원이 정한다.
         """
         ref = operation.target_refs[0]
         try:
-            definition.target_spec(ref)
+            spec = definition.target_spec(ref)
         except KeyError:
             return _fail(
                 ResolutionStatus.INVALID_CONTEXT,
@@ -822,6 +838,8 @@ class EffectExecutor:
                 f"{operation.kind.value} 가 선언되지 않은 대상 {ref} 를 "
                 "가리킵니다.",
             )
+        if spec is not None and spec.is_random:
+            return self._roll_selection(state, spec, context, ref)
         selection = context.selection_for(ref)
         if selection is None:
             return _fail(
@@ -830,6 +848,117 @@ class EffectExecutor:
                 f"{ref} 에 고른 카드가 없습니다.",
             )
         return ref, selection
+
+    def _roll_selection(
+        self,
+        state: GameState,
+        spec,
+        context: ResolutionContext,
+        ref,
+    ):
+        """
+        후보를 세고, 그중 하나를 **난수원이** 고른다 (Phase 2-AB).
+
+        두 일을 섞지 않는다.
+
+        1. :class:`~engine.cost.resolver.CandidateResolver` 가 후보를 센다.
+        2. :class:`~engine.randomness.RandomSource` 가 **자리 번호**를 고른다.
+
+        난수원은 판을 뒤지지 않고 카드를 보지도 않는다 — 몇 개 중 몇
+        번째인지만 답한다.
+
+        **아무도 고르지 않으므로 아무도 볼 필요가 없다.** 그래서 후보는
+        각 자리의 **주인 시점**으로 센다 (상대 패의 카드는 상대가 안다).
+        그렇게 만든 관측은 후보를 세는 데만 쓰이고 밖으로 나가지 않는다 —
+        선택되었다는 사실이 카드를 공개하지는 않는다 (Phase 2-AA).
+
+        난수는 **계획 단계의 마지막**에 꺼낸다. 후보가 없거나 모르면 꺼내기
+        전에 멈추므로, 실패한 요청이 난수원만 소비하는 일이 없다.
+        """
+        candidates = self._authoritative_candidates(state, spec, context)
+        if isinstance(candidates, EffectResult):
+            return candidates
+
+        count = spec.choice.count
+        try:
+            outcome = state.randomness.choose_many(
+                candidates, count, replacement=spec.choice.replacement
+            )
+        except RandomError as error:
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.TOO_FEW_SELECTED,
+                f"{ref} 를 무작위로 고를 수 없습니다: {error}",
+            )
+        except RuntimeError as error:  # seed 없이 만들어진 판
+            return _fail(
+                ResolutionStatus.UNSUPPORTED_OPERATION,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{ref} 를 무작위로 고를 수 없습니다: {error}",
+                missing="seeded randomness (GameState.create(seed=...))",
+            )
+        return ref, Selection(chosen=outcome.selected)
+
+    def _authoritative_candidates(self, state: GameState, spec, context):
+        """
+        무작위 선택의 후보를 **자리마다 그 주인의 눈으로** 센다.
+
+        자리마다 따로 세는 이유가 있다. 한 사람의 관측으로는 상대의 패를
+        볼 수 없고, 그렇다고 "못 봤으니 후보가 없다" 로 접으면 모르는 것을
+        거짓으로 만든다 (STRUCTURAL-15). 무작위 선택에는 고르는 사람이
+        없으므로, 각 자리를 **그 자리의 주인이 아는 만큼** 세는 것이 맞다.
+
+        그래도 **아직 모르는 것은 모른다.** 뒷면 카드의 정의를 읽지 못해
+        조건을 판정할 수 없으면 ``undecided`` 로 남고, 그때는 고르지
+        않는다 — 후보가 몇 개인지 모르는 채로 무작위를 돌리면 확률이
+        틀린다.
+        """
+        source = spec.choice.source
+        owners = (
+            (source.owner.resolve(context.condition_context()),)
+            if source.owner is not None
+            else (0, 1)
+        )
+
+        eligible: list[InstanceId] = []
+        undecided: list[InstanceId] = []
+        reasons: list[str] = []
+        unchecked: list[str] = []
+        for owner in owners:
+            # 그 자리의 주인 시점. 자기 패는 자기가 안다. 덱처럼 주인도
+            # 못 보는 자리는 ``looked_at`` 으로 연다 — 자기 자리에만
+            # 적용되므로 남의 것은 열리지 않는다 (Phase 2-Y).
+            view = GameStateView.from_state(
+                state, viewer=owner, looked_at=frozenset(source.zones)
+            )
+            narrowed = ChoiceSpec(
+                source=CandidateSource(
+                    zones=source.zones,
+                    owner=PlayerRef.CONTROLLER,
+                    require=source.require,
+                    exclude_source=source.exclude_source,
+                ),
+                minimum=spec.choice.minimum,
+                maximum=spec.choice.maximum,
+            )
+            found = CandidateResolver(view).resolve(
+                narrowed,
+                ConditionContext(player=owner, source=context.source),
+            )
+            eligible.extend(found.eligible)
+            undecided.extend(found.undecided)
+            reasons.extend(found.reasons)
+            unchecked.extend(found.unchecked)
+
+        if undecided or unchecked:
+            return _fail(
+                ResolutionStatus.UNCHECKED_TARGET,
+                ValidationCode.INFORMATION_UNAVAILABLE,
+                "후보를 다 세지 못했습니다: "
+                + "; ".join(reasons + unchecked),
+                missing="; ".join(unchecked) or None,
+            )
+        return tuple(eligible)
 
     def _check_target(
         self,
