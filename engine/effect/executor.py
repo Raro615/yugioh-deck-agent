@@ -802,7 +802,14 @@ class EffectExecutor:
         판정할 수 없는 것과 규칙상 틀린 것은 다른 사실이고, 어느 쪽이든
         판은 건드리지 않는다.
         """
-        view = GameStateView.from_state(state, viewer=context.controller)
+        # 이 규칙이 **스스로 적어 둔** 자리만 들여다본다 (Phase 2-Y).
+        # 규칙이 자기 덱에서 고르라고 했으면 컨트롤러는 자기 덱을 본다 —
+        # 룰북이 그렇게 말한다. 남의 자리는 어떤 경우에도 열리지 않는다.
+        view = GameStateView.from_state(
+            state,
+            viewer=context.controller,
+            looked_at=spec.looked_at_zones() if spec is not None else None,
+        )
         verdict = TargetResolver(view).validate(
             spec, selection, context.condition_context(), ref
         )

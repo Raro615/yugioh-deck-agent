@@ -41,6 +41,7 @@ from engine.effect.executor import EffectExecutor, EffectImplementationRegistry
 from engine.effect.journal import EventJournal
 from engine.effect.library import (
     FINE,
+    MYSTICAL_SPACE_TYPHOON,
     FOOLISH_BURIAL,
     SELF_MUMMIFICATION,
     availability,
@@ -915,25 +916,25 @@ def test_i_the_two_earlier_real_cards_declare_no_gate():
 
 @pytest.mark.real_card
 @requires_official_db
-def test_i_foolish_burial_activates_and_names_the_hidden_deck(repository):
+def test_i_foolish_burial_now_reaches_the_gate(repository):
     """
-    §7-3 — 여전히 실행되지 않는 이유를 **엔진이 스스로 말한다.**
+    §7-3 — **Phase 2-Y 가 이 테스트의 전제를 바꿨다.**
 
-    관문이 아니라 **덱을 관측할 수 없다는 것**이 먼저 막는다. 순서가
-    규칙이다: 대상이 적법한가 → 해도 되는가 → 어디로 가는가.
+    Phase 2-X 에서 이 테스트의 이름은 ``..._names_the_hidden_deck`` 이었고,
+    발동이 ``UNCHECKED_TARGET`` / ``HIDDEN_CARD`` 로 멈추는 것을 단언했다.
+    그것은 **STRUCTURAL-69 의 증상을 고정해 둔 것**이었지 올바른 동작이
+    아니었다 — 룰북이 "If a card effect requires you to ... look through
+    it" 라고 말하는데도 자기 덱을 들여다볼 자리가 없었기 때문이다.
+
+    이제 규칙이 **자기 덱에서 고르라고 적었으면** 컨트롤러가 자기 덱을
+    본다. 그래서 대상 판정을 통과하고 **관문까지 간다.** 관문의 내용은
+    여전히 모르므로 ``UNCHECKED_RULES`` 다 — 추측하지 않는다.
+
+    두 이유가 이제 **다른 답으로** 갈린다는 것이 이번 단계의 전부다.
     """
-    game = GameState.create(
-        repository, decks=([FOOLISH_BURIAL] + [FEATHERMAN] * 20, [FEATHERMAN] * 20)
-    )
-    game.draw(MINE, 1)
-    game.draw(THEIRS, 3)
-    game.move(
-        game.player(MINE).hand[0], Zone.SZONE, to_player=MINE,
-        position=Position.FACEUP,
-    )
-    game.turn.set_phase(Phase.MAIN1)
+    game = _burial_board(repository)
     source = game.player(MINE).spell_zone[0].instance_id
-    hidden_card = game.player(MINE).deck[0].instance_id
+    monster = _deck_card(game, FEATHERMAN)
     before = game.state_hash()
 
     registry = definition_registry()
@@ -943,7 +944,55 @@ def test_i_foolish_burial_activates_and_names_the_hidden_deck(repository):
         PlayerAction.activate_effect(
             actor=MINE, source=source, effect_ref=EffectRef(FOOLISH_BURIAL, 0)
         ),
-        (TargetSelection(PRIMARY_TARGET, Selection.of(hidden_card)),),
+        (TargetSelection(PRIMARY_TARGET, Selection.of(monster)),),
+        authorization=GRANTED,
+    )
+
+    # 관측이 더 이상 막지 않는다.
+    assert activated.status is ActivationStatus.ACTIVATED
+    assert len(activated.chain) == 1
+
+    journal = EventJournal()
+    resolved = ChainResolver(build_executor(journal), registry).resolve_top(
+        game, activated.chain
+    )
+
+    # 관문이 막는다. **다른 이유이고 다른 답이다.**
+    assert resolved.result.status is ResolutionStatus.UNCHECKED_RULES
+    assert resolved.result.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert resolved.result.missing == MISSING_GATE[OperationKind.SEND_TO_GRAVE]
+    assert resolved.result.applied == ()
+    assert resolved.result.deltas == ()
+    assert game.state_hash() == before
+    assert len(journal) == 0
+    assert game.locate(monster).zone is Zone.DECK
+
+
+@pytest.mark.real_card
+@requires_official_db
+def test_i_foolish_burial_cannot_look_into_the_opponents_deck(repository):
+    """
+    §4 · §16 — 자기 덱을 열어 준 것이 **남의 덱까지 열지 않는다.**
+
+    어리석은 매장의 후보 자리는 ``LOCATION_DECK, 0`` — 자신 쪽뿐이다.
+    상대 덱의 카드를 고르면 예전과 똑같이 ``HIDDEN_CARD`` 이고, 정체도
+    새지 않는다.
+    """
+    game = _burial_board(repository)
+    source = game.player(MINE).spell_zone[0].instance_id
+    theirs = game.player(THEIRS).deck[0].instance_id
+    identity = game.find_instance(theirs).card_id
+    before = game.state_hash()
+
+    activated = EffectActivator(
+        definition_registry(), implementation_registry()
+    ).activate(
+        game,
+        Chain(),
+        PlayerAction.activate_effect(
+            actor=MINE, source=source, effect_ref=EffectRef(FOOLISH_BURIAL, 0)
+        ),
+        (TargetSelection(PRIMARY_TARGET, Selection.of(theirs)),),
         authorization=GRANTED,
     )
 
@@ -951,9 +1000,122 @@ def test_i_foolish_burial_activates_and_names_the_hidden_deck(repository):
     assert activated.code is ValidationCode.HIDDEN_CARD
     assert len(activated.chain) == 0
     assert game.state_hash() == before
-    # 정체가 새지 않는다.
-    identity = game.find_instance(hidden_card).card_id
     assert str(identity) not in (activated.reason or "")
+
+
+@pytest.mark.real_card
+@requires_official_db
+def test_i_foolish_burial_refuses_a_visible_non_monster(repository):
+    """
+    §8 CASE 2 — 이제 덱이 보이므로 **규칙으로 거절할 수 있다.**
+    "몬스터 1장" 인데 마법을 골랐다. 관측 문제가 아니다.
+    """
+    game = _burial_board(repository)
+    source = game.player(MINE).spell_zone[0].instance_id
+    spell = _deck_card(game, MYSTICAL_SPACE_TYPHOON)
+    before = game.state_hash()
+
+    activated = EffectActivator(
+        definition_registry(), implementation_registry()
+    ).activate(
+        game,
+        Chain(),
+        PlayerAction.activate_effect(
+            actor=MINE, source=source, effect_ref=EffectRef(FOOLISH_BURIAL, 0)
+        ),
+        (TargetSelection(PRIMARY_TARGET, Selection.of(spell)),),
+        authorization=GRANTED,
+    )
+
+    assert activated.status is ActivationStatus.INVALID_TARGET
+    assert activated.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    assert activated.code is not ValidationCode.HIDDEN_CARD
+    assert game.state_hash() == before
+
+
+@pytest.mark.real_card
+@requires_official_db
+def test_i_foolish_burial_runs_end_to_end_when_the_gate_is_answered(repository):
+    """
+    §8 CASE 1 — **실제 카드가 처음으로 끝까지 간다.**
+
+    판정은 **테스트가 명시적으로 준다.** 저장소는 여전히
+    ``Card.IsAbleToGrave`` 의 내용을 모르고, 목록에도 적지 않았다 —
+    싸이크론의 파괴 판정과 같은 자리다 (Phase 2-O). ``UNKNOWN`` 을
+    ``TRUE`` 로 바꾼 것이 아니라 밖에서 답을 받은 것이다.
+    """
+    game = _burial_board(repository)
+    source = game.player(MINE).spell_zone[0].instance_id
+    monster = _deck_card(game, FEATHERMAN)
+    grave_before = len(game.player(MINE).grave)
+
+    registry = definition_registry()
+    activated = EffectActivator(registry, implementation_registry()).activate(
+        game,
+        Chain(),
+        PlayerAction.activate_effect(
+            actor=MINE, source=source, effect_ref=EffectRef(FOOLISH_BURIAL, 0)
+        ),
+        (TargetSelection(PRIMARY_TARGET, Selection.of(monster)),),
+        authorization=GRANTED,
+    )
+    assert activated.status is ActivationStatus.ACTIVATED
+
+    journal = EventJournal()
+    executor = build_executor(
+        journal, movement=DeclaredMovementRuling(sendable=frozenset({monster}))
+    )
+    resolved = ChainResolver(executor, registry).resolve_top(game, activated.chain)
+    result = resolved.result
+
+    assert result.status is ResolutionStatus.RESOLVED
+    (applied,) = result.applied
+    assert applied.kind is OperationKind.SEND_TO_GRAVE
+    assert applied.reason_names == ("EFFECT",)  # 파괴가 아니다
+    (delta,) = result.deltas
+    assert isinstance(delta, ZoneMoved)
+    assert delta.movement is OperationKind.SEND_TO_GRAVE
+    assert delta.source_zone is Zone.DECK
+    assert delta.destination_zone is Zone.GRAVE
+    assert game.locate(monster).zone is Zone.GRAVE
+    assert len(game.player(MINE).grave) == grave_before + 1
+    assert len(journal) == 1
+
+    observed = EventReader(
+        GameStateView.from_state(game, viewer=MINE)
+    ).read(result, actor=MINE)
+    assert [event.timing.point for event in observed] == [TimingPoint.CARD_MOVED]
+
+
+def _burial_board(repository) -> GameState:
+    """
+    어리석은 매장이 앞면으로 놓인 판. 덱에 **몬스터와 마법이 둘 다** 있다
+    — 후보 조건이 실제로 갈리는지 보려면 둘 다 필요하다.
+    """
+    game = GameState.create(
+        repository,
+        decks=(
+            [FOOLISH_BURIAL, FEATHERMAN, MYSTICAL_SPACE_TYPHOON]
+            + [FEATHERMAN] * 18,
+            [FEATHERMAN] * 20,
+        ),
+    )
+    game.draw(MINE, 1)
+    game.draw(THEIRS, 3)
+    game.move(
+        game.player(MINE).hand[0], Zone.SZONE, to_player=MINE,
+        position=Position.FACEUP,
+    )
+    game.turn.set_phase(Phase.MAIN1)
+    return game
+
+
+def _deck_card(game: GameState, card_id: int) -> InstanceId:
+    """자기 덱에서 그 번호의 카드 하나. **엔진 내부 지식**이다 (§3 의 A)."""
+    for card in game.player(MINE).deck:
+        if card.card_id == card_id:
+            return card.instance_id
+    raise AssertionError(f"덱에 {card_id} 가 없습니다.")
 
 
 @pytest.mark.real_card

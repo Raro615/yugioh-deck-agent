@@ -337,6 +337,39 @@ Duel Engine.
   기존 엔진 테스트는 **한 건도 고치지 않았다.**
   ``docs/phase2x-rule-gate-grave-discard.md`` 참고.
 
+- **Phase 2-Y** — 관측 경계와 관문의 분리 (``game_state_view.py`` 의
+  ``looked_at``). STRUCTURAL-69 를 해결한다.
+
+  **세 가지를 합치지 않는다.** 엔진이 아는 것(``GameState``) · 그 사람이
+  보는 것(``GameStateView``) · 규칙 판정에 필요한 것(효과의 후보 규칙).
+  엔진은 자기 덱의 카드를 언제나 알지만, 기본 관측은 모른다 — **그것이
+  맞다.**
+
+  문제는 한 칸이었다. ``_zone_view`` 가 자리 이름만 보고 공개 범위를
+  정했고, "이 효과는 자기 덱을 들여다본다" 를 말할 자리가 없었다.
+  기본값이 틀린 것이 아니다 — 룰북이 예외를 명시한다: "If a card effect
+  requires you to reveal cards from your Deck, **or look through it**,
+  shuffle it and put it back in this space afterwards."
+
+  그래서 고친 것은 **기본 공개 범위가 아니라 표현력**이다.
+  ``from_state(..., looked_at=)`` 이고, 기본값은 비어 있으며, 비면 예전과
+  한 글자도 다르지 않다. 자리 이름은 효과가 말한다 —
+  ``CandidateSource.zones``/``owner``/``chooser`` 를 읽을 뿐 추론하지
+  않는다. 남의 자리는 **어떤 값을 넘겨도** 열리지 않는다:
+  ``container.owner == viewer`` 가 같은 줄에 있고, 그 방어는 한 곳에만
+  있다.
+
+  결과는 **두 UNKNOWN 이 갈린 것**이다. 어리석은 매장(81439173)이 이제
+  발동을 통과해 **관문까지 가고**, 거기서 ``UNCHECKED_RULES`` 로 멈춘다 —
+  ``Card.IsAbleToGrave`` 의 내용은 여전히 모르고 추측하지 않는다. 그리고
+  덱이 보이므로 "고른 것이 몬스터가 아니다" 를 **규칙으로 거절할 수**
+  있게 되었다 (예전에는 전부 ``HIDDEN_CARD`` 로 뭉개졌다).
+
+  **실행되는 실제 카드 수는 8장 그대로다.** 늘리려면 관문의 내용을
+  추측해야 하고, 그것이 이 프로젝트가 하지 않기로 한 일이다. 바뀐 것은
+  **막히는 이유**이고, 그것이 다음에 무엇을 해야 하는지를 가리킨다.
+  ``docs/phase2y-observation-boundary.md`` 참고.
+
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
 변경이고, 변경을 적으려면 ``effect.delta`` 가 필요한데 ``effect`` 가 이미

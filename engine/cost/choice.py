@@ -52,6 +52,28 @@ class CandidateSource:
         if not self.zones:
             raise ValueError("후보를 찾을 존이 최소 하나 필요합니다.")
 
+    def looked_at_zones(self) -> frozenset[Zone]:
+        """
+        이 후보 규칙을 판정하려면 고르는 사람이 **자기 어느 자리를 들여다
+        봐야 하는가** (Phase 2-Y).
+
+        추론이 아니라 **이 규칙이 스스로 적어 둔 것**을 읽는다. Lua 의
+        ``Duel.SelectMatchingCard(tp, filter, tp, LOCATION_DECK, 0, ...)``
+        에서 "고르는 사람 ``tp``" 와 "``tp`` 의 덱" 이 그대로 여기
+        ``chooser`` 와 ``zones``/``owner`` 로 와 있다.
+
+        ``owner`` 가 :attr:`PlayerRef.OPPONENT` 면 **빈 집합**이다 — 남의
+        자리에서 고르라는 규칙이 남의 자리를 볼 권리까지 주지는 않는다
+        (상대 패에서 고르게 하는 효과는 공개 효과가 따로 필요하다).
+
+        ``None`` (양쪽) 이면 자리 이름을 그대로 돌려주되, 실제로 열리는
+        것은 **보는 사람 자신의 자리뿐**이다 —
+        :func:`~engine.game_state_view._zone_view` 가 그것을 지킨다.
+        """
+        if self.owner is PlayerRef.OPPONENT:
+            return frozenset()
+        return self.zones
+
     def canonical_state(self) -> tuple:
         return (
             tuple(sorted(z.value for z in self.zones)),
@@ -104,6 +126,18 @@ class ChoiceSpec:
             raise ValueError(
                 f"최대({self.maximum})가 최소({self.minimum})보다 작습니다."
             )
+
+    def looked_at_zones(self) -> frozenset[Zone]:
+        """
+        고르는 사람이 들여다봐야 하는 자리들.
+
+        **고르는 사람이 컨트롤러일 때만** 답한다. 관측은 컨트롤러의
+        시점으로 만들어지므로, 상대가 고르는 효과에서 컨트롤러의 관측을
+        넓히면 엉뚱한 사람이 보게 된다.
+        """
+        if self.chooser is not PlayerRef.CONTROLLER:
+            return frozenset()
+        return self.source.looked_at_zones()
 
     @property
     def is_optional(self) -> bool:

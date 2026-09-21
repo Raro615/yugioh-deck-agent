@@ -714,13 +714,20 @@ class EffectActivator:
             return None
 
         chosen = {selection.ref: selection.selection for selection in selections}
-        resolver = TargetResolver(
-            GameStateView.from_state(state, viewer=action.actor)
-        )
         context = self._condition_context(
             action, tuple(i for s in selections for i in s.selection.chosen)
         )
         for binding in definition.targets:
+            # 규칙마다 들여다보는 자리가 다르므로 **규칙마다** 관측을
+            # 만든다 (Phase 2-Y). 하나로 합쳐서 전부 열면, 덱을 보는
+            # 효과가 같은 판의 다른 규칙에까지 덱을 열어 준다.
+            resolver = TargetResolver(
+                GameStateView.from_state(
+                    state,
+                    viewer=action.actor,
+                    looked_at=binding.spec.looked_at_zones(),
+                )
+            )
             checked = resolver.validate(
                 binding.spec, chosen.get(binding.ref), context, binding.ref
             )

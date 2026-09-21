@@ -599,14 +599,43 @@ class GameStateView:
     # 만들기
     # ------------------------------------------------------------------
     @classmethod
-    def from_state(cls, state: "GameState", viewer: int) -> "GameStateView":
+    def from_state(
+        cls,
+        state: "GameState",
+        viewer: int,
+        looked_at: "frozenset[Zone] | None" = None,
+    ) -> "GameStateView":
         """
         ``viewer`` 가 보는 만큼만 담은 스냅숏을 만든다.
 
         **``state`` 를 바꾸지 않는다.** 읽기만 한다.
+
+        ``looked_at`` — **효과가 들여다보게 한 자리들** (Phase 2-Y).
+
+        기본값은 비어 있고, 비어 있으면 이 함수의 동작은 예전과 **한 글자도
+        다르지 않다.** 넘기더라도 :func:`_zone_view` 가 ``owner == viewer``
+        인 자리에만 적용한다 — 남의 패나 덱은 어떤 값을 넘겨도 열리지
+        않는다. 그 방어는 한 곳에만 있어야 하므로 여기서 다시 하지 않고
+        거기서 한 번만 한다.
+
+        왜 이런 것이 필요한가는 룰북이 말한다. ``sd-rulebook-en-v10`` 의
+        Deck 항목이다:
+
+            "If a card effect requires you to reveal cards from your Deck,
+            or look through it, shuffle it and put it back in this space
+            afterwards."
+
+        즉 덱이 가려져 있는 것은 **기본값**이지 불변이 아니다. "덱에서
+        고른다" 는 효과는 그 순간 자기 덱을 본다. 그 경우를 표현할 자리가
+        없던 것이 STRUCTURAL-69 였다.
+
+        **엔진이 아는 것(``GameState``)과 플레이어가 보는 것(이 관측)은
+        계속 다른 것이다.** 이 인자는 둘을 합치지 않는다 — 무엇을 보게 할지
+        **효과가 이름으로 말할 때만** 그 자리를 연다.
         """
         if viewer not in (0, 1):
             raise ValueError(f"viewer 는 0 또는 1 입니다: {viewer}")
+        looked_at = frozenset() if looked_at is None else frozenset(looked_at)
         return cls(
             viewer=viewer,
             turn_number=state.turn.turn_number,
@@ -614,8 +643,8 @@ class GameStateView:
             phase=state.turn.phase,
             step=state.turn.step,
             players=(
-                _player_view(state, 0, viewer),
-                _player_view(state, 1, viewer),
+                _player_view(state, 0, viewer, looked_at),
+                _player_view(state, 1, viewer, looked_at),
             ),
             winner=state.result.winner if state.result is not None else None,
             result_reason=state.result.reason if state.result is not None else "",
@@ -714,20 +743,29 @@ class GameStateView:
 # ----------------------------------------------------------------------
 # 내부 — 공개 범위 판정
 # ----------------------------------------------------------------------
-def _player_view(state: "GameState", player_id: int, viewer: int) -> PlayerView:
+def _player_view(
+    state: "GameState",
+    player_id: int,
+    viewer: int,
+    looked_at: frozenset[Zone] = frozenset(),
+) -> PlayerView:
     player = state.player(player_id)
     return PlayerView(
         player_id=player_id,
         life_points=player.life_points,
         zones=tuple(
-            _zone_view(player.zones[zone], viewer)
+            _zone_view(player.zones[zone], viewer, looked_at)
             for zone in PLAYER_ZONES
             if zone in player.zones
         ),
     )
 
 
-def _zone_view(container: "ZoneContainer", viewer: int) -> ZoneView:
+def _zone_view(
+    container: "ZoneContainer",
+    viewer: int,
+    looked_at: frozenset[Zone] = frozenset(),
+) -> ZoneView:
     zone = container.zone
     visibility = zone_visibility(zone)
     kind = zone_kind(zone)
@@ -742,12 +780,26 @@ def _zone_view(container: "ZoneContainer", viewer: int) -> ZoneView:
         size=size,
     )
 
-    # 덱은 아무도 내용을 모른다. 자기 덱도 마찬가지다 — 그것이 규칙이다.
-    if visibility is ZoneVisibility.HIDDEN:
+    # **효과가 들여다보게 한 자리인가** (Phase 2-Y).
+    #
+    # 이 한 줄이 이번 단계의 전부다. ``container.owner == viewer`` 가
+    # 함께 있는 것이 핵심이다 — 어떤 값을 넘겨도 **남의 자리는 열리지
+    # 않는다.** 그 방어를 여기 한 곳에만 두어야 부르는 쪽이 늘어도 새지
+    # 않는다.
+    looking = container.owner == viewer and zone in looked_at
+
+    # 덱은 아무도 내용을 모른다. 자기 덱도 마찬가지다 — 그것이 **기본
+    # 규칙**이고, 효과가 들여다보게 할 때만 예외다 (룰북의 Deck 항목:
+    # "If a card effect requires you to ... look through it").
+    if visibility is ZoneVisibility.HIDDEN and not looking:
         return ZoneView(**base, cards=(), concealed=True)
 
     # 패 · 엑스트라 덱은 소유자만 안다.
-    if visibility is ZoneVisibility.OWNER_ONLY and container.owner != viewer:
+    if (
+        visibility is ZoneVisibility.OWNER_ONLY
+        and container.owner != viewer
+        and not looking  # ``looking`` 은 owner == viewer 를 이미 요구한다
+    ):
         return ZoneView(**base, cards=(), concealed=True)
 
     if kind is ZoneKind.SLOTTED:

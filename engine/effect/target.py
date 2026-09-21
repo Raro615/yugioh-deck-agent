@@ -114,6 +114,17 @@ class TargetSpec:
     # ------------------------------------------------------------------
     # 조회
     # ------------------------------------------------------------------
+    def looked_at_zones(self) -> "frozenset[Zone]":
+        """
+        이 대상 규칙을 판정하려면 컨트롤러가 **자기 어느 자리를 들여다
+        봐야 하는가** (Phase 2-Y).
+
+        고를 것이 없으면 빈 집합이다.
+        """
+        if self.choice is None:
+            return frozenset()
+        return self.choice.looked_at_zones()
+
     @property
     def requires_selection(self) -> bool:
         """고를 것이 있는가. **"아직 안 골랐다" 와 다른 질문이다.**"""
