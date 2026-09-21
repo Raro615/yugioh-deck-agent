@@ -298,6 +298,45 @@ Duel Engine.
   하나가 다른 하나를 대체하지 않는다.
   ``docs/phase2w-real-card-execution.md`` 참고.
 
+- **Phase 2-X** — 묘지로 보내기 · 버리기의 **규칙 관문**
+  (``effect/semantics.py`` 의 ``MovementRuling``). Phase 2-W 가 지목한
+  관문 계층의 부재 중 이 둘을 메운다.
+
+  먼저 ``c*.lua`` 12,702개를 다시 읽었다. 지시서가 예로 든 이름 중
+  ``IsAbleToDiscard`` · ``IsCanBeGrave`` · ``IsCanBeDiscarded`` 는
+  **코퍼스에 없다** (0장). 실제로 쓰이는 것은 ``Card.IsAbleToGrave``
+  (544장)와 ``Card.IsDiscardable`` (537장)이고, **둘은 다른 질문**이다 —
+  한쪽만 쓰는 카드가 각각 518장 · 511장이고, ``c26400609.lua`` 는 한
+  줄에서 둘을 함께 묻는다.
+
+  그래서 ``MovementRuling`` 의 메서드가 **둘**이고
+  (``may_be_sent_to_grave`` · ``may_be_discarded``),
+  ``DeclaredMovementRuling`` 의 집합이 **넷**이다 — "묘지로는 보낼 수
+  있지만 버릴 수 있는지는 모른다" 를 적을 수 있어야 한다.
+  ``RuleQuestion`` 이 네 질문(A 묘지 · B 버리기 · C 대상 지정 · D 수행
+  가능성)을 갈라 놓고, 아직 아무도 묻지 않는 C 는 ``UNASKED_QUESTIONS``
+  에 **적어 둔다** — 빈 칸은 "없다" 로 읽히기 때문이다.
+
+  **관문을 종류로 걸지 않았다.** 파괴와 특수 소환은 언제나 판정을 받지만
+  (``RULE_GATED``), 묘지로 보내기는 카드마다 다르다 — 육신보살
+  (15103313)의 후보 조건은 ``nil`` 이고 어리석은 매장(81439173)은
+  ``IsAbleToGrave`` 다. 같은 ``Duel.SendtoGrave`` 인데 한쪽은 묻고 한쪽은
+  묻지 않는다. 종류로 걸었다면 이미 실행되던 두 장이 멈췄을 것이다 —
+  스크립트가 묻지 않는 것을 엔진이 묻는 것도 추측이다. 선언은
+  ``CardOperation.gated`` 한 칸이고 기본값은 거짓이다.
+
+  **실제 카드는 여전히 실행되지 않는다. 이유가 관문이 아니다.**
+  ``IsAbleToGrave`` 를 선언하면서 이 엔진이 닿는 카드 15장이 **전부**
+  덱이나 엑스트라 덱에서 보내는데, 덱은 관측 모델에서 ``HIDDEN`` 이다.
+  "자신의 덱을 본다" 는 동작이 없다 (STRUCTURAL-69). 어리석은 매장은
+  그래서 ``UNCHECKED_TARGET`` / ``HIDDEN_CARD`` 로 멈추고, **무엇이 막고
+  있는지 정확히 지목한다** — Phase 2-W 에서는 표현조차 못 하던 카드다.
+  ``IsDiscardable`` 쪽은 닿는 카드가 **0장**이라 실제 카드를 붙이지
+  못했다. 없는 것을 있는 척 만들지 않았다.
+
+  기존 엔진 테스트는 **한 건도 고치지 않았다.**
+  ``docs/phase2x-rule-gate-grave-discard.md`` 참고.
+
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
 변경이고, 변경을 적으려면 ``effect.delta`` 가 필요한데 ``effect`` 가 이미

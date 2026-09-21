@@ -46,10 +46,14 @@ Phase 2-M 은 세 번째까지만 했다 — 파괴를 실행하면서 "내성�
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from engine.condition import ConditionResult
-from engine.effect.operation import OperationKind
+from engine.effect.operation import (
+    DECLARABLE_GATE_KINDS,
+    OperationKind,
+)
 from engine.ids import InstanceId
 from engine.vocabulary import Zone
 
@@ -168,10 +172,9 @@ ORIGIN_RULES: dict[OperationKind, OriginRule] = {
 #: 않는다. 실행 **전에** 판정을 받아야 하고, 받지 못하면 판을 건드리지
 #: 않는다.
 #:
-#: ``SEND_TO_GRAVE`` 와 ``DISCARD`` 는 아직 여기 없다. 둘도 판정되지 않은
-#: 규칙을 안고 실행되고 있으며 (STRUCTURAL-48), 같은 원칙이 적용되어야
-#: 한다. 다만 그 둘은 Phase 2-D-2 부터의 상태이고 이번 수정의 범위가
-#: 아니다 — **알면서 남겨 둔 것이지 괜찮다고 판단한 것이 아니다.**
+#: ``SEND_TO_GRAVE`` 와 ``DISCARD`` 는 **여기 오지 않는다.** 관문이 없어서가
+#: 아니라 **종류로 거는 관문이 아니기** 때문이다 (Phase 2-X). 그 둘의 관문은
+#: 카드가 선언하고, :data:`DECLARED_GATE_RULINGS` 가 그 자리다.
 RULE_GATED: frozenset[OperationKind] = frozenset(
     {OperationKind.DESTROY, OperationKind.SPECIAL_SUMMON}
 )
@@ -186,6 +189,15 @@ GATING_RULES: dict[OperationKind, tuple[str, ...]] = {
         "이 카드를 특수 소환할 수 있는가 (소환 조건)",
         "지금 특수 소환해도 되는가 (소생 제한 · 제약)",
     ),
+    # 아래 둘은 **카드가 선언할 때만** 물어진다 (Phase 2-X).
+    OperationKind.SEND_TO_GRAVE: (
+        "이 카드를 묘지로 보낼 수 있는가 (Card.IsAbleToGrave)",
+        "묘지 대신 다른 곳으로 가는가 (펜듈럼 · 토큰 · 대체 효과)",
+    ),
+    OperationKind.DISCARD: (
+        "이 카드를 버릴 수 있는가 (Card.IsDiscardable)",
+        "버려진 카드가 묘지 이외로 가는가",
+    ),
 }
 
 #: 관문을 여는 계층의 이름. 결과의 ``missing`` 에 그대로 실린다.
@@ -194,6 +206,10 @@ MISSING_GATE: dict[OperationKind, str] = {
     OperationKind.SPECIAL_SUMMON: (
         "special-summon-legality (소환 조건 · 소생 제한 판정)"
     ),
+    OperationKind.SEND_TO_GRAVE: (
+        "send-to-grave-legality (Card.IsAbleToGrave 판정)"
+    ),
+    OperationKind.DISCARD: "discard-legality (Card.IsDiscardable 판정)",
 }
 
 
@@ -325,6 +341,192 @@ class DeclaredSummonRuling:
         return ConditionResult.UNKNOWN
 
 
+
+# ======================================================================
+# 관문이 묻는 **서로 다른** 질문들 (Phase 2-X §2)
+# ======================================================================
+
+
+class RuleQuestion(str, Enum):
+    """
+    관문이 묻는 질문. **넷을 하나의 boolean 으로 합치지 않는다.**
+
+    합치면 안 되는 이유는 추론이 아니라 **관측**이다. 공식 스크립트
+    ``c26400609.lua`` 가 한 줄에서 둘을 함께 묻는다::
+
+        return c:IsAttribute(ATTRIBUTE_WATER)
+               and c:IsDiscardable()
+               and c:IsAbleToGraveAsCost()
+
+    같은 질문이라면 스크립트가 둘 다 쓸 이유가 없다. 실측으로도 갈린다 —
+    12,702개 중 ``IsAbleToGrave`` 만 쓰는 카드 518장, ``IsDiscardable`` 만
+    쓰는 카드 511장, 둘 다 쓰는 카드는 26장뿐이다.
+    """
+
+    MAY_BE_SENT_TO_GRAVE = "may_be_sent_to_grave"
+    """A — "이 카드를 묘지로 보낼 수 있는가" (``Card.IsAbleToGrave``)."""
+    MAY_BE_DISCARDED = "may_be_discarded"
+    """B — "이 카드를 버릴 수 있는가" (``Card.IsDiscardable``)."""
+    MAY_BE_TARGETED = "may_be_targeted"
+    """C — "이 카드를 대상으로 지정할 수 있는가" (``Card.IsCanBeEffectTarget``)."""
+    OPERATION_POSSIBLE = "operation_possible"
+    """D — "그 이동을 실제로 수행할 수 있는가". 실행기의 계획 단계가 답한다."""
+
+
+#: 질문 → 그 질문을 던지는 공식 Lua 술어 이름. **근거다.**
+#:
+#: 이름을 추측하지 않았다. 저장소의 ``c*.lua`` 12,702개를 읽어서 확인한
+#: 것이고, 여기 없는 이름(``IsAbleToDiscard`` · ``IsCanBeGrave`` ·
+#: ``IsCanBeDiscarded``)은 **코퍼스에 존재하지 않는다** — 0회.
+LUA_GATE_PREDICATES: dict[RuleQuestion, str] = {
+    RuleQuestion.MAY_BE_SENT_TO_GRAVE: "Card.IsAbleToGrave",
+    RuleQuestion.MAY_BE_DISCARDED: "Card.IsDiscardable",
+    RuleQuestion.MAY_BE_TARGETED: "Card.IsCanBeEffectTarget",
+}
+
+#: 카드가 **선언할 때만** 물어지는 관문 → 그 질문.
+#:
+#: 파괴 · 특수 소환은 여기 없다. 그 둘은 종류만으로 언제나 물어지므로
+#: :data:`RULE_GATED` 에 있다 (Phase 2-X §6 — 파괴를 이번 범위로 넓히지
+#: 않는다).
+DECLARED_GATE_RULINGS: dict[OperationKind, RuleQuestion] = {
+    OperationKind.SEND_TO_GRAVE: RuleQuestion.MAY_BE_SENT_TO_GRAVE,
+    OperationKind.DISCARD: RuleQuestion.MAY_BE_DISCARDED,
+}
+
+#: **아직 아무도 묻지 않는** 질문들.
+#:
+#: C(대상 지정 가능성)는 실제 카드 429장이 쓰지만 이 엔진에 대상 내성
+#: 계층이 없다. 표에 비워 두는 대신 **여기에 적어** 둔다 — 빈 칸은
+#: "없다" 로 읽히고, 적어 둔 것은 "아직" 으로 읽힌다.
+UNASKED_QUESTIONS: dict[RuleQuestion, str] = {
+    RuleQuestion.MAY_BE_TARGETED: (
+        "대상 지정 내성 계층이 없다 (Card.IsCanBeEffectTarget, 실제 카드 429장)"
+    ),
+}
+
+
+@runtime_checkable
+class MovementRuling(Protocol):
+    """
+    "이 카드를 그 자리로 보내도 되는가" 에 답하는 것.
+
+    :class:`DestructionRuling` · :class:`SummonRuling` 과 **같은 모양**이다
+    — 세 값을 돌려주고, ``UNKNOWN`` 은 허가가 아니다.
+
+    **메서드가 둘인 것이 핵심이다.** 묘지로 보내기와 버리기는 다른
+    질문이므로 (:class:`RuleQuestion`), 하나의
+    ``may_be_moved(kind, instance)`` 로 합치지 않는다. 합치면 호출하는
+    쪽이 ``kind`` 를 잘못 넘겨도 타입이 잡아 주지 못하고, 구현하는 쪽이
+    "둘 다 같은 답" 을 내놓기 쉬워진다.
+    """
+
+    def may_be_sent_to_grave(self, instance: InstanceId) -> ConditionResult:
+        ...  # pragma: no cover - 프로토콜
+
+    def may_be_discarded(self, instance: InstanceId) -> ConditionResult:
+        ...  # pragma: no cover - 프로토콜
+
+
+class UnknownMovementRuling:
+    """
+    **아무것도 판정하지 못한다.** 지금 엔진의 실제 상태다.
+
+    "이 카드가 묘지로 갈 수 있는가" 는 토큰 · 펜듈럼 몬스터 · "묘지로
+    보낼 수 없다" 제약이 갈라놓는 질문이고, 그것을 읽는 계층이 없다.
+    룰북(``sd-rulebook-en-v10``)도 답하지 않는다 — 토큰을 한 번
+    언급하는데 그것도 엑시즈 소재 이야기다.
+
+    그래서 이 판정기로는 **관문을 선언한 어떤 이동도 일어나지 않는다.**
+    관문을 선언하지 않은 이동(육신보살 · 벌금)은 영향을 받지 않는다 —
+    그 카드들의 스크립트가 애초에 묻지 않기 때문이다.
+    """
+
+    __slots__ = ()
+
+    def may_be_sent_to_grave(self, instance: InstanceId) -> ConditionResult:
+        return ConditionResult.UNKNOWN
+
+    def may_be_discarded(self, instance: InstanceId) -> ConditionResult:
+        return ConditionResult.UNKNOWN
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return "<UnknownMovementRuling>"
+
+
+@dataclass(frozen=True, slots=True)
+class DeclaredMovementRuling:
+    """
+    **손으로 선언한** 이동 판정. 적히지 않은 카드는 ``UNKNOWN`` 이다.
+
+    네 집합인 것이 핵심이다 — 같은 카드가 "묘지로는 보낼 수 있지만 버릴
+    수 있는지는 모른다" 일 수 있다. 두 질문을 한 쌍으로 묶으면 그 상태를
+    적을 수 없다.
+    """
+
+    sendable: frozenset[InstanceId] = field(default_factory=frozenset)
+    """묘지로 보내도 된다고 **확인된** 카드들."""
+    unsendable: frozenset[InstanceId] = field(default_factory=frozenset)
+    """묘지로 보낼 수 없다고 **확인된** 카드들."""
+    discardable: frozenset[InstanceId] = field(default_factory=frozenset)
+    """버려도 된다고 **확인된** 카드들."""
+    undiscardable: frozenset[InstanceId] = field(default_factory=frozenset)
+    """버릴 수 없다고 **확인된** 카드들."""
+
+    def __post_init__(self) -> None:
+        for yes, no, what in (
+            (self.sendable, self.unsendable, "묘지로 보내기"),
+            (self.discardable, self.undiscardable, "버리기"),
+        ):
+            both = yes & no
+            if both:
+                raise ValueError(
+                    f"같은 카드가 {what} 가능이면서 불가능일 수 없습니다: "
+                    f"{sorted(i.value for i in both)}"
+                )
+
+    def may_be_sent_to_grave(self, instance: InstanceId) -> ConditionResult:
+        if instance in self.unsendable:
+            return ConditionResult.FALSE
+        if instance in self.sendable:
+            return ConditionResult.TRUE
+        return ConditionResult.UNKNOWN
+
+    def may_be_discarded(self, instance: InstanceId) -> ConditionResult:
+        if instance in self.undiscardable:
+            return ConditionResult.FALSE
+        if instance in self.discardable:
+            return ConditionResult.TRUE
+        return ConditionResult.UNKNOWN
+
+
+def declared_gate_question(operation) -> "RuleQuestion | None":
+    """
+    이 일이 **스스로 선언한** 관문의 질문. 선언하지 않았으면 ``None``.
+
+    선언은 :attr:`~engine.effect.operation.CardOperation.gated` 한 칸이고,
+    그 값은 원본 스크립트에서 왔다. 여기서 추론하지 않는다.
+    """
+    if not getattr(operation, "gated", False):
+        return None
+    return DECLARED_GATE_RULINGS.get(operation.kind)
+
+
+def ask_movement(
+    ruling: "MovementRuling", question: RuleQuestion, instance: InstanceId
+) -> ConditionResult:
+    """
+    질문에 **맞는 메서드**로 묻는다. 두 질문을 섞지 않는 유일한 통로다.
+    """
+    if question is RuleQuestion.MAY_BE_SENT_TO_GRAVE:
+        return ruling.may_be_sent_to_grave(instance)
+    if question is RuleQuestion.MAY_BE_DISCARDED:
+        return ruling.may_be_discarded(instance)
+    raise ValueError(  # pragma: no cover - 표가 막는다
+        f"{question.value} 는 이동 판정기가 답하는 질문이 아닙니다."
+    )
+
+
 def is_rule_gated(kind: OperationKind) -> bool:
     """실행 전에 판정을 받아야 하는 의미인가."""
     return kind in RULE_GATED
@@ -387,6 +589,16 @@ __all__ = [
     "DeclaredSummonRuling",
     "OriginRule",
     "ORIGIN_RULES",
+    "RuleQuestion",
+    "LUA_GATE_PREDICATES",
+    "DECLARED_GATE_RULINGS",
+    "DECLARABLE_GATE_KINDS",
+    "UNASKED_QUESTIONS",
+    "MovementRuling",
+    "UnknownMovementRuling",
+    "DeclaredMovementRuling",
+    "declared_gate_question",
+    "ask_movement",
     "is_semantic",
     "unchecked_rules",
     "origin_rule",

@@ -39,7 +39,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from engine.condition import IsSpellTrap, PlayerRef, ZoneCountAtLeast
+from engine.condition import IsMonster, IsSpellTrap, PlayerRef, ZoneCountAtLeast
 from engine.cost import CandidateSource, ChoiceSpec
 from engine.effect.definition import (
     EffectDefinition,
@@ -58,7 +58,7 @@ from engine.effect.operation import (
     LifeChangeOperation,
     OperationKind,
 )
-from engine.effect.semantics import FIELD_ZONES, DestructionRuling
+from engine.effect.semantics import FIELD_ZONES, DestructionRuling, MovementRuling
 from engine.effect.target import PRIMARY_TARGET, TargetBinding, TargetSpec
 from engine.ids import EffectRef
 from engine.vocabulary import Zone
@@ -176,6 +176,8 @@ SELF_MUMMIFICATION = 15103313
 FINE = 92595643
 COMPULSORY_EVACUATION_DEVICE = 94192409
 DISAPPEAR = 24623598
+# Phase 2-X
+FOOLISH_BURIAL = 81439173
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -600,6 +602,73 @@ _DISAPPEAR_ENTRY = LibraryEntry(
 )
 
 
+#: 어리석은 매장 — "①: 덱에서 몬스터 1장을 묘지로 보낸다."
+#:
+#: **이 목록에서 처음으로 규칙 관문을 선언하는 카드다** (Phase 2-X).
+#: 스크립트의 후보 조건이 ``c:IsMonster() and c:IsAbleToGrave()`` 이고,
+#: 뒤쪽이 "이 카드가 묘지로 갈 수 있는가" 라는 관문이다. 육신보살
+#: (15103313)의 후보 조건이 ``nil`` 이었던 것과 **정확히 대비된다** —
+#: 같은 ``Duel.SendtoGrave`` 인데 한쪽은 묻고 한쪽은 묻지 않는다. 그래서
+#: 관문을 종류로 걸지 않고 ``gated=True`` 로 **효과가 선언한다.**
+#:
+#: ``EFFECT_FLAG_CARD_TARGET`` 이 없으므로 대상 지정이 아니라 고르기다
+#: (``Duel.SelectMatchingCard``). 벌금(92595643)과 같은 자리.
+#:
+#: **실행되지는 않는다. 발동은 된다.** 후보를 덱에서 찾는데 이 엔진의
+#: 관측 모델에서 덱은 ``HIDDEN`` 이다 — 주인조차 보지 못한다
+#: (``zone_visibility(Zone.DECK)``). 그래서 해결은 ``UNCHECKED_TARGET`` /
+#: ``HIDDEN_CARD`` 에서 멈추고, 관문은 그 **뒤**에 있다. 순서가 규칙이다:
+#: 대상이 적법한가 → 해도 되는가 → 어디로 가는가.
+#:
+#: 그 사실이 이 항목을 싣는 이유다. Phase 2-W 에서는 이 카드를 **표현조차
+#: 할 수 없었고** (``IsAbleToGrave`` 를 옮길 자리가 없었다), 이제는
+#: 표현되고 엔진이 **무엇이 막고 있는지 정확히 지목한다.**
+#:
+#: 발동 조건 ``IsExistingMatchingCard(s.tgfilter,tp,LOCATION_DECK,0,1,nil)``
+#: 중 **덱 장수 부분만** 옮겼다 — "몬스터이면서 묘지로 갈 수 있는 것이
+#: 있는가" 는 덱을 볼 수 없어 셀 수 없다 (욕망의 항아리의
+#: ``IsPlayerCanDraw`` 와 같은 부분 이전).
+_FOOLISH_BURIAL_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(FOOLISH_BURIAL, 0),
+        source_card_id=FOOLISH_BURIAL,
+        targets=TargetBinding.single(
+            TargetSpec.choosing(
+                ChoiceSpec(
+                    source=CandidateSource(
+                        # ``LOCATION_DECK, 0`` — 자신 덱만이다.
+                        zones=frozenset({Zone.DECK}),
+                        owner=PlayerRef.CONTROLLER,
+                        # ``s.tgfilter`` 의 **앞쪽만** 조건으로 옮긴다.
+                        # 뒤쪽 ``IsAbleToGrave`` 는 조건이 아니라 관문이고,
+                        # 관문은 ``CardOperation.gated`` 가 들고 간다.
+                        require=IsMonster(),
+                    ),
+                    minimum=1,
+                    maximum=1,
+                )
+            )
+        ),
+        operations=(
+            CardOperation.send_to_grave(PRIMARY_TARGET, gated=True),
+        ),
+        activation=ZoneCountAtLeast(PlayerRef.CONTROLLER, Zone.DECK, 1),
+        provenance=EffectProvenance.official_lua(
+            "c81439173.lua 의 s.tgfilter · s.target · s.activate 를 옮겼다. "
+            "IsAbleToGrave 는 조건이 아니라 관문으로 옮겼고, 발동 조건은 "
+            "덱 장수 부분만 옮겼다 (덱을 관측할 수 없다)."
+        ),
+    ),
+    lua_file="c81439173.lua",
+    lua_excerpt=(
+        "s.tgfilter = c:IsMonster() and c:IsAbleToGrave(); "
+        "Duel.SelectMatchingCard(tp,s.tgfilter,tp,LOCATION_DECK,0,1,1,nil); "
+        "Duel.SendtoGrave(g,REASON_EFFECT)"
+    ),
+    executable=True,
+)
+
+
 #: 이 엔진이 들고 있는 효과 정의 전부. **이것이 전부라는 것이 사실이다.**
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
@@ -616,6 +685,8 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _FINE_ENTRY,
     _COMPULSORY_EVACUATION_DEVICE_ENTRY,
     _DISAPPEAR_ENTRY,
+    # Phase 2-X
+    _FOOLISH_BURIAL_ENTRY,
 )
 
 
@@ -664,6 +735,7 @@ def build_executor(
     journal: EventJournal | None = None,
     entries: "tuple[LibraryEntry, ...]" = EFFECT_LIBRARY,
     destruction: DestructionRuling | None = None,
+    movement: MovementRuling | None = None,
 ) -> EffectExecutor:
     """
     이 목록의 구현을 아는 실행기.
@@ -673,6 +745,10 @@ def build_executor(
     여기서 그것을 몰래 바꾸지 않는다 — 목록에 실렸다는 사실이 파괴 판정을
     대신하지 못한다 (Phase 2-M · STRUCTURAL-47).
 
+    ``movement`` 도 같다 (Phase 2-X). 주지 않으면 **관문을 선언한** 이동은
+    일어나지 않는다. 선언하지 않은 이동(육신보살 · 벌금)은 영향을 받지
+    않는다 — 그 카드들의 공식 스크립트가 애초에 묻지 않기 때문이다.
+
     체인 해결기는 만들어 주지 않는다 — :class:`~engine.chain.ChainResolver`
     는 이 실행기와 정의 저장소를 받아 **부르는 쪽이** 만든다.
     """
@@ -680,6 +756,7 @@ def build_executor(
         lookup=implementation_registry(entries),
         journal=journal,
         destruction=destruction,
+        movement=movement,
     )
 
 

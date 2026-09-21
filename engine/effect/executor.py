@@ -85,10 +85,14 @@ from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.effect.semantics import (
     MISSING_GATE,
     DestructionRuling,
+    MovementRuling,
     SummonRuling,
     UnknownDestructionRuling,
+    UnknownMovementRuling,
     UnknownSummonRuling,
+    ask_movement,
     collect_unchecked,
+    declared_gate_question,
     gating_rules,
     is_rule_gated,
     origin_rule,
@@ -279,7 +283,7 @@ class EffectExecutor:
     그것이 기본 상태이고, 그 상태에서는 어떤 효과도 실행되지 않는다.
     """
 
-    __slots__ = ("_lookup", "_journal", "_destruction", "_summoning")
+    __slots__ = ("_lookup", "_journal", "_destruction", "_summoning", "_movement")
 
     def __init__(
         self,
@@ -287,6 +291,7 @@ class EffectExecutor:
         journal: EventJournal | None = None,
         destruction: DestructionRuling | None = None,
         summoning: SummonRuling | None = None,
+        movement: MovementRuling | None = None,
     ):
         self._lookup = lookup if lookup is not None else EmptyImplementationLookup()
         # 기록은 **선택**이다. 없으면 아무것도 적지 않고, 있어도 실행
@@ -304,6 +309,12 @@ class EffectExecutor:
         self._summoning = (
             summoning if summoning is not None else UnknownSummonRuling()
         )
+        # 이동 판정도 **선택이 아니다** (Phase 2-X). 주지 않으면 관문을
+        # **선언한** 이동은 하나도 일어나지 않는다. 선언하지 않은 이동은
+        # 영향을 받지 않는다 — 그 카드의 스크립트가 묻지 않기 때문이다.
+        self._movement = (
+            movement if movement is not None else UnknownMovementRuling()
+        )
 
     @property
     def journal(self) -> EventJournal | None:
@@ -316,6 +327,10 @@ class EffectExecutor:
     @property
     def summoning(self) -> SummonRuling:
         return self._summoning
+
+    @property
+    def movement(self) -> MovementRuling:
+        return self._movement
 
     # ==================================================================
     # 진입점
@@ -659,7 +674,7 @@ class EffectExecutor:
                     f"{rule.detail}.",
                     missing=rule.missing,
                 )
-            gate = self._check_rule_gate(operation.kind, instance)
+            gate = self._check_rule_gate(operation, instance)
             if gate is not None:
                 return gate
 
@@ -708,7 +723,7 @@ class EffectExecutor:
 
         placements: list[SummonPlacement] = []
         for instance in selection.chosen:
-            gate = self._check_rule_gate(operation.kind, instance)
+            gate = self._check_rule_gate(operation, instance)
             if gate is not None:
                 return gate
             try:
@@ -807,7 +822,7 @@ class EffectExecutor:
         )
 
     def _check_rule_gate(
-        self, kind: OperationKind, instance: InstanceId
+        self, operation: Operation, instance: InstanceId
     ) -> "EffectResult | None":
         """
         **판정을 받아야만 실행되는 일**의 관문. 통과하면 ``None``.
@@ -821,17 +836,28 @@ class EffectExecutor:
         한 장만 남고 나머지는 파괴된다" 는 규칙을 아직 옮기지 못했으므로,
         안전한 쪽으로 통째로 멈춘다 (STRUCTURAL-49).
         """
-        if not is_rule_gated(kind):
-            return None
+        kind = operation.kind
+        question = declared_gate_question(operation)
 
-        if kind is OperationKind.SPECIAL_SUMMON:
-            verdict = self._summoning.may_be_special_summoned(instance)
-            refusal = f"{instance} 는 특수 소환할 수 없다고 판정되었습니다."
-            unknown = f"{instance} 를 특수 소환해도 되는지 판정할 수 없습니다"
+        if is_rule_gated(kind):
+            # 종류만으로 언제나 물어지는 관문 (파괴 · 특수 소환).
+            if kind is OperationKind.SPECIAL_SUMMON:
+                verdict = self._summoning.may_be_special_summoned(instance)
+                refusal = f"{instance} 는 특수 소환할 수 없다고 판정되었습니다."
+                unknown = f"{instance} 를 특수 소환해도 되는지 판정할 수 없습니다"
+            else:
+                verdict = self._destruction.may_be_destroyed(instance)
+                refusal = f"{instance} 는 파괴되지 않는다고 판정되었습니다."
+                unknown = f"{instance} 를 파괴해도 되는지 판정할 수 없습니다"
+        elif question is not None:
+            # **카드가 선언한** 관문 (Phase 2-X). 선언하지 않은 같은 종류의
+            # 일은 여기 오지 않는다 — 원본 스크립트가 묻지 않기 때문이다.
+            verdict = ask_movement(self._movement, question, instance)
+            word = "묘지로 보낼" if kind is OperationKind.SEND_TO_GRAVE else "버릴"
+            refusal = f"{instance} 는 {word} 수 없다고 판정되었습니다."
+            unknown = f"{instance} 를 {word} 수 있는지 판정할 수 없습니다"
         else:
-            verdict = self._destruction.may_be_destroyed(instance)
-            refusal = f"{instance} 는 파괴되지 않는다고 판정되었습니다."
-            unknown = f"{instance} 를 파괴해도 되는지 판정할 수 없습니다"
+            return None
 
         if verdict is ConditionResult.TRUE:
             return None

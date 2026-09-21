@@ -161,6 +161,25 @@ CARD_OPERATION_KINDS: frozenset[OperationKind] = frozenset(
 #: 무슨 일인지는 말하지 않기 때문이다 (ADR-002).
 SEMANTIC_CARD_KINDS: frozenset[OperationKind] = CARD_OPERATION_KINDS
 
+#: **카드의 스크립트가 스스로 선언하는** 관문이 있는 일들 (Phase 2-X).
+#:
+#: 파괴와 특수 소환의 관문은 *언제나* 적용된다 — 어떤 파괴든 내성에 막힐 수
+#: 있고, 어떤 특수 소환이든 소환 조건을 받는다. 그래서 그 둘은
+#: ``semantics.RULE_GATED`` 에서 **종류로** 막는다.
+#:
+#: 묘지로 보내기와 버리기는 다르다. 공식 스크립트가 후보 조건에
+#: ``Card.IsAbleToGrave`` · ``Card.IsDiscardable`` 을 **적을 때도 있고 적지
+#: 않을 때도 있다** (실측: 12,702개 중 각각 544장 · 537장이 적는다). 적지
+#: 않은 카드는 EDOPro 자신도 묻지 않고 보낸다 — 육신보살(15103313)의
+#: ``Duel.SelectTarget(tp,nil,...)`` 이 그렇다.
+#:
+#: 그러므로 이 둘의 관문은 **종류가 아니라 효과가 선언한다.** 선언은
+#: :attr:`CardOperation.gated` 한 칸이고, 그 값은 원본 스크립트를 읽어서
+#: 정한다 — 추측하지 않는다.
+DECLARABLE_GATE_KINDS: frozenset[OperationKind] = frozenset(
+    {OperationKind.SEND_TO_GRAVE, OperationKind.DISCARD}
+)
+
 
 #: :class:`MoveOperation` 이 갈 수 있는 곳.
 #:
@@ -244,11 +263,29 @@ class CardOperation(Operation):
 
     operation: OperationKind
     target_ref: TargetRef
+    gated: bool = False
+    """
+    이 일이 **규칙 관문을 받아야 하는가** (Phase 2-X).
+
+    카드의 공식 스크립트가 후보 조건에 ``Card.IsAbleToGrave`` 또는
+    ``Card.IsDiscardable`` 을 적었으면 참이다. 적지 않았으면 거짓이고,
+    거짓이 기본값이다 — **적지 않은 것을 "관문이 있다" 로 읽지 않는다.**
+
+    :data:`DECLARABLE_GATE_KINDS` 의 일에만 붙일 수 있다. 파괴와 특수
+    소환은 선언과 무관하게 언제나 관문을 받으므로 여기 오지 않는다.
+    """
 
     def __post_init__(self) -> None:
         if self.operation not in CARD_OPERATION_KINDS:
             raise ValueError(
                 f"{self.operation.value} 는 카드를 다루는 일이 아닙니다."
+            )
+        if self.gated and self.operation not in DECLARABLE_GATE_KINDS:
+            raise ValueError(
+                f"{self.operation.value} 의 관문은 효과가 선언하는 것이 "
+                "아닙니다. 파괴 · 특수 소환은 언제나 판정을 받고 "
+                "(semantics.RULE_GATED), 나머지는 아직 관문이 없습니다 "
+                "(STRUCTURAL-48)."
             )
         if not isinstance(self.target_ref, TargetRef):
             raise TypeError(
@@ -271,9 +308,17 @@ class CardOperation(Operation):
         return cls(OperationKind.DESTROY, target_ref)
 
     @classmethod
-    def send_to_grave(cls, target_ref: TargetRef) -> "CardOperation":
-        """묘지로 보낸다. **파괴가 아니다** — 파괴 내성이 막지 못한다."""
-        return cls(OperationKind.SEND_TO_GRAVE, target_ref)
+    def send_to_grave(
+        cls, target_ref: TargetRef, *, gated: bool = False
+    ) -> "CardOperation":
+        """
+        묘지로 보낸다. **파괴가 아니다** — 파괴 내성이 막지 못한다.
+
+        ``gated`` 는 원본 스크립트가 ``Card.IsAbleToGrave`` 를 적었는지에서
+        온다. 기본값이 거짓인 이유는 적지 않은 카드가 실제로 있기
+        때문이다 (육신보살 15103313).
+        """
+        return cls(OperationKind.SEND_TO_GRAVE, target_ref, gated=gated)
 
     @classmethod
     def banish(cls, target_ref: TargetRef) -> "CardOperation":
@@ -284,8 +329,15 @@ class CardOperation(Operation):
         return cls(OperationKind.RELEASE, target_ref)
 
     @classmethod
-    def discard(cls, target_ref: TargetRef) -> "CardOperation":
-        return cls(OperationKind.DISCARD, target_ref)
+    def discard(
+        cls, target_ref: TargetRef, *, gated: bool = False
+    ) -> "CardOperation":
+        """
+        버린다. ``gated`` 는 원본이 ``Card.IsDiscardable`` 을 적었는지다 —
+        ``Card.IsAbleToGrave`` 와 **다른 술어이고 다른 질문**이다
+        (c26400609.lua 가 한 줄에서 둘을 함께 묻는다).
+        """
+        return cls(OperationKind.DISCARD, target_ref, gated=gated)
 
     @classmethod
     def return_to_hand(cls, target_ref: TargetRef) -> "CardOperation":
@@ -301,15 +353,19 @@ class CardOperation(Operation):
             self.operation.value,
             self.reason_names,
             self.target_ref.name,
+            self.gated,
         )
 
     def to_dict(self) -> dict:
-        return {
+        data = {
             "kind": "card_operation",
             "operation": self.operation.value,
             "reasons": list(self.reason_names),
             "target_ref": self.target_ref.name,
         }
+        if self.gated:
+            data["gated"] = True
+        return data
 
     def describe_ko(self) -> str:
         korean = {
@@ -321,7 +377,8 @@ class CardOperation(Operation):
             OperationKind.RETURN_TO_HAND: "패로 되돌림",
             OperationKind.RETURN_TO_DECK: "덱으로 되돌림",
         }[self.operation]
-        return f"{self.target_ref} 을 {korean}"
+        gate = " (규칙 판정을 받는다)" if self.gated else ""
+        return f"{self.target_ref} 을 {korean}{gate}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -566,6 +623,7 @@ __all__ = [
     "REASON_NAMES",
     "CARD_OPERATION_KINDS",
     "SEMANTIC_CARD_KINDS",
+    "DECLARABLE_GATE_KINDS",
     "MOVABLE_DESTINATIONS",
     "Operation",
     "CardOperation",
