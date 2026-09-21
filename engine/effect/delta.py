@@ -280,6 +280,55 @@ class CardDrawn(CardMovement):
 
 
 @dataclass(frozen=True, slots=True)
+class ZoneShuffled(StateDelta):
+    """
+    한 존의 순서가 **무작위로 다시 정해졌다** (Phase 2-Z).
+
+    카드가 움직이지 않았으므로 :class:`CardMovement` 이 아니다. 움직인
+    것은 순서뿐이고, 그래서 ``card`` 칸이 없다.
+
+    **결과 순서를 적지 않는다.** 섞은 뒤의 덱 순서는 아무도 모르는 것이
+    규칙이므로, 변화에 적어 두면 그것을 읽는 쪽이 알게 된다. 여기 있는
+    것은 "누구의 어느 존이 몇 장인 채로 섞였는가" 뿐이다.
+
+    :attr:`draw` 는 **재현 좌표**다 — 이 듀얼의 난수원에서 몇 번째로 꺼낸
+    결과인가. 정체가 아니라 번호이므로 공개해도 아무것도 새지 않는다.
+    """
+
+    player: int
+    zone: Zone
+    size: int
+    draw: int
+
+    def __post_init__(self) -> None:
+        if self.player not in (0, 1):
+            raise ValueError(f"player 는 0 또는 1 입니다: {self.player}")
+        if self.size < 0:
+            raise ValueError(f"size 는 음수일 수 없습니다: {self.size}")
+        if self.draw < 0:
+            raise ValueError(f"draw 는 음수일 수 없습니다: {self.draw}")
+
+    @property
+    def kind(self) -> str:
+        return "zone_shuffled"
+
+    def canonical_state(self) -> tuple:
+        return ("zone_shuffled", self.player, self.zone.value, self.size, self.draw)
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "zone_shuffled",
+            "player": self.player,
+            "zone": self.zone.value,
+            "size": self.size,
+            "draw": self.draw,
+        }
+
+    def describe_ko(self) -> str:
+        return f"P{self.player} 의 {self.zone.value} {self.size}장을 섞었다"
+
+
+@dataclass(frozen=True, slots=True)
 class LifeChanged(StateDelta):
     """
     라이프가 바뀌었다.
@@ -552,6 +601,7 @@ __all__ = [
     "ZoneMoved",
     "CardDrawn",
     "LifeChanged",
+    "ZoneShuffled",
     "PhaseChanged",
     "SummonKind",
     "MonsterSummoned",

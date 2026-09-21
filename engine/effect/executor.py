@@ -63,7 +63,13 @@ from enum import Enum
 from typing import Callable
 
 from engine.condition import ConditionEvaluator, ConditionResult
-from engine.effect.delta import CardDrawn, LifeChanged, StateDelta, ZoneMoved
+from engine.effect.delta import (
+    CardDrawn,
+    LifeChanged,
+    StateDelta,
+    ZoneMoved,
+    ZoneShuffled,
+)
 from engine.effect.definition import (
     EffectDefinition,
     EffectImplementationLookup,
@@ -72,6 +78,7 @@ from engine.effect.definition import (
     execution_availability,
 )
 from engine.effect.operation import (
+    ShuffleOperation,
     CardOperation,
     DrawOperation,
     LifeChangeOperation,
@@ -81,6 +88,7 @@ from engine.effect.operation import (
     SpecialSummonOperation,
 )
 from engine.effect.journal import EventJournal
+from engine.randomness import RandomError, RandomOutcome, RandomPurpose
 from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.effect.semantics import (
     MISSING_GATE,
@@ -226,6 +234,14 @@ class _Step:
     player: int | None = None
     placements: tuple[SummonPlacement, ...] = ()
     """소환이 확정한 배치들. 소환이 아닌 일에는 비어 있다 (Phase 2-U)."""
+    outcome: "RandomOutcome | None" = None
+    """
+    무작위가 **계획 단계에서 이미 결정된** 결과 (Phase 2-Z).
+
+    적용 단계에서 난수를 꺼내지 않는 것이 핵심이다 — 계획이 끝난 뒤에
+    무작위가 일어나면 "계획을 전부 확인한 뒤에 적용한다" 가 깨지고,
+    실패했을 때 난수원만 소비된 채로 남는다.
+    """
 
     def __post_init__(self) -> None:
         if len(self.owners) != len(self.instances):
@@ -607,6 +623,37 @@ class EffectExecutor:
             player=_resolve_player(operation.who, context),
         )
 
+    def _plan_shuffle(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        operation: ShuffleOperation,
+    ) -> "_Step | EffectResult":
+        """
+        섞을 순서를 **계획 단계에서** 정한다 (Phase 2-Z).
+
+        적용 단계에서 난수를 꺼내지 않는 것이 핵심이다. 꺼내면 뒤의 일이
+        막혔을 때 난수원만 소비된 채로 남고, 같은 입력을 다시 돌려도 같은
+        결과가 나오지 않는다.
+
+        난수원이 없으면 **거절한다.** 조용히 전역 난수로 넘어가면 재현할
+        수 없는 판이 만들어진다.
+        """
+        player = _resolve_player(operation.who, context)
+        container = state.player(player).zone(operation.zone)
+        cards = tuple(card.instance_id for card in container)
+        try:
+            outcome = state.randomness.shuffle(cards, RandomPurpose.DECK_SHUFFLE)
+        except (RuntimeError, RandomError) as error:
+            return _fail(
+                ResolutionStatus.UNSUPPORTED_OPERATION,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"섞을 수 없습니다: {error}",
+                missing="seeded randomness (GameState.create(seed=...))",
+            )
+        return _Step(operation, player=player, amount=len(cards), outcome=outcome)
+
     def _plan_card_operation(
         self,
         state: GameState,
@@ -955,6 +1002,35 @@ class EffectExecutor:
             changes.append(placement.to_delta(SPECIAL_SUMMON_PROCEDURE.summon))
         return step.record(), tuple(changes)
 
+    def _apply_shuffle(
+        self, state: GameState, step: _Step
+    ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
+        """
+        계획이 정한 순서를 **그대로 적용한다.** 여기서 난수를 꺼내지 않는다.
+        """
+        operation = step.operation
+        outcome = step.outcome
+        assert outcome is not None and step.player is not None  # 계획이 정했다
+        container = state.player(step.player).zone(operation.zone)
+
+        current = [card.instance_id for card in container]
+        if current != list(outcome.candidates):
+            # pragma: no cover - 계획과 적용 사이에 판이 바뀌면 안 된다
+            raise EffectExecutionError(
+                "섞기를 계획한 뒤 존의 내용이 달라졌습니다. 계획과 적용 "
+                "사이에 판이 바뀌면 재현이 깨집니다."
+            )
+        place = {instance: index for index, instance in enumerate(current)}
+        container.reorder(tuple(place[i] for i in outcome.selected))
+
+        changed = ZoneShuffled(
+            player=step.player,
+            zone=operation.zone,
+            size=outcome.size,
+            draw=outcome.draw,
+        )
+        return step.record(), (changed,)
+
     def _apply_card_movement(
         self, state: GameState, step: _Step
     ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
@@ -1049,6 +1125,11 @@ OPERATION_HANDLERS: dict[OperationKind, OperationHandler] = {
         EffectExecutor._plan_summon_operation,
         EffectExecutor._apply_special_summon,
         "SummonProcedure (Phase 2-T)",
+    ),
+    OperationKind.SHUFFLE: OperationHandler(
+        EffectExecutor._plan_shuffle,
+        EffectExecutor._apply_shuffle,
+        "RandomSource.shuffle + ZoneContainer.reorder (Phase 2-Z)",
     ),
     OperationKind.MOVE: OperationHandler(
         EffectExecutor._plan_card_operation,

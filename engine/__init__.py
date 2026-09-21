@@ -370,6 +370,41 @@ Duel Engine.
   **막히는 이유**이고, 그것이 다음에 무엇을 해야 하는지를 가리킨다.
   ``docs/phase2y-observation-boundary.md`` 참고.
 
+- **Phase 2-Z** — 재현 가능한 무작위 (``randomness.py``).
+
+  두 원칙이 전부다. **랜덤이어도 재현 가능해야 하고**, **게임 규칙의
+  랜덤과 AI 의 랜덤은 다른 계층이다.**
+
+  ``GameState`` 는 이미 주입된 seed 와 ``random.Random`` 을 들고 있었고
+  (STRUCTURAL-53), 복제도 상태째 하고 있었다. 없던 것은 넷이다 — 꺼낸
+  횟수(재현 좌표) · 결과를 적을 값 · 규칙이 쓸 API · 두 RNG 의 경계.
+
+  :class:`~engine.randomness.RandomSource` 가 그 자리다. **카드를 보지
+  않는다** — 원시 연산이 돌려주는 것은 자리 번호와 순열뿐이고, 정체를
+  붙이는 일은 부르는 쪽이 한다. 그래서 난수원을 통해 숨은 정보가 샐 수
+  없다. 정체가 붙은 :class:`~engine.randomness.RandomOutcome` 은
+  **엔진 내부 기록**이고, 밖으로 나가는 문은 ``public_summary()`` 로
+  따로 있다 ("4장 중 1장" 만 말한다).
+
+  ``RandomPurpose`` 에 ``AI_*`` 가 **없다.** 한 열거형에 섞으면 같은
+  난수원을 쓰게 되고, AI 가 한 번 더 생각했다는 이유로 듀얼의 결과가
+  달라진다.
+
+  ``OperationKind.SHUFFLE`` 이 기존 표에 **한 줄** 늘었다. 난수는
+  **계획 단계에서** 꺼낸다 — 적용 중에 꺼내면 "계획을 전부 확인한 뒤에
+  적용한다" 가 깨지고, 뒤가 막혔을 때 난수원만 소비된 채로 남는다.
+  ``ZoneShuffled`` 는 **결과 순서를 적지 않는다**: 섞은 뒤의 덱 순서는
+  아무도 모르는 것이 규칙이다.
+
+  **난수원은 ``state_hash()`` 에 들어가지 않는다.** ``chain`` ·
+  ``journal`` · 우선권을 뺀 것과 같은 이유다 — 난수원의 위치는 판의
+  모양이 아니라 흐름의 위치이고, 넣으면 판이 똑같은데 몇 번 뽑았느냐로
+  해시가 달라진다. 대신 ``RandomSource.canonical_state()`` 가 따로 있고,
+  객체 주소가 아니라 ``getstate()`` 의 내용에서 나온다.
+
+  동전(실제 카드 30장) · 주사위(57장)는 **일부러 만들지 않았다.**
+  ``docs/phase2z-deterministic-randomness.md`` 참고.
+
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
 변경이고, 변경을 적으려면 ``effect.delta`` 가 필요한데 ``effect`` 가 이미

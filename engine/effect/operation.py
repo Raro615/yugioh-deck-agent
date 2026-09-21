@@ -103,6 +103,17 @@ class OperationKind(str, Enum):
     """
     DRAW = "draw"
     CHANGE_LIFE = "change_life"
+    SHUFFLE = "shuffle"
+    """
+    한 존의 카드 순서를 **무작위로 다시 늘어놓는다** (Phase 2-Z).
+
+    카드가 존을 옮기지 않으므로 이동이 아니다. ``MOVE`` 와도 다르다 —
+    저쪽은 목적지가 있고 이쪽은 없다. 룰북이 "shuffle it and put it back
+    in this space" 라고 말하는 그 동작이다.
+
+    **결과 순서를 변화에 적지 않는다.** 섞은 뒤의 덱 순서는 아무도 모르는
+    것이 규칙이고, 적어 두면 그것을 읽는 쪽이 알게 된다.
+    """
     MOVE = "move"
     """
     카드를 다른 존으로 옮긴다. **게임 의미가 없는 저수준 조작이다.**
@@ -137,6 +148,9 @@ REASON_NAMES: dict[OperationKind, tuple[str, ...]] = {
     OperationKind.SPECIAL_SUMMON: ("SPSUMMON", "EFFECT"),
     OperationKind.DRAW: ("DRAW", "EFFECT"),
     OperationKind.CHANGE_LIFE: ("EFFECT",),
+    # 섞기는 카드에 **아무 일도 하지 않는다.** 이유를 주장하지 않는 것이
+    # 사실이다 — ``MOVE`` 가 비어 있는 것과 같은 자리.
+    OperationKind.SHUFFLE: (),
     # **비어 있는 것이 사실이다.** 이유를 말할 수 없는 이동이므로
     # ``REASON_EFFECT`` 조차 주장하지 않는다. 여기에 이유를 적는 순간
     # 트리거 계층이 이것을 "효과로 묘지에 갔다" 로 읽게 된다.
@@ -189,6 +203,15 @@ DECLARABLE_GATE_KINDS: frozenset[OperationKind] = frozenset(
 MOVABLE_DESTINATIONS: frozenset[Zone] = frozenset(
     {Zone.GRAVE, Zone.REMOVED, Zone.HAND, Zone.DECK}
 )
+
+#: 섞을 수 있는 존 (Phase 2-Z).
+#:
+#: 덱과 엑스트라 덱뿐이다. 칸 방식 존은 "몇 번째" 가 칸 번호라서 순서를
+#: 바꾸는 것이 카드를 옮기는 일이고, 묘지는 룰북이 **순서를 바꾸지 말라고
+#: 말한다** ("The order of the cards in the Graveyard should not be
+#: changed."). 패를 섞는 규칙은 따로 있지만 (``Duel.ShuffleHand``) 이번
+#: 단계에서 옮기지 않았다 — 없는 것을 있는 척 넣지 않는다.
+SHUFFLEABLE_ZONES: frozenset[Zone] = frozenset({Zone.DECK, Zone.EXTRA})
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,6 +435,46 @@ class DrawOperation(Operation):
 
 
 @dataclass(frozen=True, slots=True)
+class ShuffleOperation(Operation):
+    """
+    한 존을 섞는다. **섞지 않는다** — 섞겠다는 의미를 담을 뿐이다.
+
+    대상이 없다. 카드 한 장을 가리키는 일이 아니라 존 전체의 순서를
+    다루는 일이므로 ``target_ref`` 칸 자체를 두지 않는다
+    (:class:`DrawOperation` 과 같은 이유).
+    """
+
+    zone: Zone
+    who: PlayerRef = PlayerRef.CONTROLLER
+
+    def __post_init__(self) -> None:
+        if self.zone not in SHUFFLEABLE_ZONES:
+            raise ValueError(
+                f"{self.zone.value} 는 섞을 수 있는 존이 아닙니다. 칸 방식 존은 "
+                "순서를 바꾸는 것이 곧 카드를 옮기는 일이라 섞기로 표현할 수 "
+                "없고, 순서가 규칙인 존(묘지)도 섞지 않습니다."
+            )
+
+    @property
+    def kind(self) -> OperationKind:
+        return OperationKind.SHUFFLE
+
+    def canonical_state(self) -> tuple:
+        return ("shuffle", self.zone.value, self.who.value, self.reason_names)
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "shuffle",
+            "zone": self.zone.value,
+            "who": self.who.value,
+            "reasons": list(self.reason_names),
+        }
+
+    def describe_ko(self) -> str:
+        return f"{self.who} 의 {self.zone.value} 를 섞는다"
+
+
+@dataclass(frozen=True, slots=True)
 class LifeChangeOperation(Operation):
     """
     라이프를 바꾼다. **바꾸지 않는다.**
@@ -624,6 +687,8 @@ __all__ = [
     "CARD_OPERATION_KINDS",
     "SEMANTIC_CARD_KINDS",
     "DECLARABLE_GATE_KINDS",
+    "SHUFFLEABLE_ZONES",
+    "ShuffleOperation",
     "MOVABLE_DESTINATIONS",
     "Operation",
     "CardOperation",

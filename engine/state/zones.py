@@ -41,6 +41,10 @@ from engine.vocabulary import (
 )
 
 
+class ZoneReorderError(RuntimeError):
+    """존의 순서를 바꿀 수 없다 — 칸 방식이거나 순열이 맞지 않는다."""
+
+
 class ZoneFull(RuntimeError):
     """
     칸이 없는 존에 더 넣으려 했다.
@@ -177,6 +181,30 @@ class ZoneContainer:
     # ------------------------------------------------------------------
     # 빼기
     # ------------------------------------------------------------------
+    def reorder(self, order: "list[int] | tuple[int, ...]") -> None:
+        """
+        자리 번호 순열대로 **다시 늘어놓는다.**
+
+        카드를 만들지도 잃지도 않는다 — 순열이 이 존의 크기와 맞지 않거나
+        같은 자리를 두 번 가리키면 거부한다.
+
+        칸 방식 존(몬스터 존 등)에는 쓰지 않는다. 거기서는 "몇 번째" 가
+        칸 번호이고, 순서를 바꾸는 것은 카드를 다른 칸으로 옮기는 일이라
+        이 연산으로 표현할 수 없다.
+        """
+        if self._slots is not None:
+            raise ZoneReorderError(
+                f"{self.zone.value} 는 칸 방식 존이라 순서를 바꿀 수 없습니다. "
+                "칸을 옮기는 것은 이동이지 재배열이 아닙니다."
+            )
+        order = tuple(order)
+        if sorted(order) != list(range(len(self._cards))):
+            raise ZoneReorderError(
+                f"{self.zone.value} 의 순열이 맞지 않습니다: {len(self._cards)}장인데 "
+                f"{sorted(order)} 를 받았습니다."
+            )
+        self._cards = [self._cards[i] for i in order]
+
     def remove(self, card: CardInstance | InstanceId) -> CardInstance:
         """카드를 빼서 돌려준다. 없으면 ``KeyError``."""
         index = self.index(card)

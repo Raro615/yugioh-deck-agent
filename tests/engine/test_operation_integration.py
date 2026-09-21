@@ -307,6 +307,8 @@ def test_a_the_taxonomy_is_exactly_what_is_executable():
         "move",
         # 소환 (Phase 2-U)
         "special_summon",
+        # 무작위 (Phase 2-Z) — 카드가 움직이지 않는 유일한 일이다
+        "shuffle",
     }
 
 
@@ -1189,7 +1191,19 @@ def test_k_no_duplicate_execution_architecture():
 
 
 def test_k_the_executor_makes_no_choice_of_its_own():
-    """§10 — 실행기가 임의로 대상을 고르지 않는다."""
+    """
+    §10 — 실행기가 임의로 대상을 고르지 않는다.
+
+    **Phase 2-Z 가 이 단언을 날카롭게 만들었다.** 예전에는 원문에
+    ``"random"`` 이라는 낱말이 없는지 보았는데, 그 검사는 "무작위를 전혀
+    쓰지 않는다" 를 뜻했다. 이제 실행기는 덱 셔플을 수행하므로 **규칙이
+    요구하는 무작위**를 쓴다 — 규칙의 무작위와 임의의 선택은 다른 것이고,
+    낱말 하나로는 그 둘이 구분되지 않는다.
+
+    그래서 낱말 대신 **두 가지를 코드로** 확인한다. 예전 검사보다 약하지
+    않다: 전역 :mod:`random` 은 여전히 금지이고, 그 금지가 이제
+    ``import`` 와 호출 양쪽에서 확인된다.
+    """
     source = pathlib.Path("engine/effect/executor.py").read_text("utf-8")
     tree = ast.parse(source)
     functions = {
@@ -1200,4 +1214,26 @@ def test_k_the_executor_makes_no_choice_of_its_own():
 
     for forbidden in ("choose", "select_", "score", "policy"):
         assert not any(forbidden in name for name in functions)
-    assert "random" not in source
+
+    # 1. 전역 random 을 **import 하지 않는다.**
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            assert all(alias.name != "random" for alias in node.names)
+        if isinstance(node, ast.ImportFrom):
+            assert node.module != "random"
+
+    # 2. ``random.*`` 을 **부르지 않는다.**
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            assert node.value.id != "random", ast.dump(node)
+
+    # 3. 무작위는 **판이 들고 있는 난수원**에서만 나온다.
+    randomness = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute) and node.attr == "randomness"
+    ]
+    assert randomness, "셔플이 있는데 난수원을 쓰지 않습니다"
+    for node in randomness:
+        assert isinstance(node.value, ast.Name), ast.dump(node)
+        assert node.value.id == "state", ast.dump(node)

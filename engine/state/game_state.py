@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator
 
 from engine.ids import InstanceId, InstanceIdAllocator
+from engine.randomness import RandomSource
 from engine.state.card_instance import CardInstance
 from engine.state.player import DEFAULT_LIFE_POINTS, PlayerState
 from engine.state.turn import TurnState
@@ -67,7 +68,7 @@ class GameState:
         "_repository",
         "_allocator",
         "_seed",
-        "_rng",
+        "_random",
     )
 
     def __init__(
@@ -80,7 +81,7 @@ class GameState:
         uses: UseRegistry | None = None,
         rule_uses: RuleUsageRegistry | None = None,
         seed: int | None = None,
-        rng: random.Random | None = None,
+        rng: "random.Random | RandomSource | None" = None,
     ):
         if len(players) != PLAYER_COUNT:
             raise ValueError(f"플레이어는 {PLAYER_COUNT} 명이어야 합니다.")
@@ -108,10 +109,19 @@ class GameState:
             rule_uses if rule_uses is not None else RuleUsageRegistry()
         )
 
-        # 무작위는 주입된 seed 에서만 나온다. seed 가 없으면 rng 도 없고,
+        # 무작위는 주입된 seed 에서만 나온다. seed 가 없으면 난수원도 없고,
         # 셔플을 요청하면 거부한다 (:meth:`create`).
+        #
+        # 들고 있는 것은 :class:`~engine.randomness.RandomSource` 다 (Phase
+        # 2-Z) — 꺼낸 횟수를 세고 카드를 보지 않는 한 겹이 있어야 재현
+        # 좌표가 생긴다. ``random.Random`` 을 그대로 받아도 감싸 준다.
         self._seed = seed
-        self._rng = rng
+        if rng is None:
+            self._random: RandomSource | None = None
+        elif isinstance(rng, RandomSource):
+            self._random = rng
+        else:
+            self._random = RandomSource(rng)
 
         # --- 이후 Phase 용 자리표시 --------------------------------------
         # Phase 5 에서 ChainState 가 들어온다. 지금은 구조만 잡아두고
@@ -171,11 +181,14 @@ class GameState:
         while len(extra_lists) < PLAYER_COUNT:
             extra_lists.append([])
 
-        rng = random.Random(seed) if seed is not None else None
+        source = RandomSource.seeded(seed) if seed is not None else None
         if shuffle:
-            assert rng is not None  # 위에서 이미 거부했다
+            assert source is not None  # 위에서 이미 거부했다
+            # **카드가 아직 없다.** 여기서 섞는 것은 카드 번호 목록이므로
+            # 자리 번호 순열을 받아 적용한다 — 난수원은 정체를 보지 않는다.
             for deck in deck_lists:
-                rng.shuffle(deck)
+                order = source.next_permutation(len(deck))
+                deck[:] = [deck[i] for i in order]
 
         allocator = InstanceIdAllocator()
         players = tuple(
@@ -188,7 +201,7 @@ class GameState:
             repository=repository,
             allocator=allocator,
             seed=seed,
-            rng=rng,
+            rng=source,
         )
         # 할당 순서를 고정한다: p0 덱 -> p0 엑스트라 -> p1 덱 -> p1 엑스트라.
         for player_id in range(PLAYER_COUNT):
@@ -244,19 +257,34 @@ class GameState:
         return self._seed
 
     @property
-    def rng(self) -> random.Random:
+    def randomness(self) -> RandomSource:
         """
-        이 듀얼 전용 난수원.
+        이 듀얼 전용 난수원. **규칙의 무작위는 전부 여기서 나온다.**
 
         seed 없이 만든 상태에서 무작위를 꺼내려 하면 거부한다. 조용히 전역
         난수로 넘어가면 재현 불가능한 상태가 만들어지기 때문이다.
+
+        AI 의 무작위(탐색 · 정책)는 **여기 오지 않는다.** 같은 난수원을
+        쓰면 AI 가 한 번 더 생각했다는 이유로 듀얼의 결과가 달라진다
+        (Phase 2-Z).
         """
-        if self._rng is None:
+        if self._random is None:
             raise RuntimeError(
                 "이 GameState 는 seed 없이 만들어져 난수원이 없습니다. "
                 "GameState.create(seed=...) 로 만드세요."
             )
-        return self._rng
+        return self._random
+
+    @property
+    def rng(self) -> random.Random:
+        """
+        바탕이 되는 :class:`random.Random`.
+
+        **엔진 코드는 이것을 쓰지 않는다** — 여기서 직접 꺼내면
+        :attr:`RandomSource.draws` 가 세지 않아 재현 좌표가 어긋난다.
+        :attr:`randomness` 를 쓴다.
+        """
+        return self.randomness.raw
 
     def player(self, player_id: int) -> PlayerState:
         return self.players[player_id]
@@ -361,10 +389,8 @@ class GameState:
         변하지 않는다.
         """
         players = tuple(player.clone() for player in self.players)
-        rng = None
-        if self._rng is not None:
-            rng = random.Random()
-            rng.setstate(self._rng.getstate())
+        # 난수원도 **꺼낸 횟수까지** 복제한다 (Phase 2-Z).
+        rng = None if self._random is None else self._random.clone()
         copy = GameState(
             players=players,  # type: ignore[arg-type]
             turn=self.turn.clone(),
