@@ -62,6 +62,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from engine.observation import (
+    EMPTY_POLICY,
+    ObservationPermission,
+    ObservationPolicy,
+)
 from engine.ids import InstanceId
 from engine.state.rule_usage import RuleActionKind
 from engine.vocabulary import (
@@ -604,6 +609,7 @@ class GameStateView:
         state: "GameState",
         viewer: int,
         looked_at: "frozenset[Zone] | None" = None,
+        policy: "ObservationPolicy | None" = None,
     ) -> "GameStateView":
         """
         ``viewer`` 가 보는 만큼만 담은 스냅숏을 만든다.
@@ -632,10 +638,30 @@ class GameStateView:
         **엔진이 아는 것(``GameState``)과 플레이어가 보는 것(이 관측)은
         계속 다른 것이다.** 이 인자는 둘을 합치지 않는다 — 무엇을 보게 할지
         **효과가 이름으로 말할 때만** 그 자리를 연다.
+
+        ``policy`` — **효과가 주는 관측 권한** (Phase 2-AA).
+
+        ``looked_at`` 과 **다른 것이고 둘은 함께 있을 수 있다.**
+
+        ============  ===============================================
+        ``looked_at``  지금 이 판정을 위한 **일시적 열람**
+                       ("덱에서 고르려면 덱을 본다")
+        ``policy``     효과가 살아 있는 동안 유지되는 **권한**
+                       ("이 카드가 있는 동안 상대 패가 공개된다")
+        ============  ===============================================
+
+        최종 공개 범위는 셋을 합쳐 정해진다:
+        **기본 공개 범위 + 권한 + 일시적 열람.**
+
+        ``looked_at`` 이 *자기* 자리만 여는 것과 달리 ``policy`` 는 **남의**
+        자리를 열 수 있다 — 효과가 그렇게 말하기 때문이다. 대신 누가
+        무엇을 보는지가 권한마다 적혀 있고, 권한이 없는 viewer 에게는
+        아무것도 열리지 않는다.
         """
         if viewer not in (0, 1):
             raise ValueError(f"viewer 는 0 또는 1 입니다: {viewer}")
         looked_at = frozenset() if looked_at is None else frozenset(looked_at)
+        policy = EMPTY_POLICY if policy is None else policy
         return cls(
             viewer=viewer,
             turn_number=state.turn.turn_number,
@@ -643,8 +669,8 @@ class GameStateView:
             phase=state.turn.phase,
             step=state.turn.step,
             players=(
-                _player_view(state, 0, viewer, looked_at),
-                _player_view(state, 1, viewer, looked_at),
+                _player_view(state, 0, viewer, looked_at, policy),
+                _player_view(state, 1, viewer, looked_at, policy),
             ),
             winner=state.result.winner if state.result is not None else None,
             result_reason=state.result.reason if state.result is not None else "",
@@ -748,13 +774,14 @@ def _player_view(
     player_id: int,
     viewer: int,
     looked_at: frozenset[Zone] = frozenset(),
+    policy: "ObservationPolicy" = EMPTY_POLICY,
 ) -> PlayerView:
     player = state.player(player_id)
     return PlayerView(
         player_id=player_id,
         life_points=player.life_points,
         zones=tuple(
-            _zone_view(player.zones[zone], viewer, looked_at)
+            _zone_view(player.zones[zone], viewer, looked_at, policy)
             for zone in PLAYER_ZONES
             if zone in player.zones
         ),
@@ -765,6 +792,7 @@ def _zone_view(
     container: "ZoneContainer",
     viewer: int,
     looked_at: frozenset[Zone] = frozenset(),
+    policy: "ObservationPolicy" = EMPTY_POLICY,
 ) -> ZoneView:
     zone = container.zone
     visibility = zone_visibility(zone)
@@ -794,21 +822,31 @@ def _zone_view(
     if visibility is ZoneVisibility.HIDDEN and not looking:
         return ZoneView(**base, cards=(), concealed=True)
 
+    # **효과가 준 권한인가** (Phase 2-AA).
+    #
+    # ``looking`` 과 달리 남의 자리를 열 수 있다 — 효과가 그렇게 말하기
+    # 때문이다. 다만 여는 것은 **그 권한이 적어 둔 사람의 자리**뿐이고,
+    # 권한이 없는 viewer 에게는 아무 일도 일어나지 않는다.
+    revealed = zone is Zone.HAND and policy.permits(
+        ObservationPermission.REVEAL_HAND, viewer, container.owner
+    )
+
     # 패 · 엑스트라 덱은 소유자만 안다.
     if (
         visibility is ZoneVisibility.OWNER_ONLY
         and container.owner != viewer
         and not looking  # ``looking`` 은 owner == viewer 를 이미 요구한다
+        and not revealed
     ):
         return ZoneView(**base, cards=(), concealed=True)
 
     if kind is ZoneKind.SLOTTED:
         cards: tuple[CardView | None, ...] = tuple(
-            None if card is None else _card_view(card, viewer)
+            None if card is None else _card_view(card, viewer, policy)
             for card in container.slots()
         )
     else:
-        cards = tuple(_card_view(card, viewer) for card in container)
+        cards = tuple(_card_view(card, viewer, policy) for card in container)
     return ZoneView(**base, cards=cards, concealed=False)
 
 
@@ -843,15 +881,28 @@ def _definition_of(card: "CardInstance") -> CardDefinitionView | None:
     return CardDefinitionView.of(definition)
 
 
-def _card_view(card: "CardInstance", viewer: int) -> CardView:
+def _card_view(
+    card: "CardInstance",
+    viewer: int,
+    policy: "ObservationPolicy" = EMPTY_POLICY,
+) -> CardView:
     """
     공개 존의 카드 한 장이 얼마나 보이는가.
 
     앞뒷면이 의미를 갖는 존에서만 뒷면을 가린다. 그 경우에도 **컨트롤러는
     안다** — 자기가 세트한 카드가 무엇인지는 당연히 알기 때문이다.
+
+    ``INSPECT_FACE_DOWN`` 권한이 있으면 남의 뒷면 카드도 보인다
+    (Phase 2-AA). **그 viewer 에게만 보인다** — 확인했다는 사실이 카드를
+    모두에게 공개하지는 않는다. 그래서 여기서 ``card`` 자체를 바꾸지 않고
+    이 관측에서만 드러낸다.
     """
     if card.zone not in _FACE_SENSITIVE_ZONES:
         return CardView.revealed(card)
     if card.is_faceup or card.controller == viewer:
+        return CardView.revealed(card)
+    if policy.permits(
+        ObservationPermission.INSPECT_FACE_DOWN, viewer, card.controller
+    ):
         return CardView.revealed(card)
     return CardView.concealed(card)
