@@ -68,6 +68,7 @@ from engine.effect.semantics import FIELD_ZONES, DestructionRuling, MovementRuli
 from engine.effect.target import (
     PRIMARY_TARGET,
     RandomSelectionSpec,
+    SelectionCount,
     TargetBinding,
     TargetRef,
     TargetSpec,
@@ -197,6 +198,8 @@ DISAPPEAR = 24623598
 FOOLISH_BURIAL = 81439173
 # Phase 2-AB
 RUTHLESS_DENIAL = 73148972
+# Phase 2-AC
+INTRODUCTION_TO_GALLANTRY = 69091732
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -774,6 +777,61 @@ _RUTHLESS_DENIAL_ENTRY = LibraryEntry(
 
 
 #: 이 엔진이 들고 있는 효과 정의 전부. **이것이 전부라는 것이 사실이다.**
+#: 의적의 입문서 — "상대의 패가 5장 이상일 경우에 발동할 수 있다.
+#: 상대의 패를 무작위로 1장 버린다."
+#:
+#: 무정한 말살에 이어 **무작위 선택을 쓰는 두 번째 실제 카드**다 (Phase
+#: 2-AC). 새로 보여 주는 것은 하나다 — **발동 조건이 상대 패의 장수**다.
+#:
+#: ``Duel.GetFieldGroupCount(tp,0,LOCATION_HAND)>4`` 는 컨트롤러가 상대의
+#: 패를 **본다는 뜻이 아니다.** 몇 장인지는 규칙이 아는 사실이고, 무엇인지는
+#: 아니다. 장수와 정체가 다른 정보라는 것이 이 카드로 한 번 더 확인된다
+#: (§8 · §9: engine authority ≠ viewer visibility).
+#:
+#: ``>4`` 를 ``ZoneCountAtLeast(..., 5)`` 로 옮긴 것은 정수에서 두 표현이
+#: 같기 때문이고, 한국어 공식 텍스트도 "5장 이상" 이다.
+#:
+#: 관문은 **선언하지 않는다.** 원본에 ``Card.IsDiscardable`` 이 없다
+#: (Phase 2-X: 관문은 카드가 적어 둔 것만 옮긴다).
+_INTRODUCTION_TO_GALLANTRY_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(INTRODUCTION_TO_GALLANTRY, 0),
+        source_card_id=INTRODUCTION_TO_GALLANTRY,
+        # 대상이 하나뿐이어도 ``@primary`` 로 부르지 않는다 — 이 대상은
+        # **무작위로 정해지는 것**이고, 이름이 그렇게 말한다.
+        targets=(
+            TargetBinding(
+                RANDOM_TARGET,
+                TargetSpec.at_random(
+                    RandomSelectionSpec(
+                        source=CandidateSource(
+                            # ``Duel.GetFieldGroup(p, LOCATION_HAND, 0)`` 에서
+                            # ``p`` 는 ``SetTargetPlayer(1-tp)`` 로 정해진 상대다.
+                            zones=frozenset({Zone.HAND}),
+                            owner=PlayerRef.OPPONENT,
+                        ),
+                        count=SelectionCount.fixed(1),
+                    )
+                ),
+            ),
+        ),
+        operations=(CardOperation.discard(RANDOM_TARGET),),
+        activation=ZoneCountAtLeast(PlayerRef.OPPONENT, Zone.HAND, 5),
+        provenance=EffectProvenance.official_lua(
+            "c69091732.lua 의 s.condition 과 s.activate 를 옮겼다. "
+            "s.target 의 SetTargetPlayer(1-tp) 는 후보의 owner 로 들어갔다."
+        ),
+    ),
+    lua_file="c69091732.lua",
+    lua_excerpt=(
+        "return Duel.GetFieldGroupCount(tp,0,LOCATION_HAND)>4; "
+        "local dg=g:RandomSelect(tp,1); "
+        "Duel.SendtoGrave(dg,REASON_EFFECT|REASON_DISCARD)"
+    ),
+    executable=True,
+)
+
+
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
     _POT_OF_GREED_ENTRY,
@@ -793,7 +851,10 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _FOOLISH_BURIAL_ENTRY,
     # Phase 2-AB
     _RUTHLESS_DENIAL_ENTRY,
+    # Phase 2-AC
+    _INTRODUCTION_TO_GALLANTRY_ENTRY,
 )
+
 
 
 # ======================================================================

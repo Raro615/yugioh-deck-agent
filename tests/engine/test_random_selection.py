@@ -62,7 +62,9 @@ from engine.effect.resolution import (
 )
 from engine.effect.target import (
     PRIMARY_TARGET,
+    CountKind,
     RandomSelectionSpec,
+    SelectionCount,
     TargetBinding,
     TargetRef,
     TargetRequirement,
@@ -801,7 +803,10 @@ def test_q_ruthless_denial_uses_both_kinds_of_selection():
     (player_choice, rolled) = entry.definition.targets
     assert player_choice.spec.choice.source.owner is PlayerRef.CONTROLLER
     assert rolled.spec.choice.source.owner is PlayerRef.OPPONENT
-    assert rolled.spec.choice.count == 1
+    # **수는 숫자가 아니라 값이다** (Phase 2-AC). 무정의 말살은 고정 1장이고,
+    # 그 "고정" 이 이제 타입에 적혀 있다.
+    assert rolled.spec.choice.count == SelectionCount.fixed(1)
+    assert rolled.spec.choice.count.kind is CountKind.FIXED
     assert not hasattr(rolled.spec.choice, "chooser")
 
 

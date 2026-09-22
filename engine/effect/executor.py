@@ -95,6 +95,7 @@ from engine.effect.operation import (
     SpecialSummonOperation,
 )
 from engine.effect.journal import EventJournal
+from engine.effect.target import CountOutcome, Shortfall
 from engine.randomness import RandomError, RandomOutcome, RandomPurpose
 from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.effect.semantics import (
@@ -875,11 +876,39 @@ class EffectExecutor:
         난수는 **계획 단계의 마지막**에 꺼낸다. 후보가 없거나 모르면 꺼내기
         전에 멈추므로, 실패한 요청이 난수원만 소비하는 일이 없다.
         """
+        # **수를 먼저 묻는다** (Phase 2-AC §4). 후보를 세는 일과 수를
+        # 정하는 일은 서로를 읽지 않는다. 수를 모르면 후보를 다 세어도
+        # 소용이 없으므로 순서는 이쪽이 싸고, 어느 쪽도 난수를 쓰지
+        # 않으므로 순서가 결과를 바꾸지 않는다.
+        wanted = self._resolve_count(state, spec, context, ref)
+        if isinstance(wanted, EffectResult):
+            return wanted
+
         candidates = self._authoritative_candidates(state, spec, context)
         if isinstance(candidates, EffectResult):
             return candidates
 
-        count = spec.choice.count
+        count = wanted
+        if len(candidates) < count:
+            if spec.choice.on_shortfall is Shortfall.TAKE_ALL:
+                # **카드가 그렇게 적어 둔 경우만이다.** 일반 규칙이 아니다.
+                count = len(candidates)
+                if count == 0:
+                    return _fail(
+                        ResolutionStatus.INVALID_TARGET,
+                        ValidationCode.NO_CANDIDATES,
+                        f"{ref} 를 무작위로 고를 후보가 하나도 없습니다.",
+                    )
+            else:
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.TOO_FEW_SELECTED,
+                    f"{ref} 를 무작위로 고를 수 없습니다: 후보 "
+                    f"{len(candidates)}장 중 {count}장을 고를 수 없습니다. "
+                    "모자랄 때 있는 대로 고르는 것은 카드가 그렇게 적어 둔 "
+                    "경우뿐입니다.",
+                )
+
         try:
             outcome = state.randomness.choose_many(
                 candidates, count, replacement=spec.choice.replacement
@@ -898,6 +927,40 @@ class EffectExecutor:
                 missing="seeded randomness (GameState.create(seed=...))",
             )
         return ref, Selection(chosen=outcome.selected)
+
+    def _resolve_count(self, state: GameState, spec, context, ref):
+        """
+        **몇 장을 고르는가** (Phase 2-AC). 후보와 따로 묻는다.
+
+        수는 :class:`~engine.effect.target.SelectionCount` 가 답하고,
+        여기서는 그것이 필요로 하는 **자리 장수**만 건네준다. 그 장수는
+        판의 권위 있는 사실이다 — 상대 패가 몇 장인지는 누가 보느냐와
+        무관하게 정해져 있다 (§9: engine authority ≠ viewer visibility).
+
+        모르면 **모른다고 답한다.** 숫자로 바꾸지 않는다.
+        """
+        condition_context = context.condition_context()
+
+        def zone_size(player_ref, zone) -> int:
+            player = state.player(player_ref.resolve(condition_context))
+            return len(player.zone(zone))
+
+        answer = spec.choice.count.resolve(zone_size)
+        if answer.outcome is CountOutcome.RESOLVED:
+            assert answer.value is not None
+            return answer.value
+        if answer.outcome is CountOutcome.UNKNOWN:
+            return _fail(
+                ResolutionStatus.UNSUPPORTED_OPERATION,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{ref}: {answer.reason}",
+                missing=answer.missing,
+            )
+        return _fail(
+            ResolutionStatus.INVALID_OPERATION,
+            ValidationCode.INVALID_AMOUNT,
+            f"{ref}: {answer.reason}",
+        )
 
     def _authoritative_candidates(self, state: GameState, spec, context):
         """
@@ -931,6 +994,9 @@ class EffectExecutor:
             view = GameStateView.from_state(
                 state, viewer=owner, looked_at=frozenset(source.zones)
             )
+            # **장수를 넘기지 않는다** (Phase 2-AC §4). 후보를 세는 데
+            # 장수는 쓰이지 않고, 넘기면 "후보를 세다가 수를 보는" 길이
+            # 열린다. ``ChoiceSpec`` 의 기본값을 그대로 둔다.
             narrowed = ChoiceSpec(
                 source=CandidateSource(
                     zones=source.zones,
@@ -938,8 +1004,6 @@ class EffectExecutor:
                     require=source.require,
                     exclude_source=source.exclude_source,
                 ),
-                minimum=spec.choice.minimum,
-                maximum=spec.choice.maximum,
             )
             found = CandidateResolver(view).resolve(
                 narrowed,
@@ -950,13 +1014,38 @@ class EffectExecutor:
             reasons.extend(found.reasons)
             unchecked.extend(found.unchecked)
 
-        if undecided or unchecked:
+        if unchecked:
+            # **여기는 원칙적으로 닿지 않는다.** 자리마다 그 주인의 눈으로
+            # 보므로 가려진 자리가 없기 때문이다. 그래도 지우지 않는 이유는,
+            # 닿는다면 그것은 "모른다" 가 아니라 **"못 봤다"** 이고 둘은
+            # 다른 사실이기 때문이다 (UNKNOWN ≠ HIDDEN).
             return _fail(
                 ResolutionStatus.UNCHECKED_TARGET,
                 ValidationCode.INFORMATION_UNAVAILABLE,
-                "후보를 다 세지 못했습니다: "
-                + "; ".join(reasons + unchecked),
-                missing="; ".join(unchecked) or None,
+                "후보가 있는 자리를 들여다보지 못했습니다: "
+                + "; ".join(unchecked),
+                missing="; ".join(unchecked),
+            )
+        if undecided:
+            # **조용히 빼지 않는다** (§7). 넷 중 하나가 후보인지 모르는
+            # 채로 셋에서 고르면 확률이 1/4 이 아니라 1/3 이 된다 — 그것은
+            # 다른 규칙이다.
+            #
+            # 전부 모르는 것과 일부만 모르는 것을 **한 문장으로 뭉치지
+            # 않는다.** 어느 쪽이든 고르지 않지만, 무엇을 고쳐야 하는지가
+            # 다르다.
+            whole = not eligible
+            head = (
+                f"후보 {len(undecided)}장이 **전부** 후보인지 알 수 없습니다"
+                if whole
+                else f"후보 {len(eligible) + len(undecided)}장 중 "
+                f"{len(undecided)}장이 후보인지 알 수 없습니다"
+            )
+            return _fail(
+                ResolutionStatus.UNCHECKED_TARGET,
+                ValidationCode.INFORMATION_UNAVAILABLE,
+                f"{head}. 모르는 것을 빼고 고르면 확률이 달라지므로 "
+                "고르지 않습니다: " + "; ".join(reasons),
             )
         return tuple(eligible)
 
