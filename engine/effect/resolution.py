@@ -44,6 +44,7 @@ from engine.effect.definition import (
 )
 from engine.effect.operation import OperationKind
 from engine.effect.target import TargetRef, TargetSelection
+from engine.execution import DeclaredNumber, ValueRef
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
 from engine.validation import ValidationCode
@@ -72,11 +73,22 @@ class ResolutionContext:
     """
     cost_selections: tuple[Selection, ...] = ()
     """비용으로 내놓기로 한 카드들. 비용 순서대로다."""
+    declarations: tuple[DeclaredNumber, ...] = ()
+    """
+    **플레이어가 선언한 수들** (Phase 2-AD).
+
+    ``selections`` 와 같은 자리, 같은 성격이다 — 둘 다 **사람이 정해서
+    들어온 입력**이고 정의가 아니다. 다만 **다른 이름 공간**이다: 저쪽은
+    고른 카드, 이쪽은 선언한 수다.
+
+    비어 있는 것은 "선언이 없는 효과" 가 아니라 **"아직 선언하지 않았다"**
+    다. 어느 쪽인지는 정의의 ``declarations`` 가 말한다.
+    """
 
     def __post_init__(self) -> None:
         if self.controller not in (0, 1):
             raise ValueError(f"controller 는 0 또는 1 입니다: {self.controller}")
-        for name in ("selections", "cost_selections"):
+        for name in ("selections", "cost_selections", "declarations"):
             if not isinstance(getattr(self, name), tuple):
                 raise TypeError(f"{name} 은 tuple 이어야 합니다 — 문맥은 불변입니다.")
         seen: set[TargetRef] = set()
@@ -84,6 +96,11 @@ class ResolutionContext:
             if chosen.ref in seen:
                 raise ValueError(f"대상 {chosen.ref} 에 선택이 두 번 들어왔습니다.")
             seen.add(chosen.ref)
+        declared: set[ValueRef] = set()
+        for number in self.declarations:
+            if number.ref in declared:
+                raise ValueError(f"수 {number.ref} 가 두 번 들어왔습니다.")
+            declared.add(number.ref)
 
     @property
     def opponent(self) -> int:

@@ -52,6 +52,13 @@ from enum import Enum
 
 from engine.condition import PlayerRef
 from engine.cost import CandidateSource, ChoiceSpec, Selection
+from engine.execution import (
+    NO_EXECUTION_VALUES,
+    DeclarationOutcome,
+    ExecutionLookupError,
+    ResultRef,
+    ValueRef,
+)
 from engine.vocabulary import Zone
 
 
@@ -110,10 +117,23 @@ class CountKind(str, Enum):
     판에서 **계산된다.** 무정의 말살의 1장과 달리, 악몽의 신기루는
     "뽑은 수만큼" 이고 멀차미는 "패 - (상대 필드 + 6)" 이다.
     """
+    DECLARED = "declared"
+    """
+    **플레이어가 선언한다** (Phase 2-AD). 이름으로 가리키고, 그 이름의
+    선언 규칙은 정의가 따로 들고 있다.
+
+    ``DERIVED`` 와 다르다 — 저쪽은 판이 정하고 이쪽은 **사람이 정한다.**
+    같은 판에서도 다른 수가 나올 수 있고, 그것이 옳다.
+    """
+    FROM_RESULT = "from_result"
+    """
+    **앞선 조작이 낸 수** (Phase 2-AD). 몇 번째 조작인지 적는다.
+
+    "바로 앞" 이 아니다. 번호를 적지 않으면 가리킬 수 없다.
+    """
     UNKNOWN = "unknown"
     """
-    **계산할 수 없다.** 수가 플레이어의 선언이나 앞선 조작의 결과에서
-    오는데 그 계층이 아직 없다.
+    **계산할 수 없다.** 수가 아직 옮기지 못한 곳에서 온다.
 
     이것을 숫자로 바꾸지 않는다. 1 로 접으면 "1장 고른다" 는 **틀린
     규칙**이 되고, 0 으로 접으면 효과가 조용히 사라진다.
@@ -207,26 +227,49 @@ class SelectionCount:
     constant: int = 0
     missing: str = ""
     """``UNKNOWN`` 일 때 **무엇이 없어서** 모르는가."""
+    declared: "ValueRef | None" = None
+    """``DECLARED`` 일 때 그 수의 이름 (Phase 2-AD)."""
+    result: "ResultRef | None" = None
+    """``FROM_RESULT`` 일 때 가리키는 앞선 조작 (Phase 2-AD)."""
 
     def __post_init__(self) -> None:
+        # **한 갈래에는 한 가지 근거만 붙는다.** 숫자와 계산식과 이름이
+        # 함께 붙어 있으면 그중 하나는 반드시 거짓말이다.
+        carried = {
+            "value": self.value is not None,
+            "terms": bool(self.terms),
+            "declared": self.declared is not None,
+            "result": self.result is not None,
+        }
+        allowed = {
+            CountKind.FIXED: "value",
+            CountKind.DERIVED: "terms",
+            CountKind.DECLARED: "declared",
+            CountKind.FROM_RESULT: "result",
+            CountKind.UNKNOWN: None,
+        }[self.kind]
+        for name, present in carried.items():
+            if present and name != allowed:
+                raise ValueError(
+                    f"{self.kind.value} 수에 {name} 가 붙어 있습니다 — "
+                    "둘 중 하나는 거짓말입니다."
+                )
         if self.kind is CountKind.FIXED:
             if self.value is None or self.value < 1:
                 raise ValueError(
                     f"고정 수는 1 이상이어야 합니다: {self.value}. "
                     "0장을 무작위로 고르는 것은 고르지 않는 것입니다."
                 )
-            if self.terms:
-                raise ValueError("고정 수에 계산식이 붙어 있습니다.")
         elif self.kind is CountKind.DERIVED:
-            if self.value is not None:
-                raise ValueError(
-                    "계산되는 수에 숫자가 박혀 있습니다 — 둘 중 하나는 거짓말입니다."
-                )
             if not self.terms and self.constant == 0:
                 raise ValueError("계산식이 비어 있습니다.")
+        elif self.kind is CountKind.DECLARED:
+            if self.declared is None:
+                raise ValueError("선언되는 수에 이름이 없습니다.")
+        elif self.kind is CountKind.FROM_RESULT:
+            if self.result is None:
+                raise ValueError("앞선 결과를 가리키는데 번호가 없습니다.")
         else:
-            if self.value is not None or self.terms:
-                raise ValueError("모르는 수에 숫자나 계산식이 붙어 있습니다.")
             if not self.missing:
                 raise ValueError("무엇이 없어서 모르는지 적어야 합니다.")
 
@@ -245,6 +288,16 @@ class SelectionCount:
         return cls(kind=CountKind.DERIVED, terms=tuple(terms), constant=constant)
 
     @classmethod
+    def from_declaration(cls, ref: "ValueRef") -> "SelectionCount":
+        """**플레이어가 선언한 수**를 이름으로 가리킨다 (Phase 2-AD)."""
+        return cls(kind=CountKind.DECLARED, declared=ref)
+
+    @classmethod
+    def from_result(cls, result: "ResultRef") -> "SelectionCount":
+        """**앞선 조작이 낸 수**를 번호로 가리킨다 (Phase 2-AD)."""
+        return cls(kind=CountKind.FROM_RESULT, result=result)
+
+    @classmethod
     def unknown(cls, missing: str) -> "SelectionCount":
         """**모른다.** 무엇이 없어서 모르는지 이름으로 남긴다."""
         return cls(kind=CountKind.UNKNOWN, missing=missing)
@@ -260,14 +313,63 @@ class SelectionCount:
     # 답하기
     # ------------------------------------------------------------------
 
-    def resolve(self, zone_size) -> ResolvedCount:
+    def resolve(self, zone_size, values=NO_EXECUTION_VALUES) -> ResolvedCount:
         """
         이번 판에서 몇 장인가.
 
         ``zone_size`` 는 ``(PlayerRef, Zone) -> int`` 다. 판을 아는 쪽이
         건네준다 — 이 값은 **엔진의 권위 있는 장수**이지 누군가의 관측이
         아니다 (상대 패가 몇 장인지는 규칙이 아는 사실이다).
+
+        ``values`` 는 **이번 해결 중에 생긴 값들**이다 (Phase 2-AD).
+        기본값은 "아무것도 생기지 않았다" 이고, 그 상태에서 선언이나 앞선
+        결과를 물으면 ``PENDING``/없음이 그대로 나온다 — 실행 밖에서
+        물었다는 사실을 숫자로 덮지 않는다.
         """
+        if self.kind is CountKind.DECLARED:
+            assert self.declared is not None
+            answer = values.declared(self.declared)
+            if answer.outcome is DeclarationOutcome.RESOLVED:
+                assert answer.value is not None
+                if answer.value < 1:
+                    return ResolvedCount(
+                        CountOutcome.INVALID,
+                        reason=(
+                            f"{self.declared} 로 {answer.value} 를 선언했습니다. "
+                            "0장 이하를 무작위로 고르는 것은 고르지 않는 것입니다."
+                        ),
+                    )
+                return ResolvedCount(CountOutcome.RESOLVED, value=answer.value)
+            if answer.outcome is DeclarationOutcome.PENDING:
+                # **대신 정해 주지 않는다.** 아직 사람이 안 정했다는 사실이다.
+                return ResolvedCount(
+                    CountOutcome.UNKNOWN,
+                    reason=answer.reason,
+                    missing=f"declared number {self.declared}",
+                )
+            return ResolvedCount(CountOutcome.INVALID, reason=answer.reason)
+
+        if self.kind is CountKind.FROM_RESULT:
+            assert self.result is not None
+            try:
+                found = values.result(self.result)
+            except ExecutionLookupError as error:
+                # 가리킨 결과가 없다. **0 으로 때우지 않는다.**
+                return ResolvedCount(
+                    CountOutcome.UNKNOWN,
+                    reason=f"앞선 결과를 읽지 못했습니다: {error}",
+                    missing=self.result.describe_ko(),
+                )
+            if found < 1:
+                return ResolvedCount(
+                    CountOutcome.INVALID,
+                    reason=(
+                        f"{self.result.describe_ko()} 가 {found} 입니다. "
+                        "0장 이하를 무작위로 고르는 것은 고르지 않는 것입니다."
+                    ),
+                )
+            return ResolvedCount(CountOutcome.RESOLVED, value=found)
+
         if self.kind is CountKind.UNKNOWN:
             return ResolvedCount(
                 CountOutcome.UNKNOWN,
@@ -306,6 +408,8 @@ class SelectionCount:
             tuple(term.canonical_state() for term in self.terms),
             self.constant,
             self.missing,
+            self.declared.name if self.declared is not None else None,
+            self.result.canonical_state() if self.result is not None else None,
         )
 
     def to_dict(self) -> dict:
@@ -318,6 +422,10 @@ class SelectionCount:
             data["constant"] = self.constant
         if self.missing:
             data["missing"] = self.missing
+        if self.declared is not None:
+            data["declared"] = self.declared.name
+        if self.result is not None:
+            data["result"] = self.result.to_dict()
         return data
 
     def describe_ko(self) -> str:
@@ -325,6 +433,11 @@ class SelectionCount:
             return f"{self.value}장"
         if self.kind is CountKind.UNKNOWN:
             return f"몇 장인지 모름 ({self.missing})"
+        if self.kind is CountKind.DECLARED:
+            return f"{self.declared} 로 선언한 수만큼"
+        if self.kind is CountKind.FROM_RESULT:
+            assert self.result is not None
+            return f"{self.result.describe_ko()} 만큼"
         parts = [term.describe_ko() for term in self.terms]
         if self.constant:
             parts.append(f"{self.constant:+d}")

@@ -32,6 +32,7 @@ from engine.effect import (
     UnimplementedOperation,
     execution_availability,
 )
+from engine.effect.target import CountKind, SelectionCount
 from engine.ids import EffectRef, InstanceId
 from engine.vocabulary import Zone, default_vocabulary
 
@@ -249,7 +250,11 @@ def test_a_non_card_kind_cannot_be_a_card_operation():
 def test_draw_and_life_operations():
     draw = DrawOperation(2)
     assert draw.kind is OperationKind.DRAW
-    assert draw.count == 2
+    # **매수는 숫자가 아니라 값이다** (Phase 2-AD). 2장이라는 사실과 그것이
+    # 고정 수라는 사실을 따로 확인한다 — 이제 판에서 계산되거나 사람이
+    # 선언한 매수도 적을 수 있기 때문이다.
+    assert draw.count == SelectionCount.fixed(2)
+    assert draw.count.kind is CountKind.FIXED
 
     loss = LifeChangeOperation(-1000, PlayerRef.OPPONENT)
     assert loss.is_loss

@@ -64,7 +64,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from engine.condition import PlayerRef
-from engine.effect.target import TargetRef
+from engine.effect.target import SelectionCount, TargetRef
 from engine.vocabulary import Zone
 
 
@@ -408,30 +408,45 @@ class CardOperation(Operation):
 class DrawOperation(Operation):
     """카드를 뽑는다. 뽑지 않는다 — 뽑는다는 **의미**를 담을 뿐이다."""
 
-    count: int = 1
+    count: "int | SelectionCount" = 1
+    """
+    몇 장 뽑는가. 숫자를 그대로 적으면 고정 수로 읽는다.
+
+    :class:`~engine.effect.target.SelectionCount` 를 적으면 **판에서
+    계산되거나 플레이어가 선언한 수**로 뽑는다 (Phase 2-AC · 2-AD).
+    실제 카드가 그렇게 한다 — ``local ct=Duel.SendtoDeck(...)`` 뒤의
+    ``Duel.Draw(p,ct,...)`` 가 corpus 에 33곳 있다.
+    """
     who: PlayerRef = PlayerRef.CONTROLLER
 
     def __post_init__(self) -> None:
-        if self.count <= 0:
-            raise ValueError(f"드로우 매수는 양수여야 합니다: {self.count}")
+        if not isinstance(self.count, SelectionCount):
+            if self.count <= 0:
+                raise ValueError(f"드로우 매수는 양수여야 합니다: {self.count}")
+            object.__setattr__(self, "count", SelectionCount.fixed(self.count))
 
     @property
     def kind(self) -> OperationKind:
         return OperationKind.DRAW
 
     def canonical_state(self) -> tuple:
-        return ("draw", self.count, self.who.value, self.reason_names)
+        return (
+            "draw",
+            self.count.canonical_state(),
+            self.who.value,
+            self.reason_names,
+        )
 
     def to_dict(self) -> dict:
         return {
             "kind": "draw",
-            "count": self.count,
+            "count": self.count.to_dict(),
             "who": self.who.value,
             "reasons": list(self.reason_names),
         }
 
     def describe_ko(self) -> str:
-        return f"{self.who} 가 {self.count}장 드로우"
+        return f"{self.who} 가 {self.count.describe_ko()} 드로우"
 
 
 @dataclass(frozen=True, slots=True)

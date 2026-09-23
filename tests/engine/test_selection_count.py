@@ -520,12 +520,19 @@ def test_the_candidate_counter_never_reads_the_count():
 
 
 def test_the_count_resolver_never_counts_candidates():
-    """§4 — 반대 방향도 막는다."""
+    """
+    §4 — 반대 방향도 막는다.
+
+    Phase 2-AD 에서 이름이 ``_resolve_count`` → ``_resolve_number`` 로
+    바뀌었다. 답하는 것이 "고를 장수" 만이 아니게 됐기 때문이다 — 드로우
+    매수도 같은 자리에서 답한다. **하는 일이 넓어졌지, 후보를 보게 된
+    것은 아니다.**
+    """
     tree = ast.parse((ROOT / "engine" / "effect" / "executor.py").read_text("utf-8"))
     (counting,) = [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "_resolve_count"
+        if isinstance(node, ast.FunctionDef) and node.name == "_resolve_number"
     ]
     names = {node.id for node in ast.walk(counting) if isinstance(node, ast.Name)}
     assert "CandidateResolver" not in names

@@ -57,7 +57,8 @@ from typing import Protocol, runtime_checkable
 from engine.condition import Condition
 from engine.cost import CostGroup
 from engine.effect.operation import Operation
-from engine.effect.target import TargetBinding, TargetRef
+from engine.effect.target import CountKind, TargetBinding, TargetRef
+from engine.execution import DeclarationBinding, ValueRef
 from engine.ids import EffectRef
 
 
@@ -135,6 +136,19 @@ class EffectProvenance:
         return f"{self.source.value}({mark})"
 
 
+def _counts_of(operation) -> tuple:
+    """
+    그 조작이 들고 있는 :class:`~engine.effect.target.SelectionCount` 들.
+
+    ``isinstance`` 사슬을 만들지 않으려고 **값이 있는지**만 본다. 새 조작이
+    수를 갖게 되면 이름만 ``count`` 로 맞추면 여기 걸린다.
+    """
+    value = getattr(operation, "count", None)
+    if hasattr(value, "kind") and hasattr(value, "resolve"):
+        return (value,)
+    return ()
+
+
 class EffectDefinitionError(ValueError):
     """정의의 **모양**이 틀렸다. 규칙 위반이 아니다."""
 
@@ -156,6 +170,13 @@ class EffectDefinition:
     cost: CostGroup = field(default_factory=CostGroup)
     targets: tuple[TargetBinding, ...] = ()
     """이름별 대상 규칙. 하는 일이 이 이름을 가리킨다."""
+    declarations: tuple[DeclarationBinding, ...] = ()
+    """
+    이름별 **수 선언** 규칙 (Phase 2-AD).
+
+    ``targets`` 와 **다른 이름 공간**이다 — 저쪽은 고른 카드이고 이쪽은
+    선언한 수다. 하나로 합치면 "2장" 과 "2" 가 같은 이름표를 달게 된다.
+    """
     provenance: EffectProvenance = field(default_factory=EffectProvenance)
 
     def __post_init__(self) -> None:
@@ -169,7 +190,12 @@ class EffectDefinition:
             raise TypeError("operations 는 tuple 이어야 합니다 — 정의는 불변입니다.")
         if not isinstance(self.targets, tuple):
             raise TypeError("targets 는 tuple 이어야 합니다 — 정의는 불변입니다.")
+        if not isinstance(self.declarations, tuple):
+            raise TypeError(
+                "declarations 는 tuple 이어야 합니다 — 정의는 불변입니다."
+            )
         self._check_target_links()
+        self._check_value_links()
 
     def _check_target_links(self) -> None:
         """
@@ -209,6 +235,77 @@ class EffectDefinition:
                     f"선언한 대상 {sorted(r.name for r in unused)} 를 아무 일도 "
                     "쓰지 않습니다. 고르게 해 놓고 쓰지 않는 정의입니다."
                 )
+
+    def _check_value_links(self) -> None:
+        """
+        실행 중에 생기는 **수**의 이름이 실제로 이어지는지 본다 (Phase 2-AD).
+
+        네 가지를 거부한다.
+
+        1. 같은 이름을 두 번 선언했다.
+        2. 없는 이름의 수를 쓴다.
+        3. 선언해 놓고 아무 일도 쓰지 않는다 — 사람에게 수를 묻고 버리는
+           정의다.
+        4. **뒤의 조작을 가리킨다.** 아직 일어나지 않은 일의 결과를 읽을
+           수는 없다. 자기 자신을 가리키는 것도 같은 이유로 막는다.
+
+        네 번째가 이 검사의 핵심이다. "바로 앞" 같은 암묵적 지시를 두지
+        않는 대신, 번호가 **앞**을 가리키는지를 정의를 만들 때 못박는다.
+        """
+        declared: set[ValueRef] = set()
+        for binding in self.declarations:
+            if binding.ref in declared:
+                raise EffectDefinitionError(
+                    f"수 이름 {binding.ref} 가 두 번 선언되었습니다."
+                )
+            declared.add(binding.ref)
+
+        used: set[ValueRef] = set()
+        for index, operation in enumerate(self.operations):
+            for count in self._counts_used_by(operation):
+                if count.kind is CountKind.DECLARED:
+                    if count.declared not in declared:
+                        raise EffectDefinitionError(
+                            f"{operation.kind.value} 가 선언되지 않은 수 "
+                            f"{count.declared} 를 씁니다. 선언된 것: "
+                            f"{sorted(r.name for r in declared) or '없음'}"
+                        )
+                    used.add(count.declared)
+                elif count.kind is CountKind.FROM_RESULT:
+                    target = count.result.operation_index
+                    if target >= index:
+                        raise EffectDefinitionError(
+                            f"{index}번 조작이 {target}번 조작의 결과를 "
+                            "가리킵니다. 앞선 일만 읽을 수 있습니다 — 아직 "
+                            "일어나지 않은 일에는 결과가 없습니다."
+                        )
+
+        if self.operations:
+            unused = declared - used
+            if unused:
+                raise EffectDefinitionError(
+                    f"선언하게 한 수 {sorted(r.name for r in unused)} 를 아무 "
+                    "일도 쓰지 않습니다. 묻고 버리는 정의입니다."
+                )
+
+    def _counts_used_by(self, operation) -> tuple:
+        """
+        그 일이 **실제로 묻게 되는** 수들.
+
+        두 곳에서 온다. 일이 직접 들고 있는 매수(드로우)와, 일이 가리키는
+        **대상 규칙**이 들고 있는 장수(무작위 선택)다. 뒤쪽을 빼먹으면
+        "선언하게 해 놓고 안 쓴다" 가 거짓으로 걸린다.
+        """
+        found = list(_counts_of(operation))
+        for ref in operation.target_refs:
+            for binding in self.targets:
+                if binding.ref != ref:
+                    continue
+                choice = getattr(binding.spec, "choice", None)
+                count = getattr(choice, "count", None)
+                if hasattr(count, "kind") and hasattr(count, "resolve"):
+                    found.append(count)
+        return tuple(found)
 
     # ------------------------------------------------------------------
     # 조회
@@ -261,6 +358,7 @@ class EffectDefinition:
             self.activation.canonical_state() if self.activation is not None else None,
             self.cost.canonical_state(),
             tuple(b.canonical_state() for b in self.targets),
+            tuple(b.canonical_state() for b in self.declarations),
             self.provenance.canonical_state(),
         )
 

@@ -95,7 +95,12 @@ from engine.effect.operation import (
     SpecialSummonOperation,
 )
 from engine.effect.journal import EventJournal
-from engine.effect.target import CountOutcome, Shortfall
+from engine.effect.target import CountOutcome, SelectionCount, Shortfall
+from engine.execution import (
+    DeclarationOutcome,
+    ExecutionValues,
+    OperationResult,
+)
 from engine.randomness import RandomError, RandomOutcome, RandomPurpose
 from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.effect.semantics import (
@@ -257,6 +262,22 @@ class _Step:
                 "카드마다 목적지의 주인이 정해져 있어야 합니다: "
                 f"{len(self.instances)}장, 주인 {len(self.owners)}개"
             )
+
+    def result(self, index: int) -> OperationResult:
+        """
+        이 일이 **낸 결과** (Phase 2-AD). 사건이 아니다.
+
+        카드를 다루는 일이면 장수, 드로우처럼 수만 있는 일이면 그 수다.
+        라이프 증감에는 **장수가 없다** — 없는 것을 0 으로 답하지 않고
+        ``None`` 으로 둔다. 0 으로 두면 "한 장도 안 건드렸다" 로 읽힌다.
+        """
+        if self.instances:
+            affected = len(self.instances)
+        elif self.operation.kind is OperationKind.DRAW:
+            affected = self.amount
+        else:
+            affected = None
+        return OperationResult(operation_index=index, affected_count=affected)
 
     def record(self) -> AppliedOperation:
         return AppliedOperation(
@@ -463,13 +484,69 @@ class EffectExecutor:
                 + ", ".join(str(ref) for ref in pending),
             )
 
+        declared = self._check_declarations(definition, context)
+        if isinstance(declared, EffectResult):
+            return declared
+
+        # **이번 해결 한 번 동안만 사는 값들** (Phase 2-AD). 판에 붙이지
+        # 않는다 — 선언한 수도 앞선 결과도 판의 모양이 아니다.
+        values = ExecutionValues(declarations=declared)
+
         steps: list[_Step] = []
-        for operation in definition.operations:
-            step = self._plan_operation(state, definition, context, operation)
+        for index, operation in enumerate(definition.operations):
+            step = self._plan_operation(
+                state, definition, context, operation, values
+            )
             if isinstance(step, EffectResult):
                 return step
             steps.append(step)
+            # 계획이 끝난 일의 결과는 **계획 단계에서 이미 확정**이다.
+            # 적용은 계획한 그대로만 하므로, 뒤의 일이 읽는 수와 실제로
+            # 일어날 일이 어긋나지 않는다.
+            values = values.with_result(step.result(index))
         return steps
+
+    def _check_declarations(
+        self, definition: EffectDefinition, context: ResolutionContext
+    ):
+        """
+        선언해야 할 수가 **전부 들어왔는지, 허용된 수인지** 본다 (Phase 2-AD).
+
+        대상 선택과 같은 자리에서 같은 방식으로 본다 — 고르지 않은 대상이
+        있으면 시작하지 않듯, 선언하지 않은 수가 있어도 시작하지 않는다.
+
+        **대신 정해 주지 않는다.** ``PENDING`` 을 아무 수로 채우거나
+        ``INVALID`` 를 가까운 수로 고치면, 그 순간 규칙을 만든 것은
+        플레이어가 아니라 실행기다.
+        """
+        supplied = context.declarations
+        known = {binding.ref for binding in definition.declarations}
+        extra = [d.ref for d in supplied if d.ref not in known]
+        if extra:
+            return _fail(
+                ResolutionStatus.INVALID_CONTEXT,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                "이 효과가 묻지 않은 수가 들어왔습니다: "
+                + ", ".join(str(ref) for ref in extra),
+            )
+
+        probe = ExecutionValues(declarations=supplied)
+        for binding in definition.declarations:
+            answer = probe.declared(binding.ref, binding.spec)
+            if answer.outcome is DeclarationOutcome.PENDING:
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.TOO_FEW_SELECTED,
+                    answer.reason,
+                    missing=f"declared number {binding.ref}",
+                )
+            if answer.outcome is DeclarationOutcome.INVALID:
+                return _fail(
+                    ResolutionStatus.INVALID_CONTEXT,
+                    ValidationCode.INVALID_AMOUNT,
+                    answer.reason,
+                )
+        return supplied
 
     def _check_authority(self, definition: EffectDefinition) -> EffectResult | None:
         """
@@ -556,6 +633,7 @@ class EffectExecutor:
         definition: EffectDefinition,
         context: ResolutionContext,
         operation: Operation,
+        values: ExecutionValues,
     ) -> "_Step | EffectResult":
         """
         일 하나를 **표에 따라** 계획기에게 넘긴다.
@@ -576,7 +654,9 @@ class EffectExecutor:
                     operation.kind, f"{operation.kind.value} 실행"
                 ),
             )
-        return handler.plan(self, state, definition, context, operation)
+        return handler.plan(
+            self, state, definition, context, operation, values
+        )
 
     # ------------------------------------------------------------------
     # 종류별 계획기 — 표가 부른다
@@ -587,6 +667,7 @@ class EffectExecutor:
         definition: EffectDefinition,
         context: ResolutionContext,
         operation: DrawOperation,
+        values: ExecutionValues,
     ) -> "_Step | EffectResult":
         """
         표는 ``kind`` 로 찾지만 여기서는 :class:`DrawOperation` 의 값을
@@ -594,17 +675,18 @@ class EffectExecutor:
         때문이다 — :class:`CardOperation` 은 ``DRAW`` 로 만들어지지 않는다
         (생성 시점에 ``ValueError``). 종류가 곧 부류다.
         """
-        if operation.count <= 0:
-            # :class:`DrawOperation` 이 생성 시점에 막지만, 그 방어를
-            # 우회해서 들어온 값도 조용히 통과시키지 않는다.
-            return _fail(
-                ResolutionStatus.INVALID_OPERATION,
-                ValidationCode.INVALID_AMOUNT,
-                f"{operation.count}장 드로우는 의미가 없습니다.",
-            )
+        # **몇 장인지 먼저 묻는다** (Phase 2-AC · 2-AD). 고정 수면 그
+        # 숫자가, 선언된 수면 사람이 정한 값이, 앞선 결과를 가리키면 그
+        # 조작이 실제로 다룬 장수가 나온다.
+        wanted = self._resolve_number(
+            state, operation.count, context, values, "드로우 매수"
+        )
+        if isinstance(wanted, EffectResult):
+            return wanted
+        count = wanted
         player = _resolve_player(operation.who, context)
         available = len(state.player(player).deck)
-        if available < operation.count:
+        if available < count:
             # **뽑기 전에** 센다. 덱이 모자랄 때의 규칙(덱 데스)이 아직
             # 없으므로, 있는 만큼만 뽑아 놓고 성공처럼 끝내지 않는다.
             # ``GameState.draw`` 는 있는 만큼만 옮기고 멈추는 primitive
@@ -612,11 +694,11 @@ class EffectExecutor:
             return _fail(
                 ResolutionStatus.INSUFFICIENT_CARDS,
                 ValidationCode.INSUFFICIENT_DECK,
-                f"덱이 {available}장뿐이라 {operation.count}장을 뽑을 수 "
+                f"덱이 {available}장뿐이라 {count}장을 뽑을 수 "
                 "없습니다. 한 장도 뽑지 않습니다.",
                 missing="deck-out rule (Phase 2-G)",
             )
-        return _Step(operation, amount=operation.count, player=player)
+        return _Step(operation, amount=count, player=player)
 
     def _plan_life_change(
         self,
@@ -624,6 +706,7 @@ class EffectExecutor:
         definition: EffectDefinition,
         context: ResolutionContext,
         operation: LifeChangeOperation,
+        values: ExecutionValues,
     ) -> "_Step | EffectResult":
         return _Step(
             operation,
@@ -637,6 +720,7 @@ class EffectExecutor:
         definition: EffectDefinition,
         context: ResolutionContext,
         operation: ShuffleOperation,
+        values: ExecutionValues,
     ) -> "_Step | EffectResult":
         """
         섞을 순서를 **계획 단계에서** 정한다 (Phase 2-Z).
@@ -668,6 +752,7 @@ class EffectExecutor:
         definition: EffectDefinition,
         context: ResolutionContext,
         operation: "CardOperation | MoveOperation",
+        values: ExecutionValues,
     ) -> "_Step | EffectResult":
         """
         대상 이름을 실제 카드로 푼다.
@@ -686,7 +771,9 @@ class EffectExecutor:
                 "가리킵니다.",
             )
 
-        resolved = self._resolve_selection(state, definition, context, operation)
+        resolved = self._resolve_selection(
+            state, definition, context, operation, values
+        )
         if isinstance(resolved, EffectResult):
             return resolved
         _, selection = resolved
@@ -760,6 +847,7 @@ class EffectExecutor:
         definition: EffectDefinition,
         context: ResolutionContext,
         operation: SpecialSummonOperation,
+        values: ExecutionValues,
     ) -> "_Step | EffectResult":
         """
         고른 몬스터를 어디에 놓을지 **Phase 2-T 의 절차에게 묻는다.**
@@ -772,7 +860,9 @@ class EffectExecutor:
         되는가(관문) → 어디에 놓을 수 있는가. **판에 손대기 전에** 전부
         끝낸다.
         """
-        selected = self._resolve_selection(state, definition, context, operation)
+        selected = self._resolve_selection(
+            state, definition, context, operation, values
+        )
         if isinstance(selected, EffectResult):
             return selected
         ref, selection = selected
@@ -820,6 +910,7 @@ class EffectExecutor:
         definition: EffectDefinition,
         context: ResolutionContext,
         operation: Operation,
+        values: ExecutionValues,
     ):
         """
         일이 가리키는 이름과 이번에 골라진 것. 실패하면 :class:`EffectResult`.
@@ -840,7 +931,7 @@ class EffectExecutor:
                 "가리킵니다.",
             )
         if spec is not None and spec.is_random:
-            return self._roll_selection(state, spec, context, ref)
+            return self._roll_selection(state, spec, context, ref, values)
         selection = context.selection_for(ref)
         if selection is None:
             return _fail(
@@ -856,6 +947,7 @@ class EffectExecutor:
         spec,
         context: ResolutionContext,
         ref,
+        values: ExecutionValues,
     ):
         """
         후보를 세고, 그중 하나를 **난수원이** 고른다 (Phase 2-AB).
@@ -880,7 +972,9 @@ class EffectExecutor:
         # 정하는 일은 서로를 읽지 않는다. 수를 모르면 후보를 다 세어도
         # 소용이 없으므로 순서는 이쪽이 싸고, 어느 쪽도 난수를 쓰지
         # 않으므로 순서가 결과를 바꾸지 않는다.
-        wanted = self._resolve_count(state, spec, context, ref)
+        wanted = self._resolve_number(
+            state, spec.choice.count, context, values, str(ref)
+        )
         if isinstance(wanted, EffectResult):
             return wanted
 
@@ -928,24 +1022,47 @@ class EffectExecutor:
             )
         return ref, Selection(chosen=outcome.selected)
 
-    def _resolve_count(self, state: GameState, spec, context, ref):
+    def _resolve_number(
+        self,
+        state: GameState,
+        count,
+        context: ResolutionContext,
+        values: ExecutionValues,
+        what: str,
+    ):
         """
-        **몇 장을 고르는가** (Phase 2-AC). 후보와 따로 묻는다.
+        **수 하나를 답한다** (Phase 2-AC · 2-AD). 후보와 따로 묻는다.
 
         수는 :class:`~engine.effect.target.SelectionCount` 가 답하고,
-        여기서는 그것이 필요로 하는 **자리 장수**만 건네준다. 그 장수는
-        판의 권위 있는 사실이다 — 상대 패가 몇 장인지는 누가 보느냐와
-        무관하게 정해져 있다 (§9: engine authority ≠ viewer visibility).
+        여기서는 그것이 필요로 하는 두 가지만 건네준다.
+
+        ==================  ==========================================
+        ``zone_size``        판의 **권위 있는** 자리 장수
+        ``values``           이번 해결 중에 생긴 값 (선언 · 앞선 결과)
+        ==================  ==========================================
+
+        앞의 것은 누가 보느냐와 무관하게 정해져 있고 (§9: engine
+        authority ≠ viewer visibility), 뒤의 것은 **이번 해결에서만**
+        산다. 둘 다 판을 바꾸지 않는다.
 
         모르면 **모른다고 답한다.** 숫자로 바꾸지 않는다.
         """
+        if not isinstance(count, SelectionCount):
+            # 조작이 생성 시점에 숫자를 제 타입으로 바꾸지만, 그 방어를
+            # 우회해서 들어온 값도 조용히 통과시키지 않는다.
+            return _fail(
+                ResolutionStatus.INVALID_OPERATION,
+                ValidationCode.INVALID_AMOUNT,
+                f"{what}가 수 명세가 아닙니다: {count!r}.",
+            )
+
         condition_context = context.condition_context()
 
         def zone_size(player_ref, zone) -> int:
             player = state.player(player_ref.resolve(condition_context))
             return len(player.zone(zone))
 
-        answer = spec.choice.count.resolve(zone_size)
+        answer = count.resolve(zone_size, values)
         if answer.outcome is CountOutcome.RESOLVED:
             assert answer.value is not None
             return answer.value
@@ -953,13 +1070,13 @@ class EffectExecutor:
             return _fail(
                 ResolutionStatus.UNSUPPORTED_OPERATION,
                 ValidationCode.RULE_NOT_IMPLEMENTED,
-                f"{ref}: {answer.reason}",
+                f"{what}: {answer.reason}",
                 missing=answer.missing,
             )
         return _fail(
             ResolutionStatus.INVALID_OPERATION,
             ValidationCode.INVALID_AMOUNT,
-            f"{ref}: {answer.reason}",
+            f"{what}: {answer.reason}",
         )
 
     def _authoritative_candidates(self, state: GameState, spec, context):
@@ -1311,6 +1428,7 @@ class OperationHandler:
             EffectDefinition,
             ResolutionContext,
             Operation,
+            ExecutionValues,
         ],
         "_Step | EffectResult",
     ]
