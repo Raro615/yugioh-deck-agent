@@ -406,6 +406,47 @@ class GameState:
         # 복제 대상이 아니다 (Phase 2-D-3 · 2-F-1 · 2-F-2).
         return copy
 
+    def project(self) -> "GameState":
+        """
+        **계획이 내다보는 판** (Phase 2-AH).
+
+        :meth:`clone` 과 **한 가지만** 다르다 — 난수원을 복제하지 않고
+        원본과 **같은 것을 함께 쓴다.**
+
+        왜 그래야 하는지가 이 메서드의 전부다.
+
+        계획 단계는 판을 **읽기만** 해야 하는데(ADR-008), 한 효과가 여러
+        일을 할 때 뒤의 일은 **앞의 일이 끝난 판**을 봐야 한다. 상대 패에서
+        무작위로 두 장을 따로 고르는 효과가 같은 판을 두 번 보면 **같은
+        카드를 두 번 고른다.**
+
+        그래서 계획은 이 투영 위에서 앞의 일을 반영해 가며 진행하고, 진짜
+        판은 계획이 전부 끝난 뒤에야 바뀐다. 전부 아니면 무가 그대로
+        유지된다.
+
+        난수원만 함께 쓰는 이유도 같다. 난수는 **계획 단계에서** 꺼내고
+        (Phase 2-Z), 꺼낸 횟수는 재현의 좌표다. 투영이 제 난수원을 따로
+        가지면 그 좌표가 진짜 판에 남지 않아 **같은 seed 로 다시 돌렸을 때
+        다른 판**이 된다.
+
+        판의 *모양*은 복제되고 흐름의 *위치*는 공유된다 — 해시에서 난수원을
+        뺀 것과 같은 가름이다.
+        """
+        players = tuple(player.clone() for player in self.players)
+        copy = GameState(
+            players=players,  # type: ignore[arg-type]
+            turn=self.turn.clone(),
+            repository=self._repository,
+            allocator=self._allocator.clone(),
+            result=self.result,  # frozen
+            uses=self.uses.clone(),
+            rule_uses=self.rule_uses.clone(),
+            seed=self._seed,
+            # **복제하지 않는다.** 같은 난수원을 함께 쓴다.
+            rng=self._random,
+        )
+        return copy
+
     # ------------------------------------------------------------------
     # 정규 해시
     # ------------------------------------------------------------------

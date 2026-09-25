@@ -527,6 +527,14 @@ class EffectExecutor:
         if isinstance(declared, EffectResult):
             return declared
 
+        # **계획이 내다보는 판** (Phase 2-AH). 앞의 일을 여기에 반영해 가며
+        # 계획하므로, 뒤의 일은 **앞의 일이 끝난 판**을 본다. 진짜 판은
+        # 계획이 전부 끝난 뒤에야 바뀐다 — 전부 아니면 무는 그대로다.
+        #
+        # 난수원만은 함께 쓴다. 꺼낸 횟수가 재현의 좌표이므로 투영이 제
+        # 난수원을 따로 가지면 그 좌표가 진짜 판에 남지 않는다.
+        board = state.project()
+
         # **이번 해결 한 번 동안만 사는 값들** (Phase 2-AD). 판에 붙이지
         # 않는다 — 선언한 수도 앞선 결과도 판의 모양이 아니다.
         values = ExecutionValues(declarations=declared)
@@ -537,7 +545,7 @@ class EffectExecutor:
             if waiting is not None:
                 return waiting
 
-            allowed = self._check_guards(state, definition, index, context, values)
+            allowed = self._check_guards(board, definition, index, context, values)
             if isinstance(allowed, EffectResult):
                 return allowed
             if not allowed:
@@ -554,7 +562,7 @@ class EffectExecutor:
                 continue
 
             step = self._plan_operation(
-                state, definition, context, operation, values
+                board, definition, context, operation, values
             )
             if isinstance(step, EffectResult):
                 return step
@@ -563,6 +571,20 @@ class EffectExecutor:
             # 적용은 계획한 그대로만 하므로, 뒤의 일이 읽는 수와 실제로
             # 일어날 일이 어긋나지 않는다.
             values = values.with_result(step.result(index))
+
+            # **투영에 반영한다.** 이제 뒤의 일이 앞의 일을 본다.
+            try:
+                self._apply(board, step)
+            except Exception as error:
+                # 투영에서 막혔다. **진짜 판은 아직 한 글자도 바뀌지
+                # 않았으므로** 깨끗하게 거절할 수 있다 — 예전에는 이런
+                # 실패가 적용 도중에 터져 판이 반쯤 바뀐 채로 남았다.
+                return _fail(
+                    ResolutionStatus.INVALID_OPERATION,
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    f"{index}번 조작을 수행할 수 없습니다: {error}. "
+                    "판은 그대로입니다.",
+                )
         return steps
 
     def _check_requirements(

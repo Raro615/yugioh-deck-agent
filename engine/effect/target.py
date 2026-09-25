@@ -53,6 +53,7 @@ from enum import Enum
 from engine.condition import PlayerRef
 from engine.cost import CandidateSource, ChoiceSpec, Selection
 from engine.execution import (
+    ResultAvailability,
     ResolvedValue,
     ValueDomain,
     ValueOutcome,
@@ -315,16 +316,27 @@ class SelectionCount:
 
         if self.kind is CountKind.FROM_RESULT:
             assert self.result is not None
-            try:
-                found = values.result(self.result)
-            except ExecutionLookupError as error:
-                # 가리킨 결과가 없다. **0 으로 때우지 않는다.**
+            found = values.look_up(self.result)
+            if found.availability is ResultAvailability.AVAILABLE:
+                assert found.value is not None
+                return ResolvedValue(ValueOutcome.RESOLVED, value=found.value)
+            # **0 으로 때우지 않는다.** 그리고 왜 없는지에 따라 **다르게**
+            # 답한다 (Phase 2-AH) — 고쳐야 할 것이 다르기 때문이다.
+            if found.availability is ResultAvailability.NO_FIELD:
+                # 그 종류의 일은 그 수를 내지 않는다. 규칙이 모자란 것이
+                # 아니라 **정의가 틀린 것**이다.
                 return ResolvedValue(
-                    ValueOutcome.UNKNOWN,
-                    reason=f"앞선 결과를 읽지 못했습니다: {error}",
-                    missing=self.result.describe_ko(),
+                    ValueOutcome.INVALID, reason=found.reason
                 )
-            return ResolvedValue(ValueOutcome.RESOLVED, value=found)
+            return ResolvedValue(
+                ValueOutcome.UNKNOWN,
+                reason=found.reason,
+                missing=(
+                    "rule for reading a skipped operation's count"
+                    if found.availability is ResultAvailability.NOT_APPLIED
+                    else self.result.describe_ko()
+                ),
+            )
 
         if self.kind is CountKind.UNKNOWN:
             return ResolvedValue(

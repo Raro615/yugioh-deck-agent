@@ -996,8 +996,68 @@ class OperationResult:
         }
 
 
+class ResultAvailability(str, Enum):
+    """
+    앞선 일의 수를 **왜 읽을 수 없는가** (Phase 2-AH).
+
+    셋을 뭉개지 않는다. 셋 다 "수가 없다" 로 끝나지만 **고쳐야 할 것이
+    다르다.**
+
+    ============  ==========================================
+    ``NOT_YET``    아직 그 일에 **닿지 않았다** — 순서의 문제
+    ``NOT_APPLIED`` 그 일을 **하지 않았다** — 조건이 거짓이었다 (2-AG)
+    ``NO_FIELD``   그 일에는 **그 칸이 없다** — 정의가 틀렸다
+    ============  ==========================================
+
+    ``UNKNOWN`` 과도 다르다. 저것은 "규칙을 판정할 수 없다" 이고 이것은
+    "그 수가 존재하지 않는다" 다 — 둘을 합치면 "규칙을 더 옮기면 풀린다"
+    와 "정의를 고쳐야 한다" 가 같은 말이 된다.
+    """
+
+    AVAILABLE = "available"
+    NOT_YET = "not_yet"
+    NOT_APPLIED = "not_applied"
+    NO_FIELD = "no_field"
+
+
+@dataclass(frozen=True, slots=True)
+class ResultLookup:
+    """앞선 일의 수를 찾아본 결과. ``AVAILABLE`` 일 때만 수가 있다."""
+
+    availability: ResultAvailability
+    value: "int | None" = None
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        if (self.availability is ResultAvailability.AVAILABLE) is not (
+            self.value is not None
+        ):
+            raise ValueError(
+                "찾았을 때만 수가 있습니다. 없는 수를 숫자로 적으면 그 "
+                "숫자가 규칙이 됩니다."
+            )
+
+    def __bool__(self):  # pragma: no cover - 부르면 안 된다
+        raise TypeError(
+            "ResultLookup 을 참/거짓으로 쓰지 마십시오. 없는 것이 거짓이 "
+            "되면 '수가 없다' 가 '0 이다' 로 접힙니다."
+        )
+
+
 class ExecutionLookupError(LookupError):
-    """실행 중의 값을 이름으로 찾지 못했다. **0 으로 때우지 않는다.**"""
+    """
+    실행 중의 값을 이름으로 찾지 못했다. **0 으로 때우지 않는다.**
+
+    :attr:`availability` 가 **왜** 못 찾았는지 들고 있다 (Phase 2-AH).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        availability: ResultAvailability = ResultAvailability.NOT_YET,
+    ):
+        super().__init__(message)
+        self.availability = availability
 
 
 @dataclass(frozen=True, slots=True)
@@ -1051,6 +1111,42 @@ class ExecutionValues:
             )
         return ResolvedDeclaration(DeclarationOutcome.RESOLVED, value=value)
 
+    def look_up(self, ref: ResultRef) -> ResultLookup:
+        """
+        그 조작이 낸 수를 **찾아본다** (Phase 2-AH).
+
+        못 찾았으면 **왜** 못 찾았는지까지 답한다. 셋을 뭉개지 않는
+        이유는 고쳐야 할 것이 다르기 때문이다 — 순서를 고칠 일인지,
+        건너뛴 일의 처리를 정의에 적을 일인지, 정의가 틀린 것인지.
+        """
+        for result in self.results:
+            if result.operation_index != ref.operation_index:
+                continue
+            if not result.was_applied:
+                return ResultLookup(
+                    ResultAvailability.NOT_APPLIED,
+                    reason=(
+                        f"{ref.operation_index}번 조작은 조건이 거짓이라 "
+                        "하지 않았습니다. 하지 않은 일에는 수가 없습니다."
+                    ),
+                )
+            value = result.value_of(ref.field)
+            if value is None:
+                return ResultLookup(
+                    ResultAvailability.NO_FIELD,
+                    reason=(
+                        f"{ref.operation_index}번 조작에는 "
+                        f"{ref.field.value} 가 없습니다."
+                    ),
+                )
+            return ResultLookup(
+                ResultAvailability.AVAILABLE, value=value * ref.multiplier
+            )
+        return ResultLookup(
+            ResultAvailability.NOT_YET,
+            reason=f"{ref.operation_index}번 조작에 아직 닿지 않았습니다.",
+        )
+
     def result(self, ref: ResultRef) -> int:
         """
         그 조작이 낸 수. 없으면 :class:`ExecutionLookupError`.
@@ -1059,18 +1155,11 @@ class ExecutionValues:
         아직 없다" 는 다른 사실이고, 전자를 후자로 읽으면 뒤의 일이
         0장을 다룬 척 지나간다.
         """
-        for result in self.results:
-            if result.operation_index == ref.operation_index:
-                value = result.value_of(ref.field)
-                if value is None:
-                    raise ExecutionLookupError(
-                        f"{ref.operation_index}번 조작에는 "
-                        f"{ref.field.value} 가 없습니다."
-                    )
-                return value * ref.multiplier
-        raise ExecutionLookupError(
-            f"{ref.operation_index}번 조작의 결과가 아직 없습니다."
-        )
+        found = self.look_up(ref)
+        if found.availability is ResultAvailability.AVAILABLE:
+            assert found.value is not None
+            return found.value
+        raise ExecutionLookupError(found.reason, found.availability)
 
     def outcome_of(self, operation_index: int) -> "OperationOutcome | None":
         """
@@ -1117,6 +1206,8 @@ NO_EXECUTION_VALUES = ExecutionValues()
 
 
 __all__ = [
+    "ResultAvailability",
+    "ResultLookup",
     "Comparison",
     "NumericTest",
     "ValueDomain",

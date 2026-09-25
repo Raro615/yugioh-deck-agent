@@ -214,6 +214,28 @@ MOVABLE_DESTINATIONS: frozenset[Zone] = frozenset(
 SHUFFLEABLE_ZONES: frozenset[Zone] = frozenset({Zone.DECK, Zone.EXTRA})
 
 
+
+#: 그 일이 **장수를 내는가** (Phase 2-AH).
+#:
+#: 카드를 다루는 일과 드로우는 "몇 장" 이 있고, 라이프 증감과 셔플에는
+#: 없다. 없는 칸을 가리키는 정의는 **만들 때** 막는다 — 실행해 봐야
+#: 아는 거짓말이 아니라 적는 순간 아는 거짓말이다.
+COUNTING_KINDS: frozenset = frozenset(
+    {
+        OperationKind.DESTROY,
+        OperationKind.SEND_TO_GRAVE,
+        OperationKind.BANISH,
+        OperationKind.RELEASE,
+        OperationKind.DISCARD,
+        OperationKind.RETURN_TO_HAND,
+        OperationKind.RETURN_TO_DECK,
+        OperationKind.MOVE,
+        OperationKind.SPECIAL_SUMMON,
+        OperationKind.DRAW,
+    }
+)
+
+
 @dataclass(frozen=True, slots=True)
 class Operation:
     """

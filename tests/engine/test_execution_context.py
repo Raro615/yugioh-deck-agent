@@ -564,24 +564,31 @@ def test_h_an_operation_without_a_count_has_no_count(state):
     """
     라이프 증감에는 **장수가 없다.** 없는 것을 0 으로 답하면 뒤의 일이
     "0장을 다뤘다" 고 읽는다.
+
+    **Phase 2-AH 에서 막는 자리가 앞당겨졌다.** 예전에는 실행해 봐야
+    알았지만(``UNSUPPORTED_OPERATION``), 어느 종류가 장수를 내는지는
+    **정의를 적는 순간** 알 수 있다. 그래서 정의가 만들어지지 않는다 —
+    거짓말을 실행 때까지 들고 다니지 않는다.
+
+    이 시험이 지키려던 것("없는 것을 0 으로 답하지 않는다")은 그대로이고,
+    더 일찍 지켜진다.
     """
-    definition = EffectDefinition(
-        effect_ref=EffectRef(LAB, 4),
-        source_card_id=LAB,
-        operations=(
-            LifeChangeOperation(delta=1000),
-            DrawOperation(count=SelectionCount.from_result(ResultRef(0))),
-        ),
-        cost=CostGroup(),
-        provenance=EffectProvenance.hand_written(verified=True),
-    )
-    before, hand = state.state_hash(), hand_ids(state, P2)
+    with pytest.raises(EffectDefinitionError, match="장수를 내지 않습니다"):
+        EffectDefinition(
+            effect_ref=EffectRef(LAB, 4),
+            source_card_id=LAB,
+            operations=(
+                LifeChangeOperation(delta=1000),
+                DrawOperation(count=SelectionCount.from_result(ResultRef(0))),
+            ),
+            cost=CostGroup(),
+            provenance=EffectProvenance.hand_written(verified=True),
+        )
 
-    result = run(state, definition)
-
-    assert result.status is ResolutionStatus.UNSUPPORTED_OPERATION
-    assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    untouched(state, before, hand, result)
+    # 그래도 **값 계층은 여전히 0 을 지어내지 않는다.**
+    values = ExecutionValues().with_result(OperationResult(0))
+    with pytest.raises(ExecutionLookupError):
+        values.result(ResultRef(0))
 
 
 def test_i_a_failure_in_the_first_operation_stops_the_second(repository):

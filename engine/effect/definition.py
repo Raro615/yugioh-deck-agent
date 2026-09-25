@@ -56,7 +56,7 @@ from typing import Protocol, runtime_checkable
 
 from engine.condition import Condition
 from engine.cost import CostGroup
-from engine.effect.operation import Operation
+from engine.effect.operation import COUNTING_KINDS, Operation
 from engine.effect.target import CountKind, TargetBinding, TargetRef
 from engine.effect.target import SelectionCount
 from engine.execution import (
@@ -376,13 +376,7 @@ class EffectDefinition:
                         )
                     used.add(count.declared)
                 elif count.kind is CountKind.FROM_RESULT:
-                    target = count.result.operation_index
-                    if target >= index:
-                        raise EffectDefinitionError(
-                            f"{index}번 조작이 {target}번 조작의 결과를 "
-                            "가리킵니다. 앞선 일만 읽을 수 있습니다 — 아직 "
-                            "일어나지 않은 일에는 결과가 없습니다."
-                        )
+                    self._check_result_ref(count.result, index)
 
         # **조건이 읽는 수도 쓰는 것이다** (Phase 2-AG). 빼먹으면
         # "묻고 버린다" 가 거짓으로 걸린다.
@@ -397,6 +391,34 @@ class EffectDefinition:
                     f"선언하게 한 수 {sorted(r.name for r in unused)} 를 아무 "
                     "일도 쓰지 않습니다. 묻고 버리는 정의입니다."
                 )
+
+    def _check_result_ref(self, ref, index: int) -> None:
+        """
+        앞선 일의 수를 가리키는 것이 **말이 되는가** (2-AD · 2-AH).
+
+        둘을 본다.
+
+        1. **앞선 일인가.** 아직 일어나지 않은 일에는 수가 없다. 이
+           검사가 있어서 A→B, B→A 같은 고리는 **만들어질 수조차
+           없다** — 고리를 푸는 장치를 따로 두지 않는 이유다.
+        2. **그 일이 그 수를 내는가.** 라이프 증감에는 장수가 없다.
+           실행해 봐야 아는 거짓말이 아니라 **적는 순간 아는 거짓말**
+           이므로 여기서 막는다 (Phase 2-AH).
+        """
+        target = ref.operation_index
+        if target >= index:
+            raise EffectDefinitionError(
+                f"{index}번 조작이 {target}번 조작의 결과를 가리킵니다. "
+                "앞선 일만 읽을 수 있습니다 — 아직 일어나지 않은 일에는 "
+                "결과가 없습니다."
+            )
+        kind = self.operations[target].kind
+        if kind not in COUNTING_KINDS:
+            raise EffectDefinitionError(
+                f"{index}번 조작이 {target}번 조작({kind.value})의 "
+                f"{ref.field.value} 를 읽습니다. 그 일은 장수를 내지 "
+                "않습니다."
+            )
 
     def _check_requirements(self) -> None:
         """
@@ -444,13 +466,7 @@ class EffectDefinition:
             result = guard.value.result
             if result is None:
                 continue
-            if result.operation_index >= guard.operation_index:
-                raise EffectDefinitionError(
-                    f"{guard.operation_index}번 조작의 조건이 "
-                    f"{result.operation_index}번 조작의 수를 봅니다. 앞선 "
-                    "일만 볼 수 있습니다 — 아직 일어나지 않은 일에는 수가 "
-                    "없습니다."
-                )
+            self._check_result_ref(result, guard.operation_index)
 
     def guards_for(self, index: int) -> tuple:
         """그 조작에 걸린 조건들. 선언 순서 그대로다."""
