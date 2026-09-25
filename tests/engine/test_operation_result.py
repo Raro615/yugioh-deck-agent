@@ -266,7 +266,10 @@ def test_c_a_failed_operation_leaves_no_result_at_all(state):
 
     assert result.status is ResolutionStatus.INSUFFICIENT_CARDS
     assert result.applied == ()
-    assert [o.value for o in OperationOutcome] == ["succeeded", "unknown"]
+    # Phase 2-AG 에서 ``not_applied`` 가 늘었다 (하지 않은 일). 계획에서
+    # 막힌 조작이 결과를 남기지 않는다는 **이 시험의 주장은 그대로**다 —
+    # 건너뛴 일과 막힌 일은 다른 것이다.
+    assert "failed" not in [o.value for o in OperationOutcome]
     untouched(state, before, hand, result)
 
 

@@ -615,7 +615,15 @@ def test_i_a_failed_operation_still_leaves_no_result():
     그래서 이 시험은 **여전히 참인 것**을 단언한다: 실패한 조작은
     결과를 남기지 않고, 성패 어휘에 ``FAILED`` 가 없다.
     """
-    assert [o.value for o in OperationOutcome] == ["succeeded", "unknown"]
+    # Phase 2-AG 에서 ``not_applied`` 가 늘었다 — 조건이 거짓이라 **하지
+    # 않은** 일이 생겼기 때문이다. 그것은 실패가 아니고, ``FAILED`` 는
+    # 여전히 없다. 이 시험이 지키려는 것이 그것이다.
+    assert "failed" not in [o.value for o in OperationOutcome]
+    assert [o.value for o in OperationOutcome] == [
+        "succeeded",
+        "not_applied",
+        "unknown",
+    ]
     # Phase 2-AF 에서 ``attempted_count`` 가 늘었다 — **하려고 한 수와 실제로
     # 한 수는 다른 질문**이기 때문이다. 여기서 세는 이유는 칸이 조용히
     # 늘어나는 것을 막기 위해서이므로, 늘어난 것을 적어 두고 계속 센다.

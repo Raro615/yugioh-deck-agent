@@ -41,7 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from engine.condition import ConditionContext, PlayerRef
+from engine.condition import ConditionContext, ConditionResult, PlayerRef
 from engine.validation import ActionValidity
 from engine.vocabulary import Zone
 
@@ -251,6 +251,108 @@ class BoardQuantity:
             return f"{self.player} 의 라이프"
         assert self.zone is not None
         return f"{self.player} {self.zone.value} 의 장수"
+
+
+class Comparison(str, Enum):
+    """
+    수를 **어떻게** 견주는가 (Phase 2-AG).
+
+    둘뿐이다. 실제 카드가 조작의 결과를 조건으로 쓰는 자리 97곳을 세어
+    보니 **91곳이 0 과 견준다.**
+
+    ========  ===  ==========================================
+    ``> 0``    57   하나라도 됐는가
+    ``== 0``   26   하나도 안 됐는가
+    ``~= 0``    8   하나라도 됐는가
+    ``> 1``     2   둘 이상인가
+    ``<= 0``    1   하나도 안 됐는가
+    ``>= 2``    1   둘 이상인가
+    ``>= 1``    1   하나라도 됐는가
+    ========  ===  ==========================================
+
+    장수는 음수가 될 수 없으므로 ``> 0`` · ``~= 0`` · ``>= 1`` 은 같은
+    질문이고, ``== 0`` · ``<= 0`` 도 같은 질문이다. 그래서 이 둘이면
+    96곳이 적힌다.
+
+    ``EQUAL`` · ``NOT_EQUAL`` · ``GREATER_THAN`` · ``LESS_THAN`` 을
+    **만들지 않았다.** 정확히 N 은 :attr:`AT_LEAST` 와 :attr:`AT_MOST`
+    를 함께 걸면 되고, 나머지는 쓰는 카드를 못 찾았다 — 쓰지 않는
+    연산자를 미리 만들면 그것이 옳은지 아무도 확인하지 않는다.
+    """
+
+    AT_LEAST = "at_least"
+    """``value >= operand``"""
+    AT_MOST = "at_most"
+    """``value <= operand``"""
+
+
+@dataclass(frozen=True, slots=True)
+class NumericTest:
+    """
+    수 하나를 견주는 **가장 작은 조건** (Phase 2-AG).
+
+    **값을 구하지 않는다.** 이미 나온 수를 받아 견주기만 한다 — 값을
+    정하는 일(:class:`~engine.effect.target.SelectionCount`), 값이
+    되는지 보는 일(:class:`ValueDomain`), 그리고 값을 견주는 일은 서로
+    다른 세 가지다.
+
+    :class:`~engine.condition.ConditionResult` 를 그대로 돌려준다.
+    판정 결과를 나타내는 어휘를 하나 더 만들지 않는다.
+    """
+
+    comparison: Comparison
+    operand: int
+
+    def __post_init__(self) -> None:
+        if self.operand < 0:
+            raise ValueError(
+                f"견줄 수는 0 이상입니다: {self.operand}. 장수는 음수가 "
+                "되지 않으므로 음수와 견주는 조건은 언제나 같은 답입니다."
+            )
+
+    def test(self, value: int) -> ConditionResult:
+        """
+        **수가 있을 때만** 부른다. 수를 모르는 것은 이 타입의 일이 아니라
+        부르는 쪽의 사실이고, 그때의 답은 ``UNKNOWN`` 이다 — 그것을
+        여기서 ``FALSE`` 로 접지 않으려고 아예 받지 않는다.
+        """
+        if self.comparison is Comparison.AT_LEAST:
+            return ConditionResult.from_bool(value >= self.operand)
+        return ConditionResult.from_bool(value <= self.operand)
+
+    def canonical_state(self) -> tuple:
+        return (self.comparison.value, self.operand)
+
+    def to_dict(self) -> dict:
+        return {"comparison": self.comparison.value, "operand": self.operand}
+
+    def describe_ko(self) -> str:
+        word = "이상" if self.comparison is Comparison.AT_LEAST else "이하"
+        return f"{self.operand} {word}"
+
+    @classmethod
+    def at_least(cls, operand: int) -> "NumericTest":
+        return cls(Comparison.AT_LEAST, operand)
+
+    @classmethod
+    def at_most(cls, operand: int) -> "NumericTest":
+        return cls(Comparison.AT_MOST, operand)
+
+    @classmethod
+    def any_at_all(cls) -> "NumericTest":
+        """
+        **하나라도 됐는가** — 97곳 중 66곳이 묻는 바로 그것이다.
+
+        ``> 0`` 과 ``~= 0`` 과 ``>= 1`` 을 한 이름으로 부른다. 장수가
+        음수가 될 수 없으므로 셋은 같은 질문이고, 같은 질문을 세 이름으로
+        부르면 어느 것을 써야 하는지가 새 문제로 생긴다.
+        """
+        return cls(Comparison.AT_LEAST, 1)
+
+    @classmethod
+    def none_at_all(cls) -> "NumericTest":
+        """**하나도 안 됐는가** — 27곳이 묻는다."""
+        return cls(Comparison.AT_MOST, 0)
 
 
 class ValueDomainKind(str, Enum):
@@ -646,6 +748,18 @@ class OperationOutcome(str, Enum):
 
     SUCCEEDED = "succeeded"
     """계획대로 적용되고, 그 조작이 주장한 규칙을 **전부 봤다.**"""
+    NOT_APPLIED = "not_applied"
+    """
+    **일어나지 않았다.** 조건이 거짓이어서 건너뛴 일이다 (Phase 2-AG).
+
+    실패가 아니다 — 규칙이 "하지 말라" 고 한 것을 그대로 따른 것이고,
+    효과는 정상적으로 해결된다. 그래서 ``FAILED`` 와 **다른 값**이다
+    (그리고 ``FAILED`` 는 여전히 없다).
+
+    건너뛴 일에는 장수가 **없다.** 0 이 아니다 — "0장을 다뤘다" 와
+    "하지 않았다" 는 다른 사실이고, 뒤의 일이 이것을 수로 읽으려 하면
+    ``UNKNOWN`` 으로 멈춘다.
+    """
     UNKNOWN = "unknown"
     """
     일어나기는 했지만 **규칙대로였는지 말할 수 없다.**
@@ -820,6 +934,11 @@ class OperationResult:
     규칙대로 되었는가 (Phase 2-AE). **장수와 독립이다** —
     ``affected_count == 0`` 을 실패로 읽지 않는다.
     """
+
+    @property
+    def was_applied(self) -> bool:
+        """이 일이 실제로 일어났는가 (Phase 2-AG)."""
+        return self.outcome is not OperationOutcome.NOT_APPLIED
 
     @property
     def is_complete(self) -> bool:
@@ -998,6 +1117,8 @@ NO_EXECUTION_VALUES = ExecutionValues()
 
 
 __all__ = [
+    "Comparison",
+    "NumericTest",
     "ValueDomain",
     "ValueDomainKind",
     "DomainVerdict",

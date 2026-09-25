@@ -303,14 +303,6 @@ class SelectionCount:
             answer = values.declared(self.declared)
             if answer.outcome is DeclarationOutcome.RESOLVED:
                 assert answer.value is not None
-                if answer.value < 1:
-                    return ResolvedValue(
-                        ValueOutcome.INVALID,
-                        reason=(
-                            f"{self.declared} 로 {answer.value} 를 선언했습니다. "
-                            "0장 이하를 무작위로 고르는 것은 고르지 않는 것입니다."
-                        ),
-                    )
                 return ResolvedValue(ValueOutcome.RESOLVED, value=answer.value)
             if answer.outcome is DeclarationOutcome.PENDING:
                 # **대신 정해 주지 않는다.** 아직 사람이 안 정했다는 사실이다.
@@ -332,14 +324,6 @@ class SelectionCount:
                     reason=f"앞선 결과를 읽지 못했습니다: {error}",
                     missing=self.result.describe_ko(),
                 )
-            if found < 1:
-                return ResolvedValue(
-                    ValueOutcome.INVALID,
-                    reason=(
-                        f"{self.result.describe_ko()} 가 {found} 입니다. "
-                        "0장 이하를 무작위로 고르는 것은 고르지 않는 것입니다."
-                    ),
-                )
             return ResolvedValue(ValueOutcome.RESOLVED, value=found)
 
         if self.kind is CountKind.UNKNOWN:
@@ -355,18 +339,10 @@ class SelectionCount:
         total = self.constant
         for term in self.terms:
             total += term.coefficient * zone_size(term.player, term.zone)
-        if total < 1:
-            # **0 을 조용히 넘기지 않는다.** 실제 카드는 이 경우를 발동
-            # 조건으로 막는다 (멀차미는 ``if dif>0``, 악몽의 신기루는
-            # 라벨이 0 이면 발동하지 않는다). 그 조건 없이 여기까지 왔다면
-            # 정의가 조건을 빠뜨린 것이지, 0장을 고르라는 뜻이 아니다.
-            return ResolvedValue(
-                ValueOutcome.INVALID,
-                reason=(
-                    f"계산된 수가 {total} 입니다. 0장 이하를 무작위로 고르는 "
-                    "것은 고르지 않는 것이므로, 발동 조건이 먼저 막아야 합니다."
-                ),
-            )
+        # **0 이나 음수를 여기서 막지 않는다** (Phase 2-AG). 0 은 "고를
+        # 수 없다" 이기도 하지만 조건의 입력으로는 **멀쩡한 값**이다
+        # ("하나도 없다"). 무엇이 허용되는지는 **쓰는 자리**가 안다 —
+        # 고르라는 자리는 1 이상을 요구하고, 견주는 자리는 0 도 받는다.
         return ResolvedValue(ValueOutcome.RESOLVED, value=total)
 
     # ------------------------------------------------------------------

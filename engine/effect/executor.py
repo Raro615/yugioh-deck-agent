@@ -536,6 +536,23 @@ class EffectExecutor:
             waiting = self._check_requirements(definition, index, values)
             if waiting is not None:
                 return waiting
+
+            allowed = self._check_guards(state, definition, index, context, values)
+            if isinstance(allowed, EffectResult):
+                return allowed
+            if not allowed:
+                # **조건이 거짓이라 하지 않는다** (Phase 2-AG). 실패가
+                # 아니므로 계속 간다. 다만 번호는 밀리지 않는다 — 뒤의
+                # 일이 번호로 앞을 가리키기 때문이고, 건너뛴 일의 자리에는
+                # "하지 않았다" 가 들어간다.
+                values = values.with_result(
+                    OperationResult(
+                        operation_index=index,
+                        outcome=OperationOutcome.NOT_APPLIED,
+                    )
+                )
+                continue
+
             step = self._plan_operation(
                 state, definition, context, operation, values
             )
@@ -581,6 +598,48 @@ class EffectExecutor:
                     ),
                 )
         return None
+
+    def _check_guards(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        index: int,
+        context: ResolutionContext,
+        values: ExecutionValues,
+    ):
+        """
+        이 조작을 **할 것인가** (Phase 2-AG). 참이면 ``True``.
+
+        세 답이 **세 가지 다른 일**로 이어진다.
+
+        ======  ==========================================
+        TRUE     한다
+        FALSE    **건너뛴다** — 실패가 아니다. 효과는 계속된다
+        UNKNOWN  **전체를 거절한다** — 건너뛰는 것도 결정이다
+        ======  ==========================================
+
+        마지막 줄이 이 함수의 요점이다. 조건을 모르는 채로 건너뛰면 그
+        일을 했어야 하는지 안 했어야 하는지를 **엔진이 지어내는 것**이
+        된다. 모르는 것은 허가도 거절도 아니다.
+        """
+        for guard in definition.guards_for(index):
+            measured = self._resolve_number(
+                state,
+                guard.value,
+                context,
+                values,
+                f"{index}번 조작의 조건",
+                minimum=0,
+            )
+            if isinstance(measured, EffectResult):
+                # 수를 구하지 못했다. 그 실패를 그대로 들고 나간다 —
+                # 조건이 거짓인 것과 수를 모르는 것은 다른 사실이다.
+                return measured
+            for test in guard.tests:
+                verdict = test.test(measured)
+                if verdict is ConditionResult.FALSE:
+                    return False
+        return True
 
     def _read_quantity(self, state: GameState, context: ResolutionContext):
         """
@@ -1179,6 +1238,7 @@ class EffectExecutor:
         context: ResolutionContext,
         values: ExecutionValues,
         what: str,
+        minimum: int = 1,
     ):
         """
         **수 하나를 답한다** (Phase 2-AC · 2-AD). 후보와 따로 묻는다.
@@ -1215,6 +1275,16 @@ class EffectExecutor:
         answer = count.resolve(zone_size, values)
         if answer.outcome is ValueOutcome.RESOLVED:
             assert answer.value is not None
+            # **무엇이 허용되는지는 쓰는 자리가 안다** (Phase 2-AG).
+            # 고르라는 자리와 뽑으라는 자리는 1 이상을 요구하고, 견주는
+            # 자리는 0 도 받는다 ("하나도 없다" 는 멀쩡한 답이다).
+            if answer.value < minimum:
+                return _fail(
+                    ResolutionStatus.INVALID_OPERATION,
+                    ValidationCode.INVALID_AMOUNT,
+                    f"{what}: 계산된 수가 {answer.value} 입니다. "
+                    f"여기서는 {minimum} 이상이어야 합니다.",
+                )
             # **값을 얻는 것과 그 값이 되는지 보는 것은 다른 일이다**
             # (Phase 2-AF §12). 순서도 그래서 이쪽이다 — 값이 없으면
             # 검사할 것도 없다.

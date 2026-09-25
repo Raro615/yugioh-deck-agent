@@ -58,8 +58,10 @@ from engine.condition import Condition
 from engine.cost import CostGroup
 from engine.effect.operation import Operation
 from engine.effect.target import CountKind, TargetBinding, TargetRef
+from engine.effect.target import SelectionCount
 from engine.execution import (
     DeclarationBinding,
+    NumericTest,
     OperationRequirement,
     ValueRef,
 )
@@ -158,6 +160,82 @@ class EffectDefinitionError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class OperationGuard:
+    """
+    **이 조작은 이 수가 이러할 때만 한다** (Phase 2-AG · STRUCTURAL-91).
+
+    실제 카드가 그렇게 적혀 있다.
+
+    ::
+
+        local ct=Duel.Destroy(g,REASON_EFFECT)
+        if ct>0 then <다음 일> end            -- 66곳
+        if ct==0 then return end              -- 27곳
+
+    조건이 **거짓이면 그 일을 건너뛴다.** 효과는 정상적으로 해결되고,
+    건너뛴 것은 실패가 아니다 (``OperationOutcome.NOT_APPLIED``).
+
+    조건을 **판정할 수 없으면 건너뛰지 않는다.** 효과 전체를 거절한다 —
+    건너뛰는 것도 결정이고, 모르는 채로 결정하면 그 결정을 엔진이 지어낸
+    것이 된다.
+
+    ``tests`` 가 여럿이면 **전부** 만족해야 한다. 불 대수를 새로 만들지
+    않은 이유다 — "정확히 N" 은 ``at_least(N)`` 과 ``at_most(N)`` 을 함께
+    걸면 되고, 실제 카드가 요구하는 것은 거기까지다.
+
+    Phase 2-AE 의 :class:`~engine.execution.OperationRequirement` 와
+    **다른 것**이다.
+
+    ==========================  ==========================================
+    ``OperationRequirement``     앞이 **규칙대로 되었는가** — 아니면 거절
+    ``OperationGuard``           앞의 **수가 조건을 만족하는가** — 아니면 건너뜀
+    ==========================  ==========================================
+
+    2-AE 가 성패를 수로 읽는 길을 막아 둔 것은 지금도 유효하다. 여기서
+    수를 읽는 것은 **수를 수로 읽는 것**이고, 견주는 방법을 명시적으로
+    적는다.
+    """
+
+    operation_index: int
+    value: SelectionCount
+    tests: tuple[NumericTest, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.operation_index < 0:
+            raise ValueError(f"조작 번호는 0 이상입니다: {self.operation_index}")
+        if not isinstance(self.tests, tuple):
+            raise TypeError("tests 는 tuple 이어야 합니다 — 정의는 불변입니다.")
+        if not self.tests:
+            raise ValueError(
+                "견줄 조건이 하나도 없습니다. 조건 없는 조건문은 조건이 "
+                "아니라 언제나 참이고, 그것을 적을 이유가 없습니다."
+            )
+
+    def canonical_state(self) -> tuple:
+        return (
+            self.operation_index,
+            self.value.canonical_state(),
+            tuple(test.canonical_state() for test in self.tests),
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "operation_index": self.operation_index,
+            "value": self.value.to_dict(),
+            "tests": [test.to_dict() for test in self.tests],
+        }
+
+    def describe_ko(self) -> str:
+        what = " 그리고 ".join(test.describe_ko() for test in self.tests)
+        # 수의 설명은 "…만큼" 으로 끝나는데, 조건에서는 그 수 자체를
+        # 가리키므로 꼬리를 뗀다.
+        measured = self.value.describe_ko().removesuffix(" 만큼")
+        return (
+            f"{self.operation_index}번 조작은 {measured} 가 {what} 일 때만 한다"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class EffectDefinition:
     """
     효과 하나의 불변 정의.
@@ -190,6 +268,13 @@ class EffectDefinition:
     조작에 붙이면 같은 조작을 다른 정의에서 다시 쓸 때 남의 번호를 들고
     다니게 된다.
     """
+    guards: tuple[OperationGuard, ...] = ()
+    """
+    **어느 조작이 어떤 수를 보고 실행 여부를 정하는가** (Phase 2-AG).
+
+    ``requirements`` 와 나란히 있고 하는 일이 다르다 — 저쪽은 못 하면
+    거절이고 이쪽은 안 하면 건너뜀이다.
+    """
     provenance: EffectProvenance = field(default_factory=EffectProvenance)
 
     def __post_init__(self) -> None:
@@ -214,6 +299,7 @@ class EffectDefinition:
         self._check_target_links()
         self._check_value_links()
         self._check_requirements()
+        self._check_guards()
 
     def _check_target_links(self) -> None:
         """
@@ -298,6 +384,12 @@ class EffectDefinition:
                             "일어나지 않은 일에는 결과가 없습니다."
                         )
 
+        # **조건이 읽는 수도 쓰는 것이다** (Phase 2-AG). 빼먹으면
+        # "묻고 버린다" 가 거짓으로 걸린다.
+        for guard in self.guards:
+            if guard.value.kind is CountKind.DECLARED:
+                used.add(guard.value.declared)
+
         if self.operations:
             unused = declared - used
             if unused:
@@ -334,6 +426,36 @@ class EffectDefinition:
             requirement
             for requirement in self.requirements
             if requirement.operation_index == index
+        )
+
+    def _check_guards(self) -> None:
+        """
+        조건이 **앞선 일만** 본다는 것을 정의를 만들 때 못박는다 (2-AG).
+
+        수를 읽을 때와 성패를 읽을 때와 **같은 규칙**이다. 아직 일어나지
+        않은 일의 수를 보고 실행 여부를 정할 수는 없다.
+        """
+        for guard in self.guards:
+            if guard.operation_index >= len(self.operations):
+                raise EffectDefinitionError(
+                    f"{guard.operation_index}번 조작이 없습니다 "
+                    f"({len(self.operations)}개뿐입니다)."
+                )
+            result = guard.value.result
+            if result is None:
+                continue
+            if result.operation_index >= guard.operation_index:
+                raise EffectDefinitionError(
+                    f"{guard.operation_index}번 조작의 조건이 "
+                    f"{result.operation_index}번 조작의 수를 봅니다. 앞선 "
+                    "일만 볼 수 있습니다 — 아직 일어나지 않은 일에는 수가 "
+                    "없습니다."
+                )
+
+    def guards_for(self, index: int) -> tuple:
+        """그 조작에 걸린 조건들. 선언 순서 그대로다."""
+        return tuple(
+            guard for guard in self.guards if guard.operation_index == index
         )
 
     def _counts_used_by(self, operation) -> tuple:
@@ -408,6 +530,7 @@ class EffectDefinition:
             tuple(b.canonical_state() for b in self.targets),
             tuple(b.canonical_state() for b in self.declarations),
             tuple(r.canonical_state() for r in self.requirements),
+            tuple(g.canonical_state() for g in self.guards),
             self.provenance.canonical_state(),
         )
 
