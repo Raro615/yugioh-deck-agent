@@ -53,6 +53,7 @@ from engine.effect.library import (
     MYSTICAL_SPACE_TYPHOON,
     POT_OF_GREED,
     RAIN_OF_MERCY,
+    RELOAD,
     SELF_MUMMIFICATION,
     THE_GIFT_OF_GREED,
     UPSTART_GOBLIN,
@@ -293,15 +294,20 @@ def resolve_directly(
 # ======================================================================
 
 
-def test_a_the_library_is_exactly_fifteen_real_cards():
+def test_a_the_library_is_exactly_sixteen_real_cards():
     """
     **이것이 전부라는 것이 사실이다.** 14,127장 중 여기 있는 것만
     실행되고, 늘어나면 이 단언이 깨진다 — 그것이 이 테스트의 일이다.
     Phase 2-X 에서 어리석은 매장(81439173)이, Phase 2-AB 에서 무정한
-    말살(73148972)이, Phase 2-AC 에서 의적의 입문서(69091732)가 더해지며
-    실제로 깨졌다.
+    말살(73148972)이, Phase 2-AC 에서 의적의 입문서(69091732)가,
+    Phase 2-AI 에서 리로드(22589918)가 더해지며 실제로 깨졌다.
+
+    깨진 이유는 이 테스트가 틀렸기 때문이 아니다. 이 테스트는 "지금
+    열다섯 장" 이라는 **사실**을 들고 있었고, 열여섯 번째가 등록되어
+    사실이 바뀌었다. 그래서 단언을 늘리는 것이 맞는 고침이다 —
+    카드를 빼서 통과시키는 것이 아니라.
     """
-    assert len(EFFECT_LIBRARY) == 15
+    assert len(EFFECT_LIBRARY) == 16
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -311,17 +317,22 @@ def test_a_the_library_is_exactly_fifteen_real_cards():
         FOOLISH_BURIAL,  # Phase 2-X — 관문을 선언하는 첫 실제 카드
         RUTHLESS_DENIAL,  # Phase 2-AB — 플레이어 선택과 무작위 선택을 함께 쓴다
         INTRODUCTION_TO_GALLANTRY,  # Phase 2-AC — 발동 조건이 상대 패의 장수
+        RELOAD,  # Phase 2-AI — 패 전부를 되돌리고 되돌린 만큼 드로우한다
     }
 
 
-def test_a_eleven_real_effect_refs_are_executable():
+def test_a_twelve_real_effect_refs_are_executable():
     """
     §1 — ``LUA_VERIFIED`` + ``EffectRef`` + 등록된 구현. **이 셋이 다
     맞을 때만** ``EXECUTABLE`` 이다 (ADR-006).
 
     ``EXECUTABLE`` 은 "실행 권위가 있다" 이지 "해결이 성공한다" 가
-    아니다. 열한 장 중 싸이크론은 파괴 관문에서, 어리석은 매장은 덱을
+    아니다. 열둘 중 싸이크론은 파괴 관문에서, 어리석은 매장은 덱을
     관측할 수 없어서 멈춘다 — 둘 다 ``EXECUTABLE`` 이다.
+
+    Phase 2-AI 에서 열하나에서 열둘이 되었다. 이 테스트가 "열하나" 라는
+    잘못된 가정을 갖고 있었던 것이 아니라, 열하나가 그때의 사실이었고
+    리로드가 등록되면서 사실이 바뀌었다.
     """
     executable = {
         entry.effect_ref
@@ -333,9 +344,9 @@ def test_a_eleven_real_effect_refs_are_executable():
         EffectRef(cid, 0)
         for cid in OLD_CARDS
         + NEW_CARDS
-        + (FOOLISH_BURIAL, RUTHLESS_DENIAL, INTRODUCTION_TO_GALLANTRY)
+        + (FOOLISH_BURIAL, RUTHLESS_DENIAL, INTRODUCTION_TO_GALLANTRY, RELOAD)
     }
-    assert len(executable) == 11
+    assert len(executable) == 12
 
 
 def test_a_every_declined_card_says_what_is_missing():
@@ -385,13 +396,19 @@ def test_a_operation_coverage_by_real_cards():
         OperationKind.DESTROY,  # 싸이크론 — 관문에서 멈춘다
         OperationKind.SEND_TO_GRAVE,  # 육신보살 (Phase 2-W)
         OperationKind.DISCARD,  # 벌금 (Phase 2-W)
+        OperationKind.RETURN_TO_DECK,  # 리로드 (Phase 2-AI)
+        OperationKind.SHUFFLE,  # 리로드 (Phase 2-AI)
     }
     # B. synthetic 으로만 검증된 종류 (STRUCTURAL-66)
+    #
+    # RETURN_TO_DECK 는 Phase 2-AI 에서 B 를 떠나 A 로 갔다. 억지로 옮긴
+    # 것이 아니라 리로드가 실제로 그것을 쓴다 — c22589918.lua 의
+    # ``Duel.SendtoDeck``. 옮겨 간 이유를 지우지 않으려고 목록에서 빼기만
+    # 하지 않고 여기 적어 둔다.
     assert not by_real & {
         OperationKind.BANISH,
         OperationKind.RELEASE,
         OperationKind.RETURN_TO_HAND,
-        OperationKind.RETURN_TO_DECK,
         OperationKind.SPECIAL_SUMMON,
     }
     # C. 실제 카드가 될 수 없는 것 · 실행되지 않는 것

@@ -873,17 +873,23 @@ def test_u_an_affordability_domain_needs_no_new_rule():
     assert pay.validate(9, lambda q: 8000).validity is ActionValidity.INVALID
 
 
-def test_u_no_real_card_was_registered_this_phase():
+def test_u_phase_2af_registered_no_real_card_and_none_is_partial():
     """
-    **0장 등재했다.** "가능한 만큼" 카드 203장 중 마법·함정이 103장이지만,
-    파괴 관문을 답할 판정기가 없으므로 어느 것도 실행되지 않는다
-    (``UnknownDestructionRuling`` — ADR-006 과 같은 자리).
+    Phase 2-AF 는 **0장 등재했다.** "가능한 만큼" 카드 203장 중 마법·함정이
+    103장이지만, 파괴 관문을 답할 판정기가 없으므로 어느 것도 실행되지
+    않는다 (``UnknownDestructionRuling`` — ADR-006 과 같은 자리).
 
     적을 수 있다는 것과 실행할 수 있다는 것은 다른 말이다.
+
+    Phase 2-AI 에서 ``len(EFFECT_LIBRARY) == 15`` 가 깨졌다. 리로드는
+    "가능한 만큼" 카드가 아니다 — c22589918.lua 는 패 **전부**를 덱으로
+    되돌린다. 그래서 아래의 진짜 단언(등재된 어느 조작도 ``Partial`` 이
+    아니다)은 리로드가 들어온 뒤에도 그대로 참이고, 바뀐 것은 장부 숫자
+    뿐이다.
     """
     from engine.effect.library import EFFECT_LIBRARY
 
-    assert len(EFFECT_LIBRARY) == 15
+    assert len(EFFECT_LIBRARY) == 16  # Phase 2-AI 에서 리로드가 열여섯 번째
     for entry in EFFECT_LIBRARY:
         for operation in entry.definition.operations:
             assert getattr(operation, "partial", Partial.ALL_OR_NOTHING) is (

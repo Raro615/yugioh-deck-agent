@@ -820,13 +820,18 @@ def test_t_the_corpus_reads_the_board_after_an_operation(state):
     assert len(state.player(P2).hand) == 2
 
 
-def test_t_no_real_card_was_registered_this_phase():
+def test_t_phase_2ah_registered_no_real_card_and_none_uses_a_guard():
     """
-    **0장 등재했다.** 계획이 보는 판을 고친 것이지 새 카드를 옮긴 것이
-    아니다.
+    Phase 2-AH 는 **0장 등재했다.** 계획이 보는 판을 고친 것이지 새 카드를
+    옮긴 것이 아니다.
+
+    Phase 2-AI 에서 ``len(EFFECT_LIBRARY) == 15`` 가 깨졌다. 2-AH 가 0장
+    등재했다는 사실은 여전히 참이고, 바뀐 것은 **그 다음 Phase** 다. 숫자는
+    장부로서 16 으로 옮기고, 2-AH 의 기록은 이름에 남긴다. guard 단언은
+    그대로다.
     """
     from engine.effect.library import EFFECT_LIBRARY
 
-    assert len(EFFECT_LIBRARY) == 15
+    assert len(EFFECT_LIBRARY) == 16  # Phase 2-AI 에서 리로드가 열여섯 번째
     for entry in EFFECT_LIBRARY:
         assert entry.definition.guards == ()

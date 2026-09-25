@@ -878,13 +878,21 @@ def test_q_a_value_to_value_comparison_is_not_supported_yet():
     assert isinstance(NumericTest.at_least(2).operand, int)
 
 
-def test_q_no_real_card_was_registered_this_phase():
+def test_q_phase_2ag_registered_no_real_card_and_none_uses_a_guard():
     """
-    **0장 등재했다.** 조건을 적을 수 있게 됐지만, 그 조건이 보는 수를
-    내는 일(파괴)은 여전히 판정기가 없어 일어나지 않는다 (ADR-006).
+    Phase 2-AG 는 **0장 등재했다.** 조건을 적을 수 있게 됐지만, 그 조건이
+    보는 수를 내는 일(파괴)은 여전히 판정기가 없어 일어나지 않는다
+    (ADR-006).
+
+    Phase 2-AI 에서 ``len(EFFECT_LIBRARY) == 15`` 가 깨졌다. 이 단언이
+    잘못된 가정을 갖고 있었다기보다, **두 가지를 한 숫자로 묶어** 두고
+    있었다: (1) 2-AG 가 카드를 안 늘렸다는 것과 (2) 등재된 카드 중 guard
+    를 쓰는 것이 없다는 것. (1)은 2-AG 의 기록이므로 이제 이름으로 남기고,
+    숫자는 장부(census)로서 16 으로 옮긴다. 진짜 단언인 (2)는 그대로다 —
+    리로드도 guard 를 쓰지 않는다.
     """
     from engine.effect.library import EFFECT_LIBRARY
 
-    assert len(EFFECT_LIBRARY) == 15
+    assert len(EFFECT_LIBRARY) == 16  # Phase 2-AI 에서 리로드가 열여섯 번째
     for entry in EFFECT_LIBRARY:
         assert entry.definition.guards == ()

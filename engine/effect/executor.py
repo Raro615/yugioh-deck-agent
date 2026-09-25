@@ -978,8 +978,9 @@ class EffectExecutor:
             return resolved
         _, selection = resolved
 
-        if spec is not None and spec.is_random:
-            # **다시 판정하지 않는다** (Phase 2-AB). 무작위 선택은 바로 앞
+        if spec is not None and (spec.is_random or spec.is_bulk):
+            # **다시 판정하지 않는다** (Phase 2-AB · 2-AI). 무작위 선택과
+            # 일괄 처리는 바로 앞
             # 단계에서 후보를 **권위 있게** 세면서 자리 · 주인 · 조건을 이미
             # 확인했다. 여기서 컨트롤러의 관측으로 다시 보면 상대 패의
             # 카드가 "안 보인다" 는 이유로 거절된다 — 아무도 고르지 않은
@@ -1161,6 +1162,12 @@ class EffectExecutor:
                 f"{operation.kind.value} 가 선언되지 않은 대상 {ref} 를 "
                 "가리킵니다.",
             )
+        if spec is not None and spec.is_bulk:
+            # **고를 것이 없다** (Phase 2-AI). 후보가 곧 대상이다.
+            candidates = self._authoritative_candidates(state, spec, context)
+            if isinstance(candidates, EffectResult):
+                return candidates
+            return ref, Selection(chosen=candidates)
         if spec is not None and spec.is_random:
             return self._roll_selection(state, spec, context, ref, values)
         selection = context.selection_for(ref)
@@ -1343,11 +1350,12 @@ class EffectExecutor:
 
     def _authoritative_candidates(self, state: GameState, spec, context):
         """
-        무작위 선택의 후보를 **자리마다 그 주인의 눈으로** 센다.
+        아무도 고르지 않는 선택의 후보를 **자리마다 그 주인의 눈으로**
+        센다 — 무작위 선택(2-AB)과 "전부"(2-AI)가 함께 쓴다.
 
         자리마다 따로 세는 이유가 있다. 한 사람의 관측으로는 상대의 패를
         볼 수 없고, 그렇다고 "못 봤으니 후보가 없다" 로 접으면 모르는 것을
-        거짓으로 만든다 (STRUCTURAL-15). 무작위 선택에는 고르는 사람이
+        거짓으로 만든다 (STRUCTURAL-15). 두 경우 모두 고르는 사람이
         없으므로, 각 자리를 **그 자리의 주인이 아는 만큼** 세는 것이 맞다.
 
         그래도 **아직 모르는 것은 모른다.** 뒷면 카드의 정의를 읽지 못해
@@ -1787,6 +1795,11 @@ def _demands_a_card(spec) -> bool:
     """
     if spec is None:
         return True
+    if getattr(spec, "is_bulk", False):
+        # **"전부" 가 0장일 수 있다** (Phase 2-AI). 필드에 몬스터가 없을 때
+        # "전부 파괴" 는 실패가 아니라 할 일이 없는 것이다. 애초에 발동을
+        # 막아야 하는 카드라면 그것은 **발동 조건**이 할 일이다.
+        return False
     choice = getattr(spec, "choice", None)
     minimum = getattr(choice, "minimum", None)
     if minimum is None:

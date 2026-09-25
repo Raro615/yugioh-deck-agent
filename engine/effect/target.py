@@ -81,6 +81,23 @@ class TargetRequirement(str, Enum):
     고르기는 하지만 **대상 지정은 아니다.** 해결 시점에 고른다.
     "대상을 지정하지 않는 제거" 가 여기에 해당한다.
     """
+    ALL = "all"
+    """
+    **고르지 않는다. 해당하는 것 전부다** (Phase 2-AI · STRUCTURAL-10).
+
+    "필드의 몬스터를 **전부** 파괴한다" · "패를 **전부** 덱으로 되돌린다"
+    처럼, 후보가 곧 대상인 일이다. 실제 카드 **654장**이 존이나 그룹을
+    그대로 넘긴다 (``Duel.Destroy(g, …)`` 412 · ``SendtoGrave`` 77 ·
+    ``SendtoDeck`` 62 · ``Remove`` 58 · ``SendtoHand`` 40 · ``Release`` 5).
+
+    ``CHOOSING`` 과 **다르다.** 저쪽은 "몇 장을 고른다" 이고 이쪽은 "고를
+    것이 없다" 다. ``minimum``/``maximum`` 을 후보 수에 맞춰 놓는 것으로
+    흉내 내면, 후보가 하나 늘거나 줄 때마다 명세가 달라져야 한다.
+
+    ``RANDOM`` 과도 다르다. 저쪽은 후보 중 **일부**를 난수가 정하고,
+    이쪽은 **전부**이므로 정할 것이 없다. 다만 "아무도 고르지 않는다" 는
+    같아서, 후보를 세는 방식은 그대로 쓴다 (자리마다 그 주인의 눈).
+    """
     RANDOM = "random"
     """
     **아무도 고르지 않는다.** 무작위가 정한다 (Phase 2-AB).
@@ -522,6 +539,41 @@ class RandomSelectionSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class AllMatchingSpec:
+    """
+    "해당하는 것 **전부**" 라는 요구 (Phase 2-AI).
+
+    :class:`~engine.cost.CandidateSource` 하나뿐이다. 장수도 고르는
+    사람도 없다 — 둘 다 **없는 것이 사실**이기 때문이다.
+
+    ``count`` 칸을 두지 않은 이유가 특히 그렇다. 전부를 "지금 후보 수
+    만큼" 이라고 적으면 명세가 판에 따라 달라지고, 판이 바뀌면 명세가
+    거짓이 된다. 전부는 수가 아니라 **범위**다.
+    """
+
+    source: CandidateSource
+
+    def looked_at_zones(self) -> "frozenset[Zone]":
+        """
+        **비어 있다.** 고르는 사람이 없으므로 아무도 들여다보지 않는다
+        (:class:`RandomSelectionSpec` 과 같은 이유).
+        """
+        return frozenset()
+
+    def canonical_state(self) -> tuple:
+        return ("all", self.source.canonical_state())
+
+    def to_dict(self) -> dict:
+        return {"kind": "all", "source": self.source.to_dict()}
+
+    def describe_ko(self) -> str:
+        return f"{self.source.describe_ko()} 전부"
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.describe_ko()
+
+
+@dataclass(frozen=True, slots=True)
 class TargetSpec:
     """
     효과의 대상 규칙. **불변**이다.
@@ -531,7 +583,7 @@ class TargetSpec:
     """
 
     requirement: TargetRequirement = TargetRequirement.NONE
-    choice: "ChoiceSpec | RandomSelectionSpec | None" = None
+    choice: "ChoiceSpec | RandomSelectionSpec | AllMatchingSpec | None" = None
 
     def __post_init__(self) -> None:
         if self.requirement is TargetRequirement.NONE:
@@ -546,6 +598,14 @@ class TargetSpec:
             )
         # **명세와 요구가 어긋나지 않는다.** 무작위인데 고르는 사람이
         # 적혀 있거나, 고르기인데 고르는 사람이 없으면 둘 중 하나가 거짓말이다.
+        bulk = isinstance(self.choice, AllMatchingSpec)
+        if (self.requirement is TargetRequirement.ALL) is not bulk:
+            raise ValueError(
+                f"{self.requirement.value} 에 "
+                f"{type(self.choice).__name__} 이 붙어 있습니다. 전부를 "
+                "다루는 일은 AllMatchingSpec 이고 (고를 것이 없다), 몇 장을 "
+                "고르는 것은 ChoiceSpec 입니다."
+            )
         random_spec = isinstance(self.choice, RandomSelectionSpec)
         if (self.requirement is TargetRequirement.RANDOM) is not random_spec:
             raise ValueError(
@@ -574,6 +634,11 @@ class TargetSpec:
         return cls(requirement=TargetRequirement.CHOOSING, choice=choice)
 
     @classmethod
+    def all_matching(cls, choice: "AllMatchingSpec") -> "TargetSpec":
+        """**고르지 않는다.** 해당하는 것 전부다 (Phase 2-AI)."""
+        return cls(requirement=TargetRequirement.ALL, choice=choice)
+
+    @classmethod
     def at_random(cls, choice: "RandomSelectionSpec") -> "TargetSpec":
         """**아무도 고르지 않는다.** 무작위가 정한다 (Phase 2-AB)."""
         return cls(requirement=TargetRequirement.RANDOM, choice=choice)
@@ -591,6 +656,14 @@ class TargetSpec:
         if self.choice is None:
             return frozenset()
         return self.choice.looked_at_zones()
+
+    @property
+    def is_bulk(self) -> bool:
+        """
+        **전부인가.** 참이면 밖에서 고른 것을 받지 않는다 — 고를 것이
+        없으므로 받을 곳도 없다.
+        """
+        return self.requirement is TargetRequirement.ALL
 
     @property
     def is_random(self) -> bool:
@@ -621,7 +694,7 @@ class TargetSpec:
         해결 중에 난수원이 정하므로 "아직 안 골랐다" 라는 상태가 아예
         없다.
         """
-        if not self.requires_selection or self.is_random:
+        if not self.requires_selection or self.is_random or self.is_bulk:
             return False
         if selection is None:
             return True
@@ -743,6 +816,7 @@ __all__ = [
     "TargetRequirement",
     "TargetSpec",
     "RandomSelectionSpec",
+    "AllMatchingSpec",
     "SelectionCount",
     "CountKind",
     "ValueOutcome",

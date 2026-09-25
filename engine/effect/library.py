@@ -63,16 +63,19 @@ from engine.effect.operation import (
     DrawOperation,
     LifeChangeOperation,
     OperationKind,
+    ShuffleOperation,
 )
 from engine.effect.semantics import FIELD_ZONES, DestructionRuling, MovementRuling
 from engine.effect.target import (
     PRIMARY_TARGET,
+    AllMatchingSpec,
     RandomSelectionSpec,
     SelectionCount,
     TargetBinding,
     TargetRef,
     TargetSpec,
 )
+from engine.execution import ResultField, ResultRef
 from engine.ids import EffectRef
 from engine.vocabulary import Zone
 
@@ -200,6 +203,8 @@ FOOLISH_BURIAL = 81439173
 RUTHLESS_DENIAL = 73148972
 # Phase 2-AC
 INTRODUCTION_TO_GALLANTRY = 69091732
+# Phase 2-AI
+RELOAD = 22589918
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -832,6 +837,85 @@ _INTRODUCTION_TO_GALLANTRY_ENTRY = LibraryEntry(
 )
 
 
+#: 리로드 — "자신의 패를 전부 덱에 넣고 셔플한다. 그 후, 덱에 넣은
+#: 매수만큼의 카드를 드로우한다."
+#:
+#: **Phase 2-AD ~ 2-AH 의 사슬을 처음으로 쓰는 실제 카드다** (Phase 2-AI).
+#: 지금까지 그 계층들은 synthetic 정의만 태웠다.
+#:
+#: ====================  ==========================================
+#: ``@primary``           ``Duel.GetFieldGroup(p,LOCATION_HAND,0)``
+#:                        → **고르지 않는다. 패 전부다** (2-AI)
+#: 0번 조작                ``Duel.SendtoDeck(g,…)``
+#: 1번 조작                ``Duel.ShuffleDeck(p)``
+#: 2번 조작                ``Duel.Draw(p,#g,…)``
+#:                        → ``ResultRef(0, ATTEMPTED_COUNT)`` (2-AD · 2-AF)
+#: ====================  ==========================================
+#:
+#: 마지막 줄이 **``#g`` 인 것**에 주의한다. ``g`` 는 패 전체 그룹이므로
+#: 스크립트는 실제로 덱에 들어간 수가 아니라 **넣으려 한 수**만큼 뽑는다.
+#: 그래서 ``AFFECTED_COUNT`` 가 아니라 ``ATTEMPTED_COUNT`` 다 — Phase 2-AF
+#: 가 둘을 가른 이유가 여기서 값을 한다.
+#:
+#: **공식 텍스트와 스크립트가 다르게 읽힌다는 점을 숨기지 않는다.**
+#: 한국어 텍스트는 "덱에 넣은 매수만큼" 이라고 적혀 있어 ``AFFECTED_COUNT``
+#: 쪽으로 읽히고, ``c22589918.lua`` 는 ``#g`` 를 쓴다. 이 정의의 출처는
+#: :meth:`EffectProvenance.official_lua` 이므로 **스크립트를 따른다** —
+#: 텍스트를 해석해서 스크립트를 고치는 일은 하지 않는다. 지금 이 정의에서
+#: 둘은 같은 수다(필터가 ``nil`` 이라 관문이 없고 전부 아니면 무다). 같다고
+#: 해서 아무 쪽이나 적으면 나중에 갈릴 때 조용히 틀리므로 적어 둔다.
+#:
+#: 어느 쪽이 맞는가는 공식 재정(``https://www.db.yugioh-card.com/yugiohdb/``)
+#: 이 답할 일이고, 아직 확인하지 않았다.
+#:
+#: 옮기지 **못한** 것도 적는다.
+#:
+#: - ``Card.IsAbleToDeck`` — 발동 조건의 일부다. "덱으로 되돌릴 수 있는
+#:   카드가 패에 있는가" 를 판정할 계층이 없어 ``ZoneCountAtLeast`` 로만
+#:   옮겼다. 조작 쪽에는 필터가 ``nil`` 이므로 관문을 선언하지 않는다
+#:   (Phase 2-X: 관문은 카드가 적어 둔 것만 옮긴다).
+#: - ``Duel.BreakEffect()`` — 체인 처리의 마디이고 그 계층이 없다.
+#: - ``Duel.IsPlayerCanDraw(tp)`` — 드로우 가능 여부를 판정할 계층이 없다.
+#:   실행기가 덱 장수는 세므로 덱이 모자라면 멈춘다.
+_RELOAD_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(RELOAD, 0),
+        source_card_id=RELOAD,
+        targets=TargetBinding.single(
+            TargetSpec.all_matching(
+                AllMatchingSpec(
+                    source=CandidateSource(
+                        zones=frozenset({Zone.HAND}),
+                        owner=PlayerRef.CONTROLLER,
+                    )
+                )
+            )
+        ),
+        operations=(
+            CardOperation.return_to_deck(PRIMARY_TARGET),
+            ShuffleOperation(zone=Zone.DECK, who=PlayerRef.CONTROLLER),
+            DrawOperation(
+                count=SelectionCount.from_result(
+                    ResultRef(0, ResultField.ATTEMPTED_COUNT)
+                )
+            ),
+        ),
+        activation=ZoneCountAtLeast(PlayerRef.CONTROLLER, Zone.HAND, 1),
+        provenance=EffectProvenance.official_lua(
+            "c22589918.lua 의 s.activate 를 옮겼다. IsAbleToDeck 와 "
+            "IsPlayerCanDraw 와 BreakEffect 는 옮기지 못했다."
+        ),
+    ),
+    lua_file="c22589918.lua",
+    lua_excerpt=(
+        "local g=Duel.GetFieldGroup(p,LOCATION_HAND,0); if #g==0 then return end; "
+        "Duel.SendtoDeck(g,nil,SEQ_DECKSHUFFLE,REASON_EFFECT); "
+        "Duel.ShuffleDeck(p); Duel.BreakEffect(); Duel.Draw(p,#g,REASON_EFFECT)"
+    ),
+    executable=True,
+)
+
+
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
     _POT_OF_GREED_ENTRY,
@@ -853,6 +937,8 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _RUTHLESS_DENIAL_ENTRY,
     # Phase 2-AC
     _INTRODUCTION_TO_GALLANTRY_ENTRY,
+    # Phase 2-AI
+    _RELOAD_ENTRY,
 )
 
 

@@ -718,21 +718,32 @@ class EffectActivator:
             action, tuple(i for s in selections for i in s.selection.chosen)
         )
         for binding in definition.targets:
-            if binding.spec.is_random:
-                # **발동 시점에 정하지 않는다** (Phase 2-AB). 무작위 선택은
-                # 해결 중에 일어난다 — 공식 스크립트도 ``s.target`` 이
-                # 아니라 ``s.activate`` 에서 ``RandomSelect`` 를 부른다.
+            if binding.spec.is_random or binding.spec.is_bulk:
+                # **발동 시점에 정하지 않는다** (Phase 2-AB · 2-AI). 무작위
+                # 선택은 해결 중에 일어난다 — 공식 스크립트도 ``s.target``
+                # 이 아니라 ``s.activate`` 에서 ``RandomSelect`` 를 부른다.
+                # "전부" 도 같은 자리다: ``c22589918.lua`` 의
+                # ``Duel.GetFieldGroup`` 은 ``s.activate`` 안에 있다.
                 #
                 # 밖에서 골라 보내는 것도 막는다. 고르는 사람이 없는
-                # 선택에 누가 고른 결과가 들어오면 무작위가 아니다.
+                # 선택에 누가 고른 결과가 들어오면 무작위도 전부도 아니다.
+                #
+                # 아래 :class:`TargetResolver` 를 태우지 않는 것도 그
+                # 때문이다. 저쪽은 ``choice.minimum`` 을 읽는데, 둘 다
+                # 장수가 **없는 것이 사실**이라 읽을 것이 없다.
                 if chosen.get(binding.ref) is not None:
                     return self._fail(
                         ActivationStatus.INVALID_TARGET,
                         action,
                         chain,
                         ValidationCode.TARGET_COUNT_MISMATCH,
-                        f"{binding.ref} 는 무작위로 정해집니다. 고른 결과를 "
-                        "밖에서 넣을 수 없습니다.",
+                        f"{binding.ref} 는 "
+                        + (
+                            "무작위로 정해집니다"
+                            if binding.spec.is_random
+                            else "해당하는 것 전부입니다"
+                        )
+                        + ". 고른 결과를 밖에서 넣을 수 없습니다.",
                         authorization=verdict,
                     )
                 continue
