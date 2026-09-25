@@ -53,6 +53,8 @@ from enum import Enum
 from engine.condition import PlayerRef
 from engine.cost import CandidateSource, ChoiceSpec, Selection
 from engine.execution import (
+    ResolvedValue,
+    ValueOutcome,
     NO_EXECUTION_VALUES,
     DeclarationOutcome,
     ExecutionLookupError,
@@ -140,19 +142,6 @@ class CountKind(str, Enum):
     """
 
 
-class CountOutcome(str, Enum):
-    """선택 수를 물어본 결과."""
-
-    RESOLVED = "resolved"
-    UNKNOWN = "unknown"
-    INVALID = "invalid"
-    # FORBIDDEN 은 **여기 없다.** 출처가 실행을 금지하는 것
-    # (``TEXT_DERIVED``) 은 수의 문제가 아니라 효과의 문제이고,
-    # :class:`~engine.effect.resolution.ResolutionStatus.FORBIDDEN` 이
-    # 이미 한 계층 위에서 답한다 (ADR-004). 여기 같은 이름을 하나 더 두면
-    # 두 곳이 서로 다른 말을 하게 된다.
-
-
 @dataclass(frozen=True, slots=True)
 class ZoneCountTerm:
     """
@@ -181,34 +170,6 @@ class ZoneCountTerm:
         size = abs(self.coefficient)
         amount = "" if size == 1 else f"{size}x"
         return f"{sign}{amount}({self.player} {self.zone.value} 장수)"
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedCount:
-    """
-    수를 물어본 **결과**. 숫자 하나가 아니다.
-
-    ``value`` 는 :attr:`CountOutcome.RESOLVED` 일 때만 있다. 나머지에서는
-    ``None`` 이고, **부르는 쪽이 대신 숫자를 만들어 넣지 않는다.**
-    """
-
-    outcome: CountOutcome
-    value: "int | None" = None
-    reason: str = ""
-    missing: "str | None" = None
-
-    def __post_init__(self) -> None:
-        if (self.outcome is CountOutcome.RESOLVED) is not (self.value is not None):
-            raise ValueError(
-                "RESOLVED 일 때만 수가 있습니다. 모르는 수를 숫자로 적으면 "
-                "그 숫자가 규칙이 됩니다."
-            )
-
-    def __bool__(self):  # pragma: no cover - 부르면 안 된다
-        raise TypeError(
-            "ResolvedCount 를 참/거짓으로 쓰지 마십시오. UNKNOWN 이 거짓이 "
-            "되면 '모른다' 가 '안 된다' 로 접힙니다."
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,7 +274,7 @@ class SelectionCount:
     # 답하기
     # ------------------------------------------------------------------
 
-    def resolve(self, zone_size, values=NO_EXECUTION_VALUES) -> ResolvedCount:
+    def resolve(self, zone_size, values=NO_EXECUTION_VALUES) -> ResolvedValue:
         """
         이번 판에서 몇 장인가.
 
@@ -332,22 +293,22 @@ class SelectionCount:
             if answer.outcome is DeclarationOutcome.RESOLVED:
                 assert answer.value is not None
                 if answer.value < 1:
-                    return ResolvedCount(
-                        CountOutcome.INVALID,
+                    return ResolvedValue(
+                        ValueOutcome.INVALID,
                         reason=(
                             f"{self.declared} 로 {answer.value} 를 선언했습니다. "
                             "0장 이하를 무작위로 고르는 것은 고르지 않는 것입니다."
                         ),
                     )
-                return ResolvedCount(CountOutcome.RESOLVED, value=answer.value)
+                return ResolvedValue(ValueOutcome.RESOLVED, value=answer.value)
             if answer.outcome is DeclarationOutcome.PENDING:
                 # **대신 정해 주지 않는다.** 아직 사람이 안 정했다는 사실이다.
-                return ResolvedCount(
-                    CountOutcome.UNKNOWN,
+                return ResolvedValue(
+                    ValueOutcome.UNKNOWN,
                     reason=answer.reason,
                     missing=f"declared number {self.declared}",
                 )
-            return ResolvedCount(CountOutcome.INVALID, reason=answer.reason)
+            return ResolvedValue(ValueOutcome.INVALID, reason=answer.reason)
 
         if self.kind is CountKind.FROM_RESULT:
             assert self.result is not None
@@ -355,30 +316,30 @@ class SelectionCount:
                 found = values.result(self.result)
             except ExecutionLookupError as error:
                 # 가리킨 결과가 없다. **0 으로 때우지 않는다.**
-                return ResolvedCount(
-                    CountOutcome.UNKNOWN,
+                return ResolvedValue(
+                    ValueOutcome.UNKNOWN,
                     reason=f"앞선 결과를 읽지 못했습니다: {error}",
                     missing=self.result.describe_ko(),
                 )
             if found < 1:
-                return ResolvedCount(
-                    CountOutcome.INVALID,
+                return ResolvedValue(
+                    ValueOutcome.INVALID,
                     reason=(
                         f"{self.result.describe_ko()} 가 {found} 입니다. "
                         "0장 이하를 무작위로 고르는 것은 고르지 않는 것입니다."
                     ),
                 )
-            return ResolvedCount(CountOutcome.RESOLVED, value=found)
+            return ResolvedValue(ValueOutcome.RESOLVED, value=found)
 
         if self.kind is CountKind.UNKNOWN:
-            return ResolvedCount(
-                CountOutcome.UNKNOWN,
+            return ResolvedValue(
+                ValueOutcome.UNKNOWN,
                 reason=f"고를 수를 계산할 수 없습니다: {self.missing}",
                 missing=self.missing,
             )
         if self.kind is CountKind.FIXED:
             assert self.value is not None  # __post_init__ 이 보장한다
-            return ResolvedCount(CountOutcome.RESOLVED, value=self.value)
+            return ResolvedValue(ValueOutcome.RESOLVED, value=self.value)
 
         total = self.constant
         for term in self.terms:
@@ -388,14 +349,14 @@ class SelectionCount:
             # 조건으로 막는다 (멀차미는 ``if dif>0``, 악몽의 신기루는
             # 라벨이 0 이면 발동하지 않는다). 그 조건 없이 여기까지 왔다면
             # 정의가 조건을 빠뜨린 것이지, 0장을 고르라는 뜻이 아니다.
-            return ResolvedCount(
-                CountOutcome.INVALID,
+            return ResolvedValue(
+                ValueOutcome.INVALID,
                 reason=(
                     f"계산된 수가 {total} 입니다. 0장 이하를 무작위로 고르는 "
                     "것은 고르지 않는 것이므로, 발동 조건이 먼저 막아야 합니다."
                 ),
             )
-        return ResolvedCount(CountOutcome.RESOLVED, value=total)
+        return ResolvedValue(ValueOutcome.RESOLVED, value=total)
 
     # ------------------------------------------------------------------
     # 표시
@@ -785,8 +746,8 @@ __all__ = [
     "RandomSelectionSpec",
     "SelectionCount",
     "CountKind",
-    "CountOutcome",
-    "ResolvedCount",
+    "ValueOutcome",
+    "ResolvedValue",
     "ZoneCountTerm",
     "Shortfall",
     "TargetRef",

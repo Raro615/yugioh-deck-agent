@@ -42,6 +42,60 @@ from dataclasses import dataclass
 from enum import Enum
 
 from engine.condition import ConditionContext, PlayerRef
+from engine.vocabulary import Zone
+
+
+# ======================================================================
+# 값을 물어본 결과 (Phase 2-AE)
+# ======================================================================
+
+
+class ValueOutcome(str, Enum):
+    """
+    **값을 물어본 결과.** 수에도 쓰고 도메인에도 쓴다.
+
+    Phase 2-AC 에서 ``CountOutcome`` 이라는 이름으로 태어났는데, 그때는
+    답하는 것이 "고를 장수" 뿐이었다. 지금은 드로우 매수도, 선언할 수 있는
+    수의 목록도 같은 어휘로 답한다 — 그래서 이름이 넓어졌다. 어휘를 하나
+    더 만들지 않은 이유가 그것이다.
+    """
+
+    RESOLVED = "resolved"
+    UNKNOWN = "unknown"
+    INVALID = "invalid"
+    # FORBIDDEN 은 **여기 없다.** 출처가 실행을 금지하는 것
+    # (``TEXT_DERIVED``) 은 값의 문제가 아니라 효과의 문제이고,
+    # :class:`~engine.effect.resolution.ResolutionStatus.FORBIDDEN` 이
+    # 이미 한 계층 위에서 답한다 (ADR-004). 여기 같은 이름을 하나 더 두면
+    # 두 곳이 서로 다른 말을 하게 된다.
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedValue:
+    """
+    수를 물어본 **결과**. 숫자 하나가 아니다.
+
+    ``value`` 는 :attr:`ValueOutcome.RESOLVED` 일 때만 있다. 나머지에서는
+    ``None`` 이고, **부르는 쪽이 대신 숫자를 만들어 넣지 않는다.**
+    """
+
+    outcome: ValueOutcome
+    value: "int | None" = None
+    reason: str = ""
+    missing: "str | None" = None
+
+    def __post_init__(self) -> None:
+        if (self.outcome is ValueOutcome.RESOLVED) is not (self.value is not None):
+            raise ValueError(
+                "RESOLVED 일 때만 수가 있습니다. 모르는 수를 숫자로 적으면 "
+                "그 숫자가 규칙이 됩니다."
+            )
+
+    def __bool__(self):  # pragma: no cover - 부르면 안 된다
+        raise TypeError(
+            "ResolvedValue 를 참/거짓으로 쓰지 마십시오. UNKNOWN 이 거짓이 "
+            "되면 '모른다' 가 '안 된다' 로 접힙니다."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +200,152 @@ class NumberDomain:
         return self.describe_ko()
 
 
+class QuantitySource(str, Enum):
+    """
+    판에서 **무엇을 세는가** (Phase 2-AE).
+
+    둘뿐이다. 실제 카드가 선언 도메인을 만들 때 쓰는 것이 이 둘이기
+    때문이고 (자리 장수 · 라이프), 더 필요해지면 그때 근거를 들고 온다.
+    """
+
+    ZONE_COUNT = "zone_count"
+    LIFE_POINTS = "life_points"
+
+
+@dataclass(frozen=True, slots=True)
+class BoardQuantity:
+    """
+    판에서 읽는 **양 하나.**
+
+    이것은 **관측이 아니라 규칙이 아는 사실**이다. 상대 패가 몇 장인지,
+    누가 라이프가 얼마인지는 누가 보느냐와 무관하게 정해져 있다 —
+    카드의 **정체**와는 다른 정보다 (Phase 2-AC §9 와 같은 구분).
+    """
+
+    source: QuantitySource
+    player: PlayerRef = PlayerRef.CONTROLLER
+    zone: "Zone | None" = None
+
+    def __post_init__(self) -> None:
+        if self.source is QuantitySource.ZONE_COUNT and self.zone is None:
+            raise ValueError("자리 장수를 세려면 어느 자리인지 적어야 합니다.")
+        if self.source is QuantitySource.LIFE_POINTS and self.zone is not None:
+            raise ValueError("라이프에는 자리가 없습니다.")
+
+    def canonical_state(self) -> tuple:
+        return (
+            self.source.value,
+            self.player.value,
+            self.zone.value if self.zone is not None else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"source": self.source.value, "player": self.player.value}
+        if self.zone is not None:
+            data["zone"] = self.zone.value
+        return data
+
+    def describe_ko(self) -> str:
+        if self.source is QuantitySource.LIFE_POINTS:
+            return f"{self.player} 의 라이프"
+        assert self.zone is not None
+        return f"{self.player} {self.zone.value} 의 장수"
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedDomain:
+    """도메인을 물어본 결과. ``RESOLVED`` 일 때만 목록이 있다."""
+
+    outcome: ValueOutcome
+    domain: "NumberDomain | None" = None
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        if (self.outcome is ValueOutcome.RESOLVED) is not (self.domain is not None):
+            raise ValueError(
+                "RESOLVED 일 때만 목록이 있습니다. 고를 수 없는 것을 고를 수 "
+                "있는 것처럼 적으면 그 목록이 규칙이 됩니다."
+            )
+
+    def __bool__(self):  # pragma: no cover - 부르면 안 된다
+        raise TypeError(
+            "ResolvedDomain 을 참/거짓으로 쓰지 마십시오. UNKNOWN 이 거짓이 "
+            "되면 '모른다' 가 '안 된다' 로 접힙니다."
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DerivedNumberDomain:
+    """
+    **판에서 만들어지는** 선언 도메인 (Phase 2-AE · STRUCTURAL-85).
+
+    모양은 하나다 — ``step`` 의 배수를 ``bound`` 를 넘지 않을 때까지.
+
+    ::
+
+        for i=1,math.floor(lp/1000) do t[i]=i*1000 end   -- 광명의 벽
+        → DerivedNumberDomain(BoardQuantity(LIFE_POINTS), step=1000)
+
+        for i=1,#g do table.insert(nums,i) end
+        → DerivedNumberDomain(BoardQuantity(ZONE_COUNT, ..., zone), step=1)
+
+    **수식 언어가 아니다.** 실제 카드가 목록을 만드는 방식을 센 결과, 이
+    한 모양이 계산 가능한 것의 대부분이고 나머지는 값마다 규칙 판정이
+    필요하다 (그것은 ``UNKNOWN`` 으로 남는다).
+
+    :class:`NumberDomain` 과 **다른 타입**이다. 저쪽은 정의에 적힌 목록,
+    이쪽은 "판을 보고 만들어라" 는 지시다. 합치면 "목록이 적혀 있는데
+    비어 있다" 와 "아직 안 만들었다" 가 같은 값이 된다.
+    """
+
+    bound: BoardQuantity
+    step: int = 1
+
+    def __post_init__(self) -> None:
+        if self.step < 1:
+            raise ValueError(f"간격은 1 이상이어야 합니다: {self.step}")
+
+    def resolve(self, read) -> ResolvedDomain:
+        """
+        이번 판에서 고를 수 있는 수들.
+
+        ``read`` 는 ``(BoardQuantity) -> int | None`` 이다. 판을 아는 쪽이
+        건네준다 — 이 타입은 :class:`~engine.state.game_state.GameState` 를
+        알지 못한다.
+        """
+        amount = read(self.bound)
+        if amount is None:
+            return ResolvedDomain(
+                ValueOutcome.UNKNOWN,
+                reason=f"{self.bound.describe_ko()} 를 읽지 못했습니다.",
+            )
+        count = amount // self.step
+        if count < 1:
+            # **비어 있는 목록을 만들지 않는다.** 고를 것이 없으면 그것은
+            # 선언이 아니라 조건이고, 조건은 발동 단계가 답할 일이다.
+            return ResolvedDomain(
+                ValueOutcome.INVALID,
+                reason=(
+                    f"{self.bound.describe_ko()} 가 {amount} 라서 "
+                    f"{self.step} 의 배수를 하나도 고를 수 없습니다."
+                ),
+            )
+        return ResolvedDomain(
+            ValueOutcome.RESOLVED,
+            domain=NumberDomain(tuple(self.step * i for i in range(1, count + 1))),
+        )
+
+    def canonical_state(self) -> tuple:
+        return ("derived", self.bound.canonical_state(), self.step)
+
+    def to_dict(self) -> dict:
+        return {"kind": "derived", "bound": self.bound.to_dict(), "step": self.step}
+
+    def describe_ko(self) -> str:
+        unit = "" if self.step == 1 else f"{self.step} 의 배수로 "
+        return f"{self.bound.describe_ko()} 까지 {unit}하나"
+
+
 @dataclass(frozen=True, slots=True)
 class DeclaredNumberSpec:
     """
@@ -157,8 +357,16 @@ class DeclaredNumberSpec:
     (30922149)에서 수를 정하는 것은 뽑는 쪽, 즉 상대다.
     """
 
-    domain: NumberDomain
+    domain: "NumberDomain | DerivedNumberDomain"
+    """
+    적힌 목록이거나, **판에서 만들라는 지시**다 (Phase 2-AE).
+    """
     chooser: PlayerRef = PlayerRef.CONTROLLER
+
+    @property
+    def is_derived(self) -> bool:
+        """도메인을 판에서 만들어야 하는가."""
+        return isinstance(self.domain, DerivedNumberDomain)
 
     def canonical_state(self) -> tuple:
         return (self.domain.canonical_state(), self.chooser.value)
@@ -239,6 +447,46 @@ class ResolvedDeclaration:
         )
 
 
+class OperationOutcome(str, Enum):
+    """
+    조작 하나가 **규칙대로 되었는가** (Phase 2-AE).
+
+    처리한 장수와 **다른 질문이다.** 0장을 다뤘어도 규칙대로 된 것일 수
+    있고 ("최대 2장까지" 에서 0장을 고른 경우), 2장을 다뤘어도 규칙을 다
+    보지 못했을 수 있다.
+
+    ``FAILED`` 가 **없다.** 없는 이유를 적어 둔다.
+
+        이 실행기는 계획이 전부 끝난 뒤에야 적용을 시작한다. 계획에서
+        막힌 조작은 **결과를 남기지 않는다** — 효과 전체가 거절되고
+        아무 일도 일어나지 않기 때문이다. 그래서 "실패한 조작의 결과"
+        라는 것이 존재할 수 없다.
+
+        실패는 조작이 아니라 **효과 단위**의 사실이고, 그것은
+        :class:`~engine.effect.resolution.ResolutionStatus` 가 이미
+        답한다. 같은 말을 두 어휘로 하지 않는다.
+
+    여기 ``FAILED`` 를 두면 **언제나 거짓인 값**이 생기고, 그것을 읽은
+    쪽은 규칙을 지켰다고 믿게 된다.
+    """
+
+    SUCCEEDED = "succeeded"
+    """계획대로 적용되고, 그 조작이 주장한 규칙을 **전부 봤다.**"""
+    UNKNOWN = "unknown"
+    """
+    일어나기는 했지만 **규칙대로였는지 말할 수 없다.**
+
+    Phase 2-M 이 적어 둔 미확인 규칙이 있는 의미가 여기다 — 묘지로
+    보내면서 "묘지로 보내는 것을 막는 효과" 를 보지 않았다면, 카드는
+    움직였어도 그것이 규칙대로였다고 주장할 수 없다.
+
+    **보수적으로 잡는다.** 미확인 규칙 중에는 성패와 무관한 것도 있지만
+    (예: "'파괴되었을 때' 유발 효과"), 그것을 갈라 읽으려면 규칙을
+    새로 판정해야 한다. 모르는 쪽으로 기울이는 것이 이 프로젝트의
+    기본값이다.
+    """
+
+
 class ResultField(str, Enum):
     """앞선 조작에서 **무엇을** 가져오는가."""
 
@@ -249,11 +497,19 @@ class ResultField(str, Enum):
     카드를 옮기는 일이면 장수, 드로우면 뽑은 장수다. 라이프 증감처럼
     "장수" 가 없는 일에는 **없다** — 없는 것을 0 으로 답하지 않는다.
     """
-    # SUCCEEDED 를 **일부러 만들지 않았다.** 이 실행기는 계획이 전부
-    # 끝난 뒤에야 적용을 시작하므로, 앞의 조작이 실패하면 뒤의 조작은
-    # 아예 시작되지 않는다. "앞이 성공했는가" 를 뒤에서 물을 수 있는
-    # 순간이 존재하지 않는다. 있지도 않은 질문에 칸을 만들면, 언제나
-    # 참인 값을 읽고 규칙을 지켰다고 믿게 된다.
+    SUCCEEDED = "succeeded"
+    """
+    그 조작이 **규칙대로 되었는가** (Phase 2-AE).
+
+    수가 아니다. 그래서 장수를 묻는 자리에 쓸 수 없고,
+    :class:`OperationRequirement` 로만 가리킨다.
+
+    Phase 2-AD 는 이 칸을 만들지 않았다. "앞이 실패하면 뒤는 시작조차
+    하지 않으므로 언제나 참" 이라고 보았기 때문이다. 그 판단은 절반만
+    맞았다 — ``FAILED`` 는 정말로 생기지 않지만, **``UNKNOWN`` 은
+    생긴다.** 규칙을 다 보지 못한 채 일어난 조작이 있고, 그 위에 다음
+    일을 쌓아도 되는지는 다른 질문이다.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -302,6 +558,53 @@ class ResultRef:
 
 
 @dataclass(frozen=True, slots=True)
+class OperationRequirement:
+    """
+    **이 조작은 저 조작이 규칙대로 되었어야 한다** (Phase 2-AE).
+
+    실제 카드가 그렇게 적혀 있다 — ``local ct=Duel.Destroy(...)`` 뒤의
+    ``if ct~=0 then <다음 일> end`` 이 corpus 에 92곳이다.
+
+    ``operation_index`` 는 **가리키는 쪽**, ``after`` 는 **가리켜지는
+    쪽**이고, 둘 다 정의의 ``operations`` 안 자리다. 가리켜지는 쪽이
+    반드시 앞이어야 한다는 것을 정의가 만들어질 때 검사한다 (Phase 2-AD
+    와 같은 규칙).
+
+    **건너뛰지 않는다.** 앞이 ``UNKNOWN`` 이면 효과 전체를 거절한다 —
+    이 실행기에는 부분 적용이 없고, 모르는 것 위에 다음 일을 쌓지
+    않는다. 앞이 ``FAILED`` 인 경우는 애초에 오지 않는다
+    (:class:`OperationOutcome` 참고).
+    """
+
+    operation_index: int
+    after: "ResultRef"
+
+    def __post_init__(self) -> None:
+        if self.operation_index < 0:
+            raise ValueError(f"조작 번호는 0 이상입니다: {self.operation_index}")
+        if self.after.field is not ResultField.SUCCEEDED:
+            raise ValueError(
+                f"조건으로 쓸 수 있는 것은 성패뿐입니다: {self.after.field}. "
+                "수를 조건처럼 읽는 것이 바로 이 단계가 막으려는 일입니다."
+            )
+
+    def canonical_state(self) -> tuple:
+        return (self.operation_index, self.after.canonical_state())
+
+    def to_dict(self) -> dict:
+        return {
+            "operation_index": self.operation_index,
+            "after": self.after.to_dict(),
+        }
+
+    def describe_ko(self) -> str:
+        return (
+            f"{self.operation_index}번 조작은 "
+            f"{self.after.operation_index}번 조작이 규칙대로 되었어야 한다"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class OperationResult:
     """
     조작 하나가 **낸 결과.** 사건이 아니다.
@@ -323,11 +626,19 @@ class OperationResult:
 
     operation_index: int
     affected_count: "int | None" = None
+    outcome: OperationOutcome = OperationOutcome.SUCCEEDED
+    """
+    규칙대로 되었는가 (Phase 2-AE). **장수와 독립이다** —
+    ``affected_count == 0`` 을 실패로 읽지 않는다.
+    """
 
     def value_of(self, field: ResultField) -> "int | None":
         if field is ResultField.AFFECTED_COUNT:
             return self.affected_count
-        raise KeyError(f"{field} 는 결과에 없는 칸입니다.")  # pragma: no cover
+        raise KeyError(
+            f"{field} 는 수가 아닙니다. 성패는 OperationRequirement 로 "
+            "가리킵니다."
+        )
 
     def canonical_state(self) -> tuple:
         return (self.operation_index, self.affected_count)
@@ -415,6 +726,18 @@ class ExecutionValues:
             f"{ref.operation_index}번 조작의 결과가 아직 없습니다."
         )
 
+    def outcome_of(self, operation_index: int) -> "OperationOutcome | None":
+        """
+        그 조작이 규칙대로 되었는가. 결과가 아직 없으면 ``None``.
+
+        **수를 돌려주지 않는다.** 성패와 장수는 다른 질문이고, 한 함수가
+        둘 다 답하면 부르는 쪽에서 섞인다.
+        """
+        for result in self.results:
+            if result.operation_index == operation_index:
+                return result.outcome
+        return None
+
     def chooser_of(
         self, spec: DeclaredNumberSpec, context: ConditionContext
     ) -> int:
@@ -448,6 +771,14 @@ NO_EXECUTION_VALUES = ExecutionValues()
 
 
 __all__ = [
+    "ValueOutcome",
+    "ResolvedValue",
+    "QuantitySource",
+    "BoardQuantity",
+    "DerivedNumberDomain",
+    "ResolvedDomain",
+    "OperationOutcome",
+    "OperationRequirement",
     "ValueRef",
     "DECLARED_NUMBER",
     "NumberDomain",

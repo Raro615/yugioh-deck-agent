@@ -58,7 +58,11 @@ from engine.condition import Condition
 from engine.cost import CostGroup
 from engine.effect.operation import Operation
 from engine.effect.target import CountKind, TargetBinding, TargetRef
-from engine.execution import DeclarationBinding, ValueRef
+from engine.execution import (
+    DeclarationBinding,
+    OperationRequirement,
+    ValueRef,
+)
 from engine.ids import EffectRef
 
 
@@ -177,6 +181,15 @@ class EffectDefinition:
     ``targets`` 와 **다른 이름 공간**이다 — 저쪽은 고른 카드이고 이쪽은
     선언한 수다. 하나로 합치면 "2장" 과 "2" 가 같은 이름표를 달게 된다.
     """
+    requirements: tuple[OperationRequirement, ...] = ()
+    """
+    **어느 조작이 어느 조작의 성패에 기대는가** (Phase 2-AE).
+
+    조작 자체에 붙이지 않은 이유가 있다. 이것은 조작이 *하는 일*이 아니라
+    조작들 **사이의 순서 관계**이고, 정의가 그 순서를 들고 있기 때문이다.
+    조작에 붙이면 같은 조작을 다른 정의에서 다시 쓸 때 남의 번호를 들고
+    다니게 된다.
+    """
     provenance: EffectProvenance = field(default_factory=EffectProvenance)
 
     def __post_init__(self) -> None:
@@ -194,8 +207,13 @@ class EffectDefinition:
             raise TypeError(
                 "declarations 는 tuple 이어야 합니다 — 정의는 불변입니다."
             )
+        if not isinstance(self.requirements, tuple):
+            raise TypeError(
+                "requirements 는 tuple 이어야 합니다 — 정의는 불변입니다."
+            )
         self._check_target_links()
         self._check_value_links()
+        self._check_requirements()
 
     def _check_target_links(self) -> None:
         """
@@ -288,6 +306,36 @@ class EffectDefinition:
                     "일도 쓰지 않습니다. 묻고 버리는 정의입니다."
                 )
 
+    def _check_requirements(self) -> None:
+        """
+        성패에 기대는 순서가 실제로 성립하는지 본다 (Phase 2-AE).
+
+        결과를 수로 읽을 때와 **같은 규칙**이다 — 가리켜지는 쪽이 반드시
+        앞이어야 한다. 아직 일어나지 않은 일에는 성패가 없다.
+        """
+        for requirement in self.requirements:
+            for index in (requirement.operation_index, requirement.after.operation_index):
+                if index >= len(self.operations):
+                    raise EffectDefinitionError(
+                        f"{index}번 조작이 없습니다 "
+                        f"({len(self.operations)}개뿐입니다)."
+                    )
+            if requirement.after.operation_index >= requirement.operation_index:
+                raise EffectDefinitionError(
+                    f"{requirement.operation_index}번 조작이 "
+                    f"{requirement.after.operation_index}번 조작의 성패에 "
+                    "기댑니다. 앞선 일만 읽을 수 있습니다 — 아직 일어나지 "
+                    "않은 일에는 성패가 없습니다."
+                )
+
+    def requirements_for(self, index: int) -> tuple:
+        """그 조작이 기대고 있는 앞선 일들. 선언 순서 그대로다."""
+        return tuple(
+            requirement
+            for requirement in self.requirements
+            if requirement.operation_index == index
+        )
+
     def _counts_used_by(self, operation) -> tuple:
         """
         그 일이 **실제로 묻게 되는** 수들.
@@ -359,6 +407,7 @@ class EffectDefinition:
             self.cost.canonical_state(),
             tuple(b.canonical_state() for b in self.targets),
             tuple(b.canonical_state() for b in self.declarations),
+            tuple(r.canonical_state() for r in self.requirements),
             self.provenance.canonical_state(),
         )
 

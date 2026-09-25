@@ -58,6 +58,7 @@ Phase 2-E 의 몫이다 (ADR-008).
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
@@ -95,11 +96,15 @@ from engine.effect.operation import (
     SpecialSummonOperation,
 )
 from engine.effect.journal import EventJournal
-from engine.effect.target import CountOutcome, SelectionCount, Shortfall
+from engine.effect.target import SelectionCount, Shortfall
 from engine.execution import (
+    BoardQuantity,
     DeclarationOutcome,
     ExecutionValues,
+    OperationOutcome,
     OperationResult,
+    QuantitySource,
+    ValueOutcome,
 )
 from engine.randomness import RandomError, RandomOutcome, RandomPurpose
 from engine.effect.targeting import TargetLegality, TargetResolver
@@ -265,19 +270,37 @@ class _Step:
 
     def result(self, index: int) -> OperationResult:
         """
-        이 일이 **낸 결과** (Phase 2-AD). 사건이 아니다.
+        이 일이 **낸 결과** (Phase 2-AD · 2-AE). 사건이 아니다.
 
-        카드를 다루는 일이면 장수, 드로우처럼 수만 있는 일이면 그 수다.
+        **장수와 성패를 따로 답한다.**
+
+        장수는 카드를 다루는 일이면 다룬 장수, 드로우면 뽑은 장수다.
         라이프 증감에는 **장수가 없다** — 없는 것을 0 으로 답하지 않고
         ``None`` 으로 둔다. 0 으로 두면 "한 장도 안 건드렸다" 로 읽힌다.
+        그리고 **0장은 실패가 아니다** — "최대 2장까지" 에서 0장을 고른
+        것은 규칙대로 된 일이다.
+
+        성패는 그 의미가 주장한 규칙을 **전부 봤는가**로 정한다 (Phase
+        2-M 의 표). 못 본 규칙이 있으면 일어났어도 ``UNKNOWN`` 이다.
         """
         if self.instances:
             affected = len(self.instances)
         elif self.operation.kind is OperationKind.DRAW:
             affected = self.amount
+        elif isinstance(self.operation, CardOperation):
+            # 고르지 않아도 되는 대상에서 **아무것도 고르지 않았다.**
+            # 0 은 "없다" 가 아니라 **0장이라는 사실**이다.
+            affected = 0
         else:
             affected = None
-        return OperationResult(operation_index=index, affected_count=affected)
+        outcome = (
+            OperationOutcome.UNKNOWN
+            if unchecked_rules(self.operation.kind)
+            else OperationOutcome.SUCCEEDED
+        )
+        return OperationResult(
+            operation_index=index, affected_count=affected, outcome=outcome
+        )
 
     def record(self) -> AppliedOperation:
         return AppliedOperation(
@@ -484,7 +507,9 @@ class EffectExecutor:
                 + ", ".join(str(ref) for ref in pending),
             )
 
-        declared = self._check_declarations(definition, context)
+        declared = self._check_declarations(
+            definition, context, self._read_quantity(state, context)
+        )
         if isinstance(declared, EffectResult):
             return declared
 
@@ -494,6 +519,9 @@ class EffectExecutor:
 
         steps: list[_Step] = []
         for index, operation in enumerate(definition.operations):
+            waiting = self._check_requirements(definition, index, values)
+            if waiting is not None:
+                return waiting
             step = self._plan_operation(
                 state, definition, context, operation, values
             )
@@ -506,8 +534,64 @@ class EffectExecutor:
             values = values.with_result(step.result(index))
         return steps
 
+    def _check_requirements(
+        self,
+        definition: EffectDefinition,
+        index: int,
+        values: ExecutionValues,
+    ) -> "EffectResult | None":
+        """
+        이 조작이 기대고 있는 앞선 일이 **규칙대로 되었는가** (Phase 2-AE).
+
+        건너뛰지 않는다. 이 실행기에는 부분 적용이 없고, 모르는 것 위에
+        다음 일을 쌓지 않는다 — ``UNKNOWN`` 은 허가가 아니다.
+        """
+        for requirement in definition.requirements_for(index):
+            target = requirement.after.operation_index
+            outcome = values.outcome_of(target)
+            if outcome is None:  # pragma: no cover - 정의가 먼저 막는다
+                return _fail(
+                    ResolutionStatus.INVALID_CONTEXT,
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    f"{target}번 조작의 결과가 아직 없습니다.",
+                )
+            if outcome is OperationOutcome.UNKNOWN:
+                return _fail(
+                    ResolutionStatus.UNCHECKED_RULES,
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    f"{index}번 조작은 {target}번 조작이 규칙대로 되었어야 "
+                    "하는데, 그 조작이 주장한 규칙을 다 보지 못했습니다. "
+                    "모르는 것 위에 다음 일을 쌓지 않습니다.",
+                    missing="; ".join(
+                        unchecked_rules(definition.operations[target].kind)
+                    ),
+                )
+        return None
+
+    def _read_quantity(self, state: GameState, context: ResolutionContext):
+        """
+        판에서 양을 읽어 주는 함수 (Phase 2-AE).
+
+        이 값은 **규칙이 아는 사실**이지 누군가의 관측이 아니다 — 상대
+        패가 몇 장인지, 라이프가 얼마인지는 누가 보느냐와 무관하다. 카드의
+        **정체**를 여는 것과는 다른 일이고, 관측은 한 줄도 건드리지 않는다.
+        """
+        condition_context = context.condition_context()
+
+        def read(quantity: BoardQuantity) -> "int | None":
+            player = state.player(quantity.player.resolve(condition_context))
+            if quantity.source is QuantitySource.LIFE_POINTS:
+                return player.life_points
+            assert quantity.zone is not None
+            return len(player.zone(quantity.zone))
+
+        return read
+
     def _check_declarations(
-        self, definition: EffectDefinition, context: ResolutionContext
+        self,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        read=None,
     ):
         """
         선언해야 할 수가 **전부 들어왔는지, 허용된 수인지** 본다 (Phase 2-AD).
@@ -532,7 +616,28 @@ class EffectExecutor:
 
         probe = ExecutionValues(declarations=supplied)
         for binding in definition.declarations:
-            answer = probe.declared(binding.ref, binding.spec)
+            spec = binding.spec
+            if spec.is_derived:
+                # **도메인을 판에서 만든다** (Phase 2-AE). 만들 수 없으면
+                # 만들지 않는다 — 빈 목록이나 짐작한 목록을 쓰지 않는다.
+                built = spec.domain.resolve(read)
+                if built.outcome is ValueOutcome.UNKNOWN:
+                    return _fail(
+                        ResolutionStatus.UNSUPPORTED_OPERATION,
+                        ValidationCode.RULE_NOT_IMPLEMENTED,
+                        f"{binding.ref} 의 고를 수 있는 수를 만들지 "
+                        f"못했습니다: {built.reason}",
+                        missing=spec.domain.describe_ko(),
+                    )
+                if built.outcome is ValueOutcome.INVALID:
+                    return _fail(
+                        ResolutionStatus.INVALID_OPERATION,
+                        ValidationCode.INVALID_AMOUNT,
+                        f"{binding.ref}: {built.reason}",
+                    )
+                assert built.domain is not None
+                spec = dataclasses.replace(spec, domain=built.domain)
+            answer = probe.declared(binding.ref, spec)
             if answer.outcome is DeclarationOutcome.PENDING:
                 return _fail(
                     ResolutionStatus.INVALID_TARGET,
@@ -833,7 +938,14 @@ class EffectExecutor:
             else:
                 owners.append(destination_player(operation.kind, card))
 
-        if not instances:
+        if not instances and _demands_a_card(spec):
+            # **고르지 않아도 되는 규칙과 나눈다** (Phase 2-AE).
+            #
+            # "최대 2장까지" 에서 0장을 고른 것은 규칙대로 된 일이고,
+            # 대상 계층이 이미 그것을 적법하다고 판정한다
+            # (``ChoiceSpec.is_optional``). 여기서 다시 거절하면 두 계층이
+            # 서로 다른 말을 하게 되고, 무엇보다 **0장을 실패로 읽는
+            # 셈**이 된다 — 그 둘은 다른 사실이다.
             return _fail(
                 ResolutionStatus.INVALID_TARGET,
                 ValidationCode.TOO_FEW_SELECTED,
@@ -1063,10 +1175,10 @@ class EffectExecutor:
             return len(player.zone(zone))
 
         answer = count.resolve(zone_size, values)
-        if answer.outcome is CountOutcome.RESOLVED:
+        if answer.outcome is ValueOutcome.RESOLVED:
             assert answer.value is not None
             return answer.value
-        if answer.outcome is CountOutcome.UNKNOWN:
+        if answer.outcome is ValueOutcome.UNKNOWN:
             return _fail(
                 ResolutionStatus.UNSUPPORTED_OPERATION,
                 ValidationCode.RULE_NOT_IMPLEMENTED,
@@ -1493,6 +1605,24 @@ def _fail(
     unchecked: tuple[str, ...] = (),
 ) -> EffectResult:
     return EffectResult(status, code, reason, missing, unchecked_rules=unchecked)
+
+
+
+def _demands_a_card(spec) -> bool:
+    """
+    그 대상 규칙이 **한 장 이상을 요구하는가** (Phase 2-AE).
+
+    규칙이 적혀 있지 않으면 참이다 — 무엇을 요구하는지 모르면서 "안 골라도
+    된다" 고 넘기지 않는다. 무작위 선택은 장수가 1 이상이므로 여기 오지
+    않는다.
+    """
+    if spec is None:
+        return True
+    choice = getattr(spec, "choice", None)
+    minimum = getattr(choice, "minimum", None)
+    if minimum is None:
+        return True
+    return minimum > 0
 
 
 def _resolve_player(who, context: ResolutionContext) -> int:

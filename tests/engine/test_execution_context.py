@@ -46,13 +46,14 @@ from engine.effect.resolution import ResolutionContext, ResolutionStatus
 from engine.effect.target import (
     PRIMARY_TARGET,
     CountKind,
-    CountOutcome,
     RandomSelectionSpec,
     SelectionCount,
     TargetBinding,
     TargetSpec,
 )
 from engine.execution import (
+    ResolvedValue,
+    ValueOutcome,
     DECLARED_NUMBER,
     NO_EXECUTION_VALUES,
     DeclarationBinding,
@@ -62,6 +63,7 @@ from engine.execution import (
     ExecutionLookupError,
     ExecutionValues,
     NumberDomain,
+    OperationOutcome,
     OperationResult,
     ResolvedDeclaration,
     ResultField,
@@ -426,7 +428,7 @@ def test_e_a_count_asked_outside_an_execution_says_so():
 
     answer = count.resolve(lambda ref, zone: 5)
 
-    assert answer.outcome is CountOutcome.UNKNOWN
+    assert answer.outcome is ValueOutcome.UNKNOWN
     assert answer.value is None
     assert answer.missing == f"declared number {DECLARED_NUMBER}"
 
@@ -553,7 +555,7 @@ def test_h_a_result_that_does_not_exist_is_not_zero():
         values.result(ResultRef(0))
 
     answer = SelectionCount.from_result(ResultRef(0)).resolve(lambda r, z: 9)
-    assert answer.outcome is CountOutcome.UNKNOWN
+    assert answer.outcome is ValueOutcome.UNKNOWN
     assert answer.value is None
     assert answer.missing
 
@@ -597,12 +599,24 @@ def test_i_a_failure_in_the_first_operation_stops_the_second(repository):
     untouched(state, before, hand, result, journal)
 
 
-def test_i_there_is_no_succeeded_field_on_purpose():
+def test_i_a_failed_operation_still_leaves_no_result():
     """
-    있지도 않은 질문에 칸을 만들면, 언제나 참인 값을 읽고 규칙을
-    지켰다고 믿게 된다.
+    **Phase 2-AD 의 판단은 절반만 맞았다.**
+
+    그때 이 시험은 ``ResultField`` 에 ``affected_count`` 하나뿐이라고
+    단언했다. 근거는 "앞이 실패하면 뒤는 시작조차 하지 않으므로 성패는
+    언제나 참" 이었고, 그 근거의 **앞부분은 지금도 맞다** — 계획에서
+    막힌 조작은 결과를 남기지 않는다.
+
+    틀린 것은 뒷부분이다. ``FAILED`` 는 정말로 생기지 않지만,
+    **``UNKNOWN`` 은 생긴다** — 규칙을 다 보지 못한 채 일어난 조작이
+    있고, 그 위에 다음 일을 쌓아도 되는지는 다른 질문이다 (Phase 2-AE).
+
+    그래서 이 시험은 **여전히 참인 것**을 단언한다: 실패한 조작은
+    결과를 남기지 않고, 성패 어휘에 ``FAILED`` 가 없다.
     """
-    assert [f.value for f in ResultField] == ["affected_count"]
+    assert [o.value for o in OperationOutcome] == ["succeeded", "unknown"]
+    assert set(f.value for f in ResultField) == {"affected_count", "succeeded"}
 
 
 # ======================================================================

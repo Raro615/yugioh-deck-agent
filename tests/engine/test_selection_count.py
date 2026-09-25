@@ -45,15 +45,14 @@ from engine.effect.resolution import ResolutionContext, ResolutionStatus
 from engine.effect.target import (
     PRIMARY_TARGET,
     CountKind,
-    CountOutcome,
     RandomSelectionSpec,
-    ResolvedCount,
     SelectionCount,
     Shortfall,
     TargetBinding,
     TargetSpec,
     ZoneCountTerm,
 )
+from engine.execution import ResolvedValue, ValueOutcome
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef
 from engine.observation import ObservationPermission
@@ -272,7 +271,7 @@ def test_c_an_unknown_count_must_say_what_is_missing():
 def test_c_an_unknown_result_carries_no_number():
     answer = SelectionCount.unknown("chain parameter").resolve(lambda ref, zone: 3)
 
-    assert answer.outcome is CountOutcome.UNKNOWN
+    assert answer.outcome is ValueOutcome.UNKNOWN
     assert answer.value is None
     with pytest.raises(TypeError):
         bool(answer)
@@ -317,7 +316,7 @@ def test_d_a_count_cannot_be_two_things_at_once():
             terms=(ZoneCountTerm(PlayerRef.CONTROLLER, Zone.HAND),),
         )
     with pytest.raises(ValueError):
-        ResolvedCount(CountOutcome.UNKNOWN, value=1)
+        ResolvedValue(ValueOutcome.UNKNOWN, value=1)
 
 
 # ======================================================================
@@ -395,7 +394,7 @@ def test_g_up_to_n_is_not_a_shortfall_rule():
     declared = SelectionCount.unknown("player-declared number (SelectOption/AnnounceNumber)")
 
     assert declared.kind is CountKind.UNKNOWN
-    assert declared.resolve(lambda ref, zone: 2).outcome is CountOutcome.UNKNOWN
+    assert declared.resolve(lambda ref, zone: 2).outcome is ValueOutcome.UNKNOWN
     # 기본값은 여전히 "하지 않는다" 다.
     assert spec_of(1).on_shortfall is Shortfall.REFUSE
 
@@ -775,7 +774,7 @@ def test_q_the_four_shapes_of_a_dynamic_count_are_recorded():
     assert board.resolve(lambda ref, zone: 9).value == 3
     for unknown in (declared, carried, chained):
         answer = unknown.resolve(lambda ref, zone: 9)
-        assert answer.outcome is CountOutcome.UNKNOWN
+        assert answer.outcome is ValueOutcome.UNKNOWN
         assert answer.value is None
         assert answer.missing
 
