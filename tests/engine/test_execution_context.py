@@ -616,7 +616,14 @@ def test_i_a_failed_operation_still_leaves_no_result():
     결과를 남기지 않고, 성패 어휘에 ``FAILED`` 가 없다.
     """
     assert [o.value for o in OperationOutcome] == ["succeeded", "unknown"]
-    assert set(f.value for f in ResultField) == {"affected_count", "succeeded"}
+    # Phase 2-AF 에서 ``attempted_count`` 가 늘었다 — **하려고 한 수와 실제로
+    # 한 수는 다른 질문**이기 때문이다. 여기서 세는 이유는 칸이 조용히
+    # 늘어나는 것을 막기 위해서이므로, 늘어난 것을 적어 두고 계속 센다.
+    assert set(f.value for f in ResultField) == {
+        "attempted_count",
+        "affected_count",
+        "succeeded",
+    }
 
 
 # ======================================================================

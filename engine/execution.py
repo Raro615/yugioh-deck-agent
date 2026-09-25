@@ -42,6 +42,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from engine.condition import ConditionContext, PlayerRef
+from engine.validation import ActionValidity
 from engine.vocabulary import Zone
 
 
@@ -250,6 +251,179 @@ class BoardQuantity:
             return f"{self.player} 의 라이프"
         assert self.zone is not None
         return f"{self.player} {self.zone.value} 의 장수"
+
+
+class ValueDomainKind(str, Enum):
+    """값이 **어떤 조건을 만족해야 하는가** (Phase 2-AF)."""
+
+    AT_LEAST_ONE = "at_least_one"
+    """1 이상. 장수를 다루는 거의 모든 값이 여기다."""
+    BOUNDED = "bounded"
+    """
+    판에서 읽은 양을 **넘지 않는다.**
+
+    실제 카드가 목록을 만들 때 쓰는 모양이다 —
+    ``Duel.IsPlayerCanDiscardDeckAsCost(tp, i)`` 는 "덱이 i장 이상인가" 이고
+    ``Duel.CheckLPCost(tp, 1000*p)`` 는 "라이프가 1000p 이상인가" 다.
+    """
+    RULE_UNRESOLVED = "rule_unresolved"
+    """
+    **값마다 규칙 판정이 필요한데 그 규칙이 없다.**
+
+    언제나 ``UNKNOWN`` 이다. 자리표시가 아니라 **지금 엔진의 정직한
+    상태**다 — ``Duel.IsExistingMatchingCard(filter, …, i, g)`` 처럼 "그
+    수에 해당하는 카드가 있는가" 를 묻는 도메인이 여기 걸리고, 그것을
+    답하려면 조건 계층이 **수를 인자로** 받아야 한다.
+
+    이 갈래가 있어서 "적을 수는 있지만 판정할 수 없다" 를 적을 수 있다.
+    없으면 그런 카드는 아예 표현되지 못하거나, 더 나쁘게는 조건 없이
+    통과한다.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class DomainVerdict:
+    """
+    값이 도메인을 만족하는가. **값을 계산한 결과가 아니다.**
+
+    ``ActionValidity`` 를 그대로 쓴다 (Phase 2-B 의 어휘). 판정 결과를
+    나타내는 어휘를 하나 더 만들지 않는다 — 같은 질문에 같은 세 답이다.
+    """
+
+    validity: ActionValidity
+    reason: str = ""
+    missing: "str | None" = None
+
+    def __bool__(self):  # pragma: no cover - 부르면 안 된다
+        raise TypeError(
+            "DomainVerdict 를 참/거짓으로 쓰지 마십시오. UNKNOWN 이 거짓이 "
+            "되면 '모른다' 가 '안 된다' 로 접힙니다."
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ValueDomain:
+    """
+    **계산된 값이 유효한가** 를 묻는 규칙 (Phase 2-AF · STRUCTURAL-89).
+
+    :class:`NumberDomain` 과 **다른 것**이다.
+
+    ==================  ==========================================
+    ``NumberDomain``     플레이어가 **고를 수 있는** 수들 (2-AD)
+    ``ValueDomain``      이미 정해진 값이 **허용되는가** (2-AF)
+    ==================  ==========================================
+
+    앞은 고르기 **전**에 쓰이고 뒤는 값이 나온 **뒤**에 쓰인다. 합치면
+    "고를 수 있는 것" 과 "유효한 것" 이 한 값이 되고, 계산된 값(선언이
+    아닌 값)을 검사할 자리가 사라진다.
+
+    :class:`SelectionCount` 와도 다르다 — 저쪽은 "몇 개인가" 에 답하고
+    이쪽은 "그 수가 되는가" 에 답한다. 값과 규칙은 따로 산다.
+    """
+
+    kind: ValueDomainKind = ValueDomainKind.AT_LEAST_ONE
+    bound: "BoardQuantity | None" = None
+    step: int = 1
+    missing: str = ""
+
+    def __post_init__(self) -> None:
+        if self.kind is ValueDomainKind.BOUNDED and self.bound is None:
+            raise ValueError("무엇을 넘지 않아야 하는지 적어야 합니다.")
+        if self.kind is not ValueDomainKind.BOUNDED and self.bound is not None:
+            raise ValueError(f"{self.kind.value} 에는 한계가 붙지 않습니다.")
+        if self.kind is ValueDomainKind.RULE_UNRESOLVED and not self.missing:
+            raise ValueError("무엇이 없어서 판정할 수 없는지 적어야 합니다.")
+        if self.step < 1:
+            raise ValueError(f"간격은 1 이상이어야 합니다: {self.step}")
+
+    @classmethod
+    def at_least_one(cls) -> "ValueDomain":
+        return cls(ValueDomainKind.AT_LEAST_ONE)
+
+    @classmethod
+    def bounded_by(cls, bound: "BoardQuantity", step: int = 1) -> "ValueDomain":
+        return cls(ValueDomainKind.BOUNDED, bound=bound, step=step)
+
+    @classmethod
+    def unresolved(cls, missing: str) -> "ValueDomain":
+        return cls(ValueDomainKind.RULE_UNRESOLVED, missing=missing)
+
+    def validate(self, value: int, read=None) -> DomainVerdict:
+        """
+        ``value`` 가 이 도메인을 만족하는가.
+
+        **값을 계산하지 않는다.** 이미 나온 값을 받아서 판정만 한다
+        (§12 의 책임 분리). ``read`` 는 판에서 양을 읽어 주는 함수이고,
+        판을 봐야 하는 도메인에서만 쓴다.
+        """
+        if self.kind is ValueDomainKind.RULE_UNRESOLVED:
+            return DomainVerdict(
+                ActionValidity.UNKNOWN,
+                reason=(
+                    f"{value} 가 되는지 판정할 규칙이 없습니다: {self.missing}"
+                ),
+                missing=self.missing,
+            )
+        if value < 1:
+            return DomainVerdict(
+                ActionValidity.INVALID,
+                reason=f"{value} 는 1 이상이어야 합니다.",
+            )
+        if self.kind is ValueDomainKind.AT_LEAST_ONE:
+            return DomainVerdict(ActionValidity.VALID)
+
+        assert self.bound is not None
+        if read is None:
+            # **판을 못 봤다는 사실을 숫자로 덮지 않는다.**
+            return DomainVerdict(
+                ActionValidity.UNKNOWN,
+                reason=f"{self.bound.describe_ko()} 를 읽을 수 없습니다.",
+                missing=self.bound.describe_ko(),
+            )
+        amount = read(self.bound)
+        if amount is None:
+            return DomainVerdict(
+                ActionValidity.UNKNOWN,
+                reason=f"{self.bound.describe_ko()} 를 읽지 못했습니다.",
+                missing=self.bound.describe_ko(),
+            )
+        if value * self.step > amount:
+            return DomainVerdict(
+                ActionValidity.INVALID,
+                reason=(
+                    f"{value}"
+                    + (f" x{self.step}" if self.step != 1 else "")
+                    + f" 는 {self.bound.describe_ko()}({amount})를 넘습니다."
+                ),
+            )
+        return DomainVerdict(ActionValidity.VALID)
+
+    def canonical_state(self) -> tuple:
+        return (
+            self.kind.value,
+            self.bound.canonical_state() if self.bound is not None else None,
+            self.step,
+            self.missing,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": self.kind.value}
+        if self.bound is not None:
+            data["bound"] = self.bound.to_dict()
+        if self.step != 1:
+            data["step"] = self.step
+        if self.missing:
+            data["missing"] = self.missing
+        return data
+
+    def describe_ko(self) -> str:
+        if self.kind is ValueDomainKind.AT_LEAST_ONE:
+            return "1 이상"
+        if self.kind is ValueDomainKind.RULE_UNRESOLVED:
+            return f"판정 불가 ({self.missing})"
+        assert self.bound is not None
+        unit = f" x{self.step}" if self.step != 1 else ""
+        return f"{self.bound.describe_ko()} 이하{unit}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -490,6 +664,14 @@ class OperationOutcome(str, Enum):
 class ResultField(str, Enum):
     """앞선 조작에서 **무엇을** 가져오는가."""
 
+    ATTEMPTED_COUNT = "attempted_count"
+    """
+    그 조작이 **하려고 한** 수 (Phase 2-AF).
+
+    처리된 수와 **다른 질문이다.** 셋을 고르고 둘만 처리됐다면 시도는
+    3 이고 처리는 2 다. 실패한 수를 따로 저장하지 않는 이유는 그것이
+    이 둘의 차이이기 때문이다 — 같은 정보를 두 번 적지 않는다.
+    """
     AFFECTED_COUNT = "affected_count"
     """
     그 조작이 실제로 다룬 **수.**
@@ -627,12 +809,50 @@ class OperationResult:
     operation_index: int
     affected_count: "int | None" = None
     outcome: OperationOutcome = OperationOutcome.SUCCEEDED
+    attempted_count: "int | None" = None
+    """
+    **하려고 한** 수 (Phase 2-AF). ``None`` 이면 세지 않는 종류의 일이다.
+
+    부분 적용은 이 둘의 관계로 읽는다. 상태를 하나 더 만들지 않은 이유는
+    **파생되기 때문**이다 — 저장하면 두 값이 어긋날 수 있다.
+    """
     """
     규칙대로 되었는가 (Phase 2-AE). **장수와 독립이다** —
     ``affected_count == 0`` 을 실패로 읽지 않는다.
     """
 
+    @property
+    def is_complete(self) -> bool:
+        """하려던 것을 **전부** 했는가."""
+        return (
+            self.attempted_count is not None
+            and self.affected_count == self.attempted_count
+        )
+
+    @property
+    def is_partial(self) -> bool:
+        """
+        **일부만** 했는가. 실패가 아니다 — 카드가 "가능한 만큼" 이라고
+        적어 두었을 때 일어나는 **정상적인 결과**다.
+        """
+        return (
+            self.attempted_count is not None
+            and self.affected_count is not None
+            and 0 < self.affected_count < self.attempted_count
+        )
+
+    @property
+    def did_nothing(self) -> bool:
+        """하려고 했는데 **하나도** 못 했는가."""
+        return (
+            self.attempted_count is not None
+            and bool(self.attempted_count)
+            and self.affected_count == 0
+        )
+
     def value_of(self, field: ResultField) -> "int | None":
+        if field is ResultField.ATTEMPTED_COUNT:
+            return self.attempted_count
         if field is ResultField.AFFECTED_COUNT:
             return self.affected_count
         raise KeyError(
@@ -641,12 +861,19 @@ class OperationResult:
         )
 
     def canonical_state(self) -> tuple:
-        return (self.operation_index, self.affected_count)
+        return (
+            self.operation_index,
+            self.affected_count,
+            self.outcome.value,
+            self.attempted_count,
+        )
 
     def to_dict(self) -> dict:
         return {
             "operation_index": self.operation_index,
             "affected_count": self.affected_count,
+            "attempted_count": self.attempted_count,
+            "outcome": self.outcome.value,
         }
 
 
@@ -771,6 +998,9 @@ NO_EXECUTION_VALUES = ExecutionValues()
 
 
 __all__ = [
+    "ValueDomain",
+    "ValueDomainKind",
+    "DomainVerdict",
     "ValueOutcome",
     "ResolvedValue",
     "QuantitySource",

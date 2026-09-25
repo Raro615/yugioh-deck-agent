@@ -54,6 +54,7 @@ from engine.condition import PlayerRef
 from engine.cost import CandidateSource, ChoiceSpec, Selection
 from engine.execution import (
     ResolvedValue,
+    ValueDomain,
     ValueOutcome,
     NO_EXECUTION_VALUES,
     DeclarationOutcome,
@@ -192,6 +193,16 @@ class SelectionCount:
     """``DECLARED`` 일 때 그 수의 이름 (Phase 2-AD)."""
     result: "ResultRef | None" = None
     """``FROM_RESULT`` 일 때 가리키는 앞선 조작 (Phase 2-AD)."""
+    domain: "ValueDomain | None" = None
+    """
+    나온 값이 **허용되는지** 보는 규칙 (Phase 2-AF).
+
+    수를 **정하는 것**과 그 수가 **되는지 보는 것**은 다른 일이므로 타입도
+    다르다. 여기 있는 것은 그 둘을 잇는 한 칸일 뿐이고, 검사는
+    :class:`~engine.execution.ValueDomain` 이 한다.
+
+    ``None`` 이면 **검사하지 않았다는 뜻**이지 무엇이든 된다는 뜻이 아니다.
+    """
 
     def __post_init__(self) -> None:
         # **한 갈래에는 한 가지 근거만 붙는다.** 숫자와 계산식과 이름이

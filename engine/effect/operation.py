@@ -272,6 +272,35 @@ class Operation:
         return self.describe_ko()
 
 
+class Partial(str, Enum):
+    """
+    여러 대상 중 **일부만 할 수 있을 때** 어떻게 하는가 (Phase 2-AF).
+
+    기본은 :attr:`ALL_OR_NOTHING` 이고, 그것이 **일반 규칙이 아니라는
+    것**이 이 갈래의 요점이다 — 공식 카드 텍스트 **203장**이 "가능한
+    만큼" 을 자기 텍스트에 직접 적어 두었다.
+
+        2333466   "destroy **as many** other cards on the field **as possible**"
+        21623008  "Each player sends the top 2 cards of their Deck to the GY
+                   (**or as many as possible**)"
+        35699     "Destroy **as many** cards you control **as possible**"
+
+    적어 두지 않은 카드는 이 길을 타지 않는다. "하나라도 못 하면 전부
+    안 한다" 도, "되는 것만 한다" 도 이 엔진이 정할 일이 아니다 — 카드가
+    적어야 아는 것이면 카드가 말하게 한다 (Phase 2-X 에서 관문을, 2-AC
+    에서 부족 처리를 카드가 선언하게 한 것과 같은 이유다).
+
+    **``UNKNOWN`` 은 어느 쪽에서도 건너뛰지 않는다.** 규칙이 "안 된다"
+    고 답한 것과 "모르겠다" 는 다른 사실이고, 모르는 것을 건너뛰면 그
+    카드가 처리됐어야 하는지 아닌지를 엔진이 멋대로 정하는 것이 된다.
+    """
+
+    ALL_OR_NOTHING = "all_or_nothing"
+    """하나라도 규칙이 막으면 **아무것도 하지 않는다.**"""
+    AS_MANY_AS_POSSIBLE = "as_many_as_possible"
+    """규칙이 막은 것만 빼고 **나머지는 한다.** 카드가 그렇게 적은 경우만이다."""
+
+
 @dataclass(frozen=True, slots=True)
 class CardOperation(Operation):
     """
@@ -296,6 +325,11 @@ class CardOperation(Operation):
 
     :data:`DECLARABLE_GATE_KINDS` 의 일에만 붙일 수 있다. 파괴와 특수
     소환은 선언과 무관하게 언제나 관문을 받으므로 여기 오지 않는다.
+    """
+    partial: Partial = Partial.ALL_OR_NOTHING
+    """
+    여럿 중 일부만 할 수 있을 때 (Phase 2-AF). **카드가 적어 둔 경우만**
+    바꾼다.
     """
 
     def __post_init__(self) -> None:
@@ -377,6 +411,7 @@ class CardOperation(Operation):
             self.reason_names,
             self.target_ref.name,
             self.gated,
+            self.partial.value,
         )
 
     def to_dict(self) -> dict:
@@ -388,6 +423,8 @@ class CardOperation(Operation):
         }
         if self.gated:
             data["gated"] = True
+        if self.partial is not Partial.ALL_OR_NOTHING:
+            data["partial"] = self.partial.value
         return data
 
     def describe_ko(self) -> str:
@@ -401,7 +438,12 @@ class CardOperation(Operation):
             OperationKind.RETURN_TO_DECK: "덱으로 되돌림",
         }[self.operation]
         gate = " (규칙 판정을 받는다)" if self.gated else ""
-        return f"{self.target_ref} 을 {korean}{gate}"
+        some = (
+            " (가능한 만큼)"
+            if self.partial is Partial.AS_MANY_AS_POSSIBLE
+            else ""
+        )
+        return f"{self.target_ref} 을 {korean}{gate}{some}"
 
 
 @dataclass(frozen=True, slots=True)

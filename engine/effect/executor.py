@@ -86,6 +86,7 @@ from engine.effect.definition import (
     execution_availability,
 )
 from engine.effect.operation import (
+    Partial,
     ShuffleOperation,
     CardOperation,
     DrawOperation,
@@ -135,7 +136,7 @@ from engine.ids import EffectRef, InstanceId
 from engine.special_summon import SPECIAL_SUMMON_PROCEDURE
 from engine.state.game_state import GameState
 from engine.summon import SummonError, SummonPlacement
-from engine.validation import ValidationCode
+from engine.validation import ActionValidity, ValidationCode
 from engine.vocabulary import Zone
 
 #: 카드를 다루는 일이 카드를 **어디로** 보내는가.
@@ -252,6 +253,12 @@ class _Step:
     player: int | None = None
     placements: tuple[SummonPlacement, ...] = ()
     """소환이 확정한 배치들. 소환이 아닌 일에는 비어 있다 (Phase 2-U)."""
+    attempted: "int | None" = None
+    """
+    **하려고 한 장수** (Phase 2-AF). 실제로 한 장수(``instances``)와 다를
+    수 있다 — 규칙이 막은 것이 있고 카드가 "가능한 만큼" 이라고 적어
+    두었을 때다. ``None`` 이면 장수를 세지 않는 종류의 일이다.
+    """
     outcome: "RandomOutcome | None" = None
     """
     무작위가 **계획 단계에서 이미 결정된** 결과 (Phase 2-Z).
@@ -298,8 +305,15 @@ class _Step:
             if unchecked_rules(self.operation.kind)
             else OperationOutcome.SUCCEEDED
         )
+        attempted = self.attempted
+        if attempted is None and affected is not None:
+            # 부분 적용이 없는 일은 **하려던 만큼 했다.**
+            attempted = affected
         return OperationResult(
-            operation_index=index, affected_count=affected, outcome=outcome
+            operation_index=index,
+            affected_count=affected,
+            outcome=outcome,
+            attempted_count=attempted,
         )
 
     def record(self) -> AppliedOperation:
@@ -899,6 +913,7 @@ class EffectExecutor:
 
         instances: list[InstanceId] = []
         owners: list[int] = []
+        refused: list[InstanceId] = []
         for instance in selection.chosen:
             card = state.find_instance(instance)
             if card is None:
@@ -928,7 +943,16 @@ class EffectExecutor:
                 )
             gate = self._check_rule_gate(operation, instance)
             if gate is not None:
-                return gate
+                if not _may_skip(operation, gate):
+                    return gate
+                # **규칙이 "안 된다" 고 답했고, 카드가 "가능한 만큼" 이라고
+                # 적어 두었다** (Phase 2-AF). 이 한 장만 빼고 나머지는 한다.
+                #
+                # ``UNKNOWN`` 은 여기 오지 않는다 — 모르는 것을 건너뛰면
+                # 그 카드가 처리됐어야 하는지를 엔진이 멋대로 정하는 것이
+                # 된다. ``_may_skip`` 이 그것을 막는다.
+                refused.append(instance)
+                continue
 
             instances.append(instance)
             # 주인 결정은 **바꾸기 전에** 끝낸다 (계획 단계).
@@ -938,6 +962,15 @@ class EffectExecutor:
             else:
                 owners.append(destination_player(operation.kind, card))
 
+        if refused and not instances:
+            # 하려던 것을 **하나도** 못 했다. "가능한 만큼" 이라고 적혀
+            # 있어도 가능한 것이 없으면 일어난 일이 없다 — 판은 그대로다.
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                f"{ref} 에 고른 카드를 규칙이 전부 막았습니다 "
+                f"({len(refused)}장).",
+            )
         if not instances and _demands_a_card(spec):
             # **고르지 않아도 되는 규칙과 나눈다** (Phase 2-AE).
             #
@@ -951,7 +984,12 @@ class EffectExecutor:
                 ValidationCode.TOO_FEW_SELECTED,
                 f"{ref} 에 고른 카드가 없습니다.",
             )
-        return _Step(operation, instances=tuple(instances), owners=tuple(owners))
+        return _Step(
+            operation,
+            instances=tuple(instances),
+            owners=tuple(owners),
+            attempted=len(selection.chosen),
+        )
 
     def _plan_summon_operation(
         self,
@@ -1177,6 +1215,26 @@ class EffectExecutor:
         answer = count.resolve(zone_size, values)
         if answer.outcome is ValueOutcome.RESOLVED:
             assert answer.value is not None
+            # **값을 얻는 것과 그 값이 되는지 보는 것은 다른 일이다**
+            # (Phase 2-AF §12). 순서도 그래서 이쪽이다 — 값이 없으면
+            # 검사할 것도 없다.
+            if count.domain is not None:
+                verdict = count.domain.validate(
+                    answer.value, self._read_quantity(state, context)
+                )
+                if verdict.validity is ActionValidity.INVALID:
+                    return _fail(
+                        ResolutionStatus.INVALID_OPERATION,
+                        ValidationCode.INVALID_AMOUNT,
+                        f"{what}: {verdict.reason}",
+                    )
+                if verdict.validity is ActionValidity.UNKNOWN:
+                    return _fail(
+                        ResolutionStatus.UNSUPPORTED_OPERATION,
+                        ValidationCode.RULE_NOT_IMPLEMENTED,
+                        f"{what}: {verdict.reason}",
+                        missing=verdict.missing,
+                    )
             return answer.value
         if answer.outcome is ValueOutcome.UNKNOWN:
             return _fail(
@@ -1606,6 +1664,25 @@ def _fail(
 ) -> EffectResult:
     return EffectResult(status, code, reason, missing, unchecked_rules=unchecked)
 
+
+
+
+def _may_skip(operation, gate) -> bool:
+    """
+    이 한 장을 **건너뛰어도 되는가** (Phase 2-AF).
+
+    두 가지가 **동시에** 참일 때만이다.
+
+    1. 카드가 "가능한 만큼" 이라고 적어 두었다 (공식 텍스트 203장).
+    2. 규칙이 **"안 된다" 고 답했다** — 모른다고 한 것이 아니다.
+
+    두 번째가 핵심이다. ``UNCHECKED_RULES`` 는 판정할 규칙이 없다는
+    뜻이고, 그것을 건너뛰면 "처리됐어야 하는가" 를 엔진이 정하는 것이
+    된다. 모르는 것은 건너뛰지 않고 **멈춘다.**
+    """
+    if getattr(operation, "partial", None) is not Partial.AS_MANY_AS_POSSIBLE:
+        return False
+    return gate.status is ResolutionStatus.INVALID_TARGET
 
 
 def _demands_a_card(spec) -> bool:

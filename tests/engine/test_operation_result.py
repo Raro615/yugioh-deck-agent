@@ -279,12 +279,19 @@ def test_c_count_is_never_read_as_success_in_the_engine():
     """
     source = (ROOT / "engine" / "execution.py").read_text("utf-8")
     tree = ast.parse(source)
+
+    # **장수를 세는 코드와 성패를 정하는 코드를 가른다** (Phase 2-AF 에서
+    # 날카롭게 했다). 장수끼리 비교하는 것은 장수 질문이고 (``did_nothing``
+    # 은 "하나도 못 했는가" 이지 "실패했는가" 가 아니다), 막아야 하는 것은
+    # **성패를 장수에서 뽑아내는 것**이다.
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Compare):
+        if not isinstance(node, ast.FunctionDef):
             continue
-        rendered = ast.unparse(node)
-        if "affected_count" in rendered and "0" in rendered:
-            raise AssertionError(f"장수를 성패처럼 읽는다: {rendered}")
+        body = ast.unparse(node)
+        if "OperationOutcome" not in body:
+            continue
+        assert "affected_count" not in body, node.name
+        assert "attempted_count" not in body, node.name
 
     # 성패를 만드는 코드도 장수를 보지 않는다.
     executor = ast.parse(
