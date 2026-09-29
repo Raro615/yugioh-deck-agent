@@ -198,6 +198,19 @@ GATING_RULES: dict[OperationKind, tuple[str, ...]] = {
         "이 카드를 버릴 수 있는가 (Card.IsDiscardable)",
         "버려진 카드가 묘지 이외로 가는가",
     ),
+    # Phase 2-AK. 셋 다 **카드가 선언할 때만** 물어진다.
+    OperationKind.RETURN_TO_HAND: (
+        "이 카드를 패로 되돌릴 수 있는가 (Card.IsAbleToHand)",
+        "패 이외의 곳으로 가는가 (토큰 · 대체 효과)",
+    ),
+    OperationKind.BANISH: (
+        "이 카드를 제외할 수 있는가 (Card.IsAbleToRemove)",
+        "제외 대신 다른 일이 일어나는가 (대체 효과)",
+    ),
+    OperationKind.RETURN_TO_DECK: (
+        "이 카드를 덱으로 되돌릴 수 있는가 (Card.IsAbleToDeck)",
+        "덱 이외의 곳으로 가는가 (토큰 · 엑스트라 덱 · 대체 효과)",
+    ),
 }
 
 #: 관문을 여는 계층의 이름. 결과의 ``missing`` 에 그대로 실린다.
@@ -210,6 +223,13 @@ MISSING_GATE: dict[OperationKind, str] = {
         "send-to-grave-legality (Card.IsAbleToGrave 판정)"
     ),
     OperationKind.DISCARD: "discard-legality (Card.IsDiscardable 판정)",
+    OperationKind.RETURN_TO_HAND: (
+        "return-to-hand-legality (Card.IsAbleToHand 판정)"
+    ),
+    OperationKind.BANISH: "banish-legality (Card.IsAbleToRemove 판정)",
+    OperationKind.RETURN_TO_DECK: (
+        "return-to-deck-legality (Card.IsAbleToDeck 판정)"
+    ),
 }
 
 
@@ -371,6 +391,28 @@ class RuleQuestion(str, Enum):
     """C — "이 카드를 대상으로 지정할 수 있는가" (``Card.IsCanBeEffectTarget``)."""
     OPERATION_POSSIBLE = "operation_possible"
     """D — "그 이동을 실제로 수행할 수 있는가". 실행기의 계획 단계가 답한다."""
+    MAY_BE_RETURNED_TO_HAND = "may_be_returned_to_hand"
+    """
+    E — "이 카드를 패로 되돌릴 수 있는가" (``Card.IsAbleToHand``, Phase 2-AK).
+
+    A · B 와 **같은 이유로 따로 있다.** 실측: ``Duel.SendtoHand`` 를 쓰는
+    카드 2,587장 중 **2,437장**이 이 술어를 적는다 (94%).
+    """
+    MAY_BE_BANISHED = "may_be_banished"
+    """
+    F — "이 카드를 제외할 수 있는가" (``Card.IsAbleToRemove``, Phase 2-AK).
+
+    실측: ``Duel.Remove`` 를 쓰는 카드 1,396장 중 **711장**이 적는다 (50%).
+    절반이 적고 절반이 적지 않는다 — 그래서 **종류가 아니라 카드가
+    선언한다** (A · B 와 같은 결론).
+    """
+    MAY_BE_RETURNED_TO_DECK = "may_be_returned_to_deck"
+    """
+    G — "이 카드를 덱으로 되돌릴 수 있는가" (``Card.IsAbleToDeck``, Phase 2-AK).
+
+    실측: ``Duel.SendtoDeck`` 를 쓰는 카드 825장 중 **557장**이 적는다 (67%).
+    리로드(22589918)가 적는 쪽이다 — 2-AI 가 옮기지 못한 그 술어다.
+    """
 
 
 #: 질문 → 그 질문을 던지는 공식 Lua 술어 이름. **근거다.**
@@ -382,6 +424,11 @@ LUA_GATE_PREDICATES: dict[RuleQuestion, str] = {
     RuleQuestion.MAY_BE_SENT_TO_GRAVE: "Card.IsAbleToGrave",
     RuleQuestion.MAY_BE_DISCARDED: "Card.IsDiscardable",
     RuleQuestion.MAY_BE_TARGETED: "Card.IsCanBeEffectTarget",
+    # Phase 2-AK. ``*AsCost`` 변종(IsAbleToHandAsCost 등)은 **여기 없다** —
+    # 비용 계층의 질문이고 (STRUCTURAL-70), 효과의 질문과 다르다.
+    RuleQuestion.MAY_BE_RETURNED_TO_HAND: "Card.IsAbleToHand",
+    RuleQuestion.MAY_BE_BANISHED: "Card.IsAbleToRemove",
+    RuleQuestion.MAY_BE_RETURNED_TO_DECK: "Card.IsAbleToDeck",
 }
 
 #: 카드가 **선언할 때만** 물어지는 관문 → 그 질문.
@@ -392,6 +439,21 @@ LUA_GATE_PREDICATES: dict[RuleQuestion, str] = {
 DECLARED_GATE_RULINGS: dict[OperationKind, RuleQuestion] = {
     OperationKind.SEND_TO_GRAVE: RuleQuestion.MAY_BE_SENT_TO_GRAVE,
     OperationKind.DISCARD: RuleQuestion.MAY_BE_DISCARDED,
+    # Phase 2-AK — 셋 다 **적는 카드와 적지 않는 카드가 둘 다 있다.**
+    # 94% · 50% · 67% 이므로 "언제나 물어진다" 도 "아무도 안 묻는다" 도
+    # 거짓이다. 그래서 종류가 아니라 카드가 선언한다.
+    OperationKind.RETURN_TO_HAND: RuleQuestion.MAY_BE_RETURNED_TO_HAND,
+    OperationKind.BANISH: RuleQuestion.MAY_BE_BANISHED,
+    OperationKind.RETURN_TO_DECK: RuleQuestion.MAY_BE_RETURNED_TO_DECK,
+}
+
+#: 질문을 한국어 동사로. 거절 이유 문장에 그대로 들어간다.
+QUESTION_VERBS: dict[RuleQuestion, str] = {
+    RuleQuestion.MAY_BE_SENT_TO_GRAVE: "묘지로 보낼",
+    RuleQuestion.MAY_BE_DISCARDED: "버릴",
+    RuleQuestion.MAY_BE_RETURNED_TO_HAND: "패로 되돌릴",
+    RuleQuestion.MAY_BE_BANISHED: "제외할",
+    RuleQuestion.MAY_BE_RETURNED_TO_DECK: "덱으로 되돌릴",
 }
 
 #: **아직 아무도 묻지 않는** 질문들.
@@ -516,15 +578,38 @@ def ask_movement(
     ruling: "MovementRuling", question: RuleQuestion, instance: InstanceId
 ) -> ConditionResult:
     """
-    질문에 **맞는 메서드**로 묻는다. 두 질문을 섞지 않는 유일한 통로다.
+    질문에 **맞는 방법**으로 묻는다. 질문을 섞지 않는 **유일한** 통로다.
+
+    Phase 2-AK 에서 질문이 둘에서 다섯이 되었다. 판정기마다 메서드를 셋 더
+    만드는 대신, 질문을 인자로 받는
+    :meth:`~engine.effect.ruling.OperationRuling.may` 를 **가진 판정기에게만**
+    새 질문을 던진다.
+
+    옛 판정기(:class:`DeclaredMovementRuling` 과 시험용 대역들)는 그 메서드가
+    없고, 그래서 새 질문에 ``UNKNOWN`` 이다 — **그것이 사실이다.** 없는
+    답을 있는 것처럼 만들지 않으려고 예외 대신 ``UNKNOWN`` 을 돌려준다.
+
+    메서드 이름으로 나눠 두었던 두 질문은 **그대로 둔다.** 이름을 합치면
+    2-X 가 세워 둔 "묘지로 보내기 ≠ 버리기" 가 호출부에서 흐려진다.
     """
+    if question not in DECLARED_GATE_RULINGS.values():
+        # **이동 판정기가 답하는 질문이 아니다.** 대상 지정 가능성(C)과
+        # "수행할 수 있는가"(D)는 다른 계층의 질문이고, 여기로 오는 것은
+        # 지식의 공백이 아니라 **부르는 쪽의 잘못**이다. 그래서 여전히
+        # 예외다 — UNKNOWN 으로 받아 주면 오타가 "모른다" 로 통과한다.
+        raise ValueError(
+            f"{question.value} 는 이동 판정기가 답하는 질문이 아닙니다."
+        )
+    answer = getattr(ruling, "may", None)
+    if answer is not None:
+        # 새 계층은 질문 하나로 전부 답한다 (engine/effect/ruling.py).
+        return answer(question, instance)
     if question is RuleQuestion.MAY_BE_SENT_TO_GRAVE:
         return ruling.may_be_sent_to_grave(instance)
     if question is RuleQuestion.MAY_BE_DISCARDED:
         return ruling.may_be_discarded(instance)
-    raise ValueError(  # pragma: no cover - 표가 막는다
-        f"{question.value} 는 이동 판정기가 답하는 질문이 아닙니다."
-    )
+    # 옛 판정기는 2-AK 의 세 질문을 **모른다.** 그것이 사실이다.
+    return ConditionResult.UNKNOWN
 
 
 def is_rule_gated(kind: OperationKind) -> bool:
@@ -592,6 +677,7 @@ __all__ = [
     "RuleQuestion",
     "LUA_GATE_PREDICATES",
     "DECLARED_GATE_RULINGS",
+    "QUESTION_VERBS",
     "DECLARABLE_GATE_KINDS",
     "UNASKED_QUESTIONS",
     "MovementRuling",

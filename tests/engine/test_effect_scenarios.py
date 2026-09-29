@@ -1117,9 +1117,15 @@ def test_e_no_hidden_identity_leaks_through_a_failure(state):
 # ======================================================================
 
 
-def test_f_this_phase_added_no_engine_module():
+def test_f_the_effect_package_is_exactly_these_modules():
     """
-    §1 — 이번 단계는 검증이다. 엔진에 새 파일이 생기지 않았다.
+    Phase 2-P 의 원래 이름은 ``…_this_phase_added_no_engine_module`` 이었고,
+    그때의 사실("이번 단계는 검증이고 새 파일이 없다")을 장부로 들고 있었다.
+    Phase 2-AK 가 ``ruling.py`` 를 더하면서 깨졌다.
+
+    2-P 의 기록은 그때 그대로 참이므로 지우지 않는다. 다만 이 단언이 실제로
+    지키는 것은 **"이 꾸러미에 무엇이 있는가"** 이므로 이름을 그쪽으로
+    바꾼다 — 그래야 다음에 늘어날 때도 같은 방식으로 고친다.
     """
     expected = {
         "__init__.py",
@@ -1130,6 +1136,7 @@ def test_f_this_phase_added_no_engine_module():
         "library.py",
         "operation.py",
         "resolution.py",
+        "ruling.py",  # Phase 2-AK — 조작 판정 계층 (ADR-006)
         "semantics.py",
         "target.py",
         "targeting.py",

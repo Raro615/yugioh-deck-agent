@@ -75,6 +75,12 @@ from engine.effect.target import (
     TargetRef,
     TargetSpec,
 )
+from engine.effect.ruling import (
+    CardRuleFacts,
+    OperationRulingRegistry,
+    RuleBasis,
+    normal_monster_facts,
+)
 from engine.execution import ResultField, ResultRef
 from engine.ids import EffectRef
 from engine.vocabulary import Zone
@@ -568,24 +574,55 @@ _FINE_ENTRY = LibraryEntry(
 #: 강제 탈출 장치 — "①: 필드의 몬스터 1장을 대상으로 하고 발동할 수 있다.
 #: 그 몬스터를 패로 되돌린다."
 #:
-#: **일부러 실행하지 않는다.** 모양은 싸이크론과 똑같고
-#: ``OperationKind.RETURN_TO_HAND`` 도 실행기가 지원한다. 막는 것은 후보
-#: 조건 하나다 — ``Card.IsAbleToHand``.
+#: **Phase 2-AK 에서 실행되기 시작했다.** 2-W 부터 네 단계 동안 "일부러
+#: 실행하지 않는다" 로 실려 있었고, 막고 있던 것은 후보 조건 하나였다 —
+#: ``Card.IsAbleToHand``, 즉 "이 카드가 패로 갈 수 있는가".
 #:
-#: 그것은 "이 카드가 패로 갈 수 있는가" 이고, 토큰 · 엑스트라 덱 몬스터 ·
-#: "패로 되돌릴 수 없다" 제약이 전부 거기서 갈린다. 이 엔진에 그 계층이
-#: 없다 (STRUCTURAL-48 — 되돌리기에는 관문이 없다). 없는 채로 실행하면
-#: 토큰이 패로 올라간다.
+#: 이제 그 질문에 답할 자리가 있다
+#: (:class:`~engine.effect.ruling.BoardRuling`). 모양은 싸이크론과 같다.
 #:
-#: 죽은 자의 소생이 ``IsCanBeSpecialSummoned`` 때문에 멈춘 것과 **같은
-#: 자리**다. 하는 일을 적지 않은 채로 싣는다.
+#: ====================================  ==================================
+#: ``EFFECT_FLAG_CARD_TARGET``            :meth:`TargetSpec.targeting`
+#: ``LOCATION_MZONE`` (양쪽)              ``zones={MZONE}, owner=None``
+#: ``SelectTarget(..., 1, 1, nil)``       ``minimum=1, maximum=1``
+#: ``Card.IsAbleToHand`` (후보 조건)       ``gated=True`` (2-X · 2-AK)
+#: ``Duel.SendtoHand(tc,nil,…)``          ``CardOperation.return_to_hand``
+#: ====================================  ==================================
+#:
+#: ``IsAbleToHand`` 를 **후보 조건이 아니라 관문으로** 옮긴 것에 주의한다.
+#: 스크립트에서는 같은 술어가 두 자리에 쓰인다 — 고를 수 있는 것을 좁히는
+#: 데 한 번(``s.target``), 그리고 실제로 보낼 때 한 번. 이 엔진은 관문을
+#: 계획 단계에서 묻고 (``_check_rule_gate``), 답이 ``FALSE`` 면 거기서
+#: 멈춘다. 후보 조건으로도 걸면 같은 질문을 두 계층이 각자 답하게 되고,
+#: 둘이 갈리면 어느 쪽이 맞는지 알 수 없다 (Phase 2-AJ 가 사건 계층에서
+#: 겪은 바로 그 일이다).
+#:
+#: ``tc:IsRelateToEffect(e)`` 는 싸이크론과 같은 이유로 옮기지 못했다
+#: (STRUCTURAL-50).
 _COMPULSORY_EVACUATION_DEVICE_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(COMPULSORY_EVACUATION_DEVICE, 0),
         source_card_id=COMPULSORY_EVACUATION_DEVICE,
-        operations=(),
+        targets=TargetBinding.single(
+            TargetSpec.targeting(
+                ChoiceSpec(
+                    source=CandidateSource(
+                        zones=frozenset({Zone.MZONE}),
+                        # ``LOCATION_MZONE, LOCATION_MZONE`` — 양쪽이다.
+                        owner=None,
+                    ),
+                    minimum=1,
+                    maximum=1,
+                )
+            )
+        ),
+        operations=(
+            CardOperation.return_to_hand(PRIMARY_TARGET, gated=True),
+        ),
         provenance=EffectProvenance.official_lua(
-            "c94192409.lua 를 읽었으나 후보 조건을 옮기지 못했다."
+            "c94192409.lua 의 s.target 과 s.activate 를 옮겼다. "
+            "Card.IsAbleToHand 는 관문으로 옮겼다. IsRelateToEffect 는 "
+            "옮기지 못했다."
         ),
     ),
     lua_file="c94192409.lua",
@@ -593,20 +630,35 @@ _COMPULSORY_EVACUATION_DEVICE_ENTRY = LibraryEntry(
         "Duel.SelectTarget(tp,Card.IsAbleToHand,tp,LOCATION_MZONE,"
         "LOCATION_MZONE,1,1,nil); Duel.SendtoHand(tc,nil,REASON_EFFECT)"
     ),
-    executable=False,
-    note="패로 되돌릴 수 있는가(IsAbleToHand)를 판정할 계층이 없다 (STRUCTURAL-48)",
+    executable=True,
 )
 
 #: 로스트 — "상대의 묘지의 카드 1장을 게임에서 제외한다."
 #:
-#: **일부러 실행하지 않는다.** 후보 조건이 ``c:IsAbleToRemove() and
-#: aux.SpElimFilter(c)`` 다 — 앞은 "제외될 수 있는가" 라는 관문이고
-#: (STRUCTURAL-48), 뒤는 EDOPro 의 보조 함수라 그 안을 읽지 않고는 무슨
-#: 조건인지 말할 수 없다.
+#: **여전히 실행하지 않는다. 다만 막는 것이 바뀌었다** (Phase 2-AK).
+#:
+#: 2-W 부터 적혀 있던 이유는 "``IsAbleToRemove`` 를 판정할 계층이 없다"
+#: 였고, **그 이유는 이제 없다** — ``MAY_BE_BANISHED`` 가 생겼다
+#: (:class:`~engine.effect.ruling.BoardRuling`). 그래서 다시 읽었고, 남은
+#: 두 가지를 찾았다.
+#:
+#: 1. ``aux.SpElimFilter`` — EDOPro 의 보조 함수다. 그 안을 읽지 않고는
+#:    무슨 조건인지 말할 수 없고, 읽지 않은 것을 "없는 조건" 으로 옮기면
+#:    후보가 넓어진다.
+#: 2. **공식 텍스트와 스크립트가 다른 자리를 가리킨다.**
+#:
+#:    ====================  ==========================================
+#:    공식 텍스트 (KO/EN)     "**상대의 묘지의** 카드 1장" /
+#:                           "1 card from your opponent's Graveyard"
+#:    ``c24623598.lua``      ``LOCATION_MZONE|LOCATION_GRAVE`` (상대 쪽)
+#:    ====================  ==========================================
+#:
+#:    스크립트는 상대 **필드의 몬스터**도 고를 수 있다. 어느 쪽이 맞는지
+#:    공식 재정으로 확인하지 않았으므로 옮기지 않는다 — 2-AJ 가
+#:    STRUCTURAL-96 을 닫은 방법이 그것이었다 (받아서 확인한 뒤에 적는다).
 #:
 #: 이 항목이 실린 이유는 **BANISH 가 실제 카드로 검증되지 않은 까닭을 한
-#: 곳에 적어 두기 위해서**다. 제외 계열 후보 14장이 전부 같은 이유로
-#: 걸린다 (Phase 2-W §1).
+#: 곳에 적어 두기 위해서**다. 이유가 바뀌었으므로 이유를 고쳐 적는다.
 _DISAPPEAR_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(DISAPPEAR, 0),
@@ -623,8 +675,9 @@ _DISAPPEAR_ENTRY = LibraryEntry(
     ),
     executable=False,
     note=(
-        "제외될 수 있는가(IsAbleToRemove)를 판정할 계층이 없고 "
-        "aux.SpElimFilter 의 내용을 읽지 않았다 (STRUCTURAL-48)"
+        "aux.SpElimFilter 의 내용을 읽지 않았고, 공식 텍스트(상대 묘지)와 "
+        "스크립트(상대 묘지 또는 몬스터 존)가 가리키는 자리가 다르다 "
+        "(Phase 2-AK 에서 다시 읽음 — IsAbleToRemove 는 더 이상 이유가 아니다)"
     ),
 )
 
@@ -962,6 +1015,70 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _INTRODUCTION_TO_GALLANTRY_ENTRY,
     # Phase 2-AI
     _RELOAD_ENTRY,
+)
+
+
+# ======================================================================
+# 조작 판정 지식 (Phase 2-AK · ADR-006)
+# ======================================================================
+
+#: **이 카드를 이렇게 해도 되는가** 에 답할 수 있는 카드들.
+#:
+#: :data:`EFFECT_LIBRARY` 와 **같은 규칙**으로 산다 — 손으로 등록하고,
+#: 등록되지 않은 카드는 ``UNKNOWN`` 이다. 다른 점은 여기 적히는 것이
+#: "무엇을 하는가" 가 아니라 **"무엇이 가능한가"** 라는 것뿐이다.
+#:
+#: 두 종류가 들어 있다.
+#:
+#: 1. **통상 몬스터** — 룰북 한 줄에서 전부 나온다
+#:    (:func:`~engine.effect.ruling.normal_monster_facts`). 효과가 없으므로
+#:    스스로를 지키지도, 남을 막지도 않는다.
+#: 2. **목록의 마법 · 함정** — 각 카드의 공식 텍스트 **전문**을 읽고,
+#:    다른 카드의 조작을 막는 문장이 없음을 확인했다. 확인한 것은 그것
+#:    하나이므로 :attr:`~engine.effect.ruling.CardRuleFacts.answers` 는
+#:    비어 있다 — "이 카드 자신을 패로 되돌릴 수 있는가" 는 묻지 않았다.
+#:
+#: 2번이 왜 필요한가: 판정은 카드 한 장만 보고 끝나지 않는다. 판에 깔린
+#: 것 중 **모르는 카드가 하나라도 있으면** 답은 ``UNKNOWN`` 이다
+#: (:meth:`~engine.effect.ruling.BoardRuling._interference`). 발동한 마법 ·
+#: 함정 자신도 앞면으로 필드에 있으므로 그 훑기에 걸린다.
+_SPELL_TRAP_READ = (
+    "공식 텍스트 전문을 읽었고, 다른 카드의 조작을 막는 문장이 없다"
+)
+
+#: 시험과 실제 실행에 쓰이는 통상 몬스터.
+FEATHERMAN = 21844576
+
+OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
+    (
+        normal_monster_facts(FEATHERMAN, "엘리멘틀 히어로 페더맨"),
+    )
+    + tuple(
+        CardRuleFacts(
+            card_id=card_id,
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=f"{name}: {_SPELL_TRAP_READ}",
+        )
+        for card_id, name in (
+            (POT_OF_GREED, "욕망의 항아리"),
+            (RAIN_OF_MERCY, "은혜의 단비"),
+            (MYSTICAL_SPACE_TYPHOON, "싸이크론"),
+            (DARK_HOLE, "블랙홀"),
+            (MONSTER_REBORN, "죽은 자의 소생"),
+            (DIAN_KETO, "치료의 신 다이안 켓"),
+            (THE_GIFT_OF_GREED, "욕망의 선물"),
+            (UPSTART_GOBLIN, "갑부 고블린"),
+            (SELF_MUMMIFICATION, "육신보살"),
+            (FINE, "벌금"),
+            (COMPULSORY_EVACUATION_DEVICE, "강제 탈출 장치"),
+            (DISAPPEAR, "로스트"),
+            (FOOLISH_BURIAL, "어리석은 매장"),
+            (RUTHLESS_DENIAL, "무정한 말살"),
+            (INTRODUCTION_TO_GALLANTRY, "의적의 입문서"),
+            (RELOAD, "리로드"),
+        )
+    )
 )
 
 

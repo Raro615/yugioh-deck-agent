@@ -231,15 +231,29 @@ def test_a_no_reachable_real_card_declares_the_discard_gate():
 # ======================================================================
 
 
-def test_b_the_four_questions_are_four_values():
-    """A · B · C · D 가 각각 이름을 갖는다."""
+def test_b_every_question_is_its_own_value():
+    """
+    A · B · C · D 가 각각 이름을 갖는다. Phase 2-AK 에서 E · F · G 가
+    더해져 일곱이 되었다.
+
+    원래 이름은 ``…_the_four_questions_are_four_values`` 였다. 잘못된
+    가정을 갖고 있었던 것이 아니라 **넷이 그때의 사실**이었고, 실측이
+    (``IsAbleToHand`` 94% · ``IsAbleToRemove`` 50% · ``IsAbleToDeck`` 67%)
+    셋을 더 요구했다. 이 시험이 지키는 것은 개수가 아니라 **합치지
+    않는다**는 것이므로 이름을 그쪽으로 바꾼다.
+    """
     assert {q.value for q in RuleQuestion} == {
         "may_be_sent_to_grave",  # A
         "may_be_discarded",  # B
         "may_be_targeted",  # C
         "operation_possible",  # D
+        "may_be_returned_to_hand",  # E — Phase 2-AK
+        "may_be_banished",  # F — Phase 2-AK
+        "may_be_returned_to_deck",  # G — Phase 2-AK
     }
     assert RuleQuestion.MAY_BE_SENT_TO_GRAVE is not RuleQuestion.MAY_BE_DISCARDED
+    # 일곱이 **일곱 개의 다른 값**이다. 하나라도 겹치면 질문이 뭉개진다.
+    assert len({q.value for q in RuleQuestion}) == len(list(RuleQuestion)) == 7
 
 
 def test_b_the_ruling_has_a_separate_method_for_each_question():
@@ -290,8 +304,19 @@ def test_b_asking_routes_to_the_matching_method():
     assert ask_movement(
         ruling, RuleQuestion.MAY_BE_DISCARDED, card
     ) is ConditionResult.FALSE
+    # **이동 판정기의 질문이 아닌 것**은 여전히 예외다. 부르는 쪽의
+    # 잘못이지 지식의 공백이 아니므로 UNKNOWN 으로 받아 주지 않는다.
     with pytest.raises(ValueError):
         ask_movement(ruling, RuleQuestion.MAY_BE_TARGETED, card)
+    with pytest.raises(ValueError):
+        ask_movement(ruling, RuleQuestion.OPERATION_POSSIBLE, card)
+
+    # 2-AK 가 더한 질문은 이동의 질문이 **맞다.** 다만 옛 판정기는 그것을
+    # 모르므로 UNKNOWN 이다 — 예외가 아니다. 모르는 것과 잘못 부른 것을
+    # 같은 모양으로 만들지 않는다.
+    assert ask_movement(
+        ruling, RuleQuestion.MAY_BE_RETURNED_TO_HAND, card
+    ) is ConditionResult.UNKNOWN
 
 
 def test_b_the_unasked_question_is_written_down_not_left_blank():
@@ -349,18 +374,32 @@ def test_c_not_declaring_is_the_default():
         assert factory(PRIMARY_TARGET).gated is False
 
 
-def test_c_only_the_two_kinds_may_declare_a_gate():
-    """파괴 · 특수 소환은 선언과 무관하게 언제나 판정을 받는다."""
+def test_c_a_gate_is_declarable_only_where_the_corpus_is_split():
+    """
+    파괴 · 특수 소환은 선언과 무관하게 언제나 판정을 받는다.
+
+    원래 이름은 ``…_only_the_two_kinds_may_declare_a_gate`` 였다. Phase
+    2-AK 에서 셋이 늘어 다섯이 됐고, 늘린 근거는 2-X 와 **같은 실측**이다 —
+    그 조작을 하는 카드 중 술어를 적는 비율이 100% 도 0% 도 아니다.
+
+        SendtoHand  2,587장 중 IsAbleToHand   2,437 (94%)
+        Remove      1,396장 중 IsAbleToRemove   711 (50%)
+        SendtoDeck    825장 중 IsAbleToDeck     557 (67%)
+
+    ``RELEASE`` 는 10% 뿐이지만 **더하지 않았다** — 이번에 필요한 카드가
+    없고, 필요 없는 것을 미리 열면 그것이 옳은지 아무도 확인하지 않는다.
+    """
     assert DECLARABLE_GATE_KINDS == frozenset(
-        {OperationKind.SEND_TO_GRAVE, OperationKind.DISCARD}
+        {
+            OperationKind.SEND_TO_GRAVE,
+            OperationKind.DISCARD,
+            OperationKind.RETURN_TO_HAND,
+            OperationKind.BANISH,
+            OperationKind.RETURN_TO_DECK,
+        }
     )
-    for kind in (
-        OperationKind.DESTROY,
-        OperationKind.BANISH,
-        OperationKind.RELEASE,
-        OperationKind.RETURN_TO_HAND,
-        OperationKind.RETURN_TO_DECK,
-    ):
+    # 종류로 언제나 막는 것과 아예 관문이 없는 것은 선언할 수 없다.
+    for kind in (OperationKind.DESTROY, OperationKind.RELEASE):
         with pytest.raises(ValueError, match="선언하는 것이 아닙니다"):
             CardOperation(kind, PRIMARY_TARGET, gated=True)
 

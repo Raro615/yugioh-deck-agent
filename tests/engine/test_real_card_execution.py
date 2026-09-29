@@ -321,7 +321,7 @@ def test_a_the_library_is_exactly_sixteen_real_cards():
     }
 
 
-def test_a_twelve_real_effect_refs_are_executable():
+def test_a_thirteen_real_effect_refs_are_executable():
     """
     §1 — ``LUA_VERIFIED`` + ``EffectRef`` + 등록된 구현. **이 셋이 다
     맞을 때만** ``EXECUTABLE`` 이다 (ADR-006).
@@ -330,9 +330,13 @@ def test_a_twelve_real_effect_refs_are_executable():
     아니다. 열둘 중 싸이크론은 파괴 관문에서, 어리석은 매장은 덱을
     관측할 수 없어서 멈춘다 — 둘 다 ``EXECUTABLE`` 이다.
 
-    Phase 2-AI 에서 열하나에서 열둘이 되었다. 이 테스트가 "열하나" 라는
-    잘못된 가정을 갖고 있었던 것이 아니라, 열하나가 그때의 사실이었고
-    리로드가 등록되면서 사실이 바뀌었다.
+    Phase 2-AI 에서 열하나에서 열둘이, Phase 2-AK 에서 열셋이 되었다.
+    이 테스트가 잘못된 가정을 갖고 있었던 것이 아니라 그때그때의 사실을
+    들고 있었고, 카드가 등록되면서 사실이 바뀌었다.
+
+    2-AK 가 더한 것은 강제 탈출 장치다. 2-W 부터 네 단계 동안 "패로
+    되돌릴 수 있는가를 판정할 계층이 없다" 로 실려 있었고, 그 계층이
+    생겼다 (:class:`~engine.effect.ruling.BoardRuling`).
     """
     executable = {
         entry.effect_ref
@@ -344,15 +348,30 @@ def test_a_twelve_real_effect_refs_are_executable():
         EffectRef(cid, 0)
         for cid in OLD_CARDS
         + NEW_CARDS
-        + (FOOLISH_BURIAL, RUTHLESS_DENIAL, INTRODUCTION_TO_GALLANTRY, RELOAD)
+        + (
+            FOOLISH_BURIAL,
+            RUTHLESS_DENIAL,
+            INTRODUCTION_TO_GALLANTRY,
+            RELOAD,
+            COMPULSORY_EVACUATION_DEVICE,  # Phase 2-AK
+        )
     }
-    assert len(executable) == 12
+    assert len(executable) == 13
 
 
 def test_a_every_declined_card_says_what_is_missing():
     """
     실행하지 않는 실제 카드를 **빼 버리지 않는다.** 빼면 "왜 못 하는가" 가
-    사라진다. 넷이 남아 있고 넷 다 이유를 들고 있다.
+    사라진다. 셋이 남아 있고 셋 다 이유를 들고 있다.
+
+    Phase 2-AK 에서 넷에서 셋이 되었다. 강제 탈출 장치가 빠진 것은 카드를
+    지워서가 아니라 **이유가 없어져서**다 — ``IsAbleToHand`` 에 답할 수
+    있게 됐다.
+
+    로스트는 남았지만 **이유가 바뀌었다.** 2-W 의 이유("IsAbleToRemove 를
+    판정할 계층이 없다")는 더 이상 참이 아니고, 다시 읽어 보니 두 가지가
+    남아 있었다 — ``aux.SpElimFilter`` 미확인, 그리고 공식 텍스트(상대
+    묘지)와 스크립트(상대 묘지 또는 몬스터 존)의 불일치.
     """
     declined = {
         entry.card_id: entry.note
@@ -363,16 +382,20 @@ def test_a_every_declined_card_says_what_is_missing():
     assert set(declined) == {
         DARK_HOLE,  # 파괴 의미 + 존 전체 일괄 처리
         MONSTER_REBORN,  # IsCanBeSpecialSummoned + 표시 형식
-        COMPULSORY_EVACUATION_DEVICE,  # IsAbleToHand
-        DISAPPEAR,  # IsAbleToRemove
+        DISAPPEAR,  # aux.SpElimFilter + 텍스트/스크립트 불일치 (2-AK 에서 갱신)
     }
+    # 더 이상 이유가 없는 것은 목록에 없다.
+    assert COMPULSORY_EVACUATION_DEVICE not in declined
     for card_id, note in declined.items():
         assert note, card_id
         assert availability(EffectRef(card_id, 0)) is (
             ExecutionAvailability.NO_IMPLEMENTATION
         )
-    # 막고 있는 것이 **관문 계층**이라는 것을 두 카드가 이름으로 말한다.
-    assert "IsAbleToHand" in declined[COMPULSORY_EVACUATION_DEVICE]
+    # 막고 있는 것을 **이름으로** 말한다. 2-AK 전에는 두 카드가
+    # ``IsAbleToHand`` · ``IsAbleToRemove`` 를 들고 있었고, 둘 다 이제
+    # 답할 수 있는 질문이다. 그래서 그 이름은 더 이상 이유가 아니다.
+    assert "aux.SpElimFilter" in declined[DISAPPEAR]
+    assert "IsCanBeSpecialSummoned" in declined[MONSTER_REBORN]
     assert "IsAbleToRemove" in declined[DISAPPEAR]
     assert "IsCanBeSpecialSummoned" in declined[MONSTER_REBORN]
 
@@ -398,6 +421,7 @@ def test_a_operation_coverage_by_real_cards():
         OperationKind.DISCARD,  # 벌금 (Phase 2-W)
         OperationKind.RETURN_TO_DECK,  # 리로드 (Phase 2-AI)
         OperationKind.SHUFFLE,  # 리로드 (Phase 2-AI)
+        OperationKind.RETURN_TO_HAND,  # 강제 탈출 장치 (Phase 2-AK)
     }
     # B. synthetic 으로만 검증된 종류 (STRUCTURAL-66)
     #
@@ -405,10 +429,12 @@ def test_a_operation_coverage_by_real_cards():
     # 것이 아니라 리로드가 실제로 그것을 쓴다 — c22589918.lua 의
     # ``Duel.SendtoDeck``. 옮겨 간 이유를 지우지 않으려고 목록에서 빼기만
     # 하지 않고 여기 적어 둔다.
+    # RETURN_TO_HAND 도 2-AK 에서 B 를 떠나 A 로 갔다. 억지로 옮긴 것이
+    # 아니라 강제 탈출 장치가 실제로 그것을 쓴다 — c94192409.lua 의
+    # ``Duel.SendtoHand``.
     assert not by_real & {
         OperationKind.BANISH,
         OperationKind.RELEASE,
-        OperationKind.RETURN_TO_HAND,
         OperationKind.SPECIAL_SUMMON,
     }
     # C. 실제 카드가 될 수 없는 것 · 실행되지 않는 것
@@ -1053,7 +1079,7 @@ def test_k_unsupported_operation_is_unreachable_from_real_cards():
     ]
 
     assert unknown_ops == []
-    for card_id in (DARK_HOLE, MONSTER_REBORN, COMPULSORY_EVACUATION_DEVICE, DISAPPEAR):
+    for card_id in (DARK_HOLE, MONSTER_REBORN, DISAPPEAR):
         entry = entry_for(EffectRef(card_id, 0))
         assert entry.definition.operations == ()
         assert availability(entry.effect_ref) is (
@@ -1085,10 +1111,15 @@ def test_k_an_effect_ref_outside_the_library_has_no_implementation():
 
 def test_k_a_declined_real_card_cannot_be_activated(state):
     """
-    §10 — implementation missing. 강제 탈출 장치는 **발동 단계에서**
-    멈춘다. 체인에 아무것도 올라가지 않는다.
+    §10 — implementation missing. 로스트는 **발동 단계에서** 멈춘다.
+    체인에 아무것도 올라가지 않는다.
+
+    Phase 2-AK 전에는 이 시험이 강제 탈출 장치를 예로 썼고, 그 카드가
+    실행되기 시작하면서 예를 바꿨다. 보는 것은 카드가 아니라 **거절된
+    카드의 발동이 어디서 멈추는가**이므로, 여전히 거절된 카드 중 하나를
+    쓰면 된다.
     """
-    definition = entry_for(EffectRef(COMPULSORY_EVACUATION_DEVICE, 0)).definition
+    definition = entry_for(EffectRef(DISAPPEAR, 0)).definition
     assert execution_availability(definition, implementation_registry()) is (
         ExecutionAvailability.NO_IMPLEMENTATION
     )
@@ -1102,7 +1133,7 @@ def test_k_a_declined_real_card_cannot_be_activated(state):
         PlayerAction.activate_effect(
             actor=MINE,
             source=borrowed,  # 자리만 빌린다
-            effect_ref=EffectRef(COMPULSORY_EVACUATION_DEVICE, 0),
+            effect_ref=EffectRef(DISAPPEAR, 0),
         ),
         (),
         authorization=GRANTED,

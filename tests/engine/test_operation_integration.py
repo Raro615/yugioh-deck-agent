@@ -877,8 +877,9 @@ def test_h_no_real_card_uses_move_or_special_summon_yet():
     일이다. Phase 2-W 에서 실제 카드 다섯 장이 더해지며 실제로 깨졌고,
     ``SEND_TO_GRAVE`` · ``DISCARD`` 가 여기 들어왔다. Phase 2-AI 에서
     리로드가 더해지며 다시 깨졌고 ``RETURN_TO_DECK`` · ``SHUFFLE`` 이
-    들어왔다. 요점(MOVE 와 특수 소환에는 아직 실제 카드가 없다)은
-    그대로다 — 리로드는 둘 다 쓰지 않는다.
+    들어왔다. Phase 2-AK 에서 강제 탈출 장치가 ``RETURN_TO_HAND`` 를
+    가져왔다. 요점(MOVE 와 특수 소환에는 아직 실제 카드가 없다)은
+    그대로다 — 둘 다 쓰지 않는다.
     """
     from engine.effect.library import EFFECT_LIBRARY
 
@@ -897,6 +898,7 @@ def test_h_no_real_card_uses_move_or_special_summon_yet():
         OperationKind.DISCARD,  # Phase 2-W — 벌금
         OperationKind.RETURN_TO_DECK,  # Phase 2-AI — 리로드
         OperationKind.SHUFFLE,  # Phase 2-AI — 리로드
+        OperationKind.RETURN_TO_HAND,  # Phase 2-AK — 강제 탈출 장치
     }
     assert OperationKind.MOVE not in kinds
     assert OperationKind.SPECIAL_SUMMON not in kinds

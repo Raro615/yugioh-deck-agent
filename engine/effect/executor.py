@@ -111,6 +111,7 @@ from engine.randomness import RandomError, RandomOutcome, RandomPurpose
 from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.effect.semantics import (
     MISSING_GATE,
+    QUESTION_VERBS,
     DestructionRuling,
     MovementRuling,
     SummonRuling,
@@ -1512,7 +1513,9 @@ class EffectExecutor:
             # **카드가 선언한** 관문 (Phase 2-X). 선언하지 않은 같은 종류의
             # 일은 여기 오지 않는다 — 원본 스크립트가 묻지 않기 때문이다.
             verdict = ask_movement(self._movement, question, instance)
-            word = "묘지로 보낼" if kind is OperationKind.SEND_TO_GRAVE else "버릴"
+            # 동사는 **질문이** 들고 있다 (Phase 2-AK). 종류가 둘일 때는
+            # 삼항으로 됐지만 다섯이 되면 그 자리가 거짓말을 하기 쉽다.
+            word = QUESTION_VERBS[question]
             refusal = f"{instance} 는 {word} 수 없다고 판정되었습니다."
             unknown = f"{instance} 를 {word} 수 있는지 판정할 수 없습니다"
         else:

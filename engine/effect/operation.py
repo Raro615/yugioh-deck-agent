@@ -190,8 +190,21 @@ SEMANTIC_CARD_KINDS: frozenset[OperationKind] = CARD_OPERATION_KINDS
 #: 그러므로 이 둘의 관문은 **종류가 아니라 효과가 선언한다.** 선언은
 #: :attr:`CardOperation.gated` 한 칸이고, 그 값은 원본 스크립트를 읽어서
 #: 정한다 — 추측하지 않는다.
+#: Phase 2-AK 에서 셋이 늘었다. 같은 실측이 같은 답을 준다 —
+#: ``Duel.SendtoHand`` 2,587장 중 ``IsAbleToHand`` 를 적는 것 2,437장(94%),
+#: ``Duel.Remove`` 1,396장 중 ``IsAbleToRemove`` 711장(50%),
+#: ``Duel.SendtoDeck`` 825장 중 ``IsAbleToDeck`` 557장(67%).
+#:
+#: **셋 다 100% 가 아니다.** 그러므로 "언제나 물어진다" 로 종류에 박으면
+#: 묻지 않는 카드까지 막게 된다. 50% 인 제외가 특히 그렇다.
 DECLARABLE_GATE_KINDS: frozenset[OperationKind] = frozenset(
-    {OperationKind.SEND_TO_GRAVE, OperationKind.DISCARD}
+    {
+        OperationKind.SEND_TO_GRAVE,
+        OperationKind.DISCARD,
+        OperationKind.RETURN_TO_HAND,
+        OperationKind.BANISH,
+        OperationKind.RETURN_TO_DECK,
+    }
 )
 
 
@@ -400,8 +413,14 @@ class CardOperation(Operation):
         return cls(OperationKind.SEND_TO_GRAVE, target_ref, gated=gated)
 
     @classmethod
-    def banish(cls, target_ref: TargetRef) -> "CardOperation":
-        return cls(OperationKind.BANISH, target_ref)
+    def banish(
+        cls, target_ref: TargetRef, *, gated: bool = False
+    ) -> "CardOperation":
+        """
+        제외한다. ``gated`` 는 원본이 ``Card.IsAbleToRemove`` 를 적었는지다
+        (Phase 2-AK). 절반만 적으므로 기본값은 거짓이다.
+        """
+        return cls(OperationKind.BANISH, target_ref, gated=gated)
 
     @classmethod
     def release(cls, target_ref: TargetRef) -> "CardOperation":
@@ -419,12 +438,18 @@ class CardOperation(Operation):
         return cls(OperationKind.DISCARD, target_ref, gated=gated)
 
     @classmethod
-    def return_to_hand(cls, target_ref: TargetRef) -> "CardOperation":
-        return cls(OperationKind.RETURN_TO_HAND, target_ref)
+    def return_to_hand(
+        cls, target_ref: TargetRef, *, gated: bool = False
+    ) -> "CardOperation":
+        """패로 되돌린다. ``gated`` 는 원본의 ``Card.IsAbleToHand`` 다."""
+        return cls(OperationKind.RETURN_TO_HAND, target_ref, gated=gated)
 
     @classmethod
-    def return_to_deck(cls, target_ref: TargetRef) -> "CardOperation":
-        return cls(OperationKind.RETURN_TO_DECK, target_ref)
+    def return_to_deck(
+        cls, target_ref: TargetRef, *, gated: bool = False
+    ) -> "CardOperation":
+        """덱으로 되돌린다. ``gated`` 는 원본의 ``Card.IsAbleToDeck`` 다."""
+        return cls(OperationKind.RETURN_TO_DECK, target_ref, gated=gated)
 
     def canonical_state(self) -> tuple:
         return (
