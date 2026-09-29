@@ -1256,3 +1256,75 @@ def test_g_the_registry_is_not_a_default(repository):
 
     assert resolved.status is not ChainResolutionStatus.RESOLVED
     assert state.state_hash() == before
+
+
+# ======================================================================
+# H. Phase 2-AM — 판정 계층이 실행 경로에서 안전한가 (§0)
+# ======================================================================
+
+
+@pytest.mark.real_card
+def test_h_an_ungated_effect_is_untouched_by_the_ruling_layer(repository):
+    """
+    **관문을 선언하지 않은 카드는 판정기를 아예 부르지 않는다.**
+
+    욕망의 항아리는 드로우 하나뿐이고 관문이 없다. ``rulings`` 를 주든
+    말든 **같은 판**이 나와야 하고, 판정기를 만드는 일조차 없어야 한다 —
+    그래야 "판정 계층을 켰더니 상관없는 카드가 달라졌다" 가 생기지 않는다.
+    """
+    calls = []
+    original = EffectExecutor._movement_ruling
+
+    def counted(self, board, instance):
+        calls.append(instance)
+        return original(self, board, instance)
+
+    EffectExecutor._movement_ruling = counted
+    try:
+        plain = evacuation_state(repository, seed=9)
+        with_layer = evacuation_state(repository, seed=9)
+        assert plain.state_hash() == with_layer.state_hash()
+
+        registry = definition_registry()
+        for game, rulings in ((plain, None), (with_layer, OPERATION_RULINGS)):
+            resolver = ChainResolver(build_executor(rulings=rulings), registry)
+            activator = EffectActivator(registry, implementation_registry())
+            activated = activator.activate(
+                game,
+                Chain(),
+                PlayerAction.activate_effect(
+                    actor=MINE,
+                    source=game.player(MINE).spell_zone[0].instance_id,
+                    effect_ref=EffectRef(POT_OF_GREED, 0),
+                ),
+                (),
+                authorization=GRANTED,
+            )
+            assert activated.status is ActivationStatus.ACTIVATED
+            assert resolver.resolve_top(game, activated.chain).status is (
+                ChainResolutionStatus.RESOLVED
+            )
+
+        assert plain.state_hash() == with_layer.state_hash()
+        assert calls == []  # 관문이 없으므로 판정기를 만들지도 않았다
+    finally:
+        EffectExecutor._movement_ruling = original
+
+
+@pytest.mark.real_card
+def test_h_the_layer_is_deterministic_across_repeated_runs(repository):
+    """
+    같은 지식 · 같은 씨앗이면 **몇 번을 돌려도 같은 판**이다. 판정기가
+    판마다 새로 만들어지는데도 그렇다는 것이 요점이다 (2-AL).
+    """
+    hashes = set()
+    for _ in range(3):
+        game = evacuation_state(repository, seed=12)
+        evacuate(
+            game,
+            game.player(THEIRS).monster_zone[0].instance_id,
+            rulings=OPERATION_RULINGS,
+        )
+        hashes.add(game.state_hash())
+
+    assert len(hashes) == 1

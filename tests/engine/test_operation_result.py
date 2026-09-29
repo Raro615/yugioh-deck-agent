@@ -273,6 +273,30 @@ def test_c_a_failed_operation_leaves_no_result_at_all(state):
     untouched(state, before, hand, result)
 
 
+def _produces_an_outcome(function: ast.FunctionDef) -> bool:
+    """
+    이 함수가 ``OperationOutcome`` 을 **만들어 내는가** (Phase 2-AM).
+
+    비교(``x is OperationOutcome.NOT_APPLIED``)로만 쓰면 거짓이다 — 그것은
+    이미 정해진 성패를 **읽는** 것이다. 대입 · 반환 · 인자로 넘기면 참이다.
+    """
+    comparisons = {
+        id(node)
+        for compare in ast.walk(function)
+        if isinstance(compare, ast.Compare)
+        for node in [compare.left, *compare.comparators]
+    }
+    for node in ast.walk(function):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "OperationOutcome"
+            and id(node) not in comparisons
+        ):
+            return True
+    return False
+
+
 def test_c_count_is_never_read_as_success_in_the_engine():
     """
     §30 — ``affected_count == 0`` 을 실패로 접는 코드가 없다.
@@ -287,12 +311,21 @@ def test_c_count_is_never_read_as_success_in_the_engine():
     # 날카롭게 했다). 장수끼리 비교하는 것은 장수 질문이고 (``did_nothing``
     # 은 "하나도 못 했는가" 이지 "실패했는가" 가 아니다), 막아야 하는 것은
     # **성패를 장수에서 뽑아내는 것**이다.
+    #
+    # Phase 2-AM 에서 "둘을 함께 언급하면 실패" 라는 방식이 **방향을 보지
+    # 못한다**는 것이 드러났다. ``OperationResult.__post_init__`` 은 둘을
+    # 함께 언급하지만 하는 일이 정반대다 — 성패를 **읽어서** 장수를
+    # 거절한다 ("하지 않은 일에는 장수가 없다").
+    #
+    # 막아야 하는 방향은 **장수 → 성패** 하나다. 그러므로 검사도 그쪽으로
+    # 좁힌다: ``OperationOutcome`` 이 **값으로 쓰이는** 함수(성패를 만드는
+    # 함수)만 장수를 보지 못한다. 비교로만 쓰는 함수는 성패를 읽을 뿐이다.
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
-        body = ast.unparse(node)
-        if "OperationOutcome" not in body:
+        if not _produces_an_outcome(node):
             continue
+        body = ast.unparse(node)
         assert "affected_count" not in body, node.name
         assert "attempted_count" not in body, node.name
 
@@ -1009,3 +1042,213 @@ def test_u_a_literal_domain_did_not_need_this_phase():
             BoardQuantity(QuantitySource.LIFE_POINTS, PlayerRef.CONTROLLER), 1000
         )
     ).is_derived
+
+
+# ======================================================================
+# H. Phase 2-AM — 결과 모델의 경계
+# ======================================================================
+#
+# 감사 결과를 값으로 고정한다. 새 모델을 만들지 않았다 — 이미 있는 것이
+# 무엇을 말하고 무엇을 말하지 않는지를 못박는다.
+
+
+def test_h_the_engine_only_ever_makes_five_kinds_of_result():
+    """
+    **실측이다.** ``tests/engine`` 전체를 돌리며 값 계층에 들어간
+    ``OperationResult`` 778건을 훑으면 실행기가 만드는 것은 다섯 모양뿐이다.
+
+    ::
+
+        시도=n 처리=n  unknown    완료     333   묘지로 · 버리기 · 파괴
+        시도=n 처리=n  succeeded  완료     289   되돌리기 · 드로우
+        시도=- 처리=-  succeeded          111   라이프 증감 · 셔플 (장수 없음)
+        시도=n 처리=m  unknown    부분      20   "가능한 만큼"
+        시도=- 처리=-  not_applied         15   조건이 거짓이라 건너뜀
+
+    나머지는 시험이 손으로 만든 것이다. 이 다섯이 **엔진이 실제로 말할 수
+    있는 전부**다.
+    """
+    kinds = {
+        "일어났고 규칙을 다 봤다": OperationResult(
+            0, affected_count=2, attempted_count=2
+        ),
+        "일어났지만 규칙을 다 보지 못했다": OperationResult(
+            0, affected_count=2, attempted_count=2,
+            outcome=OperationOutcome.UNKNOWN,
+        ),
+        "장수를 세지 않는 일": OperationResult(0),
+        "일부만 했다": OperationResult(0, affected_count=1, attempted_count=2),
+        "하지 않았다": OperationResult(0, outcome=OperationOutcome.NOT_APPLIED),
+    }
+
+    assert kinds["하지 않았다"].was_applied is False
+    assert all(r.was_applied for name, r in kinds.items() if name != "하지 않았다")
+    assert kinds["일부만 했다"].is_partial
+    assert kinds["일어났고 규칙을 다 봤다"].is_complete
+    assert kinds["장수를 세지 않는 일"].affected_count is None
+
+
+def test_h_did_nothing_is_a_state_the_engine_never_reaches():
+    """
+    **모델이 이름을 가진 상태를 엔진이 만들지 못한다.**
+
+    ``did_nothing`` 은 "하려고 했는데 하나도 못 했다" 다. 실측 778건 중
+    **0건**이고, 코드를 읽어도 나올 수 없다 — 고른 것이 전부 거절되면
+    계획이 ``INVALID_TARGET`` 으로 **실패**하므로 결과가 남지 않는다
+    (``_plan_card_operation`` 의 ``if refused and not instances``).
+
+    결함이라고 부르지 않는다. 구분 자체는 옳고 (``0장을 다뤘다`` 와
+    ``하지 않았다`` 는 다른 사실이다), 다만 **지금은 도달할 수 없다** 는
+    것을 적어 둔다 — 그 위에 무언가를 쌓으려는 다음 사람을 위해서다.
+    """
+    possible = OperationResult(0, affected_count=0, attempted_count=2)
+    assert possible.did_nothing is True
+    assert possible.is_partial is False
+    assert possible.is_complete is False
+
+    # 엔진이 그것을 만들려면 "전부 거절됐는데 결과가 남는" 길이 있어야 한다.
+    source = (ROOT / "engine" / "effect" / "executor.py").read_text("utf-8")
+    assert "if refused and not instances:" in source
+    assert "did_nothing" not in source
+
+
+def test_h_a_skipped_operation_may_not_carry_counts():
+    """
+    **Phase 2-AG 가 적어 둔 규칙을 Phase 2-AM 이 타입으로 옮겼다.**
+
+        "건너뛴 일에는 장수가 없다. 0 이 아니다."
+
+    적혀만 있고 막지 않으면 **모순이 만들어진다** — ``was_applied`` 는
+    거짓인데 ``is_complete`` 는 참인 결과, 곧 "하지 않았는데 전부 했다".
+    """
+    with pytest.raises(ValueError, match="하지 않은 일에는 장수가"):
+        OperationResult(
+            0,
+            affected_count=0,
+            attempted_count=0,
+            outcome=OperationOutcome.NOT_APPLIED,
+        )
+    with pytest.raises(ValueError, match="하지 않은 일에는 장수가"):
+        OperationResult(
+            0, affected_count=3, outcome=OperationOutcome.NOT_APPLIED
+        )
+
+    # 장수가 없으면 멀쩡하다 — 실행기가 만드는 모양이 그것이다.
+    skipped = OperationResult(0, outcome=OperationOutcome.NOT_APPLIED)
+    assert skipped.was_applied is False
+    assert skipped.is_complete is False
+
+
+def test_h_you_cannot_do_more_than_you_tried():
+    """
+    처리한 수가 시도한 수보다 많으면 ``is_partial`` 도 ``is_complete`` 도
+    거짓인 **이름 없는 상태**가 된다. 실측으로는 나온 적이 없지만, 나오면
+    아무도 알아채지 못한다.
+    """
+    with pytest.raises(ValueError, match="처리한 수가 시도한 수보다"):
+        OperationResult(0, affected_count=3, attempted_count=2)
+
+
+def test_h_an_unknown_operation_still_has_a_real_count():
+    """
+    **Q8** — 2-AH 의 네 갈래와 성패는 **다른 축**이고 충돌하지 않는다.
+
+    규칙을 다 보지 못한 일도 **일어나기는 했으므로** 그 수는 진짜다.
+    뒤의 일이 그 수를 읽는 것을 엔진이 막지 않는다 — 막아야 하는 카드는
+    :class:`OperationRequirement` 로 **스스로 적는다**.
+    """
+    from engine.execution import ResultAvailability
+
+    values = ExecutionValues().with_result(
+        OperationResult(
+            0,
+            affected_count=2,
+            attempted_count=2,
+            outcome=OperationOutcome.UNKNOWN,
+        )
+    )
+    lookup = values.look_up(ResultRef(0, ResultField.AFFECTED_COUNT))
+
+    assert lookup.availability is ResultAvailability.AVAILABLE
+    assert lookup.value == 2
+
+    skipped = ExecutionValues().with_result(
+        OperationResult(0, outcome=OperationOutcome.NOT_APPLIED)
+    )
+    assert skipped.look_up(ResultRef(0)).availability is (
+        ResultAvailability.NOT_APPLIED
+    )
+    assert skipped.look_up(ResultRef(0)).value is None  # 0 이 아니다
+
+
+def test_h_success_is_not_a_number_and_a_number_is_not_success():
+    """
+    **Q7** — ``ResultRef`` 로 수를 가리키고, 성패는
+    :class:`OperationRequirement` 로만 가리킨다. 두 길이 섞이지 않는다.
+    """
+    with pytest.raises(KeyError):
+        OperationResult(0, affected_count=2).value_of(ResultField.SUCCEEDED)
+
+    with pytest.raises(ValueError, match="성패뿐입니다"):
+        OperationRequirement(1, ResultRef(0, ResultField.AFFECTED_COUNT))
+
+    assert OperationRequirement(1, ResultRef(0, ResultField.SUCCEEDED))
+
+
+def test_h_there_is_no_failed_outcome_and_that_is_the_point():
+    """
+    **Q6** — "판정할 수 없다" 와 "효과가 실패했다" 는 **다른 계층**이 답한다.
+
+    ============================  ======================================
+    ``OperationOutcome.UNKNOWN``   일어났지만 규칙대로였는지 모른다
+    ``ResolutionStatus.*``         효과가 실패했다 — 판은 그대로다
+    ============================  ======================================
+
+    조작에 ``FAILED`` 가 없는 이유는 **만들어질 수 없기 때문**이다. 계획이
+    막히면 효과 전체가 거절되고 그 조작의 결과는 남지 않는다.
+    """
+    assert [o.value for o in OperationOutcome] == [
+        "succeeded",
+        "not_applied",
+        "unknown",
+    ]
+    assert not hasattr(OperationOutcome, "FAILED")
+
+
+def test_h_a_blind_spot_does_not_make_the_outcome_unknown():
+    """
+    **STRUCTURAL-100 의 답.** 두 칸이 **다른 질문**에 답한다.
+
+    ==============================  ====================================
+    ``OperationOutcome.UNKNOWN``     이 조작이 주장한 의미의 규칙 중
+                                     엔진이 **아예 옮기지 못한 것**이 있다
+    ``EffectResult.unchecked_rules``  이 실행이 **보지 못한 것** 전부
+                                     (위의 것 + 판정 한 번의 사각지대)
+    ==============================  ====================================
+
+    사각지대를 성패로 옮기지 **않는** 이유는 그렇게 하면 일관성이
+    깨지기 때문이다. "숨은 카드가 막았을 수 있다" 는 의심은 관문이 있는
+    조작만의 것이 아니다 — 지속 효과 계층이 아예 없으므로
+    (STRUCTURAL-76) 드로우도 라이프 증감도 똑같이 의심스럽다. 관문이 있는
+    조작만 ``UNKNOWN`` 으로 표시하면 그 칸의 뜻이 "확인 못 했다, 단
+    우리가 확인 못 한 다른 것들은 빼고" 가 된다.
+
+    그래서 사각지대는 **실행 단위의 사실**로 남기고, 성패는 **모델링
+    범위**를 말하는 자리로 둔다.
+    """
+    source = (ROOT / "engine" / "effect" / "executor.py").read_text("utf-8")
+    tree = ast.parse(source)
+
+    # 성패를 정하는 자리는 **종류별 표** 하나만 본다.
+    (result_method,) = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "result"
+    ]
+    body = ast.unparse(result_method)
+    assert "unchecked_rules(self.operation.kind)" in body
+    assert "blind" not in body
+
+    # 사각지대는 **결과**로 나간다.
+    assert "step.blind" in source
+    assert "unchecked_rules=tuple(unchecked)" in source

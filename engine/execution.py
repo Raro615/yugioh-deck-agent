@@ -923,6 +923,14 @@ class OperationResult:
     operation_index: int
     affected_count: "int | None" = None
     outcome: OperationOutcome = OperationOutcome.SUCCEEDED
+    """
+    규칙대로 되었는가 (Phase 2-AE). **장수와 독립이다** —
+    ``affected_count == 0`` 을 실패로 읽지 않는다.
+
+    (이 설명은 Phase 2-AM 까지 ``attempted_count`` 아래에 떠 있었다. 칸
+    순서가 바뀔 때 함께 옮겨지지 않아 ``outcome`` 에는 설명이 **없고**
+    ``attempted_count`` 에는 남의 설명이 붙어 있던 셈이다.)
+    """
     attempted_count: "int | None" = None
     """
     **하려고 한** 수 (Phase 2-AF). ``None`` 이면 세지 않는 종류의 일이다.
@@ -930,10 +938,40 @@ class OperationResult:
     부분 적용은 이 둘의 관계로 읽는다. 상태를 하나 더 만들지 않은 이유는
     **파생되기 때문**이다 — 저장하면 두 값이 어긋날 수 있다.
     """
-    """
-    규칙대로 되었는가 (Phase 2-AE). **장수와 독립이다** —
-    ``affected_count == 0`` 을 실패로 읽지 않는다.
-    """
+
+    def __post_init__(self) -> None:
+        if self.operation_index < 0:
+            raise ValueError(
+                f"조작 번호는 0 이상입니다: {self.operation_index}"
+            )
+        if self.outcome is OperationOutcome.NOT_APPLIED and not (
+            self.affected_count is None and self.attempted_count is None
+        ):
+            # **하지 않은 일에는 장수가 없다** (Phase 2-AG 가 적어 둔 규칙을
+            # Phase 2-AM 이 타입으로 옮긴다).
+            #
+            # 적혀만 있고 막지 않으면 모순이 만들어진다:
+            # ``NOT_APPLIED`` + ``attempted=0`` + ``affected=0`` 은
+            # ``was_applied`` 가 거짓인데 ``is_complete`` 는 참인 결과다 —
+            # "하지 않았는데 전부 했다".
+            raise ValueError(
+                f"{self.operation_index}번: 하지 않은 일에는 장수가 "
+                f"없습니다 (시도 {self.attempted_count}, 처리 "
+                f"{self.affected_count}). 0 은 '0장을 다뤘다' 는 **사실**이고 "
+                "'하지 않았다' 와 다릅니다."
+            )
+        if (
+            self.attempted_count is not None
+            and self.affected_count is not None
+            and self.affected_count > self.attempted_count
+        ):
+            # 하려던 것보다 더 할 수는 없다. 이쪽은 실측으로는 나온 적이
+            # 없지만, 나오면 ``is_partial`` 과 ``is_complete`` 가 둘 다
+            # 거짓인 **이름 없는 상태**가 된다.
+            raise ValueError(
+                f"{self.operation_index}번: 처리한 수가 시도한 수보다 "
+                f"많습니다 ({self.affected_count} > {self.attempted_count})."
+            )
 
     @property
     def was_applied(self) -> bool:
