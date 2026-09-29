@@ -34,8 +34,8 @@ import pytest
 from engine.action import PlayerAction
 from engine.activation import ActivationStatus, EffectActivator
 from engine.chain import Chain, ChainResolutionStatus, ChainResolver
-from engine.condition import ConditionResult
-from engine.cost import Selection
+from engine.condition import ConditionResult, PlayerRef
+from engine.cost import CandidateSource, ChoiceSpec, Selection
 from engine.effect.delta import ZoneMoved
 from engine.effect.journal import EventJournal
 from engine.effect.library import (
@@ -54,8 +54,15 @@ from engine.effect.operation import (
     CardOperation,
     OperationKind,
 )
-from engine.effect.resolution import ResolutionStatus, TargetSelection
+from engine.effect.definition import EffectDefinition, EffectProvenance
+from engine.effect.executor import EffectExecutor, EffectImplementationRegistry
+from engine.effect.resolution import (
+    ResolutionContext,
+    ResolutionStatus,
+    TargetSelection,
+)
 from engine.effect.ruling import (
+    BLIND_ZONE,
     NORMAL_MONSTER_RULE,
     TOKEN_FORBIDDEN,
     TOKEN_RULE,
@@ -78,7 +85,12 @@ from engine.effect.semantics import (
     UnknownMovementRuling,
     ask_movement,
 )
-from engine.effect.target import PRIMARY_TARGET
+from engine.effect.target import (
+    PRIMARY_TARGET,
+    TargetBinding,
+    TargetRef,
+    TargetSpec,
+)
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
 from engine.state.game_state import GameState
@@ -144,7 +156,14 @@ def board_ruling(state: GameState, registry=OPERATION_RULINGS) -> BoardRuling:
     return BoardRuling(GameStateView.from_state(state, viewer=MINE), registry)
 
 
-def evacuate(state: GameState, target: InstanceId, *, movement=None, journal=None):
+def evacuate(
+    state: GameState,
+    target: InstanceId,
+    *,
+    movement=None,
+    rulings=None,
+    journal=None,
+):
     """**기존 경로를 그대로 지난다.** 발동 → 체인 → 해결."""
     registry = definition_registry()
     activator = EffectActivator(registry, implementation_registry())
@@ -162,7 +181,9 @@ def evacuate(state: GameState, target: InstanceId, *, movement=None, journal=Non
     )
     if activated.status is not ActivationStatus.ACTIVATED:
         return activated, None
-    resolver = ChainResolver(build_executor(journal, movement=movement), registry)
+    resolver = ChainResolver(
+        build_executor(journal, movement=movement, rulings=rulings), registry
+    )
     return activated, resolver.resolve_top(state, activated.chain)
 
 
@@ -592,11 +613,30 @@ def test_d_what_is_not_scanned_is_written_down(state):
     """
     **빈 칸으로 두지 않는다.** 패를 훑지 않는다는 것은 한계이고, 한계를
     값으로 들고 있어야 문서만 남고 코드가 잊는 일이 없다.
-    """
-    limits = board_ruling(state).scope_limits()
 
-    assert any("패" in line for line in limits)
-    assert any("STRUCTURAL-98" in line for line in limits)
+    Phase 2-AK 는 이것을 ``BoardRuling.scope_limits()`` 로 갖고 있었고,
+    2-AL 이 :attr:`RulingVerdict.unchecked` 로 옮겼다. **잘못된 책임
+    배치였다** — 판정마다 달라지지 않는 상수를 판정기의 메서드로 두면
+    "이 답이 무엇을 못 봤는가" 를 말할 수 없다. 자세한 것은
+    ``test_g_*`` 가 본다.
+    """
+    target = state.player(THEIRS).monster_zone[0].instance_id
+
+    # 이 판은 양쪽 패가 비어 있다 — **못 본 것이 없다.**
+    assert len(state.player(MINE).hand) == 0
+    assert len(state.player(THEIRS).hand) == 0
+    clean = board_ruling(state).explain(RuleQuestion.MAY_BE_RETURNED_TO_HAND, target)
+    assert clean.answer is ConditionResult.TRUE
+    assert clean.unchecked == ()
+
+    # 패에 카드가 생기면 **그때부터** 못 본 것이 생긴다.
+    state.draw(THEIRS, 2)
+    seen = board_ruling(state).explain(RuleQuestion.MAY_BE_RETURNED_TO_HAND, target)
+    assert seen.answer is ConditionResult.TRUE
+    assert any("패 2장" in line for line in seen.unchecked)
+    assert any("STRUCTURAL-98" in line for line in seen.unchecked)
+
+    assert not hasattr(board_ruling(state), "scope_limits")
 
 
 def test_d_destruction_and_summoning_are_still_unknown(state):
@@ -850,3 +890,369 @@ def test_f_no_spell_or_trap_claims_to_be_returnable(repository):
     assert facts.answers == {}
     assert facts.restricts_others is False
     assert facts.restriction_basis is RuleBasis.CARD_TEXT
+
+
+# ======================================================================
+# G. Phase 2-AL — 적용 가능성과 범위의 경계
+# ======================================================================
+#
+# 2-AK 가 남긴 두 가지를 여기서 본다.
+#
+#   STRUCTURAL-98  판정이 **무엇을 못 봤는가** 를 실을 자리
+#   STRUCTURAL-99  판정기가 **어느 시점의 판**을 보는가
+#
+# 둘은 같은 질문의 앞뒤다 — "이 판정은 어떤 범위를 보고 내린 답인가".
+
+
+def test_g_the_blind_spot_is_per_call_not_a_constant(repository):
+    """
+    **2-AK 의 ``scope_limits()`` 는 잘못된 책임 배치였다.**
+
+    그것은 판정마다 달라지지 않는 **모듈 상수**를 판정기의 메서드로 둔
+    것이었다. 그래서 양쪽 패가 비어 어떤 것도 놓치지 않은 판정과, 상대
+    패 5장을 못 본 판정이 **같은 문장**을 돌려주었다. 답의 성질이 아니라
+    함수의 성질을 적고 있었던 셈이다.
+
+    지금은 :attr:`RulingVerdict.unchecked` 가 **그 판정이 실제로 못 본
+    것**을 말한다.
+    """
+    empty = evacuation_state(repository)
+    target = empty.player(THEIRS).monster_zone[0].instance_id
+    assert board_ruling(empty).explain(
+        RuleQuestion.MAY_BE_RETURNED_TO_HAND, target
+    ).unchecked == ()
+
+    for count in (1, 3):
+        state = evacuation_state(repository)
+        state.draw(THEIRS, count)
+        verdict = board_ruling(state).explain(
+            RuleQuestion.MAY_BE_RETURNED_TO_HAND,
+            state.player(THEIRS).monster_zone[0].instance_id,
+        )
+        assert verdict.answer is ConditionResult.TRUE
+        assert len(verdict.unchecked) == 1
+        assert f"패 {count}장" in verdict.unchecked[0]
+
+
+def test_g_a_concealed_hand_still_reports_its_size(repository):
+    """
+    가려진 자리의 ``cards`` 는 **비어 있다.** 그것을 "패가 없다" 로 읽으면
+    못 본 것을 못 봤다고 말하게 된다. 장수는 가려진 자리에서도 공개된
+    사실이므로 ``size`` 로 센다.
+    """
+    state = evacuation_state(repository)
+    state.draw(THEIRS, 2)
+    view = GameStateView.from_state(state, viewer=MINE)
+    hand = view.player(THEIRS).zone(Zone.HAND)
+
+    assert hand.concealed is True
+    assert hand.cards == ()
+    assert hand.size == 2
+
+    verdict = board_ruling(state).explain(
+        RuleQuestion.MAY_BE_RETURNED_TO_HAND,
+        state.player(THEIRS).monster_zone[0].instance_id,
+    )
+    assert "패 2장" in verdict.unchecked[0]
+
+
+def test_g_only_the_hand_counts_as_a_blind_spot(repository):
+    """
+    **셋이 같은 무게가 아니다.** 덱과 뒷면 카드는 룰북이 답한다 — 거기서는
+    효과가 적용되지 않으므로 못 본 것이 아니라 **볼 것이 없는** 자리다.
+    패만 진짜 한계다.
+    """
+    state = evacuation_state(repository)
+    state.draw(THEIRS, 1)
+    state.move(
+        state.player(THEIRS).hand[0].instance_id,
+        Zone.SZONE,
+        to_player=THEIRS,
+        position=Position.FACEDOWN,
+    )
+    assert len(state.player(THEIRS).deck) > 0
+    assert len(state.player(THEIRS).hand) == 0
+
+    verdict = board_ruling(state).explain(
+        RuleQuestion.MAY_BE_RETURNED_TO_HAND,
+        state.player(THEIRS).monster_zone[0].instance_id,
+    )
+
+    assert verdict.answer is ConditionResult.TRUE
+    assert verdict.unchecked == ()  # 덱도 뒷면 카드도 한계가 아니다
+    assert set(UNSCANNED_ZONES) == {"패", "덱", "뒷면 카드"}
+    assert BLIND_ZONE is Zone.HAND
+
+
+def test_g_a_false_and_an_unknown_carry_no_blind_spot(repository):
+    """
+    ``FALSE`` 는 판과 무관하고 (막는 것은 혼자서도 막는다), ``UNKNOWN`` 은
+    이미 못 본 것을 **이유로** 말한다. 둘 다 따로 실을 것이 없다.
+    """
+    state = evacuation_state(repository)
+    state.draw(THEIRS, 3)
+    target = state.player(THEIRS).monster_zone[0].instance_id
+
+    refused = board_ruling(
+        state, OperationRulingRegistry((token_facts(FEATHERMAN, "토큰인 척"),))
+    ).explain(RuleQuestion.MAY_BE_RETURNED_TO_HAND, target)
+    assert refused.answer is ConditionResult.FALSE
+    assert refused.unchecked == ()
+
+    unknown = board_ruling(state, OperationRulingRegistry()).explain(
+        RuleQuestion.MAY_BE_RETURNED_TO_HAND, target
+    )
+    assert unknown.answer is ConditionResult.UNKNOWN
+    assert unknown.unchecked == ()
+    assert unknown.reason  # 이유가 곧 못 본 것이다
+
+
+@pytest.mark.real_card
+def test_g_the_blind_spot_reaches_the_effect_result(repository):
+    """
+    **STRUCTURAL-98 의 핵심.** 관문을 통과했다는 것이 "전부 보고
+    통과시켰다" 는 뜻은 아니다. 못 본 것이 결과까지 나온다.
+
+    2-AK 는 이 자리가 없다고 적었는데, **절반만 맞았다.**
+    :attr:`EffectResult.unchecked_rules` 는 2-M 부터 있었고, 없던 것은
+    그 칸이 아니라 **판정 한 번의 사실을 거기에 넣는 길**이었다.
+    """
+    state = evacuation_state(repository)
+    state.draw(THEIRS, 2)
+    target = state.player(THEIRS).monster_zone[0].instance_id
+
+    _, resolved = evacuate(state, target, rulings=OPERATION_RULINGS)
+
+    assert resolved.status is ChainResolutionStatus.RESOLVED
+    assert any("패 2장" in note for note in resolved.result.unchecked_rules)
+
+
+@pytest.mark.real_card
+def test_g_a_fully_checked_resolution_claims_nothing_extra(repository):
+    """
+    반대쪽도 참이어야 한다. 못 본 것이 없으면 **아무것도 적지 않는다** —
+    언제나 한 줄을 붙이면 그 줄은 곧 무시된다.
+    """
+    state = evacuation_state(repository)
+    assert len(state.player(MINE).hand) == len(state.player(THEIRS).hand) == 0
+
+    _, resolved = evacuate(
+        state,
+        state.player(THEIRS).monster_zone[0].instance_id,
+        rulings=OPERATION_RULINGS,
+    )
+
+    assert resolved.status is ChainResolutionStatus.RESOLVED
+    assert resolved.result.unchecked_rules == ()
+
+
+# ----------------------------------------------------------------------
+# STRUCTURAL-99 — 판정기가 보는 판
+# ----------------------------------------------------------------------
+
+LAB = 999_777
+FIRST, SECOND = TargetRef("first"), TargetRef("second")
+
+
+def two_returns() -> EffectDefinition:
+    """
+    0번: 상대 몬스터를 패로. 1번: 내 몬스터를 패로.
+
+    0번의 대상은 **다른 카드를 막을 수 있는** 카드다. 그러므로 0번이 끝난
+    판에서는 막는 것이 없고, 1번은 통과해야 한다.
+    """
+
+    def mzone(owner) -> TargetSpec:
+        return TargetSpec.targeting(
+            ChoiceSpec(
+                source=CandidateSource(
+                    zones=frozenset({Zone.MZONE}), owner=owner
+                ),
+                minimum=1,
+                maximum=1,
+            )
+        )
+
+    return EffectDefinition(
+        effect_ref=EffectRef(LAB, 0),
+        source_card_id=LAB,
+        targets=(
+            TargetBinding(FIRST, mzone(PlayerRef.OPPONENT)),
+            TargetBinding(SECOND, mzone(PlayerRef.CONTROLLER)),
+        ),
+        operations=(
+            CardOperation.return_to_hand(FIRST, gated=True),
+            CardOperation.return_to_hand(SECOND, gated=True),
+        ),
+        provenance=EffectProvenance.hand_written(
+            verified=True, note="Phase 2-AL — 판정이 보는 판"
+        ),
+    )
+
+
+def blocker_board(repository, blocker: int):
+    game = GameState.create(
+        repository,
+        decks=([FEATHERMAN] * 10, [blocker] + [FEATHERMAN] * 10),
+        seed=3,
+    )
+    game.draw(MINE, 1)
+    game.draw(THEIRS, 1)
+    for player in (MINE, THEIRS):
+        game.move(
+            game.player(player).hand[0].instance_id,
+            Zone.MZONE,
+            to_player=player,
+            position=Position.FACEUP_ATTACK,
+        )
+    game.turn.set_phase(Phase.MAIN1)
+    return game
+
+
+def blocker_registry(blocker: int) -> OperationRulingRegistry:
+    """막는 카드 자신은 패로 되돌릴 수 있지만, 필드에서는 남을 막는다."""
+    return OperationRulingRegistry(
+        (
+            normal_monster_facts(FEATHERMAN, "페더맨"),
+            CardRuleFacts(
+                card_id=blocker,
+                answers={
+                    RuleQuestion.MAY_BE_RETURNED_TO_HAND: RuleFact(
+                        ConditionResult.TRUE, RuleBasis.CARD_TEXT, "시험용"
+                    )
+                },
+                restricts_others=True,
+            ),
+        )
+    )
+
+
+def run_two_returns(game, **executor_kwargs):
+    definition = two_returns()
+    executor = EffectExecutor(
+        lookup=EffectImplementationRegistry((definition.effect_ref,)),
+        **executor_kwargs,
+    )
+    return executor.execute(
+        game,
+        definition,
+        ResolutionContext(
+            effect_ref=definition.effect_ref,
+            controller=MINE,
+            selections=(
+                TargetSelection(
+                    FIRST,
+                    Selection.of(game.player(THEIRS).monster_zone[0].instance_id),
+                ),
+                TargetSelection(
+                    SECOND,
+                    Selection.of(game.player(MINE).monster_zone[0].instance_id),
+                ),
+            ),
+        ),
+    )
+
+
+def test_g_a_prebuilt_ruling_sees_the_board_frozen_at_the_start(repository):
+    """
+    **2-AK 의 배선이 만든 실제 버그를 재현한다.**
+
+    부르는 쪽이 ``BoardRuling`` 을 만들어 넘기면 그 판은 효과 시작 시점에
+    멈춰 있다. 0번이 막는 카드를 필드에서 치웠는데도 1번의 판정은 여전히
+    막혀 있다고 보고, 효과 **전체**가 멈춘다.
+
+    STRUCTURAL-94 가 조건에서 일으킨 것과 **같은 종류의 버그**다 (2-AH 가
+    고친 그것). 계층만 다르다.
+    """
+    blocker = 55144522
+    game = blocker_board(repository, blocker)
+    before = game.state_hash()
+
+    result = run_two_returns(
+        game,
+        movement=BoardRuling(
+            GameStateView.from_state(game, viewer=MINE), blocker_registry(blocker)
+        ),
+    )
+
+    assert result.status is ResolutionStatus.UNCHECKED_RULES
+    assert game.state_hash() == before  # 멈출 때 판은 그대로다
+
+
+def test_g_the_executor_builds_the_ruling_from_the_projected_board(repository):
+    """
+    **같은 정의 · 같은 판 · 같은 지식**인데 결과가 다르다. 다른 것은
+    판정기가 **어느 시점의 판**을 보는가 하나뿐이다.
+
+    실행기가 ``rulings`` 를 받으면 계획 단계의 **투영된 판**으로 판정기를
+    그때그때 만든다 — 앞 조작이 끝난 판을 뒤 조작이 본다.
+    """
+    blocker = 55144522
+    game = blocker_board(repository, blocker)
+
+    result = run_two_returns(game, rulings=blocker_registry(blocker))
+
+    assert result.status is ResolutionStatus.RESOLVED
+    assert len(result.applied) == 2
+    assert len(game.player(MINE).monster_zone) == 0
+    assert len(game.player(THEIRS).monster_zone) == 0
+
+
+def test_g_knowledge_is_board_independent_and_judgement_is_not(repository):
+    """
+    **지식과 판정을 나눈 것이 이 단계의 요점이다.**
+
+    ``OperationRulingRegistry`` 는 카드에 대한 사실이므로 판과 무관하고
+    두 판에서 **같은 객체**를 써도 된다. ``BoardRuling`` 은 판마다 다르다.
+    """
+    blocker = 55144522
+    knowledge = blocker_registry(blocker)
+    first = blocker_board(repository, blocker)
+    second = blocker_board(repository, blocker)
+
+    assert run_two_returns(first, rulings=knowledge).status is (
+        ResolutionStatus.RESOLVED
+    )
+    assert run_two_returns(second, rulings=knowledge).status is (
+        ResolutionStatus.RESOLVED
+    )
+    assert first.state_hash() == second.state_hash()
+
+
+def test_g_the_rule_question_is_not_an_observation_question(repository):
+    """
+    **어리석은 매장이 자기 덱 안의 카드에 관문을 묻는다.**
+
+    컨트롤러의 평범한 관측으로는 자기 덱이 보이지 않는다. 그런데도 그
+    질문의 답은 누가 보고 있는지에 따라 달라지지 않으므로, 판정기는 그
+    카드 **주인의 눈**으로 그 자리를 열어 묻는다 (2-AI 의 후보 세기와
+    같은 방법이고, 그 관측은 밖으로 나가지 않는다).
+    """
+    state = evacuation_state(repository)
+    hidden = state.player(THEIRS).deck[0].instance_id
+
+    # 평범한 관측으로는 보이지 않는다.
+    assert GameStateView.from_state(state, viewer=MINE).find(hidden) is None
+
+    # 그래도 판정은 답한다 — 실행기가 주인의 눈으로 묻기 때문이다.
+    executor = EffectExecutor(rulings=OPERATION_RULINGS)
+    ruling = executor._movement_ruling(state, hidden)
+    assert ruling.may(
+        RuleQuestion.MAY_BE_SENT_TO_GRAVE, hidden
+    ) is ConditionResult.TRUE
+
+
+def test_g_the_registry_is_not_a_default(repository):
+    """
+    ``build_executor`` 가 :data:`OPERATION_RULINGS` 를 몰래 넣지 않는다.
+    넣으면 **목록에 실렸다는 사실이 판정을 대신하게 된다** —
+    ``destruction`` 을 몰래 바꾸지 않는 것과 같은 이유다 (ADR-006).
+    """
+    state = evacuation_state(repository)
+    target = state.player(THEIRS).monster_zone[0].instance_id
+    before = state.state_hash()
+
+    _, resolved = evacuate(state, target)  # 아무것도 주지 않는다
+
+    assert resolved.status is not ChainResolutionStatus.RESOLVED
+    assert state.state_hash() == before

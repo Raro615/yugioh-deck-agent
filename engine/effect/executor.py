@@ -110,6 +110,7 @@ from engine.execution import (
 from engine.randomness import RandomError, RandomOutcome, RandomPurpose
 from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.effect.semantics import (
+    DECLARED_GATE_RULINGS,
     MISSING_GATE,
     QUESTION_VERBS,
     DestructionRuling,
@@ -132,6 +133,7 @@ from engine.effect.resolution import (
     ResolutionContext,
     ResolutionStatus,
 )
+from engine.effect.ruling import BoardRuling, OperationRulingRegistry
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
 from engine.special_summon import SPECIAL_SUMMON_PROCEDURE
@@ -260,6 +262,18 @@ class _Step:
     수 있다 — 규칙이 막은 것이 있고 카드가 "가능한 만큼" 이라고 적어
     두었을 때다. ``None`` 이면 장수를 세지 않는 종류의 일이다.
     """
+    blind: tuple[str, ...] = ()
+    """
+    이 일의 **관문이 들여다보지 못한 자리들** (Phase 2-AL).
+
+    관문을 통과했다는 것이 "전부 보고 통과시켰다" 는 뜻은 아니다. 통과한
+    답에도 못 본 것이 있으면 그것을 결과까지 들고 나간다
+    (:attr:`~engine.effect.resolution.EffectResult.unchecked_rules`).
+
+    **:meth:`result` 의 성패를 바꾸지 않는다.** 바꾸면 같은 효과 안의 뒤
+    조작이 앞의 결과를 읽을 때 막히고, 그것은 "못 본 자리가 있다" 와는
+    다른 결정이다 — 근거를 모으기 전에 내릴 결정이 아니다.
+    """
     outcome: "RandomOutcome | None" = None
     """
     무작위가 **계획 단계에서 이미 결정된** 결과 (Phase 2-Z).
@@ -366,7 +380,14 @@ class EffectExecutor:
     그것이 기본 상태이고, 그 상태에서는 어떤 효과도 실행되지 않는다.
     """
 
-    __slots__ = ("_lookup", "_journal", "_destruction", "_summoning", "_movement")
+    __slots__ = (
+        "_lookup",
+        "_journal",
+        "_destruction",
+        "_summoning",
+        "_movement",
+        "_rulings",
+    )
 
     def __init__(
         self,
@@ -375,6 +396,7 @@ class EffectExecutor:
         destruction: DestructionRuling | None = None,
         summoning: SummonRuling | None = None,
         movement: MovementRuling | None = None,
+        rulings: "OperationRulingRegistry | None" = None,
     ):
         self._lookup = lookup if lookup is not None else EmptyImplementationLookup()
         # 기록은 **선택**이다. 없으면 아무것도 적지 않고, 있어도 실행
@@ -398,6 +420,15 @@ class EffectExecutor:
         self._movement = (
             movement if movement is not None else UnknownMovementRuling()
         )
+        # **지식과 판정을 나눈다** (Phase 2-AL). ``rulings`` 는 카드에 대해
+        # 확인된 사실들이고 판과 무관하다. 판을 보고 답을 합성하는 일은
+        # 계획 시점에 **투영된 판**으로 그때그때 한다 — 그러지 않으면
+        # 앞 조작이 치운 카드가 뒤 조작의 판정을 계속 막는다.
+        #
+        # 2-AK 는 부르는 쪽이 ``BoardRuling`` 을 만들어 넘기게 했고, 그래서
+        # 그 판은 **효과 시작 시점**에 멈춰 있었다. STRUCTURAL-94 가
+        # 조건에서 일으킨 것과 **같은 종류의 버그**다 (2-AH 가 고친 그것).
+        self._rulings = rulings
 
     @property
     def journal(self) -> EventJournal | None:
@@ -459,6 +490,15 @@ class EffectExecutor:
                 "있습니다.",
             )
 
+        # 종류마다 정해진 표(2-M)와 **이 판정 한 번**이 못 본 자리(2-AL)를
+        # 합친다. 같은 칸에 들어가는 이유는 읽는 쪽에 같은 뜻이기 때문이다 —
+        # "이 실행은 규칙을 전부 보지 못했다".
+        unchecked = list(collect_unchecked(record.kind for record in applied))
+        for step in plan:
+            for note in step.blind:
+                if note not in unchecked:
+                    unchecked.append(note)
+
         result = EffectResult(
             ResolutionStatus.RESOLVED,
             ValidationCode.OK,
@@ -467,7 +507,12 @@ class EffectExecutor:
             deltas=tuple(deltas),
             # 의미를 주장한 일들이 **보지 않은 규칙**을 그대로 들고 나간다.
             # 성공했다고 규칙을 전부 본 것이 아니다 (Phase 2-M).
-            unchecked_rules=collect_unchecked(record.kind for record in applied),
+            #
+            # 둘을 합친다 (Phase 2-AL). 앞의 것은 **조작 종류**마다 정해진
+            # 표이고, 뒤의 것은 **이 판정 한 번**이 못 본 자리다. 같은 칸에
+            # 들어가는 이유는 읽는 쪽에 같은 뜻이기 때문이다 — "이 실행은
+            # 규칙을 전부 보지 못했다".
+            unchecked_rules=tuple(unchecked),
         )
         if self._journal is not None and result.deltas:
             # 판을 바꾼 해결만 적는다. 바꾼 것이 없으면 역사도 없다.
@@ -995,6 +1040,7 @@ class EffectExecutor:
                 return legal
 
         instances: list[InstanceId] = []
+        blind: list[str] = []
         owners: list[int] = []
         refused: list[InstanceId] = []
         for instance in selection.chosen:
@@ -1024,7 +1070,8 @@ class EffectExecutor:
                     f"{rule.detail}.",
                     missing=rule.missing,
                 )
-            gate = self._check_rule_gate(operation, instance)
+            gate, unseen = self._check_rule_gate(state, operation, instance)
+            blind.extend(note for note in unseen if note not in blind)
             if gate is not None:
                 if not _may_skip(operation, gate):
                     return gate
@@ -1072,6 +1119,7 @@ class EffectExecutor:
             instances=tuple(instances),
             owners=tuple(owners),
             attempted=len(selection.chosen),
+            blind=tuple(blind),
         )
 
     def _plan_summon_operation(
@@ -1106,7 +1154,7 @@ class EffectExecutor:
 
         placements: list[SummonPlacement] = []
         for instance in selection.chosen:
-            gate = self._check_rule_gate(operation, instance)
+            gate, _ = self._check_rule_gate(state, operation, instance)
             if gate is not None:
                 return gate
             try:
@@ -1481,9 +1529,36 @@ class EffectExecutor:
             missing="; ".join(verdict.unchecked) or None,
         )
 
+    def _movement_ruling(self, board: GameState, instance: InstanceId):
+        """
+        이 카드에 대해 물을 **판정기 하나.** 결정하는 자리는 여기뿐이다.
+
+        ``rulings`` 를 받았으면 **지금 이 판**(계획 단계의 투영)으로
+        :class:`~engine.effect.ruling.BoardRuling` 을 만든다. 받지 않았으면
+        생성자가 받은 판정기를 그대로 쓴다 — 옛 호출부와 시험 대역이 그쪽이다.
+
+        관측은 **그 카드 주인의 눈**으로 만들고 그 카드가 있는 자리를 연다.
+        규칙 질문은 관측 질문이 아니기 때문이다 — "이 카드를 패로 되돌릴 수
+        있는가" 의 답은 누가 보고 있는지에 따라 달라지지 않는다. 어리석은
+        매장이 **자기 덱** 안의 카드에 관문을 묻는 것이 그 예다.
+        (Phase 2-AI 의 ``_authoritative_candidates`` 가 후보를 셀 때 쓴
+        것과 같은 방법이고, 같은 이유로 그 관측은 밖으로 나가지 않는다.)
+        """
+        if self._rulings is None:
+            return self._movement
+        card = board.find_instance(instance)
+        # 이름을 ``owner`` 로 두는 것은 ``_authoritative_candidates`` 와
+        # **같은 예외**라는 표시다. 경계 시험이 그 이름까지 고정한다.
+        owner = card.controller if card is not None else 0
+        looked_at = frozenset({card.zone}) if card is not None else frozenset()
+        return BoardRuling(
+            GameStateView.from_state(board, viewer=owner, looked_at=looked_at),
+            self._rulings,
+        )
+
     def _check_rule_gate(
-        self, operation: Operation, instance: InstanceId
-    ) -> "EffectResult | None":
+        self, board: GameState, operation: Operation, instance: InstanceId
+    ) -> "tuple[EffectResult | None, tuple[str, ...]]":
         """
         **판정을 받아야만 실행되는 일**의 관문. 통과하면 ``None``.
 
@@ -1498,6 +1573,7 @@ class EffectExecutor:
         """
         kind = operation.kind
         question = declared_gate_question(operation)
+        blind: tuple[str, ...] = ()
 
         if is_rule_gated(kind):
             # 종류만으로 언제나 물어지는 관문 (파괴 · 특수 소환).
@@ -1512,23 +1588,30 @@ class EffectExecutor:
         elif question is not None:
             # **카드가 선언한** 관문 (Phase 2-X). 선언하지 않은 같은 종류의
             # 일은 여기 오지 않는다 — 원본 스크립트가 묻지 않기 때문이다.
-            verdict = ask_movement(self._movement, question, instance)
+            ruling = self._movement_ruling(board, instance)
+            explain = getattr(ruling, "explain", None)
+            if explain is not None and question in DECLARED_GATE_RULINGS.values():
+                # 답과 **못 본 것**을 함께 받는다 (Phase 2-AL).
+                told = explain(question, instance)
+                verdict, blind = told.answer, told.unchecked
+            else:
+                verdict = ask_movement(ruling, question, instance)
             # 동사는 **질문이** 들고 있다 (Phase 2-AK). 종류가 둘일 때는
             # 삼항으로 됐지만 다섯이 되면 그 자리가 거짓말을 하기 쉽다.
             word = QUESTION_VERBS[question]
             refusal = f"{instance} 는 {word} 수 없다고 판정되었습니다."
             unknown = f"{instance} 를 {word} 수 있는지 판정할 수 없습니다"
         else:
-            return None
+            return None, ()
 
         if verdict is ConditionResult.TRUE:
-            return None
+            return None, blind
         if verdict is ConditionResult.FALSE:
             return _fail(
                 ResolutionStatus.INVALID_TARGET,
                 ValidationCode.CANDIDATE_NOT_ELIGIBLE,
                 refusal,
-            )
+            ), blind
         return _fail(
             ResolutionStatus.UNCHECKED_RULES,
             ValidationCode.RULE_NOT_IMPLEMENTED,
@@ -1538,7 +1621,7 @@ class EffectExecutor:
             + ". 판정할 수 없는 것을 허가로 바꾸지 않습니다.",
             missing=MISSING_GATE[kind],
             unchecked=unchecked_rules(kind),
-        )
+        ), blind
 
     # ==================================================================
     # 2단계 — 적용. 기존 primitive 만 부른다.

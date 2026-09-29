@@ -335,18 +335,30 @@ INTERFERENCE_ZONES: frozenset[Zone] = frozenset(
     }
 )
 
-#: 훑지 **않는** 자리와 그 이유. 빈 칸으로 두지 않고 적어 둔다.
+#: 훑지 **않는** 자리와 그 이유.
+#:
+#: 세 줄이 **같은 무게가 아니다** (Phase 2-AL 이 갈랐다).
+#:
+#: - 덱과 뒷면 카드는 **룰북이 답한다** — 거기서는 효과가 적용되지 않는다.
+#:   못 본 것이 아니라 **볼 것이 없는** 자리이므로 판정의 한계가 아니다.
+#: - 패는 **정말로 못 본다.** 패에서 적용되는 지속 효과를 가진 카드가 있으면
+#:   이 계층은 그것을 놓친다. 이것 하나만 판정마다 :attr:`RulingVerdict.
+#:   unchecked` 에 실린다.
 UNSCANNED_ZONES: dict[str, str] = {
     "패": (
-        "상대의 패는 보이지 않는다. 패에서 적용되는 지속 효과를 가진 카드가 "
-        "있으면 이 계층은 그것을 못 본다 (STRUCTURAL-98)."
+        "패는 가려져 있다. 패에서 적용되는 지속 효과를 가진 카드가 있으면 "
+        "이 계층은 그것을 못 본다 (STRUCTURAL-98)."
     ),
-    "덱": "덱의 카드는 효과를 적용하지 않는다.",
+    "덱": "덱의 카드는 효과를 적용하지 않는다 (룰북).",
     "뒷면 카드": (
-        "세트된 카드는 발동 · 반전 전까지 효과를 적용하지 않는다. 그래서 "
-        "정체를 몰라도 훑기를 막지 않는다."
+        "세트된 카드는 발동 · 반전 전까지 효과를 적용하지 않는다 (룰북). "
+        "그래서 정체를 몰라도 훑기를 막지 않는다."
     ),
 }
+
+#: 판정의 **진짜 한계**인 자리. :data:`UNSCANNED_ZONES` 의 나머지 둘은
+#: 룰북이 답하므로 여기 없다.
+BLIND_ZONE: Zone = Zone.HAND
 
 
 @runtime_checkable
@@ -374,6 +386,22 @@ class RulingVerdict:
 
     answer: ConditionResult
     reason: str
+    unchecked: tuple[str, ...] = ()
+    """
+    이 판정이 **들여다보지 못한 자리들** (Phase 2-AL).
+
+    :attr:`~engine.cost.choice.CandidateSet.unchecked` 와 **같은 뜻이고 같은
+    모양**이다 — "저기를 못 봤다" 를 자리 이름으로 남긴다. 후보 계층이 이미
+    쓰던 어휘를 새로 만들지 않고 그대로 가져왔다.
+
+    2-AK 는 이것을 ``BoardRuling.scope_limits()`` 로 갖고 있었다. 그것은
+    **판정마다 달라지지 않는 상수**였고, 그래서 이 판정이 실제로 무엇을 못
+    봤는지 말하지 못했다 — 양쪽 패가 비어 있어 못 볼 것이 없을 때도 같은
+    문장을 돌려주었다. 답이 아니라 **함수의 성질**을 적고 있었던 셈이다.
+
+    ``TRUE`` 일 때만 채워진다. ``FALSE`` 는 판과 무관하고 (막는 것은
+    혼자서도 막는다), ``UNKNOWN`` 은 이미 못 본 것을 이유로 말한다.
+    """
 
 
 class BoardRuling:
@@ -437,7 +465,7 @@ class BoardRuling:
         blocker = self._interference(instance)
         if blocker is not None:
             return RulingVerdict(ConditionResult.UNKNOWN, blocker)
-        return RulingVerdict(ConditionResult.TRUE, fact.note)
+        return RulingVerdict(ConditionResult.TRUE, fact.note, self._blind_spots())
 
     def may(
         self, question: RuleQuestion, instance: InstanceId
@@ -500,14 +528,29 @@ class BoardRuling:
                         )
         return None
 
-    def scope_limits(self) -> tuple[str, ...]:
+    def _blind_spots(self) -> tuple[str, ...]:
         """
-        **무엇을 보지 않았는가.** 통과한 답에도 이것이 함께 있다.
+        이 판에서 **정말로 못 본 것.** 없으면 비어 있다.
 
-        지금 이 목록을 결과에 실어 보낼 자리가 없다 (STRUCTURAL-98). 그래서
-        여기에서라도 값으로 들고 있는다 — 문서에만 적으면 썩는다.
+        비어 있을 수 있다는 것이 요점이다 — 양쪽 패가 모두 비어 있으면 못
+        본 것이 없고, 그때의 ``TRUE`` 는 **전부 보고 낸 답**이다. 2-AK 의
+        ``scope_limits()`` 는 그 구분을 할 수 없었다.
+
+        덱과 뒷면 카드는 여기 없다. 거기서는 효과가 적용되지 않는다고
+        **룰북이 답하므로**, 못 본 것이 아니라 볼 것이 없는 자리다.
         """
-        return tuple(f"{where}: {why}" for where, why in UNSCANNED_ZONES.items())
+        found: list[str] = []
+        for player in self._view.players:
+            hand = player.zone(BLIND_ZONE)
+            # ``size`` 를 쓴다. ``cards`` 는 가려진 자리에서 **비어 있고**,
+            # 그것을 "패가 없다" 로 읽으면 못 본 것을 못 봤다고 말하게 된다.
+            # 장수는 가려진 자리에서도 공개된 사실이다.
+            if hand.size:
+                found.append(
+                    f"P{player.player_id} 의 패 {hand.size}장: "
+                    f"{UNSCANNED_ZONES['패']}"
+                )
+        return tuple(found)
 
     def __repr__(self) -> str:  # pragma: no cover - 표시용
         return f"<BoardRuling viewer=P{self._view.viewer} {self._registry!r}>"
@@ -526,6 +569,7 @@ __all__ = [
     "OperationRulingRegistry",
     "INTERFERENCE_ZONES",
     "UNSCANNED_ZONES",
+    "BLIND_ZONE",
     "OperationRuling",
     "RulingVerdict",
     "BoardRuling",

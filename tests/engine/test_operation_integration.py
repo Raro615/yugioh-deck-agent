@@ -1130,19 +1130,29 @@ def test_j_the_observation_boundary_is_the_actors(state):
     """
     관측은 행위자의 시점으로만 만든다.
 
-    **Phase 2-AB 가 하나의 예외를 열었고, 그 예외를 여기서 좁힌다.**
-    무작위 선택에는 고르는 사람이 없으므로 후보를 **자리 주인의 눈으로**
-    센다 (``_authoritative_candidates``). 그 관측은 세는 데만 쓰이고
-    **밖으로 나가지 않는다** — 그것까지 확인해야 예외가 구멍이 되지
-    않는다.
+    **예외가 둘이고, 둘 다 여기서 좁힌다.**
+
+    ``_authoritative_candidates`` (2-AB)
+        무작위 선택과 "전부" 에는 고르는 사람이 없으므로 후보를 **자리
+        주인의 눈으로** 센다.
+    ``_movement_ruling`` (2-AL)
+        규칙 관문은 **관측 질문이 아니다.** "이 카드를 패로 되돌릴 수
+        있는가" 의 답은 누가 보고 있는지에 따라 달라지지 않는다. 어리석은
+        매장이 자기 덱 안의 카드에 관문을 묻는 것이 그 예다.
+
+    둘 다 그 관측이 그 자리에서만 쓰이고 **밖으로 나가지 않는다** —
+    그것까지 확인해야 예외가 구멍이 되지 않는다. 예외를 **하나 더 연 것이
+    아니라**, 같은 종류의 예외가 하나 더 생긴 것이고 같은 방법으로
+    막는다 (이름까지 ``owner`` 로 고정한다).
     """
     tree = ast.parse(pathlib.Path("engine/effect/executor.py").read_text("utf-8"))
 
+    RULE_QUESTIONS = ("_authoritative_candidates", "_movement_ruling")
     counting = {
         node
         for parent in ast.walk(tree)
         if isinstance(parent, ast.FunctionDef)
-        and parent.name == "_authoritative_candidates"
+        and parent.name in RULE_QUESTIONS
         for node in ast.walk(parent)
     }
 
@@ -1162,24 +1172,25 @@ def test_j_the_observation_boundary_is_the_actors(state):
         assert isinstance(value, ast.Attribute), ast.dump(value)
         assert value.attr == "controller", ast.dump(value)
 
-    # 그 관측이 **밖으로 나가지 않는다.**
-    (function,) = [
+    # 그 관측이 **밖으로 나가지 않는다** — 두 자리 다.
+    functions = [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef)
-        and node.name == "_authoritative_candidates"
+        if isinstance(node, ast.FunctionDef) and node.name in RULE_QUESTIONS
     ]
-    for node in ast.walk(function):
-        if isinstance(node, ast.Return) and isinstance(node.value, ast.Name):
-            assert node.value.id != "view", ast.dump(node)
-        # ``self`` 에 붙여 두지도 않는다.
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                assert not (
-                    isinstance(target, ast.Attribute)
-                    and isinstance(target.value, ast.Name)
-                    and target.value.id == "self"
-                ), ast.dump(node)
+    assert len(functions) == len(RULE_QUESTIONS)
+    for function in functions:
+        for node in ast.walk(function):
+            if isinstance(node, ast.Return) and isinstance(node.value, ast.Name):
+                assert node.value.id != "view", ast.dump(node)
+            # ``self`` 에 붙여 두지도 않는다.
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    assert not (
+                        isinstance(target, ast.Attribute)
+                        and isinstance(target.value, ast.Name)
+                        and target.value.id == "self"
+                    ), ast.dump(node)
 
 
 # ======================================================================

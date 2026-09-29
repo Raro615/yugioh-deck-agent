@@ -1129,6 +1129,7 @@ def build_executor(
     entries: "tuple[LibraryEntry, ...]" = EFFECT_LIBRARY,
     destruction: DestructionRuling | None = None,
     movement: MovementRuling | None = None,
+    rulings: "OperationRulingRegistry | None" = None,
 ) -> EffectExecutor:
     """
     이 목록의 구현을 아는 실행기.
@@ -1142,6 +1143,15 @@ def build_executor(
     일어나지 않는다. 선언하지 않은 이동(육신보살 · 벌금)은 영향을 받지
     않는다 — 그 카드들의 공식 스크립트가 애초에 묻지 않기 때문이다.
 
+    ``rulings`` 는 **지식**이고 판과 무관하다 (Phase 2-AL). 주면 실행기가
+    계획 시점의 **투영된 판**으로 판정기를 그때그때 만든다 — ``movement``
+    처럼 미리 만들어 넘기면 그 판이 효과 시작 시점에 멈춰 있고, 앞 조작이
+    치운 카드가 뒤 조작의 판정을 계속 막는다.
+
+    :data:`OPERATION_RULINGS` 를 **기본값으로 넣지 않는다.** 넣으면 목록에
+    실렸다는 사실이 판정을 대신하게 되고, 그것은 ``destruction`` 을 몰래
+    바꾸지 않는 것과 같은 이유로 하지 않는다 (ADR-006).
+
     체인 해결기는 만들어 주지 않는다 — :class:`~engine.chain.ChainResolver`
     는 이 실행기와 정의 저장소를 받아 **부르는 쪽이** 만든다.
     """
@@ -1150,6 +1160,7 @@ def build_executor(
         journal=journal,
         destruction=destruction,
         movement=movement,
+        rulings=rulings,
     )
 
 
