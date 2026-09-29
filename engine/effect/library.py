@@ -849,24 +849,45 @@ _INTRODUCTION_TO_GALLANTRY_ENTRY = LibraryEntry(
 #: 0번 조작                ``Duel.SendtoDeck(g,…)``
 #: 1번 조작                ``Duel.ShuffleDeck(p)``
 #: 2번 조작                ``Duel.Draw(p,#g,…)``
-#:                        → ``ResultRef(0, ATTEMPTED_COUNT)`` (2-AD · 2-AF)
+#:                        → ``ResultRef(0, AFFECTED_COUNT)`` (2-AD · 2-AF)
 #: ====================  ==========================================
 #:
-#: 마지막 줄이 **``#g`` 인 것**에 주의한다. ``g`` 는 패 전체 그룹이므로
-#: 스크립트는 실제로 덱에 들어간 수가 아니라 **넣으려 한 수**만큼 뽑는다.
-#: 그래서 ``AFFECTED_COUNT`` 가 아니라 ``ATTEMPTED_COUNT`` 다 — Phase 2-AF
-#: 가 둘을 가른 이유가 여기서 값을 한다.
+#: 마지막 줄의 **수가 무엇인가**가 이 정의의 가장 미묘한 곳이다
+#: (STRUCTURAL-96 · Phase 2-AI 에서 열고 2-AJ 에서 닫았다).
 #:
-#: **공식 텍스트와 스크립트가 다르게 읽힌다는 점을 숨기지 않는다.**
-#: 한국어 텍스트는 "덱에 넣은 매수만큼" 이라고 적혀 있어 ``AFFECTED_COUNT``
-#: 쪽으로 읽히고, ``c22589918.lua`` 는 ``#g`` 를 쓴다. 이 정의의 출처는
-#: :meth:`EffectProvenance.official_lua` 이므로 **스크립트를 따른다** —
-#: 텍스트를 해석해서 스크립트를 고치는 일은 하지 않는다. 지금 이 정의에서
-#: 둘은 같은 수다(필터가 ``nil`` 이라 관문이 없고 전부 아니면 무다). 같다고
-#: 해서 아무 쪽이나 적으면 나중에 갈릴 때 조용히 틀리므로 적어 둔다.
+#: - ``c22589918.lua`` 는 ``Duel.Draw(p,#g,…)`` 다. ``g`` 는 패 전체
+#:   그룹이므로 **넣으려 한 수**(``ATTEMPTED_COUNT``)다.
+#: - 공식 텍스트는 "덱에 넣은 매수만큼" / 일본어 원문
+#:   "デッキに加えた枚数分" 이다. **실제로 들어간 수**로 읽힌다.
 #:
-#: 어느 쪽이 맞는가는 공식 재정(``https://www.db.yugioh-card.com/yugiohdb/``)
-#: 이 답할 일이고, 아직 확인하지 않았다.
+#: 둘이 갈리므로 **공식 재정을 받아서 확인했다.**
+#: ``data/rulings/ocg/5849.json`` 에 있다.
+#:
+#:     OCG-QA-11919 — "『その後、相手は自身のデッキに戻した数だけドローする』
+#:     処理の際の、『自身のデッキに戻した数』にその魔法・罠カードは含まれません。"
+#:
+#: 덱에 **돌아가지 않은** 카드는 "되돌린 수" 에 **들어가지 않는다.** 즉
+#: 공식 semantics 는 ``AFFECTED_COUNT`` 이고, ``#g`` 는 이 카드에서 둘이
+#: 언제나 같기 때문에 통하는 **스크립트의 지름길**이다. 그래서 여기는
+#: ``AFFECTED_COUNT`` 로 적는다 — 출처가 ``official_lua`` 여도, 공식
+#: 데이터베이스가 직접 답한 자리에서는 그쪽이 권위다.
+#:
+#: **모든 카드가 이쪽인 것은 아니다.** 같은 계열인 교란작전(77561728)은
+#: 공식 텍스트가 "원래의 패의 수만큼" / "元の手札の数だけ" 이다 —
+#: 그쪽은 ``ATTEMPTED_COUNT`` 다. 두 칸 중 어느 것인지는 **카드가 적어 둔
+#: 것**이지 조작 종류가 정하는 것이 아니다 (2-X 의 관문 · 2-AC 의
+#: ``Shortfall`` · 2-AF 의 ``Partial`` 과 같은 결론).
+#:
+#: 같은 재정 페이지의 보충(補足)이 이 정의의 모양도 확인해 준다.
+#:
+#:     "『自分の手札を全てデッキに加えてシャッフルする』処理を行います。
+#:      その後、『デッキに加えた枚数分のカードをドローする』処理を行います。
+#:      （これらの処理は同時に行われません。）"
+#:
+#: 되돌리기 · 셔플 · 드로우가 **한 덩어리가 아니라 차례**라는 것이고, 그래서
+#: 조작 셋에 ``ResultRef`` 하나로 적는 지금 모양이 맞다. 같은 보충의
+#: "デッキが０枚の状況でも発動できます" 도 확인된다 —
+#: :func:`test_g_this_card_can_never_run_the_deck_out` 가 그것이다.
 #:
 #: 옮기지 **못한** 것도 적는다.
 #:
@@ -896,14 +917,16 @@ _RELOAD_ENTRY = LibraryEntry(
             ShuffleOperation(zone=Zone.DECK, who=PlayerRef.CONTROLLER),
             DrawOperation(
                 count=SelectionCount.from_result(
-                    ResultRef(0, ResultField.ATTEMPTED_COUNT)
+                    ResultRef(0, ResultField.AFFECTED_COUNT)
                 )
             ),
         ),
         activation=ZoneCountAtLeast(PlayerRef.CONTROLLER, Zone.HAND, 1),
         provenance=EffectProvenance.official_lua(
             "c22589918.lua 의 s.activate 를 옮겼다. IsAbleToDeck 와 "
-            "IsPlayerCanDraw 와 BreakEffect 는 옮기지 못했다."
+            "IsPlayerCanDraw 와 BreakEffect 는 옮기지 못했다. 드로우 매수는 "
+            "스크립트의 #g 가 아니라 공식 재정(OCG-QA-11919)이 말하는 "
+            "'실제로 덱에 돌아간 수' 로 적었다."
         ),
     ),
     lua_file="c22589918.lua",

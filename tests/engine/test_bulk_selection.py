@@ -424,23 +424,35 @@ def test_e_reload_is_the_first_real_card_on_the_chain():
     assert bulk == [RELOAD]
 
 
-def test_e_the_draw_reads_the_attempted_count_not_the_affected_one():
+def test_e_the_draw_reads_the_affected_count_because_the_ruling_says_so():
     """
-    스크립트는 ``Duel.Draw(p,#g,…)`` 다 — ``g`` 는 **패 전체 그룹**이므로
-    실제로 덱에 들어간 수가 아니라 **넣으려 한 수**다 (2-AF 가 둘을 가른
-    이유).
+    **이 테스트는 Phase 2-AI 에서 반대로 적혀 있었다** (``…attempted_count
+    _not_the_affected_one``). 그때는 스크립트의 ``Duel.Draw(p,#g,…)`` 만
+    근거로 삼았고, ``g`` 가 패 전체 그룹이므로 ``ATTEMPTED_COUNT`` 라고
+    적었다. 공식 텍스트("덱에 넣은 매수만큼")가 반대로 읽힌다는 것은 그때도
+    알고 있었고, 어느 쪽이 맞는지 **확인하지 않은 채** 출처 규칙만으로
+    스크립트를 따랐다 (STRUCTURAL-96).
 
-    공식 한국어 텍스트("덱에 넣은 매수만큼")는 ``AFFECTED_COUNT`` 쪽으로
-    읽힌다. 이 정의의 출처는 ``official_lua`` 이므로 **스크립트를 따르고**,
-    다른 점은 라이브러리 주석에 적어 두었다 — 텍스트를 해석해서 스크립트를
-    고치지 않는다.
+    Phase 2-AJ 에서 공식 재정을 받아 확인했다
+    (``data/rulings/ocg/5849.json``).
+
+        OCG-QA-11919 — 『自身のデッキに戻した数』にその魔法・罠カードは
+        含まれません。
+
+    덱에 **돌아가지 않은** 카드는 "되돌린 수" 에 들어가지 않는다. 그러므로
+    공식 semantics 는 ``AFFECTED_COUNT`` 이고, ``#g`` 는 이 카드에서 둘이
+    언제나 같아서 통하는 지름길이다.
+
+    잘못된 가정은 "출처가 official_lua 면 스크립트가 최종 권위다" 였다.
+    스크립트는 **구현**이고, 공식 데이터베이스가 직접 답한 자리에서는
+    그쪽이 권위다.
     """
     draw = entry_for(EffectRef(RELOAD, 0)).definition.operations[2]
 
     assert draw.kind is OperationKind.DRAW
     assert draw.count.kind is CountKind.FROM_RESULT
     assert draw.count.result.operation_index == 0
-    assert draw.count.result.field is ResultField.ATTEMPTED_COUNT
+    assert draw.count.result.field is ResultField.AFFECTED_COUNT
 
 
 # ======================================================================

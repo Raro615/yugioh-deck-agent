@@ -1,0 +1,35 @@
+{
+ "schema_version": 1,
+ "official_cid": 5546,
+ "card_id": 77561728,
+ "availability": "ruling_exists",
+ "identity_status": "unverified",
+ "name_ja": "攪乱作戦",
+ "card_text_ja": "相手は手札をデッキに加えてシャッフルした後、元の手札の数だけデッキからカードをドローする。",
+ "reported_total": null,
+ "checked_at": "2026-09-29T06:47:03Z",
+ "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=5546&request_locale=ja&page=1&rp=100",
+ "error": "",
+ "supplement": {
+  "ruling_id": "OCG-SUP-5546",
+  "card_id": 77561728,
+  "official_cid": 5546,
+  "kind": "supplement",
+  "text_original": "■ダメージステップに発動する事はできません。<br>■対象を取る効果ではありません。<br>■相手の手札が0枚の場合、「攪乱作戦」を発動する事はできません。<br>■相手が手札をデッキに加えてシャッフルする処理と、ドローする処理は同時の扱いではありません。",
+  "published_or_updated_at": "2015-08-06",
+  "related_card_cids": [],
+  "related_card_ids": [],
+  "provenance": {
+   "source": "konami_ocg_database",
+   "language": "ja",
+   "authority": "official",
+   "data_type": "card_supplement",
+   "game": "ocg",
+   "source_url": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=5546&request_locale=ja&page=1&rp=100",
+   "retrieved_at": "2026-09-29T06:47:03Z"
+  },
+  "content_hash": "sha256:4068a64c4db8606b8210bf32cdcfffdcf7795a571789fb27f376089d0adb6deb",
+  "translations": {}
+ },
+ "rulings": []
+}

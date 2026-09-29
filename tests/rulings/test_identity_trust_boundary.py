@@ -291,16 +291,29 @@ def test_existing_records_are_preserved_and_honestly_labelled(ruling_repository)
     """
     식별자가 검증되지 않은 채 수집된 기존 데이터를 지우지 않는다.
     대신 authoritative 가 거짓이 되어 사실이 드러난다.
+
+    Phase 2-AJ 에서 9 에서 11 로 늘었다. 이 단언이 잘못된 가정을 갖고
+    있었던 것이 아니라 "지금 아홉 장" 이 그때의 사실이었고, 리로드(cid
+    5849)와 교란작전(cid 5546)의 재정을 실제로 받아 오면서 사실이 바뀌었다.
+    아래의 진짜 단언 — **검증되지 않은 식별자로 받은 것은 authoritative 가
+    거짓이다** — 은 새로 받은 둘에도 그대로 적용된다.
     """
     sets = {s.official_cid: s for s in ruling_repository.ruling_sets}
-    assert len(sets) == 9
+    assert len(sets) == 11
 
     unverified = [s for s in sets.values() if s.identity_status != "verified"]
     assert unverified, "식별자 상태가 기록되지 않았습니다."
     for ruling_set in unverified:
         assert ruling_set.authoritative is False
-        assert ruling_set.rulings or ruling_set.availability is (
-            RulingAvailability.NOT_FOUND
+        # **Q&A 가 재정의 전부가 아니다.** 교란작전(cid 5546)은 Q&A 가 0건인데
+        # 보충(補足)은 있다 — 공식 페이지에 내용이 있으므로 ``EXISTS`` 가 맞다.
+        # 이 단언은 원래 "EXISTS 면 Q&A 가 있다" 를 가정하고 있었고, 그
+        # 가정이 데이터 모델과 달랐다 (``CardRulingSet`` 은 ``rulings`` 와
+        # ``supplement`` 를 따로 들고 있다). 가정 쪽을 고친다.
+        assert (
+            ruling_set.rulings
+            or ruling_set.supplement is not None
+            or ruling_set.availability is RulingAvailability.NOT_FOUND
         )
 
     # 그래도 데이터는 그대로 남아 있다.

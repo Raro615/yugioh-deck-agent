@@ -54,6 +54,7 @@ from engine.trigger import (
     TriggerCollector,
     TriggerError,
     TriggerRegistry,
+    timing_for,
 )
 from engine.vocabulary import Phase
 
@@ -343,18 +344,12 @@ class EventReader:
         """
         변화 하나를 시점으로. 옮길 수 없으면 **솔직하게** 적는다.
 
-        :meth:`TimingEvent.from_delta` 는 모르는 변화를 만나면 예외를 던진다
-        (지어내지 않겠다는 뜻이다). 파이프라인은 거기서 멈추는 대신 그
-        사실을 사건으로 남긴다 — 새 Delta 가 생겼을 때 실행이 죽는 것보다,
-        "이것을 아직 못 옮긴다" 가 눈에 보이는 쪽이 낫다.
+        판단은 :func:`~engine.trigger.timing_for` 하나가 한다 (Phase 2-AJ).
+        여기에 같은 ``try``/``except`` 를 한 벌 더 두었더니 트리거 쪽과
+        **갈렸고**, 셔플이 든 실제 카드에서 한쪽만 죽었다. 두 벌을 두면
+        언제든 다시 갈린다.
         """
-        try:
-            return TimingEvent.from_delta(delta)
-        except TriggerError:
-            return TimingEvent.unimplemented(
-                f"{type(delta).__name__} 를 옮길 시점 이름이 아직 없습니다: "
-                f"{delta.describe_ko()}"
-            )
+        return timing_for(delta)
 
 
 class EventPipeline:

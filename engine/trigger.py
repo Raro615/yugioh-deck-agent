@@ -371,6 +371,34 @@ class TimingEvent:
         return self.describe_ko()
 
 
+def timing_for(delta: StateDelta) -> TimingEvent:
+    """
+    변화 하나를 시점으로. **옮길 이름이 없으면 그 사실을 사건으로 남긴다.**
+
+    :meth:`TimingEvent.from_delta` 는 모르는 변화를 만나면 예외를 던진다 —
+    지어내지 않겠다는 뜻이고, 그 태도는 그대로 둔다. 다만 **파이프라인이
+    거기서 죽으면 안 된다.** 새 ``StateDelta`` 가 생겼을 때 실행이 멈추는
+    것보다 "이것을 아직 못 옮긴다" 가 눈에 보이는 쪽이 낫다.
+
+    이 함수가 생긴 이유가 그것이다 (Phase 2-AJ). 같은 판단을 하는 자리가
+    **둘**이었고 (``timing_events`` 와
+    :class:`~engine.event_pipeline.EventReader`), 한쪽만 이 규칙을 지키고
+    있었다. 그래서 셔플이 든 실제 카드를 해결한 뒤 트리거를 모으려 하면
+    ``TriggerError`` 로 죽었다 — 관측 쪽으로 읽으면 멀쩡한 같은 해결이.
+
+    STRUCTURAL-74 가 이미 "셔플은 ``UNIMPLEMENTED`` 사건으로 남는다" 고
+    적어 두었으므로, 이것은 새 결정이 아니라 **적어 둔 결정을 한 군데 더
+    지키게 한 것**이다.
+    """
+    try:
+        return TimingEvent.from_delta(delta)
+    except TriggerError:
+        return TimingEvent.unimplemented(
+            f"{type(delta).__name__} 를 옮길 시점 이름이 아직 없습니다: "
+            f"{delta.describe_ko()}"
+        )
+
+
 def timing_events(event: JournalEvent) -> tuple[TimingEvent, ...]:
     """
     기록된 사건 하나에서 나오는 시점 전부.
@@ -378,8 +406,12 @@ def timing_events(event: JournalEvent) -> tuple[TimingEvent, ...]:
     변화(``deltas``)가 먼저고 사건 자체가 나중이다 — 카드는 해결 **중에**
     움직이고, 해결이 끝난 것은 그 뒤다. 이 순서가 규칙이라고 주장하지는
     않는다. 실제 트리거 순서는 다음 단계의 몫이다.
+
+    **하나도 빠뜨리지 않는다.** 옮길 이름이 없는 변화도 자리를 지킨다
+    (:func:`timing_for`) — 빠뜨리면 "그 자리에 아무 일도 없었다" 가 되고,
+    그것은 사실이 아니다.
     """
-    found = [TimingEvent.from_delta(delta) for delta in event.deltas]
+    found = [timing_for(delta) for delta in event.deltas]
     found.append(TimingEvent.from_journal_event(event))
     return tuple(found)
 
@@ -1478,6 +1510,7 @@ __all__ = [
     "TriggerStatus",
     "TimingEvent",
     "timing_events",
+    "timing_for",
     "TriggerSpec",
     "TriggerRegistry",
     "TriggerCandidate",
