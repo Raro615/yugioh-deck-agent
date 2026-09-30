@@ -59,7 +59,7 @@ Phase 2-E 의 몫이다 (ADR-008).
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Callable
 
@@ -99,6 +99,7 @@ from engine.effect.operation import (
 from engine.effect.journal import EventJournal
 from engine.effect.target import SelectionCount, Shortfall
 from engine.execution import (
+    NO_EXECUTION_VALUES,
     BoardQuantity,
     DeclarationOutcome,
     ExecutionValues,
@@ -631,7 +632,119 @@ class EffectExecutor:
                     f"{index}번 조작을 수행할 수 없습니다: {error}. "
                     "판은 그대로입니다.",
                 )
+
+        tidy, unshuffled = self._shuffle_searched_decks(board, definition, context)
+        for step in tidy:
+            steps.append(step)
+            try:
+                self._apply(board, step)
+            except Exception as error:  # pragma: no cover - 방어용
+                return _fail(
+                    ResolutionStatus.INVALID_OPERATION,
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    f"들여다본 덱을 섞을 수 없습니다: {error}. 판은 그대로입니다.",
+                )
+        if unshuffled and steps:
+            # 못 한 정리는 **마지막 일에 적어** 내보낸다. 실을 자리를 새로
+            # 만들지 않는다 — 2-AL 이 만든 ``_Step.blind`` 가 "이 계획이
+            # 하지 못한 것" 을 담는 자리이고, 여기가 그 뜻에 맞는다.
+            steps[-1] = replace(
+                steps[-1], blind=steps[-1].blind + tuple(unshuffled)
+            )
         return steps
+
+    def _shuffle_searched_decks(
+        self,
+        board: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+    ) -> "tuple[list[_Step], list[str]]":
+        """
+        **들여다본 덱을 섞는다** (Phase 2-AN · STRUCTURAL-71).
+
+        섞기로 계획한 일들과, **섞지 못한 이유들**을 함께 돌려준다.
+
+        룰북이 시키는 일이고, 카드가 시키는 일이 아니다.
+
+            "If a card effect requires you to reveal cards from your Deck,
+             **or look through it, shuffle it** and put it back in this
+             space afterwards."
+            "You must shuffle your Deck **after any time you search it**
+             and let your opponent shuffle or cut."
+
+        그래서 정의에 적지 않는다. 공식 스크립트도 적지 않는다 — 덱을
+        들여다보는 ``EFFECT_TYPE_ACTIVATE`` 단독 카드 269장 중
+        ``Duel.ShuffleDeck`` 을 직접 부르는 것은 **31장**뿐이고, 나머지
+        238장은 EDOPro 엔진이 알아서 섞는다. 이 엔진에서 그 "알아서" 에
+        해당하는 자리가 여기다.
+
+        섞지 않으면 **들여다본 사람이 덱 순서를 알게 된 채로 남는다.**
+        어리석은 매장(81439173)으로 재현된다 — 등재되고 실행되는 실제
+        카드다.
+
+        어느 자리를 들여다보았는지는 **대상 명세가 이미 말한다**
+        (:meth:`TargetSpec.looked_at_zones`, Phase 2-Y). 여기서 새로
+        추론하지 않는다.
+
+        **아무도 들여다보지 않은 선택은 여기 오지 않는다.** 무작위 선택과
+        "전부" 는 ``looked_at_zones()`` 가 비어 있다 (2-AA · 2-AI) — 고르는
+        사람이 없으므로 아무도 순서를 알게 되지 않고, 룰북이 말하는
+        "search" 도 아니다.
+        """
+        # **섞는 것은 고른 사람의 덱이다.** 자리 주인이 아니라 고르는
+        # 사람이다.
+        #
+        # ``looked_at_zones()`` 가 그것을 이미 정해 두었다 (2-Y). 주인이
+        # 상대면 **빈 집합**이고 ("남의 자리에서 고르라는 규칙이 남의 자리를
+        # 볼 권리까지 주지는 않는다"), 주인을 가리지 않으면 자리 이름은
+        # 나오지만 **실제로 열리는 것은 보는 사람 자신의 자리뿐**이다
+        # (``_zone_view`` 가 지킨다). 그러므로 들여다본 덱은 언제나
+        # ``chooser`` 의 것이다.
+        #
+        # 처음에 ``source.owner`` 로 적었다가 틀렸다 — 주인을 가리지 않는
+        # 명세에서 **상대 덱까지 섞었다.** 아무도 열어 보지 못한 덱이다.
+        #
+        # ``PlayerRef`` 에 절대 번호를 넣을 자리가 없는 것은 일부러 그렇게
+        # 만든 것이므로 (같은 조건을 양쪽이 쓸 수 있어야 한다) 문맥 상대적인
+        # 채로 둔다.
+        searched: list[PlayerRef] = []
+        for binding in definition.targets:
+            if Zone.DECK not in binding.spec.looked_at_zones():
+                continue
+            who = getattr(binding.spec.choice, "chooser", None)
+            if who is None:  # pragma: no cover - 명세가 먼저 막는다
+                continue
+            if who not in searched:
+                searched.append(who)
+
+        steps: list[_Step] = []
+        unshuffled: list[str] = []
+        for who in searched:
+            planned = self._plan_shuffle(
+                board,
+                definition,
+                context,
+                ShuffleOperation(zone=Zone.DECK, who=who),
+                NO_EXECUTION_VALUES,
+            )
+            if isinstance(planned, EffectResult):
+                # **난수원이 없다.** 카드가 스스로 적은 셔플이라면 여기서
+                # 효과를 거절하는 것이 맞다 (2-Z). 그러나 이것은 카드가
+                # 적은 일이 아니라 **룰북이 시키는 정리**이고, 정리를 못
+                # 했다고 카드의 일까지 무르는 것은 과하다 — 셔플과 무관한
+                # 효과가 씨앗을 안 준 판에서 죽는다.
+                #
+                # 그래서 **조용히 넘기지 않고 적어서** 내보낸다. 섞지 못한
+                # 덱은 들여다본 사람이 순서를 아는 채로 남으므로, 그 사실이
+                # 결과에 실려야 한다 (2-AL · 2-AM 이 만든 자리).
+                unshuffled.append(
+                    f"{who} 의 덱을 섞지 못했다: {planned.missing}. 룰북은 "
+                    "들여다본 덱을 섞으라고 한다 — 섞지 않으면 들여다본 "
+                    "사람이 순서를 아는 채로 남는다."
+                )
+                continue
+            steps.append(planned)
+        return steps, unshuffled
 
     def _check_requirements(
         self,

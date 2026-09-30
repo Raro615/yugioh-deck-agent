@@ -101,9 +101,19 @@ MOVE = OperationKind.MOVE
 
 
 def new_state(repository) -> GameState:
-    """p0: 패 3장 · 앞면 몬스터 1장. p1: 앞면 몬스터 1장."""
+    """
+    p0: 패 3장 · 앞면 몬스터 1장. p1: 앞면 몬스터 1장.
+
+    **씨앗을 준다** (Phase 2-AN). 이 파일의 synthetic 명세는 후보 자리에
+    ``Zone.DECK`` 을 넣어 두었고, 이제 덱을 들여다본 효과는 해결 뒤에 그
+    덱을 섞는다 (룰북 · STRUCTURAL-71). 섞으려면 난수원이 필요하다.
+
+    이 파일이 보는 것은 의미 계층(파괴 ≠ 묘지로 ≠ 버리기)이고 덱 순서가
+    아니다. 씨앗을 주면 정리가 조용히 일어나고, 결과의 ``unchecked_rules``
+    도 의미 계층의 것만 남는다 — 아래 단언들이 그것을 그대로 확인한다.
+    """
     game = GameState.create(
-        repository, decks=([FEATHERMAN] * 12, [FEATHERMAN] * 6)
+        repository, decks=([FEATHERMAN] * 12, [FEATHERMAN] * 6), seed=17
     )
     game.draw(MINE, 4)
     game.draw(THEIRS, 2)
@@ -536,6 +546,15 @@ def test_the_meaning_survives_all_the_way_to_the_timing_event(state):
 def test_the_event_pipeline_keeps_the_three_apart(state):
     """
     2-J 의 통로를 그대로 쓴다. 새 ``EventKind`` 도 새 Delta 도 만들지 않았다.
+
+    Phase 2-AN 에서 사건이 하나에서 **둘**이 되었다. 이 파일의 synthetic
+    명세가 후보 자리에 ``Zone.DECK`` 을 넣어 두었고, 덱을 들여다본 효과는
+    이제 해결 뒤에 그 덱을 섞는다 (룰북 · STRUCTURAL-71). 그 셔플이
+    ``ZoneShuffled`` 로 사건 하나를 더 만든다.
+
+    이 시험이 보는 것은 **의미가 통로를 지나 살아 남는가**이고 사건의
+    개수가 아니다. 그래서 세는 것을 카드 이동으로 좁힌다 — 단언이
+    약해지는 것이 아니라 보려던 것만 보게 된다.
     """
     state.draw(MINE, 2)
     cards = [card.instance_id for card in state.player(MINE).hand[:2]]
@@ -547,9 +566,15 @@ def test_the_event_pipeline_keeps_the_three_apart(state):
     ):
         result = run(state, synthetic(factory(PRIMARY), ordinal=index), cards[index])
         events = reader.read(result, actor=MINE)
-        assert len(events) == 1
-        assert events[0].point is TimingPoint.CARD_MOVED
-        seen.append(events[0].delta.operation)
+        moved = [e for e in events if e.point is TimingPoint.CARD_MOVED]
+        assert len(moved) == 1
+        # 나머지는 룰북이 시킨 덱 정리뿐이다 — 의미를 주장하지 않는다.
+        assert all(
+            e.point is TimingPoint.UNIMPLEMENTED
+            for e in events
+            if e is not moved[0]
+        )
+        seen.append(moved[0].delta.operation)
 
     assert seen == [SEND, DISCARD]
 
