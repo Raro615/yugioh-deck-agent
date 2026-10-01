@@ -428,14 +428,22 @@ def test_e_the_runner_gives_up_loudly_rather_than_spinning(repository):
 
 def test_e_the_baseline_policies_are_not_ai():
     """
-    이 꾸러미에 **평가 함수도 탐색도 학습도 없다.** 기준점 셋은
-    인터페이스가 도는지 보이기 위한 것이다.
+    **기준점 셋에는 평가 함수도 탐색도 학습도 없다.**
+
+    Phase 3-A 에서 이 시험은 ``agent/`` **꾸러미 전체**를 읽었다. 그때는
+    꾸러미에 기준점 정책밖에 없었으므로 "꾸러미" 와 "기준점 정책" 이
+    구별되지 않았고, 그래서 둘을 같은 것으로 적었다 — 그것이 잘못된
+    가정이었다. 주장하려던 것은 **기준점이 AI 가 아니다**이지
+    "이 꾸러미는 영원히 평가하지 않는다" 가 아니었다. Phase 3-B 가
+    ``agent/heuristic.py`` 에 평가 함수를 넣는 것은 §1 이 요구한 일이다.
+
+    그래서 읽는 대상을 **기준점이 사는 파일로** 좁힌다. 꾸러미 전체에
+    탐색 · 학습이 없다는 것은 Phase 3-B 의 시험이 §2 의 목록 그대로
+    지킨다 (``test_rule_based_ai`` 의 §H).
     """
-    source = "\n".join(
-        path.read_text() for path in sorted((ROOT / "agent").glob("*.py"))
-    )
+    source = (ROOT / "agent/policy.py").read_text().lower()
     for word in ("evaluate", "minimax", "mcts", "rollout", "reward", "train"):
-        assert word not in source.lower(), word
+        assert word not in source, word
 
     assert isinstance(FirstLegalPolicy(), Policy)
     assert isinstance(RandomPolicy(1), Policy)
