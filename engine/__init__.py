@@ -978,6 +978,12 @@ Duel Engine.
   **같은 뿌리**다.
   ``docs/phase2ao-engine-v1-freeze.md`` 참고.
 
+**Phase 3 부터 ``engine/`` 은 얼려 둔다.** AI 쪽 코드는 ``agent/`` 에 살고
+이 꾸러미를 **고치지 않고 쓴다** (Phase 3-A). 경계는 둘이다 — 정책은
+``GameStateView`` 와 ``LegalActions`` 만 보고, 정책의 난수원은 듀얼의
+난수원과 **다르다** (``RandomPurpose`` 가 2-Z 에 적어 둔 결정).
+``docs/phase3a-ai-action-interface.md`` 참고.
+
 판정 어휘(``validation.py``)는 Action 검증과 비용 검증이 함께 쓴다.
 비용 지불(``payment.py``)은 ``cost`` 와 ``effect`` **위에** 있다 — 지불은
 변경이고, 변경을 적으려면 ``effect.delta`` 가 필요한데 ``effect`` 가 이미
