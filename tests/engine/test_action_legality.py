@@ -91,6 +91,19 @@ def my_hand_spell(state) -> InstanceId:
 
 
 def _battle(state) -> GameStateView:
+    """
+    배틀 페이즈의 관측.
+
+    **턴 번호를 2 로 올린다** (Phase 3-E-1-B). 1턴은 선공의 첫 턴이고,
+    공식 규칙은 그 턴에 배틀 페이즈를 진행할 수 없다고 적는다
+    (RULE-BATTLE-001). 1턴에 두면 그 요구가 먼저 걸려서 **이 아래 시험들이
+    보려던 것**(공격자 · 대상의 적법성)을 가린다.
+
+    632 행의 ``set_phase(Phase.MAIN1)  # 페이즈 위반이 먼저 걸리지 않도록``
+    와 같은 이유의 같은 손질이다 — 시험하려는 규칙만 남기고 나머지 요구는
+    통과시킨다. 주장(assertion)은 하나도 바꾸지 않았다.
+    """
+    state.turn.turn_number = 2
     state.turn.set_phase(Phase.BATTLE)
     return GameStateView.from_state(state, viewer=0)
 
@@ -469,14 +482,53 @@ def test_attack_outside_the_battle_phase_is_invalid(validator, my_monster):
 
 
 @requires_official_db
-def test_attack_in_the_battle_phase_reaches_the_missing_rule(state, my_monster):
+def test_an_attack_is_now_judged_to_the_end(state, my_monster, their_monster):
+    """
+    공격의 적법성을 **끝까지 판정한다** (Phase 3-E-1-B).
+
+    Phase 2-I 부터 이 시험은 ``UNKNOWN`` + ``attack-declaration`` 을
+    주장했다. 그때는 그것이 사실이었다 — 공격 가능 여부를 볼 계층이 없었다.
+    Phase 3-E-1-B 가 넷을 채웠다 (표시 형식 · 카드별 공격권 · 다이렉트 조건 ·
+    선공 첫 턴), 그래서 ``ATTACK`` 이 ``_COMPLETE_RULES`` 로 옮겨졌다.
+
+    **약화가 아니라 반대 방향의 강화다**: 전에는 "모른다" 였고 지금은
+    "된다" 를 말한다.
+    """
     view = _battle(state)
+    result = ActionValidator(view).validate(
+        PlayerAction.attack(0, my_monster, ActionTarget.instance(their_monster))
+    )
+    assert result.validity is ActionValidity.VALID
+    assert result.code is ValidationCode.OK
+    assert result.missing_rule is None
+
+
+@requires_official_db
+def test_a_direct_attack_is_blocked_while_the_opponent_has_a_monster(
+    state, my_monster
+):
+    """RULE-BATTLE-013: 상대 몬스터가 있으면 다이렉트 어택을 할 수 없다."""
+    view = _battle(state)
+    assert view.opponent.monster_zone.size >= 1, "전제: 상대 필드에 몬스터가 있다"
+
     result = ActionValidator(view).validate(
         PlayerAction.attack_directly(0, my_monster)
     )
-    assert result.validity is ActionValidity.UNKNOWN
-    assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert "attack-declaration" in result.missing_rule
+    assert result.validity is ActionValidity.INVALID
+    assert result.code is ValidationCode.TARGET_NOT_OPPONENT
+
+
+@requires_official_db
+def test_a_direct_attack_is_valid_once_the_field_is_empty(state, my_monster):
+    """RULE-BATTLE-013 의 나머지 절반: 비어 있으면 직접 공격할 수 있다."""
+    state.move(state.player(1).monster_zone[0], Zone.GRAVE, to_player=1)
+    view = _battle(state)
+    assert view.opponent.monster_zone.size == 0
+
+    result = ActionValidator(view).validate(
+        PlayerAction.attack_directly(0, my_monster)
+    )
+    assert result.validity is ActionValidity.VALID
 
 
 @requires_official_db

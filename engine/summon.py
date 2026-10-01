@@ -321,6 +321,20 @@ def summon_executor() -> "ActionExecutor":
     )
 
 
+def duel_executor() -> "ActionExecutor":
+    """
+    소환 둘과 **전투**를 아는 실행기 (Phase 3-E-1-B).
+
+    :func:`summon_executor` 를 그대로 두고 따로 둔 이유는 하나다 — 그 이름이
+    말하는 것은 소환이고, 거기에 전투를 넣으면 이름이 거짓이 된다. 듀얼
+    한 판을 굴리는 쪽(:class:`~engine.duel.Duel`)이 이것을 쓴다.
+    """
+    from engine.action_execution import ActionExecutor
+    from engine.battle import AttackHandler
+
+    return summon_executor().register(PlayerActionKind.ATTACK, AttackHandler())
+
+
 __all__ = [
     "SummonError",
     "SummonPlacement",

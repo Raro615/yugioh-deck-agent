@@ -599,6 +599,20 @@ class GameStateView:
     가릴 것이 없는 정보다 — 소환은 공개된 자리에서 일어나고, 상대가 이번
     턴에 소환을 했는지는 양쪽 다 본다. 지난 턴의 기록은 싣지 않는다.
     """
+    attacks_used: tuple[tuple[int, int], ...] = ()
+    """
+    **이번 턴에** 공격한 카드들과 횟수. ``(instance_id 값, 횟수)``.
+
+    소환권과 달리 플레이어별이 아니라 **카드별**이다 — "Each face-up Attack
+    Position monster you control is allowed 1 attack per turn"
+    (RULE-BATTLE-002). 그래서 플레이어 둘짜리 튜플로 담을 수 없다.
+
+    가릴 것이 없다. 공격은 공개된 자리에서 선언되므로 어느 몬스터가 이번
+    턴에 공격했는지는 양쪽 다 본다. 양쪽 카드를 함께 싣는 이유가 그것이다.
+
+    **검증기가 이것을 읽는다.** 검증기는 관측만 보므로 (ADR-007), 여기에
+    실리지 않으면 "이미 공격했는가" 를 판정할 길이 없다.
+    """
 
     # ------------------------------------------------------------------
     # 만들기
@@ -682,6 +696,9 @@ class GameStateView:
                     state.turn.turn_number, 1, RuleActionKind.NORMAL_SUMMON
                 ),
             ),
+            attacks_used=state.rule_uses.cards_used(
+                state.turn.turn_number, RuleActionKind.ATTACK
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -698,6 +715,20 @@ class GameStateView:
     @property
     def opponent_id(self) -> int:
         return 1 - self.viewer
+
+    def attacks_by(self, instance_id: InstanceId) -> int:
+        """
+        그 카드가 **이번 턴에** 공격한 횟수.
+
+        기록이 없으면 0 이다 — 여기서 0 은 "아직 공격하지 않았다" 는 **사실**
+        이고 모른다는 뜻이 아니다. 공격은 공개된 자리에서 일어나므로 기록이
+        없는 것이 곧 하지 않은 것이다.
+        """
+        value = getattr(instance_id, "value", instance_id)
+        for instance, count in self.attacks_used:
+            if instance == value:
+                return count
+        return 0
 
     def player(self, player_id: int) -> PlayerView:
         return self.players[player_id]
@@ -743,6 +774,7 @@ class GameStateView:
             self.winner,
             self.result_reason,
             self.normal_summons_used,
+            self.attacks_used,
         )
 
     def to_dict(self) -> dict:
@@ -756,6 +788,7 @@ class GameStateView:
             "winner": self.winner,
             "result_reason": self.result_reason,
             "normal_summons_used": list(self.normal_summons_used),
+            "attacks_used": [list(pair) for pair in self.attacks_used],
         }
 
     def __str__(self) -> str:

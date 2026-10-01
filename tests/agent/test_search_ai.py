@@ -846,7 +846,9 @@ def test_17_search_off_versus_search_on_leaves_the_game_identical(repository):
     searcher = SearchesThenPicksFirst(on)
     play(on, (searcher, FirstLegalPolicy()))
 
-    assert searcher.simulations > 100, "탐색을 거의 하지 않았으면 시험이 무의미하다"
+    # 전투가 들어온 뒤로 듀얼이 짧아졌다 — 덱아웃(196걸음)이 아니라 LP 0 으로
+    # 끝난다 (실측 46~126걸음 · 시뮬레이션 41~83회). 상한을 재측정값에 맞춘다.
+    assert searcher.simulations > 30, "탐색을 거의 하지 않았으면 시험이 무의미하다"
     assert board_snapshot(on) == board_snapshot(off)
 
 
@@ -1127,9 +1129,12 @@ def test_24_a_full_duel_runs_through_the_ai_interface(repository):
     assert transcript.finished
     assert transcript.refusals == ()
     assert transcript.result is not None
-    assert "덱에서 뽑을 수 없다" in transcript.result.reason
-    assert transcript.steps > 100
-    assert policy.simulation_count() > len(policy.decisions)
+    # Phase 3-E-1-B 전에는 덱아웃이 **유일한** 종료였다. 전투가 들어온 뒤로는
+    # LP 0 으로 끝난다 (실측 8씨앗 전부). 엔진이 자란 것이므로 사실을 고친다 —
+    # "끝까지 간다 · 거절이 없다" 는 주장은 그대로다.
+    assert "라이프 포인트가 0 이 되었다" in transcript.result.reason
+    assert transcript.steps > 30
+    assert policy.simulation_count() > len(policy.decisions) // 2
     assert policy.skipped_count() == 0
     assert all(d.chosen is not None for d in policy.decisions if d.candidates)
 
@@ -1145,7 +1150,8 @@ def test_25_multiple_seeds(repository):
         assert transcript.finished, seed
         assert transcript.refusals == (), seed
         assert policy.skipped_count() == 0, seed
-        assert policy.simulation_count() > 50, seed
+        # 실측 41~80회 (전투 이후). 전에는 108~119회였다.
+        assert policy.simulation_count() > 30, seed
 
 
 @pytest.mark.real_card
@@ -1231,5 +1237,5 @@ def test_search_is_fast_enough_to_finish_a_duel(repository):
     play(duel, (policy, FirstLegalPolicy()))
     elapsed = time.perf_counter() - started
 
-    assert policy.simulation_count() > 100
+    assert policy.simulation_count() > 30
     assert elapsed < 30.0, f"듀얼 한 판에 {elapsed:.1f}s"

@@ -452,7 +452,9 @@ def test_search_on_and_search_off_leave_the_same_game(repository):
 
     on = match(11, (searches_then_picks_first, searches_then_picks_first))
 
-    assert counted and counted[-1] > 100, "탐색을 거의 하지 않으면 시험이 무의미하다"
+    # 실측 54회 (전투 이후 듀얼이 짧아졌다). 지키려던 것은 "시뮬레이션을
+    # 많이 했는데도 대국이 똑같다" 이고, 그 주장은 아래 그대로다.
+    assert counted and counted[-1] > 30, "탐색을 거의 하지 않으면 시험이 무의미하다"
     assert on.state_hash == off.state_hash
     assert on.winner == off.winner
     assert on.turns == off.turns

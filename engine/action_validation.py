@@ -76,7 +76,7 @@ from engine.game_state_view import CardDefinitionView, CardView, GameStateView
 from engine.summon_rules import SummonAssessment, assess_normal_summon
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
 from engine.ids import InstanceId
-from engine.vocabulary import Phase, Zone
+from engine.vocabulary import Phase, Position, Zone
 
 #: 몬스터가 놓이는 존. 공격 · 표시 형식 변경의 출발점이다.
 MONSTER_ZONES: frozenset[Zone] = frozenset({Zone.MZONE, Zone.EMZONE})
@@ -119,7 +119,6 @@ _MISSING_RULE: dict[PlayerActionKind, str] = {
     PlayerActionKind.ACTIVATE_CARD: "activation-timing (Phase 2-C/2-F)",
     PlayerActionKind.ACTIVATE_EFFECT: "activation-condition · cost · timing (Phase 2-C/2-F)",
     PlayerActionKind.CHANGE_POSITION: "position-change-legality (Phase 2-G)",
-    PlayerActionKind.ATTACK: "attack-declaration (Phase 2-G)",
     PlayerActionKind.CHANGE_PHASE: "turn-progression (Phase 2-G)",
     PlayerActionKind.END_PHASE: "turn-progression (Phase 2-G)",
     PlayerActionKind.PASS: "priority (Phase 2-F)",
@@ -134,7 +133,7 @@ _MISSING_RULE: dict[PlayerActionKind, str] = {
 #: **여기 넣는 것은 "이 종류의 적법성을 끝까지 볼 수 있다" 는 선언이다.**
 #: 요구 목록이 비어 있는 종류를 넣으면 아무것도 확인하지 않고 허가가 난다.
 _COMPLETE_RULES: frozenset[PlayerActionKind] = frozenset(
-    {PlayerActionKind.NORMAL_SUMMON}
+    {PlayerActionKind.NORMAL_SUMMON, PlayerActionKind.ATTACK}
 )
 
 assert not (_COMPLETE_RULES & set(_MISSING_RULE)), (
@@ -636,6 +635,27 @@ def _change_position(
 
 
 def _attack(validator: ActionValidator, action: PlayerAction) -> tuple[Requirement, ...]:
+    """
+    공격 선언. **이 목록을 전부 통과하면 허가가 난다** (``_COMPLETE_RULES``).
+
+    공식 규칙 (``rules`` 계층, ``sd-rulebook-en-v10``):
+
+    - RULE-BATTLE-001 — 선공은 첫 턴에 배틀 페이즈를 진행할 수 없다.
+    - RULE-BATTLE-002 — "Each face-up Attack Position monster you control is
+      allowed 1 attack per turn." 공격자는 **앞면 공격 표시**여야 하고,
+      **카드마다** 턴에 한 번이다.
+    - RULE-BATTLE-013 — "If there are no monsters on your opponent's side of
+      the field, you can attack directly." 상대 몬스터가 있으면 다이렉트
+      어택을 할 수 없다.
+
+    Phase 3-E-1-B 에서 ``_COMPLETE_RULES`` 로 옮겼다. 그 전까지는 요구를 전부
+    통과해도 ``UNKNOWN`` 이었다 — 공격 가능 여부를 끝까지 볼 계층이 없었기
+    때문이다. 이제 넷이 채워졌다: 표시 형식 · 공격권 · 다이렉트 조건 · 첫 턴.
+
+    **아직 보지 않는 것**은 전투 예외 규칙이다 (공격 무효 · 공격 대상 변경 ·
+    공격 횟수를 늘리는 효과 · 공격 제약을 걸는 효과). 그것들은 카드 효과가
+    만드는 것이고, 지금 발동되는 효과가 없으므로 판정할 대상도 없다.
+    """
     requirements = [
         Requirement(
             IsTurnPlayer(PlayerRef.CONTROLLER),
@@ -648,6 +668,11 @@ def _attack(validator: ActionValidator, action: PlayerAction) -> tuple[Requireme
             "배틀 페이즈가 아닙니다.",
         ),
         Requirement(
+            _BattlePhaseAllowedThisTurn(),
+            ValidationCode.WRONG_PHASE,
+            "선공은 첫 턴에 배틀 페이즈를 진행할 수 없습니다.",
+        ),
+        Requirement(
             ControllerIs(PlayerRef.CONTROLLER, action.source),
             ValidationCode.SOURCE_NOT_CONTROLLED,
             "자신이 쥐고 있는 몬스터가 아닙니다.",
@@ -656,6 +681,16 @@ def _attack(validator: ActionValidator, action: PlayerAction) -> tuple[Requireme
             InAnyZone(MONSTER_ZONES, action.source),
             ValidationCode.SOURCE_WRONG_ZONE,
             "몬스터 존에 있는 카드가 아닙니다.",
+        ),
+        Requirement(
+            _AttackPositionMonster(action.source),
+            ValidationCode.SOURCE_WRONG_CARD_TYPE,
+            "앞면 공격 표시 몬스터만 공격할 수 있습니다.",
+        ),
+        Requirement(
+            _AttackAvailable(action.source),
+            ValidationCode.NORMAL_SUMMON_ALREADY_USED,
+            "이 몬스터는 이번 턴에 이미 공격했습니다.",
         ),
     ]
     target = action.targets[0] if action.targets else None
@@ -666,6 +701,14 @@ def _attack(validator: ActionValidator, action: PlayerAction) -> tuple[Requireme
                     _AlwaysFalseMarker(),
                     ValidationCode.TARGET_NOT_OPPONENT,
                     "자기 자신을 공격할 수 없습니다.",
+                )
+            )
+        else:
+            requirements.append(
+                Requirement(
+                    _OpponentHasNoMonsters(),
+                    ValidationCode.TARGET_NOT_OPPONENT,
+                    "상대 필드에 몬스터가 있으면 다이렉트 어택을 할 수 없습니다.",
                 )
             )
     elif target is not None and target.kind is ActionTargetKind.INSTANCE:
@@ -768,6 +811,158 @@ class _NormalSummonRightAvailable(Condition):
 
     def describe_ko(self) -> str:
         return "이번 턴의 일반 소환권이 남아 있다"
+
+
+@dataclass(frozen=True, slots=True)
+class _BattlePhaseAllowedThisTurn(Condition):
+    """
+    이번 턴에 배틀 페이즈를 **진행할 수 있는가** (RULE-BATTLE-001).
+
+        "Remember, the player who goes first cannot conduct a Battle Phase
+         in their very first turn."
+
+    1턴은 선공의 첫 턴이므로 공격할 수 없다. 페이즈 자체는 지나가지만
+    (턴 진행 계층의 일이다) 공격 선언은 적법하지 않다.
+    """
+
+    def evaluate(self, view, context) -> ConditionResult:
+        return ConditionResult.from_bool(view.turn_number > 1)
+
+    def canonical_state(self) -> tuple:
+        return ("battle_phase_allowed_this_turn",)
+
+    def to_dict(self) -> dict:
+        return {"kind": "battle_phase_allowed_this_turn"}
+
+    def describe_ko(self) -> str:
+        return "선공 첫 턴이 아니다 (배틀 페이즈를 진행할 수 있다)"
+
+
+@dataclass(frozen=True, slots=True)
+class _AttackPositionMonster(Condition):
+    """
+    공격할 수 있는 표시 형식인가 (RULE-BATTLE-002).
+
+        "Each **face-up Attack Position** monster you control is allowed
+         1 attack per turn."
+
+    뒷면도, 수비 표시도 공격하지 않는다. 관측에 보이지 않으면 ``UNKNOWN``
+    이다 — 자기 몬스터 존은 언제나 보이므로 실제로는 나오지 않지만,
+    **보이지 않는 것을 FALSE 로 접지 않는다.**
+    """
+
+    instance: InstanceId | None = None
+
+    def evaluate(self, view, context) -> ConditionResult:
+        target = self.instance if self.instance is not None else context.source
+        if target is None:
+            return ConditionResult.UNKNOWN
+        card = view.find(target)
+        if card is None or card.position is None:
+            return ConditionResult.UNKNOWN
+        return ConditionResult.from_bool(
+            card.face_up and card.position is Position.FACEUP_ATTACK
+        )
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        target = self.instance if self.instance is not None else context.source
+        if target is None:
+            return ("문맥에 source 가 없어 어느 카드인지 알 수 없음",)
+        card = view.find(target)
+        if card is None:
+            return (f"{target} 가 관측에 보이지 않음 (가려진 존)",)
+        if card.position is None:
+            return (f"{target} 의 표시 형식을 알 수 없음",)
+        return ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "attack_position_monster",
+            self.instance.value if self.instance is not None else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "attack_position_monster"}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 가 앞면 공격 표시"
+
+
+@dataclass(frozen=True, slots=True)
+class _AttackAvailable(Condition):
+    """
+    이 몬스터의 **이번 턴 공격권**이 남아 있는가 (RULE-BATTLE-002).
+
+    소환권과 달리 **카드마다** 하나다. 그래서 플레이어별 기록이 아니라
+    :attr:`~engine.game_state_view.GameStateView.attacks_used` 를 읽는다 —
+    같은 이름의 두 몬스터가 서로 다른 공격권을 갖는다.
+
+    공격은 공개된 자리에서 선언되므로 ``UNKNOWN`` 이 나오지 않는다. 기록이
+    없으면 **아직 공격하지 않은 것**이고, 그것은 사실이지 모름이 아니다.
+    """
+
+    instance: InstanceId | None = None
+
+    def evaluate(self, view, context) -> ConditionResult:
+        target = self.instance if self.instance is not None else context.source
+        if target is None:
+            return ConditionResult.UNKNOWN
+        return ConditionResult.from_bool(view.attacks_by(target) == 0)
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        target = self.instance if self.instance is not None else context.source
+        if target is None:
+            return ("문맥에 source 가 없어 어느 카드인지 알 수 없음",)
+        return ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "attack_available",
+            self.instance.value if self.instance is not None else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "attack_available"}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 가 이번 턴에 아직 공격하지 않았다"
+
+
+@dataclass(frozen=True, slots=True)
+class _OpponentHasNoMonsters(Condition):
+    """
+    상대 필드에 몬스터가 **없는가** (RULE-BATTLE-013).
+
+        "If there are no monsters on your opponent's side of the field,
+         you can attack directly."
+
+    몬스터 존은 공개된 자리이고 **장수는 가려진 자리에서도 공개된 사실**
+    이므로 ``UNKNOWN`` 이 나오지 않는다.
+    """
+
+    def evaluate(self, view, context) -> ConditionResult:
+        opponent = view.player(1 - context.player)
+        occupied = sum(
+            opponent.zone(zone).size for zone in (Zone.MZONE, Zone.EMZONE)
+        )
+        return ConditionResult.from_bool(occupied == 0)
+
+    def canonical_state(self) -> tuple:
+        return ("opponent_has_no_monsters",)
+
+    def to_dict(self) -> dict:
+        return {"kind": "opponent_has_no_monsters"}
+
+    def describe_ko(self) -> str:
+        return "상대 필드에 몬스터가 없다"
 
 
 @dataclass(frozen=True, slots=True)

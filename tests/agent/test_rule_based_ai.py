@@ -544,13 +544,18 @@ def test_d_the_last_resort_rule_also_covers_passing():
 
 
 @pytest.mark.real_card
-def test_d_pass_never_shows_up_in_a_real_duel(repository):
+def test_d_pass_never_shows_up_but_attack_now_does(repository):
     """
-    **이 순간의 사실이다.** ``PASS`` 는 후보에 오르지 않는다.
+    **이 순간의 사실이다.** ``PASS`` 는 여전히 후보에 오르지 않는다.
 
     ``Duel._flow_actions`` 는 우선권이 열려 있을 때만 ``PASS`` 를 넣는데,
-    지금 우선권을 여는 규칙이 없다 (Phase 2-F 미구현). 체인이 생기면 이
-    시험이 깨지고, 그때는 규칙이 아니라 **엔진이 자란 것**이다.
+    지금도 우선권을 여는 규칙이 없다 (Phase 2-F 미구현).
+
+    **``ATTACK`` 은 이제 오른다** (Phase 3-E-1-B). Phase 3-B 에서 이 시험은
+    후보가 ``{NORMAL_SUMMON, END_PHASE}`` 둘뿐이라고 적었고 그때는 사실이었다
+    — 전투 실행 계층이 없어서 검증기가 ``UNKNOWN`` 을 돌려주었다. 엔진이
+    자란 것이므로 **규칙이 아니라 사실을 고친다.** ``PASS`` 에 대한 주장은
+    글자 하나 바뀌지 않았다.
     """
     duel = duel_with(repository, seed=13)
     policy = rule_based_policy()
@@ -561,9 +566,11 @@ def test_d_pass_never_shows_up_in_a_real_duel(repository):
         for judgement in policy.judgements
         for evaluation in judgement.evaluations
     )
+    assert PlayerActionKind.PASS not in kinds, dict(kinds)
     assert set(kinds) == {
         PlayerActionKind.NORMAL_SUMMON,
         PlayerActionKind.END_PHASE,
+        PlayerActionKind.ATTACK,
     }, dict(kinds)
 
 
@@ -647,7 +654,10 @@ def test_e_a_whole_duel_runs_without_a_single_refusal(repository):
     assert transcript.finished
     assert transcript.refusals == ()
     assert transcript.result is not None
-    assert transcript.steps > 100
+    # 전투가 들어온 뒤로 듀얼이 **짧아졌다** — 덱아웃(196걸음)이 아니라 LP 0
+    # 으로 끝나기 때문이다 (실측 46~126걸음). 지키려던 것은 "한 판이 끝까지
+    # 간다" 이고 그 주장은 그대로다.
+    assert transcript.steps > 30
 
 
 # ======================================================================
@@ -694,18 +704,28 @@ def test_f_the_rules_build_a_stronger_board_than_chance(repository):
 
 
 @pytest.mark.real_card
-def test_f_the_winner_does_not_yet_depend_on_the_policy(repository):
+def test_f_the_winner_now_depends_on_the_policy(repository):
     """
-    **이 단계에서 가장 중요한 사실이다.** 승패는 정책과 무관하다.
+    **STRUCTURAL-101 이 풀린 자리다.**
 
-    공격 선언이 아직 후보에 없고 (``PlayerActionKind.ATTACK`` 은 한 번도
-    나타나지 않는다), 그래서 LP 가 **8000 에서 움직이지 않는다.** 남은
-    패배 조건은 덱아웃 하나이고, 그것은 누가 먼저 뽑느냐로 정해진다.
+    Phase 3-B 에서 이 시험은 그 반대를 적었다 — "승패는 정책과 무관하다".
+    그때는 사실이었다: ``ATTACK`` 이 후보에 오르지 않아 LP 가 8000 에서
+    움직이지 않았고, 남은 패배 조건은 덱아웃 하나였으므로 승자는 누가 먼저
+    뽑느냐로 정해졌다. 그 시험의 설명에 **"전투가 들어오면 이 시험이 깨진다
+    — 그때는 깨지는 것이 옳다"** 고 적어 두었고, Phase 3-E-1-B 가 그
+    전투다.
 
-    그래서 규칙 기반 AI 가 "더 잘 둔다" 를 **승률로 증명할 수 없다.**
-    이것은 규칙의 한계가 아니라 **엔진의 한계**이고, 전투가 들어오면 이
-    시험이 깨진다 — 그때는 깨지는 것이 옳다.
+    그래서 주장을 **뒤집는다.** 약화가 아니라 반대 방향의 강화다.
+
+    1. 모든 듀얼이 **LP 0** 으로 끝난다 (덱아웃이 아니다)
+    2. LP 가 8000 에서 **움직인다**
+    3. 같은 씨앗에서 **정책을 바꾸면 승자가 달라지는** 경우가 있다
+
+    3번은 씨앗 4 에서 실측된다. 다른 씨앗에서 승자가 같은 것은 모순이 아니다
+    — 정책이 결과를 **좌우할 수 있다**는 것과 **언제나 좌우한다**는 것은
+    다른 주장이고, 여기서 말하는 것은 앞의 것이다.
     """
+    winners_by_seed: dict[int, set] = {}
     for seed in (1, 4, 8):
         outcomes = set()
         for factory in (
@@ -716,9 +736,19 @@ def test_f_the_winner_does_not_yet_depend_on_the_policy(repository):
             duel = duel_with(repository, seed=seed)
             transcript = play(duel, (factory(), FirstLegalPolicy()))
             outcomes.add(transcript.result.winner)
-            assert duel.state.player(MINE).life_points == 8000
-            assert duel.state.player(THEIRS).life_points == 8000
-        assert len(outcomes) == 1, f"seed={seed}: {outcomes}"
+
+            assert "라이프 포인트가 0" in transcript.result.reason, seed
+            life = (
+                duel.state.player(MINE).life_points,
+                duel.state.player(THEIRS).life_points,
+            )
+            assert 0 in life, f"seed={seed}: {life}"
+            assert life != (8000, 8000)
+        winners_by_seed[seed] = outcomes
+
+    assert len(winners_by_seed[4]) == 2, (
+        f"정책에 따라 승자가 갈리는 씨앗이 사라졌습니다: {winners_by_seed}"
+    )
 
 
 @pytest.mark.real_card

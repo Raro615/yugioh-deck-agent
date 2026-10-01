@@ -55,14 +55,19 @@ from enum import Enum
 
 from engine.action import PlayerAction, PlayerActionKind
 from engine.action_execution import ActionExecutor, ActionStatus
+from engine.action_target import ActionTarget
 from engine.action_validation import ActionValidator
 from engine.game_state_view import GameStateView
 from engine.priority import PriorityState
 from engine.state.game_state import DEFAULT_LIFE_POINTS, DuelResult, GameState
-from engine.summon import summon_executor
+from engine.summon import duel_executor
 from engine.turn_progression import ProgressionStatus, TurnProgressor
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
-from engine.vocabulary import Phase
+from engine.vocabulary import Phase, Zone
+
+
+#: 전투가 일어나는 존들. 공격자와 대상 모두 여기 있는 카드다.
+BATTLE_TARGET_ZONES: tuple[Zone, ...] = (Zone.MZONE, Zone.EMZONE)
 
 
 class DuelError(RuntimeError):
@@ -173,7 +178,7 @@ class Duel:
     priority: PriorityState
     step: TurnStep = TurnStep.OPEN
     first_player: int = 0
-    _executor: ActionExecutor = field(default_factory=summon_executor)
+    _executor: ActionExecutor = field(default_factory=duel_executor)
 
     # ------------------------------------------------------------------
     # 시작
@@ -280,6 +285,7 @@ class Duel:
                 verdict = validator.validate(summon)
                 if verdict.validity is ActionValidity.VALID:
                     allowed.append(summon)
+            allowed.extend(self._attack_actions(seat, validator))
 
         # 흐름을 움직이는 둘은 **검증기가 아니라 흐름 계층**이 답한다.
         # 검증기는 ``GameStateView`` 만 보는데, 우선권과 진행은 판 밖에
@@ -290,6 +296,50 @@ class Duel:
 
         withheld.extend(self._withheld_board_actions(seat, validator))
         return LegalActions(seat, tuple(allowed), tuple(withheld))
+
+    def _attack_actions(self, seat: int, validator: ActionValidator):
+        """
+        지금 **허가가 나는 공격들** (Phase 3-E-1-B).
+
+        공격자 × 대상의 짝을 전부 만들어 **검증기에게 하나씩 물어본다** —
+        "몬스터가 있으면 공격할 수 있다" 고 여기서 가정하지 않는다. 표시
+        형식 · 공격권 · 첫 턴 · 다이렉트 조건은 전부 검증기의 몫이고, 그래야
+        규칙이 한 곳에만 있다.
+
+        대상이 없을 때만 다이렉트 어택을 만드는 것이 아니라 **언제나 만들고
+        검증기가 거른다.** 조건을 두 곳에 적으면 둘이 갈라진다
+        (RULE-BATTLE-013 은 ``_OpponentHasNoMonsters`` 하나가 본다).
+        """
+        opponent = 1 - seat
+        targets = [
+            card.instance_id
+            for zone in BATTLE_TARGET_ZONES
+            for card in self.state.player(opponent).zone(zone)
+        ]
+
+        allowed: list[PlayerAction] = []
+        for zone in BATTLE_TARGET_ZONES:
+            for attacker in self.state.player(seat).zone(zone):
+                candidates = [
+                    PlayerAction.attack(
+                        actor=seat,
+                        source=attacker.instance_id,
+                        target=ActionTarget.instance(target),
+                    )
+                    for target in targets
+                ]
+                candidates.append(
+                    PlayerAction.attack_directly(
+                        actor=seat, source=attacker.instance_id
+                    )
+                )
+                for action in candidates:
+                    if (
+                        validator.validate(action).validity
+                        is ActionValidity.VALID
+                    ):
+                        allowed.append(action)
+        return allowed
 
     def _flow_actions(self, seat: int):
         allowed: list[PlayerAction] = []
