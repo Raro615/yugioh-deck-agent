@@ -17,6 +17,16 @@ Phase 3-B 가 그 자리에 **처음으로 판단하는 정책**을 앉혔다
 (:mod:`agent.heuristic`). 명시적인 규칙만 쓴다 — 탐색도 학습도 없고,
 판을 복제해 보지도 않는다. 모르는 값(``ATK ?``)은 **숫자로 바꾸지 않고
 판단을 포기한다.**
+
+Phase 3-C 가 **미래를 보는 정책**을 더했다 (:mod:`agent.search`).
+
+    agent.simulation.Simulator   사본에 진짜 엔진을 적용하고 **관측만** 준다
+    agent.evaluation             미래 관측 하나를 LP 단위의 값으로 바꾼다
+    agent.search.SearchPolicy    후보마다 해 보고 가장 좋은 미래를 고른다
+
+불변조건은 하나다 — **탐색은 진짜 판을 바꾸지 않는다.** 사본은
+``GameState.clone()`` 으로 만든다. ``project()`` 는 난수원을 원본과 함께
+쓰므로 **탐색에 쓰지 않는다.**
 """
 
 from agent.heuristic import (
@@ -37,6 +47,18 @@ from agent.heuristic import (
     SummonBeforeEndingThePhase,
     rule_based_policy,
 )
+from agent.evaluation import (
+    ATK_IN_LP,
+    DECK_CARD_IN_LP,
+    HAND_CARD_IN_LP,
+    MONSTER_IN_LP,
+    SPELL_TRAP_IN_LP,
+    EvaluationError,
+    Evaluator,
+    StateEvaluator,
+    StateValue,
+    Terminal,
+)
 from agent.policy import (
     Decision,
     FirstLegalPolicy,
@@ -44,6 +66,22 @@ from agent.policy import (
     PolicyError,
     RandomPolicy,
     ScriptedPolicy,
+)
+from agent.search import (
+    DEFAULT_MAX_CANDIDATES,
+    DEFAULT_MAX_SIMULATIONS,
+    SUPPORTED_DEPTH,
+    SearchCandidate,
+    SearchDecision,
+    SearchError,
+    SearchPolicy,
+    search_policy,
+)
+from agent.simulation import (
+    SimulationError,
+    SimulationResult,
+    SimulationStatus,
+    Simulator,
 )
 from agent.runner import (
     MAX_STEPS,
@@ -84,4 +122,27 @@ __all__ = [
     "ATK_WEIGHT",
     "DEF_WEIGHT",
     "BOARD_PRESENCE",
+    # Phase 3-C — 탐색 / 시뮬레이션 AI
+    "Simulator",
+    "SimulationResult",
+    "SimulationStatus",
+    "SimulationError",
+    "Terminal",
+    "StateValue",
+    "Evaluator",
+    "StateEvaluator",
+    "EvaluationError",
+    "ATK_IN_LP",
+    "MONSTER_IN_LP",
+    "SPELL_TRAP_IN_LP",
+    "DECK_CARD_IN_LP",
+    "HAND_CARD_IN_LP",
+    "SearchPolicy",
+    "search_policy",
+    "SearchCandidate",
+    "SearchDecision",
+    "SearchError",
+    "SUPPORTED_DEPTH",
+    "DEFAULT_MAX_CANDIDATES",
+    "DEFAULT_MAX_SIMULATIONS",
 ]

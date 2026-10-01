@@ -27,6 +27,7 @@ Phase 3-B — Rule-Based Duel AI.
 import ast
 import collections
 import pathlib
+import re
 
 import pytest
 
@@ -804,6 +805,10 @@ def test_g_nothing_to_choose_is_recorded_not_guessed():
 #: 없어야 한다. Phase 3-A 의 같은 시험이 ``agent/`` 전체를 읽으면서
 #: ``evaluate`` 까지 금지했는데, 평가는 §1 이 요구한 일이므로 그 단어는
 #: 여기서 빠진다 — 금지되는 것은 **탐색 · 시뮬레이션 · 학습**이다.
+#:
+#: 검사는 **식별자 단위**다. Phase 3-B 에서는 이것을 부분 문자열로 찾았는데,
+#: 그러면 ``ppo`` 가 ``supported`` 안에서 걸린다 — 금지하려던 것은 이름이지
+#: 글자 조각이 아니다 (Phase 3-C §16 에서 교정).
 FORBIDDEN_IN_THE_AGENT_PACKAGE = (
     "torch",
     "tensorflow",
@@ -824,17 +829,20 @@ FORBIDDEN_IN_THE_AGENT_PACKAGE = (
     "genetic",
     "dqn",
     "ppo",
-    "train(",
-    "fit(",
+    "train",
+    "fit",
 )
 
 
-def _code_without_prose(path: pathlib.Path) -> str:
+def _identifiers_without_prose(path: pathlib.Path) -> "set[str]":
     """
-    **설명문과 주석을 떼어 낸 코드만.**
+    **설명문과 주석을 떼어 낸 코드의 식별자 집합.**
 
     설명문에는 "MCTS 가 없다" 처럼 금지된 이름이 **없다고 적기 위해**
     나타난다. 그것까지 금지하면 왜 없는지를 적을 수 없게 된다.
+
+    식별자 단위로 쪼개는 이유: 부분 문자열로 찾으면 ``ppo`` 가
+    ``supported`` 안에서 걸린다. 금지하려던 것은 **이름**이다.
     """
     tree = ast.parse(path.read_text())
     for node in ast.walk(tree):
@@ -850,7 +858,7 @@ def _code_without_prose(path: pathlib.Path) -> str:
             and isinstance(body[0].value.value, str)
         ):
             node.body = body[1:] or [ast.Pass()]
-    return ast.unparse(tree).lower()
+    return set(re.findall(r"[A-Za-z_][A-Za-z_0-9]*", ast.unparse(tree).lower()))
 
 
 def test_h_the_agent_package_contains_no_search_and_no_learning():
@@ -864,14 +872,14 @@ def test_h_the_agent_package_contains_no_search_and_no_learning():
     자리에 나타나기 때문이다. 보는 것은 **코드**다.
     """
     sources = {
-        path.name: _code_without_prose(path)
+        path.name: _identifiers_without_prose(path)
         for path in sorted((ROOT / "agent").glob("*.py"))
     }
     found = {
         (name, word)
-        for name, text in sources.items()
+        for name, identifiers in sources.items()
         for word in FORBIDDEN_IN_THE_AGENT_PACKAGE
-        if word in text
+        if word in identifiers
     }
     assert found == set(), f"§2 가 금지한 것이 들어왔습니다: {sorted(found)}"
 
