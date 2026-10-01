@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from engine.action import PlayerAction
 from engine.duel import Duel, DuelStep
 from engine.state.game_state import DuelResult
+from engine.vocabulary import Phase
 
 from agent.policy import Decision, Policy
 
@@ -55,7 +56,17 @@ MAX_STEPS: int = 5_000
 
 @dataclass(frozen=True, slots=True)
 class TranscriptEntry:
-    """걸음 하나. **정책이 무엇을 골랐고 엔진이 무엇을 했는가.**"""
+    """
+    걸음 하나. **정책이 무엇을 골랐고 엔진이 무엇을 했는가.**
+
+    뒤쪽 셋은 **고르던 순간의 자리표**다 (Phase 3-D). 러너만 이것을 알고
+    있다 — 적용이 끝난 뒤에는 페이즈가 이미 옮겨가 있어서, 밖에서는 "어느
+    페이즈에서 고른 것인가" 를 되찾을 수 없다. 그래서 여기 적는다.
+
+    기본값을 둔 이유: Phase 3-A 의 기록을 깨지 않으려고. 자리표를 모르는
+    기록은 ``-1`` 이고, **0 이 아니다** — 0 은 "첫 턴" 이라는 사실이지만
+    여기서는 "모른다" 를 적어야 한다.
+    """
 
     index: int
     seat: int
@@ -63,6 +74,9 @@ class TranscriptEntry:
     action: "PlayerAction | None"
     accepted: bool
     reason: str
+    turn_number: int = -1
+    phase: "Phase | None" = None
+    legal_count: int = -1
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         what = self.action.kind.value if self.action is not None else "(없음)"
@@ -157,12 +171,15 @@ class DuelRunner:
         policy = self.policies[seat]
         legal = self.duel.legal_actions(seat)
 
+        # 자리표는 **적용 전에** 읽는다. 적용 뒤에는 페이즈가 옮겨가 있다.
+        at = (self.duel.state.turn.turn_number, self.duel.state.turn.phase, len(legal.allowed))
+
         # **관측과 후보만 넘어간다.** Duel 도 GameState 도 가지 않는다.
         chosen = policy.decide(self.duel.view(seat), legal)
 
         decision = self._judge(seat, policy, legal, chosen)
         if not decision.accepted:
-            return self._record(decision)
+            return self._record(decision, at=at)
 
         applied: DuelStep = self.duel.apply(decision.action)
         return self._record(
@@ -172,7 +189,8 @@ class DuelRunner:
                 decision.action,
                 applied.accepted,
                 applied.reason,
-            )
+            ),
+            at=at,
         )
 
     def _judge(self, seat, policy, legal, chosen) -> Decision:
@@ -212,7 +230,10 @@ class DuelRunner:
             )
         return Decision(seat, name, chosen, True)
 
-    def _record(self, decision: Decision) -> TranscriptEntry:
+    def _record(
+        self, decision: Decision, *, at: "tuple[int, Phase, int]"
+    ) -> TranscriptEntry:
+        turn_number, phase, legal_count = at
         entry = TranscriptEntry(
             index=len(self._entries),
             seat=decision.seat,
@@ -220,6 +241,9 @@ class DuelRunner:
             action=decision.action,
             accepted=decision.accepted,
             reason=decision.reason,
+            turn_number=turn_number,
+            phase=phase,
+            legal_count=legal_count,
         )
         self._entries.append(entry)
         return entry
