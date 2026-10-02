@@ -69,6 +69,32 @@ STRUCTURAL-115 가 바로 이 자리의 거짓이었다. 예전에는 ``_zone_at
 **수비력을 점수화하지 않았다.** 뒷면 수비 표시가 실제로 막아 내는 값
 (수비력 · 정보 은닉)을 세는 항은 아직 없고, 그 설계는 별도 Phase 의 일이다.
 
+**"세지 않았다" 는 적어야 사실이 된다** (Phase 3-E-7)
+-----------------------------------------------------
+``partial`` 은 ``excluded`` 가 비어 있지 않은가 **하나뿐**이다. 그래서
+세지 않은 것을 ``excluded`` 에 **적지 않으면** ``partial`` 이 거짓으로
+"다 셌다" 고 말한다 — 모르는 값을 0 으로 바꾸는 것과 같은 종류의 거짓이고,
+적지 않았으므로 고칠 단서조차 남지 않는다.
+
+STRUCTURAL-130 Audit 에서 **조용히 빠진 자리 다섯**이 나왔다. 묘지만
+적혀 있었고 **제외 존 · 필드 존 · 펜듈럼 존 · 엑스트라 덱**은 카드가 있어도
+``excluded`` 가 비었다. 지금은 :data:`_UNSCORED_ZONES` 가 다섯을 모두 적는다.
+점수는 **하나도 바뀌지 않았다** — 세지 않던 것을 세기 시작한 것이 아니라,
+세지 않는다고 말하기 시작한 것이다.
+
+**엑스트라 몬스터 존이 평가에서 사라져 있었다** (STRUCTURAL-132)
+---------------------------------------------------------------
+같은 Audit 에서 나온 **구현 누락**이다. 엔진은 ``MZONE`` 과 ``EMZONE`` 을
+언제나 함께 세는데(``BATTLE_ZONES`` · ``BATTLE_TARGET_ZONES`` ·
+``MONSTER_ZONES`` · RULE-BATTLE-013), 평가만 ``MZONE`` 하나를 보고 있었다.
+
+그래서 EMZ 에 선 앞면 공격 표시 몬스터는 **공격 대상으로 제시되면서
+점수는 0 이었고**, ``excluded`` 도 비어서 ``partial`` 이 거짓으로 "다 셌다"
+고 했다. 관측에는 ``extra_monster_zone`` 으로 분명히 들어와 있었다 — 정보가
+평가에서만 사라진 것이므로 가중치 문제가 아니라 **읽는 자리의 누락**이다.
+:func:`_field_monster_zones` 가 두 자리를 함께 보게 했고, 가중치는 하나도
+새로 만들지 않았다.
+
 여기서 하지 않는 것
 -------------------
 카드 이름을 보지 않는다 (§25). 상대의 가려진 정보를 추측하지 않는다
@@ -79,9 +105,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from engine.game_state_view import CardView, GameStateView, ZoneView
+from engine.game_state_view import CardView, GameStateView, PlayerView, ZoneView
+
+if TYPE_CHECKING:  # pragma: no cover - 타입 주석 전용
+    from collections.abc import Callable
 
 
 class EvaluationError(RuntimeError):
@@ -245,6 +274,74 @@ def _zone_attack(zone: ZoneView) -> tuple[int, int, int]:
     return total, unknown, withheld
 
 
+def _field_monster_zones(player: PlayerView) -> tuple[ZoneView, ZoneView]:
+    """
+    **필드에서 몬스터가 서는 자리.** 메인 몬스터 존 하나만 보면 엑스트라
+    몬스터 존에 선 몬스터가 평가에서 **통째로 사라진다.**
+
+    엔진은 이미 두 자리를 함께 센다 — ``engine/battle.py`` 의
+    ``BATTLE_ZONES``, ``engine/duel.py`` 의 ``BATTLE_TARGET_ZONES``,
+    ``engine/action_validation.py`` 의 ``MONSTER_ZONES``, 그리고 같은 파일의
+    RULE-BATTLE-013(직접 공격) 판정이 그렇다. 즉 EMZ 의 몬스터는 **공격하고,
+    공격 대상이 되고, 직접 공격을 막는다** — ``ATK_IN_LP`` 와
+    ``MONSTER_IN_LP`` 의 근거("공격을 한 번 더 할 수 있고 한 번 더 막을 수
+    있다")가 글자 그대로 성립한다.
+
+    평가만 ``MZONE`` 하나를 보고 있었던 것이 STRUCTURAL-132 다.
+    """
+    return (player.monster_zone, player.extra_monster_zone)
+
+
+def _field_attack(zones: tuple[ZoneView, ...]) -> tuple[int, int, int]:
+    """
+    **필드 몬스터 전체**에 대한 ``_zone_attack`` 의 합.
+
+    자리마다 따로 세고 더하기만 한다 — 가르는 규칙은 ``_zone_attack`` 에
+    한 번만 적혀 있다.
+
+    자리 목록을 **인수로 받는다.** ``PlayerView.monster_zone`` 같은 접근자는
+    매번 존 목록을 훑으므로, 같은 자리를 두 번 꺼내지 않기 위해 호출하는 쪽이
+    한 번만 꺼내 넘긴다.
+    """
+    total = unknown = withheld = 0
+    for zone in zones:
+        zone_total, zone_unknown, zone_withheld = _zone_attack(zone)
+        total += zone_total
+        unknown += zone_unknown
+        withheld += zone_withheld
+    return total, unknown, withheld
+
+
+def _field_monster_count(zones: tuple[ZoneView, ...]) -> int:
+    """필드에 선 몬스터 마리 수. **뒷면도 센다** — 자리를 차지하기 때문이다."""
+    return sum(zone.size for zone in zones)
+
+
+#: 평가가 **점수로 세지 않는, 묘지 밖의 자리**와 그 한국어 이름.
+#:
+#: 세지 않는 것 자체는 설계다 — 제외 존에서 되살릴 수단도, 필드 존 · 펜듈럼
+#: 존 · 엑스트라 덱에서 꺼낼 수단도 지금 후보에 오르지 않는다
+#: (:data:`GRAVE_IS_COUNTED` 의 근거와 같다).
+#:
+#: 적어 두는 이유는 다른 데 있다. **세지 않았다고 적지 않으면** ``excluded``
+#: 가 비고, 그러면 ``partial`` 이 "다 셌다" 는 **거짓**을 말한다. 예전에는
+#: 묘지 하나만 적었고 이 넷은 조용히 빠졌다 (STRUCTURAL-130).
+#:
+#: 네 자리 모두 **장수는 양쪽에 공개된 사실**이므로, 여기 적는 것은
+#: "모른다" 가 아니라 "세지 않았다" 다 — 둘을 섞지 않는다 (Phase 3-E-6).
+#:
+#: 존을 **문자열 이름이 아니라 접근자로** 적는다. ``getattr(player, "grave")``
+#: 로 적으면 "평가가 어느 자리를 읽는가" 를 코드에서 읽을 수 없게 되고,
+#: 그것을 고정한 테스트(``test_03_the_evaluator_reads_these...``)가 실제로
+#: 깨졌다.
+_UNSCORED_ZONES: tuple[tuple[str, "Callable[[PlayerView], ZoneView]"], ...] = (
+    ("제외 존", lambda player: player.removed),
+    ("필드 존", lambda player: player.field_zone),
+    ("펜듈럼 존", lambda player: player.pendulum_zone),
+    ("엑스트라 덱", lambda player: player.extra),
+)
+
+
 @dataclass(frozen=True, slots=True)
 class StateEvaluator:
     """
@@ -275,10 +372,10 @@ class StateEvaluator:
 
         terms.append(("lp", me.life_points - opponent.life_points))
 
-        my_attack, my_unknown, my_withheld = _zone_attack(me.monster_zone)
-        their_attack, their_unknown, their_withheld = _zone_attack(
-            opponent.monster_zone
-        )
+        my_monsters = _field_monster_zones(me)
+        their_monsters = _field_monster_zones(opponent)
+        my_attack, my_unknown, my_withheld = _field_attack(my_monsters)
+        their_attack, their_unknown, their_withheld = _field_attack(their_monsters)
         terms.append(("atk", (my_attack - their_attack) * ATK_IN_LP))
         if my_unknown:
             excluded.append(f"내 몬스터 {my_unknown}마리의 공격력을 모른다")
@@ -299,7 +396,9 @@ class StateEvaluator:
         terms.append(
             (
                 "monsters",
-                (me.monster_zone.size - opponent.monster_zone.size) * MONSTER_IN_LP,
+                (_field_monster_count(my_monsters)
+                 - _field_monster_count(their_monsters))
+                * MONSTER_IN_LP,
             )
         )
         terms.append(
@@ -322,6 +421,17 @@ class StateEvaluator:
             excluded.append(
                 f"묘지 {me.grave.size}/{opponent.grave.size}장은 값을 매기지 않았다"
             )
+
+        # **세지 않은 것은 세지 않았다고 적는다** (STRUCTURAL-130). 위의
+        # 묘지만 적혀 있었고 제외 존 · 필드 존 · 펜듈럼 존 · 엑스트라 덱은
+        # **조용히** 빠졌다 — 그 자리에 카드가 있어도 ``excluded`` 가 비고
+        # ``partial`` 이 거짓으로 "다 셌다" 고 했다. 점수는 바뀌지 않는다.
+        for label, zone_of in _UNSCORED_ZONES:
+            mine_size, their_size = zone_of(me).size, zone_of(opponent).size
+            if mine_size or their_size:
+                excluded.append(
+                    f"{label} {mine_size}/{their_size}장은 값을 매기지 않았다"
+                )
 
         # **이 자리에 거짓 보고가 있었다** (STRUCTURAL-115, Phase 3-E-6 에서
         # 제거). 예전에는 내 뒷면 카드 수를 세어 "값을 매기지 않았다" 고
