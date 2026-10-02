@@ -881,24 +881,50 @@ def _activate_effect(
     if _activation_out_of_scope(validator.view, context, action.source):
         return always
 
-    return always + (
+    quick_play = activation_is_quick_play(validator.view, context, action.source)
+
+    # **자기 턴인가는 둘 다 묻는다.** 패에 있는 속공 마법도 상대 턴에는
+    # 발동할 수 없다 — ``RULE-SPELLTRAP-007`` 이 상대 턴의 발동에 "if you
+    # **Set** the card face-down first" 를 요구하므로, 패에 있는 동안은
+    # 상대 턴에 쓸 수 없다. 그래서 이것은 ``UNKNOWN`` 이 아니라 **규칙이
+    # 금지하는 것**이다.
+    requirements = [
         Requirement(
             IsTurnPlayer(PlayerRef.CONTROLLER),
             ValidationCode.NOT_TURN_PLAYER,
-            "자신의 턴이 아닙니다 (통상 마법은 자기 메인 페이즈에 발동합니다).",
-        ),
-        Requirement(
-            PhaseIs(MAIN_PHASES),
-            ValidationCode.WRONG_PHASE,
-            "메인 페이즈가 아닙니다.",
-        ),
+            "자신의 턴이 아닙니다 (패의 마법은 자기 턴에 발동합니다 — 상대 "
+            "턴에 쓰려면 세트가 앞서야 합니다).",
+        )
+    ]
+
+    # **페이즈는 둘이 다르다.**
+    #
+    #   통상 마법   RULE-SPELLTRAP-001 — "only during your Main Phase"
+    #   속공 마법   RULE-SPELLTRAP-007 — "during **any Phase of your turn**,
+    #               not just your Main Phase"
+    #
+    # 그래서 속공 마법에는 페이즈 요구를 **걸지 않는다.** 걸면 "규칙이
+    # 금지한다" 는 거짓이 된다.
+    if not quick_play:
+        requirements.append(
+            Requirement(
+                PhaseIs(MAIN_PHASES),
+                ValidationCode.WRONG_PHASE,
+                "메인 페이즈가 아닙니다.",
+            )
+        )
+
+    # 놓을 자리는 둘 다 필요하다 — 속공 마법도 마법이므로 앞면으로 놓고
+    # 해결 뒤 묘지로 간다 (RULE-SPELLTRAP-002).
+    requirements.append(
         Requirement(
             ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.SZONE),
             ValidationCode.ZONE_FULL,
             "마법 & 함정 존에 빈 칸이 없습니다 (발동한 마법을 놓을 자리가 "
             "필요합니다).",
-        ),
+        )
     )
+    return always + tuple(requirements)
 
 
 def _turn_progression(
@@ -1127,13 +1153,43 @@ class _OpponentHasNoMonsters(Condition):
 #: 이름은 ``core.constants.TYPE_NAMES`` 에서 오는 것을 그대로 쓴다.
 _OUT_OF_SCOPE_TYPES: tuple[tuple[str, str], ...] = (
     ("TRAP", "trap-activation-timing (세트가 앞서고 세트한 턴에는 못 쓴다 — RULE-SPELLTRAP-009)"),
-    ("QUICKPLAY", "quick-play-timing (자기 턴의 모든 페이즈 · 상대 턴 — RULE-SPELLTRAP-007)"),
     ("CONTINUOUS", "continuous-card-lifecycle (발동 뒤 필드에 남는다 — RULE-SPELLTRAP-004 · 010)"),
     ("EQUIP", "equip-lifecycle (장착 대상과 함께 필드에 남는다 — RULE-SPELLTRAP-005)"),
     ("FIELD", "field-zone-lifecycle (필드 존에 남는다 — RULE-SPELLTRAP-006)"),
     ("RITUAL", "ritual-summon-procedure (의식 소환이 앞선다 — RULE-SPELLTRAP-003)"),
     ("COUNTER", "counter-trap-timing (다른 발동에 응답한다 — RULE-SPELLTRAP-011)"),
 )
+
+
+#: 세트된 속공 마법 · 함정의 발동에 **없는** 규칙 계층.
+#:
+#: ``RULE-SPELLTRAP-007`` 의 두 번째 절이 요구한다 — "You can also activate
+#: them during your opponent's turn **if you Set the card face-down first**,
+#: but then you **cannot activate the card in the same turn you Set it**."
+#:
+#: 그 "세트한 턴" 을 세는 자리가 엔진에 없다 —
+#: ``engine/activation_timing.py`` 의 ``UNRESOLVED_TIMING_RULES`` 가 "세트한
+#: 턴의 함정 발동 제약" 을 **보지 않는다**고 적어 두었다. 세지 못하는 제약을
+#: 통과시키면 "세트한 턴에 발동할 수 있다" 는 거짓이 되므로, 세트된 카드의
+#: 발동은 ``UNKNOWN`` 으로 남긴다.
+SET_ACTIVATION_MISSING = (
+    "set-card-activation-timing (세트한 턴에는 발동할 수 없다 — "
+    "RULE-SPELLTRAP-007 · 009. 세트한 턴을 세는 자리가 없다)"
+)
+
+
+def activation_is_quick_play(view, context, instance) -> bool:
+    """
+    이 발동이 **패에 있는 속공 마법**인가 (Phase 3-E-12).
+
+    범위 안의 발동 중 속공 마법만 ``PhaseIs(MAIN_PHASES)`` 를 **지지 않는다**
+    — ``RULE-SPELLTRAP-007`` 이 "can be activated during **any Phase of your
+    turn**, not just your Main Phase" 라고 적기 때문이다.
+    """
+    definition, _ = _resolve_definition(view, context, instance)
+    if definition is None or not definition.is_spell:
+        return False
+    return "QUICKPLAY" in set(definition.type_names)
 
 
 def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], ...]:
@@ -1172,6 +1228,11 @@ def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], 
     card = view.find(target) if target is not None else None
     if card is None or card.zone is not Zone.HAND:
         where = card.zone.value if card is not None else "?"
+        # **세트된 속공 마법은 다른 이유로 범위 밖이다** (Phase 3-E-12).
+        # 필드에서의 발동 자체를 모르는 것이 아니라, ``RULE-SPELLTRAP-007``
+        # 이 요구하는 "세트한 턴" 제약을 셀 자리가 없다.
+        if "QUICKPLAY" in names and card is not None and card.zone is Zone.SZONE:
+            return (("세트한 속공 마법의 발동이다", SET_ACTIVATION_MISSING),)
         return (
             (
                 f"패가 아니라 {where} 에서의 발동이다",

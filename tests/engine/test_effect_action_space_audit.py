@@ -296,7 +296,6 @@ def test_05_a_normal_spell_is_now_authorized_but_card_activation_is_not(reposito
 @pytest.mark.parametrize(
     "card_id,expected",
     [
-        (MYSTICAL_SPACE_TYPHOON, "quick-play-timing"),
         (THE_GIFT_OF_GREED, "non-spell-activation-timing"),
     ],
 )
@@ -306,12 +305,16 @@ def test_05b_everything_outside_the_scope_stays_unknown(
     """
     **``_COMPLETE_RULES`` 에 올렸지만 아무것도 넓히지 않았다.**
 
-    범위는 **패의 통상 마법 하나**다. 속공 마법과 함정은 공식 조항이 다른
-    타이밍을 적으므로 (RULE-SPELLTRAP-007 · 009) ``UNKNOWN`` 으로 남는다.
+    함정은 공식 조항이 다른 타이밍을 적으므로 (RULE-SPELLTRAP-009 — 세트가
+    앞서야 하고 세트한 턴에는 못 쓴다) ``UNKNOWN`` 으로 남는다.
 
-    **``INVALID`` 가 아니다.** 실제 규칙에서는 둘 다 발동할 수 있고, 없는
-    것은 그 타이밍을 볼 계층뿐이다. ``INVALID`` 로 적으면 "규칙이 금지한다"
-    는 거짓을 말하게 된다.
+    **``INVALID`` 가 아니다.** 실제 규칙에서는 발동할 수 있고, 없는 것은 그
+    타이밍을 볼 계층뿐이다. ``INVALID`` 로 적으면 "규칙이 금지한다" 는 거짓을
+    말하게 된다.
+
+    **속공 마법이 이 목록에서 빠졌다** (Phase 3-E-12). 아래 ``test_05b2`` 로
+    옮겼다 — 패에 있는 속공 마법의 발동 타이밍은 ``RULE-SPELLTRAP-007`` 이
+    한 문장으로 적으므로 더 이상 "모른다" 가 아니다.
     """
     state, source = hand_with(repository, card_id)
     validator = ActionValidator(GameStateView.from_state(state, viewer=MINE))
@@ -324,6 +327,75 @@ def test_05b_everything_outside_the_scope_stays_unknown(
     assert result.validity is ActionValidity.UNKNOWN
     assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
     assert expected in result.missing_rule
+    assert not result.permits_execution
+
+
+@pytest.mark.real_card
+def test_05b2_a_quick_play_spell_in_hand_is_now_in_scope(repository):
+    """
+    **패에 있는 속공 마법이 범위 안으로 들어왔다** (Phase 3-E-12).
+
+    Phase 3-E-3 에서는 ``UNKNOWN`` 이었고, 그때는 그것이 옳았다 — 속공 마법의
+    타이밍을 볼 계층이 없었다. 지금은 **있다.** 공식 조항이 둘로 갈린다.
+
+        ``RULE-SPELLTRAP-007`` — "These are special Spell Cards that can be
+        activated during **any Phase of your turn**, not just your Main Phase.
+        You can **also** activate them during your opponent's turn **if you Set
+        the card face-down first**, but then you cannot activate the card in
+        the same turn you Set it."
+
+    첫 문장은 **세트를 요구하지 않는다** — 그래서 "패에 있는 속공 마법을 자기
+    턴에" 는 세트한 턴을 세지 않아도 판정할 수 있다. 두 번째 문장은 세트와
+    "세트한 턴" 추적을 요구하므로 **여전히 ``UNKNOWN``** 이다
+    (``test_05b3``).
+
+    그리고 메인 페이즈 제약이 **걸리지 않는다** — "not just your Main Phase".
+    """
+    from engine.vocabulary import Phase
+
+    for phase in (Phase.MAIN1, Phase.BATTLE, Phase.MAIN2, Phase.END):
+        state, source = hand_with(repository, MYSTICAL_SPACE_TYPHOON)
+        state.turn.set_phase(phase)
+        validator = ActionValidator(GameStateView.from_state(state, viewer=MINE))
+        result = validator.validate(
+            PlayerAction.activate_effect(
+                actor=MINE,
+                source=source,
+                effect_ref=EffectRef(MYSTICAL_SPACE_TYPHOON, 0),
+            )
+        )
+        assert result.validity is ActionValidity.VALID, (phase, result.reason)
+
+
+@pytest.mark.real_card
+def test_05b3_a_set_quick_play_spell_is_still_unknown(repository):
+    """
+    **세트된 속공 마법은 여전히 ``UNKNOWN``** 이다 (Phase 3-E-12).
+
+    ``RULE-SPELLTRAP-007`` 의 두 번째 문장이 "you cannot activate the card in
+    the same turn you Set it" 를 요구하는데, **세트한 턴을 세는 자리가 엔진에
+    없다** (``engine/activation_timing.py`` 의 ``UNRESOLVED_TIMING_RULES`` 가
+    "세트한 턴의 함정 발동 제약" 을 보지 않는다고 적어 두었다).
+
+    세지 못하는 제약을 통과시키면 "세트한 턴에 발동할 수 있다" 는 거짓이
+    된다. 그래서 ``UNKNOWN`` 이고, **``INVALID`` 도 아니다.**
+    """
+    from engine.vocabulary import Position, Zone
+
+    state, source = hand_with(repository, MYSTICAL_SPACE_TYPHOON)
+    card = state.find_instance(source)
+    state.move(card, Zone.SZONE, to_player=MINE, position=Position.FACEDOWN)
+    validator = ActionValidator(GameStateView.from_state(state, viewer=MINE))
+
+    result = validator.validate(
+        PlayerAction.activate_effect(
+            actor=MINE,
+            source=source,
+            effect_ref=EffectRef(MYSTICAL_SPACE_TYPHOON, 0),
+        )
+    )
+    assert result.validity is ActionValidity.UNKNOWN, result.reason
+    assert "set-card-activation-timing" in (result.missing_rule or "")
     assert not result.permits_execution
 
 

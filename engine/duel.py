@@ -57,6 +57,7 @@ from engine.action import PlayerAction, PlayerActionKind
 from engine.action_execution import ActionExecutor, ActionStatus
 from engine.action_target import ActionTarget
 from engine.action_validation import ActionValidator
+from engine.activation_timing import ActivationTiming, ActivationTimingChecker
 from engine.chain import Chain
 from engine.game_state_view import GameStateView
 from engine.priority import PriorityState
@@ -334,9 +335,19 @@ class Duel:
         # (Phase 3-E-11). 체인은 효과 발동의 사슬이고, 소환 · 세트 · 공격은
         # 발동이 아니므로 체인에 끼어들 수 없다 (RULE-CHAIN-011 —
         # "Summoning a monster, Tributing, changing a monster's battle
-        # position and paying costs are not effect activations"). 창이 닫혀
-        # 있으면 조건이 늘 참이므로 **기존 후보가 한 건도 변하지 않는다.**
-        if seat == self.turn_player and not self.priority.is_open:
+        # position and paying costs are not effect activations").
+        #
+        # 그런데 **발동은 끼어들 수 있다** (Phase 3-E-12). 그래서 창이 열려
+        # 있고 이 자리가 그 창을 쥐고 있으면 발동 후보를 낸다 — 적법성은
+        # ``_activation_actions`` 의 세 관문이 정하고, 그 중 하나가
+        # ``ActivationTimingChecker`` 다. "창이 열렸으니 무엇이든 된다" 가
+        # 아니다.
+        #
+        # 창이 닫혀 있으면 아래 조건이 늘 참이므로 **기존 후보가 한 건도
+        # 변하지 않는다.**
+        if self.priority.is_open and self.priority.holds(seat):
+            allowed.extend(self._activation_actions(seat, validator))
+        elif seat == self.turn_player and not self.priority.is_open:
             for card in self.state.player(seat).hand:
                 # 패의 한 장이 **여러 후보**가 된다 — 소환 · 몬스터 세트 ·
                 # 마법/함정 세트. 어느 것이 되는지는 검증기가 말한다
@@ -454,9 +465,8 @@ class Duel:
             없으므로 (STRUCTURAL-120) 지금 이 관문은 아무것도 거르지
             않는다 — 비용이 생기는 날 걸리게 **먼저** 둔다.
         """
-        if not self.chain.is_empty:
-            # RULE-CHAIN-004 — 지금 범위(통상 마법)는 체인에 얹지 못한다.
-            return []
+        timing = ActivationTimingChecker(validator.view)
+        context = ActivationTiming(self.chain, self.priority)
 
         allowed: list[PlayerAction] = []
         for card in self.state.player(seat).hand:
@@ -477,6 +487,16 @@ class Duel:
                     )
                     verdict = validator.validate(candidate)
                     if verdict.validity is not ActionValidity.VALID:
+                        continue
+                    # **세 번째 관문 — 스펠 스피드** (Phase 3-E-12).
+                    # 체인이 비어 있으면 이 관문은 아무것도 거르지 않는다
+                    # (checker 가 "체인이 비어 있어 제약이 걸리지 않습니다" 로
+                    # 통과시킨다). 체인이 쌓여 있으면 RULE-CHAIN-003/004 가
+                    # 여기서 걸린다. ``UNKNOWN`` 은 **통과가 아니다.**
+                    if (
+                        timing.check(context, candidate).validity
+                        is not ActionValidity.VALID
+                    ):
                         continue
                     try:
                         selections = selections_for(definition, candidate)
