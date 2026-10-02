@@ -539,6 +539,16 @@ _SELF_MUMMIFICATION_ENTRY = LibraryEntry(
 #: 는 "자기 자신을 뺀 자신의 패가 2장 이상" 이고, 발동 시점에 이 카드는
 #: 마법 / 함정 존에 있으므로 제외는 결과를 바꾸지 않는다 —
 #: :class:`ZoneCountAtLeast` 로 **정확히** 옮겨진다.
+#:
+#: **그 이유는 이 카드가 함정이기 때문이다** (Phase 3-E-13). 함정은 세트가
+#: 앞서므로 (RULE-SPELLTRAP-009) 발동할 때 이미 마법 & 함정 존에 있고, 따라서
+#: ``e:GetHandler()`` 가 ``LOCATION_HAND`` 에 들어갈 일이 **구조적으로** 없다.
+#:
+#: 이 추론을 **패에서 발동하는 카드에 옮기면 안 된다.** 패의 마법은 발동할
+#: 때 아직 패에 있으므로 자기 자신이 세어진다. 같은 ``e:GetHandler()`` 를
+#: 그렇게 빠뜨린 것이 리로드(22589918)의 STRUCTURAL-134 였고, 그쪽은
+#: ``excluding_source=True`` 가 필요하다. 이 자리에서 필요 없는 것은 "순서가
+#: 그래서" 가 아니라 "카드 종류가 그래서" 다.
 _FINE_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(FINE, 0),
@@ -948,6 +958,22 @@ _INTRODUCTION_TO_GALLANTRY_ENTRY = LibraryEntry(
 #:   카드가 패에 있는가" 를 판정할 계층이 없어 ``ZoneCountAtLeast`` 로만
 #:   옮겼다. 조작 쪽에는 필터가 ``nil`` 이므로 관문을 선언하지 않는다
 #:   (Phase 2-X: 관문은 카드가 적어 둔 것만 옮긴다).
+#:
+#: 그 ``ZoneCountAtLeast`` 가 **빠뜨린 인자가 하나 있었다** (Phase 3-E-13).
+#: ``s.target`` 의 조건은 이렇게 적혀 있다.
+#:
+#:     ``Duel.IsExistingMatchingCard(
+#:         Card.IsAbleToDeck, tp, LOCATION_HAND, 0, 1, e:GetHandler())``
+#:
+#: 마지막 ``e:GetHandler()`` 는 **제외 카드**다 — 리로드 자신은 세지 않는다.
+#: 그래서 조건은 "자신 패에 1장 이상" 이 아니라 "**리로드 말고** 자신 패에
+#: 1장 이상" 이고, 지금은 ``excluding_source=True`` 가 그것을 적는다.
+#:
+#: 이 한 인자가 빠져 있던 동안 조건의 답이 **배치 전과 후에 달랐다**
+#: (STRUCTURAL-134). 발동한 마법은 필드에 놓이면서 패를 떠나므로
+#: (RULE-SPELLTRAP-002), 배치 뒤에는 자신이 세어지지 않아 우연히 옳은 답이
+#: 나왔고 배치 전에는 자신까지 세어 틀린 답이 나왔다. 지금은 **둘이 같다** —
+#: 자기 자신을 셀지 적어 둔 조건은 자리를 옮겨도 뒤집히지 않는다.
 #: - ``Duel.BreakEffect()`` — 체인 처리의 마디이고 그 계층이 없다.
 #: - ``Duel.IsPlayerCanDraw(tp)`` — 드로우 가능 여부를 판정할 계층이 없다.
 #:   실행기가 덱 장수는 세므로 덱이 모자라면 멈춘다.
@@ -974,12 +1000,16 @@ _RELOAD_ENTRY = LibraryEntry(
                 )
             ),
         ),
-        activation=ZoneCountAtLeast(PlayerRef.CONTROLLER, Zone.HAND, 1),
+        activation=ZoneCountAtLeast(
+            PlayerRef.CONTROLLER, Zone.HAND, 1, excluding_source=True
+        ),
         provenance=EffectProvenance.official_lua(
             "c22589918.lua 의 s.activate 를 옮겼다. IsAbleToDeck 와 "
             "IsPlayerCanDraw 와 BreakEffect 는 옮기지 못했다. 드로우 매수는 "
             "스크립트의 #g 가 아니라 공식 재정(OCG-QA-11919)이 말하는 "
-            "'실제로 덱에 돌아간 수' 로 적었다."
+            "'실제로 덱에 돌아간 수' 로 적었다. 발동 조건의 제외 카드는 "
+            "s.target 의 IsExistingMatchingCard 마지막 인자 e:GetHandler() 를 "
+            "excluding_source 로 옮긴 것이다."
         ),
     ),
     lua_file="c22589918.lua",

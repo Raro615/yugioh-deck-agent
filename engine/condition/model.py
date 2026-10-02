@@ -377,32 +377,80 @@ class ZoneCountAtLeast(Condition):
     **가려진 존에서도 확정할 수 있다.** 장수는 상대 패에서도 공개이기
     때문이다 (``ZoneView.size`` 는 언제나 정확하다). 알 수 없는 것은
     *무엇이* 있는가이지 *몇 장*이 아니다.
+
+    ``excluding_source`` — **묻는 카드 자신을 세지 않는다** (Phase 3-E-13)
+    ------------------------------------------------------------------
+    공식 스크립트가 이 예외를 ``Duel.IsExistingMatchingCard`` 의 마지막
+    인자로 적는다.
+
+        c22589918.lua (리로드) —
+            ``Duel.IsExistingMatchingCard(
+                Card.IsAbleToDeck, tp, LOCATION_HAND, 0, 1, e:GetHandler())``
+
+    마지막 ``e:GetHandler()`` 가 **제외 카드**다. 즉 "패에 1장 이상" 이
+    아니라 "**이 카드 말고** 패에 1장 이상" 이다.
+
+    왜 기본값이 ``False`` 인가: 카드마다 다르다. 같은 ``ZoneCountAtLeast`` 를
+    쓰는 욕망의 항아리의 조건은 자기 **덱**을 세므로 자신이 들어갈 일이
+    없고, 거기에 예외를 걸면 카드가 적지 않은 것을 더하게 된다. 예외는
+    **스크립트가 적어 둔 카드에만** 켠다 (Phase 2-X 의 태도와 같다).
+
+    왜 이 필드가 필요했는가 — **STRUCTURAL-134**
+    --------------------------------------------
+    예외를 빼먹은 조건은 **카드가 패를 떠나기 전과 후에 답이 달라진다.**
+    발동한 마법은 필드에 놓이면서 패를 떠나므로 (RULE-SPELLTRAP-002), 같은
+    조건을 배치 전에 묻느냐 배치 후에 묻느냐로 답이 뒤집혔다. 뒤집히는
+    조건은 **조건이 자기 자신을 셀지 말지 적지 않았다**는 뜻이고, 그것이
+    STRUCTURAL-134 의 실제 내용이었다.
+
+    ``source`` 를 **모르면 ``UNKNOWN``** 이다. 예외를 걸어 둔 조건에서 제외할
+    카드를 모르면 세는 수를 모르는 것이고, 모르는 것을 참으로 읽지 않는다.
     """
 
     who: PlayerRef
     zone: Zone
     count: int = 1
+    excluding_source: bool = False
 
     def __post_init__(self) -> None:
         if self.count < 0:
             raise ValueError(f"장수는 음수일 수 없습니다: {self.count}")
 
     def evaluate(self, view, context) -> ConditionResult:
-        player = view.player(self.who.resolve(context))
-        return ConditionResult.from_bool(player.zone(self.zone).size >= self.count)
+        player = self.who.resolve(context)
+        size = view.player(player).zone(self.zone).size
+        if self.excluding_source:
+            if context.source is None:
+                # 제외할 카드를 가리키지 않았다 — 세는 수를 모른다.
+                return ConditionResult.UNKNOWN
+            card = view.find(context.source)
+            if card is None:
+                # 묻는 카드가 보이지 않는다. 세는 수를 모른다.
+                return ConditionResult.UNKNOWN
+            if card.zone is self.zone and card.controller == player:
+                size -= 1
+        return ConditionResult.from_bool(size >= self.count)
 
     def canonical_state(self) -> tuple:
-        return ("zone_count_at_least", self.who.value, self.zone.value, self.count)
+        base = ("zone_count_at_least", self.who.value, self.zone.value, self.count)
+        # 예외를 걸지 않은 조건의 정규 표현은 **그대로 둔다** — 켜지 않은
+        # 카드의 직렬화가 이 필드 때문에 달라지면 안 된다.
+        return base + ("excluding_source",) if self.excluding_source else base
 
     def to_dict(self) -> dict:
-        return {
+        data = {
             "kind": "zone_count_at_least",
             "who": self.who.value,
             "zone": self.zone.value,
             "count": self.count,
         }
+        if self.excluding_source:
+            data["excluding_source"] = True
+        return data
 
     def describe_ko(self) -> str:
+        if self.excluding_source:
+            return f"{self.who} {self.zone.value} 에 이 카드 말고 {self.count}장 이상"
         return f"{self.who} {self.zone.value} 에 {self.count}장 이상"
 
 

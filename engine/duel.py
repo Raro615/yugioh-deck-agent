@@ -70,6 +70,7 @@ from engine.target_bridge import (
 )
 from engine.spell_activation import (
     NormalSpellPlacement,
+    SpellActivationError,
     activatable_effects,
     duel_activator,
     duel_resolver,
@@ -425,17 +426,14 @@ class Duel:
         """
         지금 **허가가 나는 효과 발동들** (Phase 3-E-3).
 
-        관문이 **둘**이고, 둘 다 통과해야 후보가 된다.
+        관문은 셋이고 셋 다 통과해야 후보가 된다. **그 셋을 여기서 세우지
+        않는다** — :meth:`_activation_gate` 하나가 세우고, ``apply`` 도 같은
+        것을 부른다 (Phase 3-E-13). 관문을 두 곳에 적었던 동안 둘이 서로 다른
+        판을 읽었고, 그것이 STRUCTURAL-134 였다.
 
-        1. :class:`~engine.action_validation.ActionValidator` — 규칙 쪽.
-           턴 플레이어 · 컨트롤러 · 패 · 메인 페이즈 · 빈 칸 · 통상 마법인가.
-        2. :meth:`~engine.activation.EffectActivator.can_activate` — 구현 쪽.
-           구현이 등록되어 있는가 (``EXECUTABLE``) · 발동 조건이 참인가 ·
-           대상이 쓸 수 있는가. **판을 읽기만 한다.**
-
-        둘을 합치지 않는 이유: 1번은 "규칙이 허락하는가" 이고 2번은 "우리가
-        할 수 있는가" 다. 합치면 구현이 없는 카드가 **규칙 위반**으로
-        읽히고, 그것은 거짓이다 (ADR-006).
+        셋을 합치지 않는 이유: 1번(``ActionValidator``)은 "규칙이 허락하는가"
+        이고 3번(``can_activate``)은 "우리가 할 수 있는가" 다. 합치면 구현이
+        없는 카드가 **규칙 위반**으로 읽히고, 그것은 거짓이다 (ADR-006).
 
         여기서 거르는 것 셋은 **이 Phase 의 범위**이고 규칙이 아니다.
 
@@ -465,9 +463,6 @@ class Duel:
             없으므로 (STRUCTURAL-120) 지금 이 관문은 아무것도 거르지
             않는다 — 비용이 생기는 날 걸리게 **먼저** 둔다.
         """
-        timing = ActivationTimingChecker(validator.view)
-        context = ActivationTiming(self.chain, self.priority)
-
         allowed: list[PlayerAction] = []
         for card in self.state.player(seat).hand:
             for effect_ref in activatable_effects(card.card_id):
@@ -485,36 +480,75 @@ class Duel:
                         effect_ref=effect_ref,
                         targets=targets,
                     )
-                    verdict = validator.validate(candidate)
-                    if verdict.validity is not ActionValidity.VALID:
-                        continue
-                    # **세 번째 관문 — 스펠 스피드** (Phase 3-E-12).
-                    # 체인이 비어 있으면 이 관문은 아무것도 거르지 않는다
-                    # (checker 가 "체인이 비어 있어 제약이 걸리지 않습니다" 로
-                    # 통과시킨다). 체인이 쌓여 있으면 RULE-CHAIN-003/004 가
-                    # 여기서 걸린다. ``UNKNOWN`` 은 **통과가 아니다.**
-                    if (
-                        timing.check(context, candidate).validity
-                        is not ActionValidity.VALID
-                    ):
-                        continue
                     try:
                         selections = selections_for(definition, candidate)
                     except TargetBridgeError:  # pragma: no cover - 위에서 맞춰 만든다
                         continue
                     if (
-                        self._activator.can_activate(
-                            self.state,
-                            self.chain,
-                            candidate,
-                            selections=selections,
-                            authorization=verdict,
+                        self._activation_gate(
+                            candidate, validator=validator, selections=selections
                         ).validity
                         is not ActionValidity.VALID
                     ):
                         continue
                     allowed.append(candidate)
         return allowed
+
+    def _activation_gate(
+        self,
+        action: PlayerAction,
+        *,
+        validator: ActionValidator,
+        selections: tuple,
+    ) -> ValidationResult:
+        """
+        발동 하나에 걸리는 **관문 셋을 한 자리에서** 본다 (Phase 3-E-13).
+
+            1. ``ActionValidator``               규칙 쪽
+            2. ``ActivationTimingChecker``       스펠 스피드 (RULE-CHAIN-003 · 004)
+            3. ``EffectActivator.can_activate``  구현 쪽 — 등록 · 조건 · 대상
+
+        **왜 한 자리여야 했는가 — STRUCTURAL-134.**
+        ``legal_actions`` 와 ``apply`` 가 각자 관문을 세우고 있었고, 그 둘이
+        보는 **판이 달랐다.** ``apply`` 는 카드를 필드에 놓은 **뒤에** 발동
+        계층을 불렀으므로 발동한 카드가 패를 떠난 판에서 조건을 읽었고,
+        그래서 ``legal_actions`` 가 허가한 발동이 ``apply`` 에서 거절되는
+        자리가 생겼다 (리로드).
+
+        이제 **같은 함수가 같은 판**을 본다. 후보 생성과 실행이 모두 배치
+        **전**의 판에서 이 관문을 지난다.
+
+        왜 배치 전인가 — 배치 뒤에는 **판정이 아예 불가능하다.** 카드가 패를
+        떠나면 ``_activation_out_of_scope`` 가 "패가 아니라 … 에서의 발동이다"
+        로 범위 밖을 선언하므로, ``ActionValidator`` 는 **어떤 발동에도**
+        ``UNKNOWN`` 을 돌려준다 (욕망의 항아리까지 전부). 배치 뒤의 판은
+        검증기가 읽을 수 있는 판이 아니다.
+
+        그것이 Phase 3-E-3 이 ``activate`` 에 ``ValidationResult.valid(
+        "legal_actions 가 허가한 발동입니다")`` 를 손으로 넣어 줘야 했던
+        이유이기도 하다. 지금 그 자리에는 **실제 검증기의 판정**이 들어간다.
+
+        **판정은 두 번 할 수 있고 실행은 한 번만 한다.** 이 함수는 판을 읽기만
+        하므로 몇 번 불러도 같은 답이고, 그래서 ``legal_actions`` 와 ``apply``
+        가 각각 부르는 것은 중복이 아니라 **독립 검증**이다 — ``apply`` 가
+        "``legal_actions`` 를 지나왔을 것" 을 믿지 않는다는 뜻이다.
+        """
+        verdict = validator.validate(action)
+        if verdict.validity is not ActionValidity.VALID:
+            return verdict
+        # 스펠 스피드는 체인을 보고, 체인은 ``GameState`` 밖에 산다 (ADR-007).
+        timed = ActivationTimingChecker(validator.view).check(
+            ActivationTiming(self.chain, self.priority), action
+        )
+        if timed.validity is not ActionValidity.VALID:
+            return timed
+        return self._activator.can_activate(
+            self.state,
+            self.chain,
+            action,
+            selections=selections,
+            authorization=verdict,
+        )
 
     def _flow_actions(self, seat: int):
         allowed: list[PlayerAction] = []
@@ -717,23 +751,43 @@ class Duel:
             then you **resolve** the effect written on the card. After
             resolving the effect, **send the card to the Graveyard**."
 
-        그래서 네 걸음이다.
+        그래서 다섯 걸음이다.
 
             ⓪ selections_for                ActionTarget → TargetSelection
-            ① NormalSpellPlacement.place    패 → 마법&함정 존 (앞면)
+            ① _activation_gate              세 관문 — **판을 바꾸기 전에**
             ② EffectActivator.activate      비용 · 체인 링크 · 대상
-            ③ ChainResolver.resolve_top     효과 해결
-            ④ NormalSpellPlacement.retire   → 묘지
+            ③ NormalSpellPlacement.place    패 → 마법&함정 존 (앞면)
+            ④ ChainResolver.resolve_top     효과 해결 (``_resolve_chain``)
+            ⑤ NormalSpellPlacement.retire   → 묘지 (``_retire_pending``)
 
-        ⓪이 ① **앞**에 있는 이유: 환전은 판을 읽지도 바꾸지도 않으므로,
-        모양이 틀렸으면 카드를 놓기 전에 거절할 수 있다 (Phase 3-E-4).
+        ⓪이 앞에 있는 이유: 환전은 판을 읽지도 바꾸지도 않으므로, 모양이
+        틀렸으면 아무것도 건드리기 전에 거절할 수 있다 (Phase 3-E-4).
 
-        **되돌릴 수 있는 자리를 하나로 줄였다.** ①은 판을 바꾸므로, ②가
-        깨지면 ①의 역 하나만 하면 된다 (:meth:`
-        ~engine.spell_activation.NormalSpellPlacement.restore`). ②를 ① 앞에
-        두지 않은 이유는 조항이 "놓고 나서 발동이 성립한다" 고 적기 때문이다.
+        **①과 ②가 ③ 앞으로 왔다** (Phase 3-E-13 · STRUCTURAL-134)
+        ---------------------------------------------------------
+        Phase 3-E-3 은 ③을 먼저 두고, 깨지면 그 하나를 되돌렸다
+        (``NormalSpellPlacement.restore``). 조항이 "놓고 나서 발동이 성립한다"
+        고 적기 때문이었다. 그런데 **판정을 어디서 하는가는 그 조항이 정하지
+        않는다.** 조항은 "발동할 수 있는 마법" 을 전제하고 시작하는 문장이고
+        ("To use a Normal Spell Card, …"), 적법한가를 묻는 자리는 그 앞이다.
 
-        ③이 깨지면 **되돌리지 않는다.** 발동은 이미 성립했고, 해결되지 않은
+        그리고 배치 뒤에는 **판정이 불가능하다.** 카드가 패를 떠나면
+        ``ActionValidator`` 가 모든 발동에 ``UNKNOWN`` 을 돌려준다
+        (``_activation_gate`` 의 설명). 그래서 예전 순서에서는 손으로 만든
+        허가를 ``activate`` 에 넣어 줄 수밖에 없었고, ``legal_actions`` 와
+        ``apply`` 가 **서로 다른 판**에서 조건을 읽게 되었다 — 그것이
+        STRUCTURAL-134 이었다.
+
+        순서를 바꿔도 **조항이 말하는 순서는 지켜진다.** ③은 여전히 ④보다
+        앞이다 — 카드는 해결되기 전에 앞면으로 필드에 놓이고, 상대가 응답
+        기회를 받는 시점에도 이미 필드에 있다 (RULE-CHAIN-001).
+
+        **되돌릴 자리가 사라졌다.** ①이 거절하면 판은 **한 번도** 바뀌지
+        않는다. ``restore`` 가 필요했던 경우가 없어진 것이고, 이것은
+        rollback 계층을 만든 것이 아니라 **만들 필요를 없앤 것**이다
+        (ADR-008 은 그대로 미뤄져 있다).
+
+        ④가 깨지면 **되돌리지 않는다.** 발동은 이미 성립했고, 해결되지 않은
         효과의 카드가 묘지로 가는 것은 규칙대로다 (불발). 다만 "해결했다" 고
         적지 않는다 — 이유를 그대로 전한다.
         """
@@ -754,21 +808,49 @@ class Duel:
                 action, False, ValidationCode.TARGET_COUNT_MISMATCH, str(error)
             )
 
-        placed = self._placement.place(self.state, action.source, action.actor)
+        # ① **판을 바꾸기 전에** 세 관문을 지난다. ``legal_actions`` 가 쓰는
+        # 것과 **같은 함수**이고 **같은 판**이다 (STRUCTURAL-134).
+        #
+        # ``legal_actions`` 를 지나왔다고 **믿지 않는다.** ``apply`` 는 공개
+        # 입구이고, 아무 ``PlayerAction`` 이나 들어올 수 있다.
+        gate = self._activation_gate(
+            action,
+            validator=ActionValidator(self.view(action.actor)),
+            selections=selections,
+        )
+        if gate.validity is not ActionValidity.VALID:
+            return DuelStep(action, False, gate.code, gate.reason)
 
+        # ② 비용과 체인 링크. ``gate`` 는 방금 이 판에서 세 관문이 모두 낸
+        # 판정이므로 그대로 허가로 넘긴다 — 손으로 만든 "허가했다" 가 아니다.
         activated = self._activator.activate(
             self.state,
             self.chain,
             action,
             selections=selections,
-            authorization=ValidationResult.valid(
-                "legal_actions 가 허가한 발동입니다."
-            ),
+            authorization=gate,
         )
         if not activated.activated:
-            # ①의 역 **하나**. 일반 rollback 이 아니다.
-            self._placement.restore(self.state, placed)
+            # 여기까지 오는 길은 ``_activation_gate`` 가 ``VALID`` 를 낸 뒤
+            # ``activate`` 가 같은 판에서 다른 답을 내는 경우뿐이다. 판을
+            # 바꾸지 않았으므로 **되돌릴 것이 없다.**
             return DuelStep(action, False, activated.code, activated.reason)
+
+        # ③ 이제 놓는다 (RULE-SPELLTRAP-002 — "placing it face-up on the
+        # field"). 발동이 성립한 뒤이므로 되돌릴 자리가 아니다.
+        try:
+            placed = self._placement.place(self.state, action.source, action.actor)
+        except SpellActivationError as error:
+            # 관문이 통과시킨 카드가 패에 없다 — 비용이 그것을 옮겼을 때만
+            # 닿는다. **비용은 이미 치러졌고 되돌리지 않는다** (ADR-008).
+            # 체인은 값이므로 ``self.chain`` 에 반영하지 않는다 — 링크가
+            # 남지 않는다. 숨기지 않고 이유를 그대로 전한다.
+            return DuelStep(
+                action,
+                False,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"발동한 카드를 필드에 놓을 수 없습니다: {error}",
+            )
 
         self.chain = activated.chain
 

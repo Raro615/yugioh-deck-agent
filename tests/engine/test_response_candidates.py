@@ -421,43 +421,79 @@ def test_11_a_candidate_can_still_be_refused_when_its_condition_reads_its_own_zo
     repository,
 ):
     """
-    **STRUCTURAL-134 (신규) — 후보가 되었는데 ``apply`` 가 거절한다.**
+    **STRUCTURAL-134 — 해결되었다** (Phase 3-E-13).
 
-    ``_activation_actions`` 는 ``can_activate`` 를 **배치 전**에 묻고,
-    ``_apply_activation`` 은 ``RULE-SPELLTRAP-002`` 대로 **배치 뒤**에
-    발동한다 ("announce its activation …, placing it face-up on the ﬁeld").
-    그 사이에 발동한 카드가 패를 떠나므로, **자기 패를 읽는 조건**은 답이
-    뒤집힌다.
+    이 시험이 Phase 3-E-12 에서 처음 적힌 모습은 **"후보가 되었는데 ``apply``
+    가 거절한다"** 를 고정하는 것이었다. 그때의 설명은 이랬다.
 
-    리로드가 그 첫 카드다 — 조건이 "자신 HAND 에 1장 이상" 이고, 패에 리로드
-    하나만 있으면 배치 뒤에 패가 비어 거짓이 된다.
+        ``_activation_actions`` 는 ``can_activate`` 를 배치 **전**에 묻고,
+        ``_apply_activation`` 은 배치 **뒤**에 발동한다. 그 사이에 발동한
+        카드가 패를 떠나므로 자기 패를 읽는 조건은 답이 뒤집힌다. 리로드가
+        그 첫 카드다.
 
-    이 Phase 가 만든 문제가 **아니다.** 순서는 Phase 3-E-3 이 공식 조항에
-    맞춰 정했고, 이 Phase 가 **자기 패를 읽는 첫 카드를 후보로 만들면서**
-    드러났을 뿐이다. 고치려면 ``legal_actions`` 가 판을 바꿔 보거나
-    (읽기 전용이어야 한다) 조항이 정한 순서를 뒤집어야 하므로, 이번 범위
-    밖이다.
+    **그 시험이 가졌던 잘못된 가정은 하나다** — "리로드의 조건은 '자신 패에
+    1장 이상' 이다". 공식 스크립트는 그렇게 적지 않았다.
 
-    **``legal_actions`` 가 허가한 것을 ``apply`` 가 거절하는 유일한 자리**이고,
-    그 사실을 여기 고정한다.
+        c22589918.lua 의 ``s.target`` —
+        ``Duel.IsExistingMatchingCard(
+            Card.IsAbleToDeck, tp, LOCATION_HAND, 0, 1, e:GetHandler())``
+
+    마지막 ``e:GetHandler()`` 가 **제외 카드**다. 즉 조건은 "**리로드 말고**
+    자신 패에 1장 이상" 이고, 엔진의 정의가 그 인자를 옮기지 않았다.
+
+    그래서 두 가지가 함께 고쳐졌다.
+
+    1. 조건이 **자기 자신을 셀지 적는다** (``excluding_source=True``). 그러면
+       조건의 답이 배치 전과 후에 **같다** — 뒤집히는 조건은 "자기를 셀지
+       적지 않은 조건" 이었다는 뜻이다.
+    2. 관문을 ``legal_actions`` 와 ``apply`` 가 **같은 함수로, 같은 판에서**
+       지난다 (``Duel._activation_gate``).
+
+    지금 고정하는 것은 **파리티**다 — 패에 리로드 하나뿐이면 후보가 되지
+    **않고**, 그 행위를 발동 경로에 직접 넣어도 **같은 이유로** 거절된다.
+    둘의 판정이 갈라지지 않는다.
+
+    ``_apply_activation`` 을 직접 부르는 이유
+    ----------------------------------------
+    ``Duel.apply`` 는 들어온 행위가 ``legal_actions`` 에 있는지부터 보고
+    (``"… 는 지금 허가된 행위가 아닙니다"``), 없으면 발동 경로에 **닿지도
+    않는다.** 그 바깥 문이 막아 주는 것과 **안쪽 관문이 스스로 막는 것**은
+    다른 주장이고, 뒤쪽이 이 Phase 가 고친 것이다. 그래서 둘을 따로 재고,
+    바깥 문도 함께 확인한다.
     """
     duel = duel_at(repository, mine=(RELOAD,))  # 패에 리로드 **하나뿐**
-    candidates = activations(duel, P0, RELOAD)
-    assert candidates, "후보가 되는 것까지는 맞다"
+    assert activations(duel, P0, RELOAD) == [], "후보가 되어서는 안 된다"
 
-    step = duel.apply(candidates[0])
-    assert not step.accepted
-    assert "발동 조건이 거짓" in step.reason
-    # 판은 그대로 되돌아간다 — 놓았던 카드가 패로 돌아온다.
+    # 후보가 아닌 그 행위를 손으로 만든다.
+    reload_card = next(
+        c for c in duel.state.player(P0).hand if c.card_id == RELOAD
+    )
+    forced = PlayerAction.activate_effect(
+        actor=P0, source=reload_card.instance_id, effect_ref=EffectRef(RELOAD, 0)
+    )
+
+    # ① 바깥 문 — 후보에 없으므로 발동 경로에 닿지 않는다.
+    outer = duel.apply(forced)
+    assert not outer.accepted
+    assert "허가된 행위가 아닙니다" in outer.reason, outer.reason
+
+    # ② 안쪽 관문 — 바깥 문을 건너뛰어도 **같은 판에서 스스로** 거절한다.
+    inner = duel._apply_activation(forced)
+    assert not inner.accepted
+    assert "발동 조건이 거짓" in inner.reason, inner.reason
+
+    # 판은 **한 번도** 바뀌지 않았다 — 되돌린 것이 아니라 건드리지 않았다.
     assert len(duel.state.player(P0).zones[Zone.HAND]) == 1
-    assert duel.state.player(P0).zones[Zone.SZONE].__len__() == 0
+    assert len(duel.state.player(P0).zones[Zone.SZONE]) == 0
     assert duel.chain.is_empty
     assert duel.priority.window is ResponseWindow.NONE
     assert duel.pending_spells == ()
 
-    # 패에 한 장이 더 있으면 조건이 성립하고 정상 발동한다.
+    # 패에 한 장이 더 있으면 조건이 성립한다 — 후보가 되고 발동도 된다.
     duel = duel_at(repository, mine=(RELOAD, LUSTER_DRAGON))
-    assert duel.apply(activations(duel, P0, RELOAD)[0]).accepted
+    candidates = activations(duel, P0, RELOAD)
+    assert candidates
+    assert duel.apply(candidates[0]).accepted
 
 
 @pytest.mark.real_card
@@ -522,11 +558,28 @@ def test_13_the_timing_gate_refuses_anything_that_is_not_valid():
 
     그래서 지금 잡을 수 있는 방법으로 잡는다 — 비교가 약해지면 깨진다.
     세트된 카드의 발동이 범위 안으로 들어오는 날 실행으로 다시 재야 한다.
+
+    **읽는 자리가 바뀌었다** (Phase 3-E-13)
+    ---------------------------------------
+    이 시험은 처음에 ``Duel._activation_actions`` 의 원문을 읽었다. 그때는
+    관문 셋이 그 함수 안에 적혀 있었기 때문이다. 그 가정이 **틀렸음이
+    드러났다** — 관문이 거기 있었던 것이 바로 STRUCTURAL-134 의 원인이었다.
+    ``apply`` 가 자기 관문을 따로 세웠고, 두 벌이 서로 다른 판을 읽었다.
+
+    지금 관문은 :meth:`Duel._activation_gate` 하나이고 ``legal_actions`` 와
+    ``apply`` 가 둘 다 그것을 부른다. 그래서 읽을 자리도 그 하나다 — 주장은
+    그대로이고 (``VALID`` 만 통과한다), **어디에 적혀 있어야 하는가**에 대한
+    가정만 고쳤다.
     """
     import inspect
 
-    source = inspect.getsource(Duel._activation_actions)
-    assert "timing.check(context, candidate).validity" in source
+    source = inspect.getsource(Duel._activation_gate)
+    assert "ActivationTimingChecker(validator.view).check(" in source
     assert "is not ActionValidity.VALID" in source, source
     # "INVALID 가 아니면 통과" 로 약해지지 않았다.
     assert "is ActionValidity.INVALID" not in source
+    # 그리고 후보 생성 쪽은 **자기 관문을 다시 세우지 않는다.**
+    candidates = inspect.getsource(Duel._activation_actions)
+    assert "_activation_gate(" in candidates
+    assert "ActivationTimingChecker(" not in candidates
+    assert "can_activate(" not in candidates
