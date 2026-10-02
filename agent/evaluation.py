@@ -44,6 +44,31 @@ cards left in their Deck and unable to draw loses the Duel" 이라고 적는다.
 거짓이 되고, 큰 수로 넣으면 "강하다" 는 거짓이 된다 (§20 · §28).
 빠진 것이 있는 평가는 :attr:`StateValue.partial` 이 참이다.
 
+**"모른다" 와 "세지 않았다" 는 다른 사실이다** (Phase 3-E-6)
+-----------------------------------------------------------
+``excluded`` 에 두 종류가 들어가고, 섞으면 둘 다 거짓이 된다.
+
+===================  =====================================================
+"모른다"              상대의 뒷면 카드 · 공격력이 ``?`` 인 카드. 값을
+                      **읽을 수 없다**
+"세지 않았다"         내 뒷면 몬스터의 공격력. 정체를 **알지만** 뒷면은
+                      공격하지 않으므로 그 공격력이 지금 들어올 피해가
+                      아니다 — ``ATK_IN_LP`` 가 1:1 인 근거가 성립하지
+                      않는다
+===================  =====================================================
+
+STRUCTURAL-115 가 바로 이 자리의 거짓이었다. 예전에는 ``_zone_attack`` 이
+내 뒷면 몬스터의 공격력을 **그대로 세면서** "값을 매기지 않았다" 고
+보고했고, 그래서 앞면 공격 표시와 뒷면 수비 표시가 같은 점수를 받았다.
+지금은 공격력을 세지 않고, 보고도 사실을 말한다.
+
+**자리에 있다는 값은 뒷면도 센다.** ``monsters`` · ``spells`` 는 뒷면
+카드도 세는데, 칸을 차지하고 나중에 쓸 수 있는 것이 사실이기 때문이다.
+그래서 뒷면 마법 · 함정은 제외 항목이 **없다** — 뺀 것이 없다.
+
+**수비력을 점수화하지 않았다.** 뒷면 수비 표시가 실제로 막아 내는 값
+(수비력 · 정보 은닉)을 세는 항은 아직 없고, 그 설계는 별도 Phase 의 일이다.
+
 여기서 하지 않는 것
 -------------------
 카드 이름을 보지 않는다 (§25). 상대의 가려진 정보를 추측하지 않는다
@@ -177,15 +202,34 @@ class Evaluator(Protocol):
         ...  # pragma: no cover - 프로토콜
 
 
-def _zone_attack(zone: ZoneView) -> tuple[int, int]:
-    """
-    그 존의 **공격력 합과 셀 수 없었던 마리 수.**
+def _is_face_down(card: CardView) -> bool:
+    return not card.face_up
 
-    셀 수 없는 경우가 셋이다 — 정의가 없는 카드(가려진 상대 카드), 공격력이
-    ``?`` 인 카드, 공격력 칸이 없는 카드. 셋 다 0 으로 바꾸지 않는다.
+
+def _zone_attack(zone: ZoneView) -> tuple[int, int, int]:
+    """
+    그 존의 **공격력 합 · 읽을 수 없었던 마리 수 · 세지 않은 마리 수.**
+
+    뒤의 둘을 **가르는 것이 이 함수의 핵심이다** (Phase 3-E-6).
+
+    ``unknown`` — 읽을 수 **없다**
+        정의가 없는 카드(가려진 상대 카드), 공격력이 ``?`` 인 카드, 공격력
+        칸이 없는 카드. 0 으로 바꾸지 않는다.
+    ``withheld`` — 읽을 수 **있지만 세지 않는다**
+        내 뒷면 카드다. 정체를 알지만 **뒷면은 공격하지 않으므로** 그 공격력이
+        지금 들어올 피해가 아니다 (``ATK_IN_LP`` 가 1:1 인 근거가 성립하지
+        않는다).
+
+    둘을 한 칸에 몰면 "내 카드를 모른다" 는 거짓이 되고, 그것이 바로
+    STRUCTURAL-115 가 ``excluded`` 에 적고 있던 거짓이다.
+
+    **순서가 규칙이다.** 읽을 수 있는지를 먼저 본다 — 상대의 뒷면 카드는
+    정의가 없으므로 ``unknown`` 으로 가고, ``withheld`` 는 **정의를 읽을 수
+    있는 뒷면 카드**(내 것)만 센다.
     """
     total = 0
     unknown = 0
+    withheld = 0
     for card in zone.occupied():
         definition = card.definition
         if definition is None or not definition.is_monster:
@@ -194,12 +238,11 @@ def _zone_attack(zone: ZoneView) -> tuple[int, int]:
         if definition.atk_is_question or not definition.has_atk:
             unknown += 1
             continue
+        if _is_face_down(card):
+            withheld += 1
+            continue
         total += definition.atk
-    return total, unknown
-
-
-def _is_face_down(card: CardView) -> bool:
-    return not card.face_up
+    return total, unknown, withheld
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,13 +275,26 @@ class StateEvaluator:
 
         terms.append(("lp", me.life_points - opponent.life_points))
 
-        my_attack, my_unknown = _zone_attack(me.monster_zone)
-        their_attack, their_unknown = _zone_attack(opponent.monster_zone)
+        my_attack, my_unknown, my_withheld = _zone_attack(me.monster_zone)
+        their_attack, their_unknown, their_withheld = _zone_attack(
+            opponent.monster_zone
+        )
         terms.append(("atk", (my_attack - their_attack) * ATK_IN_LP))
         if my_unknown:
             excluded.append(f"내 몬스터 {my_unknown}마리의 공격력을 모른다")
         if their_unknown:
             excluded.append(f"상대 몬스터 {their_unknown}마리의 공격력을 모른다")
+        # **모르는 것과 세지 않은 것은 다른 사실이다** (Phase 3-E-6).
+        # 내 뒷면 몬스터의 정체는 알지만 그 공격력을 세지 않았다.
+        if my_withheld:
+            excluded.append(
+                f"내 뒷면 몬스터 {my_withheld}마리의 공격력은 세지 않았다 "
+                "(뒷면은 공격하지 않는다)"
+            )
+        if their_withheld:  # pragma: no cover - 상대 뒷면은 정의를 읽을 수 없다
+            excluded.append(
+                f"상대 뒷면 몬스터 {their_withheld}마리의 공격력은 세지 않았다"
+            )
 
         terms.append(
             (
@@ -267,17 +323,21 @@ class StateEvaluator:
                 f"묘지 {me.grave.size}/{opponent.grave.size}장은 값을 매기지 않았다"
             )
 
-        # 내 뒷면 카드는 **정체는 보이지만** 상대에게는 안 보인다. 값에
-        # 넣지 않는 쪽을 고른 이유는, 넣으면 같은 판이 보는 자리에 따라
-        # 다른 점수가 되어 §23 의 일관된 관점이 깨지기 때문이다.
-        face_down = sum(
-            1
-            for zone in (me.monster_zone, me.spell_zone)
-            for card in zone.occupied()
-            if _is_face_down(card)
-        )
-        if face_down:
-            excluded.append(f"내 뒷면 카드 {face_down}장은 값을 매기지 않았다")
+        # **이 자리에 거짓 보고가 있었다** (STRUCTURAL-115, Phase 3-E-6 에서
+        # 제거). 예전에는 내 뒷면 카드 수를 세어 "값을 매기지 않았다" 고
+        # 적었는데, ``_zone_attack`` 은 그 공격력을 그대로 세고 있었고
+        # ``monsters`` · ``spells`` 는 **지금도** 그 카드를 센다. 그래서 그
+        # 문장은 어느 쪽으로도 참이 아니었다.
+        #
+        # 지금은 둘이 각자 사실을 말한다.
+        #
+        #   공격력을 세지 않은 것   위의 ``my_withheld`` 가 적는다
+        #   자리에 있다는 값        ``monsters`` · ``spells`` 가 **센다**
+        #                          (뒷면도 자리를 차지하고 나중에 쓸 수 있다)
+        #
+        # 뒷면 마법 · 함정은 그래서 제외 항목이 **없다** — 뺀 것이 없기
+        # 때문이다. 양쪽 모두 ``spell_zone.size`` 로 세므로 대칭이고,
+        # 가려진 정체를 읽지도 않는다.
 
         return StateValue(
             terminal=terminal,

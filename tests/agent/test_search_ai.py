@@ -622,7 +622,12 @@ def test_12_an_unknown_attack_is_excluded_not_counted_as_zero(repository):
         cards=(unknown, known, None, None, None),
         size=2,
     )
-    total, unknown_count = _zone_attack(zone)
+    # Phase 3-E-6 에서 반환값이 셋으로 늘었다 — "읽을 수 없다"(unknown)와
+    # "읽을 수 있지만 세지 않는다"(withheld)를 가르기 위해서다. 이 시험의
+    # 두 카드는 둘 다 **앞면**이므로 withheld 는 0 이고, 아래 주장은 하나도
+    # 바뀌지 않았다.
+    total, unknown_count, withheld_count = _zone_attack(zone)
+    assert withheld_count == 0, "앞면 카드는 세지 않는 쪽으로 가지 않는다"
 
     assert unknown_count == 1
     assert total == 1900, "모르는 공격력이 0 으로 더해지지 않았다"

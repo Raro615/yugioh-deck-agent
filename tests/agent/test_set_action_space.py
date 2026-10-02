@@ -483,25 +483,30 @@ def test_16_setting_a_spell_scores_above_passing(repository):
 
 
 @pytest.mark.real_card
-def test_17_the_evaluator_contradicts_itself_about_a_face_down_monster(repository):
+def test_17_the_evaluator_no_longer_contradicts_itself_about_a_face_down_monster(
+    repository,
+):
     """
-    **STRUCTURAL-115 를 사실로 적는다.** 고치지 않고 기록한다.
+    **STRUCTURAL-115 가 풀린 자리다** (Phase 3-E-6).
 
-    세트한 몬스터에 대해 평가가 두 가지를 동시에 말한다:
+    Phase 3-E-2 에서 이 시험은 그 반대를 적었다 — 평가가 뒷면 몬스터에 대해
+    두 가지를 **동시에** 말한다고:
 
-        atk 항   1900   — 뒷면 몬스터의 **공격력을 세었다**
-        excluded "내 뒷면 카드 1장은 값을 매기지 않았다"
+        atk 항   1900   — 뒷면 몬스터의 공격력을 세었다
+        excluded "내 뒷면 카드 N장은 값을 매기지 않았다"
 
-    둘 다 참일 수 없다. 그 결과 ``set_monster`` 와 ``normal_summon`` 의
-    점수가 **정확히 같아지고**, 무엇을 고르는지는 평가가 아니라
-    ``canonical_state`` 순서가 정한다.
+    둘 다 참일 수 없었고, 그래서 ``set_monster`` 와 ``normal_summon`` 의
+    점수가 정확히 같았다. 그 설명에 **"올바른 셈이 무엇인지는 설계 결정"**
+    이라고 적어 두었고, Phase 3-E-6 이 그 결정을 내렸다 — 모듈 설명이 이미
+    의도라고 적고 있던 쪽(뒷면의 공격력을 세지 않는다)으로 코드를 맞췄다.
 
-    왜 여기서 고치지 않는가: 올바른 셈이 무엇인지는 **설계 결정**이다
-    (뒷면이면 공격력을 빼야 하는가, 수비력을 넣어야 하는가, 아무 값도 주지
-    않아야 하는가). Phase 3-E-2 §15 는 평가 변경을 범위 밖으로 두었고,
-    모르는 것을 임의로 정하는 쪽이 모순을 기록하는 쪽보다 나쁘다.
+    그래서 주장을 뒤집는다. 약화가 아니라 **모순의 해소**다.
 
-    **점수를 맞추려고 가중치를 비틀지 않았다.**
+    1. 뒷면 몬스터는 ``atk`` 에 들어가지 않는다 (0)
+    2. 자리에 있다는 값(``monsters`` 500)은 **그대로 센다** — 뒷면도 칸을
+       차지하고 나중에 쓸 수 있다
+    3. ``excluded`` 가 이제 **사실**을 말한다 — "공격력은 세지 않았다"
+    4. 그래서 ``set_monster`` 가 ``normal_summon`` 보다 **낮다**
     """
     duel = staged(repository, hand=(LUSTER_DRAGON,))
     simulator, evaluator = Simulator(duel), StateEvaluator()
@@ -511,16 +516,23 @@ def test_17_the_evaluator_contradicts_itself_about_a_face_down_monster(repositor
     after_summon = evaluator.evaluate(simulator.simulate(summon, viewer=MINE).future)
     after_set = evaluator.evaluate(simulator.simulate(setting, viewer=MINE).future)
 
-    # 모순 1 — 점수가 같다.
-    assert after_set.heuristic == after_summon.heuristic
-    assert dict(after_set.terms)["atk"] == 1900
-    # 모순 2 — 같은 평가가 "값을 매기지 않았다" 고 말한다.
-    assert any("뒷면" in note for note in after_set.excluded), after_set.excluded
+    # 1 · 2 — 공격력은 빠지고 자리의 값은 남는다.
+    assert dict(after_set.terms)["atk"] == 0
+    assert dict(after_set.terms)["monsters"] == 500
+    assert dict(after_summon.terms)["atk"] == 1900
+
+    # 3 — 보고가 사실이다.
+    assert any("공격력은 세지 않았다" in note for note in after_set.excluded)
+    assert not any("값을 매기지 않았다" in note for note in after_set.excluded)
     assert after_summon.excluded == ()
 
-    # 상대 관점에서는 모순이 없다 — 보이지 않는 것을 세지 않는다.
+    # 4 — 두 수가 구별된다. 차이가 정확히 그 카드의 공격력이다.
+    assert after_summon.heuristic - after_set.heuristic == 1900
+
+    # 상대 관점도 그대로 일관된다 — 보이지 않는 것을 세지 않는다.
     theirs = evaluator.evaluate(simulator.simulate(setting, viewer=THEIRS).future)
     assert dict(theirs.terms)["atk"] == 0
+    assert any("모른다" in note for note in theirs.excluded), theirs.excluded
 
 
 # ======================================================================
@@ -569,12 +581,21 @@ def test_20_search_does_not_select_a_monster_set_and_we_say_why(repository):
     """
     **고르지 않는다는 사실을 숨기지 않는다** (§18 · §33).
 
-    후보에는 오르고 시뮬레이션도 되지만, 점수가 일반 소환과 **같기** 때문에
-    (STRUCTURAL-115) ``canonical_state`` 순서에서 ``normal_summon`` 이 이긴다.
-    ``"normal_summon" < "set_monster"`` 이므로 결과가 한쪽으로 고정된다.
+    후보에는 오르고 시뮬레이션도 되지만 고르지 않는다. **이유가 Phase 3-E-6
+    에서 달라졌다.**
 
-    이것을 "AI 가 세트를 쓴다" 로 적지 않는다. 쓰게 만들려면 평가를 고쳐야
-    하고, 그것은 이 Phase 의 범위가 아니다.
+    예전(3-E-2): 점수가 일반 소환과 **같았고**(둘 다 2400) ``canonical_state``
+    순서에서 ``normal_summon`` 이 이겼다 — 즉 평가가 두 수를 구별하지 못한
+    결과였다 (STRUCTURAL-115).
+
+    지금(3-E-6): 평가가 두 수를 **구별한다.** 뒷면 몬스터의 공격력을 세지
+    않으므로 ``set_monster`` 가 정확히 그 공격력만큼 낮다. 그래서 탐색이
+    **점수를 보고** 일반 소환을 고른다 — 순서가 아니라 평가가 정한다.
+
+    이것을 "AI 가 세트를 쓴다" 로 적지 않는다. 세트를 고르게 만들려면 뒷면
+    수비 표시의 값(수비력 · 정보 은닉)을 세는 항이 필요하고, 그 설계는 이
+    Phase 의 범위가 아니다 (Phase 3-E-5 §9 가 가중치 설계를 별도 Phase 로
+    미뤄 두었다).
     """
     duel = staged(repository, hand=(LUSTER_DRAGON,))
     policy = search_policy(duel)
@@ -586,11 +607,14 @@ def test_20_search_does_not_select_a_monster_set_and_we_say_why(repository):
     monster_set = candidates[PlayerActionKind.SET_MONSTER]
     assert monster_set.status is SimulationStatus.SUPPORTED
     assert monster_set.value is not None
-    assert (
-        monster_set.value.heuristic
-        == candidates[PlayerActionKind.NORMAL_SUMMON].value.heuristic
-    )
-    assert "normal_summon" < "set_monster"
+
+    summon = candidates[PlayerActionKind.NORMAL_SUMMON]
+    # **점수가 갈린다** — 예전에는 같았다.
+    assert monster_set.value.heuristic < summon.value.heuristic
+    assert summon.value.heuristic - monster_set.value.heuristic == 1900
+
+    # 그래서 순서가 아니라 점수가 결정한다 — 동점 타이브레이크에 닿지 않는다.
+    assert summon.ordering_key()[:3] < monster_set.ordering_key()[:3]
 
 
 @pytest.mark.real_card

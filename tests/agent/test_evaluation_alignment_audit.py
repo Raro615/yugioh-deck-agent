@@ -478,46 +478,90 @@ def test_10_an_opponent_face_down_monster_is_excluded(repository):
 
 
 @pytest.mark.real_card
-def test_11_my_own_face_down_card_is_counted_while_reported_as_excluded(
+def test_11_my_own_face_down_card_is_no_longer_counted_against_the_report(
     repository,
 ):
     """
-    **STRUCTURAL-115 — 이 Audit 의 가장 분명한 결함이다.**
+    **STRUCTURAL-115 가 풀린 자리다** (Phase 3-E-6).
 
-    평가 모듈의 설명은 이렇게 적는다: *"내 뒷면 카드는 정체는 보이지만
-    상대에게는 안 보인다. **값에 넣지 않는 쪽을 고른 이유는** ..."* 그리고
-    ``excluded`` 에 "내 뒷면 카드 N장은 값을 매기지 않았다" 를 적는다.
+    Phase 3-E-5 에서 이 시험은 그 반대를 적었다 — 평가가 내 뒷면 카드의
+    공격력을 **세면서** ``excluded`` 에 "값을 매기지 않았다" 고 보고한다고.
+    앞면 공격 1900 과 뒷면 수비 1900 이 둘 다 ``+2400`` 이었다.
 
-    **그런데 ``_zone_attack`` 은 그 카드의 공격력을 그대로 센다.** 뒷면
-    수비 표시 사파이어 드래곤이 앞면 공격 표시와 **같은 점수**를 받는다.
+    3층으로 나눠 추적한 결과 **Evaluation 층의 결함**이었다.
 
-    고치지 않는 이유: 올바른 셈이 무엇인지는 설계 결정이다 (공격력을 빼야
-    하는가 · 수비력을 넣어야 하는가 · 아무 값도 주지 않아야 하는가). 이번
-    Phase 는 Audit 이고, 모르는 것을 임의로 정하는 쪽이 모순을 기록하는
-    쪽보다 나쁘다.
+        Battle       position 을 올바르게 읽는다 (RULE-BATTLE-011 vs 012) ✔
+        Observation  position · face_up · defense 를 모두 제공한다 ✔
+        Evaluation   ``_zone_attack`` 이 position 을 **한 번도 읽지 않았다** ✘
 
-    영향: ``excluded`` 와 ``partial`` 을 **신뢰할 수 없다.** "값을 매기지
-    않았다" 를 읽은 사람은 공격력이 빠졌다고 결론 내리는데, 사실은 들어 있다.
+    고친 것은 ``_zone_attack`` 하나다. 이제 셋이 각자 사실을 말한다.
+
+        atk        뒷면은 **세지 않는다** (0)
+        monsters   뒷면도 **센다** (500) — 칸을 차지하고 나중에 쓸 수 있다
+        excluded   "공격력은 세지 않았다" — **참이다**
+
+    **"수비력을 어떻게 점수화할 것인가" 는 정하지 않았다** (Phase 3-E-5 §9).
+    정한 것은 "뒷면의 공격력은 지금 들어올 피해가 아니다" 하나이고, 그것은
+    평가 모듈의 설명이 이미 의도라고 적고 있던 것이다.
     """
     face_up = value(board(repository, mine=(LUSTER_DRAGON,)))
     face_down = value(board(repository, my_facedown=(LUSTER_DRAGON,)))
 
-    # ① 점수가 같다 — 뒷면인지 앞면인지 구별하지 못한다.
-    assert face_up.heuristic == face_down.heuristic == 2400
-    assert dict(face_down.terms)["atk"] == 1900
+    # ① 두 상태가 **구별된다** — 차이가 정확히 그 카드의 공격력이다.
+    assert face_up.heuristic == 2400
+    assert face_down.heuristic == 500
+    assert face_up.heuristic - face_down.heuristic == 1900
 
-    # ② 그런데 "값을 매기지 않았다" 고 보고한다.
+    # ② 공격력은 빠지고 자리의 값은 남는다.
+    assert dict(face_down.terms)["atk"] == 0
+    assert dict(face_down.terms)["monsters"] == MONSTER_IN_LP
+
+    # ③ 보고가 사실이다 — "모른다" 가 아니라 "세지 않았다" 다.
     assert face_up.excluded == ()
-    assert any("값을 매기지 않았다" in note for note in face_down.excluded)
-    assert face_down.partial
+    assert any("공격력은 세지 않았다" in note for note in face_down.excluded)
+    assert not any("값을 매기지 않았다" in note for note in face_down.excluded)
+    assert not any("모른다" in note for note in face_down.excluded), (
+        "내 카드의 정체는 안다 — 모른다고 적으면 그것이 새 거짓이다"
+    )
 
-    # ③ 마법 · 함정 쪽도 같은 자리다.
+    # ④ 뒷면 마법 · 함정은 제외 항목이 **없다** — 뺀 것이 없기 때문이다.
     state = board(repository)
     trap = state.create_instance(TRAP_HOLE, owner=MINE, zone=Zone.HAND)
     state.move(trap, Zone.SZONE, to_player=MINE, position=Position.FACEDOWN)
     set_spell = value(state)
     assert dict(set_spell.terms)["spells"] == SPELL_TRAP_IN_LP
-    assert any("값을 매기지 않았다" in note for note in set_spell.excluded)
+    assert set_spell.excluded == (), set_spell.excluded
+
+
+@pytest.mark.real_card
+def test_11b_a_face_down_monster_is_now_symmetric_between_the_two_seats(
+    repository,
+):
+    """
+    **고친 결과 뒷면도 영합(zero-sum)이 되었다.**
+
+    고치기 전에는 내 뒷면 몬스터가 P0 에게 ``+2400``, P1 에게 ``-500`` 이어서
+    합이 ``+1900`` 이었다 — 같은 판인데 두 자리의 값이 어긋났다. 평가 모듈의
+    설명이 **바로 이것을 피하려 했다**고 적고 있었다: "넣으면 같은 판이 보는
+    자리에 따라 다른 점수가 되어 §23 의 일관된 관점이 깨지기 때문이다."
+
+    이것은 STRUCTURAL-129(``hand`` 항이 차분이 아니라 영합이 깨진다)를 고친
+    것이 **아니다.** 패는 그대로이고, 여기서 맞춰진 것은 뒷면 몬스터뿐이다.
+    """
+    face_up = board(repository, mine=(LUSTER_DRAGON,))
+    assert value(face_up, MINE).heuristic + value(face_up, THEIRS).heuristic == 0
+
+    face_down = board(repository, my_facedown=(LUSTER_DRAGON,))
+    assert value(face_down, MINE).heuristic == +MONSTER_IN_LP
+    assert value(face_down, THEIRS).heuristic == -MONSTER_IN_LP
+    assert (
+        value(face_down, MINE).heuristic + value(face_down, THEIRS).heuristic == 0
+    )
+
+    # 상대 뒷면은 여전히 **모른다** — 관측 경계가 그대로다.
+    theirs = value(board(repository, their_facedown=(LUSTER_DRAGON,)), MINE)
+    assert any("모른다" in note for note in theirs.excluded)
+    assert not any("세지 않았다" in note for note in theirs.excluded)
 
 
 @pytest.mark.real_card
