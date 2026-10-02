@@ -556,6 +556,12 @@ def test_d_pass_never_shows_up_but_attack_now_does(repository):
     — 전투 실행 계층이 없어서 검증기가 ``UNKNOWN`` 을 돌려주었다. 엔진이
     자란 것이므로 **규칙이 아니라 사실을 고친다.** ``PASS`` 에 대한 주장은
     글자 하나 바뀌지 않았다.
+
+    **``SET_MONSTER`` · ``SET_SPELL_TRAP`` 도 이제 오른다** (Phase 3-E-2).
+    같은 이유의 같은 손질이다 — 세트 실행 계층(``engine/set_card.py``)이
+    생겨서 검증기가 ``UNKNOWN`` 대신 ``VALID`` 를 돌려준다. 이 시험이 지키는
+    것은 "후보가 정확히 세 종류다" 가 아니라 **``PASS`` 가 없다**이고, 그
+    주장은 여기서도 글자 하나 바뀌지 않았다.
     """
     duel = duel_with(repository, seed=13)
     policy = rule_based_policy()
@@ -571,6 +577,8 @@ def test_d_pass_never_shows_up_but_attack_now_does(repository):
         PlayerActionKind.NORMAL_SUMMON,
         PlayerActionKind.END_PHASE,
         PlayerActionKind.ATTACK,
+        PlayerActionKind.SET_MONSTER,
+        PlayerActionKind.SET_SPELL_TRAP,
     }, dict(kinds)
 
 

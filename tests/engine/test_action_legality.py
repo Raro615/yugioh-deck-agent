@@ -411,13 +411,38 @@ def test_set_monster_follows_the_same_checks(validator, my_hand_spell, their_mon
 
 
 @requires_official_db
-def test_set_spell_trap_rejects_a_monster(validator, my_hand_monster, my_hand_spell):
+def test_set_spell_trap_rejects_a_monster(validator, state, my_hand_monster, my_hand_spell):
+    """
+    카드 종류 검사는 페이즈와 무관하게 먼저 걸린다. 그 뒤가 Phase 3-E-2 로
+    달라졌다.
+
+    **원래의 마지막 주장은 ``UNKNOWN`` 이었다.** 그때는 세트 절차 자체가
+    없었으므로 "확인할 수 있는 것은 다 봤지만 마지막 한 걸음을 모른다" 가
+    정직한 답이었다. Phase 3-E-2 가 ``SetExecutor`` 로 그 걸음을 채웠고,
+    ``_COMPLETE_RULES`` 에 ``SET_SPELL_TRAP`` 이 들어갔다. 이제 같은 질문에
+    ``UNKNOWN`` 이 나오면 그것이 거짓말이다 — 할 수 있는데 모른다고 답하는
+    것이기 때문이다.
+
+    약화가 아니라 **방향이 반대인 강화**다. 예전에는 "허가가 아니다" 하나만
+    적었는데, 지금은 두 가지를 적는다: 메인 페이즈가 아니면 거절(``WRONG_PHASE``,
+    3-E-2 가 새로 넣은 요구 — 전에는 ``UNKNOWN`` 에 가려 보이지 않았다),
+    메인 페이즈면 허가. 어느 쪽도 무조건 통과가 아니다.
+    """
     result = validator.validate(PlayerAction.set_spell_trap(0, my_hand_monster))
     assert result.validity is ActionValidity.INVALID
     assert result.code is ValidationCode.SOURCE_WRONG_CARD_TYPE
 
-    ok = validator.validate(PlayerAction.set_spell_trap(0, my_hand_spell))
-    assert ok.validity is ActionValidity.UNKNOWN
+    # 드로우 페이즈 — 세트는 메인 페이즈의 행동이다 (RULE-TURN-004).
+    assert state.turn.phase is Phase.DRAW
+    too_early = validator.validate(PlayerAction.set_spell_trap(0, my_hand_spell))
+    assert too_early.validity is ActionValidity.INVALID
+    assert too_early.code is ValidationCode.WRONG_PHASE
+
+    state.turn.set_phase(Phase.MAIN1)
+    main = ActionValidator(GameStateView.from_state(state, viewer=0))
+    ok = main.validate(PlayerAction.set_spell_trap(0, my_hand_spell))
+    assert ok.validity is ActionValidity.VALID
+    assert ok.permits_execution
 
 
 @requires_official_db

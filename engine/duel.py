@@ -279,12 +279,21 @@ class Duel:
 
         if seat == self.turn_player:
             for card in self.state.player(seat).hand:
-                summon = PlayerAction.normal_summon(
-                    actor=seat, source=card.instance_id
-                )
-                verdict = validator.validate(summon)
-                if verdict.validity is ActionValidity.VALID:
-                    allowed.append(summon)
+                # 패의 한 장이 **여러 후보**가 된다 — 소환 · 몬스터 세트 ·
+                # 마법/함정 세트. 어느 것이 되는지는 검증기가 말한다
+                # (여기서 카드 종류를 보고 미리 거르지 않는다 — 걸러 두면
+                # 규칙이 두 곳에 적히고 둘이 갈라진다).
+                for build in (
+                    PlayerAction.normal_summon,
+                    PlayerAction.set_monster,
+                    PlayerAction.set_spell_trap,
+                ):
+                    candidate = build(actor=seat, source=card.instance_id)
+                    if (
+                        validator.validate(candidate).validity
+                        is ActionValidity.VALID
+                    ):
+                        allowed.append(candidate)
             allowed.extend(self._attack_actions(seat, validator))
 
         # 흐름을 움직이는 둘은 **검증기가 아니라 흐름 계층**이 답한다.

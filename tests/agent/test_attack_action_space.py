@@ -90,8 +90,9 @@ def staged(repository, *, mine, theirs, turn=2, turn_player=MINE) -> Duel:
     가 확인한다 — 이 판에서 엔진이 직접 ``VALID`` 를 돌려준다.
 
     ``FACEUP_ATTACK`` 만 쓰는 판은 **실제 듀얼에서도 도달한다** (일반 소환이
-    정확히 그 표시 형식으로 놓는다). 수비 표시는 도달하지 않으며, 그 사실은
-    :func:`test_defence_position_is_not_reachable_through_legal_actions` 가
+    정확히 그 표시 형식으로 놓는다). 뒷면 수비 표시도 Phase 3-E-2 부터
+    도달하며, 그 사실은
+    :func:`test_defence_position_is_now_reachable_through_legal_actions` 가
     적는다.
     """
     ids = [c for c, _ in mine] + [c for c, _ in theirs] or [LUSTER_DRAGON]
@@ -195,21 +196,20 @@ def test_a_staged_board_is_one_the_engine_itself_accepts(repository):
             assert card.position is Position.FACEUP_ATTACK
 
 
-@pytest.mark.real_card
-def test_defence_position_is_not_reachable_through_legal_actions(repository):
+def _played(repository, factories, *, seeds=SEEDS[:4]):
     """
-    **STRUCTURAL-108 을 사실로 적는다.** 수비 표시를 만들 길이 없다.
+    실제 듀얼을 끝까지 굴리면서 **후보 · 고른 수 · 나타난 표시 형식**을 센다.
 
-    ``SET_MONSTER`` 와 ``CHANGE_POSITION`` 이 후보에 오르지 않으므로 실제
-    듀얼에서 수비 표시 몬스터가 생기지 않는다. 따라서 ATK vs DEF 경로의
-    **탐색 검증은 NOT_REACHED** 다 — 엔진 수준에서는 Phase 3-E-1-B 가
-    확인했지만, 여기서 통과시키려고 가짜 상태를 만들지 않는다.
+    셋을 따로 세는 것이 이 함수의 전부다 — "후보에 올랐다" 와 "AI 가 골랐다"
+    와 "판에 실제로 생겼다" 는 서로 다른 사실이고, 하나로 뭉치면 어느 것이
+    참인지 말할 수 없게 된다.
     """
-    seen = collections.Counter()
+    seen: collections.Counter = collections.Counter()
+    chosen: collections.Counter = collections.Counter()
     positions = set()
-    for seed in SEEDS[:4]:
+    for seed in seeds:
         duel = Duel.start(repository, decks=(list(DECK), list(DECK)), seed=seed)
-        policies = (rule_based_policy(), rule_based_policy())
+        policies = [factory() for factory in factories]
         for _ in range(4000):
             if duel.is_over:
                 break
@@ -224,11 +224,66 @@ def test_defence_position_is_not_reachable_through_legal_actions(repository):
             for side in (MINE, THEIRS):
                 for card in duel.state.player(side).zone(Zone.MZONE):
                     positions.add(card.position)
-            duel.apply(policies[seat].decide(duel.view(seat), legal))
+            action = policies[seat].decide(duel.view(seat), legal)
+            chosen[action.kind] += 1
+            duel.apply(action)
+    return seen, chosen, positions
 
-    assert seen[PlayerActionKind.SET_MONSTER] == 0
-    assert seen[PlayerActionKind.CHANGE_POSITION] == 0
+
+@pytest.mark.real_card
+def test_defence_position_is_now_reachable_through_legal_actions(repository):
+    """
+    **STRUCTURAL-108 이 풀린 자리다** — 그리고 절반만 풀렸다.
+
+    Phase 3-E-1 에서 이 시험은 그 반대를 적었다: "수비 표시를 만들 길이
+    없다". 그때는 사실이었다 — ``SET_MONSTER`` 가 후보에 오르지 않았고
+    (검증기가 ``UNKNOWN``), 그래서 ATK vs DEF 경로는 ``NOT_REACHED`` 였다.
+    그 설명에 **"여기서 통과시키려고 가짜 상태를 만들지 않는다"** 고
+    적어 두었고, Phase 3-E-2 가 가짜 상태가 아니라 **세트 실행 계층**을
+    넣어서 길을 냈다. 그래서 주장을 뒤집는다 — 약화가 아니라 반대 방향의
+    강화다.
+
+    다만 **뒤집는 범위를 정확히 적는다.** 네 가지를 따로 센다:
+
+    1. ``SET_MONSTER`` 가 후보에 **오른다** (규칙 기반 판에서 104회 실측)
+    2. 규칙 기반 정책은 그것을 **한 번도 고르지 않는다** — 그래서 그
+       정책만 굴리면 뒷면 수비 표시가 판에 **생기지 않는다**
+    3. 난수 정책은 고르고, 그때 뒷면 수비 표시가 **실제로 생긴다**
+    4. ``CHANGE_POSITION`` 은 여전히 후보에 오르지 않는다 (Phase 3-E-2 §24
+       가 범위 밖으로 둔 부분 — STRUCTURAL-108 의 나머지 절반)
+
+    2번이 규칙 기반 AI 의 흠이 아니라 **측정된 사실**인 이유: ``agent/
+    heuristic.py`` 의 ``SummonBeforeEndingThePhase.BOARD_KINDS`` 는
+    ``{NORMAL_SUMMON}`` 하나이고, 세트를 보는 규칙이 하나도 없다. 그래서
+    모든 세트 후보가 0 점으로 ``END_PHASE`` 와 동점이 되고, 동점은
+    ``canonical_state()`` 가 가르는데 ``"end_phase" < "set_monster"`` 다.
+    **세트에 가산점을 주어 고르게 만들지 않는다** — Phase 3-E-2 §9 · §15 가
+    금지한 일이고, 그렇게 하면 "AI 가 세트를 고른다" 가 측정이 아니라
+    주문이 된다.
+    """
+    seen, chosen, positions = _played(
+        repository, (rule_based_policy, rule_based_policy)
+    )
+
+    # 1. 후보에는 오른다.
+    assert seen[PlayerActionKind.SET_MONSTER] == 104, dict(seen)
+    assert seen[PlayerActionKind.SET_SPELL_TRAP] == 190, dict(seen)
+
+    # 2. 규칙 기반 정책은 고르지 않는다 — 그래서 판에도 생기지 않는다.
+    assert chosen[PlayerActionKind.SET_MONSTER] == 0, dict(chosen)
     assert positions == {Position.FACEUP_ATTACK}, positions
+
+    # 4. 표시 형식 변경은 여전히 길이 없다 (§24 범위 밖).
+    assert seen[PlayerActionKind.CHANGE_POSITION] == 0, dict(seen)
+
+    # 3. 고르는 정책을 쓰면 뒷면 수비 표시가 **실제로** 생긴다.
+    rseen, rchosen, rpositions = _played(
+        repository,
+        (lambda: RandomPolicy(seed=31), lambda: RandomPolicy(seed=32)),
+    )
+    assert rchosen[PlayerActionKind.SET_MONSTER] > 0, dict(rchosen)
+    assert Position.FACEDOWN_DEFENSE in rpositions, rpositions
+    assert rseen[PlayerActionKind.CHANGE_POSITION] == 0, dict(rseen)
 
 
 # ======================================================================

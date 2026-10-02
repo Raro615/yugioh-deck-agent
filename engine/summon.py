@@ -147,8 +147,24 @@ class SummonProcedure:
 
     kind: PlayerActionKind
     """이 절차가 수행하는 행위."""
-    summon: SummonKind
-    """만들어질 :class:`~engine.effect.delta.MonsterSummoned` 의 의미."""
+    summon: "SummonKind | None"
+    """
+    만들어질 :class:`~engine.effect.delta.MonsterSummoned` 의 의미.
+
+    **``None`` 은 "이 배치는 소환이 아니다" 다** (Phase 3-E-2). 세트가 그
+    경우다 — 공식 규칙이 그렇게 적는다.
+
+        RULE-SUMMON-010: "A monster Normal Set on the field is **NOT
+        considered Summoned**."
+
+    그래서 세트 절차는 이 칸을 비우고 :meth:`SummonPlacement.to_delta` 를
+    부르지 않는다. ``SummonKind`` 에 ``SET`` 을 더하는 방법도 있었지만, 그
+    열거형의 이름이 "어떤 **소환**인가" 이므로 세트를 넣는 순간 같은 범주
+    오류를 저지르게 된다.
+
+    이 칸은 :class:`SummonProcedure` 안에서 쓰이지 않는다 — 배치 · 착지
+    확인은 표시 형식만 알면 되고, 의미는 부르는 쪽이 읽는다.
+    """
     from_zones: frozenset[Zone]
     """
     **지원하는** 출발 자리. 여기 없는 자리는 "규칙상 안 된다" 가 아니라
@@ -323,16 +339,25 @@ def summon_executor() -> "ActionExecutor":
 
 def duel_executor() -> "ActionExecutor":
     """
-    소환 둘과 **전투**를 아는 실행기 (Phase 3-E-1-B).
+    소환 둘 · **전투** · **세트 둘**을 아는 실행기.
 
     :func:`summon_executor` 를 그대로 두고 따로 둔 이유는 하나다 — 그 이름이
-    말하는 것은 소환이고, 거기에 전투를 넣으면 이름이 거짓이 된다. 듀얼
-    한 판을 굴리는 쪽(:class:`~engine.duel.Duel`)이 이것을 쓴다.
+    말하는 것은 소환이고, 거기에 전투나 세트를 넣으면 이름이 거짓이 된다.
+    듀얼 한 판을 굴리는 쪽(:class:`~engine.duel.Duel`)이 이것을 쓴다.
+
+    - Phase 3-E-1-B: ``ATTACK``
+    - Phase 3-E-2: ``SET_MONSTER`` · ``SET_SPELL_TRAP``
     """
     from engine.action_execution import ActionExecutor
     from engine.battle import AttackHandler
+    from engine.set_card import SetMonsterHandler, SetSpellTrapHandler
 
-    return summon_executor().register(PlayerActionKind.ATTACK, AttackHandler())
+    return (
+        summon_executor()
+        .register(PlayerActionKind.ATTACK, AttackHandler())
+        .register(PlayerActionKind.SET_MONSTER, SetMonsterHandler())
+        .register(PlayerActionKind.SET_SPELL_TRAP, SetSpellTrapHandler())
+    )
 
 
 __all__ = [

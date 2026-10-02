@@ -385,7 +385,15 @@ def test_e_how_much_room_a_policy_actually_has(repository):
     ::
 
         후보 1개     60곳     페이즈를 넘기는 것 말고 할 것이 없다
-        후보 4~11개  30곳     메인 페이즈 — 패의 몬스터를 소환할 수 있다
+        후보 9~23개  30곳     메인 페이즈 — 패를 소환하거나 세트할 수 있다
+
+    **Phase 3-E-2 에서 가장 넓은 자리가 11 에서 23 으로 늘었다.** 세는 방법도
+    듀얼도 그대로이고, 늘어난 것은 **엔진이 실제로 할 수 있는 일**이다: 패의
+    몬스터 한 장마다 일반 소환과 뒷면 세트가 따로 후보가 되고(RULE-SUMMON-010),
+    패의 마법·함정도 세트할 수 있게 됐다. 11 은 "영원한 상한" 이 아니라 그때
+    측정된 값이었다 — 그 값을 고정으로 읽은 것이 잘못된 가정이었다. 좁은
+    쪽(후보 1개 60곳)과 갈라지는 자리의 **수**(30곳)와 **페이즈**(메인
+    1·2)는 하나도 변하지 않았다. 바뀐 것은 너비뿐이다.
 
     방이 좁은 이유는 Engine V1 의 알려진 한계다 — 마법 발동과 우선권 창이
     아직 없다 (STRUCTURAL-103). AI 가 할 일이 적은 것이지, 인터페이스가
@@ -411,7 +419,8 @@ def test_e_how_much_room_a_policy_actually_has(repository):
     assert branching == 30
     assert total == 90
     assert branching_phases == {Phase.MAIN1, Phase.MAIN2}
-    assert max(sizes) == 11
+    assert max(sizes) == 23
+    assert min(size for size in sizes if size > 1) == 9
 
 
 @pytest.mark.real_card

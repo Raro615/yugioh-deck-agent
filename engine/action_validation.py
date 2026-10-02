@@ -114,8 +114,6 @@ class Requirement:
 #: 전부 차 있다는 것은 지금 어떤 Action 도 VALID 가 될 수 없다는 뜻이다.
 _MISSING_RULE: dict[PlayerActionKind, str] = {
     PlayerActionKind.SPECIAL_SUMMON: "special-summon-condition (카드마다 다르다)",
-    PlayerActionKind.SET_MONSTER: "summon-procedure (Phase 2-G)",
-    PlayerActionKind.SET_SPELL_TRAP: "set-timing (Phase 2-G)",
     PlayerActionKind.ACTIVATE_CARD: "activation-timing (Phase 2-C/2-F)",
     PlayerActionKind.ACTIVATE_EFFECT: "activation-condition · cost · timing (Phase 2-C/2-F)",
     PlayerActionKind.CHANGE_POSITION: "position-change-legality (Phase 2-G)",
@@ -133,7 +131,12 @@ _MISSING_RULE: dict[PlayerActionKind, str] = {
 #: **여기 넣는 것은 "이 종류의 적법성을 끝까지 볼 수 있다" 는 선언이다.**
 #: 요구 목록이 비어 있는 종류를 넣으면 아무것도 확인하지 않고 허가가 난다.
 _COMPLETE_RULES: frozenset[PlayerActionKind] = frozenset(
-    {PlayerActionKind.NORMAL_SUMMON, PlayerActionKind.ATTACK}
+    {
+        PlayerActionKind.NORMAL_SUMMON,
+        PlayerActionKind.ATTACK,
+        PlayerActionKind.SET_MONSTER,
+        PlayerActionKind.SET_SPELL_TRAP,
+    }
 )
 
 assert not (_COMPLETE_RULES & set(_MISSING_RULE)), (
@@ -580,9 +583,76 @@ def _special_summon(
     return tuple(requirements)
 
 
+def _set_monster(
+    validator: ActionValidator, action: PlayerAction
+) -> tuple[Requirement, ...]:
+    """
+    몬스터 세트. **이 목록을 전부 통과하면 허가가 난다** (``_COMPLETE_RULES``).
+
+    공식 규칙 (``rules`` 계층):
+
+    - RULE-TERM-021 — "For Monster Cards, playing it in face-down Defense
+      Position is called a Set."
+    - RULE-SUMMON-010 — "To play a Monster Card from your hand in face-down
+      Defense Position is called a Normal Set... **You can do one of these
+      once per turn.**"
+    - RULE-SUMMON-011 — 레벨 5 이상은 제물이 필요하다. "If you Tribute
+      Summon in face-down Defense Position, it is called a Tribute Set" —
+      **제물 규칙은 소환과 세트에 똑같이 걸린다.**
+    - RULE-TURN-004 · RULE-TURN-006 — "you can Normal Summon, **Set**, ..."
+      는 메인 페이즈의 행위다.
+
+    Phase 3-E-2 전까지 ``SET_MONSTER`` 는 :func:`_summon_like` 하나만 썼고
+    (턴 플레이어 · 컨트롤러 · 패 · 몬스터 · 빈 칸) ``UNKNOWN`` 에 머물렀다.
+    그래서 **페이즈 검사가 없다는 사실이 가려져 있었다** (STRUCTURAL-114).
+    ``_COMPLETE_RULES`` 로 올리기 **전에** 셋을 먼저 채운다 — 올리고 나서
+    채우면 그 사이에 메인 페이즈 밖 세트가 허가된다.
+
+    소환권은 :class:`_NormalSummonRightAvailable` 을 **그대로** 쓴다. 일반
+    소환과 세트가 같은 권리를 나눠 쓰므로 (RULE-SUMMON-009) 다른 조건을
+    두면 한 턴에 둘 다 할 수 있게 된다.
+
+    절차 판정도 :class:`_NormalSummonProcedure` 를 그대로 쓴다 — 제물 ·
+    엑스트라 덱 · 의식 · 토큰 판정이 세트에도 똑같이 걸린다
+    (RULE-SUMMON-011).
+    """
+    return _summon_like(validator, action) + (
+        Requirement(
+            PhaseIs(MAIN_PHASES),
+            ValidationCode.WRONG_PHASE,
+            "메인 페이즈가 아닙니다.",
+        ),
+        Requirement(
+            _NormalSummonRightAvailable(),
+            ValidationCode.NORMAL_SUMMON_ALREADY_USED,
+            "이번 턴의 일반 소환권을 이미 썼습니다 (세트와 소환은 같은 권리입니다).",
+        ),
+        Requirement(
+            _NormalSummonProcedure(action.source),
+            ValidationCode.CANNOT_NORMAL_SUMMON,
+            "이 카드는 패에서 세트할 수 없습니다.",
+        ),
+    )
+
+
 def _set_spell_trap(
     validator: ActionValidator, action: PlayerAction
 ) -> tuple[Requirement, ...]:
+    """
+    마법 · 함정 세트.
+
+    공식 규칙:
+
+    - RULE-TERM-021 — "Playing a card face-down is called a Set."
+    - RULE-TURN-004 · RULE-TURN-006 — "...and **Set Spell and Trap Cards**"
+      는 메인 페이즈의 행위다.
+
+    **소환권을 쓰지 않는다.** RULE-SUMMON-009 · 010 의 "once per turn" 은
+    몬스터의 일반 소환/세트에만 걸리고, 마법 · 함정 세트는 칸이 있는 한
+    몇 장이든 놓을 수 있다.
+
+    Phase 3-E-2 에서 더한 것은 **페이즈 하나**다 (STRUCTURAL-114).
+    """
     return (
         Requirement(
             IsTurnPlayer(PlayerRef.CONTROLLER),
@@ -608,6 +678,11 @@ def _set_spell_trap(
             ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.SZONE),
             ValidationCode.ZONE_FULL,
             "마법 & 함정 존에 빈 칸이 없습니다.",
+        ),
+        Requirement(
+            PhaseIs(MAIN_PHASES),
+            ValidationCode.WRONG_PHASE,
+            "메인 페이즈가 아닙니다.",
         ),
     )
 
@@ -770,7 +845,7 @@ _REQUIREMENT_BUILDERS: dict[
 ] = {
     PlayerActionKind.NORMAL_SUMMON: _normal_summon,
     PlayerActionKind.SPECIAL_SUMMON: _special_summon,
-    PlayerActionKind.SET_MONSTER: _summon_like,
+    PlayerActionKind.SET_MONSTER: _set_monster,
     PlayerActionKind.SET_SPELL_TRAP: _set_spell_trap,
     PlayerActionKind.CHANGE_POSITION: _change_position,
     PlayerActionKind.ATTACK: _attack,
