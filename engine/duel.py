@@ -61,6 +61,11 @@ from engine.chain import Chain, ChainResolutionStatus
 from engine.game_state_view import GameStateView
 from engine.priority import PriorityState
 from engine.state.game_state import DEFAULT_LIFE_POINTS, DuelResult, GameState
+from engine.target_bridge import (
+    TargetBridgeError,
+    selections_for,
+    target_combinations,
+)
 from engine.spell_activation import (
     NormalSpellPlacement,
     activatable_effects,
@@ -399,10 +404,22 @@ class Duel:
             일반 rollback 을 미뤄 두었다). 등록된 16개 효과 전부 비용이
             없으므로 (STRUCTURAL-120) 지금 이 관문은 아무것도 거르지
             않는다 — 비용이 생기는 날 걸리게 **먼저** 둔다.
-        ``대상이 없는 효과만``
-            ``PlayerAction`` 에서 :class:`
-            ~engine.effect.target.TargetSelection` 으로 가는 길이 없다
-            (STRUCTURAL-121). 길이 없는 것을 추측해서 만들지 않는다.
+        **대상이 필요한 효과도 후보가 된다** (Phase 3-E-4). 대상 하나하나가
+        **다른 후보**다 — ``@primary=A`` 와 ``@primary=B`` 는 다른 수이고,
+        하나로 뭉치면 AI 가 무엇을 고를지 말할 수 없다.
+
+        후보 목록은 :func:`~engine.target_bridge.target_combinations` 가
+        만들고, 그것도 후보를 세는 코드를 새로 쓰지 않는다 —
+        ``TargetResolver.candidates`` 를 그대로 쓴다. 그 함수가 이 모듈이
+        아니라 다리 쪽에 있는 이유는 후보를 세려면 ``engine.effect`` 와
+        ``engine.condition`` 을 읽어야 하고, 듀얼 루프는 그것을 직접 읽지
+        않기 때문이다 (``test_e_the_duel_makes_no_rules_of_its_own``).
+
+        ``비용이 없는 효과만``
+            비용을 치른 뒤 발동이 깨지면 되돌릴 방법이 없다 (ADR-008 이
+            일반 rollback 을 미뤄 두었다). 등록된 16개 효과 전부 비용이
+            없으므로 (STRUCTURAL-120) 지금 이 관문은 아무것도 거르지
+            않는다 — 비용이 생기는 날 걸리게 **먼저** 둔다.
         """
         if not self.chain.is_empty:
             # RULE-CHAIN-004 — 지금 범위(통상 마법)는 체인에 얹지 못한다.
@@ -414,22 +431,36 @@ class Duel:
                 definition = self._activator.definitions.definition_for(effect_ref)
                 if definition is None:  # pragma: no cover - 목록이 보증한다
                     continue
-                if definition.cost.costs or definition.targets:
+                if definition.cost.costs:
                     continue
-                candidate = PlayerAction.activate_effect(
-                    actor=seat, source=card.instance_id, effect_ref=effect_ref
-                )
-                verdict = validator.validate(candidate)
-                if verdict.validity is not ActionValidity.VALID:
-                    continue
-                if (
-                    self._activator.can_activate(
-                        self.state, self.chain, candidate, authorization=verdict
-                    ).validity
-                    is not ActionValidity.VALID
+                for targets in target_combinations(
+                    self.state, seat, definition, card.instance_id
                 ):
-                    continue
-                allowed.append(candidate)
+                    candidate = PlayerAction.activate_effect(
+                        actor=seat,
+                        source=card.instance_id,
+                        effect_ref=effect_ref,
+                        targets=targets,
+                    )
+                    verdict = validator.validate(candidate)
+                    if verdict.validity is not ActionValidity.VALID:
+                        continue
+                    try:
+                        selections = selections_for(definition, candidate)
+                    except TargetBridgeError:  # pragma: no cover - 위에서 맞춰 만든다
+                        continue
+                    if (
+                        self._activator.can_activate(
+                            self.state,
+                            self.chain,
+                            candidate,
+                            selections=selections,
+                            authorization=verdict,
+                        ).validity
+                        is not ActionValidity.VALID
+                    ):
+                        continue
+                    allowed.append(candidate)
         return allowed
 
     def _flow_actions(self, seat: int):
@@ -576,10 +607,14 @@ class Duel:
 
         그래서 네 걸음이다.
 
+            ⓪ selections_for                ActionTarget → TargetSelection
             ① NormalSpellPlacement.place    패 → 마법&함정 존 (앞면)
-            ② EffectActivator.activate      비용 · 체인 링크
+            ② EffectActivator.activate      비용 · 체인 링크 · 대상
             ③ ChainResolver.resolve_top     효과 해결
             ④ NormalSpellPlacement.retire   → 묘지
+
+        ⓪이 ① **앞**에 있는 이유: 환전은 판을 읽지도 바꾸지도 않으므로,
+        모양이 틀렸으면 카드를 놓기 전에 거절할 수 있다 (Phase 3-E-4).
 
         **되돌릴 수 있는 자리를 하나로 줄였다.** ①은 판을 바꾸므로, ②가
         깨지면 ①의 역 하나만 하면 된다 (:meth:`
@@ -590,12 +625,30 @@ class Duel:
         효과의 카드가 묘지로 가는 것은 규칙대로다 (불발). 다만 "해결했다" 고
         적지 않는다 — 이유를 그대로 전한다.
         """
+        definition = self._activator.definitions.definition_for(action.effect_ref)
+        if definition is None:
+            return DuelStep(
+                action,
+                False,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{action.effect_ref} 의 정의가 등록되어 있지 않습니다.",
+            )
+        try:
+            # **판을 건드리기 전에** 환전한다. 모양이 맞지 않으면 아무것도
+            # 바꾸지 않고 거절한다 (Phase 3-E-4).
+            selections = selections_for(definition, action)
+        except TargetBridgeError as error:
+            return DuelStep(
+                action, False, ValidationCode.TARGET_COUNT_MISMATCH, str(error)
+            )
+
         placed = self._placement.place(self.state, action.source, action.actor)
 
         activated = self._activator.activate(
             self.state,
             self.chain,
             action,
+            selections=selections,
             authorization=ValidationResult.valid(
                 "legal_actions 가 허가한 발동입니다."
             ),

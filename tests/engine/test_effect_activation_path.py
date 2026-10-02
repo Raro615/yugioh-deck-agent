@@ -347,7 +347,7 @@ def test_05_a_card_with_no_definition_at_all_is_not_a_candidate(repository):
     [
         (MYSTICAL_SPACE_TYPHOON, "속공 마법 — RULE-SPELLTRAP-007"),
         (THE_GIFT_OF_GREED, "함정 — RULE-SPELLTRAP-009"),
-        (FOOLISH_BURIAL, "대상이 있다 — PlayerAction 에서 갈 길이 없다"),
+        (FOOLISH_BURIAL, "대상이 **덱**에 있다 — 정책이 볼 수 없는 자리"),
     ],
 )
 def test_06_out_of_scope_cards_are_not_candidates(repository, card_id, why):
@@ -356,6 +356,13 @@ def test_06_out_of_scope_cards_are_not_candidates(repository, card_id, why):
 
     셋 다 ``executable=True`` 인데도 후보가 아니다. 이유가 서로 다르고, 그
     차이를 다음 시험들이 각각 적는다.
+
+    **어리석은 매장의 이유가 Phase 3-E-4 에서 달라졌다.** 그때는 "대상을
+    건넬 길이 없다" (STRUCTURAL-121) 였고, 이제 길은 있다. 그런데도 후보가
+    아닌 이유는 그 대상이 **덱**에 있기 때문이다 — ``PlayerAction`` 은
+    정책에게 가는 데이터이므로 거기에 덱의 카드를 적으면 후보 목록을 읽는
+    것만으로 덱 내용이 새어 나간다 (STRUCTURAL-125,
+    ``test_18b`` 가 이 사실을 따로 적는다).
     """
     assert activatable_effects(card_id), "executable 이 아니면 이 시험이 흐려진다"
     duel, _ = staged(repository, hand=(card_id,))
