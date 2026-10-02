@@ -153,35 +153,57 @@ def test_01_the_priority_vocabulary_is_complete():
         assert callable(getattr(PriorityState, transition)), transition
 
 
-def test_02_only_three_transitions_are_wired_into_the_duel():
+def test_02_the_duel_now_opens_exactly_one_window():
     """
-    **``opened`` 를 ``Duel`` 이 한 번도 부르지 않는다.**
+    **``opened`` 가 연결되었다 — 자리 하나에서만** (Phase 3-E-11).
 
-    이것이 STRUCTURAL-34 의 정확한 모양이다 — 기회를 **여는** 자리가 없다.
-    ``idle`` · ``passed`` · ``closed`` 만 연결되어 있고, 셋 다 기회를 열지
-    않는다.
+    Phase 3-E-10 Audit 에서 이 시험은 그 반대를 적었다 — ``Duel`` 이
+    ``opened`` 를 한 번도 부르지 않는다고. 그것이 STRUCTURAL-34 의 모양이었고,
+    이 Phase 가 그 중 **절반**을 이었다.
+
+    **왜 기존 전제가 바뀌었는가.** 규칙이 없었던 것이 아니라 그 자리의 규칙을
+    쓰지 않았던 것이다. ``RULE-CHAIN-001`` 이 "the opponent is **always**
+    given a chance to respond" 라고 한 문장으로 적으므로 지어낼 것이 없었다.
+
+    나머지 절반은 그대로 비어 있다 — ``give_to``(체인 해결 뒤 누구에게)와
+    ``PHASE_CHANGE``(페이즈 전환 · RULE-CHAIN-009). 룰북이 한 문장으로 못
+    박지 않거나 이번 범위 밖이므로 **열지 않았다.**
     """
     used = attributes_in("engine/duel.py")
+    source = source_of("engine/duel.py")
     assert "idle" in used
     assert "passed" in used
-    assert "closed" in used
-    assert "opened" not in used, "Duel 이 기회를 열기 시작했다 — Audit 전제가 바뀌었다"
+
+    # **``closed`` 가 ``duel.py`` 에서 사라졌다.** 기회를 닫는 것은 이제
+    # ``ResponseLoop.resolve`` 가 한다 — 닫는 이유(``AFTER_CHAIN_RULE``)를
+    # 응답 계층이 들고 있으므로 거기서 닫는 것이 맞다. 흐름을 두 곳에서
+    # 닫으면 둘이 갈라진다.
+    assert "closed" not in used
+    assert "closed(AFTER_CHAIN_RULE)" in source_of("engine/response.py")
+
+    # 이번 Phase 가 이은 것 — 기회를 여는 자리가 **하나뿐**이다.
+    assert "opened" in used
+    assert source.count("ResponseLoop.opened(") == 1
+
+    # 아직 잇지 않은 것.
     assert "give_to" not in used
     assert "acted" not in used
+    assert "PHASE_CHANGE" not in source
 
-    # 여는 능력 자체는 **있다** — 부르는 쪽이 없을 뿐이다.
+    # 여는 능력은 처음부터 있었다 — 부르는 쪽이 없었을 뿐이다.
     assert "PriorityState.opened(" in source_of("engine/response.py")
     assert "priority.acted()" in source_of("engine/activation.py")
 
 
-def test_03_the_response_loop_is_imported_by_no_production_module():
+def test_03_the_response_loop_is_now_imported_by_the_duel_and_only_the_duel():
     """
-    ``ResponseLoop`` 는 구현되어 있고 시험도 있는데 **아무도 쓰지 않는다.**
+    **끊겼던 사슬이 이어졌다** (Phase 3-E-11).
 
-    ``activation_timing`` → ``response`` → (아무도 없음) 세 단계가 전부 끊겨
-    있다. ``activation_timing`` 은 공식 룰북에서 뽑은 ``SpellSpeed`` 와
-    ``RESPONSE_TABLE`` 을 들고 있는데, 그것을 읽는 유일한 모듈이
-    ``response`` 이고 ``response`` 를 읽는 모듈이 없다.
+    Phase 3-E-10 Audit 은 ``ResponseLoop`` 를 import 하는 production 모듈이
+    0개라고 적었다 — ``activation_timing`` → ``response`` → (아무도 없음).
+
+    지금은 ``duel.py`` 가 그 끝을 잡는다. **그리고 그것 하나뿐이다** — agent
+    계층은 여전히 우선권을 모른다 (``test_10`` 이 지킨다).
     """
     importers = []
     for path in sorted(ROOT.glob("engine/**/*.py")) + sorted(ROOT.glob("agent/*.py")):
@@ -190,9 +212,9 @@ def test_03_the_response_loop_is_imported_by_no_production_module():
         text = path.read_text()
         if "from engine.response import" in text or "import engine.response" in text:
             importers.append(path.name)
-    assert importers == [], importers
+    assert importers == ["duel.py"], importers
 
-    # 그런데 response 는 activation_timing 을 쓴다 — 끊긴 곳은 그 위다.
+    # 사슬의 위쪽은 그대로다.
     assert "from engine.activation_timing import" in source_of("engine/response.py")
 
 
@@ -278,24 +300,31 @@ def test_06_no_registered_fast_effect_can_ever_be_activated(repository):
 
 
 @pytest.mark.real_card
-def test_07_the_chain_is_empty_at_every_decision(repository):
+def test_07_the_chain_now_stays_up_while_the_opponent_may_respond(repository):
     """
-    **Scenario 4~7 은 ``Duel`` 로 도달할 수 없다.**
+    **Scenario 4~7 이 이제 도달 가능하다** (Phase 3-E-11).
 
-    ``_apply_activation`` 이 놓기 → 발동 → 해결 → 묘지로 를 **한 ``apply``
-    안에서** 끝내고 ``Chain()`` 으로 비운다. 그래서 "체인 링크 1 이 남아 있고
-    상대가 응답할 수 있는 결정 시점" 이라는 상태가 존재하지 않는다.
+    Phase 3-E-10 Audit 에서 이 시험은 그 반대를 적었다 — ``_apply_activation``
+    이 놓기 → 발동 → 해결 → 묘지로 를 한 ``apply`` 안에서 끝내므로 "체인 링크
+    1 이 남아 있고 상대가 응답할 수 있는 결정 시점" 이 존재하지 않는다고.
+    그때는 그것이 사실이었고, 없는 상태를 억지로 만들지 않은 것이 옳았다.
 
-    억지로 만들지 않고 그 사실을 고정한다 (§5 — fake state 금지).
+    **왜 기존 전제가 바뀌었는가.** ``RULE-CHAIN-001`` 이 요구하는 응답 기회를
+    이 Phase 가 이었다. 그래서 발동과 해결 사이에 **결정 시점이 하나 생겼고**,
+    그 자리에서 체인은 **쌓인 채로** 있다.
+
+    결정 시점이 아닌 자리(발동 전·해결 후)에서는 체인이 여전히 비어 있다.
     """
     checked = 0
     for duel, legal in play(repository):
-        assert len(duel.chain) == 0, len(duel.chain)
-        assert duel.chain.is_complete
+        # 응답 창이 열려 있지 않은 결정에서는 체인이 비어 있다.
+        if not duel.priority.is_open:
+            assert len(duel.chain) == 0, len(duel.chain)
+            assert duel.chain.is_complete
         checked += 1
     assert checked > 100, checked
 
-    # 발동을 실제로 한 번 해 봐도 끝나고 나면 비어 있다.
+    # 발동 직후 — **체인이 쌓여 있고 상대가 결정할 차례다.**
     duel = duel_at(repository, hand=(POT_OF_GREED,))
     activate = next(
         a
@@ -304,9 +333,21 @@ def test_07_the_chain_is_empty_at_every_decision(repository):
     )
     step = duel.apply(activate)
     assert step.accepted, step.reason
+    assert len(duel.chain) == 1
+    assert duel.priority.window is ResponseWindow.RESPONSE
+    assert duel.priority.holder.is_seat(P1)
+    # 상대에게 **기회가 간다** — 이것이 이 Phase 가 만든 것이다.
+    assert [a.kind for a in duel.legal_actions(P1).allowed] == [
+        PlayerActionKind.PASS
+    ]
+    # 그리고 턴 플레이어는 지금 판을 바꿀 수 없다 (RULE-CHAIN-011).
+    assert duel.legal_actions(P0).allowed == ()
+
+    # 둘 다 패스하면 해결되고, 체인은 다시 비워진다.
+    assert duel.apply(duel.legal_actions(P1).allowed[0]).accepted
+    assert duel.apply(duel.legal_actions(P0).allowed[0]).accepted
     assert len(duel.chain) == 0
-    # 상대는 발동과 해결 **사이에** 한 번도 결정하지 않았다 (RULE-CHAIN-001).
-    assert duel.legal_actions(P1).allowed == ()
+    assert duel.priority.window is ResponseWindow.NONE
 
 
 # ======================================================================

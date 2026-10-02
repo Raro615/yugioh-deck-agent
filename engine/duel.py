@@ -57,9 +57,10 @@ from engine.action import PlayerAction, PlayerActionKind
 from engine.action_execution import ActionExecutor, ActionStatus
 from engine.action_target import ActionTarget
 from engine.action_validation import ActionValidator
-from engine.chain import Chain, ChainResolutionStatus
+from engine.chain import Chain
 from engine.game_state_view import GameStateView
 from engine.priority import PriorityState
+from engine.response import ResponseLoop, ResponseState
 from engine.state.game_state import DEFAULT_LIFE_POINTS, DuelResult, GameState
 from engine.target_bridge import (
     TargetBridgeError,
@@ -205,6 +206,32 @@ class Duel:
     _activator: object = field(default_factory=duel_activator)
     _resolver: object = field(default_factory=duel_resolver)
     _placement: NormalSpellPlacement = field(default_factory=NormalSpellPlacement)
+    pending_spells: tuple = ()
+    """
+    **해결을 기다리는 동안 필드에 놓여 있는 마법** (Phase 3-E-11).
+
+    발동과 해결 사이에 상대의 응답 기회가 들어가므로, 놓은 카드를 묘지로
+    보낼 시점이 ``_apply_activation`` 밖으로 밀려났다. 그래서 그 사이에
+    ``SpellPlaced`` 를 들고 있어야 한다 — 체인과 같은 이유로 **흐름의
+    위치**이고, ``state_hash()`` 에는 들어가지 않는다.
+
+    ``tuple`` 이므로 ``dataclasses.replace`` 로 뜬 사본이 값으로 가져간다 —
+    사본의 해결이 진짜의 대기 목록을 건드리지 않는다.
+    """
+
+    @property
+    def _response_loop(self) -> ResponseLoop:
+        """
+        **기존 응답 루프.** 상태를 들지 않으므로 칸을 차지하지 않는다 —
+        쌓인 체인과 우선권은 이미 :attr:`chain` · :attr:`priority` 에 있고,
+        :class:`~engine.response.ResponseState` 는 그 둘의 짝일 뿐이다.
+        그래서 같은 상태를 두 군데 복사하지 않는다.
+        """
+        return ResponseLoop(self._activator)
+
+    def _response_state(self) -> ResponseState:
+        """지금 흐름의 위치. **읽기만 한다.**"""
+        return ResponseState(self.chain, self.priority)
 
     # ------------------------------------------------------------------
     # 시작
@@ -303,7 +330,13 @@ class Duel:
 
         validator = ActionValidator(self.view(seat))
 
-        if seat == self.turn_player:
+        # **응답 창이 열려 있으면 판을 바꾸는 후보를 내지 않는다**
+        # (Phase 3-E-11). 체인은 효과 발동의 사슬이고, 소환 · 세트 · 공격은
+        # 발동이 아니므로 체인에 끼어들 수 없다 (RULE-CHAIN-011 —
+        # "Summoning a monster, Tributing, changing a monster's battle
+        # position and paying costs are not effect activations"). 창이 닫혀
+        # 있으면 조건이 늘 참이므로 **기존 후보가 한 건도 변하지 않는다.**
+        if seat == self.turn_player and not self.priority.is_open:
             for card in self.state.player(seat).hand:
                 # 패의 한 장이 **여러 후보**가 된다 — 소환 · 몬스터 세트 ·
                 # 마법/함정 세트. 어느 것이 되는지는 검증기가 말한다
@@ -553,10 +586,69 @@ class Duel:
         return self._apply_board(action)
 
     def _apply_pass(self, action: PlayerAction) -> DuelStep:
+        """
+        패스 하나. **둘 다 패스했으면 체인을 푼다** (RULE-CHAIN-001).
+
+            "Both players continue to add effects to the Chain until **they
+            both wish to add nothing else**, then you resolve the outcome in
+            reverse order."
+
+        그래서 한 번의 패스로는 풀지 않는다. 한쪽이 패스하면 우선권이
+        맞은편으로 가고, 거기서도 패스해야 "둘 다 그만하겠다" 가 된다.
+
+        **``both_passed`` 는 괄호 없이 읽는다.** ``@property`` 인데 예전에는
+        ``both_passed()`` 라고 불렀고, 그러면 bool 이 아니라 메서드 객체가
+        참으로 평가되어 한 번의 패스로 기회가 닫혔다. 이 자리는 우선권이
+        한 번도 열리지 않아 **도달 불가**였으므로 아무도 밟지 않았다
+        (Phase 3-E-10 이 죽은 분기로 기록했다).
+        """
         self.priority = self.priority.passed()
-        if self.priority.both_passed():
-            self.priority = self.priority.closed("양쪽이 패스했다")
-        return DuelStep(action, True, ValidationCode.OK, "우선권을 넘겼습니다.")
+
+        loop = self._response_loop
+        response = self._response_state()
+        if not loop.ready_to_resolve(response).permits_execution:
+            return DuelStep(
+                action, True, ValidationCode.OK, "우선권을 넘겼습니다."
+            )
+        return self._resolve_chain(action, loop, response)
+
+    def _resolve_chain(
+        self, action: PlayerAction, loop: ResponseLoop, response: ResponseState
+    ) -> DuelStep:
+        """
+        쌓인 체인을 푼다. **기존 해결기에 넘긴다** — 여기서 풀지 않는다.
+
+        ``ResponseLoop.resolve`` 가 ``ChainResolver.resolve_all`` 을 부르고,
+        푼 뒤 기회를 닫는다 (``AFTER_CHAIN_RULE``). 체인이 끝난 뒤 우선권이
+        누구에게 가는지는 여전히 정하지 않는다 (STRUCTURAL-34 의 나머지).
+        """
+        resolution = loop.resolve(self.state, response, self._resolver)
+        self.chain = resolution.state.chain
+        self.priority = resolution.state.priority
+        if self.chain.is_complete:
+            # 다음 발동이 체인 1 부터 시작하도록 비운다.
+            self.chain = Chain()
+
+        # **해결됐든 아니든 놓인 마법은 필드를 떠난다** (RULE-SPELLTRAP-002).
+        self._retire_pending()
+
+        steps = resolution.steps
+        if not resolution.fully_resolved:
+            last = steps[-1]
+            return DuelStep(action, False, last.code, last.reason)
+        return DuelStep(
+            action,
+            True,
+            ValidationCode.OK,
+            steps[-1].reason,
+            result=self._check_end(),
+        )
+
+    def _retire_pending(self) -> None:
+        """대기 중이던 마법을 전부 묘지로 보낸다. 카드를 옮기는 일은 배치 계층이 한다."""
+        pending, self.pending_spells = self.pending_spells, ()
+        for placed in pending:
+            self._placement.retire(self.state, placed)
 
     def _apply_end_phase(self, action: PlayerAction) -> DuelStep:
         progressed = TurnProgressor().advance(self.state)
@@ -659,25 +751,33 @@ class Duel:
             return DuelStep(action, False, activated.code, activated.reason)
 
         self.chain = activated.chain
-        resolved = self._resolver.resolve_top(self.state, self.chain)
-        self.chain = resolved.chain
 
-        # 해결됐든 아니든 카드는 필드를 떠난다 (RULE-SPELLTRAP-002).
-        self._placement.retire(self.state, placed)
-        if self.chain.is_complete:
-            # 체인이 끝났다. 다음 발동이 체인 1 부터 시작하도록 비운다 —
-            # "체인이 끝난 뒤 우선권이 누구에게 가는가" 는 정하지 않는다
-            # (STRUCTURAL-34).
-            self.chain = Chain()
-
-        if resolved.status is not ChainResolutionStatus.RESOLVED:
-            return DuelStep(action, False, resolved.code, resolved.reason)
+        # ⑤ **여기서 해결하지 않는다** (Phase 3-E-11 · RULE-CHAIN-001).
+        #
+        #     "If a card's effect is activated, the opponent is **always**
+        #      given a chance to respond with a card effect of their own,
+        #      creating a Chain."
+        #
+        # 그래서 링크를 쌓은 뒤 **상대에게** 응답 기회를 연다. 기회를 여는
+        # 도구는 이미 있다 — ``ResponseLoop.opened`` 가 "부르는 쪽이 값으로
+        # 연다" 고 적어 두었고, 이 자리가 그 부르는 쪽이다.
+        #
+        # 놓인 카드는 아직 묘지로 가지 않는다. 해결이 끝나는 자리가
+        # ``_resolve_chain`` 으로 밀려났으므로 ``pending_spells`` 가 그때까지
+        # 들고 있는다.
+        self.pending_spells = self.pending_spells + (placed,)
+        self.priority = ResponseLoop.opened(
+            self.chain,
+            1 - action.actor,
+            turn_player=self.state.turn.turn_player,
+            phase=self.state.turn.phase,
+            reason="발동에 응답 (RULE-CHAIN-001)",
+        ).priority
         return DuelStep(
             action,
             True,
             ValidationCode.OK,
-            resolved.reason,
-            result=self._check_end(),
+            f"{activated.reason} 상대의 응답을 기다립니다.",
         )
 
     # ------------------------------------------------------------------

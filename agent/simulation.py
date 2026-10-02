@@ -49,7 +49,7 @@ import dataclasses
 from dataclasses import dataclass, field
 from enum import Enum
 
-from engine.action import PlayerAction
+from engine.action import PlayerAction, PlayerActionKind
 from engine.duel import Duel, DuelStep, LegalActions
 from engine.game_state_view import GameStateView
 from engine.validation import ValidationCode
@@ -195,6 +195,39 @@ class Simulator:
         self._forks += 1
         return dataclasses.replace(self.duel, state=self.duel.state.clone())
 
+    @staticmethod
+    def _settle_forced_passes(fork: Duel) -> "DuelStep | None":
+        """
+        **고를 것이 없는 응답 창을 사본에서 닫는다** (Phase 3-E-11).
+
+        발동은 상대에게 응답 기회를 연다 (RULE-CHAIN-001). 그 기회에서
+        **패스밖에 할 수 없다면 패스는 고르는 일이 아니다** — 드로우가
+        행위 목록에 없는 것과 같은 이유다 (``Duel.advance`` 의 설명).
+
+        그래서 사본에서 그 걸음을 대신 밟는다. 깊이를 늘리는 것이 아니다:
+        상대의 **선택을 예측하지 않는다.** 선택할 것이 하나라도 있으면
+        **즉시 멈춘다** — 그 자리가 진짜 결정 지점이고, 거기까지가 깊이 1 이다.
+
+        이것을 하지 않으면 깊이 1 의 미래가 **체인 도중**의 위치가 된다.
+        그 위치는 아무도 고르는 자리가 아니고, 그것을 재면 대상이 다른 두
+        발동이 같은 점수를 받는다 (Phase 3-E-4 가 세운 구분이 사라진다).
+        """
+        last: "DuelStep | None" = None
+        guard = 0
+        while fork.priority.is_open and guard < 8:
+            guard += 1
+            legal = fork.legal_actions()
+            passes = [
+                a for a in legal.allowed if a.kind is PlayerActionKind.PASS
+            ]
+            if not passes or len(passes) != len(legal.allowed):
+                # 고를 것이 있다 — 그것은 결정이므로 여기서 멈춘다.
+                break
+            last = fork.apply(passes[0])
+            if not last.accepted:
+                break
+        return last
+
     def simulate(self, action: PlayerAction, *, viewer: int) -> SimulationResult:
         """
         후보 하나를 사본에서 해 본다. **진짜 판은 건드리지 않는다.**
@@ -235,11 +268,12 @@ class Simulator:
             )
 
         if step.accepted:
+            settled = self._settle_forced_passes(fork)
             return SimulationResult(
                 action=action,
                 status=SimulationStatus.SUPPORTED,
                 viewer=viewer,
-                reason=step.reason,
+                reason=settled.reason if settled is not None else step.reason,
                 code=step.code,
                 # 사본은 여기서 버려진다. 넘어가는 것은 관측뿐이다.
                 future=fork.view(viewer),

@@ -415,14 +415,17 @@ def test_e_each_seat_only_sees_its_own_hand(repository):
 
 
 @pytest.mark.real_card
-def test_e_priority_never_opens_yet_and_that_is_recorded(repository):
+def test_e_priority_opens_only_where_a_rule_says_so(repository):
     """
-    **우선권 창이 한 번도 열리지 않는다.** 여는 규칙이 없기 때문이다 —
-    ``PriorityState`` 는 있지만 "페이즈가 바뀌면 누구에게 언제 열리는가"
-    는 아직 규칙이 없다 (Phase 2-F 가 값만 만들고 정하지 않았다).
+    **발동이 없는 듀얼에서는 우선권 창이 한 번도 열리지 않는다.**
 
-    그래서 ``PASS`` 도 후보가 되지 않는다. 감추지 않고 여기 적어 둔다 —
-    Engine V1 의 **알려진 한계**다.
+    Phase 3-E-11 전에는 "한 번도" 가 **모든** 듀얼에 참이었고, 그것이
+    STRUCTURAL-34 였다. 지금은 공식 근거가 있는 자리 하나에서 열린다 —
+    효과 발동 직후의 응답 기회(``RULE-CHAIN-001``). 이 듀얼의 덱에는 발동할
+    효과가 없으므로 그 자리에 닿지 않고, 그래서 주장이 그대로 참이다.
+
+    아직 열리지 않는 자리는 남아 있다 — 페이즈 전환(``RULE-CHAIN-009``)과
+    체인 해결 뒤. 감추지 않고 여기 적어 둔다.
     """
     duel = small_duel(repository)
     opened = False

@@ -795,13 +795,26 @@ def test_17_the_search_policy_now_sees_the_activation(repository):
 # ======================================================================
 
 
-def test_18_the_response_loop_exists_but_nothing_opens_it():
+def test_18_the_duel_now_opens_the_response_loop_after_an_activation():
     """
-    **응답 루프는 있고, 그것을 여는 규칙은 없다** (STRUCTURAL-34).
+    **STRUCTURAL-34 의 절반이 풀린 자리다** (Phase 3-E-11).
 
-    ``ResponseLoop.opened`` 는 "부르는 쪽이 값으로 여는 도구" 라고 스스로
-    적는다 — "링크가 쌓였으니 자동으로 열린다" 는 규칙이 없다. 그리고
-    ``Duel`` 은 ``ResponseLoop`` 를 모른다.
+    Phase 3-E-3 에서 이 시험은 그 반대를 적었다 — "``Duel`` 은
+    ``ResponseLoop`` 를 모른다" 고. 그때는 **여는 규칙이 없었기 때문**이고,
+    없는 규칙을 지어내지 않은 것이 옳았다.
+
+    **왜 기존 전제가 바뀌었는가.** 규칙이 없는 것이 아니라 **찾지 않았던**
+    것이다. 공식 룰북 ``RULE-CHAIN-001`` 이 한 문장으로 적는다 —
+
+        "If a card's effect is activated, the opponent is **always** given a
+         chance to respond with a card effect of their own, creating a Chain."
+
+    그래서 지금은 ``Duel._apply_activation`` 이 링크를 쌓은 뒤 **상대에게**
+    기회를 연다. ``ResponseLoop.opened`` 의 설명("부르는 쪽이 값으로 연다")은
+    그대로이고, 그 **부르는 쪽이 생겼다.**
+
+    아직 열지 않는 자리는 그대로다 — 페이즈 전환(RULE-CHAIN-009)과 체인 해결
+    뒤(``AFTER_CHAIN_RULE``). 그래서 STRUCTURAL-34 전체가 풀린 것이 아니다.
     """
     from engine.response import ResponseLoop
 
@@ -810,8 +823,12 @@ def test_18_the_response_loop_exists_but_nothing_opens_it():
     assert hasattr(ResponseLoop, "resolve")
 
     source = (ROOT / "engine/duel.py").read_text()
-    assert "ResponseLoop" not in source
-    assert "ResponseState" not in source
+    assert "ResponseLoop.opened(" in source
+    assert "RULE-CHAIN-001" in source
+    # 나머지 절반은 여전히 열지 않는다 — 기회를 여는 자리가 **하나뿐**이다.
+    assert source.count("ResponseLoop.opened(") == 1
+    assert "PHASE_CHANGE" not in source
+    assert "give_to" not in source, "체인 해결 뒤 우선권은 아직 정하지 않았다"
 
 
 def test_19_the_timing_layer_lists_what_it_does_not_check():

@@ -273,20 +273,25 @@ def test_05_handing_over_the_turn_costs_nothing_in_the_score(repository):
 
 
 @pytest.mark.real_card
-def test_06_within_one_decision_the_turn_is_the_same_for_every_candidate(
-    repository,
-):
+def test_06_the_turn_is_no_longer_constant_within_every_decision(repository):
     """
-    **§7 · §13 — 그래서 지금 순위가 틀어지지 않는다.**
+    **STRUCTURAL-128 의 조건이 성립했다** (Phase 3-E-11).
 
-    한 결정의 모든 후보가 **같은 미래 차례**를 갖는다. 차례는 그 결정에서
-    모든 후보에 공통인 **상수**이고, 상수는 순위를 바꿀 수 없다.
+    Phase 3-E-9 에서 이 시험은 그 반대를 적었고, **깨질 조건을 미리
+    적어 두었다** — "END 페이즈에 발동이 후보로 오르면(STRUCTURAL-34 가
+    열리면) 그날 이 시험이 깨진다." 그날이 왔다.
 
-    이유는 평가에 있지 않고 **행동 공간에 있다**: 차례를 넘기는 유일한 행위
-    (END 페이즈의 ``END_PHASE``)에게는 **형제 후보가 없다.** END 페이즈에
-    발동이 후보로 오르면(STRUCTURAL-34 가 열리면) 그날 이 시험이 깨진다.
+    **왜 기존 전제가 바뀌었는가.** 3-E-9 의 결론은 "차례가 한 결정 안에서
+    상수이므로 순위를 바꿀 수 없다" 였고, 그 상수성은 **행동 공간이 좁아서**
+    생긴 것이었다. 응답 창이 열리면서 ``PASS`` 가 후보가 되었고, 응답 창의
+    ``PASS`` 는 미래의 차례가 **행위자와 다른** 후보다 (상대 턴에 내가 패스
+    한다).
+
+    그래서 지금은 차례가 다른 후보가 실제로 존재한다. 다만 그 결정의 후보가
+    ``PASS`` **하나뿐**이므로 여전히 순위를 다투지 않는다 — 128 은 아직
+    증상이 없고, 이 시험이 그 두 사실을 함께 고정한다.
     """
-    total = split = passing_alone = passing_total = 0
+    total = split = handover_decisions = sole_candidate = 0
     for duel, legal in decisions(repository):
         seat = legal.seat
         simulator = Simulator(duel)
@@ -303,29 +308,38 @@ def test_06_within_one_decision_the_turn_is_the_same_for_every_candidate(
             split += 1
         handover = [a for a, tp in futures if tp != seat]
         if handover:
-            passing_total += 1
-            assert all(a.kind.name == "END_PHASE" for a in handover), handover
+            handover_decisions += 1
+            # 차례를 넘기는 것도, 상대 턴에 내가 패스하는 것도 여기 온다.
+            assert all(
+                a.kind.name in ("END_PHASE", "PASS") for a in handover
+            ), handover
             if len(legal.allowed) == 1:
-                passing_alone += 1
+                sole_candidate += 1
 
     assert total > 500, total
-    # 차례가 갈린 결정이 **하나도 없다.**
+    # ① 차례가 행위자와 다른 미래를 만드는 결정이 **생겼다.**
+    assert handover_decisions > 0, handover_decisions
+    # ② 그래도 그런 결정의 후보는 **하나뿐**이라 순위를 다투지 않는다.
+    assert sole_candidate == handover_decisions, (sole_candidate, handover_decisions)
     assert split == 0, split
-    # 차례를 넘기는 행위는 **언제나 유일한 후보**였다.
-    assert passing_total > 0, passing_total
-    assert passing_alone == passing_total, (passing_alone, passing_total)
 
 
 @pytest.mark.real_card
-def test_07_the_actor_is_the_turn_player_at_every_decision(repository):
+def test_07_the_actor_is_no_longer_always_the_turn_player(repository):
     """
-    **§9 — 결정 시점에는 ``viewer`` 가 곧 차례다.**
+    **``viewer != turn_player`` 인 결정이 생겼다** (Phase 3-E-11).
 
-    ``Duel.to_act`` 는 "우선권을 쥔 사람, 없으면 턴 플레이어" 이고, 지금은
-    응답 창이 열리는 자리가 없으므로(STRUCTURAL-34) 언제나 턴 플레이어다.
+    Phase 3-E-9 에서 이 시험은 1053/1053 으로 ``legal.seat == turn_player``
+    를 고정했고, 그 이유를 적어 두었다 — ``Duel.to_act`` 는 "우선권을 쥔
+    사람, 없으면 턴 플레이어" 이고 **응답 창이 열리는 자리가 없었다**
+    (STRUCTURAL-34).
 
-    그래서 평가는 **현재** 상태의 차례를 ``viewer`` 로 사실상 알고 있다.
-    모르는 것은 **미래**의 차례다 — ``test_05`` 가 그 자리를 짚는다.
+    이제 열린다. 발동 직후의 응답 창에서는 ``to_act`` 가 **상대**이므로
+    ``legal.seat != turn_player`` 다. 3-E-9 가 적어 둔 두 번째 조건("상대
+    턴에 행동할 수 있게 되면 '현재 차례 = viewer' 가 깨진다")이 성립했다.
+
+    그래서 평가가 **현재** 차례를 ``viewer`` 로 아는 것도 더 이상 보장되지
+    않는다 — STRUCTURAL-128 을 다시 볼 근거가 생겼다.
     """
     same = different = 0
     for duel, legal in decisions(repository):
@@ -333,8 +347,11 @@ def test_07_the_actor_is_the_turn_player_at_every_decision(repository):
             same += 1
         else:
             different += 1
+            # 다른 자리가 되는 것은 **응답 창이 열렸을 때뿐**이다.
+            assert duel.priority.is_open
+            assert duel.priority.holds(legal.seat)
     assert same > 500, same
-    assert different == 0, different
+    assert different > 0, different
 
 
 @pytest.mark.real_card

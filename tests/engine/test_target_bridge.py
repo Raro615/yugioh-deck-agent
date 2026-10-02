@@ -54,7 +54,7 @@ from engine.target_bridge import (
 from engine.validation import ValidationResult
 from engine.vocabulary import Phase, Position, Zone
 
-from tests.conftest import requires_official_db
+from tests.conftest import requires_official_db, settle_chain
 
 pytestmark = requires_official_db
 
@@ -393,6 +393,7 @@ def test_07_same_name_copies_are_told_apart_by_instance_id(repository):
 
     target = found[1].instance_targets()[0]
     assert duel.apply(found[1]).accepted
+    assert settle_chain(duel).accepted
 
     survivors = [c.instance_id for c in duel.state.player(MINE).monster_zone]
     assert target not in survivors
@@ -490,7 +491,11 @@ def test_12_the_whole_target_path_runs_through_duel_apply(repository):
     mine_before = len(duel.state.player(MINE).monster_zone)
     opp_hand_before = len(duel.state.player(THEIRS).hand)
 
-    step = duel.apply(chosen)
+    activation = duel.apply(chosen)
+    assert activation.accepted, activation.reason
+    # 발동과 해결 사이에 상대의 응답 기회가 들어간다 (Phase 3-E-11 ·
+    # RULE-CHAIN-001). 결과 숫자는 아래에서 그대로 확인한다.
+    step = settle_chain(duel)
     assert step.accepted, step.reason
     assert "@primary" in step.reason
     assert str(target.value) in step.reason
@@ -519,6 +524,7 @@ def test_13_choosing_a_different_target_gives_a_different_board(repository):
         chosen = activations(duel)[index]
         target = chosen.instance_targets()[0]
         assert duel.apply(chosen).accepted
+        assert settle_chain(duel).accepted
         survivor = [c.card_id for c in duel.state.player(MINE).monster_zone]
         outcomes[target] = survivor
 

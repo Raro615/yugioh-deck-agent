@@ -544,12 +544,18 @@ def test_d_the_last_resort_rule_also_covers_passing():
 
 
 @pytest.mark.real_card
-def test_d_pass_never_shows_up_but_attack_now_does(repository):
+def test_d_pass_now_shows_up_because_a_response_window_opens(repository):
     """
-    **이 순간의 사실이다.** ``PASS`` 는 여전히 후보에 오르지 않는다.
+    **이 순간의 사실이다.** ``PASS`` 가 **이제 후보에 오른다**.
 
-    ``Duel._flow_actions`` 는 우선권이 열려 있을 때만 ``PASS`` 를 넣는데,
-    지금도 우선권을 여는 규칙이 없다 (Phase 2-F 미구현).
+    ``Duel._flow_actions`` 는 우선권이 열려 있을 때만 ``PASS`` 를 넣는다.
+    Phase 3-E-11 이 **여는 규칙 하나**를 이었다 — 효과 발동 직후 상대에게
+    응답 기회를 준다 (``RULE-CHAIN-001``: "the opponent is **always** given a
+    chance to respond"). 그래서 발동이 있는 이 덱에서는 ``PASS`` 가 나온다.
+
+    **규칙이 아니라 사실을 고친다** — 아래 다섯 종류에 대한 주장은 그대로이고,
+    ``PASS`` 에 대한 주장만 뒤집혔다. 엔진이 자란 것이고, 자란 자리에
+    공식 근거가 있다.
 
     **``ATTACK`` 은 이제 오른다** (Phase 3-E-1-B). Phase 3-B 에서 이 시험은
     후보가 ``{NORMAL_SUMMON, END_PHASE}`` 둘뿐이라고 적었고 그때는 사실이었다
@@ -577,7 +583,9 @@ def test_d_pass_never_shows_up_but_attack_now_does(repository):
         for judgement in policy.judgements
         for evaluation in judgement.evaluations
     )
-    assert PlayerActionKind.PASS not in kinds, dict(kinds)
+    # 발동이 있었으므로 응답 기회가 열렸고, 그 기회의 후보가 ``PASS`` 다.
+    assert kinds[PlayerActionKind.ACTIVATE_EFFECT] > 0, dict(kinds)
+    assert kinds[PlayerActionKind.PASS] > 0, dict(kinds)
     assert set(kinds) == {
         PlayerActionKind.NORMAL_SUMMON,
         PlayerActionKind.END_PHASE,
@@ -585,6 +593,7 @@ def test_d_pass_never_shows_up_but_attack_now_does(repository):
         PlayerActionKind.SET_MONSTER,
         PlayerActionKind.SET_SPELL_TRAP,
         PlayerActionKind.ACTIVATE_EFFECT,
+        PlayerActionKind.PASS,
     }, dict(kinds)
     assert PlayerActionKind.ACTIVATE_CARD not in kinds, dict(kinds)
 
@@ -777,10 +786,16 @@ def test_f_greedy_is_not_the_best_play(repository):
 
     **왜 깨졌는지 측정했다.** 규칙이 나아져서가 아니다. 행동 공간에 발동이
     들어오면서 **무작위 쪽이 훨씬 빨리 무너졌다** — 16개 씨앗에서 무작위의
-    최종 공격력 합이 19,200 이고 규칙 기반은 70,700 이다. 무작위가 10개
-    씨앗에서 0 이 되는데, 그만큼 욕망의 항아리를 아무 때나 발동해 덱을
-    태우고 LP 를 잃기 때문이다. 즉 **척도가 둘을 가르지 못하게 된 것**이고,
+    최종 공격력 합이 **9,600** 이고 규칙 기반은 70,700 이다. 무작위가 여러
+    씨앗에서 0 이 되는데, 그만큼 욕망의 항아리를 아무 때나 발동해 덱을 태우고
+    LP 를 잃기 때문이다. 즉 **척도가 둘을 가르지 못하게 된 것**이고,
     "규칙 기반이 좋아졌다" 가 아니다.
+
+    무작위 쪽 숫자가 19,200 에서 9,600 으로 또 내려간 것은 Phase 3-E-11 에서
+    발동이 **세 걸음**(발동 · 상대 패스 · 자기 패스)이 되었기 때문이다.
+    무작위는 그 걸음마다 아무 것이나 고르므로 궤적이 갈라진다. **규칙 기반의
+    70,700 은 한 점도 바뀌지 않았고**, 붕괴하는 씨앗도 그대로다 — 이 시험이
+    지키는 주장은 거기에 있다.
 
     그래서 증거를 **씨앗 비교에서 절대적인 사실로** 바꾼다. 규칙 기반도
     씨앗 10 · 15 에서 **몬스터 하나 없이 LP 0 으로 진다** — 한 수도 내다보지
@@ -802,7 +817,7 @@ def test_f_greedy_is_not_the_best_play(repository):
         for seed in COMPARISON_SEEDS
     ]
     assert sum(rules) == 70700, sum(rules)
-    assert sum(chance) == 19200, sum(chance)
+    assert sum(chance) == 9600, sum(chance)
     assert all(r >= c for r, c in zip(rules, chance)), list(zip(rules, chance))
 
     # 그런데도 탐욕은 정답이 아니다 — **스스로 무너지는 씨앗이 있다.**

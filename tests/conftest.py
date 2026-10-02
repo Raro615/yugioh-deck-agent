@@ -57,3 +57,41 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "real_card: 공식 스크립트에서 읽은 실제 카드를 실행하는 테스트"
     )
+
+
+def settle_chain(duel):
+    """
+    발동 뒤 열린 **응답 창을 닫고 체인을 해결한다** (Phase 3-E-11).
+
+    ``RULE-CHAIN-001`` 이 적는다 — "Both players continue to add effects to
+    the Chain until **they both wish to add nothing else**, then you resolve
+    the outcome in reverse order." 그래서 패스가 **두 번** 필요하다. 한 번은
+    상대가, 한 번은 발동한 쪽이 "그만하겠다" 고 말하는 것이다.
+
+    예전에는 ``Duel.apply`` 하나가 발동과 해결을 함께 끝냈다. 응답 기회가
+    없었기 때문이고, 그것이 STRUCTURAL-34 였다. 지금은 해결 **결과**를 보려면
+    이 걸음을 거쳐야 한다.
+
+    마지막 패스의 :class:`DuelStep` 을 돌려준다 — 그것이 해결의 결과다.
+    열린 창이 없으면 ``None`` 이다.
+    """
+    from engine.action import PlayerActionKind
+
+    last = None
+    guard = 0
+    while duel.priority.is_open and guard < 8:
+        guard += 1
+        legal = duel.legal_actions()
+        passing = [a for a in legal.allowed if a.kind is PlayerActionKind.PASS]
+        if not passing:
+            break
+        last = duel.apply(passing[0])
+    return last
+
+
+def activate_and_settle(duel, action):
+    """발동 하나를 끝까지 — 발동, 양쪽 패스, 해결. 해결의 결과를 돌려준다."""
+    activation = duel.apply(action)
+    if not activation.accepted:
+        return activation
+    return settle_chain(duel) or activation

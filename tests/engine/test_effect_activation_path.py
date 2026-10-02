@@ -60,7 +60,7 @@ from engine.state.game_state import GameState
 from engine.summon import duel_executor
 from engine.vocabulary import Phase, Position, Zone
 
-from tests.conftest import requires_official_db
+from tests.conftest import requires_official_db, settle_chain
 
 pytestmark = requires_official_db
 
@@ -477,9 +477,14 @@ def test_12_the_whole_path_runs_through_duel_apply(repository):
     """
     **§17 E·F·G·H·I 를 한 자리에서 센다.** 이 Phase 의 한 줄이다.
 
-        발동 → 배치 → ChainLink → 해결 → 드로우 2 → 묘지
+        발동 → 배치 → ChainLink → **상대의 응답 기회** → 해결 → 드로우 2 → 묘지
 
     숫자로 확인한다. 패는 **1장 줄고 2장 늘어** 결과적으로 +1 이다.
+
+    **응답 기회가 가운데 들어왔다** (Phase 3-E-11 · RULE-CHAIN-001 —
+    "the opponent is always given a chance to respond"). 그래서 ``apply``
+    하나가 해결까지 끝내지 않는다. 바뀐 것은 **걸음 수**이고, 결과 숫자는
+    한 개도 바뀌지 않았다 — 아래 세 줄이 그대로인 것이 그 증거다.
     """
     duel, (pot,) = staged(repository)
     player = duel.state.player(MINE)
@@ -487,7 +492,14 @@ def test_12_the_whole_path_runs_through_duel_apply(repository):
     assert hand_before == 1 and deck_before == 20
 
     action = activations(duel, MINE)[0]
-    step = duel.apply(action)
+    activation = duel.apply(action)
+    assert activation.accepted, activation.reason
+    assert "체인 1 로 발동했습니다" in activation.reason
+    # 아직 해결되지 않았다 — 상대가 응답할 차례다.
+    assert duel.priority.holder.is_seat(THEIRS)
+    assert len(player.deck) == deck_before
+
+    step = settle_chain(duel)
 
     assert step.accepted, step.reason
     assert step.code is ValidationCode.OK
@@ -622,11 +634,16 @@ def test_16_two_activations_in_one_turn_both_work(repository):
 
     first = activations(duel, MINE)[0]
     assert duel.apply(first).accepted
+    # 체인은 **해결될 때까지** 남아 있다 (Phase 3-E-11). 발동 직후 비워지던
+    # 것은 응답 기회가 없었기 때문이다.
+    assert not duel.chain.is_empty
+    assert settle_chain(duel).accepted
     assert duel.chain.is_empty
 
     remaining = activations(duel, MINE)
     assert len(remaining) == 1
     assert duel.apply(remaining[0]).accepted
+    assert settle_chain(duel).accepted
 
     assert len(player.deck) == 16
     assert len(player.grave) == 2
@@ -738,7 +755,18 @@ def test_20_many_simulations_do_not_drift_the_duel(repository):
 
 @pytest.mark.real_card
 def test_21_the_simulation_matches_what_really_happens(repository):
-    """해 본 것과 실제로 한 것이 **같다.** 다르면 탐색은 헛것을 본다."""
+    """
+    해 본 것과 실제로 한 것이 **같다.** 다르면 탐색은 헛것을 본다.
+
+    **양쪽 다 강제된 패스까지 끝낸 자리에서 견준다** (Phase 3-E-11).
+    발동은 상대에게 응답 기회를 열고, 그 기회에서 패스밖에 할 수 없으면
+    패스는 고르는 일이 아니다. 시뮬레이터는 그 걸음을 사본에서 대신 밟으므로
+    (``Simulator._settle_forced_passes``), 진짜 쪽도 같은 자리까지 와야
+    같은 것을 견주는 것이 된다.
+
+    한쪽만 밟고 견주면 이 시험이 깨진다 — 실제로 깨졌고, 그래서 이 줄이
+    생겼다.
+    """
     from agent.simulation import Simulator
 
     duel = real_duel(repository)
@@ -747,6 +775,7 @@ def test_21_the_simulation_matches_what_really_happens(repository):
 
     simulated = Simulator(duel).simulate(action, viewer=seat).future
     assert duel.apply(action).accepted
+    assert settle_chain(duel).accepted
     assert simulated.canonical_state() == duel.view(seat).canonical_state()
 
 
@@ -785,6 +814,7 @@ def test_23_the_opponent_does_not_learn_what_was_drawn(repository):
     """
     duel, (pot,) = staged(repository)
     assert duel.apply(activations(duel, MINE)[0]).accepted
+    assert settle_chain(duel).accepted   # 해결까지 와야 뽑은 카드가 패에 있다
 
     theirs = duel.view(THEIRS)
     assert theirs.opponent.hand.size == 2  # 장수는 공개
