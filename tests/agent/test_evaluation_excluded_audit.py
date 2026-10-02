@@ -1,30 +1,34 @@
 """
-Phase 3-E-7 — STRUCTURAL-130: ``partial`` / ``excluded`` 분류 Audit.
+Phase 3-E-7 / 3-E-8 — STRUCTURAL-130: ``partial`` / ``excluded`` 의 의미.
 
-이 파일이 고정하는 것은 **excluded 가 왜 excluded 인가**다. 네 가지를 섞지
-않는다.
+이 파일이 고정하는 것은 **excluded 가 왜 excluded 인가**다.
 
-=================  ========================================================
-DESIGNED OUT       관측되지만 **설계상 세지 않는다**. 묘지 · 제외 존 ·
-                   필드 존 · 펜듈럼 존 · 엑스트라 덱. 문구는 "값을 매기지
-                   않았다"
-UNKNOWN            값을 **읽을 수 없다**. 상대의 뒷면 카드, 공격력이 ``?``
-                   인 카드. 문구는 "모른다"
-WITHHELD           정체는 **알지만** 그 값이 지금 들어올 피해가 아니다.
-                   내 뒷면 몬스터의 공격력. 문구는 "세지 않았다"
-IMPLEMENTATION     관측에 있고, 평가 목적에 들어가고, 그런데 평가가
-GAP                **읽지 않는다.** 고칠 것은 이것 하나뿐이다
-=================  ========================================================
+3-E-7 은 그것을 **문구로** 갈랐다 — ``excluded`` 가 문자열 목록이었으므로 그
+수밖에 없었다. 3-E-8 에서 :class:`ExclusionCategory` 가 생겼으므로 이제
+**구조로** 가른다. 아래 주장들은 그대로이고, 판정이 문구에서 범주로 옮겨
+갔으므로 **더 강해졌다.**
 
-이번 Audit 이 찾은 IMPLEMENTATION GAP 은 **STRUCTURAL-132** 하나다 —
-엑스트라 몬스터 존이 평가에서 통째로 빠져 있었다 (``test_05`` · ``test_06``).
+==================  =======================================================
+``DESIGNED_OUT``    값이 보이는데 **항으로 두지 않기로 했다.** 묘지 · 제외
+                    존 · 필드 존 · 펜듈럼 존 · 엑스트라 덱 · **내 뒷면
+                    몬스터의 공격력**. 질문을 하지 않은 것이다
+``UNKNOWN``         **다 보이는데 숫자가 나오지 않는다.** 공격력이 ``?`` 인
+                    카드. 이것만이 평가의 미해결이다
+``WITHHELD``        **합법적으로 볼 수 없다.** 상대 뒷면의 정체 · 상대 패의
+                    내용. 규칙대로 처리한 결과다
+IMPLEMENTATION      관측에 있고, 평가 목적에 들어가고, 그런데 평가가
+GAP                 **읽지 않는다.** ``excluded`` 에 아무 기록도 남지
+                    않으므로 네 범주 중 **유일한 결함**이다
+==================  =======================================================
 
-남아 있는 것 (고치지 않고 적는다)
----------------------------------
-- **``partial`` 은 여전히 한 비트다** — 위 네 가지가 모두 같은 ``excluded``
-  문자열 목록으로 들어가고, ``partial`` 은 그 목록이 비었는지만 본다.
-  그래서 "설계상 제외" 와 "모른다" 를 **기계가 구분할 수 없다**
-  (STRUCTURAL-130 은 이 Phase 로 해결되지 않는다 · ``test_09``)
+3-E-7 Audit 이 찾은 IMPLEMENTATION GAP 은 **STRUCTURAL-132** 하나다 —
+엑스트라 몬스터 존이 평가에서 통째로 빠져 있었다 (``test_09`` ~ ``test_11``).
+
+**3-E-7 의 분류와 달라진 자리 하나.** 3-E-7 은 "내 뒷면 몬스터의 공격력" 을
+``WITHHELD`` 로 적었다. 문구가 "세지 않았다" 였기 때문이다. 그 분류가
+틀렸다 — 내 카드는 **아무것도 가려져 있지 않다.** 값을 알면서 항으로 두지
+않기로 한 것이므로 ``DESIGNED_OUT`` 이다. ``WITHHELD`` 는 관측 경계 밖인
+것(상대 뒷면 · 상대 패)에만 쓴다.
 """
 
 import ast
@@ -37,7 +41,10 @@ import pytest
 from agent.evaluation import (
     GRAVE_IS_COUNTED,
     MONSTER_IN_LP,
+    Exclusion,
+    ExclusionCategory,
     StateEvaluator,
+    StateValue,
     _field_monster_zones,
     _UNSCORED_ZONES,
 )
@@ -61,20 +68,18 @@ BATTLE_OX = 5053103  # ATK 1700 / DEF 1000
 KING_OF_THE_SKULL_SERVANTS = 36021814  # ATK ?
 POT_OF_GREED = 55144522
 
-#: 문구 → 범주. **문구가 범주를 말한다** — 이 표에 없는 문구가 나오면
-#: 분류되지 않은 제외 사유가 생긴 것이고, ``test_03`` 이 깨진다.
-CATEGORY_OF: tuple[tuple[str, str], ...] = (
-    ("값을 매기지 않았다", "DESIGNED_OUT"),
-    ("공격력은 세지 않았다", "WITHHELD"),
-    ("모른다", "UNKNOWN"),
-)
+#: 문구에 반드시 들어 있어야 하는 말. **문구와 범주가 어긋나면 둘 중 하나가
+#: 거짓이다** — 사람은 문구를 읽고 기계는 범주를 읽으므로, 둘이 같은 것을
+#: 말해야 한다.
+WORDING_OF: dict[ExclusionCategory, tuple[str, ...]] = {
+    ExclusionCategory.DESIGNED_OUT: ("값을 매기지 않았다", "세지 않았다"),
+    ExclusionCategory.UNKNOWN: ("모른다",),
+    ExclusionCategory.WITHHELD: ("모른다",),
+}
 
 
-def categorize(note: str) -> str:
-    for marker, category in CATEGORY_OF:
-        if marker in note:
-            return category
-    raise AssertionError(f"분류되지 않은 제외 사유: {note!r}")
+def categories(value) -> set[ExclusionCategory]:
+    return {item.category for item in value.excluded}
 
 
 #: 한 장을 어디에 어떻게 둘지. ``(seat, zone, position, card_id)``.
@@ -113,14 +118,20 @@ def source_of(path: str) -> str:
 # ======================================================================
 
 
-def test_01_partial_is_exactly_one_bit_over_the_excluded_list():
+def test_01_partial_is_no_longer_one_bit_over_the_whole_excluded_list():
     """
-    **§7 — ``partial`` 은 ``excluded`` 가 비었는지 하나뿐이다.**
+    **STRUCTURAL-130 이 풀린 자리다** (Phase 3-E-8).
 
-    세 가지 다른 뜻("일부 항만 계산됐다" · "일부 값이 UNKNOWN 이다" ·
-    "설계상 빠진 것이 있다")이 **같은 한 비트**로 묶여 있다. 그래서
-    ``partial`` 하나로는 무엇이 빠졌는지 알 수 없다 — STRUCTURAL-130 의
-    본체이고, 이 Phase 는 그것을 **해결하지 않는다.**
+    3-E-7 에서 이 시험은 그 반대를 적었다 — ``partial`` 이
+    ``return bool(self.excluded)`` 한 줄이고, 그래서 서로 다른 세 사실이
+    **같은 한 비트**로 묶인다고.
+
+    **왜 기존 전제가 틀렸는가.** 틀린 것은 시험이 아니라 코드였다. "빠진 것이
+    있는가" 와 "평가가 못 푼 것이 있는가" 는 다른 질문인데 한 이름을 쓰고
+    있었다. 묘지에 카드가 한 장 있으면 깃발이 참이 되었으므로, 깃발은 사실상
+    "이 판에 묘지가 있는가" 를 뜻했다 (실측 99.6%).
+
+    지금은 ``UNKNOWN`` 만 본다. 그리고 ``excluded`` 는 범주를 든다.
     """
     source = source_of("agent/evaluation.py")
     tree = ast.parse(source)
@@ -130,47 +141,68 @@ def test_01_partial_is_exactly_one_bit_over_the_excluded_list():
         if isinstance(node, ast.FunctionDef) and node.name == "partial"
     ]
     body = [n for n in partial.body if not isinstance(n, ast.Expr)]
-    assert len(body) == 1, "partial 이 한 줄이 아니면 정의가 바뀐 것이다"
-    assert ast.unparse(body[0]) == "return bool(self.excluded)"
+    assert len(body) == 1
+    returned = ast.unparse(body[0])
+    assert returned != "return bool(self.excluded)", "다시 한 비트로 돌아갔다"
+    assert "ExclusionCategory.UNKNOWN" in returned, returned
 
-    # 그 목록은 **자유 문자열**이다 — 범주를 담는 자리가 없다.
-    from agent.evaluation import StateValue
+    # 그리고 그 목록은 **범주를 담는다.**
+    assert StateValue.__annotations__["excluded"] == "tuple[Exclusion, ...]"
+    assert {category.name for category in ExclusionCategory} == {
+        "DESIGNED_OUT",
+        "UNKNOWN",
+        "WITHHELD",
+    }
 
-    assert StateValue.__annotations__["excluded"] == "tuple[str, ...]"
 
-
-def test_02_every_excluded_note_names_its_own_category(repository):
+def test_02_each_exclusion_carries_the_category_that_matches_its_wording(
+    repository,
+):
     """
-    **§3 — 문구 하나가 범주 하나를 말한다.**
+    **§3 — 하나의 제외 사유가 하나의 범주를 든다.**
 
-    같은 ``excluded`` 목록에 세 범주가 섞여 들어가므로, 적어도 **문구로는**
-    갈라져 있어야 한다. "모른다"(UNKNOWN) · "세지 않았다"(WITHHELD) ·
-    "값을 매기지 않았다"(DESIGNED OUT) 가 서로 겹치지 않는다.
+    3-E-7 은 문구로 갈랐다. 지금은 **범주 필드**로 가르고, 문구가 그 범주와
+    같은 말을 하는지도 함께 본다 — 사람은 문구를 읽고 기계는 범주를 읽으므로
+    둘이 어긋나면 어느 한쪽이 거짓이다.
     """
     cases = {
-        # 상대 뒷면 몬스터 — 정의를 읽을 수 없다
-        "UNKNOWN": state(repository, (THEIRS, Zone.MZONE, SET, LUSTER_DRAGON)),
-        # 내 뒷면 몬스터 — 정의는 알지만 공격하지 않는다
-        "WITHHELD": state(repository, (MINE, Zone.MZONE, SET, LUSTER_DRAGON)),
-        # 제외 존 — 공개되어 있지만 설계상 세지 않는다
-        "DESIGNED_OUT": state(repository, (MINE, Zone.REMOVED, FACEUP, LUSTER_DRAGON)),
+        # 내 뒷면 몬스터 — 다 보이는데 항으로 두지 않기로 했다
+        ExclusionCategory.DESIGNED_OUT: state(
+            repository, (MINE, Zone.MZONE, SET, LUSTER_DRAGON)
+        ),
+        # 내 앞면 ``?`` 몬스터 — 다 보이는데 숫자가 없다
+        ExclusionCategory.UNKNOWN: state(
+            repository, (MINE, Zone.MZONE, FACEUP, KING_OF_THE_SKULL_SERVANTS)
+        ),
+        # 상대 뒷면 몬스터 — 관측 경계 밖이다
+        ExclusionCategory.WITHHELD: state(
+            repository, (THEIRS, Zone.MZONE, SET, LUSTER_DRAGON)
+        ),
     }
     for expected, game in cases.items():
-        notes = value(game).excluded
-        assert notes, expected
-        assert {categorize(note) for note in notes} == {expected}, notes
+        result = value(game)
+        assert result.excluded, expected
+        assert categories(result) == {expected}, result.excluded
+        for item in result.excluded:
+            assert any(
+                word in item.note for word in WORDING_OF[item.category]
+            ), (item.category, item.note)
 
 
-def test_03_no_real_duel_produces_an_unclassified_excluded_note(repository):
+def test_03_real_duels_produce_only_designed_out_and_withheld(repository):
     """
-    **§2 — 실제 대국에서 나오는 모든 제외 사유가 분류된다.**
+    **§2 — 실제 대국에서 나오는 제외 사유를 전부 모아 범주를 센다.**
 
-    사례를 만들지 않고 실제 듀얼에서 모아 분류한다. 분류되지 않은 문구가
-    하나라도 나오면 :func:`categorize` 가 터진다.
+    사례를 만들지 않고 실제 듀얼에서 모은다. 통상 몬스터만 든 덱에서는
+    ``UNKNOWN`` 이 **하나도 나오지 않는다** — 공격력이 ``?`` 인 카드가 없기
+    때문이다. 그래서 ``partial`` 도 0 이다.
+
+    **빠진 것이 줄어서가 아니다.** ``DESIGNED_OUT`` 과 ``WITHHELD`` 는 여전히
+    평가 횟수보다 많이 쌓인다 — 기록은 하나도 사라지지 않았고 범주만 갈렸다.
     """
     deck = [LUSTER_DRAGON] * 10 + [BATTLE_OX] * 6 + [POT_OF_GREED] * 4
-    seen: dict[str, set[str]] = {}
-    evaluated = 0
+    counts = {category: 0 for category in ExclusionCategory}
+    evaluated = partial = 0
     for seed in (1, 2, 3):
         rng = random.Random(seed)
         duel = Duel.start(repository, decks=(list(deck), list(deck)), seed=seed)
@@ -188,14 +220,17 @@ def test_03_no_real_duel_produces_an_unclassified_excluded_note(repository):
                 if result.future is None:
                     continue
                 evaluated += 1
-                for note in EV.evaluate(result.future).excluded:
-                    shape = re.sub(r"\d+", "N", note)
-                    seen.setdefault(categorize(note), set()).add(shape)
+                evaluation = EV.evaluate(result.future)
+                partial += evaluation.partial
+                for item in evaluation.excluded:
+                    counts[item.category] += 1
             duel.apply(rng.choice(legal.allowed))
 
     assert evaluated > 500, evaluated
-    # 실제 대국에서 세 범주가 모두 나온다 — 어느 하나도 이론상의 것이 아니다.
-    assert set(seen) == {"UNKNOWN", "WITHHELD", "DESIGNED_OUT"}, seen
+    assert counts[ExclusionCategory.DESIGNED_OUT] > 0, counts
+    assert counts[ExclusionCategory.WITHHELD] > 0, counts
+    assert counts[ExclusionCategory.UNKNOWN] == 0, counts
+    assert partial == 0, (partial, evaluated)
 
 
 # ======================================================================
@@ -241,10 +276,12 @@ def test_04_an_unscored_zone_is_observable_and_says_so(repository):
         game.turn.set_phase(Phase.MAIN1)
 
         result = EV.evaluate(GameStateView.from_state(game, viewer=MINE))
-        note = [n for n in result.excluded if n.startswith(label)]
-        assert len(note) == 1, (label, result.excluded)
-        assert categorize(note[0]) == "DESIGNED_OUT"
-        assert "모른다" not in note[0]
+        found = [item for item in result.excluded if item.note.startswith(label)]
+        assert len(found) == 1, (label, result.excluded)
+        assert found[0].category is ExclusionCategory.DESIGNED_OUT
+        assert "모른다" not in found[0].note
+        # 설계상 제외는 **평가의 미해결이 아니다.**
+        assert not result.partial, result.excluded
 
 
 def test_05_a_card_in_an_unscored_zone_no_longer_vanishes_silently(repository):
@@ -252,14 +289,21 @@ def test_05_a_card_in_an_unscored_zone_no_longer_vanishes_silently(repository):
     **STRUCTURAL-130 — 조용히 빠지던 네 자리.**
 
     예전에는 묘지 하나만 적었다. 제외 존 · 필드 존 · 펜듈럼 존 · 엑스트라
-    덱에 카드가 있어도 ``excluded`` 가 **비었고**, 그래서 ``partial`` 이
-    "다 셌다" 는 거짓을 말했다 — 적지 않았으므로 고칠 단서조차 없었다.
+    덱에 카드가 있어도 ``excluded`` 가 **비었고**, 그래서 아무 기록도 남지
+    않았다 — 적지 않았으므로 고칠 단서조차 없었다.
+
+    **``partial`` 주장만 뒤집혔다** (Phase 3-E-8). 3-E-7 은 이 자리에서
+    ``partial`` 이 참이 되는 것을 성과로 적었는데, 그 전제가 틀렸다: 다섯
+    자리 모두 **보이는데 세지 않기로 한 것**이므로 평가의 미해결이 아니다.
+    기록은 남아야 하고 (``excluded``), 깃발은 서지 않아야 한다 (``partial``)
+    — 그 둘이 다른 질문이라는 것이 STRUCTURAL-130 의 전부다.
     """
     for zone in (Zone.REMOVED, Zone.FZONE, Zone.PZONE):
         game = state(repository, (MINE, zone, FACEUP, LUSTER_DRAGON))
         result = value(game)
-        assert result.partial, zone
         assert result.excluded, zone
+        assert categories(result) == {ExclusionCategory.DESIGNED_OUT}, zone
+        assert not result.partial, zone
         # 점수는 **움직이지 않는다** — 세기 시작한 것이 아니라 적기 시작했다.
         assert result.heuristic == 0, (zone, result.terms)
 
@@ -274,8 +318,9 @@ def test_05_a_card_in_an_unscored_zone_no_longer_vanishes_silently(repository):
     game.turn.turn_number = 2
     game.turn.set_phase(Phase.MAIN1)
     result = value(game)
-    assert result.partial
-    assert any(n.startswith("엑스트라 덱") for n in result.excluded), result.excluded
+    assert any(n.startswith("엑스트라 덱") for n in result.notes), result.excluded
+    assert categories(result) == {ExclusionCategory.DESIGNED_OUT}
+    assert not result.partial
     assert result.heuristic == 0
 
 
@@ -284,17 +329,27 @@ def test_05_a_card_in_an_unscored_zone_no_longer_vanishes_silently(repository):
 # ======================================================================
 
 
-def test_06_an_opponent_face_down_card_stays_unknown(repository):
+def test_06_an_opponent_face_down_card_stays_withheld(repository):
     """
     **CATEGORY B — 공개해서 해결하지 않는다 (§5).**
 
-    상대의 뒷면 몬스터는 ``UNKNOWN`` 으로 남는다. 정체도, 공격력도 평가에
+    상대의 뒷면 몬스터는 ``WITHHELD`` 로 남는다. 정체도, 공격력도 평가에
     들어오지 않고, 점수가 0 으로 바뀌지도 않는다.
+
+    **3-E-7 은 이것을 ``UNKNOWN`` 으로 적었다.** 문구가 "모른다" 였기
+    때문인데, 3-E-7 Audit 자신의 분류표에는 이미 **Category B(관측 불가)** 로
+    적혀 있었다 — 문구와 분류가 어긋나 있었고, 범주를 담을 자리가 없어서
+    문구가 이겼다. 그것이 STRUCTURAL-130 이다.
+
+    왜 ``WITHHELD`` 가 맞는가: 못 세는 이유가 **공격력에 숫자가 없어서가 아니라
+    정체가 가려져서**다. 어떤 평가자도 이보다 잘할 수 없으므로 평가의 미해결이
+    아니다.
     """
     hidden = state(repository, (THEIRS, Zone.MZONE, SET, LUSTER_DRAGON))
     result = value(hidden, MINE)
-    assert any(categorize(n) == "UNKNOWN" for n in result.excluded)
-    assert all("세지 않았다" not in n for n in result.excluded)
+    assert categories(result) == {ExclusionCategory.WITHHELD}, result.excluded
+    assert all("세지 않았다" not in n for n in result.notes)
+    assert not result.partial
 
     # 정체가 점수에 **전혀** 들어오지 않는다: 어떤 카드를 세트해도 같은 점수다.
     other = state(repository, (THEIRS, Zone.MZONE, SET, BATTLE_OX))
@@ -317,7 +372,8 @@ def test_07_an_unknown_attack_is_never_turned_into_zero(repository):
     result = value(question)
     assert dict(result.terms)["atk"] == 0
     assert dict(result.terms)["monsters"] == MONSTER_IN_LP
-    assert any(categorize(n) == "UNKNOWN" for n in result.excluded)
+    assert categories(result) == {ExclusionCategory.UNKNOWN}, result.excluded
+    assert result.partial, "보이는데 숫자가 없는 것은 평가가 못 푼 것이다"
     assert result.heuristic != value(state(repository)).heuristic
 
 
@@ -326,9 +382,9 @@ def test_07b_unreadable_beats_face_down_when_both_are_true(repository):
     **읽을 수 없는 것이 뒷면보다 먼저다** — 순서가 규칙이다 (Phase 3-E-6).
 
     내가 세트한 공격력 ``?`` 몬스터는 두 조건을 **동시에** 만족한다. 정체는
-    알지만(뒷면이 아니어도) 공격력에 숫자가 없다. 그래서 범주는 ``WITHHELD``
-    ("뒷면이라 세지 않았다") 가 아니라 ``UNKNOWN`` ("읽을 수 없다") 다 —
-    앞면으로 뒤집어도 여전히 셀 수 없기 때문이다.
+    알지만 공격력에 숫자가 없다. 그래서 범주는 ``DESIGNED_OUT``
+    ("뒷면이라 세지 않았다") 가 아니라 ``UNKNOWN`` 이다 — 앞면으로 뒤집어도
+    여전히 셀 수 없으므로 "숫자가 없다" 가 더 근본적인 사실이다.
 
     두 판정의 순서를 바꾸면 이 테스트가 깨진다. 실제로 그 위반을 주입해
     확인했고, 이 테스트가 없을 때는 **아무 테스트도 잡지 못했다.**
@@ -336,13 +392,15 @@ def test_07b_unreadable_beats_face_down_when_both_are_true(repository):
     face_down = state(
         repository, (MINE, Zone.MZONE, SET, KING_OF_THE_SKULL_SERVANTS)
     )
-    notes = value(face_down).excluded
-    assert [categorize(n) for n in notes] == ["UNKNOWN"], notes
-    assert all("세지 않았다" not in n for n in notes), notes
+    result = value(face_down)
+    assert categories(result) == {ExclusionCategory.UNKNOWN}, result.excluded
+    assert all("세지 않았다" not in n for n in result.notes), result.notes
+    assert result.partial
 
-    # 평범한 몬스터를 세트하면 그때는 ``WITHHELD`` 다 — 둘이 갈린다.
-    ordinary = state(repository, (MINE, Zone.MZONE, SET, LUSTER_DRAGON))
-    assert [categorize(n) for n in value(ordinary).excluded] == ["WITHHELD"]
+    # 평범한 몬스터를 세트하면 그때는 ``DESIGNED_OUT`` 이다 — 둘이 갈린다.
+    ordinary = value(state(repository, (MINE, Zone.MZONE, SET, LUSTER_DRAGON)))
+    assert categories(ordinary) == {ExclusionCategory.DESIGNED_OUT}
+    assert not ordinary.partial
 
 
 # ======================================================================

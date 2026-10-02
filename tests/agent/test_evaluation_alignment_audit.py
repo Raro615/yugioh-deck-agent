@@ -40,6 +40,7 @@ from agent.evaluation import (
     ATK_IN_LP,
     DECK_CARD_IN_LP,
     GRAVE_IS_COUNTED,
+    ExclusionCategory,
     HAND_CARD_IN_LP,
     MONSTER_IN_LP,
     SPELL_TRAP_IN_LP,
@@ -454,7 +455,7 @@ def test_09_an_unknown_attack_is_excluded_not_zeroed(repository):
     unknown = value(board(repository, mine=(KING_OF_THE_SKULL_SERVANTS,)))
     assert dict(unknown.terms)["atk"] == 0
     assert dict(unknown.terms)["monsters"] == MONSTER_IN_LP
-    assert any("공격력을 모른다" in note for note in unknown.excluded)
+    assert any("공격력을 모른다" in note for note in unknown.notes)
     assert unknown.partial
 
 
@@ -468,7 +469,7 @@ def test_10_an_opponent_face_down_monster_is_excluded(repository):
     hidden = value(board(repository, their_facedown=(LUSTER_DRAGON,)))
     assert dict(hidden.terms)["atk"] == 0, "상대 뒷면의 공격력을 읽었다"
     assert dict(hidden.terms)["monsters"] == -MONSTER_IN_LP
-    assert any("상대 몬스터" in note for note in hidden.excluded)
+    assert any("상대 몬스터" in note for note in hidden.notes)
     assert hidden.terminal is Terminal.ONGOING, "모르는 것을 패배로 바꾸지 않는다"
 
 
@@ -518,9 +519,9 @@ def test_11_my_own_face_down_card_is_no_longer_counted_against_the_report(
 
     # ③ 보고가 사실이다 — "모른다" 가 아니라 "세지 않았다" 다.
     assert face_up.excluded == ()
-    assert any("공격력은 세지 않았다" in note for note in face_down.excluded)
-    assert not any("값을 매기지 않았다" in note for note in face_down.excluded)
-    assert not any("모른다" in note for note in face_down.excluded), (
+    assert any("공격력은 세지 않았다" in note for note in face_down.notes)
+    assert not any("값을 매기지 않았다" in note for note in face_down.notes)
+    assert not any("모른다" in note for note in face_down.notes), (
         "내 카드의 정체는 안다 — 모른다고 적으면 그것이 새 거짓이다"
     )
 
@@ -560,25 +561,42 @@ def test_11b_a_face_down_monster_is_now_symmetric_between_the_two_seats(
 
     # 상대 뒷면은 여전히 **모른다** — 관측 경계가 그대로다.
     theirs = value(board(repository, their_facedown=(LUSTER_DRAGON,)), MINE)
-    assert any("모른다" in note for note in theirs.excluded)
-    assert not any("세지 않았다" in note for note in theirs.excluded)
+    assert any("모른다" in note for note in theirs.notes)
+    assert not any("세지 않았다" in note for note in theirs.notes)
 
 
 @pytest.mark.real_card
-def test_12_partial_is_true_on_almost_every_real_board(repository):
+def test_12_partial_is_now_rare_because_the_reasons_are_separated(repository):
     """
-    **STRUCTURAL-130 — ``partial`` 이 신호가 되지 못한다.**
+    **STRUCTURAL-130 이 풀린 자리다** (Phase 3-E-8).
 
-    실제 듀얼에서 평가한 미래의 **99% 이상**이 ``partial`` 이다. 늘 참인
-    깃발은 "이 평가는 불완전하다" 를 알려주지 못한다.
+    Phase 3-E-5 ~ 3-E-7 에서 이 시험은 그 반대를 적었다 — 실제 듀얼에서 평가한
+    미래의 **99% 이상**이 ``partial`` 이라고. 늘 참인 깃발은 아무것도 알려주지
+    못한다.
 
-    가장 큰 사유 둘이 **묘지**(설계상 세지 않는다)와 **내 뒷면**
-    (STRUCTURAL-115 의 거짓 보고)이다.
+    **왜 기존 전제가 틀렸는가.** ``partial`` 을 ``bool(excluded)`` 로 둔 것이
+    틀렸다. ``excluded`` 에는 서로 다른 세 가지가 들어간다 (3-E-7 Audit).
+
+        DESIGNED_OUT  묘지 · 제외 존 — **질문을 하지 않았다**
+        WITHHELD      상대 패 · 상대 뒷면 — **규칙상 볼 수 없다**
+        UNKNOWN       공격력 ``?`` — **보이는데 숫자가 안 나온다**
+
+    앞의 둘은 **평가가 못 푼 것이 아니다.** 하나는 설계가 세지 않기로 한
+    것이고, 하나는 어떤 평가자도 더 잘할 수 없는 것이다. 그런데 셋이 모두
+    깃발을 참으로 만들었으므로, 깃발은 "평가가 불완전하다" 가 아니라 "묘지에
+    카드가 있다" 를 뜻하게 되어 있었다.
+
+    지금 ``partial = any(범주 is UNKNOWN)`` 이다.
+
+    **빠진 것이 줄어서가 아니라 범주가 갈려서 줄었다** — 이 시험이 그 둘을
+    구별한다: 제외 사유의 **총 개수는 그대로**이고 (아무것도 숨기지 않았다),
+    ``partial`` 만 떨어진다.
     """
     assert GRAVE_IS_COUNTED is False
 
     deck = [LUSTER_DRAGON] * 10 + [BATTLE_OX] * 6 + [POT_OF_GREED] * 4
     total = partial = 0
+    counts = {category: 0 for category in ExclusionCategory}
     for seed in (1, 2):
         duel = Duel.start(repository, decks=(list(deck), list(deck)), seed=seed)
         for _ in range(200):
@@ -595,11 +613,21 @@ def test_12_partial_is_true_on_almost_every_real_board(repository):
                 if result.future is None:
                     continue
                 total += 1
-                partial += EV.evaluate(result.future).partial
+                value = EV.evaluate(result.future)
+                partial += value.partial
+                for item in value.excluded:
+                    counts[item.category] += 1
             duel.apply(legal.allowed[0])
 
     assert total > 200, total
-    assert partial / total > 0.95, (partial, total)
+
+    # ① 기록은 **그대로 많다** — 빠진 것을 숨기지 않았다.
+    assert counts[ExclusionCategory.DESIGNED_OUT] > total * 0.8, counts
+    assert counts[ExclusionCategory.WITHHELD] > total * 0.9, counts
+
+    # ② 그런데 **못 푼 것은 없다** — 이 덱에 공격력 ``?`` 카드가 없다.
+    assert counts[ExclusionCategory.UNKNOWN] == 0, counts
+    assert partial == 0, (partial, total)
 
 
 # ======================================================================

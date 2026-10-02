@@ -522,8 +522,8 @@ def test_17_the_evaluator_no_longer_contradicts_itself_about_a_face_down_monster
     assert dict(after_summon.terms)["atk"] == 1900
 
     # 3 — 보고가 사실이다.
-    assert any("공격력은 세지 않았다" in note for note in after_set.excluded)
-    assert not any("값을 매기지 않았다" in note for note in after_set.excluded)
+    assert any("공격력은 세지 않았다" in note for note in after_set.notes)
+    assert not any("값을 매기지 않았다" in note for note in after_set.notes)
     assert after_summon.excluded == ()
 
     # 4 — 두 수가 구별된다. 차이가 정확히 그 카드의 공격력이다.
@@ -532,7 +532,7 @@ def test_17_the_evaluator_no_longer_contradicts_itself_about_a_face_down_monster
     # 상대 관점도 그대로 일관된다 — 보이지 않는 것을 세지 않는다.
     theirs = evaluator.evaluate(simulator.simulate(setting, viewer=THEIRS).future)
     assert dict(theirs.terms)["atk"] == 0
-    assert any("모른다" in note for note in theirs.excluded), theirs.excluded
+    assert any("모른다" in note for note in theirs.notes), theirs.excluded
 
 
 # ======================================================================

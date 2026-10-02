@@ -52,6 +52,7 @@ from agent.evaluation import (
     MONSTER_IN_LP,
     SPELL_TRAP_IN_LP,
     EvaluationError,
+    ExclusionCategory,
     StateEvaluator,
     StateValue,
     Terminal,
@@ -622,15 +623,18 @@ def test_12_an_unknown_attack_is_excluded_not_counted_as_zero(repository):
         cards=(unknown, known, None, None, None),
         size=2,
     )
-    # Phase 3-E-6 에서 반환값이 셋으로 늘었다 — "읽을 수 없다"(unknown)와
-    # "읽을 수 있지만 세지 않는다"(withheld)를 가르기 위해서다. 이 시험의
-    # 두 카드는 둘 다 **앞면**이므로 withheld 는 0 이고, 아래 주장은 하나도
-    # 바뀌지 않았다.
-    total, unknown_count, withheld_count = _zone_attack(zone)
-    assert withheld_count == 0, "앞면 카드는 세지 않는 쪽으로 가지 않는다"
+    # 반환값이 Phase 3-E-6 에서 셋, 3-E-8 에서 넷으로 갈라졌다 — 세지 못한
+    # 이유가 서로 다른 범주로 가기 때문이다. 이 시험의 두 카드는 둘 다
+    # **앞면이고 정의가 읽히므로** hidden 과 not_attacking 은 0 이고, 아래
+    # 주장은 하나도 바뀌지 않았다. 바뀐 것은 **더 정확해진 것뿐**이다:
+    # 예전에는 "unknown 1" 이었던 것이 이제 "정의는 읽히는데 숫자가 없다
+    # (indeterminate)" 라고 말한다.
+    counted = _zone_attack(zone)
+    assert counted.not_attacking == 0, "앞면 카드는 세지 않는 쪽으로 가지 않는다"
+    assert counted.hidden == 0, "정의가 읽히는 카드는 가려진 쪽으로 가지 않는다"
 
-    assert unknown_count == 1
-    assert total == 1900, "모르는 공격력이 0 으로 더해지지 않았다"
+    assert counted.indeterminate == 1
+    assert counted.total == 1900, "모르는 공격력이 0 으로 더해지지 않았다"
 
 
 @pytest.mark.real_card
@@ -659,18 +663,37 @@ def test_12b_an_unknown_simulation_has_no_score_and_is_not_the_worst(repository)
 
 
 @pytest.mark.real_card
-def test_12c_every_real_evaluation_is_partial_and_says_why(repository):
+def test_12c_every_real_evaluation_records_the_opponent_hand_as_withheld(
+    repository,
+):
     """
-    실제 듀얼의 모든 평가는 **부분 평가**다 — 상대 패의 값을 모르므로.
+    실제 듀얼의 모든 평가는 상대 패를 **기록한다** — 값을 모르므로.
 
-    빠진 것을 기록하지 않으면 "다 재었다" 는 거짓이 된다.
+    빠진 것을 기록하지 않으면 "다 재었다" 는 거짓이 된다. 그 주장은 그대로다.
+
+    **``partial`` 주장만 뒤집혔다** (Phase 3-E-8). 이 시험은 "상대 패를
+    모르므로 모든 평가가 **부분 평가**다" 라고 적고 있었는데, 그 전제가
+    틀렸다: 상대 패의 내용은 **관측 경계 밖**이고, 그것을 모르는 것은 평가가
+    아직 못 푼 것이 아니라 **규칙대로 처리한 결과**다. 어떤 평가자도 이보다
+    잘할 수 없는데 "부분 평가" 라고 적으면 그 깃발은 영원히 참이 되고, 실제로
+    실측 99.6% 가 참이었다 (STRUCTURAL-130).
+
+    지금 ``partial`` 은 ``UNKNOWN`` — **보이는데 숫자가 안 나오는 것** — 만
+    본다. 상대 패는 ``WITHHELD`` 이므로 ``partial`` 을 참으로 만들지 않는다.
+    기록은 그대로 남는다.
     """
     duel = duel_with(repository)
     value = StateEvaluator().evaluate(duel.view(MINE))
 
-    assert value.partial
-    assert any("상대 패" in note for note in value.excluded)
+    assert any("상대 패" in note for note in value.notes)
     assert "hand" in dict(value.terms)
+
+    # 기록은 남는다 — 사라진 것이 아니라 범주가 붙었다.
+    withheld = value.of_category(ExclusionCategory.WITHHELD)
+    assert any("상대 패" in item.note for item in withheld), value.excluded
+    # 그리고 그것은 "평가가 못 푼 것" 이 아니다.
+    assert not value.partial
+    assert value.of_category(ExclusionCategory.UNKNOWN) == ()
 
 
 # ======================================================================

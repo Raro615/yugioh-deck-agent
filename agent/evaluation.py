@@ -95,6 +95,44 @@ STRUCTURAL-130 Audit 에서 **조용히 빠진 자리 다섯**이 나왔다. 묘
 :func:`_field_monster_zones` 가 두 자리를 함께 보게 했고, 가중치는 하나도
 새로 만들지 않았다.
 
+**세 이유를 코드가 구분한다** (Phase 3-E-8 · STRUCTURAL-130 해결)
+---------------------------------------------------------------
+3-E-7 Audit 이 ``excluded`` 안에서 **서로 다른 세 가지**를 찾아냈다. 그런데
+``excluded`` 는 문자열 목록이었으므로 셋을 가르는 유일한 수단이 **문구**였고,
+``partial`` 은 그 목록이 비었는지만 보았다 — 그래서 실측 **99.6%** 가 참이었다.
+언제나 참인 깃발은 아무것도 알려주지 않는다.
+
+지금은 :class:`ExclusionCategory` 가 이유를 든다.
+
+====================  ===========================================  =======
+범주                   무슨 뜻인가                                   partial
+====================  ===========================================  =======
+``DESIGNED_OUT``      값이 보이는데 **항으로 두지 않기로 했다.**      아니다
+                      묘지 · 제외 존 · 뒷면 몬스터의 공격력.
+                      질문을 하지 않은 것이다
+``UNKNOWN``           **다 보이는데 숫자가 나오지 않는다.** 공격력    **그렇다**
+                      이 ``?`` 인 카드. 이것만이 평가의 미해결이다
+``WITHHELD``          **합법적으로 볼 수 없다.** 상대의 뒷면 정체 ·   아니다
+                      상대 패의 내용. 규칙대로 처리한 결과이고,
+                      어떤 평가자도 이보다 잘할 수 없다
+====================  ===========================================  =======
+
+    ``partial = any(범주 is UNKNOWN)``
+
+**경계가 이유를 가른다.** 상대의 뒷면 몬스터는 공격력이 ``?`` 라서 못 세는 것이
+아니라 **정체가 가려져서** 못 센다 → ``WITHHELD``. 공격력이 ``?`` 인 앞면
+카드는 다 보이는데도 숫자가 없다 → ``UNKNOWN``. 그래서 ``_zone_attack`` 의
+판정 **순서가 규칙이다** — 읽을 수 있는지를 먼저 보고, 그 다음에 숫자가 있는지,
+마지막에 앞뒷면을 본다.
+
+**Phase 3-E-6 의 구분은 사라지지 않고 쪼개졌다.** 3-E-6 이 가른 "모른다" 와
+"세지 않았다" 중, "모른다" 가 다시 ``WITHHELD``(가려짐) 와
+``UNKNOWN``(숫자 없음) 으로 갈렸고, "세지 않았다" 는 ``DESIGNED_OUT`` 이다.
+문구는 그대로 두었다 — 바뀐 것은 **기계가 읽을 범주가 생긴 것**이다.
+
+**점수는 한 숫자도 바뀌지 않았다.** 이 변경은 메타데이터의 의미를 가르는
+일이고, 가중치도 항도 건드리지 않았다.
+
 여기서 하지 않는 것
 -------------------
 카드 이름을 보지 않는다 (§25). 상대의 가려진 정보를 추측하지 않는다
@@ -188,24 +226,89 @@ HAND_CARD_IN_LP: int = 200
 GRAVE_IS_COUNTED: bool = False
 
 
+class ExclusionCategory(str, Enum):
+    """
+    합에 넣지 **못한 이유의 종류.** 셋을 섞으면 셋 다 거짓이 된다.
+
+    ``DESIGNED_OUT`` — **평가하지 않기로 했다**
+        값을 읽을 수 있고 가려져 있지도 않다. 지금 평가 모델이 그것을 항으로
+        두지 않기로 정했을 뿐이다 (묘지 · 제외 존 · 뒷면 몬스터의 공격력).
+        평가에 남은 불확실성이 **아니다** — 질문을 하지 않은 것이다.
+    ``UNKNOWN`` — **값을 정할 수 없다**
+        평가 대상이고 가려져 있지도 않은데 숫자가 나오지 않는다 (공격력이
+        ``?`` 인 카드). **관측 경계 밖이어서가 아니라** 값 자체가 지금
+        결정되지 않는다. 이것만이 "평가가 아직 못 푼 것" 이다.
+    ``WITHHELD`` — **합법적으로 볼 수 없다**
+        관측 경계 밖이다 (상대의 뒷면 카드 정체 · 상대 패의 내용). 평가가
+        실패한 것이 아니라 **규칙대로 처리한 결과**다 — 어떤 평가자도
+        이보다 잘할 수 없다.
+
+    **경계가 이유를 가른다.** 상대의 뒷면 몬스터는 공격력이 ``?`` 라서 못 세는
+    것이 아니라 **정체가 가려져서** 못 센다 → ``WITHHELD``. 공격력이 ``?`` 인
+    앞면 카드는 다 보이는데도 숫자가 없다 → ``UNKNOWN``.
+    """
+
+    DESIGNED_OUT = "designed_out"
+    UNKNOWN = "unknown"
+    WITHHELD = "withheld"
+
+
+@dataclass(frozen=True, slots=True)
+class Exclusion:
+    """
+    합에 넣지 못한 것 하나. **이유의 종류와 사람이 읽을 설명을 함께** 든다.
+
+    Phase 3-E-7 까지 이 자리는 그냥 문자열이었고, 그래서 세 범주를 가르는
+    유일한 수단이 **문구**였다 — 기계가 읽을 수 없었다 (STRUCTURAL-130).
+    """
+
+    category: ExclusionCategory
+    note: str
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.note
+
+
 @dataclass(frozen=True, slots=True)
 class StateValue:
     """
     미래 상태 하나의 값. **등급과 휴리스틱을 섞지 않는다.**
 
     :attr:`excluded` 가 비어 있지 않으면 **합에 넣지 못한 것이 있다** —
-    모르는 값을 0 으로 바꾸지 않았다는 기록이다.
+    모르는 값을 0 으로 바꾸지 않았다는 기록이다. 이유의 종류는
+    :class:`ExclusionCategory` 가 든다.
     """
 
     terminal: Terminal
     heuristic: int
     terms: tuple[tuple[str, int], ...] = ()
-    excluded: tuple[str, ...] = ()
+    excluded: tuple[Exclusion, ...] = ()
 
     @property
     def partial(self) -> bool:
-        """합에 넣지 못한 것이 있는가."""
-        return bool(self.excluded)
+        """
+        **아직 못 푼 것이 남았는가** — ``UNKNOWN`` 이 하나라도 있는가다.
+
+        ``bool(self.excluded)`` 가 아니다. 그렇게 두면 "평가하지 않기로 한 것"
+        과 "볼 수 없는 것" 까지 들어와 깃발이 **언제나 참**이 되고, 참뿐인
+        깃발은 아무것도 알려주지 않는다 (STRUCTURAL-130, 실측 99.6%).
+
+        ``DESIGNED_OUT`` 은 질문을 하지 않은 것이고, ``WITHHELD`` 는 규칙상
+        볼 수 없는 것이다 — 둘 다 **평가의 미해결이 아니다.** 남은 하나,
+        "볼 수 있는데 숫자가 안 나오는 것" 만이 미해결이다.
+        """
+        return any(
+            item.category is ExclusionCategory.UNKNOWN for item in self.excluded
+        )
+
+    @property
+    def notes(self) -> tuple[str, ...]:
+        """제외 사유의 설명만. 사람에게 보여 줄 때와 문구를 볼 때 쓴다."""
+        return tuple(item.note for item in self.excluded)
+
+    def of_category(self, category: ExclusionCategory) -> tuple[Exclusion, ...]:
+        """그 범주의 제외 사유만."""
+        return tuple(item for item in self.excluded if item.category is category)
 
     def ordering_key(self) -> tuple[int, int]:
         """
@@ -217,7 +320,14 @@ class StateValue:
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         bits = ", ".join(f"{name}={value:+d}" for name, value in self.terms)
-        held = f" · 제외 {len(self.excluded)}" if self.excluded else ""
+        held = ""
+        if self.excluded:
+            counts = " ".join(
+                f"{category.value}={len(self.of_category(category))}"
+                for category in ExclusionCategory
+                if self.of_category(category)
+            )
+            held = f" · 제외 {len(self.excluded)}({counts})"
         return f"[{self.terminal.value}] {self.heuristic:+d} ({bits or '없음'}){held}"
 
 
@@ -235,43 +345,84 @@ def _is_face_down(card: CardView) -> bool:
     return not card.face_up
 
 
-def _zone_attack(zone: ZoneView) -> tuple[int, int, int]:
+@dataclass(frozen=True, slots=True)
+class _ZoneAttack:
     """
-    그 존의 **공격력 합 · 읽을 수 없었던 마리 수 · 세지 않은 마리 수.**
+    한 존의 **공격력 합과, 합에 넣지 못한 마리 수를 이유별로 가른 것.**
 
-    뒤의 둘을 **가르는 것이 이 함수의 핵심이다** (Phase 3-E-6).
+    가르는 것이 이 자료형의 전부다. 세 이유가 서로 다른
+    :class:`ExclusionCategory` 로 가므로, 한 칸에 몰면 범주가 섞인다.
 
-    ``unknown`` — 읽을 수 **없다**
-        정의가 없는 카드(가려진 상대 카드), 공격력이 ``?`` 인 카드, 공격력
-        칸이 없는 카드. 0 으로 바꾸지 않는다.
-    ``withheld`` — 읽을 수 **있지만 세지 않는다**
-        내 뒷면 카드다. 정체를 알지만 **뒷면은 공격하지 않으므로** 그 공격력이
-        지금 들어올 피해가 아니다 (``ATK_IN_LP`` 가 1:1 인 근거가 성립하지
-        않는다).
-
-    둘을 한 칸에 몰면 "내 카드를 모른다" 는 거짓이 되고, 그것이 바로
-    STRUCTURAL-115 가 ``excluded`` 에 적고 있던 거짓이다.
-
-    **순서가 규칙이다.** 읽을 수 있는지를 먼저 본다 — 상대의 뒷면 카드는
-    정의가 없으므로 ``unknown`` 으로 가고, ``withheld`` 는 **정의를 읽을 수
-    있는 뒷면 카드**(내 것)만 센다.
+    ``hidden``
+        정의를 **읽을 수 없다** (가려진 상대 카드) → ``WITHHELD``
+    ``indeterminate``
+        정의는 **읽히는데** 공격력에 숫자가 없다 (``?`` 공격력, 몬스터가 아닌
+        카드) → ``UNKNOWN``
+    ``not_attacking``
+        값을 **알지만** 뒷면은 공격하지 않으므로 세지 않는다 →
+        ``DESIGNED_OUT``
     """
-    total = 0
-    unknown = 0
-    withheld = 0
+
+    total: int = 0
+    hidden: int = 0
+    indeterminate: int = 0
+    not_attacking: int = 0
+
+    def __add__(self, other: "_ZoneAttack") -> "_ZoneAttack":
+        return _ZoneAttack(
+            total=self.total + other.total,
+            hidden=self.hidden + other.hidden,
+            indeterminate=self.indeterminate + other.indeterminate,
+            not_attacking=self.not_attacking + other.not_attacking,
+        )
+
+
+def _zone_attack(zone: ZoneView) -> _ZoneAttack:
+    """
+    그 존의 공격력 합과, **왜 세지 못했는지를 이유별로** 가른 수.
+
+    가르는 것이 이 함수의 핵심이다 (Phase 3-E-6 에서 둘, 3-E-8 에서 셋).
+
+    **순서가 규칙이다.**
+
+    1. 정의를 **읽을 수 있는가** — 못 읽으면 ``hidden``. 관측 경계 밖이고,
+       어떤 평가자도 이보다 잘할 수 없다
+    2. 읽히는데 **숫자가 있는가** — 없으면 ``indeterminate``. 다 보이는데도
+       값이 정해지지 않는다 — 이것만이 "평가가 아직 못 푼 것" 이다
+    3. 앞면인가 — 뒷면이면 ``not_attacking``. 값을 알지만 **뒷면은 공격하지
+       않으므로** 그 공격력이 지금 들어올 피해가 아니다 (``ATK_IN_LP`` 가
+       1:1 인 근거가 성립하지 않는다)
+
+    순서를 바꾸면 범주가 뒤바뀐다. 상대의 뒷면 카드는 1 에서 걸려야 하고,
+    내 뒷면 ``?`` 몬스터는 2 에서 걸려야 한다 — 앞면으로 뒤집어도 여전히
+    셀 수 없기 때문이다.
+
+    예전에 ``unknown`` 한 칸이 1 과 2 를 함께 담고 있었다. 그래서 "관측 경계
+    때문" 과 "값이 없기 때문" 이 같은 사실로 보고되었고, 그것이
+    STRUCTURAL-130 이 ``partial`` 을 쓸 수 없게 만든 뿌리다.
+    """
+    total = hidden = indeterminate = not_attacking = 0
     for card in zone.occupied():
         definition = card.definition
-        if definition is None or not definition.is_monster:
-            unknown += 1
+        if definition is None:
+            hidden += 1
+            continue
+        if not definition.is_monster:
+            indeterminate += 1
             continue
         if definition.atk_is_question or not definition.has_atk:
-            unknown += 1
+            indeterminate += 1
             continue
         if _is_face_down(card):
-            withheld += 1
+            not_attacking += 1
             continue
         total += definition.atk
-    return total, unknown, withheld
+    return _ZoneAttack(
+        total=total,
+        hidden=hidden,
+        indeterminate=indeterminate,
+        not_attacking=not_attacking,
+    )
 
 
 def _field_monster_zones(player: PlayerView) -> tuple[ZoneView, ZoneView]:
@@ -292,7 +443,7 @@ def _field_monster_zones(player: PlayerView) -> tuple[ZoneView, ZoneView]:
     return (player.monster_zone, player.extra_monster_zone)
 
 
-def _field_attack(zones: tuple[ZoneView, ...]) -> tuple[int, int, int]:
+def _field_attack(zones: tuple[ZoneView, ...]) -> _ZoneAttack:
     """
     **필드 몬스터 전체**에 대한 ``_zone_attack`` 의 합.
 
@@ -303,13 +454,10 @@ def _field_attack(zones: tuple[ZoneView, ...]) -> tuple[int, int, int]:
     매번 존 목록을 훑으므로, 같은 자리를 두 번 꺼내지 않기 위해 호출하는 쪽이
     한 번만 꺼내 넘긴다.
     """
-    total = unknown = withheld = 0
+    summed = _ZoneAttack()
     for zone in zones:
-        zone_total, zone_unknown, zone_withheld = _zone_attack(zone)
-        total += zone_total
-        unknown += zone_unknown
-        withheld += zone_withheld
-    return total, unknown, withheld
+        summed += _zone_attack(zone)
+    return summed
 
 
 def _field_monster_count(zones: tuple[ZoneView, ...]) -> int:
@@ -368,29 +516,61 @@ class StateEvaluator:
 
         me, opponent = view.me, view.opponent
         terms: list[tuple[str, int]] = []
-        excluded: list[str] = []
+        excluded: list[Exclusion] = []
+
+        def exclude(category: ExclusionCategory, note: str) -> None:
+            excluded.append(Exclusion(category=category, note=note))
 
         terms.append(("lp", me.life_points - opponent.life_points))
 
         my_monsters = _field_monster_zones(me)
         their_monsters = _field_monster_zones(opponent)
-        my_attack, my_unknown, my_withheld = _field_attack(my_monsters)
-        their_attack, their_unknown, their_withheld = _field_attack(their_monsters)
-        terms.append(("atk", (my_attack - their_attack) * ATK_IN_LP))
-        if my_unknown:
-            excluded.append(f"내 몬스터 {my_unknown}마리의 공격력을 모른다")
-        if their_unknown:
-            excluded.append(f"상대 몬스터 {their_unknown}마리의 공격력을 모른다")
-        # **모르는 것과 세지 않은 것은 다른 사실이다** (Phase 3-E-6).
-        # 내 뒷면 몬스터의 정체는 알지만 그 공격력을 세지 않았다.
-        if my_withheld:
-            excluded.append(
-                f"내 뒷면 몬스터 {my_withheld}마리의 공격력은 세지 않았다 "
-                "(뒷면은 공격하지 않는다)"
+        mine = _field_attack(my_monsters)
+        theirs = _field_attack(their_monsters)
+        terms.append(("atk", (mine.total - theirs.total) * ATK_IN_LP))
+
+        # **세 이유가 세 범주로 간다** (STRUCTURAL-130, Phase 3-E-8).
+        #
+        #   가려져서 못 읽는다        WITHHELD      — 경계 밖이다
+        #   읽히는데 숫자가 없다      UNKNOWN       — 이것만이 미해결이다
+        #   알지만 뒷면이라 안 센다   DESIGNED_OUT  — 질문을 하지 않았다
+        #
+        # 예전에는 앞의 둘이 한 문구로 합쳐져 있었고, 셋 다 ``partial`` 을
+        # 참으로 만들었다.
+        if mine.hidden:  # pragma: no cover - 내 카드는 언제나 정의가 읽힌다
+            exclude(
+                ExclusionCategory.WITHHELD,
+                f"내 몬스터 {mine.hidden}마리의 공격력을 모른다 (가려져 있다)",
             )
-        if their_withheld:  # pragma: no cover - 상대 뒷면은 정의를 읽을 수 없다
-            excluded.append(
-                f"상대 뒷면 몬스터 {their_withheld}마리의 공격력은 세지 않았다"
+        if mine.indeterminate:
+            exclude(
+                ExclusionCategory.UNKNOWN,
+                f"내 몬스터 {mine.indeterminate}마리의 공격력을 모른다 "
+                "(공격력에 숫자가 없다)",
+            )
+        if theirs.hidden:
+            exclude(
+                ExclusionCategory.WITHHELD,
+                f"상대 몬스터 {theirs.hidden}마리의 공격력을 모른다 "
+                "(가려져 있다)",
+            )
+        if theirs.indeterminate:
+            exclude(
+                ExclusionCategory.UNKNOWN,
+                f"상대 몬스터 {theirs.indeterminate}마리의 공격력을 모른다 "
+                "(공격력에 숫자가 없다)",
+            )
+        if mine.not_attacking:
+            exclude(
+                ExclusionCategory.DESIGNED_OUT,
+                f"내 뒷면 몬스터 {mine.not_attacking}마리의 공격력은 세지 않았다 "
+                "(뒷면은 공격하지 않는다)",
+            )
+        if theirs.not_attacking:  # pragma: no cover - 뒷면 열람 권한이 있을 때만
+            exclude(
+                ExclusionCategory.DESIGNED_OUT,
+                f"상대 뒷면 몬스터 {theirs.not_attacking}마리의 공격력은 "
+                "세지 않았다 (뒷면은 공격하지 않는다)",
             )
 
         terms.append(
@@ -415,11 +595,17 @@ class StateEvaluator:
         # 알아야 하고, 내용은 보이지 않는다 (§26).
         terms.append(("hand", me.hand.size * HAND_CARD_IN_LP))
         if opponent.hand.size:
-            excluded.append(f"상대 패 {opponent.hand.size}장의 값을 모른다")
+            # **장수는 보이고 내용은 보이지 않는다.** 경계 밖이므로 WITHHELD 다
+            # — 어떤 평가자도 이보다 잘할 수 없다.
+            exclude(
+                ExclusionCategory.WITHHELD,
+                f"상대 패 {opponent.hand.size}장의 값을 모른다",
+            )
 
         if not GRAVE_IS_COUNTED and (me.grave.size or opponent.grave.size):
-            excluded.append(
-                f"묘지 {me.grave.size}/{opponent.grave.size}장은 값을 매기지 않았다"
+            exclude(
+                ExclusionCategory.DESIGNED_OUT,
+                f"묘지 {me.grave.size}/{opponent.grave.size}장은 값을 매기지 않았다",
             )
 
         # **세지 않은 것은 세지 않았다고 적는다** (STRUCTURAL-130). 위의
@@ -429,8 +615,9 @@ class StateEvaluator:
         for label, zone_of in _UNSCORED_ZONES:
             mine_size, their_size = zone_of(me).size, zone_of(opponent).size
             if mine_size or their_size:
-                excluded.append(
-                    f"{label} {mine_size}/{their_size}장은 값을 매기지 않았다"
+                exclude(
+                    ExclusionCategory.DESIGNED_OUT,
+                    f"{label} {mine_size}/{their_size}장은 값을 매기지 않았다",
                 )
 
         # **이 자리에 거짓 보고가 있었다** (STRUCTURAL-115, Phase 3-E-6 에서
@@ -460,6 +647,8 @@ class StateEvaluator:
 __all__ = [
     "EvaluationError",
     "Terminal",
+    "ExclusionCategory",
+    "Exclusion",
     "StateValue",
     "Evaluator",
     "StateEvaluator",
