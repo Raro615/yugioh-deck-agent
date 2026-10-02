@@ -57,9 +57,16 @@ from engine.action import PlayerAction, PlayerActionKind
 from engine.action_execution import ActionExecutor, ActionStatus
 from engine.action_target import ActionTarget
 from engine.action_validation import ActionValidator
+from engine.chain import Chain, ChainResolutionStatus
 from engine.game_state_view import GameStateView
 from engine.priority import PriorityState
 from engine.state.game_state import DEFAULT_LIFE_POINTS, DuelResult, GameState
+from engine.spell_activation import (
+    NormalSpellPlacement,
+    activatable_effects,
+    duel_activator,
+    duel_resolver,
+)
 from engine.summon import duel_executor
 from engine.turn_progression import ProgressionStatus, TurnProgressor
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
@@ -176,9 +183,23 @@ class Duel:
 
     state: GameState
     priority: PriorityState
+    chain: Chain = field(default_factory=Chain)
+    """
+    지금 쌓여 있는 체인 (Phase 3-E-3).
+
+    이 모듈의 설명이 처음부터 이 자리라고 적었는데 (``priority`` 와 나란히)
+    칸이 없었다. ``Chain`` 은 **불변**이므로 사본과 공유해도 안전하다 —
+    링크를 쌓으면 새 ``Chain`` 이 나오고, 그것을 받는 ``Duel`` 만 달라진다.
+
+    ``state_hash()`` 에는 들어가지 않는다. 체인은 판의 **모양**이 아니라
+    흐름의 위치다.
+    """
     step: TurnStep = TurnStep.OPEN
     first_player: int = 0
     _executor: ActionExecutor = field(default_factory=duel_executor)
+    _activator: object = field(default_factory=duel_activator)
+    _resolver: object = field(default_factory=duel_resolver)
+    _placement: NormalSpellPlacement = field(default_factory=NormalSpellPlacement)
 
     # ------------------------------------------------------------------
     # 시작
@@ -295,6 +316,7 @@ class Duel:
                     ):
                         allowed.append(candidate)
             allowed.extend(self._attack_actions(seat, validator))
+            allowed.extend(self._activation_actions(seat, validator))
 
         # 흐름을 움직이는 둘은 **검증기가 아니라 흐름 계층**이 답한다.
         # 검증기는 ``GameStateView`` 만 보는데, 우선권과 진행은 판 밖에
@@ -348,6 +370,66 @@ class Duel:
                         is ActionValidity.VALID
                     ):
                         allowed.append(action)
+        return allowed
+
+    def _activation_actions(self, seat: int, validator: ActionValidator):
+        """
+        지금 **허가가 나는 효과 발동들** (Phase 3-E-3).
+
+        관문이 **둘**이고, 둘 다 통과해야 후보가 된다.
+
+        1. :class:`~engine.action_validation.ActionValidator` — 규칙 쪽.
+           턴 플레이어 · 컨트롤러 · 패 · 메인 페이즈 · 빈 칸 · 통상 마법인가.
+        2. :meth:`~engine.activation.EffectActivator.can_activate` — 구현 쪽.
+           구현이 등록되어 있는가 (``EXECUTABLE``) · 발동 조건이 참인가 ·
+           대상이 쓸 수 있는가. **판을 읽기만 한다.**
+
+        둘을 합치지 않는 이유: 1번은 "규칙이 허락하는가" 이고 2번은 "우리가
+        할 수 있는가" 다. 합치면 구현이 없는 카드가 **규칙 위반**으로
+        읽히고, 그것은 거짓이다 (ADR-006).
+
+        여기서 거르는 것 셋은 **이 Phase 의 범위**이고 규칙이 아니다.
+
+        ``체인이 비어 있을 때만``
+            RULE-CHAIN-004 — 스펠 스피드 1 은 "cannot be activated in
+            response to any other effects". 체인은 ``GameState`` 밖에 살고
+            검증기는 관측만 읽으므로 (ADR-007) 체인을 들고 있는 이쪽이 본다.
+        ``비용이 없는 효과만``
+            비용을 치른 뒤 발동이 깨지면 되돌릴 방법이 없다 (ADR-008 이
+            일반 rollback 을 미뤄 두었다). 등록된 16개 효과 전부 비용이
+            없으므로 (STRUCTURAL-120) 지금 이 관문은 아무것도 거르지
+            않는다 — 비용이 생기는 날 걸리게 **먼저** 둔다.
+        ``대상이 없는 효과만``
+            ``PlayerAction`` 에서 :class:`
+            ~engine.effect.target.TargetSelection` 으로 가는 길이 없다
+            (STRUCTURAL-121). 길이 없는 것을 추측해서 만들지 않는다.
+        """
+        if not self.chain.is_empty:
+            # RULE-CHAIN-004 — 지금 범위(통상 마법)는 체인에 얹지 못한다.
+            return []
+
+        allowed: list[PlayerAction] = []
+        for card in self.state.player(seat).hand:
+            for effect_ref in activatable_effects(card.card_id):
+                definition = self._activator.definitions.definition_for(effect_ref)
+                if definition is None:  # pragma: no cover - 목록이 보증한다
+                    continue
+                if definition.cost.costs or definition.targets:
+                    continue
+                candidate = PlayerAction.activate_effect(
+                    actor=seat, source=card.instance_id, effect_ref=effect_ref
+                )
+                verdict = validator.validate(candidate)
+                if verdict.validity is not ActionValidity.VALID:
+                    continue
+                if (
+                    self._activator.can_activate(
+                        self.state, self.chain, candidate, authorization=verdict
+                    ).validity
+                    is not ActionValidity.VALID
+                ):
+                    continue
+                allowed.append(candidate)
         return allowed
 
     def _flow_actions(self, seat: int):
@@ -432,6 +514,11 @@ class Duel:
             return self._apply_pass(action)
         if action.kind is PlayerActionKind.END_PHASE:
             return self._apply_end_phase(action)
+        if action.kind is PlayerActionKind.ACTIVATE_EFFECT:
+            # **판을 바꾸는 행위와 흐름을 바꾸는 행위를 섞지 않는다**
+            # (STRUCTURAL-55). 발동의 결과물은 ``StateDelta`` 만이 아니라
+            # ``Chain`` 이기도 하므로 ``ActionHandler`` 에 끼울 수 없다.
+            return self._apply_activation(action)
         return self._apply_board(action)
 
     def _apply_pass(self, action: PlayerAction) -> DuelStep:
@@ -473,6 +560,70 @@ class Duel:
             True,
             ValidationCode.OK,
             executed.reason,
+            result=self._check_end(),
+        )
+
+    def _apply_activation(self, action: PlayerAction) -> DuelStep:
+        """
+        효과 발동 하나. **기존 계층만 부른다** (Phase 3-E-3).
+
+        공식 조항이 순서를 정한다.
+
+            RULE-SPELLTRAP-002 — "announce its activation to your opponent,
+            **placing it face-up on the field**. If the activation succeeds,
+            then you **resolve** the effect written on the card. After
+            resolving the effect, **send the card to the Graveyard**."
+
+        그래서 네 걸음이다.
+
+            ① NormalSpellPlacement.place    패 → 마법&함정 존 (앞면)
+            ② EffectActivator.activate      비용 · 체인 링크
+            ③ ChainResolver.resolve_top     효과 해결
+            ④ NormalSpellPlacement.retire   → 묘지
+
+        **되돌릴 수 있는 자리를 하나로 줄였다.** ①은 판을 바꾸므로, ②가
+        깨지면 ①의 역 하나만 하면 된다 (:meth:`
+        ~engine.spell_activation.NormalSpellPlacement.restore`). ②를 ① 앞에
+        두지 않은 이유는 조항이 "놓고 나서 발동이 성립한다" 고 적기 때문이다.
+
+        ③이 깨지면 **되돌리지 않는다.** 발동은 이미 성립했고, 해결되지 않은
+        효과의 카드가 묘지로 가는 것은 규칙대로다 (불발). 다만 "해결했다" 고
+        적지 않는다 — 이유를 그대로 전한다.
+        """
+        placed = self._placement.place(self.state, action.source, action.actor)
+
+        activated = self._activator.activate(
+            self.state,
+            self.chain,
+            action,
+            authorization=ValidationResult.valid(
+                "legal_actions 가 허가한 발동입니다."
+            ),
+        )
+        if not activated.activated:
+            # ①의 역 **하나**. 일반 rollback 이 아니다.
+            self._placement.restore(self.state, placed)
+            return DuelStep(action, False, activated.code, activated.reason)
+
+        self.chain = activated.chain
+        resolved = self._resolver.resolve_top(self.state, self.chain)
+        self.chain = resolved.chain
+
+        # 해결됐든 아니든 카드는 필드를 떠난다 (RULE-SPELLTRAP-002).
+        self._placement.retire(self.state, placed)
+        if self.chain.is_complete:
+            # 체인이 끝났다. 다음 발동이 체인 1 부터 시작하도록 비운다 —
+            # "체인이 끝난 뒤 우선권이 누구에게 가는가" 는 정하지 않는다
+            # (STRUCTURAL-34).
+            self.chain = Chain()
+
+        if resolved.status is not ChainResolutionStatus.RESOLVED:
+            return DuelStep(action, False, resolved.code, resolved.reason)
+        return DuelStep(
+            action,
+            True,
+            ValidationCode.OK,
+            resolved.reason,
             result=self._check_end(),
         )
 

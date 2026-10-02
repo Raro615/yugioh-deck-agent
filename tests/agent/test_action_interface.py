@@ -384,8 +384,8 @@ def test_e_how_much_room_a_policy_actually_has(repository):
 
     ::
 
-        후보 1개     60곳     페이즈를 넘기는 것 말고 할 것이 없다
-        후보 9~23개  30곳     메인 페이즈 — 패를 소환하거나 세트할 수 있다
+        후보 1개      60곳    페이즈를 넘기는 것 말고 할 것이 없다
+        후보 11~23개  30곳    메인 페이즈 — 소환 · 세트 · **효과 발동**
 
     **Phase 3-E-2 에서 가장 넓은 자리가 11 에서 23 으로 늘었다.** 세는 방법도
     듀얼도 그대로이고, 늘어난 것은 **엔진이 실제로 할 수 있는 일**이다: 패의
@@ -395,9 +395,12 @@ def test_e_how_much_room_a_policy_actually_has(repository):
     쪽(후보 1개 60곳)과 갈라지는 자리의 **수**(30곳)와 **페이즈**(메인
     1·2)는 하나도 변하지 않았다. 바뀐 것은 너비뿐이다.
 
-    방이 좁은 이유는 Engine V1 의 알려진 한계다 — 마법 발동과 우선권 창이
-    아직 없다 (STRUCTURAL-103). AI 가 할 일이 적은 것이지, 인터페이스가
-    좁은 것이 아니다.
+    **Phase 3-E-3 에서 가장 좁은 갈림길이 9 에서 11 로 올랐다.** 이 듀얼의
+    덱에는 욕망의 항아리가 2장 있고, 패에 있는 동안 그 장수만큼 발동 후보가
+    더해진다. 넓은 쪽(23)과 좁은 쪽(60곳)과 갈라지는 자리 수(30곳)는 그대로다.
+
+    방이 좁은 이유는 Engine V1 의 알려진 한계다 — 우선권 창이 아직 없고
+    (STRUCTURAL-103), 발동은 **패의 통상 마법**까지만 열렸다.
     """
     duel = small_duel(repository)
     sizes: collections.Counter = collections.Counter()
@@ -420,7 +423,7 @@ def test_e_how_much_room_a_policy_actually_has(repository):
     assert total == 90
     assert branching_phases == {Phase.MAIN1, Phase.MAIN2}
     assert max(sizes) == 23
-    assert min(size for size in sizes if size > 1) == 9
+    assert min(size for size in sizes if size > 1) == 11
 
 
 @pytest.mark.real_card

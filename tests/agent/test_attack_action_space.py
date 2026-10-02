@@ -245,7 +245,9 @@ def test_defence_position_is_now_reachable_through_legal_actions(repository):
 
     다만 **뒤집는 범위를 정확히 적는다.** 네 가지를 따로 센다:
 
-    1. ``SET_MONSTER`` 가 후보에 **오른다** (규칙 기반 판에서 104회 실측)
+    1. ``SET_MONSTER`` 가 후보에 **오른다** (규칙 기반 판에서 271회 실측 —
+       Phase 3-E-3 에서 발동 후보가 들어와 듀얼이 길어지면서 104 에서 늘었다.
+       후보에 오른다는 **사실**이 이 줄이 지키는 것이고 횟수는 그때의 측정값이다)
     2. 규칙 기반 정책은 그것을 **한 번도 고르지 않는다** — 그래서 그
        정책만 굴리면 뒷면 수비 표시가 판에 **생기지 않는다**
     3. 난수 정책은 고르고, 그때 뒷면 수비 표시가 **실제로 생긴다**
@@ -266,8 +268,8 @@ def test_defence_position_is_now_reachable_through_legal_actions(repository):
     )
 
     # 1. 후보에는 오른다.
-    assert seen[PlayerActionKind.SET_MONSTER] == 104, dict(seen)
-    assert seen[PlayerActionKind.SET_SPELL_TRAP] == 190, dict(seen)
+    assert seen[PlayerActionKind.SET_MONSTER] == 271, dict(seen)
+    assert seen[PlayerActionKind.SET_SPELL_TRAP] == 56, dict(seen)
 
     # 2. 규칙 기반 정책은 고르지 않는다 — 그래서 판에도 생기지 않는다.
     assert chosen[PlayerActionKind.SET_MONSTER] == 0, dict(chosen)

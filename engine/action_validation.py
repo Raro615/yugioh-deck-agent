@@ -115,7 +115,6 @@ class Requirement:
 _MISSING_RULE: dict[PlayerActionKind, str] = {
     PlayerActionKind.SPECIAL_SUMMON: "special-summon-condition (카드마다 다르다)",
     PlayerActionKind.ACTIVATE_CARD: "activation-timing (Phase 2-C/2-F)",
-    PlayerActionKind.ACTIVATE_EFFECT: "activation-condition · cost · timing (Phase 2-C/2-F)",
     PlayerActionKind.CHANGE_POSITION: "position-change-legality (Phase 2-G)",
     PlayerActionKind.CHANGE_PHASE: "turn-progression (Phase 2-G)",
     PlayerActionKind.END_PHASE: "turn-progression (Phase 2-G)",
@@ -136,6 +135,10 @@ _COMPLETE_RULES: frozenset[PlayerActionKind] = frozenset(
         PlayerActionKind.ATTACK,
         PlayerActionKind.SET_MONSTER,
         PlayerActionKind.SET_SPELL_TRAP,
+        # Phase 3-E-3 — **통상 마법의 발동 하나**다. 넓게 푼 것이 아니라,
+        # ``_NormalSpellActivation`` 이 그 밖의 모든 카드를 UNKNOWN 으로
+        # 남기므로 여기 올려도 아무것도 새로 허가되지 않는다.
+        PlayerActionKind.ACTIVATE_EFFECT,
     }
 )
 
@@ -818,6 +821,86 @@ def _activate(validator: ActionValidator, action: PlayerAction) -> tuple[Require
     )
 
 
+def _activate_effect(
+    validator: ActionValidator, action: PlayerAction
+) -> tuple[Requirement, ...]:
+    """
+    **효과** 발동 (Phase 3-E-3). ``_activate`` 에서 갈라 나왔다.
+
+    왜 갈라야 했는가: ``ACTIVATE_CARD`` 와 ``ACTIVATE_EFFECT`` 는 뜻이 다른데
+    (``engine/action.py`` 의 설명) 요구 하나를 공유하고 있었다
+    (STRUCTURAL-119). 그리고 발동 계층(:class:`~engine.activation.
+    EffectActivator`)은 ``ACTIVATE_EFFECT`` **만** 받으므로, 허가를 낼 수 있는
+    쪽도 그쪽 하나다.
+
+    요구가 **두 갈래**인 것이 이 함수의 핵심이다
+    -------------------------------------------
+    언제나 묻는 것은 둘뿐이다 — 자기가 쥔 카드인가, 그리고 **이번 Phase 가
+    판정할 수 있는 발동인가**. 범위 안(패의 통상 마법)일 때만 좁은 요구를
+    더한다.
+
+    범위 밖에 좁은 요구를 **더하지 않는 이유**가 중요하다. 예를 들어 함정은
+    상대 턴에 발동하는 것이 정상이므로 (RULE-SPELLTRAP-008), 거기에
+    ``IsTurnPlayer`` 를 걸면 ``NOT_TURN_PLAYER`` 라는 ``INVALID`` 가 나온다 —
+    **규칙이 금지한다**는 거짓말이다. 필드의 몬스터 효과에
+    ``CardIsInZone(HAND)`` 를 거는 것도 같은 거짓말이다. 모르는 것은
+    ``UNKNOWN`` 으로 남겨야 하고, 그래서 좁은 요구는 범위 안에서만 쓴다.
+
+    범위 안에서 더하는 셋의 공식 근거:
+
+    - RULE-SPELLTRAP-001 — "Spell Cards can normally be activated **only
+      during your Main Phase**"
+    - RULE-CHAIN-009 — "The turn player always starts with Priority"
+    - RULE-SPELLTRAP-002 — "announce its activation ... **placing it face-up
+      on the field**" → 마법 & 함정 존에 빈 칸이 필요하다
+
+    넣지 **않은** 것: 사용 횟수. RULE-TURN-004 가 "activate ... **as many
+    times as you want** during this phase" 라고 적는다.
+
+    **체인이 비었는가는 여기서 보지 않는다.** 체인은 ``GameState`` 밖에 살고
+    검증기는 관측만 읽는다 (ADR-007). 그 요구는 체인을 들고 있는
+    :class:`~engine.duel.Duel` 이 본다 (RULE-CHAIN-004).
+    """
+    scope = _NormalSpellActivation(action.source)
+    always = (
+        Requirement(
+            ControllerIs(PlayerRef.CONTROLLER, action.source),
+            ValidationCode.SOURCE_NOT_CONTROLLED,
+            "자신이 쥐고 있는 카드가 아닙니다.",
+        ),
+        Requirement(
+            scope,
+            # 이 조건은 ``FALSE`` 를 **돌려주지 않는다** (범위 밖은 전부
+            # ``UNKNOWN``). 그래서 이 코드는 닿지 않지만, 닿는다면 그 이유는
+            # 규칙 계층이 없는 것이므로 새 코드를 만들지 않고 이것을 쓴다.
+            ValidationCode.RULE_NOT_IMPLEMENTED,
+            "이 카드의 발동 타이밍을 아직 판정할 수 없습니다.",
+        ),
+    )
+    context = validator.context_for(action)
+    if _activation_out_of_scope(validator.view, context, action.source):
+        return always
+
+    return always + (
+        Requirement(
+            IsTurnPlayer(PlayerRef.CONTROLLER),
+            ValidationCode.NOT_TURN_PLAYER,
+            "자신의 턴이 아닙니다 (통상 마법은 자기 메인 페이즈에 발동합니다).",
+        ),
+        Requirement(
+            PhaseIs(MAIN_PHASES),
+            ValidationCode.WRONG_PHASE,
+            "메인 페이즈가 아닙니다.",
+        ),
+        Requirement(
+            ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.SZONE),
+            ValidationCode.ZONE_FULL,
+            "마법 & 함정 존에 빈 칸이 없습니다 (발동한 마법을 놓을 자리가 "
+            "필요합니다).",
+        ),
+    )
+
+
 def _turn_progression(
     validator: ActionValidator, action: PlayerAction
 ) -> tuple[Requirement, ...]:
@@ -850,7 +933,7 @@ _REQUIREMENT_BUILDERS: dict[
     PlayerActionKind.CHANGE_POSITION: _change_position,
     PlayerActionKind.ATTACK: _attack,
     PlayerActionKind.ACTIVATE_CARD: _activate,
-    PlayerActionKind.ACTIVATE_EFFECT: _activate,
+    PlayerActionKind.ACTIVATE_EFFECT: _activate_effect,
     PlayerActionKind.CHANGE_PHASE: _turn_progression,
     PlayerActionKind.END_PHASE: _turn_progression,
     # PASS 는 우선권 규칙이 없어 지금 판정할 수 있는 것이 없다.
@@ -1038,6 +1121,128 @@ class _OpponentHasNoMonsters(Condition):
 
     def describe_ko(self) -> str:
         return "상대 필드에 몬스터가 없다"
+
+
+#: 통상 마법이 **아니게** 만드는 종류 이름과, 그때 없는 규칙 계층.
+#: 이름은 ``core.constants.TYPE_NAMES`` 에서 오는 것을 그대로 쓴다.
+_OUT_OF_SCOPE_TYPES: tuple[tuple[str, str], ...] = (
+    ("TRAP", "trap-activation-timing (세트가 앞서고 세트한 턴에는 못 쓴다 — RULE-SPELLTRAP-009)"),
+    ("QUICKPLAY", "quick-play-timing (자기 턴의 모든 페이즈 · 상대 턴 — RULE-SPELLTRAP-007)"),
+    ("CONTINUOUS", "continuous-card-lifecycle (발동 뒤 필드에 남는다 — RULE-SPELLTRAP-004 · 010)"),
+    ("EQUIP", "equip-lifecycle (장착 대상과 함께 필드에 남는다 — RULE-SPELLTRAP-005)"),
+    ("FIELD", "field-zone-lifecycle (필드 존에 남는다 — RULE-SPELLTRAP-006)"),
+    ("RITUAL", "ritual-summon-procedure (의식 소환이 앞선다 — RULE-SPELLTRAP-003)"),
+    ("COUNTER", "counter-trap-timing (다른 발동에 응답한다 — RULE-SPELLTRAP-011)"),
+)
+
+
+def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], ...]:
+    """
+    이 발동을 **이번 Phase 의 범위 밖으로** 만드는 (사실, 없는 규칙) 들.
+
+    비어 있으면 범위 안이다 — 패에 있는 통상 마법 하나.
+
+    왜 "패에 있는가" 까지 여기서 보는가: 필드에서의 발동(몬스터의 기동 효과 ·
+    세트한 마법 · 함정)은 **실제 규칙에서 적법하다.** 그것을
+    ``SOURCE_WRONG_ZONE`` 같은 ``INVALID`` 로 적으면 "규칙이 금지한다" 는
+    거짓을 말하게 된다. 모르는 것은 ``UNKNOWN`` 이어야 하고, 그래서 자리도
+    범위 조건 안에 둔다.
+    """
+    definition, why = _resolve_definition(view, context, instance)
+    if definition is None:
+        # "왜 못 읽었는가" 를 그대로 전한다 — 안 보인다 · 뒷면이다 · 정의가
+        # 없다는 **서로 다른 사실**이고, 조건 계층이 이미 구분해 두었다.
+        return ((why, ""),)
+    if not definition.is_spell:
+        return (
+            (
+                "통상 마법이 아니다",
+                "non-spell-activation-timing (함정 · 몬스터 효과의 발동 타이밍)",
+            ),
+        )
+    names = set(definition.type_names)
+    out = tuple(
+        (f"{name} 카드의 발동 타이밍을 아직 판정하지 않는다", rule)
+        for name, rule in _OUT_OF_SCOPE_TYPES
+        if name in names
+    )
+    if out:
+        return out
+    target = instance if instance is not None else context.source
+    card = view.find(target) if target is not None else None
+    if card is None or card.zone is not Zone.HAND:
+        where = card.zone.value if card is not None else "?"
+        return (
+            (
+                f"패가 아니라 {where} 에서의 발동이다",
+                "on-field-activation-timing (필드의 카드가 자기 효과를 "
+                "발동하는 타이밍)",
+            ),
+        )
+    return ()
+
+
+@dataclass(frozen=True, slots=True)
+class _NormalSpellActivation(Condition):
+    """
+    이 카드가 **이번 Phase 가 판정할 수 있는 발동**인가 (Phase 3-E-3).
+
+    ``TRUE`` 는 **통상 마법 하나**다. 그 밖의 모든 카드는 ``UNKNOWN`` 이고,
+    ``FALSE`` 는 **하나도 없다** — 실제 규칙에서는 전부 발동할 수 있고, 없는
+    것은 그 타이밍을 볼 규칙 계층뿐이다 (``UNRESOLVED_TIMING_RULES``).
+
+    왜 통상 마법만인가 — 공식 조항이 나머지를 **다른 타이밍**으로 적는다.
+
+    ==========================  =============================================
+    통상 마법                    RULE-SPELLTRAP-001 · 002 — 자기 메인 페이즈,
+                                 앞면으로 놓고 해결 뒤 묘지. **이번 범위**
+    속공 마법                    RULE-SPELLTRAP-007 — 자기 턴의 **아무 페이즈**,
+                                 세트하면 상대 턴에도. 세트한 턴 제약까지 있다
+    함정                         RULE-SPELLTRAP-009 — 세트가 **앞서야** 하고
+                                 세트한 턴에는 발동할 수 없다
+    지속 · 장착 · 필드 마법       RULE-SPELLTRAP-004 · 005 · 006 — 발동 뒤
+                                 필드에 **남는다.** 해결 뒤 묘지로 가지 않는다
+    의식 마법                    RULE-SPELLTRAP-003 — 의식 소환 절차가 앞선다
+    몬스터 효과                  기동/유발/플립/유발즉시 분류가 이 엔진의 카드
+                                 정의에 없다 (``activation_timing`` 모듈 설명)
+    ==========================  =============================================
+
+    **``FALSE`` 로 적지 않는 것이 이 조건의 핵심이다.** ``FALSE`` 는 "규칙이
+    금지한다" 이고, 위 다섯 줄은 전부 "규칙은 허락하는데 우리가 모른다" 다.
+    """
+
+    instance: InstanceId | None = None
+
+    def evaluate(self, view, context) -> ConditionResult:
+        out = _activation_out_of_scope(view, context, self.instance)
+        return ConditionResult.TRUE if not out else ConditionResult.UNKNOWN
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        return tuple(
+            why for why, _ in _activation_out_of_scope(view, context, self.instance)
+        )
+
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        return tuple(
+            rule
+            for _, rule in _activation_out_of_scope(view, context, self.instance)
+            if rule
+        )
+
+    def canonical_state(self) -> tuple:
+        return (
+            "normal_spell_activation",
+            self.instance.value if self.instance is not None else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "normal_spell_activation"}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        return "통상 마법의 발동이다 (이번 Phase 가 판정할 수 있는 범위)"
 
 
 @dataclass(frozen=True, slots=True)

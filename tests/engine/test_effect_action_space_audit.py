@@ -1,29 +1,34 @@
 """
-Phase 3-E-3 — Effect Action Space **Audit** (조사 전용).
+Phase 3-E-3 — Effect Action Space (Audit 기록 + 구현 뒤의 사실).
 
-이 파일은 기능을 넣지 않는다. **지금 사실인 것을 실행 가능한 주장으로
-고정한다** — 다음 Phase 가 무엇을 바꾸는지 이 파일이 깨지는 것으로 보인다.
+이 파일은 Audit 이 조사한 **같은 자리들**을 계속 지킨다. Audit 시점에는
+"여기가 끊어져 있다" 를 적었고, Implementation 이 그중 **일부**를 이었다.
+그래서 주장이 바뀐 시험마다 **무엇을 적고 있었고 왜 바뀌었는지**를 docstring
+에 남긴다 — 기록을 지우지 않고 갱신한다.
 
-조사한 경로
+끊어져 있던 둘 중 **하나만** 이어졌다
+-------------------------------------
+``ACTIVATE_EFFECT``  이어졌다. 후보 → 검증 → Duel.apply → 발동 → 체인 →
+                     해결 → 실제 state mutation 까지 간다.
+``ACTIVATE_CARD``    **그대로다.** 발동 계층이 받지 않으므로 (모양 검사에서
+                     거절) 후보도 실행 경로도 없다. Audit 의 주장이 그대로
+                     살아 있다.
+
+지금의 경로
 -----------
-    GameStateView
-      → legal_actions          ACTIVATE 후보가 나오는가      → 0건
-      → validation             VALID 이 나오는가             → 영원히 UNKNOWN
-      → Duel.apply             실행되는가                    → 거절
-      ────────────────────────────────────────────────────────────
-      → EffectActivator        손으로 부르면 되는가          → 된다
-      → CostPayer              비용 경로가 있는가            → 있다 (라이브러리에 비용 효과 0건)
-      → Chain                  링크가 쌓이는가               → 쌓인다
-      → ChainResolver          해결되는가                    → 된다
-      → EffectExecutor         판이 바뀌는가                 → 바뀐다
+                             ACTIVATE_EFFECT      ACTIVATE_CARD
+    legal_actions            후보가 나온다        0건
+    validation               통상 마법만 VALID    영원히 UNKNOWN
+    Duel.apply               실행된다             거절
+    EffectActivator          받는다               모양 검사에서 거절
+    Chain                    링크가 쌓인다        —
+    ChainResolver            해결된다             —
+    EffectExecutor           판이 바뀐다          —
 
-끊어진 곳이 **한 군데**다
--------------------------
-발동·체인·해결·효과 실행은 **전부 동작한다.** 동작하지 않는 것은
-``PlayerAction`` 에서 거기로 들어가는 길이다. ``Duel`` 은 ``Chain`` 을 들고
-있지 않고, ``ActionExecutor`` 에는 발동 수행기가 등록되어 있지 않으며,
-``engine/activation.py`` 의 설명이 **그것이 의도였다**고 적고 있다
-(STRUCTURAL-55).
+**``ActionExecutor`` 에는 여전히 발동 수행기가 등록되어 있지 않다.** 발동의
+결과물은 ``StateDelta`` 만이 아니라 ``Chain`` 이기도 하므로 거기 끼울 수
+없고, 그것이 의도였다 (STRUCTURAL-55). :meth:`Duel._apply_activation` 이
+``_apply_board`` 와 **나란히** 따로 있다.
 
 이름만 있는 것과 실제로 있는 것
 -------------------------------
@@ -78,6 +83,9 @@ POT_OF_GREED = 55144522
 MYSTICAL_SPACE_TYPHOON = 5318639
 TRAP_HOLE = 4206964
 LUSTER_DRAGON = 11091375
+#: 욕망의 선물 — **함정**이다. 세트가 앞서야 하므로 (RULE-SPELLTRAP-009)
+#: 이번 범위 밖이고, 그 사실을 ``test_05b`` 가 적는다.
+THE_GIFT_OF_GREED = 5915629
 
 
 # ======================================================================
@@ -184,18 +192,27 @@ def test_01_both_activate_kinds_exist_and_are_not_the_same_thing(repository):
     assert fine.validity is ActionValidity.VALID, fine.reason
 
 
-def test_02_the_validator_does_not_tell_the_two_apart_yet():
+def test_02_the_validator_now_tells_the_two_apart():
     """
-    **검증기는 둘을 구분하지 않는다** — 같은 요구 하나를 쓴다.
+    **STRUCTURAL-119 가 풀린 자리다.**
 
-    이것이 결함이라는 뜻이 아니다. 발동 타이밍 계층이 없으므로 구분할
-    근거가 아직 없고, 없는 것을 지어내지 않은 결과다. 다음 Phase 가
-    구분하면 이 시험이 깨진다.
+    Audit 에서 이 시험은 그 반대를 적었다 — "검증기는 둘을 구분하지 않는다,
+    같은 요구 하나를 쓴다". 그때는 사실이었고 결함도 아니었다: 발동 타이밍
+    계층이 없어 구분할 근거가 없었기 때문이다. 그 설명에 **"다음 Phase 가
+    구분하면 이 시험이 깨진다"** 고 적어 두었고, 이 Phase 가 그 Phase 다.
+
+    ``ACTIVATE_CARD`` 는 ``_activate`` 를 **그대로** 쓴다 — 요구 하나(컨트롤러)
+    뿐이고, 발동 계층이 애초에 받지 않으므로 더 볼 것이 없다.
     """
-    from engine.action_validation import _REQUIREMENT_BUILDERS, _activate
+    from engine.action_validation import (
+        _REQUIREMENT_BUILDERS,
+        _activate,
+        _activate_effect,
+    )
 
     assert _REQUIREMENT_BUILDERS[PlayerActionKind.ACTIVATE_CARD] is _activate
-    assert _REQUIREMENT_BUILDERS[PlayerActionKind.ACTIVATE_EFFECT] is _activate
+    assert _REQUIREMENT_BUILDERS[PlayerActionKind.ACTIVATE_EFFECT] is _activate_effect
+    assert _activate is not _activate_effect
 
 
 def test_03_the_activation_layer_only_accepts_activate_effect(repository):
@@ -228,49 +245,118 @@ def test_03_the_activation_layer_only_accepts_activate_effect(repository):
 # ======================================================================
 
 
-@pytest.mark.parametrize(
-    "kind", [PlayerActionKind.ACTIVATE_CARD, PlayerActionKind.ACTIVATE_EFFECT]
-)
-def test_04_neither_activate_kind_can_ever_be_valid(kind):
+def test_04_only_activate_effect_can_ever_be_valid():
     """
-    둘 다 ``_MISSING_RULE`` 에 있고 ``_COMPLETE_RULES`` 에 없다.
+    **한쪽만 올랐다.** Audit 에서는 둘 다 ``_MISSING_RULE`` 에 있었다.
 
-    그래서 요구를 전부 통과해도 결과는 ``UNKNOWN`` 이다. **``UNKNOWN`` 은
-    허가가 아니므로** 후보가 되지 않는다 — 이것이 ACTIVATE 후보가 0건인
-    구조적 이유다.
+    ``ACTIVATE_EFFECT`` 를 ``_COMPLETE_RULES`` 에 올린 것이 "모든 발동이
+    허가된다" 가 **아니라는 것**은 ``_activate_effect`` 의 마지막 요구가
+    지킨다 — 범위 밖은 전부 ``UNKNOWN`` 이다 (``test_05b``).
+
+    ``ACTIVATE_CARD`` 는 그대로다. 발동 계층이 받지 않으므로 올릴 근거가
+    없다.
     """
-    assert kind in _MISSING_RULE
-    assert kind not in _COMPLETE_RULES
+    assert PlayerActionKind.ACTIVATE_CARD in _MISSING_RULE
+    assert PlayerActionKind.ACTIVATE_CARD not in _COMPLETE_RULES
+
+    assert PlayerActionKind.ACTIVATE_EFFECT not in _MISSING_RULE
+    assert PlayerActionKind.ACTIVATE_EFFECT in _COMPLETE_RULES
 
 
 @pytest.mark.real_card
-def test_05_a_perfectly_fine_activation_is_still_unknown(repository):
+def test_05_a_normal_spell_is_now_authorized_but_card_activation_is_not(repository):
     """
-    **확인할 수 있는 것은 전부 통과했는데도** 허가가 아니다.
+    같은 카드 · 같은 판에서 **두 ActionKind 의 답이 갈린다.**
 
-    자기 패의 카드 · 자기 턴 · 메인 페이즈 · 덱 20장. 그래도 ``UNKNOWN`` 이고,
-    ``missing_rule`` 이 무엇이 없는지 말한다.
+    Audit 에서는 둘 다 ``UNKNOWN`` 이었다. 이제 ``ACTIVATE_EFFECT`` 는
+    통상 마법이므로 허가가 나고, ``ACTIVATE_CARD`` 는 그대로 ``UNKNOWN`` 이다
+    — 발동 계층이 그 ActionKind 를 받지 않으므로 허가를 낼 근거가 없다.
     """
     state, source = hand_with(repository, POT_OF_GREED)
     validator = ActionValidator(GameStateView.from_state(state, viewer=MINE))
 
-    for action, expected in (
-        (
-            PlayerAction.activate_card(actor=MINE, source=source),
-            "activation-timing",
-        ),
-        (
-            PlayerAction.activate_effect(
-                actor=MINE, source=source, effect_ref=EffectRef(POT_OF_GREED, 0)
-            ),
-            "activation-condition",
-        ),
-    ):
-        result = validator.validate(action)
-        assert result.validity is ActionValidity.UNKNOWN
-        assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
-        assert expected in result.missing_rule
-        assert not result.permits_execution
+    as_effect = validator.validate(
+        PlayerAction.activate_effect(
+            actor=MINE, source=source, effect_ref=EffectRef(POT_OF_GREED, 0)
+        )
+    )
+    assert as_effect.validity is ActionValidity.VALID
+    assert as_effect.permits_execution
+
+    as_card = validator.validate(
+        PlayerAction.activate_card(actor=MINE, source=source)
+    )
+    assert as_card.validity is ActionValidity.UNKNOWN
+    assert as_card.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert "activation-timing" in as_card.missing_rule
+    assert not as_card.permits_execution
+
+
+@pytest.mark.real_card
+@pytest.mark.parametrize(
+    "card_id,expected",
+    [
+        (MYSTICAL_SPACE_TYPHOON, "quick-play-timing"),
+        (THE_GIFT_OF_GREED, "non-spell-activation-timing"),
+    ],
+)
+def test_05b_everything_outside_the_scope_stays_unknown(
+    repository, card_id, expected
+):
+    """
+    **``_COMPLETE_RULES`` 에 올렸지만 아무것도 넓히지 않았다.**
+
+    범위는 **패의 통상 마법 하나**다. 속공 마법과 함정은 공식 조항이 다른
+    타이밍을 적으므로 (RULE-SPELLTRAP-007 · 009) ``UNKNOWN`` 으로 남는다.
+
+    **``INVALID`` 가 아니다.** 실제 규칙에서는 둘 다 발동할 수 있고, 없는
+    것은 그 타이밍을 볼 계층뿐이다. ``INVALID`` 로 적으면 "규칙이 금지한다"
+    는 거짓을 말하게 된다.
+    """
+    state, source = hand_with(repository, card_id)
+    validator = ActionValidator(GameStateView.from_state(state, viewer=MINE))
+
+    result = validator.validate(
+        PlayerAction.activate_effect(
+            actor=MINE, source=source, effect_ref=EffectRef(card_id, 0)
+        )
+    )
+    assert result.validity is ActionValidity.UNKNOWN
+    assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert expected in result.missing_rule
+    assert not result.permits_execution
+
+
+@pytest.mark.real_card
+def test_05c_an_on_field_activation_is_unknown_not_invalid(repository):
+    """
+    필드에서의 발동은 **``UNKNOWN``** 이다 — 이 구분이 가장 중요하다.
+
+    구현 중에 한 번 틀렸던 자리다. "패에 있는가" 를 ``INVALID``
+    (``SOURCE_WRONG_ZONE``) 요구로 두었더니, 필드의 몬스터가 자기 효과를
+    발동하는 것이 **규칙 위반**으로 읽혔다. 실제 규칙에서는 적법하고 (기동
+    효과) 없는 것은 그 타이밍 계층뿐이다. 그래서 자리 검사를 범위 조건 안으로
+    옮겼다.
+
+    ``tests/engine/test_action_legality.py`` 의
+    ``test_an_effect_ordinal_beyond_the_card_is_invalid`` 가 이 실수를 잡았다.
+    """
+    state, source = hand_with(repository, POT_OF_GREED)
+    state.move(
+        state.find_instance(source),
+        Zone.SZONE,
+        to_player=MINE,
+        position=Position.FACEDOWN,
+    )
+    validator = ActionValidator(GameStateView.from_state(state, viewer=MINE))
+
+    result = validator.validate(
+        PlayerAction.activate_effect(
+            actor=MINE, source=source, effect_ref=EffectRef(POT_OF_GREED, 0)
+        )
+    )
+    assert result.validity is ActionValidity.UNKNOWN, result
+    assert "on-field-activation-timing" in result.missing_rule
 
 
 # ======================================================================
@@ -279,9 +365,12 @@ def test_05_a_perfectly_fine_activation_is_still_unknown(repository):
 
 
 @pytest.mark.real_card
-def test_06_a_real_duel_offers_zero_activate_candidates(repository):
+def test_06_a_real_duel_now_offers_one_candidate_per_hand_copy(repository):
     """
-    **실제로 굴린 듀얼**에서 센다. 패에 욕망의 항아리가 여러 장 있어도 0건이다.
+    **실제로 굴린 듀얼**에서 센다. Audit 에서는 0건이었다.
+
+    패의 욕망의 항아리 **장수만큼** 후보가 나온다 — 같은 이름 여러 장이
+    하나로 뭉치지 않는다. ``ACTIVATE_CARD`` 는 여전히 0건이다.
     """
     duel = main_phase_duel(repository)
     seat = duel.to_act
@@ -296,8 +385,16 @@ def test_06_a_real_duel_offers_zero_activate_candidates(repository):
 
     kinds = [a.kind for a in legal.allowed]
     assert kinds.count(PlayerActionKind.ACTIVATE_CARD) == 0
-    assert kinds.count(PlayerActionKind.ACTIVATE_EFFECT) == 0
-    # 세트는 된다 — 같은 마법 카드로 할 수 있는 다른 일은 후보에 있다.
+    assert kinds.count(PlayerActionKind.ACTIVATE_EFFECT) == len(pots)
+
+    # instance 마다 하나씩이고, 전부 패의 그 카드들이다.
+    sources = {
+        a.source
+        for a in legal.allowed
+        if a.kind is PlayerActionKind.ACTIVATE_EFFECT
+    }
+    assert sources == set(pots)
+    # 세트도 그대로 된다 — 같은 카드로 할 수 있는 다른 일이 사라지지 않았다.
     assert PlayerActionKind.SET_SPELL_TRAP in kinds
 
 
@@ -327,33 +424,33 @@ def test_07_only_activate_card_leaves_a_trace_in_withheld(repository):
 
 
 @pytest.mark.real_card
-def test_07b_candidate_generation_is_a_separate_gap_from_validation(repository):
+def test_07b_candidate_generation_is_now_wired_too(repository):
     """
-    **두 구멍이 따로다.** 이것이 다음 Phase 의 최소 변경량을 정하는 사실이다.
+    **STRUCTURAL-117 이 풀린 자리다.**
 
-    ``Duel.legal_actions`` 의 패 순회는 **세 가지만** 만들어 본다 —
-    ``normal_summon`` · ``set_monster`` · ``set_spell_trap``. 발동은 그 목록에
-    없으므로, 검증기가 ``VALID`` 를 돌려주더라도 후보는 여전히 0건이다.
+    Audit 에서 이 시험은 "후보를 만드는 코드와 적법성 판정이 서로 다른
+    구멍이다" 를 적었고, 고의 위반으로 그것을 증명했다 — ``ACTIVATE_CARD`` 를
+    ``_COMPLETE_RULES`` 에 올려 검증기가 ``VALID`` 를 내게 만든 뒤에도 후보는
+    0건이었다. 둘을 **모두** 이어야 했고, 그래서 이 Phase 가 둘을 모두 이었다.
 
-    고의 위반으로 확인했다: ``ACTIVATE_CARD`` 를 ``_COMPLETE_RULES`` 에 올려
-    검증기가 ``VALID`` 를 내게 만든 뒤에도 후보 수는 0이었고 ``Duel.apply``
-    는 "지금 허가된 행위가 아닙니다" 로 거절했다. 그래서
-
-        "검증기를 고치면 후보가 나온다"
-
-    는 **틀렸다.** 후보를 만드는 코드와 실행 수행기가 따로 필요하다.
-    이 시험은 그 순회가 세 가지뿐이라는 것을 소스에서 직접 읽어 고정한다.
+    ``Duel._activation_actions`` 가 그 자리다. 패 순회에 억지로 끼우지 않고
+    **따로** 둔 이유: 소환·세트는 ``source`` 하나로 후보가 정해지지만 발동은
+    ``(source, effect_ref)`` 짝이고, 카드 한 장이 효과를 여러 개 가질 수 있다.
     """
     source = (ROOT / "engine/duel.py").read_text()
+
+    # 후보를 만드는 자리가 실제로 있다.
+    assert "def _activation_actions" in source
+    assert "PlayerAction.activate_effect" in source
+    assert "self._activation_actions(seat, validator)" in source
+
+    # 소환·세트의 순회는 **건드리지 않았다** — 거기에 발동을 끼워 넣지 않았다.
     hand_loop = source.split("for card in self.state.player(seat).hand:")[1]
     builders = hand_loop.split("):")[0]
     assert "PlayerAction.normal_summon" in builders
     assert "PlayerAction.set_monster" in builders
     assert "PlayerAction.set_spell_trap" in builders
     assert "activate" not in builders, builders
-
-    # allowed 에 발동을 넣는 자리가 **하나도 없다.**
-    assert "PlayerAction.activate_effect" not in source
 
 
 # ======================================================================
@@ -362,9 +459,13 @@ def test_07b_candidate_generation_is_a_separate_gap_from_validation(repository):
 
 
 @pytest.mark.real_card
-def test_08_duel_apply_refuses_both_and_changes_nothing(repository):
+def test_08_duel_apply_still_refuses_activate_card_and_changes_nothing(repository):
     """
-    거절이 **조용하지 않고**, 거절된 발동이 판을 한 글자도 바꾸지 않는다.
+    **``ACTIVATE_CARD`` 쪽 주장은 글자 하나 바뀌지 않았다.**
+
+    Audit 에서는 둘 다 거절됐다. 이제 ``ACTIVATE_EFFECT`` 는 실행되지만
+    (``test_11b``), ``ACTIVATE_CARD`` 는 그대로 거절되고 판은 한 글자도
+    바뀌지 않는다.
     """
     duel = main_phase_duel(repository)
     seat = duel.to_act
@@ -375,16 +476,10 @@ def test_08_duel_apply_refuses_both_and_changes_nothing(repository):
     )
     before = board(duel)
 
-    for action in (
-        PlayerAction.activate_card(actor=seat, source=pot),
-        PlayerAction.activate_effect(
-            actor=seat, source=pot, effect_ref=EffectRef(POT_OF_GREED, 0)
-        ),
-    ):
-        step = duel.apply(action)
-        assert not step.accepted, action.kind
-        assert step.code is ValidationCode.RULE_NOT_IMPLEMENTED
-        assert board(duel) == before, action.kind
+    step = duel.apply(PlayerAction.activate_card(actor=seat, source=pot))
+    assert not step.accepted
+    assert step.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert board(duel) == before
 
 
 def test_09_no_activation_handler_is_registered_anywhere():
@@ -402,21 +497,28 @@ def test_09_no_activation_handler_is_registered_anywhere():
     assert PlayerActionKind.ACTIVATE_EFFECT not in executor.supported
 
 
-def test_10_the_duel_does_not_hold_a_chain():
+def test_10_the_duel_now_holds_a_chain():
     """
-    **``Duel`` 에 체인이 없다.** 이것이 끊어진 자리의 정확한 위치다.
+    **``Duel`` 이 체인을 들게 됐다.**
 
-    ``Duel`` 의 모듈 설명은 "지금 누가 우선권을 쥐었는지 · **체인이 어디까지
-    쌓였는지** ... 그 자리가 여태 없었다. 이 클래스가 그 자리다" 라고
-    적었지만, 실제로 받은 칸은 ``priority`` 하나다.
+    Audit 에서 이 시험은 그 반대를 적었다. ``Duel`` 의 모듈 설명이 처음부터
+    "체인이 어디까지 쌓였는지 ... 그 자리가 여태 없었다. 이 클래스가 그
+    자리다" 라고 썼는데 실제로 받은 칸은 ``priority`` 하나였고, 이 Phase 가
+    설명대로 칸을 채웠다.
+
+    **``Chain`` 은 ``state_hash()`` 에 들어가지 않는다** — 체인은 판의 모양이
+    아니라 흐름의 위치다. 그 불변식은 그대로다.
     """
     fields = set(Duel.__dataclass_fields__)
     assert "priority" in fields
-    assert "chain" not in fields
+    assert "chain" in fields
 
+    # 발동기·해결기는 **발동 계층**에서 가져온다. duel.py 가
+    # engine.effect 를 직접 읽지 않는 것은 test_duel_loop 가 지킨다.
     source = (ROOT / "engine/duel.py").read_text()
-    assert "EffectActivator" not in source
-    assert "ChainResolver" not in source
+    assert "duel_activator" in source
+    assert "duel_resolver" in source
+    assert "from engine.spell_activation import" in source
 
 
 # ======================================================================
@@ -631,12 +733,14 @@ def test_15_no_library_effect_has_a_cost_so_the_cost_path_is_untravelled():
 
 
 @pytest.mark.real_card
-def test_16_the_simulator_reports_not_a_candidate_not_unknown(repository):
+def test_16_the_simulator_runs_the_activation_and_still_refuses_the_card(repository):
     """
-    탐색은 **후보만** 해 본다. 발동은 후보가 아니므로 ``NOT_A_CANDIDATE`` 다.
+    Audit 에서는 둘 다 ``NOT_A_CANDIDATE`` 였다. 이제 갈린다.
 
-    ``UNKNOWN`` 과 구분되는 것이 중요하다 — ``UNKNOWN`` 은 "해 봤는데
-    엔진이 모른다" 이고 ``NOT_A_CANDIDATE`` 는 "애초에 고를 수 없다" 다.
+    ``ACTIVATE_EFFECT`` 는 ``SUPPORTED`` 이고 미래가 돌아온다.
+    ``ACTIVATE_CARD`` 는 그대로 ``NOT_A_CANDIDATE`` 다 — ``UNKNOWN`` 과
+    구분되는 것이 여전히 중요하다: ``UNKNOWN`` 은 "해 봤는데 엔진이 모른다"
+    이고 ``NOT_A_CANDIDATE`` 는 "애초에 고를 수 없다" 다.
     """
     from agent.simulation import SimulationStatus, Simulator
 
@@ -649,20 +753,31 @@ def test_16_the_simulator_reports_not_a_candidate_not_unknown(repository):
     )
     simulator = Simulator(duel)
 
-    for action in (
-        PlayerAction.activate_card(actor=seat, source=pot),
+    refused = simulator.simulate(
+        PlayerAction.activate_card(actor=seat, source=pot), viewer=seat
+    )
+    assert refused.status is SimulationStatus.NOT_A_CANDIDATE
+    assert refused.future is None
+
+    supported = simulator.simulate(
         PlayerAction.activate_effect(
             actor=seat, source=pot, effect_ref=EffectRef(POT_OF_GREED, 0)
         ),
-    ):
-        result = simulator.simulate(action, viewer=seat)
-        assert result.status is SimulationStatus.NOT_A_CANDIDATE, action.kind
-        assert result.future is None
+        viewer=seat,
+    )
+    assert supported.status is SimulationStatus.SUPPORTED, supported.reason
+    assert supported.future is not None
 
 
 @pytest.mark.real_card
-def test_17_the_search_policy_never_sees_an_activation(repository):
-    """탐색의 후보 목록에 발동이 **하나도** 없다."""
+def test_17_the_search_policy_now_sees_the_activation(repository):
+    """
+    탐색의 후보 목록에 발동이 **들어온다.** Audit 에서는 0건이었다.
+
+    ``SearchPolicy`` 에 발동을 위한 분기를 **넣지 않았다** — 후보 목록이
+    넓어진 것만으로 저절로 들어온다. 그것이 Phase 3-A 가 만든 경계가
+    아직 성립한다는 뜻이다.
+    """
     from agent import search_policy
 
     duel = main_phase_duel(repository)
@@ -672,8 +787,7 @@ def test_17_the_search_policy_never_sees_an_activation(repository):
 
     kinds = {c.action.kind for c in policy.last_decision.candidates}
     assert PlayerActionKind.ACTIVATE_CARD not in kinds
-    assert PlayerActionKind.ACTIVATE_EFFECT not in kinds
-    assert kinds, "후보가 아예 없으면 이 시험이 말하는 것이 없다"
+    assert PlayerActionKind.ACTIVATE_EFFECT in kinds
 
 
 # ======================================================================

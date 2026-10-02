@@ -562,6 +562,11 @@ def test_d_pass_never_shows_up_but_attack_now_does(repository):
     생겨서 검증기가 ``UNKNOWN`` 대신 ``VALID`` 를 돌려준다. 이 시험이 지키는
     것은 "후보가 정확히 세 종류다" 가 아니라 **``PASS`` 가 없다**이고, 그
     주장은 여기서도 글자 하나 바뀌지 않았다.
+
+    **``ACTIVATE_EFFECT`` 도 이제 오른다** (Phase 3-E-3). 세 번째로 같은
+    손질이다 — 이 덱에는 욕망의 항아리가 5장 있고, 패의 통상 마법은
+    ``_COMPLETE_RULES`` 에 올라 허가가 난다. ``ACTIVATE_CARD`` 는 **오르지
+    않는다**: 발동 계층이 그 ActionKind 를 받지 않는다.
     """
     duel = duel_with(repository, seed=13)
     policy = rule_based_policy()
@@ -579,7 +584,9 @@ def test_d_pass_never_shows_up_but_attack_now_does(repository):
         PlayerActionKind.ATTACK,
         PlayerActionKind.SET_MONSTER,
         PlayerActionKind.SET_SPELL_TRAP,
+        PlayerActionKind.ACTIVATE_EFFECT,
     }, dict(kinds)
+    assert PlayerActionKind.ACTIVATE_CARD not in kinds, dict(kinds)
 
 
 # ======================================================================
@@ -762,24 +769,51 @@ def test_f_the_winner_now_depends_on_the_policy(repository):
 @pytest.mark.real_card
 def test_f_greedy_is_not_the_best_play(repository):
     """
-    **탐욕은 baseline 이지 정답이 아니다.**
+    **탐욕은 baseline 이지 정답이 아니다.** 같은 주장, **다른 증거**.
 
-    매번 가장 센 몬스터를 고르면 몬스터 존이 찰 때까지의 **순서**가 바뀌고,
-    그래서 끝났을 때의 판이 무작위보다 나쁜 씨앗이 존재한다. 한 수도
-    내다보지 않는 규칙으로는 이것을 고칠 수 없다 — 다음 단계가 탐색인
-    이유가 이것이다.
+    Phase 3-B 에서 이 시험이 든 증거는 "끝났을 때의 판이 무작위보다 나쁜
+    씨앗이 존재한다" 였고, 그 설명에 **"깨지면 규칙이 나아진 것이므로 다시
+    읽어야 하는 시험"** 이라고 적어 두었다. Phase 3-E-3 에서 깨졌다.
 
-    깨지면 규칙이 나아진 것이므로 **다시 읽어야 하는 시험**이다.
+    **왜 깨졌는지 측정했다.** 규칙이 나아져서가 아니다. 행동 공간에 발동이
+    들어오면서 **무작위 쪽이 훨씬 빨리 무너졌다** — 16개 씨앗에서 무작위의
+    최종 공격력 합이 19,200 이고 규칙 기반은 70,700 이다. 무작위가 10개
+    씨앗에서 0 이 되는데, 그만큼 욕망의 항아리를 아무 때나 발동해 덱을
+    태우고 LP 를 잃기 때문이다. 즉 **척도가 둘을 가르지 못하게 된 것**이고,
+    "규칙 기반이 좋아졌다" 가 아니다.
+
+    그래서 증거를 **씨앗 비교에서 절대적인 사실로** 바꾼다. 규칙 기반도
+    씨앗 10 · 15 에서 **몬스터 하나 없이 LP 0 으로 진다** — 한 수도 내다보지
+    않는 규칙으로는 이것을 고칠 수 없고, 다음 단계가 탐색인 이유가 그대로
+    남는다.
+
+    **무작위가 이기는 씨앗을 찾아 범위를 넓히지 않았다.** 그렇게 하면
+    측정이 아니라 원하는 답을 찾는 일이 된다.
     """
-    worse = [
-        seed
+    # 척도가 더 이상 둘을 가르지 못한다는 것을 **먼저 적는다.**
+    rules = [
+        _field_attack_after(repository, rule_based_policy, seed)
         for seed in COMPARISON_SEEDS
-        if _field_attack_after(repository, rule_based_policy, seed)
-        < _field_attack_after(
+    ]
+    chance = [
+        _field_attack_after(
             repository, lambda s=seed: RandomPolicy(seed=s * 101 + 3), seed
         )
+        for seed in COMPARISON_SEEDS
     ]
-    assert worse, "탐욕이 모든 씨앗에서 이겼습니다 — 척도나 규칙을 다시 읽어야 합니다"
+    assert sum(rules) == 70700, sum(rules)
+    assert sum(chance) == 19200, sum(chance)
+    assert all(r >= c for r, c in zip(rules, chance)), list(zip(rules, chance))
+
+    # 그런데도 탐욕은 정답이 아니다 — **스스로 무너지는 씨앗이 있다.**
+    collapsed = [seed for seed, total in zip(COMPARISON_SEEDS, rules) if total == 0]
+    assert collapsed == [10, 15], collapsed
+    for seed in collapsed:
+        duel = duel_with(repository, seed=seed)
+        transcript = play(duel, (rule_based_policy(), FirstLegalPolicy()))
+        assert transcript.result.winner == THEIRS, seed
+        assert "라이프 포인트가 0" in transcript.result.reason, seed
+        assert len(duel.state.player(MINE).monster_zone) == 0, seed
 
 
 # ======================================================================
