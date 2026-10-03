@@ -296,7 +296,12 @@ def test_05_a_normal_spell_is_now_authorized_but_card_activation_is_not(reposito
 @pytest.mark.parametrize(
     "card_id,expected",
     [
-        (THE_GIFT_OF_GREED, "non-spell-activation-timing"),
+        # **이유 문자열이 바뀌었다** (Phase 3-E-16). 예전에는 함정과 몬스터
+        # 효과가 ``non-spell-activation-timing`` 한 문장을 공유했다. 모자란
+        # 것이 서로 다르므로 (함정은 **유발 조건**, 몬스터는 **효과 분류**)
+        # 한 문장으로 적으면 어느 쪽을 고쳐야 하는지 알 수 없다. 판정 결과는
+        # 그대로 ``UNKNOWN`` 이고, 바뀐 것은 **왜**뿐이다.
+        (THE_GIFT_OF_GREED, "trap-activation-timing"),
     ],
 )
 def test_05b_everything_outside_the_scope_stays_unknown(

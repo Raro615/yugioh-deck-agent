@@ -1181,8 +1181,50 @@ class _OpponentHasNoMonsters(Condition):
 
 #: 통상 마법이 **아니게** 만드는 종류 이름과, 그때 없는 규칙 계층.
 #: 이름은 ``core.constants.TYPE_NAMES`` 에서 오는 것을 그대로 쓴다.
+#:
+#: **``TRAP`` 의 이유가 바뀌었다** (Phase 3-E-16)
+#: -------------------------------------------
+#: 처음 적은 이유는 "세트가 앞서고 세트한 턴에는 못 쓴다 —
+#: RULE-SPELLTRAP-009" 였다. **그 둘은 지금 다 있다** — 세트는
+#: ``SET_SPELL_TRAP`` 이 하고 (Phase 3-E-2), 세트한 턴은
+#: ``GameState.rule_uses`` 가 적고 ``ActivationTimingChecker`` 가 본다
+#: (Phase 3-E-15). 그래서 그 문장은 더 이상 참이 아니었다.
+#:
+#: 지금 모자란 것은 **효과마다 유발 조건이 있는지 없는지**다. 공식 스크립트는
+#: 그것을 ``SetCode(EVENT_*)`` 로 적고, 등재된 함정 5장은 전부
+#: ``EVENT_FREE_CHAIN`` (유발 조건 없음) 이다 — 그 사실이 ``core`` 계층의
+#: ``Card.script`` 에는 있지만 **``EffectDefinition`` 에는 옮겨지지 않았다.**
+#:
+#: 그래서 엔진은 "유발 조건 없는 함정" 과 "무언가가 일어났을 때만 발동하는
+#: 함정" 을 **구분할 수 없다.** 구분하지 못하는 채로 종류 전체를 통과시키면
+#: 유발 함정이 아무 때나 발동하게 되므로, 종류 단위로 막아 둔다. 이것은
+#: 규칙이 금지하는 것이 아니라 **우리가 모르는 것**이므로 ``UNKNOWN`` 이다.
+#: 함정의 발동에 **없는** 규칙 계층 (Phase 3-E-16 이 측정했다).
+#:
+#: 공식 스크립트는 "이 효과가 언제 발동하는가" 를 ``SetCode(EVENT_*)`` 로
+#: 적는다. 등재된 함정 다섯 장은 전부 유발 조건이 없고 (``EVENT_FREE_CHAIN``),
+#: 그 사실이 ``core`` 계층의 ``Card.script`` 에는 **있다.** 그런데
+#: :class:`~engine.effect.definition.EffectDefinition` 에는 옮겨지지 않았다.
+#:
+#: 그래서 엔진은 "유발 조건 없는 함정" 과 "무언가가 일어났을 때만 발동하는
+#: 함정" 을 **구분할 수 없다.** 구분하지 못하는 채로 통과시키면 유발 함정이
+#: 아무 때나 발동하게 되므로 막는다 — 규칙이 금지하는 것이 아니라 **우리가
+#: 모르는 것**이므로 ``UNKNOWN`` 이다.
+#:
+#: 세트와 세트한 턴은 **이유가 아니다.** 둘 다 있다 (Phase 3-E-2 · 3-E-15).
+TRAP_TRIGGER_MISSING = (
+    "trap-activation-timing (함정의 유발 조건을 효과마다 구분할 수 없다 — "
+    "공식 스크립트의 SetCode(EVENT_*) 가 EffectDefinition 에 없다)"
+)
+
+#: 몬스터 효과의 발동에 없는 규칙 계층. 함정과 **다른 이유**다 — 이쪽은
+#: 기동 · 유발 · 플립 · 유발즉시 분류가 없어서 속도조차 정할 수 없다
+#: (``engine/activation_timing.py`` 의 ``MONSTER_CLASSIFICATION_MISSING``).
+MONSTER_ACTIVATION_MISSING = (
+    "monster-activation-timing (기동 · 유발 · 플립 · 유발즉시 분류가 없다)"
+)
+
 _OUT_OF_SCOPE_TYPES: tuple[tuple[str, str], ...] = (
-    ("TRAP", "trap-activation-timing (세트가 앞서고 세트한 턴에는 못 쓴다 — RULE-SPELLTRAP-009)"),
     ("CONTINUOUS", "continuous-card-lifecycle (발동 뒤 필드에 남는다 — RULE-SPELLTRAP-004 · 010)"),
     ("EQUIP", "equip-lifecycle (장착 대상과 함께 필드에 남는다 — RULE-SPELLTRAP-005)"),
     ("FIELD", "field-zone-lifecycle (필드 존에 남는다 — RULE-SPELLTRAP-006)"),
@@ -1199,8 +1241,9 @@ _OUT_OF_SCOPE_TYPES: tuple[tuple[str, str], ...] = (
 # 으로 받아 판정한다 (``engine/activation_timing.py`` 의 ``SET_TURN_MISSING``
 # 이 그 값을 받지 못했을 때의 자리다).
 #
-# 세트한 **함정**은 여전히 범위 밖이지만 이유가 다르다 — 발동 타이밍 계층
-# 자체가 더 넓게 비어 있고 (유발 · 응답 타이밍), 그것은
+# 세트한 **함정**은 여전히 범위 밖이지만 이유가 다르다 — 효과마다 유발 조건이
+# 있는지 없는지를 ``EffectDefinition`` 이 적지 않으므로, 유발 함정과 유발 조건
+# 없는 함정을 구분할 수 없다 (Phase 3-E-16 이 측정했다). 그것은
 # ``_OUT_OF_SCOPE_TYPES`` 의 ``TRAP`` 항목이 말한다. 지우지 않고 남겨 두면
 # 두 이유가 한 문자열에 섞인다.
 
@@ -1252,12 +1295,21 @@ def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], 
         # 없다는 **서로 다른 사실**이고, 조건 계층이 이미 구분해 두었다.
         return ((why, ""),)
     if not definition.is_spell:
-        return (
-            (
-                "통상 마법이 아니다",
-                "non-spell-activation-timing (함정 · 몬스터 효과의 발동 타이밍)",
-            ),
-        )
+        # **함정과 몬스터를 나눈다** (Phase 3-E-16).
+        #
+        # 예전에는 둘을 한 문장으로 적었다 — "함정 · 몬스터 효과의 발동
+        # 타이밍". 그런데 모자란 것이 서로 다르다: 함정은 **유발 조건**을
+        # 구분할 수 없고, 몬스터는 **효과 분류**가 없어 스펠 스피드조차 정하지
+        # 못한다. 한 문장으로 적으면 어느 쪽을 고쳐야 하는지 알 수 없다.
+        #
+        # 그리고 ``_OUT_OF_SCOPE_TYPES`` 에 있던 ``TRAP`` 항목은 **닿지 않는
+        # 코드**였다 — 함정은 ``is_spell`` 이 거짓이라 이 분기에서 먼저
+        # 돌아가고, 아래의 이름 검사까지 가지 않는다. 닿지 않는 자리에 이유를
+        # 적어 두면 그 문장이 틀려도 아무도 모른다.
+        # ``names`` 는 아래에서 묶이므로 여기서는 정의에서 바로 읽는다.
+        if "TRAP" in set(definition.type_names):
+            return (("함정이다", TRAP_TRIGGER_MISSING),)
+        return (("통상 마법이 아니다", MONSTER_ACTIVATION_MISSING),)
     names = set(definition.type_names)
     out = tuple(
         (f"{name} 카드의 발동 타이밍을 아직 판정하지 않는다", rule)
