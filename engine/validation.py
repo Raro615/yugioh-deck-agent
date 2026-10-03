@@ -68,6 +68,14 @@ class ValidationCode(str, Enum):
     SOURCE_WRONG_CARD_TYPE = "source_wrong_card_type"
     ZONE_FULL = "zone_full"
     WRONG_PHASE = "wrong_phase"
+    SET_THIS_TURN = "set_this_turn"
+    """
+    **세트한 그 턴**에 발동하려 했다 (Phase 3-E-15).
+
+    ``RULE-SPELLTRAP-007`` · ``RULE-SPELLTRAP-009`` 가 세트한 속공 마법과
+    함정에만 이 제약을 둔다. 세트한 **통상** 마법은 같은 턴에 발동할 수
+    있으므로 (``RULE-SPELLTRAP-012``) 이 코드가 붙지 않는다.
+    """
     TARGET_NOT_OPPONENT = "target_not_opponent"
     TARGET_SELF_CONTROLLED = "target_self_controlled"
     TARGET_WRONG_ZONE = "target_wrong_zone"

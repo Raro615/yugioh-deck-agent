@@ -368,17 +368,28 @@ def test_05b2_a_quick_play_spell_in_hand_is_now_in_scope(repository):
 
 
 @pytest.mark.real_card
-def test_05b3_a_set_quick_play_spell_is_still_unknown(repository):
+def test_05b3_a_set_quick_play_spell_is_in_scope_but_the_validator_cannot_date_it(
+    repository,
+):
     """
-    **세트된 속공 마법은 여전히 ``UNKNOWN``** 이다 (Phase 3-E-12).
+    **세트된 속공 마법은 이제 검증기의 범위 안이다** (Phase 3-E-15).
 
-    ``RULE-SPELLTRAP-007`` 의 두 번째 문장이 "you cannot activate the card in
-    the same turn you Set it" 를 요구하는데, **세트한 턴을 세는 자리가 엔진에
-    없다** (``engine/activation_timing.py`` 의 ``UNRESOLVED_TIMING_RULES`` 가
-    "세트한 턴의 함정 발동 제약" 을 보지 않는다고 적어 두었다).
+    처음 적을 때의 주장은 **"여전히 ``UNKNOWN`` 이다"** 였고, 근거는 "세트한
+    턴을 세는 자리가 엔진에 없다" 였다. **그 근거가 사라졌다** —
+    ``GameState.rule_uses`` 가 ``(턴, 플레이어, instance_id,
+    set_spell_trap)`` 으로 적는다.
 
-    세지 못하는 제약을 통과시키면 "세트한 턴에 발동할 수 있다" 는 거짓이
-    된다. 그래서 ``UNKNOWN`` 이고, **``INVALID`` 도 아니다.**
+    그래서 범위 조건은 통과한다. 그런데 **검증기가 세트한 턴을 보는 것은
+    아니다** — 그 사실은 ``GameStateView`` 에 **없고**, 넣지 않는 것이 Phase
+    3-E-15 의 결정이었다 (상대가 언제 세웠는지는 공개 정보가 아니다).
+
+    체인과 똑같은 분업이다. 검증기는 체인도 보지 못하므로 스펠 스피드 1 의
+    한가운데 발동에도 ``VALID`` 를 낸다. 그 자리를 흐름 계층
+    (``ActivationTimingChecker`` + ``Duel._set_this_turn``) 이 본다.
+
+    **그래서 이 시험이 재는 것이 바뀌었다** — "검증기가 모른다" 에서 "검증기는
+    이것을 판정하는 자리가 아니다" 로. 세트한 턴 제약이 실제로 걸리는 것은
+    ``tests/engine/test_set_turn_record.py`` 가 잰다.
     """
     from engine.vocabulary import Position, Zone
 
@@ -394,9 +405,13 @@ def test_05b3_a_set_quick_play_spell_is_still_unknown(repository):
             effect_ref=EffectRef(MYSTICAL_SPACE_TYPHOON, 0),
         )
     )
-    assert result.validity is ActionValidity.UNKNOWN, result.reason
-    assert "set-card-activation-timing" in (result.missing_rule or "")
-    assert not result.permits_execution
+    # 범위 밖이라고 말하지 않는다 — 그 이유가 더 이상 참이 아니다.
+    assert result.validity is ActionValidity.VALID, result.reason
+    assert "set-card-activation-timing" not in (result.missing_rule or "")
+
+    # 그리고 **관측에는 세트한 턴이 없다.** 검증기가 그것을 볼 길이 없다.
+    view = GameStateView.from_state(state, viewer=MINE)
+    assert not [f for f in view.to_dict() if "set_turn" in f or "set_this" in f]
 
 
 @pytest.mark.real_card

@@ -54,6 +54,7 @@ from engine.ids import InstanceId
 from engine.priority import PriorityState
 from engine.trigger import TimingPoint
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
+from engine.vocabulary import Zone
 
 
 class SpellSpeed(int, Enum):
@@ -106,10 +107,20 @@ SPEED_RULES: dict[SpellSpeed, tuple[str, ...]] = {
     SpellSpeed.COUNTER: ("RULE-CHAIN-006", "RULE-CHAIN-003"),
 }
 
+#: 세트한 턴을 **부르는 쪽이 알려주지 않았을** 때 모자란 것.
+#:
+#: 이 계층은 판을 읽지 않으므로 (``GameStateView`` 만 받는다) "이 카드를 이
+#: 턴에 세웠는가" 를 스스로 알 수 없다. 그 사실은 ``GameState.rule_uses`` 에
+#: 있고, 그것을 들고 있는 쪽이 ``ActivationTiming.set_this_turn`` 으로 넘긴다
+#: (체인과 우선권을 같은 방식으로 받는 것과 같다).
+SET_TURN_MISSING = (
+    "set-turn (이 카드를 이 턴에 세웠는지 — ActivationTiming.set_this_turn)"
+)
+
 #: 이 계층이 **보지 않은** 규칙들. ``VALID`` 가 "발동해도 된다" 가 아닌 이유다.
 UNRESOLVED_TIMING_RULES: tuple[str, ...] = (
     "페이즈별 발동 제약 (메인 페이즈 전용 · 배틀 페이즈 등)",
-    "세트한 턴의 함정 발동 제약",
+    "세트한 턴 제약 — set_this_turn 을 받지 못하면 보지 못한다",
     "1턴에 1번 · 턴 1회 제약",
     "타이밍 놓침 (when/if)",
     "체인 블록 · 데미지 스텝 · 배틀 스텝 타이밍",
@@ -244,6 +255,19 @@ class ActivationTiming:
     priority: PriorityState
     point: TimingPoint | None = None
     """지금이 어떤 시점인가. ``None`` 은 **"모른다"** 이지 "시점이 없다" 가 아니다."""
+    set_this_turn: bool | None = None
+    """
+    발동하려는 카드를 **이 턴에 세웠는가** (Phase 3-E-15).
+
+    ``None`` 은 **"모른다"** 이지 "세우지 않았다" 가 아니다 — ``point`` 와 같은
+    자리다. 모르면 세트한 카드의 발동은 ``UNKNOWN`` 이 되고, ``UNKNOWN`` 은
+    허가가 아니다.
+
+    왜 값으로 받는가: 이 사실은 ``GameState.rule_uses`` 에 있고 관측
+    (``GameStateView``) 에는 **없다.** 상대가 언제 세웠는지는 공개 정보가
+    아니기 때문이다. 그래서 체인과 우선권처럼 **판을 들고 있는 쪽이** 읽어서
+    넘긴다 (ADR-007).
+    """
 
     def __post_init__(self) -> None:
         if not isinstance(self.chain, Chain):
@@ -251,6 +275,10 @@ class ActivationTiming:
         if not isinstance(self.priority, PriorityState):
             raise TypeError(
                 f"PriorityState 가 필요합니다: {type(self.priority).__name__}"
+            )
+        if self.set_this_turn is not None and not isinstance(self.set_this_turn, bool):
+            raise TypeError(
+                f"set_this_turn 은 bool 또는 None 입니다: {self.set_this_turn!r}"
             )
 
     @property
@@ -268,6 +296,7 @@ class ActivationTiming:
             self.chain.canonical_state(),
             self.priority.canonical_state(),
             self.point.value if self.point is not None else None,
+            self.set_this_turn,
         )
 
     def to_dict(self) -> dict:
@@ -278,6 +307,8 @@ class ActivationTiming:
         }
         if self.point is not None:
             data["point"] = self.point.value
+        if self.set_this_turn is not None:
+            data["set_this_turn"] = self.set_this_turn
         return data
 
     def describe_ko(self) -> str:
@@ -364,6 +395,12 @@ class ActivationTimingChecker:
         if not isinstance(action, PlayerAction):
             raise TypeError(f"PlayerAction 이 필요합니다: {type(action).__name__}")
 
+        # **세트한 턴을 먼저 본다** (Phase 3-E-15). 체인이 비어 있어도 걸리는
+        # 제약이므로 아래의 이른 통과보다 앞이어야 한다.
+        on_set_turn = self._set_turn_refusal(timing, action)
+        if on_set_turn is not None:
+            return on_set_turn
+
         if not timing.chain_is_open:
             # 체인이 비어 있으면 **응수가 아니다.** 스펠 스피드 1 도 체인 1
             # 이 될 수 있다 (RULE-CHAIN-004 의 "Chain Link 2 이상" 제약).
@@ -402,6 +439,63 @@ class ActivationTimingChecker:
                 else "."
             ),
         )
+
+    # ------------------------------------------------------------------
+    def _set_turn_refusal(
+        self, timing: ActivationTiming, action: PlayerAction
+    ) -> "ValidationResult | None":
+        """
+        **세트한 턴에는 발동할 수 없는 카드인가** (Phase 3-E-15).
+
+        막지 않으면 ``None``. 이 규칙의 자리가 아닌 경우에도 ``None`` 이다 —
+        둘을 구분해서 적지 않는다. 막는 쪽만 결과를 만든다.
+
+        **세 조항이 서로 다르게 적는다.**
+
+        ==================  ==================================================
+        세트한 통상 마법     RULE-SPELLTRAP-012 — "Spell Cards can be activated
+                            during the Main Phases **even in the same turn that
+                            you Set them** (except for Quick-Play Spell
+                            Cards)." → 이 규칙이 **걸리지 않는다**
+        세트한 속공 마법     RULE-SPELLTRAP-007 — "you **cannot activate the
+                            card in the same turn you Set it**"
+        세트한 함정          RULE-SPELLTRAP-009 — "You cannot activate a Trap in
+                            the same turn that you Set it, but you can activate
+                            it at any time after that—starting from the
+                            beginning of the next turn."
+        ==================  ==================================================
+
+        그래서 **스펠 스피드로 가른다.** 1 은 통상 · 지속 · 장착 · 필드 · 의식
+        마법이고 (RULE-SPELLTRAP-012 가 괄호로 뺀 속공 마법만 빠진다), 2 와 3
+        은 속공 마법과 함정이다. 카드 이름을 보지 않는다.
+
+        **패에서의 발동에는 걸리지 않는다.** 세트하지 않은 카드에 "세트한 턴"
+        을 물으면 뜻이 없다 — 그래서 자리와 표시 형식을 먼저 본다.
+        """
+        if action.source is None:
+            return None
+        card = self._view.find(action.source)
+        if card is None or card.zone is not Zone.SZONE or card.face_up:
+            # 세트해 둔 카드가 아니다 — 이 규칙의 자리가 아니다.
+            return None
+        speed = self.spell_speed(action.source)
+        if speed.speed is None or speed.speed is SpellSpeed.NORMAL:
+            # 스펠 스피드를 모르면 **다른 이유로** 이미 막히거나 모른다 —
+            # 여기서 두 번 말하지 않는다. 1 이면 이 규칙이 걸리지 않는다.
+            return None
+        if timing.set_this_turn is None:
+            return self._unknown(
+                "세트한 턴을 알 수 없어 발동할 수 있는지 판정할 수 없습니다 "
+                f"({speed.speed} 는 세트한 턴에 발동할 수 없습니다).",
+                SET_TURN_MISSING,
+            )
+        if timing.set_this_turn:
+            return ValidationResult.invalid(
+                ValidationCode.SET_THIS_TURN,
+                f"세트한 턴에는 발동할 수 없습니다 ({speed.speed} — "
+                "RULE-SPELLTRAP-007 · 009). 다음 턴부터 발동할 수 있습니다.",
+            )
+        return None
 
     # ------------------------------------------------------------------
     def _passed(self, reason: str, rules: tuple[str, ...] = ()) -> ValidationResult:

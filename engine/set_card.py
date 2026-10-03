@@ -303,6 +303,29 @@ class SetExecutor:
                 placement.player,
                 RuleActionKind.NORMAL_SUMMON,
             )
+        elif action.kind is PlayerActionKind.SET_SPELL_TRAP:
+            # **언제 세웠는가를 적는다** (Phase 3-E-15).
+            #
+            # 횟수를 세는 것이 아니다 — 마법 · 함정 세트에는 횟수 제한이
+            # 없다. 적는 이유는 규칙이 **턴**을 묻기 때문이다.
+            #
+            #     RULE-SPELLTRAP-009 — "You cannot activate a Trap in the same
+            #     turn that you Set it, but you can activate it at any time
+            #     after that—starting from the beginning of the next turn."
+            #     RULE-SPELLTRAP-007 — 세트한 속공 마법도 같다.
+            #
+            # **카드마다** 적는다. 플레이어별로 적으면 같은 턴에 두 장을 세운
+            # 뒤 한 장만 발동한 상황에서 남은 장이 언제 세워졌는지 말할 수
+            # 없다 (``RuleActionKind.SET_SPELL_TRAP`` 의 설명).
+            #
+            # 놓은 **뒤에** 적는 것은 위와 같은 이유다 — 배치가 실패하면
+            # 기록만 남은 판이 된다.
+            state.rule_uses.record_card(
+                state.turn.turn_number,
+                placement.player,
+                placement.card,
+                RuleActionKind.SET_SPELL_TRAP,
+            )
 
         return (
             CardSet(

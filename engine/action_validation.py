@@ -889,22 +889,36 @@ def _activate_effect(
     # 상대 턴에 쓸 수 없다. 그래서 이것은 ``UNKNOWN`` 이 아니라 **규칙이
     # 금지하는 것**이다.
     set_card = activation_is_set_card(validator.view, context, action.source)
-    requirements = [
-        Requirement(
-            IsTurnPlayer(PlayerRef.CONTROLLER),
-            ValidationCode.NOT_TURN_PLAYER,
-            # **이유가 둘이다.** 패의 마법은 "세트가 앞서야 한다" 이지만,
-            # 세트해 둔 통상 마법은 세트했어도 **상대 턴에 쓸 수 없다** —
-            # RULE-SPELLTRAP-012 가 "Setting them does not allow you to use
-            # them on your opponent's turn" 이라고 못 박는다. 같은 문장으로
-            # 적으면 뒤쪽에 거짓을 말한다.
-            "자신의 턴이 아닙니다 (세트한 통상 마법도 자기 메인 페이즈에만 "
-            "발동합니다 — 세트는 상대 턴의 발동을 허락하지 않습니다)."
-            if set_card
-            else "자신의 턴이 아닙니다 (패의 마법은 자기 턴에 발동합니다 — "
-            "상대 턴에 쓰려면 세트가 앞서야 합니다).",
+
+    # **턴 플레이어 요구가 셋으로 갈린다** (Phase 3-E-15).
+    #
+    # ==================  =============================================
+    # 패의 마법            자기 턴만. 상대 턴에 쓰려면 세트가 앞서야 한다
+    #                     (RULE-SPELLTRAP-001 · 007)
+    # 세트한 통상 마법      자기 **메인 페이즈**만. 세트해도 상대 턴에는 못 쓴다
+    #                     (RULE-SPELLTRAP-012: "Setting them does not allow
+    #                     you to use them on your opponent's turn")
+    # 세트한 속공 마법      **상대 턴에도 쓴다** (RULE-SPELLTRAP-007: "You can
+    #                     also activate them during your opponent's turn if
+    #                     you Set the card face-down first") → 요구를 **걸지
+    #                     않는다.** 걸면 규칙이 금지한다는 거짓이 된다
+    # ==================  =============================================
+    #
+    # 세트한 턴 제약은 여기서 보지 않는다 — 그 사실이 관측에 없으므로
+    # ``ActivationTimingChecker`` 가 흐름 계층에서 받아 본다 (체인과 같다).
+    requirements = []
+    if not (set_card and quick_play):
+        requirements.append(
+            Requirement(
+                IsTurnPlayer(PlayerRef.CONTROLLER),
+                ValidationCode.NOT_TURN_PLAYER,
+                "자신의 턴이 아닙니다 (세트한 통상 마법도 자기 메인 페이즈에만 "
+                "발동합니다 — 세트는 상대 턴의 발동을 허락하지 않습니다)."
+                if set_card
+                else "자신의 턴이 아닙니다 (패의 마법은 자기 턴에 발동합니다 — "
+                "상대 턴에 쓰려면 세트가 앞서야 합니다).",
+            )
         )
-    ]
 
     # **페이즈는 둘이 다르다.**
     #
@@ -1177,21 +1191,18 @@ _OUT_OF_SCOPE_TYPES: tuple[tuple[str, str], ...] = (
 )
 
 
-#: 세트된 속공 마법 · 함정의 발동에 **없는** 규칙 계층.
-#:
-#: ``RULE-SPELLTRAP-007`` 의 두 번째 절이 요구한다 — "You can also activate
-#: them during your opponent's turn **if you Set the card face-down first**,
-#: but then you **cannot activate the card in the same turn you Set it**."
-#:
-#: 그 "세트한 턴" 을 세는 자리가 엔진에 없다 —
-#: ``engine/activation_timing.py`` 의 ``UNRESOLVED_TIMING_RULES`` 가 "세트한
-#: 턴의 함정 발동 제약" 을 **보지 않는다**고 적어 두었다. 세지 못하는 제약을
-#: 통과시키면 "세트한 턴에 발동할 수 있다" 는 거짓이 되므로, 세트된 카드의
-#: 발동은 ``UNKNOWN`` 으로 남긴다.
-SET_ACTIVATION_MISSING = (
-    "set-card-activation-timing (세트한 턴에는 발동할 수 없다 — "
-    "RULE-SPELLTRAP-007 · 009. 세트한 턴을 세는 자리가 없다)"
-)
+# ``SET_ACTIVATION_MISSING`` 이 여기 있었다 — **지웠다** (Phase 3-E-15).
+#
+# 그 문자열이 말한 것은 "세트한 턴을 세는 자리가 없다" 였고, 지금은 있다.
+# ``GameState.rule_uses`` 가 ``(턴, 플레이어, instance_id, set_spell_trap)``
+# 으로 적고, ``ActivationTimingChecker`` 가 ``ActivationTiming.set_this_turn``
+# 으로 받아 판정한다 (``engine/activation_timing.py`` 의 ``SET_TURN_MISSING``
+# 이 그 값을 받지 못했을 때의 자리다).
+#
+# 세트한 **함정**은 여전히 범위 밖이지만 이유가 다르다 — 발동 타이밍 계층
+# 자체가 더 넓게 비어 있고 (유발 · 응답 타이밍), 그것은
+# ``_OUT_OF_SCOPE_TYPES`` 의 ``TRAP`` 항목이 말한다. 지우지 않고 남겨 두면
+# 두 이유가 한 문자열에 섞인다.
 
 
 def activation_is_quick_play(view, context, instance) -> bool:
@@ -1220,7 +1231,7 @@ def activation_is_set_card(view, context, instance) -> bool:
         return False
     target = instance if instance is not None else context.source
     card = view.find(target) if target is not None else None
-    return _is_set_normal_spell(card, definition, set(definition.type_names))
+    return _is_set_spell(card, definition, set(definition.type_names))
 
 
 def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], ...]:
@@ -1259,12 +1270,7 @@ def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], 
     card = view.find(target) if target is not None else None
     if card is None or card.zone is not Zone.HAND:
         where = card.zone.value if card is not None else "?"
-        # **세트된 속공 마법은 다른 이유로 범위 밖이다** (Phase 3-E-12).
-        # 필드에서의 발동 자체를 모르는 것이 아니라, ``RULE-SPELLTRAP-007``
-        # 이 요구하는 "세트한 턴" 제약을 셀 자리가 없다.
-        if "QUICKPLAY" in names and card is not None and card.zone is Zone.SZONE:
-            return (("세트한 속공 마법의 발동이다", SET_ACTIVATION_MISSING),)
-        # **세트된 통상 마법은 범위 안이다** (Phase 3-E-14).
+        # **세트된 통상 마법과 속공 마법이 범위 안이다** (Phase 3-E-14 · 15).
         #
         #     RULE-SPELLTRAP-012 — "Spell Cards can be activated during the
         #     Main Phases **even in the same turn that you Set them** (except
@@ -1277,7 +1283,7 @@ def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], 
         # 통상 마법과 **판정에 필요한 정보가 똑같다.** 속공 마법과 함정이
         # ``UNKNOWN`` 으로 남는 것은 그 둘만 "세트한 턴" 을 요구하기 때문이다
         # (RULE-SPELLTRAP-007 · 009).
-        if _is_set_normal_spell(card, definition, names):
+        if _is_set_spell(card, definition, names):
             return ()
         return (
             (
@@ -1289,38 +1295,50 @@ def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], 
     return ()
 
 
-#: :func:`_is_set_normal_spell` 이 **받지 않는** 아이콘들.
+#: :func:`_is_set_spell` 이 **받지 않는** 아이콘들.
 #:
-#: ``RULE-SPELLTRAP-012`` 가 괄호로 하나를 직접 뺀다 — "(**except for
-#: Quick-Play Spell Cards**)". 나머지는 발동 뒤 필드에 남거나 절차가 앞서므로
-#: (RULE-SPELLTRAP-003 · 004 · 005 · 006) 해결 뒤 묘지로 가는 이 경로와 모양이
-#: 다르다.
-_NOT_A_SET_NORMAL_SPELL: frozenset[str] = frozenset(
-    {"QUICKPLAY", "CONTINUOUS", "EQUIP", "FIELD", "RITUAL", "COUNTER", "TRAP"}
+#: 발동 뒤 필드에 남거나 절차가 앞서는 것들이다 (RULE-SPELLTRAP-003 · 004 ·
+#: 005 · 006) — 해결 뒤 묘지로 가는 이 경로와 모양이 다르다. ``TRAP`` 과
+#: ``COUNTER`` 는 발동 타이밍 계층 자체가 더 넓게 비어 있다.
+#:
+#: **``QUICKPLAY`` 는 여기 없다** (Phase 3-E-15). 세트한 속공 마법은 세트한
+#: 턴만 지나면 발동할 수 있고 (RULE-SPELLTRAP-007), 그 턴을 이제 셀 수 있다.
+_NOT_A_SET_SPELL: frozenset[str] = frozenset(
+    {"CONTINUOUS", "EQUIP", "FIELD", "RITUAL", "COUNTER", "TRAP"}
 )
 
 
-def _is_set_normal_spell(card, definition, names) -> bool:
+def _is_set_spell(card, definition, names) -> bool:
     """
-    **세트해 둔 통상 마법**인가 (Phase 3-E-14 · RULE-SPELLTRAP-012).
+    **세트해 둔 마법**인가 — 통상 또는 속공 (Phase 3-E-14 · 15).
 
     넷을 모두 만족해야 한다. 하나라도 빠지면 **다른 조항**이 걸리는 자리다.
 
     - 마법 & 함정 존에 있다
     - **뒷면**이다 (앞면이면 이미 발동했거나 지속 · 필드 마법이다)
     - 마법이다
-    - 아이콘이 :data:`_NOT_A_SET_NORMAL_SPELL` 에 없다
+    - 아이콘이 :data:`_NOT_A_SET_SPELL` 에 없다
+
+    **두 종류가 같은 범위에 있고 규칙은 다르다.** 그 차이는 여기서 적지 않는다.
+
+    ==============  ===================================================
+    통상 마법        RULE-SPELLTRAP-012 — 세트한 **같은 턴**에도 자기 메인
+                    페이즈에 발동할 수 있다. 상대 턴에는 못 한다
+    속공 마법        RULE-SPELLTRAP-007 — 세트한 턴에는 **못 하고**, 그
+                    뒤로는 자기 턴의 아무 페이즈 · 상대 턴에도 할 수 있다
+    ==============  ===================================================
+
+    위 차이는 두 자리가 나눠 본다 — 턴 플레이어 요구는 :func:`_activate_effect`
+    가, "세트한 턴" 은 :class:`~engine.activation_timing.ActivationTimingChecker`
+    가 본다 (그 사실이 관측에 없으므로 흐름 계층이 값으로 넘긴다).
 
     **마지막 줄을 앞선 관문에 맡기지 않는다.** ``_activation_out_of_scope`` 가
     함정과 지속 · 장착 · 필드 · 의식을 이미 걸러내므로 여기서 다시 보는 것은
-    결과를 바꾸지 않는다. 그래도 적어 두는 이유: 이 술어가 "세트된 카드" 의
+    결과를 바꾸지 않는다. 그래도 적어 두는 이유: 이 술어가 "세트된 마법" 의
     **정의**이고, 느슨해지면 ``ZoneHasFreeSlot`` 면제와 ``IsTurnPlayer``
     문장이 **엉뚱한 카드에** 붙는다. 그때 나오는 것은 틀린 이유 문장이고,
-    그것은 규칙을 거짓으로 적는 것이다.
-
-    실제로 느슨했다 — 처음 적을 때 속공 마법을 걸러내지 않아 세트된 속공
-    마법에도 ``True`` 를 냈다. 앞선 관문이 가려서 어떤 테스트도 그것을 잡지
-    못했고, ``test_15`` 가 이 술어를 직접 재서 잡았다.
+    그것은 규칙을 거짓으로 적는 것이다 (Phase 3-E-14 의 고의 위반 B 가 실제로
+    그 느슨함을 찾아냈다).
     """
     return (
         card is not None
@@ -1328,7 +1346,7 @@ def _is_set_normal_spell(card, definition, names) -> bool:
         and not card.face_up
         and definition is not None
         and definition.is_spell
-        and not (set(names) & _NOT_A_SET_NORMAL_SPELL)
+        and not (set(names) & _NOT_A_SET_SPELL)
     )
 
 

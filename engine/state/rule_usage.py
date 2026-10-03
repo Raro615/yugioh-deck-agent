@@ -1,7 +1,8 @@
 """
-규칙이 정한 **1턴 1회**의 기록.
+규칙이 **턴 단위로 묻는** 것의 기록.
 
     "이 턴에 일반 소환을 했는가"
+    "이 카드를 이 턴에 세웠는가"            (Phase 3-E-15)
 
 카드 효과의 "1턴에 1번" 과 **다른 것**이다. 후자는
 :class:`~engine.state.use_registry.UseRegistry` 가 세고, 그쪽 키는 카드 ·
@@ -20,6 +21,9 @@
 ``ATTACK``          **카드마다** 하나씩 갖는다 — "Each face-up Attack
                     Position monster you control is allowed 1 attack per
                     turn" (RULE-BATTLE-002).
+``SET_SPELL_TRAP``  **횟수가 아니라 턴**을 묻는다. 세트는 몇 번이든 할 수
+                    있지만, 세트한 **그 턴**에는 발동할 수 없는 카드가 있다
+                    (RULE-SPELLTRAP-007 · 009). 카드마다 센다.
 
 그래서 표가 둘이다. 하나로 합치면 몬스터 하나가 공격한 것이 **다른
 몬스터의 공격권까지** 쓴 것이 된다. 같은 이름의 두 장도 서로 다른 권리를
@@ -42,11 +46,26 @@ from enum import Enum
 
 class RuleActionKind(str, Enum):
     """
-    규칙이 횟수를 정해 둔 행위.
+    규칙이 **턴 단위로 묻는** 행위.
 
     **소환권은 일반 소환과 세트가 나눠 쓴다** (RULE-SUMMON-009: "You can only
     Normal Summon OR Normal Set once per turn"). 그래서 세트가 구현되면 같은
     이름으로 기록한다 — 이름을 나누면 한 턴에 둘 다 할 수 있게 된다.
+
+    **"횟수를 정해 둔" 에서 "턴 단위로 묻는" 으로 넓혔다** (Phase 3-E-15)
+    -----------------------------------------------------------------
+    처음 둘(``NORMAL_SUMMON`` · ``ATTACK``)은 규칙이 **횟수를 1 로 정해 둔**
+    권리였다. 셋째(``SET_SPELL_TRAP``)는 다르다 — 마법 · 함정 세트는 **횟수
+    제한이 없다** (칸이 있는 만큼 할 수 있다). 그런데도 같은 표에 적는 이유는
+    규칙이 그 행위에 대해 **턴을 묻기** 때문이다.
+
+        RULE-SPELLTRAP-009 — "You cannot activate a Trap in the same turn that
+        you Set it, but you can activate it at any time after that—starting
+        from the beginning of the next turn."
+
+    즉 세는 것은 **횟수가 아니라 턴**이다. 이 표의 키가 이미
+    ``(턴 번호, …)`` 이므로 담을 자리가 정확히 여기다. 이 구분을 적어 두지
+    않으면 "세트는 1턴 1회다" 라는 거짓이 이 enum 의 이름에서 읽힌다.
     """
 
     NORMAL_SUMMON = "normal_summon"
@@ -58,13 +77,33 @@ class RuleActionKind(str, Enum):
     플레이어별 표에 넣지 않는다 — 넣으면 한 몬스터가 공격한 것이 다른
     몬스터의 공격권까지 쓴 것이 된다.
     """
+    SET_SPELL_TRAP = "set_spell_trap"
+    """
+    마법 · 함정을 세트했다 (Phase 3-E-15).
+
+    **횟수를 세기 위한 것이 아니다** — "언제 세웠는가" 를 알기 위한 것이다.
+    세트한 턴에는 발동할 수 없는 카드가 있고 (RULE-SPELLTRAP-007 · 009),
+    그 턴을 적어 둔 자리가 엔진에 없었다 (``SET_ACTIVATION_MISSING``).
+
+    **카드마다** 센다. 플레이어별 표에 넣으면 "이 플레이어가 이번 턴에 무언가
+    세웠다" 까지만 알 수 있고, 같은 턴에 두 장을 세운 뒤 한 장만 발동한
+    상황에서 남은 장이 언제 세워졌는지 말할 수 없다. 같은 이름의 두 장도
+    서로 다른 턴에 세워질 수 있으므로 키는 ``instance_id`` 다
+    (``ATTACK`` 과 같은 이유).
+
+    **몬스터 세트는 여기 적지 않는다.** 그쪽은 소환권을 쓰므로
+    ``NORMAL_SUMMON`` 으로 적히고 (RULE-SUMMON-009), 뒷면 수비 표시 몬스터의
+    발동에는 "세트한 턴" 제약이 없다 — 뒤집기는 발동이 아니다.
+    """
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
         return self.value
 
 
 #: 카드마다 세는 행위들. :meth:`RuleUsageRegistry.record` 가 이것을 거부한다.
-PER_CARD_ACTIONS: frozenset[RuleActionKind] = frozenset({RuleActionKind.ATTACK})
+PER_CARD_ACTIONS: frozenset[RuleActionKind] = frozenset(
+    {RuleActionKind.ATTACK, RuleActionKind.SET_SPELL_TRAP}
+)
 
 #: ``(turn_number, player, action.value)``
 RuleUseKey = tuple[int, int, str]

@@ -63,6 +63,7 @@ from engine.game_state_view import GameStateView
 from engine.priority import PriorityState
 from engine.response import ResponseLoop, ResponseState
 from engine.state.game_state import DEFAULT_LIFE_POINTS, DuelResult, GameState
+from engine.state.rule_usage import RuleActionKind
 from engine.target_bridge import (
     TargetBridgeError,
     selections_for,
@@ -494,6 +495,35 @@ class Duel:
                     allowed.append(candidate)
         return allowed
 
+    def _set_this_turn(self, action: PlayerAction) -> "bool | None":
+        """
+        발동하려는 카드를 **이 턴에 세웠는가** (Phase 3-E-15).
+
+        ``None`` 은 **"모른다"** 다 — 가리킨 카드를 판에서 찾지 못했을 때다.
+        관문은 그것을 ``UNKNOWN`` 으로 받고, ``UNKNOWN`` 은 허가가 아니다.
+
+        **왜 이 자리가 읽는가.** 이 사실은 ``GameState.rule_uses`` 에 있고
+        관측(``GameStateView``)에는 **없다** — 상대가 언제 세웠는지는 공개
+        정보가 아니기 때문이다 (Phase 3-E-15 §12). 그래서 검증기도 타이밍
+        관문도 스스로 알 수 없고, **판을 들고 있는 이쪽**이 읽어서 값으로
+        넘긴다. 체인과 우선권을 같은 방식으로 넘기는 것과 같은 자리다
+        (ADR-007).
+
+        **읽기만 한다.** 후보 생성도 타이밍 판정도 기록을 바꾸지 않는다 —
+        쓰는 곳은 ``SetExecutor.apply`` 하나다.
+        """
+        if action.source is None:
+            return None
+        instance = self.state.find_instance(action.source)
+        if instance is None:
+            return None
+        return self.state.rule_uses.used_card(
+            self.state.turn.turn_number,
+            instance.controller,
+            action.source,
+            RuleActionKind.SET_SPELL_TRAP,
+        )
+
     def _activation_sources(self, seat: int):
         """
         발동이 **출발할 수 있는 자리들** (Phase 3-E-14).
@@ -562,7 +592,12 @@ class Duel:
             return verdict
         # 스펠 스피드는 체인을 보고, 체인은 ``GameState`` 밖에 산다 (ADR-007).
         timed = ActivationTimingChecker(validator.view).check(
-            ActivationTiming(self.chain, self.priority), action
+            ActivationTiming(
+                self.chain,
+                self.priority,
+                set_this_turn=self._set_this_turn(action),
+            ),
+            action,
         )
         if timed.validity is not ActionValidity.VALID:
             return timed

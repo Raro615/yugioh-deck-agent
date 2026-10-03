@@ -29,6 +29,14 @@ Phase 3-E-14 — 세트해 둔 카드의 발동 (``SET_ACTIVATION_MISSING`` 감�
 닫은 것은 그 옆에 있던, 이름이 붙어 있지 않던 자리다 — 조항이 **같은 턴을
 명시적으로 허락**하는 통상 마법을 엔진이 "모른다" 고 말하고 있었다.
 
+**Phase 3-E-15 가 그 다음 칸을 채웠다.** 세트한 턴이
+``GameState.rule_uses`` 에 ``(턴, 플레이어, instance_id, set_spell_trap)`` 으로
+적히고, ``ActivationTimingChecker`` 가 ``ActivationTiming.set_this_turn`` 으로
+받아 판정한다. 그래서 위 표의 **둘째 줄(세트한 속공 마법)이 열렸다** — 같은
+턴이면 ``INVALID``, 다음 턴부터 ``VALID`` 다. 셋째 줄(함정)은 그대로 남아
+있고, 이 파일의 ``test_10`` 이 그 이유가 "세트한 턴" 이 **아님**을 잰다.
+세트한 턴 자체의 기록과 판정은 ``test_set_turn_record.py`` 가 잰다.
+
 RULE ≠ TIMING ≠ EXECUTION
 -------------------------
 세 층을 따로 쟀고, 세트된 카드가 후보가 되지 않는 이유가 **층마다 달랐다.**
@@ -54,6 +62,7 @@ from engine.ids import EffectRef
 from engine.priority import PriorityState, ResponseWindow
 from engine.spell_activation import SpellActivationError, SpellRevealed
 from engine.state.game_state import GameState
+from engine.state.rule_usage import RuleActionKind
 from engine.validation import ActionValidity, ValidationCode
 from engine.vocabulary import Phase, Position, Zone
 
@@ -123,23 +132,25 @@ def szone(duel, seat=P0):
 
 
 @pytest.mark.real_card
-def test_01_the_set_state_is_preserved_but_the_set_turn_is_not(repository):
+def test_01_the_set_state_and_the_set_turn_are_both_recorded(repository):
     """
-    **§7 · §8 — 무엇이 있고 무엇이 없는지 실행으로 적는다.**
+    **§7 · §8 — 무엇이 있는지 실행으로 적는다.**
 
-    있는 것: 존 · 표시 형식 · 직전 상태. 없는 것: **세트한 턴.**
+    **이 시험의 주장이 뒤집혔다** (Phase 3-E-15)
+    -------------------------------------------
+    처음 적을 때는 **"세트한 턴은 적혀 있지 않다"** 를 고정했다. 그것이 당시의
+    사실이었고, 그 한 줄이 다음 단계를 가리켰다 — 설명에 "다음 단계가 무엇인지가
+    이 한 줄에 달려 있다" 고 적어 두었다.
 
-    ``RuleUsageRegistry`` 는 키에 턴 번호를 담으므로 (``(turn, player,
-    action)``) 세트를 적어 두기만 하면 세트한 턴을 셀 수 있는 **모양은 이미
-    있다.** 그런데 마법 · 함정 세트는 거기에 **아무것도 적지 않는다** —
-    소환권을 쓰는 몬스터 세트만 적는다 (RULE-SUMMON-009).
+    Phase 3-E-15 가 그 단계를 밟았다. ``RuleUsageRegistry`` 는 키에 턴 번호를
+    담고 있었으므로 (``(턴, 플레이어, instance_id, 행위)``) 담을 자리가 이미
+    있었고, 쓰는 쪽만 없었다. 이제 ``SetExecutor.apply`` 가 적는다.
 
-    그래서 ``SET_ACTIVATION_MISSING`` 은 "판정 계층이 없다" 가 아니라
-    **"기록이 없다"** 다. 이 사실을 여기 고정해 둔다 — 억지로 새 필드를 만들지
-    않았고, 다음 단계가 무엇인지가 이 한 줄에 달려 있다.
+    그래서 주장을 **반대 방향으로 강화한다** — 약화가 아니다. 존 · 표시 형식 ·
+    직전 상태에 더해 **세트한 턴까지** 적혀 있고, 그것이 카드마다 따로다.
     """
     duel = duel_at(repository, mine=(POT_OF_GREED,))
-    before = dict(duel.state.rule_uses.card_counts)
+    turn = duel.state.turn.turn_number
     instance = set_down(duel, P0, POT_OF_GREED)
 
     card = duel.state.find_instance(instance)
@@ -148,10 +159,15 @@ def test_01_the_set_state_is_preserved_but_the_set_turn_is_not(repository):
     assert card.is_faceup is False
     assert card.previous.location is Zone.HAND
 
-    # 세트한 턴을 적은 곳이 **없다.**
-    assert duel.state.rule_uses.card_counts == before
-    assert duel.state.rule_uses.counts == {}
+    # 세트한 턴이 **카드마다** 적혀 있다.
+    uses = duel.state.rule_uses
+    assert uses.used_card(turn, P0, instance, RuleActionKind.SET_SPELL_TRAP)
+    assert not uses.used_card(turn + 1, P0, instance, RuleActionKind.SET_SPELL_TRAP)
+    # 플레이어별 표에는 적지 않는다 — 세트는 횟수 제한이 없다.
+    assert uses.counts == {}
+    # 카드 자신에게는 새 필드를 만들지 않았다.
     assert card.status_flags == 0
+    assert not hasattr(card, "set_turn")
 
 
 # ======================================================================
@@ -182,7 +198,7 @@ def test_02_the_action_space_was_the_omission(repository):
 
 
 @pytest.mark.real_card
-def test_03_the_timing_gate_was_never_the_blocker(repository):
+def test_03_the_timing_gate_now_reads_the_set_turn_it_is_given(repository):
     """
     **§12 — ``ActivationTimingChecker`` 는 세트된 카드도 판정한다.**
 
@@ -193,19 +209,62 @@ def test_03_the_timing_gate_was_never_the_blocker(repository):
 
     그리고 자기가 **보지 않은 것**을 숨기지 않는다 — 이유에 "다른 타이밍 규칙은
     판정하지 않았습니다" 가 들어 있다.
+
+    **한 가지가 늘었다** (Phase 3-E-15)
+    ----------------------------------
+    이 관문은 이제 **세트한 턴도 본다** — 단, 스스로 알아내는 것이 아니라
+    ``ActivationTiming.set_this_turn`` 으로 **받아서** 본다. 그 사실이 관측에
+    없기 때문이다.
+
+    그래서 같은 카드가 세 가지 답을 낸다.
+
+    ==========================  ==========================================
+    ``set_this_turn`` 을 안 줌    ``UNKNOWN`` — 모르는 것을 통과시키지 않는다
+    ``set_this_turn=True``      ``INVALID`` — 세트한 턴이다 (스펠 스피드 2 · 3)
+    ``set_this_turn=False``     ``VALID`` — 스펠 스피드만 남는다
+    ==========================  ==========================================
+
+    스펠 스피드 1(세트한 통상 마법)은 **셋 다 ``VALID``** 다 —
+    RULE-SPELLTRAP-012 가 같은 턴을 허락하므로 이 규칙의 자리가 아니다.
     """
     duel = duel_at(repository, mine=(POT_OF_GREED, RELOAD, GIFT_OF_GREED, LUSTER_DRAGON))
-    checker = ActivationTimingChecker(duel.view(P0))
+    instances = {
+        card_id: set_down(duel, P0, card_id)
+        for card_id in (POT_OF_GREED, RELOAD, GIFT_OF_GREED)
+    }
 
-    for card_id in (POT_OF_GREED, RELOAD, GIFT_OF_GREED):
-        instance = set_down(duel, P0, card_id)
+    # 스펠 스피드 1 — 세트한 턴 제약이 걸리지 않는다 (RULE-SPELLTRAP-012).
+    for given in (None, True, False):
         verdict = checker_for(duel, P0).check(
-            ActivationTiming(duel.chain, duel.priority),
-            hand_made(P0, instance, card_id),
+            ActivationTiming(duel.chain, duel.priority, set_this_turn=given),
+            hand_made(P0, instances[POT_OF_GREED], POT_OF_GREED),
         )
-        assert verdict.validity is ActionValidity.VALID, (card_id, verdict.reason)
+        assert verdict.validity is ActionValidity.VALID, (given, verdict.reason)
         assert "판정하지 않았습니다" in verdict.reason
-    assert checker is not None  # 관문은 관측만 읽는다 — 판을 바꾸지 않았다
+
+    # 스펠 스피드 2 — 세트한 턴을 받아야 판정한다.
+    for card_id in (RELOAD, GIFT_OF_GREED):
+        action = hand_made(P0, instances[card_id], card_id)
+        unknown = checker_for(duel, P0).check(
+            ActivationTiming(duel.chain, duel.priority), action
+        )
+        assert unknown.validity is ActionValidity.UNKNOWN, card_id
+        assert "set-turn" in (unknown.missing_rule or ""), card_id
+
+        refused = checker_for(duel, P0).check(
+            ActivationTiming(duel.chain, duel.priority, set_this_turn=True), action
+        )
+        assert refused.validity is ActionValidity.INVALID, card_id
+        assert refused.code is ValidationCode.SET_THIS_TURN, card_id
+
+        allowed = checker_for(duel, P0).check(
+            ActivationTiming(duel.chain, duel.priority, set_this_turn=False), action
+        )
+        assert allowed.validity is ActionValidity.VALID, (card_id, allowed.reason)
+
+    # 관문은 관측만 읽는다 — 판을 바꾸지 않았다.
+    assert len(szone(duel)) == 3
+    assert all(c.position is Position.FACEDOWN for c in szone(duel))
 
 
 def checker_for(duel, seat):
@@ -417,12 +476,10 @@ def test_09_a_full_spell_trap_zone_does_not_block_its_own_card(repository):
 @pytest.mark.parametrize(
     "card_id,label,missing",
     [
-        # 세트한 속공 마법은 **세트한 턴 하나만** 모자라다 —
-        # ``SET_ACTIVATION_MISSING`` 이 가리키는 바로 그 자리다.
-        (RELOAD, "세트한 속공 마법 (RULE-SPELLTRAP-007)", "세트한 턴"),
         # 함정은 **더 넓은 이유**로 범위 밖이다. 세트한 턴 제약 말고도 발동
-        # 타이밍 계층 자체가 없다 (유발 · 응답 타이밍). 둘을 같은 이유로 적으면
-        # "세트한 턴만 세면 함정이 열린다" 는 거짓이 된다.
+        # 타이밍 계층 자체가 없다 (유발 · 응답 타이밍). 세트한 턴을 세게 된
+        # 뒤에도 이것은 그대로다 — 둘을 같은 이유로 적으면 "세트한 턴만 세면
+        # 함정이 열린다" 는 거짓이 된다.
         (GIFT_OF_GREED, "세트한 함정 (RULE-SPELLTRAP-009)", "함정"),
     ],
 )
@@ -432,13 +489,25 @@ def test_10_unknown_is_not_promoted_for_cards_that_need_the_set_turn(
     """
     **§12 · §22-6 — ``UNKNOWN`` 을 허가로 바꾸지 않았다.**
 
-    이 둘만 "세트한 턴" 을 요구한다. 세는 자리가 없으므로 ``UNKNOWN`` 이고,
     ``UNKNOWN`` 은 허가가 아니므로 후보가 되지 않는다. **``INVALID`` 도
     아니다** — 실제 규칙에서는 다음 턴부터 적법하기 때문이다.
 
     그리고 **막힌 이유가 기록으로 남는다.** 이것이 Phase 3-E-14 전과 다른
     점이다 — 전에는 출발지에서조차 보이지 않아 "왜 없는지" 가 어디에도 적히지
     않았다.
+
+    **세트한 속공 마법이 이 목록에서 빠졌다** (Phase 3-E-15)
+    -----------------------------------------------------
+    처음에는 둘이었다 — 세트한 속공 마법과 세트한 함정. 둘을 **다른 이유**로
+    적어 둔 것이 그때의 핵심이었고, 그 구분이 지금 값을 했다.
+
+    속공 마법은 모자란 것이 **"세트한 턴" 하나뿐**이었고 그것이 채워졌으므로
+    (``GameState.rule_uses``) 이제 판정된다 — 같은 턴이면 ``INVALID``, 다음
+    턴부터 ``VALID`` 다 (``tests/engine/test_set_turn_record.py``).
+
+    함정은 모자란 것이 **더 많았다.** 그래서 여기 남아 있고, 남아 있는 이유가
+    "세트한 턴" 이 아니라 ``함정 · 몬스터 효과의 발동 타이밍`` 임을 아래
+    단정이 그대로 잰다.
     """
     duel = duel_at(repository, mine=(card_id, LUSTER_DRAGON))
     instance = set_down(duel, P0, card_id)
@@ -590,7 +659,7 @@ def test_14_no_new_action_kind_and_no_new_engine():
 
 
 @pytest.mark.real_card
-def test_15_only_a_face_down_normal_spell_counts_as_a_set_card(repository):
+def test_15_only_a_face_down_spell_counts_as_a_set_card(repository):
     """
     **§13 — "세트된 카드" 의 뜻을 한 자리에서 고정한다.**
 
@@ -607,7 +676,7 @@ def test_15_only_a_face_down_normal_spell_counts_as_a_set_card(repository):
     카드 종류를 이름으로 적지 않는다 — 정의와 판 상태만 읽는다 (§13).
     """
     from engine.action_validation import activation_is_set_card
-    from engine.condition.context import ConditionContext
+    from engine.condition.context import ConditionContext  # noqa: F401
 
     duel = duel_at(
         repository,
@@ -629,10 +698,22 @@ def test_15_only_a_face_down_normal_spell_counts_as_a_set_card(repository):
 
     assert is_set_card(set_spell) is True
 
-    # 세트된 **속공 마법**은 아니다 — RULE-SPELLTRAP-007 이 세트한 턴을
-    # 요구하므로 다른 조항의 자리다.
-    assert is_set_card(set_quick) is False
-    # 세트된 **함정**도 아니다 — RULE-SPELLTRAP-009 가 같은 것을 요구한다.
+    # 세트된 **속공 마법도 세트된 마법이다** (Phase 3-E-15). 처음에는 ``False``
+    # 를 기대했고, 근거는 "RULE-SPELLTRAP-007 이 세트한 턴을 요구하므로 다른
+    # 조항의 자리다" 였다. 그 가정이 둘을 섞었다 —
+    #
+    #   "세트된 마법인가"        자리와 표시 형식의 문제다. 발동이 **놓는 것이
+    #                           아니라 돌리는 것**이므로 빈 칸을 요구하지 않는다
+    #   "세트한 턴이 걸리는가"   **조항**의 문제다. 통상 마법은 안 걸리고
+    #                           속공 마법은 걸린다
+    #
+    # 앞의 것은 둘 다 참이고 뒤의 것만 다르다. 한 술어로 둘을 다 적으면 세트한
+    # 속공 마법이 ``ZoneHasFreeSlot`` 을 지게 되고, 마법 & 함정 존이 꽉 찬 판에서
+    # **자기 칸에 있는 카드**를 발동할 수 없게 된다 (``test_09`` 가 그것을 잰다).
+    #
+    # 그래서 뒤의 판정은 타이밍 관문으로 옮겼다 (``test_03``).
+    assert is_set_card(set_quick) is True
+    # 세트된 **함정**은 아니다 — 발동 타이밍 계층 자체가 더 넓게 비어 있다.
     assert is_set_card(set_trap) is False
     # 패에 있는 통상 마법은 세트된 카드가 아니다 (옮겨 놓아야 한다).
     assert is_set_card(hand_spell) is False

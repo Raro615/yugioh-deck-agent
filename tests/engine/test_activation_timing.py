@@ -759,12 +759,22 @@ def test_f_no_second_timing_system_was_built():
 
 def test_f_the_context_stores_nothing_twice():
     """
-    §4 — ``ActivationTiming`` 은 세 값을 **참조로만** 담는다. 페이즈 ·
-    턴 플레이어는 관측이 이미 들고 있으므로 여기 없다.
+    §4 — ``ActivationTiming`` 은 **관측에 이미 있는 것을 다시 담지 않는다.**
+    페이즈 · 턴 플레이어는 ``GameStateView`` 가 들고 있으므로 여기 없다.
+
+    **네 번째 값이 늘었다** (Phase 3-E-15)
+    -------------------------------------
+    ``set_this_turn`` 은 **관측에 없는** 사실이다 — 상대가 언제 세웠는지는
+    공개 정보가 아니므로 ``GameStateView`` 에 넣지 않았고, 넣지 않기로 한 것이
+    그 Phase 의 가장 중요한 결정이었다. 그래서 체인과 우선권처럼 **판을 들고
+    있는 쪽이** 값으로 넘긴다.
+
+    즉 이 시험이 지키는 주장은 "세 개다" 가 아니라 **"관측과 겹치지
+    않는다"** 였고, 아래 두 번째 단정이 그것을 그대로 잰다.
     """
     fields = set(ActivationTiming.__dataclass_fields__)
 
-    assert fields == {"chain", "priority", "point"}
+    assert fields == {"chain", "priority", "point", "set_this_turn"}
     for copied in ("phase", "turn_player", "holder", "actor"):
         assert copied not in fields
 
