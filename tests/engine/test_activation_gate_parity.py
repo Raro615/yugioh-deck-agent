@@ -183,9 +183,15 @@ def test_02_apply_no_longer_hands_itself_a_verdict():
     source = inspect.getsource(Duel._apply_activation)
     assert "legal_actions 가 허가한 발동입니다" not in source
     assert "authorization=gate" in source
-    # 그리고 관문은 배치보다 **앞**에 있다.
-    assert source.index("_activation_gate(") < source.index("_placement.place(")
-    assert source.index("_activator.activate(") < source.index("_placement.place(")
+    # 그리고 관문은 **앞면으로 만드는 걸음**보다 앞에 있다.
+    #
+    # 읽는 이름이 ``_placement.place(`` 에서 ``_place_activated(`` 로 바뀌었다
+    # (Phase 3-E-14). 발동의 출발지가 패 하나가 아니게 되었기 때문이다 —
+    # 세트해 둔 통상 마법은 옮기지 않고 그 자리에서 앞면으로 돌린다
+    # (RULE-SPELLTRAP-012). **주장은 그대로다**: 판을 바꾸는 걸음이 관문 뒤에
+    # 있다.
+    assert source.index("_activation_gate(") < source.index("_place_activated(")
+    assert source.index("_activator.activate(") < source.index("_place_activated(")
 
 
 # ======================================================================

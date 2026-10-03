@@ -224,22 +224,38 @@ def test_03_the_response_loop_is_now_imported_by_the_duel_and_only_the_duel():
 
 
 @pytest.mark.real_card
-def test_04_the_window_is_closed_at_every_decision_of_a_real_duel(repository):
+def test_04_to_act_is_the_window_holder_or_the_turn_player(repository):
     """
-    **실제 대국 전체에서 기회가 한 번도 열리지 않는다.**
+    **``to_act`` 는 창을 쥔 자리이고, 창이 없으면 턴 플레이어다.**
 
-    그래서 ``to_act`` 는 언제나 턴 플레이어이고 (Phase 3-E-9 의 1053/1053 과
-    같은 사실), ``legal_actions`` 의 우선권 분기는 **한쪽만** 돈다.
+    처음 적을 때의 주장은 **"실제 대국 전체에서 기회가 한 번도 열리지
+    않는다"** 였다 (Phase 3-E-10 의 감사 사실). 그 가정은 **Phase 3-E-11 부터
+    틀렸다** — 발동이 상대에게 응답 창을 열기 때문이다. 그런데도 이 시험이
+    통과하고 있었던 이유는 ``play`` 가 밟는 궤적에서 발동이 한 번도 일어나지
+    않았기 때문이다. 즉 **주장이 아니라 궤적이 시험을 지켜 주고 있었다.**
+
+    Phase 3-E-14 가 세트해 둔 통상 마법의 발동을 후보로 만들면서
+    (RULE-SPELLTRAP-012) 그 궤적이 실제로 발동에 닿았고, 가정이 드러났다.
+
+    그래서 **지금 참인 더 강한 불변식**으로 바꾼다 — 창이 열렸든 닫혔든
+    ``to_act`` 와 ``legal_actions`` 의 자리가 어긋나지 않는다. 그리고 **두
+    분기가 모두 실제로 돌았다**는 것까지 센다 (앞의 시험은 한쪽만 돌았다).
     """
-    checked = 0
+    closed = opened = 0
     for duel, legal in play(repository):
-        assert duel.priority.holder is PriorityHolder.NOBODY
-        assert duel.priority.window is ResponseWindow.NONE
-        assert duel.priority.is_open is False
-        assert duel.to_act == duel.turn_player
-        assert legal.seat == duel.turn_player
-        checked += 1
-    assert checked > 100, checked
+        if duel.priority.is_open:
+            assert duel.priority.holder is not PriorityHolder.NOBODY
+            assert duel.priority.window is not ResponseWindow.NONE
+            assert duel.to_act == duel.priority.holder.seat
+            opened += 1
+        else:
+            assert duel.priority.holder is PriorityHolder.NOBODY
+            assert duel.priority.window is ResponseWindow.NONE
+            assert duel.to_act == duel.turn_player
+            closed += 1
+        assert legal.seat == duel.to_act
+    assert closed > 100, closed
+    assert opened > 0, "열린 분기를 한 번도 밟지 않았다 — 궤적이 주장을 가린다"
 
 
 @pytest.mark.real_card
@@ -250,11 +266,28 @@ def test_05_the_opponent_never_receives_a_candidate(repository):
     ``withheld`` 의 ``missing`` 이 "우선권을 여는 규칙 (Phase 2-F)" 이라고
     말한다 — 없는 권한을 허가로 바꾸지 않는다. 이것이 이 공백을 BLOCKER 가
     아니게 만드는 성질이다.
+
+    **"언제나" 가 "창이 닫혀 있는 동안" 으로 좁혀졌다** (Phase 3-E-14)
+    ----------------------------------------------------------------
+    창이 **열려 있을 때**는 반대쪽이 바로 그 창을 쥔 자리일 수 있고, 그러면
+    후보를 받는 것이 옳다 (Phase 3-E-12). 처음 적을 때 그 경우가 없었던 것은
+    ``play`` 의 궤적이 발동에 닿지 않았기 때문이고 (``test_04`` 의 설명과 같은
+    이유), 주장이 아니라 궤적이 시험을 지키고 있었다.
+
+    그래서 창이 닫혀 있는 걸음에서만 "반대쪽은 비어 있다" 를 재고, 열린
+    걸음에서는 **쥔 자리만 받는다**를 재는 쪽으로 바꾼다. 둘 다 "없는 권한을
+    허가로 바꾸지 않는다" 의 같은 얼굴이다.
     """
     checked = 0
+    opened = 0
     for duel, legal in play(repository):
-        other = duel.legal_actions(1 - legal.seat)
+        other_seat = 1 - duel.to_act
+        other = duel.legal_actions(other_seat)
         assert other.allowed == (), other.allowed
+        if duel.priority.is_open:
+            # 창이 열려 있으면 쥔 자리만 받는다 — 반대쪽은 위에서 이미 비었다.
+            opened += 1
+            continue
         passes = [w for w in other.withheld if w.kind is PlayerActionKind.PASS]
         assert len(passes) == 1, other.withheld
         assert "우선권" in passes[0].reason
@@ -262,6 +295,7 @@ def test_05_the_opponent_never_receives_a_candidate(repository):
         assert "우선권" in passes[0].missing
         checked += 1
     assert checked > 100, checked
+    assert opened > 0, "열린 분기를 한 번도 밟지 않았다 — 궤적이 주장을 가린다"
 
 
 @pytest.mark.real_card

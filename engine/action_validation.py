@@ -888,12 +888,21 @@ def _activate_effect(
     # **Set** the card face-down first" 를 요구하므로, 패에 있는 동안은
     # 상대 턴에 쓸 수 없다. 그래서 이것은 ``UNKNOWN`` 이 아니라 **규칙이
     # 금지하는 것**이다.
+    set_card = activation_is_set_card(validator.view, context, action.source)
     requirements = [
         Requirement(
             IsTurnPlayer(PlayerRef.CONTROLLER),
             ValidationCode.NOT_TURN_PLAYER,
-            "자신의 턴이 아닙니다 (패의 마법은 자기 턴에 발동합니다 — 상대 "
-            "턴에 쓰려면 세트가 앞서야 합니다).",
+            # **이유가 둘이다.** 패의 마법은 "세트가 앞서야 한다" 이지만,
+            # 세트해 둔 통상 마법은 세트했어도 **상대 턴에 쓸 수 없다** —
+            # RULE-SPELLTRAP-012 가 "Setting them does not allow you to use
+            # them on your opponent's turn" 이라고 못 박는다. 같은 문장으로
+            # 적으면 뒤쪽에 거짓을 말한다.
+            "자신의 턴이 아닙니다 (세트한 통상 마법도 자기 메인 페이즈에만 "
+            "발동합니다 — 세트는 상대 턴의 발동을 허락하지 않습니다)."
+            if set_card
+            else "자신의 턴이 아닙니다 (패의 마법은 자기 턴에 발동합니다 — "
+            "상대 턴에 쓰려면 세트가 앞서야 합니다).",
         )
     ]
 
@@ -914,16 +923,23 @@ def _activate_effect(
             )
         )
 
-    # 놓을 자리는 둘 다 필요하다 — 속공 마법도 마법이므로 앞면으로 놓고
-    # 해결 뒤 묘지로 간다 (RULE-SPELLTRAP-002).
-    requirements.append(
-        Requirement(
-            ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.SZONE),
-            ValidationCode.ZONE_FULL,
-            "마법 & 함정 존에 빈 칸이 없습니다 (발동한 마법을 놓을 자리가 "
-            "필요합니다).",
+    # 놓을 자리는 **패에서 발동할 때만** 필요하다 — 속공 마법도 마법이므로
+    # 앞면으로 놓고 해결 뒤 묘지로 간다 (RULE-SPELLTRAP-002).
+    #
+    # **세트해 둔 마법에는 걸지 않는다** (Phase 3-E-14). 그 카드는 이미 제
+    # 칸에 있고 발동은 그 자리에서 앞면으로 돌리는 것이므로 (``
+    # NormalSpellPlacement.reveal``), 새 칸이 필요하지 않다. 걸어 두면 마법 &
+    # 함정 존이 꽉 찬 판에서 **자기 칸에 있는 카드를** 발동할 수 없게 되고,
+    # 그것은 규칙이 금지하지 않는 것을 금지한다는 거짓이다.
+    if not set_card:
+        requirements.append(
+            Requirement(
+                ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.SZONE),
+                ValidationCode.ZONE_FULL,
+                "마법 & 함정 존에 빈 칸이 없습니다 (발동한 마법을 놓을 자리가 "
+                "필요합니다).",
+            )
         )
-    )
     return always + tuple(requirements)
 
 
@@ -1192,6 +1208,21 @@ def activation_is_quick_play(view, context, instance) -> bool:
     return "QUICKPLAY" in set(definition.type_names)
 
 
+def activation_is_set_card(view, context, instance) -> bool:
+    """
+    이 발동이 **세트해 둔 카드**의 발동인가 (Phase 3-E-14).
+
+    범위 안의 발동 중 이쪽만 ``ZoneHasFreeSlot(SZONE)`` 을 **지지 않는다** —
+    카드가 이미 그 존에 있기 때문이다.
+    """
+    definition, _ = _resolve_definition(view, context, instance)
+    if definition is None:
+        return False
+    target = instance if instance is not None else context.source
+    card = view.find(target) if target is not None else None
+    return _is_set_normal_spell(card, definition, set(definition.type_names))
+
+
 def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], ...]:
     """
     이 발동을 **이번 Phase 의 범위 밖으로** 만드는 (사실, 없는 규칙) 들.
@@ -1233,6 +1264,21 @@ def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], 
         # 이 요구하는 "세트한 턴" 제약을 셀 자리가 없다.
         if "QUICKPLAY" in names and card is not None and card.zone is Zone.SZONE:
             return (("세트한 속공 마법의 발동이다", SET_ACTIVATION_MISSING),)
+        # **세트된 통상 마법은 범위 안이다** (Phase 3-E-14).
+        #
+        #     RULE-SPELLTRAP-012 — "Spell Cards can be activated during the
+        #     Main Phases **even in the same turn that you Set them** (except
+        #     for Quick-Play Spell Cards). Setting them does not allow you to
+        #     use them on your opponent's turn; they still can only be
+        #     activated during your Main Phase."
+        #
+        # 그래서 이쪽은 **세트한 턴을 셀 필요가 없다.** 조항이 같은 턴을 명시
+        # 적으로 허락하고, 상대 턴은 명시적으로 금지한다 — 패에서 발동하는
+        # 통상 마법과 **판정에 필요한 정보가 똑같다.** 속공 마법과 함정이
+        # ``UNKNOWN`` 으로 남는 것은 그 둘만 "세트한 턴" 을 요구하기 때문이다
+        # (RULE-SPELLTRAP-007 · 009).
+        if _is_set_normal_spell(card, definition, names):
+            return ()
         return (
             (
                 f"패가 아니라 {where} 에서의 발동이다",
@@ -1241,6 +1287,49 @@ def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], 
             ),
         )
     return ()
+
+
+#: :func:`_is_set_normal_spell` 이 **받지 않는** 아이콘들.
+#:
+#: ``RULE-SPELLTRAP-012`` 가 괄호로 하나를 직접 뺀다 — "(**except for
+#: Quick-Play Spell Cards**)". 나머지는 발동 뒤 필드에 남거나 절차가 앞서므로
+#: (RULE-SPELLTRAP-003 · 004 · 005 · 006) 해결 뒤 묘지로 가는 이 경로와 모양이
+#: 다르다.
+_NOT_A_SET_NORMAL_SPELL: frozenset[str] = frozenset(
+    {"QUICKPLAY", "CONTINUOUS", "EQUIP", "FIELD", "RITUAL", "COUNTER", "TRAP"}
+)
+
+
+def _is_set_normal_spell(card, definition, names) -> bool:
+    """
+    **세트해 둔 통상 마법**인가 (Phase 3-E-14 · RULE-SPELLTRAP-012).
+
+    넷을 모두 만족해야 한다. 하나라도 빠지면 **다른 조항**이 걸리는 자리다.
+
+    - 마법 & 함정 존에 있다
+    - **뒷면**이다 (앞면이면 이미 발동했거나 지속 · 필드 마법이다)
+    - 마법이다
+    - 아이콘이 :data:`_NOT_A_SET_NORMAL_SPELL` 에 없다
+
+    **마지막 줄을 앞선 관문에 맡기지 않는다.** ``_activation_out_of_scope`` 가
+    함정과 지속 · 장착 · 필드 · 의식을 이미 걸러내므로 여기서 다시 보는 것은
+    결과를 바꾸지 않는다. 그래도 적어 두는 이유: 이 술어가 "세트된 카드" 의
+    **정의**이고, 느슨해지면 ``ZoneHasFreeSlot`` 면제와 ``IsTurnPlayer``
+    문장이 **엉뚱한 카드에** 붙는다. 그때 나오는 것은 틀린 이유 문장이고,
+    그것은 규칙을 거짓으로 적는 것이다.
+
+    실제로 느슨했다 — 처음 적을 때 속공 마법을 걸러내지 않아 세트된 속공
+    마법에도 ``True`` 를 냈다. 앞선 관문이 가려서 어떤 테스트도 그것을 잡지
+    못했고, ``test_15`` 가 이 술어를 직접 재서 잡았다.
+    """
+    return (
+        card is not None
+        and card.zone is Zone.SZONE
+        and not card.face_up
+        and definition is not None
+        and definition.is_spell
+        and not (set(names) & _NOT_A_SET_NORMAL_SPELL)
+    )
 
 
 @dataclass(frozen=True, slots=True)

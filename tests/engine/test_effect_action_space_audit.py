@@ -412,13 +412,33 @@ def test_05c_an_on_field_activation_is_unknown_not_invalid(repository):
 
     ``tests/engine/test_action_legality.py`` 의
     ``test_an_effect_ordinal_beyond_the_card_is_invalid`` 가 이 실수를 잡았다.
+
+    **예로 든 카드를 바꿨다** (Phase 3-E-14)
+    ----------------------------------------
+    처음에는 **뒷면으로 세트한** 통상 마법을 예로 들었다. 그 가정이 틀렸다 —
+    공식 룰북에 그 자리를 **직접 판정하는 조항이 있다.**
+
+        RULE-SPELLTRAP-012 — "Spell Cards can be activated during the Main
+        Phases **even in the same turn that you Set them** (except for
+        Quick-Play Spell Cards). Setting them does not allow you to use them
+        on your opponent's turn; they still can only be activated during your
+        Main Phase."
+
+    즉 "세트한 통상 마법의 발동" 은 모르는 것이 아니라 **아는 것**이고, 지금은
+    ``VALID`` 가 나온다. ``UNKNOWN`` 으로 남겨 두면 "모른다" 는 거짓이 된다.
+
+    **주장은 그대로다.** 필드에서의 발동을 ``INVALID`` 로 적지 않는다는 것이고,
+    그것을 보이려면 조항이 아직 답하지 않은 자리를 예로 들어야 한다 — 마법 &
+    함정 존의 **앞면** 마법이 그렇다. 몬스터의 기동 효과도 같은 자리지만 그쪽은
+    "통상 마법이 아니다" 라는 **다른** 이유로 걸리므로 (``
+    non-spell-activation-timing``) 이 시험이 읽는 문자열이 달라진다.
     """
     state, source = hand_with(repository, POT_OF_GREED)
     state.move(
         state.find_instance(source),
         Zone.SZONE,
         to_player=MINE,
-        position=Position.FACEDOWN,
+        position=Position.FACEUP,
     )
     validator = ActionValidator(GameStateView.from_state(state, viewer=MINE))
 

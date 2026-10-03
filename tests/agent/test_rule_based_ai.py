@@ -741,15 +741,38 @@ def test_f_the_winner_now_depends_on_the_policy(repository):
 
     그래서 주장을 **뒤집는다.** 약화가 아니라 반대 방향의 강화다.
 
-    1. 모든 듀얼이 **LP 0** 으로 끝난다 (덱아웃이 아니다)
-    2. LP 가 8000 에서 **움직인다**
+    1. **모든 듀얼에서 LP 가 8000 에서 움직인다** (전투가 실제로 일어난다)
+    2. 끝내는 조건은 거의 모두 **LP 0** 이다 (덱아웃만 남은 판이 아니다)
     3. 같은 씨앗에서 **정책을 바꾸면 승자가 달라지는** 경우가 있다
 
-    3번은 씨앗 4 에서 실측된다. 다른 씨앗에서 승자가 같은 것은 모순이 아니다
-    — 정책이 결과를 **좌우할 수 있다**는 것과 **언제나 좌우한다**는 것은
+    3번은 씨앗 **1 과 8** 에서 실측된다. 다른 씨앗에서 승자가 같은 것은 모순이
+    아니다 — 정책이 결과를 **좌우할 수 있다**는 것과 **언제나 좌우한다**는 것은
     다른 주장이고, 여기서 말하는 것은 앞의 것이다.
+
+    **증인 씨앗이 4 에서 1 · 8 로 옮겨졌다** (Phase 3-E-14). 행동 공간이
+    넓어지면 어느 씨앗이 갈리는지는 움직인다 — 그것을 하나로 못박아 두면
+    주장이 아니라 **그 씨앗**을 지키게 된다. 그래서 "갈리는 씨앗이 있다" 를
+    재고, 지금 갈리는 집합을 함께 적어 둔다.
+
+    **1번과 2번의 모양이 바뀌었다** (Phase 3-E-14)
+    ---------------------------------------------
+    처음에는 1번을 **"모든 듀얼이 LP 0 으로 끝난다"** 로 적었다. 9번의 대국
+    (씨앗 3 × 정책 3) 중 **8번이 여전히 그렇고**, 한 번이 덱아웃으로 끝난다 —
+    씨앗 4 의 무작위 정책이다.
+
+    왜 바뀌었는가: 세트해 둔 통상 마법의 발동이 후보가 되었다
+    (RULE-SPELLTRAP-012). 행동 공간이 넓어지면서 아무 것이나 고르는 정책이
+    욕망의 항아리를 **세트한 뒤 다시 발동**하는 길까지 밟고, 그만큼 덱을 더
+    빨리 태운다. 그 대국에서도 LP 는 움직였다 — (4800, 400) 이다. 즉 **전투가
+    없어서 덱아웃이 된 것이 아니다.**
+
+    그래서 주장을 "덱아웃이 아니다" 에서 **"LP 가 움직인다"** 로 옮긴다.
+    STRUCTURAL-101 당시의 판은 LP 가 (8000, 8000) 에서 **한 번도** 움직이지
+    않은 판이었고, 이 시험이 지키는 것은 그 상태로 돌아가지 않는다는 것이다.
+    덱아웃이 몇 번인지도 **세어서 고정한다** — 늘어나면 다시 읽어야 한다.
     """
     winners_by_seed: dict[int, set] = {}
+    endings: list[str] = []
     for seed in (1, 4, 8):
         outcomes = set()
         for factory in (
@@ -761,18 +784,24 @@ def test_f_the_winner_now_depends_on_the_policy(repository):
             transcript = play(duel, (factory(), FirstLegalPolicy()))
             outcomes.add(transcript.result.winner)
 
-            assert "라이프 포인트가 0" in transcript.result.reason, seed
             life = (
                 duel.state.player(MINE).life_points,
                 duel.state.player(THEIRS).life_points,
             )
-            assert 0 in life, f"seed={seed}: {life}"
-            assert life != (8000, 8000)
+            # **전투가 일어났다** — 이것이 STRUCTURAL-101 과 갈리는 자리다.
+            assert life != (8000, 8000), f"seed={seed}: {life}"
+            endings.append(transcript.result.reason)
         winners_by_seed[seed] = outcomes
 
-    assert len(winners_by_seed[4]) == 2, (
-        f"정책에 따라 승자가 갈리는 씨앗이 사라졌습니다: {winners_by_seed}"
-    )
+    lp_zero = [r for r in endings if "라이프 포인트가 0" in r]
+    deck_out = [r for r in endings if "뽑을 수 없다" in r]
+    assert len(endings) == 9, endings
+    assert len(lp_zero) == 8, endings
+    assert len(deck_out) == 1, endings
+
+    split = {seed for seed, outcomes in winners_by_seed.items() if len(outcomes) == 2}
+    assert split, f"정책에 따라 승자가 갈리는 씨앗이 사라졌습니다: {winners_by_seed}"
+    assert split == {1, 8}, f"갈리는 씨앗이 달라졌습니다: {winners_by_seed}"
 
 
 @pytest.mark.real_card
@@ -797,6 +826,13 @@ def test_f_greedy_is_not_the_best_play(repository):
     70,700 은 한 점도 바뀌지 않았고**, 붕괴하는 씨앗도 그대로다 — 이 시험이
     지키는 주장은 거기에 있다.
 
+    Phase 3-E-14 에서 무작위 쪽이 9,600 → **13,300** 으로 올라갔다. 세트해 둔
+    통상 마법의 발동이 후보가 되면서 (RULE-SPELLTRAP-012) 행동 공간이 넓어졌고,
+    무작위의 궤적이 또 갈라졌다. **규칙 기반의 70,700 은 이번에도 한 점도
+    바뀌지 않았고** 붕괴 씨앗도 10 · 15 그대로다 — 즉 이 숫자의 움직임은
+    "순위 로직이 바뀌었다" 가 아니라 **"고를 수 있는 수가 늘었다"** 이고,
+    규칙 기반 쪽이 한 점도 안 움직인 것이 그 증거다.
+
     그래서 증거를 **씨앗 비교에서 절대적인 사실로** 바꾼다. 규칙 기반도
     씨앗 10 · 15 에서 **몬스터 하나 없이 LP 0 으로 진다** — 한 수도 내다보지
     않는 규칙으로는 이것을 고칠 수 없고, 다음 단계가 탐색인 이유가 그대로
@@ -817,7 +853,7 @@ def test_f_greedy_is_not_the_best_play(repository):
         for seed in COMPARISON_SEEDS
     ]
     assert sum(rules) == 70700, sum(rules)
-    assert sum(chance) == 9600, sum(chance)
+    assert sum(chance) == 13300, sum(chance)
     assert all(r >= c for r, c in zip(rules, chance)), list(zip(rules, chance))
 
     # 그런데도 탐욕은 정답이 아니다 — **스스로 무너지는 씨앗이 있다.**

@@ -464,7 +464,7 @@ class Duel:
             않는다 — 비용이 생기는 날 걸리게 **먼저** 둔다.
         """
         allowed: list[PlayerAction] = []
-        for card in self.state.player(seat).hand:
+        for card in self._activation_sources(seat):
             for effect_ref in activatable_effects(card.card_id):
                 definition = self._activator.definitions.definition_for(effect_ref)
                 if definition is None:  # pragma: no cover - 목록이 보증한다
@@ -493,6 +493,30 @@ class Duel:
                         continue
                     allowed.append(candidate)
         return allowed
+
+    def _activation_sources(self, seat: int):
+        """
+        발동이 **출발할 수 있는 자리들** (Phase 3-E-14).
+
+        패 하나였다가 둘이 되었다. 세트해 둔 마법 · 함정도 발동의 출발지이고
+        (RULE-SPELLTRAP-012 · 007 · 009), 그 자리를 아예 보지 않으면 **어떤
+        관문도 판정할 기회를 얻지 못한다.**
+
+        **여기서 거르지 않는다.** 뒷면인지 · 마법인지 · 속공인지 · 함정인지는
+        전부 규칙이고, 그 판정은 :meth:`_activation_gate` 의 몫이다. 여기서
+        미리 걸러 두면 규칙이 두 곳에 적히고 둘이 갈라진다 — Phase 3-E-13 이
+        고친 것이 바로 그것이다.
+
+        그래서 세트된 **속공 마법과 함정도 여기서는 나온다.** 관문이 그것을
+        ``UNKNOWN`` 으로 막는다 ("세트한 턴" 을 세는 자리가 아직 없다 —
+        ``SET_ACTIVATION_MISSING``), 그리고 ``UNKNOWN`` 은 허가가 아니므로
+        후보가 되지 않는다. **막는 이유가 기록으로 남는 것**이 "보지도 않는
+        것" 과의 차이다.
+        """
+        player = self.state.player(seat)
+        return tuple(player.hand) + tuple(
+            card for card in player.zone(Zone.SZONE) if card is not None
+        )
 
     def _activation_gate(
         self,
@@ -698,6 +722,22 @@ class Duel:
             result=self._check_end(),
         )
 
+    def _place_activated(self, action: PlayerAction):
+        """
+        발동한 카드를 앞면으로 만든다 — **출발지가 정한다** (Phase 3-E-14).
+
+        패에서면 옮겨 놓고 (RULE-SPELLTRAP-002), 마법 & 함정 존에서면 그
+        자리에서 돌린다 (RULE-SPELLTRAP-012). 둘 다 해결 뒤 묘지로 가는 길은
+        같으므로 ``pending_spells`` 와 뒷정리는 하나로 쓴다.
+
+        자리를 못 읽으면 **고르지 않는다** — ``place`` 가 그 사실을
+        ``SpellActivationError`` 로 말하게 둔다.
+        """
+        instance = self.state.find_instance(action.source)
+        if instance is not None and instance.zone is Zone.SZONE:
+            return self._placement.reveal(self.state, action.source, action.actor)
+        return self._placement.place(self.state, action.source, action.actor)
+
     def _retire_pending(self) -> None:
         """대기 중이던 마법을 전부 묘지로 보낸다. 카드를 옮기는 일은 배치 계층이 한다."""
         pending, self.pending_spells = self.pending_spells, ()
@@ -836,10 +876,15 @@ class Duel:
             # 바꾸지 않았으므로 **되돌릴 것이 없다.**
             return DuelStep(action, False, activated.code, activated.reason)
 
-        # ③ 이제 놓는다 (RULE-SPELLTRAP-002 — "placing it face-up on the
-        # field"). 발동이 성립한 뒤이므로 되돌릴 자리가 아니다.
+        # ③ 이제 앞면으로 만든다 (RULE-SPELLTRAP-002 — "placing it face-up on
+        # the field"). 발동이 성립한 뒤이므로 되돌릴 자리가 아니다.
+        #
+        # **출발지가 둘이다** (Phase 3-E-14). 패에서 발동하면 옮겨 놓고
+        # (``place``), 세트해 둔 것이면 그 자리에서 돌린다 (``reveal``,
+        # RULE-SPELLTRAP-012). 어느 쪽인지는 **판이 말한다** — 여기서 카드
+        # 종류를 보고 정하지 않는다.
         try:
-            placed = self._placement.place(self.state, action.source, action.actor)
+            placed = self._place_activated(action)
         except SpellActivationError as error:
             # 관문이 통과시킨 카드가 패에 없다 — 비용이 그것을 옮겼을 때만
             # 닿는다. **비용은 이미 치러졌고 되돌리지 않는다** (ADR-008).

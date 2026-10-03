@@ -74,6 +74,18 @@ ACTIVATION_POSITION: Position = Position.FACEUP
 #: 해결 뒤 가는 자리 (RULE-SPELLTRAP-002: "send the card to the Graveyard").
 AFTER_RESOLUTION_ZONE: Zone = Zone.GRAVE
 
+#: **세트된** 마법이 발동할 때 출발하는 자리 (Phase 3-E-14).
+#:
+#: 세트된 마법은 이미 마법 & 함정 존에 **뒷면으로** 있다. 그래서 발동은
+#: 이동이 아니라 **그 자리에서 앞면으로 돌리는 것**이다.
+#:
+#:     RULE-SPELLTRAP-012 — "Spell Cards can be activated during the Main
+#:     Phases **even in the same turn that you Set them** (except for
+#:     Quick-Play Spell Cards). Setting them does not allow you to use them on
+#:     your opponent's turn; they still can only be activated during your
+#:     Main Phase."
+REVEAL_FROM_ZONE: Zone = Zone.SZONE
+
 
 @dataclass(frozen=True, slots=True)
 class _SpellMovement(CardMovement):
@@ -198,6 +210,32 @@ class SpellRetired(_SpellMovement):
 
 
 @dataclass(frozen=True, slots=True)
+class SpellRevealed(_SpellMovement):
+    """
+    **세트된** 마법을 그 자리에서 앞면으로 돌렸다 (Phase 3-E-14).
+
+    :class:`SpellPlaced` 와 **다른 사건**이다. 저쪽은 패에서 필드로 옮기는
+    이동이고, 이쪽은 **옮기지 않는다** — 출발 존과 도착 존이 둘 다 마법 &
+    함정 존이고, 칸 번호도 그대로다. 둘을 한 타입으로 적으면 "패에서 나왔다"
+    가 거짓이 된다.
+
+    해결 뒤 가는 자리는 같다 (마법 & 함정 존 → 묘지). 그래서
+    :meth:`NormalSpellPlacement.retire` 를 둘이 공유한다 —
+    ``RULE-SPELLTRAP-002`` 의 마지막 문장이 출발지를 따지지 않기 때문이다.
+    """
+
+    @property
+    def kind(self) -> str:
+        return "spell_revealed"
+
+    def describe_ko(self) -> str:
+        return (
+            f"P{self.player} 가 세트해 둔 {self.card} 를 "
+            f"{self.destination_zone.value} 에서 앞면으로 돌려 발동했다 (해결 전)"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SpellRestored(_SpellMovement):
     """
     놓았던 마법을 **패로 되돌렸다** — 발동이 성립하지 않았을 때.
@@ -269,7 +307,49 @@ class NormalSpellPlacement:
         )
 
     # ------------------------------------------------------------------
-    def retire(self, state: GameState, placed: SpellPlaced) -> SpellRetired:
+    def reveal(
+        self, state: GameState, card: InstanceId, player: int
+    ) -> SpellRevealed:
+        """
+        **세트해 둔** 마법의 발동 — 그 자리에서 앞면으로 돌린다
+        (RULE-SPELLTRAP-012, Phase 3-E-14).
+
+        :meth:`place` 와 **대칭이 아니다.** 저쪽은 ``state.move`` 로 존을
+        옮기지만 이쪽은 **옮기지 않는다** — 카드는 이미 제 칸에 있고 바뀌는
+        것은 표시 형식 하나다. 칸을 다시 잡으면 세트했던 자리가 달라져서,
+        칸 번호를 읽는 카드(펜듈럼 존 · "같은 세로열") 가 거짓을 보게 된다.
+
+        **적법성을 다시 보지 않는다.** :meth:`place` 와 같은 자리다 — 허가를
+        낸 쪽이 이미 확인했다.
+        """
+        instance = state.find_instance(card)
+        if instance is None:
+            raise SpellActivationError(f"{card} 를 찾을 수 없습니다.")
+        if instance.zone is not REVEAL_FROM_ZONE:
+            raise SpellActivationError(
+                f"{card} 는 {instance.zone.value} 에 있습니다 — 세트된 마법의 "
+                f"발동은 {REVEAL_FROM_ZONE.value} 에서만 합니다."
+            )
+        if instance.is_faceup:
+            raise SpellActivationError(
+                f"{card} 는 이미 앞면입니다 — 세트된 카드가 아닙니다."
+            )
+        owner, source_zone = instance.owner, instance.zone
+        source_player = instance.controller
+        # **이동이 아니다.** 표시 형식만 바꾼다 (칸 번호가 그대로여야 한다).
+        instance.set_position(ACTIVATION_POSITION)
+        return SpellRevealed(
+            card=card,
+            player=player,
+            owner=owner,
+            source_player=source_player,
+            source_zone=source_zone,
+            destination_zone=REVEAL_FROM_ZONE,
+            position=ACTIVATION_POSITION,
+        )
+
+    # ------------------------------------------------------------------
+    def retire(self, state: GameState, placed: _SpellMovement) -> SpellRetired:
         """해결을 마친 마법을 묘지로 보낸다 (RULE-SPELLTRAP-002)."""
         return self._move_back(
             state, placed, AFTER_RESOLUTION_ZONE, SpellRetired, position=None
@@ -368,6 +448,8 @@ __all__ = [
     "SpellRetired",
     "SpellRestored",
     "NormalSpellPlacement",
+    "SpellRevealed",
+    "REVEAL_FROM_ZONE",
     "ACTIVATE_FROM_ZONE",
     "ACTIVATION_ZONE",
     "ACTIVATION_POSITION",
