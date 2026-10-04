@@ -288,7 +288,10 @@ def test_an_unknown_trigger_is_kept_apart_and_not_called_absent(view):
     for entry in plan.unresolved:
         assert entry.insertion is ChainInsertion.UNKNOWN
         assert entry.insertion is not ChainInsertion.NOT_INSERTABLE
-        assert entry.code is ValidationCode.INFORMATION_UNAVAILABLE
+        #: Phase 3-E-27 — 막힌 관문이 말한 까닭을 그대로 올린다. 여기서는
+        #: ``UnimplementedRule`` 이므로 **규칙 없음**이다.
+        assert entry.code is ValidationCode.RULE_NOT_IMPLEMENTED
+        assert entry.code is not ValidationCode.INFORMATION_UNAVAILABLE
         assert "트리거가 없다는 뜻이 아닙니다" in entry.reason
         assert any("체인 위의 카드 수" in note for note in entry.notes)
     assert plan.skipped == ()  # 제외 통에 섞이지 않았다

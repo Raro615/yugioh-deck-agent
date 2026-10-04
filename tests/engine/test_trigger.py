@@ -371,7 +371,13 @@ def test_a_false_condition_makes_the_candidate_ineligible(view):
 
 
 def test_an_unjudgeable_condition_is_unknown_not_ineligible(view):
-    """**모르는 것을 거짓으로 접지 않는다.**"""
+    """
+    **모르는 것을 거짓으로 접지 않는다.**
+
+    Phase 3-E-27 에서 코드가 바뀌었다: 여기 걸린 조건은 ``UnimplementedRule``
+    이므로 모르는 까닭은 **규칙이 없어서**이고 정보가 없어서가 아니다. 판정
+    (``UNKNOWN``)은 그대로고 이유만 정확해졌다.
+    """
     spec = TriggerSpec(
         EffectRef(WATCHER, 0),
         TimingPoint.CARD_DRAWN,
@@ -385,8 +391,36 @@ def test_an_unjudgeable_condition_is_unknown_not_ineligible(view):
     for candidate in collection:
         assert candidate.status is TriggerStatus.UNKNOWN
         assert candidate.status is not TriggerStatus.INELIGIBLE
-        assert candidate.code is ValidationCode.INFORMATION_UNAVAILABLE
+        assert candidate.code is ValidationCode.RULE_NOT_IMPLEMENTED
+        assert candidate.code is not ValidationCode.INFORMATION_UNAVAILABLE
         assert any("체인 위의 카드 수" in note for note in candidate.notes)
+        assert candidate.is_candidate is False
+
+
+def test_a_hidden_fact_makes_the_candidate_unknown_for_a_different_reason(view, state):
+    """
+    같은 ``UNKNOWN`` 이지만 까닭이 다르다 — 상대의 뒷면 카드는 **정체를 볼 수
+    없다.** 빠진 규칙이 없으므로 ``INFORMATION_UNAVAILABLE`` 이다.
+
+    갈래의 두 쪽을 **둘 다** 잠근다 (Phase 3-E-27).
+    """
+    facedown = state.move(
+        state.player(THEIRS).hand[0], Zone.SZONE, position=Position.FACEDOWN
+    )
+    fresh = GameStateView.from_state(state, viewer=MINE)
+    spec = TriggerSpec(
+        EffectRef(WATCHER, 0),
+        TimingPoint.CARD_DRAWN,
+        condition=IsMonster(facedown.instance_id),
+    )
+
+    collection = collector(fresh, spec).collect(drawn_event())
+
+    assert collection.undecided
+    for candidate in collection:
+        assert candidate.status is TriggerStatus.UNKNOWN
+        assert candidate.code is ValidationCode.INFORMATION_UNAVAILABLE
+        assert candidate.code is not ValidationCode.RULE_NOT_IMPLEMENTED
         assert candidate.is_candidate is False
 
 

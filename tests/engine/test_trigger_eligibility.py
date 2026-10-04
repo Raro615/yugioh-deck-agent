@@ -324,7 +324,11 @@ def test_an_unjudgeable_condition_is_unknown_not_ineligible(view):
     assert field.status is TriggerStatus.UNKNOWN
     assert field.status is not TriggerStatus.INELIGIBLE
     gate = field.gate(EligibilityGate.TRIGGER_CONDITION)
-    assert gate.code is ValidationCode.INFORMATION_UNAVAILABLE
+    #: Phase 3-E-27 — 모르는 까닭이 **규칙 없음**이다. 정보 부족이 아니다.
+    assert gate.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert gate.code is not ValidationCode.INFORMATION_UNAVAILABLE
+    #: 관문은 ``ValidationResult`` 를 그대로 싣으므로 규칙 이름까지 남는다.
+    assert gate.result.missing_rule == "체인 위의 카드 수"
     assert any("체인 위의 카드 수" in note for note in gate.result.notes)
 
 

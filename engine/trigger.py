@@ -981,10 +981,23 @@ class TriggerCollector:
                 code=ValidationCode.CANDIDATE_NOT_ELIGIBLE,
                 reason=f"조건이 거짓입니다: {described}",
             )
+        # **모르는 까닭을 가른다.** "규칙이 없어서" 와 "정보가 없어서" 는 다른
+        # 사실이고, 앞은 코드가 생겨야 풀리지만 뒤는 판이 바뀌면 풀린다.
+        # 조건에게 직접 되묻는다 — ``ActionValidator._check_requirements`` 와
+        # ``EffectActivator._check_condition`` 이 이미 쓰는 방법 그대로다
+        # (Phase 3-E-27). 새 정보를 보지 않는다: ``missing_rules`` 는 평가가
+        # 받은 것과 **같은 관측**을 받는다.
+        unimplemented = tuple(
+            rule
+            for condition in conditions
+            for rule in condition.missing_rules(self._view, context)
+        )
         return TriggerCandidate(
             **base,
             status=TriggerStatus.UNKNOWN,
-            code=ValidationCode.INFORMATION_UNAVAILABLE,
+            code=ValidationCode.RULE_NOT_IMPLEMENTED
+            if unimplemented
+            else ValidationCode.INFORMATION_UNAVAILABLE,
             reason=f"조건을 판정할 수 없습니다: {described}",
             notes=notes,
         )
@@ -1410,14 +1423,25 @@ class TriggerEligibilityJudge:
                 ValidationCode.CANDIDATE_NOT_ELIGIBLE,
                 f"조건이 거짓입니다: {described}",
             )
+        # 수집기(``TriggerCollector._judge``)와 **같은 방법으로** 까닭을 가른다.
+        # 관문은 ``ValidationResult`` 를 그대로 싣으므로 ``missing_rule`` 까지
+        # 남길 수 있다 — 새 필드를 만들지 않는다 (Phase 3-E-27).
+        unimplemented = tuple(
+            rule
+            for condition in conditions
+            for rule in condition.missing_rules(self._view, context)
+        )
         return _gate(
             EligibilityGate.TRIGGER_CONDITION,
             ActionValidity.UNKNOWN,
-            ValidationCode.INFORMATION_UNAVAILABLE,
+            ValidationCode.RULE_NOT_IMPLEMENTED
+            if unimplemented
+            else ValidationCode.INFORMATION_UNAVAILABLE,
             f"조건을 판정할 수 없습니다: {described}",
             notes=tuple(
                 reason for verdict in verdicts for reason in verdict.unknown_reasons
             ),
+            missing_rule=unimplemented[0] if unimplemented else None,
         )
 
     def _execution_authority(
@@ -1500,9 +1524,15 @@ def _gate(
     code: ValidationCode,
     reason: str,
     notes: tuple[str, ...] = (),
+    missing_rule: "str | None" = None,
 ) -> GateVerdict:
+    #: ``missing_rule`` 은 :class:`~engine.validation.ValidationResult` 가
+    #: 이미 가진 필드다 — 여기서 새로 만들지 않고 실어 보낸다.
     return GateVerdict(
-        gate, ValidationResult(validity, code, reason, notes=notes)
+        gate,
+        ValidationResult(
+            validity, code, reason, missing_rule=missing_rule, notes=notes
+        ),
     )
 
 

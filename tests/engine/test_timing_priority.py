@@ -376,7 +376,9 @@ def test_an_unknown_trigger_is_preserved_not_turned_into_ineligible(view):
     )
     assert outcome.plan.unresolved
     for entry in outcome.plan.unresolved:
-        assert entry.code is ValidationCode.INFORMATION_UNAVAILABLE
+        #: Phase 3-E-27 — 까닭이 **규칙 없음**이다 (``UnimplementedRule``).
+        assert entry.code is ValidationCode.RULE_NOT_IMPLEMENTED
+        assert entry.code is not ValidationCode.INFORMATION_UNAVAILABLE
         assert any("체인 위의 카드 수" in note for note in entry.notes)
     assert outcome.inserted_links == ()
 

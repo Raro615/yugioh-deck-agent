@@ -66,7 +66,7 @@ from engine.trigger import (
     TriggerStatus,
 )
 from engine.trigger_order import TriggerOrderer, TriggerOrdering
-from engine.validation import ValidationCode
+from engine.validation import ActionValidity, ValidationCode
 
 
 class ChainInsertion(str, Enum):
@@ -507,10 +507,14 @@ class TriggerChainIntegrator:
                 ValidationCode.EXECUTION_FORBIDDEN,
                 f"출처가 실행을 금지합니다 (막힌 관문: {blocking}).",
             )
+        # **확실한 거부에 "엔진이 못 한다" 를 적지 않는다.** 막힌 관문이 이미
+        # 제 코드를 들고 있으므로 (자리가 아니면 ``SOURCE_WRONG_ZONE``, 조건이
+        # 거짓이면 ``CANDIDATE_NOT_ELIGIBLE``) 그것을 그대로 올린다
+        # (Phase 3-E-26 이 ``trigger.py`` 에서 한 것과 같은 수정, 3-E-27).
         return TriggerChainEntry(
             eligibility,
             ChainInsertion.NOT_INSERTABLE,
-            ValidationCode.RULE_NOT_IMPLEMENTED,
+            _refusal_code(eligibility),
             f"발동 조건을 만족하지 않습니다 (막힌 관문: {blocking}).",
         )
 
@@ -524,10 +528,13 @@ class TriggerChainIntegrator:
             for verdict in eligibility.blocking
             for note in verdict.result.notes
         )
+        # 모르는 **까닭**을 관문에서 받아 온다. 이 계층은 조건을 다시 평가하지
+        # 않으므로 ``missing_rules`` 를 부를 수 없다 — 대신 관문이 이미 적어 둔
+        # 코드를 올린다 (Phase 3-E-27).
         return TriggerChainEntry(
             eligibility,
             ChainInsertion.UNKNOWN,
-            ValidationCode.INFORMATION_UNAVAILABLE,
+            _undecided_code(eligibility),
             f"발동 가능한지 판정할 수 없습니다 (막힌 관문: {blocking}). "
             "트리거가 없다는 뜻이 아닙니다.",
             notes=notes,
@@ -535,6 +542,48 @@ class TriggerChainIntegrator:
 
     def __repr__(self) -> str:  # pragma: no cover - 표시용
         return f"<TriggerChainIntegrator {self._registry!r}>"
+
+
+def _refusal_code(eligibility: TriggerEligibility) -> ValidationCode:
+    """
+    **확실한 거부**의 대표 코드. 거부를 일으킨 관문에서만 가져온다.
+
+    ``INVALID`` 관문만 본다. 같은 후보에 ``UNKNOWN`` 관문이 섞여 있어도
+    그것은 거부의 까닭이 아니다 — 자리가 틀려서 막힌 후보에
+    ``RULE_NOT_IMPLEMENTED`` 를 적으면 "엔진이 못 한다" 와 "규칙이 막았다" 가
+    다시 섞인다 (``fold`` 가 ``INVALID`` 를 ``UNKNOWN`` 보다 먼저 접는 것과
+    같은 태도다).
+    """
+    for verdict in eligibility.blocking:
+        if verdict.validity is ActionValidity.INVALID:
+            return verdict.code
+    return ValidationCode.CANDIDATE_NOT_ELIGIBLE
+
+
+def _undecided_code(eligibility: TriggerEligibility) -> ValidationCode:
+    """
+    **판정 불가**의 대표 코드. ``UNKNOWN`` 관문만 본다.
+
+    우선순위를 새로 정하지 않았다 — 저장소가 이미 쓰는 것을 그대로 따른다:
+    ``ActionValidator._check_requirements`` 는 빠진 규칙이 하나라도 있으면
+    ``RULE_NOT_IMPLEMENTED`` 를 쓰고, ``And.missing_rules`` 는 자식 순서와
+    무관하게 규칙을 모은다. 즉 **"규칙이 없다" 가 "정보가 없다" 를 이긴다.**
+
+    그 다음은 검사 순서대로 **처음 막힌 ``UNKNOWN`` 관문**이다 (``blocking``
+    이 그 순서를 보존한다).
+    """
+    undecided = [
+        verdict
+        for verdict in eligibility.blocking
+        if verdict.validity is ActionValidity.UNKNOWN
+    ]
+    for verdict in undecided:
+        if verdict.code is ValidationCode.RULE_NOT_IMPLEMENTED:
+            return verdict.code
+    for verdict in undecided:
+        if verdict.code is not ValidationCode.OK:
+            return verdict.code
+    return ValidationCode.INFORMATION_UNAVAILABLE
 
 
 __all__ = [
