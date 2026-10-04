@@ -368,6 +368,47 @@ def test_10_a_definite_refusal_is_not_relabelled_by_an_unknown_gate(board):
         assert entry.code is not ValidationCode.RULE_NOT_IMPLEMENTED
 
 
+def test_10b_an_earlier_unknown_gate_does_not_name_the_refusal(board):
+    """
+    **거부의 이름은 거부를 일으킨 관문에서만 온다** — 순서가 아니라 판정으로
+    고른다.
+
+    이 판은 그 둘이 갈리는 유일한 모양이다: ``activates_from`` 을 적지 않아
+    자리 관문이 ``UNKNOWN`` (``RULE_NOT_IMPLEMENTED``) 이고, 조건 관문이
+    ``INVALID`` (``CANDIDATE_NOT_ELIGIBLE``) 다. ``blocking`` 은 검사 순서를
+    보존하므로 **모름이 먼저 온다.** "처음 막힌 관문" 으로 고르면 확실한
+    거부가 "엔진이 못 한다" 로 다시 라벨링된다.
+
+    (``test_10`` 만으로는 이 차이가 드러나지 않는다 — 거기서는 ``INVALID``
+    관문이 마침 먼저 와서 두 방식이 같은 답을 낸다.)
+    """
+    state, _ = board
+    view = seen_by(state)
+    undeclared = TriggerSpec(WATCHED, TimingPoint.CARD_DRAWN, activates_from=None)
+    integrator = TriggerChainIntegrator(
+        view,
+        TriggerRegistry((undeclared,)),
+        EffectDefinitionRegistry((definition(activation=Always(ConditionResult.FALSE)),)),
+        EffectImplementationRegistry((WATCHED,)),
+    )
+    plan = integrator.plan(Chain(), integrator.collect_and_order(drawn()))
+
+    assert plan.skipped
+    for entry in plan.skipped:
+        gates = {v.gate: v for v in entry.eligibility.blocking}
+        #: 모름이 거부보다 **먼저** 막혀 있다는 전제를 테스트가 직접 확인한다.
+        order = [v.gate for v in entry.eligibility.blocking]
+        assert order.index(EligibilityGate.ACTIVATION_ZONE) < order.index(
+            EligibilityGate.TRIGGER_CONDITION
+        )
+        assert gates[EligibilityGate.ACTIVATION_ZONE].validity is ActionValidity.UNKNOWN
+        assert gates[EligibilityGate.TRIGGER_CONDITION].validity is ActionValidity.INVALID
+
+        assert entry.insertion is ChainInsertion.NOT_INSERTABLE
+        assert entry.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+        assert entry.code is not ValidationCode.RULE_NOT_IMPLEMENTED
+
+
 # ======================================================================
 # G. 관측 경계 · 어휘
 # ======================================================================
