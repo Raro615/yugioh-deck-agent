@@ -48,7 +48,19 @@ class EffectSpec:
     """SetType() 에서 추출한 EFFECT_TYPE_* 목록"""
 
     code: str | None = None
-    """SetCode() 인자. EVENT_* 또는 EFFECT_* 상수 이름"""
+    """
+    SetCode() 인자. EVENT_* 또는 EFFECT_* 상수 이름.
+
+    ``None`` 은 **두 가지를 뜻한다** (Phase 3-E-17 이 측정했다).
+
+    1. ``SetCode`` 호출이 아예 없었다 — 물어볼 것이 없다
+    2. 호출은 있었는데 인자가 ``EVENT_*`` 도 ``EFFECT_*`` 도 아니어서
+       **읽지 못했다** (``SetCode(id)`` · ``SetCode(1082946)`` 등)
+
+    둘이 같은 값이 되므로 ``code is None`` 을 "유발 조건이 없다" 로 읽으면
+    **162장이 조용히 틀린다.** "없다" 를 말하는 값은 ``None`` 이 아니라
+    ``"EVENT_FREE_CHAIN"`` 이다 (아래 ``trigger_events`` 설명).
+    """
 
     ranges: list[str] = field(default_factory=list)
     """SetRange() 의 LOCATION_* 목록 — '이 효과를 어디서 발동/적용할 수 있는가'"""
@@ -94,7 +106,21 @@ class LuaScriptInfo:
     """s.listed_series — 참조하는 카드군(SET_*)"""
     functions: list[str] = field(default_factory=list)
     trigger_events: list[str] = field(default_factory=list)
-    """스크립트 전체에서 등장한 EVENT_* 상수"""
+    """
+    스크립트 전체에서 등장한 EVENT_* 상수.
+
+    **유발 목록이 아니다** (Phase 3-E-17). 이름이 그렇게 읽히지만 실제로는
+    파일 하나를 정규식으로 긁은 것이고, 두 가지가 섞여 있다.
+
+    - 어느 효과에 붙었는지 모른다 — 그것은 :attr:`EffectSpec.code` 만 안다
+    - ``EVENT_FREE_CHAIN`` 도 들어간다. 그것은 **유발 이벤트가 아니라
+      "유발 조건이 없다"** 를 적은 값이다 (``EFFECT_TYPE_ACTIVATE`` ·
+      ``QUICK_O`` · ``IGNITION`` 과만 함께 쓰이고 ``TRIGGER_O`` ·
+      ``TRIGGER_F`` 와는 한 번도 같이 쓰이지 않는다 — 전수 측정)
+
+    그래서 이 목록의 길이나 내용으로 "이 카드가 유발 효과를 갖는가" 를 말할 수
+    없다.
+    """
     locations: list[str] = field(default_factory=list)
     """스크립트 전체에서 등장한 LOCATION_* 상수"""
     categories: list[str] = field(default_factory=list)

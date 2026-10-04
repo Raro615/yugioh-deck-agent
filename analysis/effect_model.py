@@ -453,7 +453,22 @@ class EffectAnalysis:
 
     effect_types: list[str] = field(default_factory=list)
     trigger_event: str | None = None
-    """SetCode 가 EVENT_* 이면 그 값. 아니면 ``None``."""
+    """
+    SetCode 가 EVENT_* 이면 그 값. 아니면 ``None``.
+
+    **``is not None`` 을 "유발 효과다" 로 읽지 않는다** (Phase 3-E-17).
+    ``EVENT_FREE_CHAIN`` 이 이 자리에 들어오는데, 그것은 유발 이벤트가 아니라
+    **"유발 조건이 없다"** 를 적은 값이다. 둘은 ``EVENT_`` 로 시작하는 같은
+    모양이고 번호대도 같아서 (``constant.lua``: ``EVENT_FREE_CHAIN = 1002`` ·
+    ``EVENT_CHAINING = 1027``) 구문으로 가를 수 없다. 가르는 것은 함께 쓰인
+    :attr:`effect_types` 다.
+
+    그리고 ``None`` 은 **세 가지가 합쳐진 값**이다 — SetCode 가 없었다 /
+    ``EFFECT_*`` 였다 (:attr:`effect_code` 가 받는다) / 읽지 못했다. 마지막
+    경우를 적어 두는 자리가 없고, 그것이
+    :class:`ActivationCondition` 이 ``has_condition_function`` ·
+    ``unparsed`` 로 "있었는데 못 읽었다" 를 말할 수 있는 것과 다른 점이다.
+    """
     effect_code: str | None = None
     """SetCode 가 EFFECT_* 이면 그 값."""
     activation_locations: list[str] = field(default_factory=list)
