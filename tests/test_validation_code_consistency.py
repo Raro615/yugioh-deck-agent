@@ -26,6 +26,7 @@ enum · 새 status · 새 계층은 하나도 만들지 않았다.
 """
 
 import ast
+import collections
 import pathlib
 
 import pytest
@@ -433,12 +434,14 @@ def test_11_the_remaining_invalid_sites_are_the_measured_three():
 
     (3-E-26 이전에는 6곳이었다. 숫자가 늘면 새 자리가 생긴 것이다.)
     """
+    #: **자리마다 센다.** 한 파일 안에 같은 모양이 하나 더 생기는 것이 바로
+    #: 되돌아가는 모습이라서, 집합으로 묶으면 그것을 놓친다.
     expected = {
-        ("engine/activation.py", "ActivationStatus.CONDITION_FALSE"),
-        ("engine/effect/executor.py", "ResolutionStatus.CONDITION_FALSE"),
-        ("engine/trigger.py", "ActionValidity.INVALID"),  # _event_relation
+        ("engine/activation.py", "ActivationStatus.CONDITION_FALSE"): 1,
+        ("engine/effect/executor.py", "ResolutionStatus.CONDITION_FALSE"): 1,
+        ("engine/trigger.py", "ActionValidity.INVALID"): 1,  # _event_relation 하나뿐
     }
-    found = set()
+    found: "collections.Counter[tuple[str, str]]" = collections.Counter()
     root = PROJECT_ROOT / "engine"
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -461,9 +464,9 @@ def test_11_the_remaining_invalid_sites_are_the_measured_three():
                 or "INELIGIBLE" in n
             }
             for verdict in verdicts:
-                found.add((str(path.relative_to(PROJECT_ROOT)), verdict))
+                found[(str(path.relative_to(PROJECT_ROOT)), verdict)] += 1
 
-    assert found == expected, f"측정된 3곳과 다르다: {found ^ expected}"
+    assert dict(found) == expected, f"측정된 3곳과 다르다: {dict(found)}"
 
 
 def test_12_the_duel_loop_still_does_not_import_the_trigger_layer():
