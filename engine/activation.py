@@ -658,9 +658,8 @@ class EffectActivator:
         if definition.activation is None:
             return None
         view = GameStateView.from_state(state, viewer=action.actor)
-        evaluated = ConditionEvaluator(view).evaluate(
-            definition.activation, self._condition_context(action, ())
-        )
+        context = self._condition_context(action, ())
+        evaluated = ConditionEvaluator(view).evaluate(definition.activation, context)
         if evaluated.result is ConditionResult.TRUE:
             return None
         if evaluated.result is ConditionResult.FALSE:
@@ -672,11 +671,21 @@ class EffectActivator:
                 f"발동 조건이 거짓입니다: {evaluated.description}",
                 authorization=verdict,
             )
+        # **"정보가 없어서 모른다" 와 "규칙이 없어서 모른다" 는 다른 사실이다.**
+        # 앞은 판이 바뀌면 풀리고 뒤는 코드가 생겨야 풀린다. 조건에게 직접
+        # 되묻는다 — ``ActionValidator._check_requirements`` 가 이미 쓰는 방법
+        # 그대로이고, 새 구조를 만들지 않는다 (Phase 3-E-26).
+        #
+        # 어느 쪽이든 상태는 ``CONDITION_UNKNOWN`` 그대로다. 모름을 거부로도
+        # 허가로도 접지 않는다.
+        unimplemented = definition.activation.missing_rules(view, context)
         return self._fail(
             ActivationStatus.CONDITION_UNKNOWN,
             action,
             chain,
-            ValidationCode.INFORMATION_UNAVAILABLE,
+            ValidationCode.RULE_NOT_IMPLEMENTED
+            if unimplemented
+            else ValidationCode.INFORMATION_UNAVAILABLE,
             f"발동 조건을 판정할 수 없습니다: {evaluated.description}",
             missing="; ".join(evaluated.unknown_reasons) or None,
             unchecked=evaluated.unknown_reasons,

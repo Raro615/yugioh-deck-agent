@@ -94,6 +94,19 @@ class ValidationCode(str, Enum):
     EFFECT_LIST_UNRELIABLE = "effect_list_unreliable"
     """``effect_count`` 가 0 이다. 효과가 없어서인지 못 읽어서인지 모른다."""
     RULE_NOT_IMPLEMENTED = "rule_not_implemented"
+    """
+    **이 엔진이 아직 못 한다.** 판이 어떻든 달라지지 않고, 코드가 생겨야 풀린다.
+
+    ``UNKNOWN`` 쪽의 코드다 — 확실한 거부(``INVALID``)에 붙이지 않는다.
+    "조건을 끝까지 보고 거짓을 받았다" 는 미구현이 아니라 거부이고, 섞어
+    적으면 "엔진이 못 한 것" 을 세는 쪽이 거부를 미구현으로 읽는다.
+
+    구분해 쓸 자리들 (Phase 3-E-24 에서 측정, 3-E-26 에서 정리):
+
+    * 정보가 없어서 모른다 → ``INFORMATION_UNAVAILABLE`` · ``HIDDEN_CARD``
+    * 출처가 실행을 금지한다 → ``EXECUTION_FORBIDDEN``
+    * 후보가 조건을 만족하지 않는다 → ``CANDIDATE_NOT_ELIGIBLE``
+    """
 
     # --- 비용 · 선택 (Phase 2-C) ---------------------------------------
     NO_CANDIDATES = "no_candidates"

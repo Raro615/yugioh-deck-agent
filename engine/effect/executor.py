@@ -968,8 +968,9 @@ class EffectExecutor:
         if definition.activation is None:
             return None
         view = GameStateView.from_state(state, viewer=context.controller)
+        condition_context = context.condition_context()
         verdict = ConditionEvaluator(view).evaluate(
-            definition.activation, context.condition_context()
+            definition.activation, condition_context
         )
         if verdict.result is ConditionResult.TRUE:
             return None
@@ -979,9 +980,15 @@ class EffectExecutor:
                 ValidationCode.RULE_NOT_IMPLEMENTED,
                 f"발동 조건이 거짓입니다: {verdict.description}",
             )
+        # 발동기(:meth:`EffectActivator._check_condition`)와 **같은 태도**를
+        # 유지한다 — "정보가 없어서" 와 "규칙이 없어서" 를 나눈다. 여기만
+        # 다르게 적으면 같은 정의가 두 계층에서 다른 뜻이 된다 (Phase 3-E-26).
+        unimplemented = definition.activation.missing_rules(view, condition_context)
         return _fail(
             ResolutionStatus.CONDITION_UNKNOWN,
-            ValidationCode.INFORMATION_UNAVAILABLE,
+            ValidationCode.RULE_NOT_IMPLEMENTED
+            if unimplemented
+            else ValidationCode.INFORMATION_UNAVAILABLE,
             f"발동 조건을 판정할 수 없습니다: {verdict.description}",
             missing="; ".join(verdict.unknown_reasons) or None,
         )

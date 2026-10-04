@@ -913,7 +913,12 @@ class TriggerCollector:
             return TriggerCandidate(
                 **base,
                 status=TriggerStatus.FORBIDDEN,
-                code=ValidationCode.RULE_NOT_IMPLEMENTED,
+                # **"엔진이 못 한다" 가 아니라 "이 근거로는 실행하지 않는다"** 다.
+                # 같은 사실을 :meth:`TriggerEligibilityJudge._execution_authority`
+                # 가 이미 ``EXECUTION_FORBIDDEN`` 으로 적는다 — 한 파일 안에서
+                # 같은 사실이 두 코드로 적히면 ``GateVerdict.forbids`` 처럼
+                # **코드로** 금지를 읽는 쪽이 한쪽을 못 본다 (Phase 3-E-26).
+                code=ValidationCode.EXECUTION_FORBIDDEN,
                 reason="공식 텍스트에서 유추한 효과는 실행하지 않습니다 (ADR-004).",
             )
 
@@ -970,7 +975,10 @@ class TriggerCollector:
             return TriggerCandidate(
                 **base,
                 status=TriggerStatus.INELIGIBLE,
-                code=ValidationCode.RULE_NOT_IMPLEMENTED,
+                # **확실한 거부이고 미구현이 아니다.** ``RULE_NOT_IMPLEMENTED``
+                # 는 "이 엔진이 못 한다" 는 뜻이라서, 조건을 끝까지 보고 거짓을
+                # 받은 자리에 적으면 판정과 이유가 어긋난다 (Phase 3-E-26).
+                code=ValidationCode.CANDIDATE_NOT_ELIGIBLE,
                 reason=f"조건이 거짓입니다: {described}",
             )
         return TriggerCandidate(
@@ -1396,7 +1404,10 @@ class TriggerEligibilityJudge:
             return _gate(
                 EligibilityGate.TRIGGER_CONDITION,
                 ActionValidity.INVALID,
-                ValidationCode.RULE_NOT_IMPLEMENTED,
+                # 수집기(``TriggerCollector._judge``)와 **같은 사실을 같은 코드로**
+                # 적는다. 두 계층이 같은 거부를 다른 이유로 적으면 하나를 고쳐도
+                # 다른 하나가 남는다 (Phase 3-E-26).
+                ValidationCode.CANDIDATE_NOT_ELIGIBLE,
                 f"조건이 거짓입니다: {described}",
             )
         return _gate(

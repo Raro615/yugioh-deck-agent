@@ -327,32 +327,42 @@ def test_07_unknown_never_leaks_into_permission():
 @pytest.mark.real_card
 def test_08_a_false_condition_is_reported_with_the_unimplemented_code(repository):
     """
-    **발견 ① — ``status`` 는 맞는데 ``code`` 가 틀린다.**
+    **발견 ① — ``status`` 는 맞는데 ``code`` 가 틀렸다. Phase 3-E-26 에서 고쳤다.**
 
-    ``_judge`` 는 조건이 거짓일 때 ``INELIGIBLE`` + ``RULE_NOT_IMPLEMENTED`` 를
-    돌려준다. "거짓" 과 "구현 없음" 은 다른 사실이고, 쓸 수 있는 코드
-    (``CANDIDATE_NOT_ELIGIBLE``)가 이미 있다. 지금은 불리지 않으므로 해가 없다 —
-    **연결할 때 고칠 자리로 적어 둔다.**
+    이 함수 이름은 3-E-24 가 **결함을 측정했을 때** 붙인 이름이라 그대로 둔다
+    (그 발견을 찾는 사람이 이 자리에 닿아야 한다). 이제 하는 일은 반대다 —
+    고친 것이 **되돌아가지 않는지** 지킨다.
+
+    고친 내용:
+
+    * 조건이 거짓 → ``INELIGIBLE`` + ``CANDIDATE_NOT_ELIGIBLE``
+      (``RULE_NOT_IMPLEMENTED`` 는 "이 엔진이 못 한다" 는 뜻이고, 조건을
+      끝까지 보고 받은 거짓은 미구현이 아니다)
+    * 출처 금지 → ``FORBIDDEN`` + ``EXECUTION_FORBIDDEN``
+      (금지를 알아보는 ``GateVerdict.forbids`` 가 **코드로** 판단하므로, 같은
+      사실을 두 계층이 다른 코드로 말하면 한쪽이 안 보인다)
     """
     source = (PROJECT_ROOT / "engine/trigger.py").read_text(encoding="utf-8")
     judge = source.split("def _judge")[1].split("\n    def ")[0]
     false_branch = judge.split("if combined is ConditionResult.FALSE:")[1].split(
         "return TriggerCandidate("
-    )[1][:400]
-    assert "TriggerStatus.INELIGIBLE" in false_branch  # 판정은 맞다
-    assert "ValidationCode.RULE_NOT_IMPLEMENTED" in false_branch  # 이유가 틀리다
+    )[1][:600]
+    assert "TriggerStatus.INELIGIBLE" in false_branch  # 판정은 그대로 맞다
+    assert "ValidationCode.CANDIDATE_NOT_ELIGIBLE" in false_branch  # 이유도 맞아졌다
     assert "조건이 거짓입니다" in false_branch
 
-    #: 더 맞는 코드가 이미 enum 에 있다.
-    assert ValidationCode.CANDIDATE_NOT_ELIGIBLE.value == "candidate_not_eligible"
+    #: 같은 사실을 말하는 관문(``_trigger_condition``)도 같은 코드를 쓴다 —
+    #: 수집기와 판정기가 어긋나 있으면 한쪽을 고쳐도 다른 쪽이 남는다.
+    gate = source.split("def _trigger_condition")[1].split("\n    def ")[0]
+    gate_false = gate.split("if combined is ConditionResult.FALSE:")[1][:600]
+    assert "ActionValidity.INVALID" in gate_false
+    assert "ValidationCode.CANDIDATE_NOT_ELIGIBLE" in gate_false
+    assert "ValidationCode.RULE_NOT_IMPLEMENTED" not in gate_false
 
-    #: 같은 모양이 **금지**에서도 나타난다 — ``FORBIDDEN`` 후보의 코드도
-    #: ``RULE_NOT_IMPLEMENTED`` 다. 그런데 금지를 알아보는 쪽(``GateVerdict.forbids``)
-    #: 은 **코드로** 판단한다 (``EXECUTION_FORBIDDEN``). 즉 같은 사실을 두 계층이
-    #: 서로 다른 코드로 말한다 — 지금은 두 계층이 이어져 있지 않아 해가 없다.
-    forbidden_branch = judge.split("provenance.is_forbidden:")[1][:400]
+    #: 금지는 **금지 코드로** 적는다. 그래야 ``GateVerdict.forbids`` 가 본다.
+    forbidden_branch = judge.split("provenance.is_forbidden:")[1][:700]
     assert "TriggerStatus.FORBIDDEN" in forbidden_branch
-    assert "ValidationCode.RULE_NOT_IMPLEMENTED" in forbidden_branch
+    assert "ValidationCode.EXECUTION_FORBIDDEN" in forbidden_branch
     assert "ADR-004" in forbidden_branch
     forbids_source = source.split("def forbids")[1][:300]
     assert "ValidationCode.EXECUTION_FORBIDDEN" in forbids_source

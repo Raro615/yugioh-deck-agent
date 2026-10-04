@@ -661,6 +661,12 @@ def test_an_unknown_condition_changes_nothing_and_is_not_false(state):
     """
     ``UNKNOWN`` 을 ``TRUE`` 로도 ``FALSE`` 로도 접지 않는다. 별도의 상태로
     남고, 무엇을 몰랐는지 남긴다.
+
+    **Phase 3-E-26 에서 코드가 바뀌었다.** 여기 걸린 조건은
+    ``UnimplementedRule`` 이므로 모르는 까닭은 **규칙이 없어서**이고,
+    ``INFORMATION_UNAVAILABLE`` ("판정할 정보가 없다") 이 아니다. 둘은 다른
+    사실이다 — 앞은 코드가 생겨야 풀리고 뒤는 판이 바뀌면 풀린다. 아래
+    ``test_hidden_information_...`` 이 뒤쪽을 맡는다.
     """
     definition = make_definition(
         DrawOperation(1), activation=UnimplementedRule("체인 위의 카드 수")
@@ -669,7 +675,8 @@ def test_an_unknown_condition_changes_nothing_and_is_not_false(state):
 
     assert result.status is ResolutionStatus.CONDITION_UNKNOWN
     assert result.status is not ResolutionStatus.CONDITION_FALSE
-    assert result.code is ValidationCode.INFORMATION_UNAVAILABLE
+    assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert result.code is not ValidationCode.INFORMATION_UNAVAILABLE
     assert "체인 위의 카드 수" in (result.missing or "")
     assert after == before
 
@@ -691,6 +698,9 @@ def test_hidden_information_makes_the_condition_unknown_not_true(state):
     result, before, after = run(state, definition, make_context(definition))
 
     assert result.status is ResolutionStatus.CONDITION_UNKNOWN
+    #: 여기는 **정보**가 없어서 모른다 — 빠진 규칙이 없다 (Phase 3-E-26).
+    assert result.code is ValidationCode.INFORMATION_UNAVAILABLE
+    assert result.code is not ValidationCode.RULE_NOT_IMPLEMENTED
     assert after == before
     assert GameStateView.from_state(state, viewer=0).find(
         facedown.instance_id
