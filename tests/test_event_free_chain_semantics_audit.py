@@ -450,11 +450,30 @@ def test_12_this_audit_added_no_production_structure():
     assert len(dataclasses.fields(EffectDefinition)) == 10
     assert len(dataclasses.fields(TriggerSpec)) == 9
 
-    #: 새 enum 이 생기지 않았다 — 이름에 FREE_CHAIN 을 가진 엔진 심볼이 없다.
-    import engine.trigger as trigger_mod
+    #: 새 enum 이 생기지 않았다.
+    #:
+    #: ``dir(module)`` 만 보면 **enum 멤버를 놓친다** — ``TimingPoint.FREE_CHAIN``
+    #: 을 추가해도 모듈 속성 목록에는 나타나지 않는다. 그래서 모듈의 Enum
+    #: 클래스를 찾아 **멤버 이름까지** 본다 (고의 위반 F 가 이 구멍을 찾았다).
+    import enum as enum_mod
     import engine.activation_timing as timing_mod
+    import engine.trigger as trigger_mod
 
+    offenders: list[str] = []
     for module in (trigger_mod, timing_mod):
-        assert not [
-            name for name in dir(module) if "FREE_CHAIN" in name.upper()
-        ], module.__name__
+        for name in dir(module):
+            if "FREE_CHAIN" in name.upper():
+                offenders.append(f"{module.__name__}.{name}")
+            attribute = getattr(module, name, None)
+            if isinstance(attribute, type) and issubclass(attribute, enum_mod.Enum):
+                offenders.extend(
+                    f"{module.__name__}.{name}.{member}"
+                    for member in attribute.__members__
+                    if "FREE_CHAIN" in member.upper()
+                )
+    assert offenders == [], offenders
+
+    #: 측정값 — ``TimingPoint`` 는 8개 그대로다 (3-E-30 · 3-E-31 과 같은 값).
+    from engine.trigger import TimingPoint
+
+    assert len(list(TimingPoint)) == 8
