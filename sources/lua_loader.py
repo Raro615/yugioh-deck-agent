@@ -194,6 +194,21 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
                     code = _RE_EFFECT_CODE.search(args)
                     if code:
                         spec.code = f"EFFECT_{code.group(1)}"
+                    else:
+                        # 이름을 붙일 수 없는 인자다 (``SetCode(id)`` ·
+                        # ``SetCode(1082946)`` · ``SetCode(CARD_*)``).
+                        #
+                        # 여기서 **앞 값을 그대로 두면 안 된다.** Clone 은 부모의
+                        # ``code`` 를 물려받으므로, 물려받은 값이 남은 채 스크립트가
+                        # 분명히 덮어쓴 코드를 계속 주장하게 된다 (Phase 3-E-18 이
+                        # corpus 전체에서 3개 블록을 찾았다 — ``c4179255`` 는
+                        # ``e1:SetCode(EVENT_CHAINING)`` → ``local e2=e1:Clone()``
+                        # → ``e2:SetCode(id)`` 인데 ``e2.code`` 가
+                        # ``EVENT_CHAINING`` 으로 남았다).
+                        #
+                        # 읽지 못한 것은 **모른다**(``None``)로 되돌린다. 틀린 값을
+                        # 남기는 것보다 모른다고 말하는 것이 맞다.
+                        spec.code = None
             elif setter == "Range":
                 spec.ranges = _strip_prefix(spec.ranges + _RE_LOCATION.findall(args))
             elif setter == "TargetRange":
@@ -323,7 +338,7 @@ class LuaScriptSource:
                 if entry.is_file() and _RE_SCRIPT_FILE.match(entry.name):
                     count += 1
                     newest = max(newest, entry.stat().st_mtime)
-        return f"v3:{count}:{newest:.0f}"
+        return f"v4:{count}:{newest:.0f}"
 
 
 def _info_to_dict(info: LuaScriptInfo) -> dict:

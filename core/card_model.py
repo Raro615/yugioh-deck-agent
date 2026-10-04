@@ -51,15 +51,20 @@ class EffectSpec:
     """
     SetCode() 인자. EVENT_* 또는 EFFECT_* 상수 이름.
 
-    ``None`` 은 **두 가지를 뜻한다** (Phase 3-E-17 이 측정했다).
+    ``None`` 은 **두 가지를 뜻한다** (Phase 3-E-17 이 발견하고 3-E-18 이 셌다).
 
-    1. ``SetCode`` 호출이 아예 없었다 — 물어볼 것이 없다
+    1. ``SetCode`` 호출이 아예 없었다 — 물어볼 것이 없다 (블록 4,436개)
     2. 호출은 있었는데 인자가 ``EVENT_*`` 도 ``EFFECT_*`` 도 아니어서
-       **읽지 못했다** (``SetCode(id)`` · ``SetCode(1082946)`` 등)
+       **읽지 못했다** (``SetCode(id)`` · ``SetCode(1082946)`` 등 — 블록 118개 ·
+       스크립트 112개)
 
     둘이 같은 값이 되므로 ``code is None`` 을 "유발 조건이 없다" 로 읽으면
-    **162장이 조용히 틀린다.** "없다" 를 말하는 값은 ``None`` 이 아니라
+    **118개 블록이 조용히 틀린다.** "없다" 를 말하는 값은 ``None`` 이 아니라
     ``"EVENT_FREE_CHAIN"`` 이다 (아래 ``trigger_events`` 설명).
+
+    (3-E-17 이 적은 "162장" 은 측정 방법이 틀린 숫자였다 — 3-E-18 이
+    ``parse_lua_source`` 결과로 다시 셌다. 또한 ``Clone`` 이 물려준 값이
+    읽지 못한 ``SetCode`` 뒤에 **남아 있던** 블록 3개를 3-E-18 이 고쳤다.)
     """
 
     ranges: list[str] = field(default_factory=list)
