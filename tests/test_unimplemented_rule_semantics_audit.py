@@ -126,7 +126,11 @@ PRODUCTION_CONSTRUCTION_COUNT = 2
 
 #: ``RULE_NOT_IMPLEMENTED`` 가 production (``engine/`` + ``agent/``) 에
 #: 등장하는 총 횟수. 생성 2곳과 대비하는 수다.
-RULE_NOT_IMPLEMENTED_MENTIONS = 75
+#:
+#: 75 → **76** (Phase 3-E-38). 네 자리를 정확한 코드로 바꾸면서 코드 등장이
+#: 2 줄어들고(69 → 67) 그 까닭을 적은 주석이 3 늘었다(6 → 9). 이 수가
+#: 가리키는 요지("코드 등장이 생성의 수십 배다")는 그대로다.
+RULE_NOT_IMPLEMENTED_MENTIONS = 76
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7개.
 #: ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.

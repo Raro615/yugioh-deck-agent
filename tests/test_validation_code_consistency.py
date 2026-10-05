@@ -426,19 +426,33 @@ def test_11_the_remaining_invalid_sites_are_the_measured_three():
     """
     **고치지 않은 것을 숨기지 않는다.**
 
-    ``INVALID`` 판정에 ``RULE_NOT_IMPLEMENTED`` 를 붙이는 자리가 **3곳**
-    남았다. 셋 다 "조건이 거짓" · "이 사건과 무관" 이라는 사실이고, 그것을
-    말하는 코드가 enum 에 **없다.** §7 이 새 enum 을 금지하므로 억지로
-    맞추지 않았다 — 판정(``CONDITION_FALSE`` · ``INVALID``)이 사실을
-    정확히 싣고 있어서 지금 해가 없다.
+    ``INVALID`` 판정에 ``RULE_NOT_IMPLEMENTED`` 를 붙이는 자리가 이제
+    **1곳**이다 — ``engine/trigger.py`` 의 ``_event_relation`` 하나뿐이다.
 
-    (3-E-26 이전에는 6곳이었다. 숫자가 늘면 새 자리가 생긴 것이다.)
+    .. note::
+       **이 테스트의 원래 가정이 틀렸다** (3-E-37 이 측정, 3-E-38 이 고침).
+
+       원래 docstring 은 3곳을 세면서 "그것을 말하는 코드가 enum 에
+       **없다**" 고 적었다. 그 가정이 틀렸다 — ``CANDIDATE_NOT_ELIGIBLE``
+       이 enum 에 **있었고**, 같은 파일의 ``TriggerCollector._judge`` 가
+       "조건이 거짓" 에 이미 그 코드를 쓰고 있었다. 즉 3-E-26 은 자기가
+       이미 쓴 코드를 못 보고 "새 enum 이 필요하다" 고 결론 내린 셈이다.
+
+       그래서 3-E-38 이 두 자리(``activation.py`` ·
+       ``effect/executor.py`` 의 ``CONDITION_FALSE``)를
+       ``CANDIDATE_NOT_ELIGIBLE`` 로 바로잡았다.
+
+       남은 1곳(``_event_relation``)은 **의도적으로 남겼다.** "이 선언은 그
+       사건에 반응하지 않는다" 를 ``INVALID`` 로 적는 것이 맞는지 자체가
+       구조 질문이고, 트리거 파이프라인이 dormant 라서 지금 해가 없다
+       (3-E-38 §6).
+
+    (3-E-26 이전 6곳 → 3-E-26 이후 3곳 → 3-E-38 이후 **1곳**.
+    숫자가 늘면 새 자리가 생긴 것이다.)
     """
     #: **자리마다 센다.** 한 파일 안에 같은 모양이 하나 더 생기는 것이 바로
     #: 되돌아가는 모습이라서, 집합으로 묶으면 그것을 놓친다.
     expected = {
-        ("engine/activation.py", "ActivationStatus.CONDITION_FALSE"): 1,
-        ("engine/effect/executor.py", "ResolutionStatus.CONDITION_FALSE"): 1,
         ("engine/trigger.py", "ActionValidity.INVALID"): 1,  # _event_relation 하나뿐
     }
     found: "collections.Counter[tuple[str, str]]" = collections.Counter()

@@ -629,12 +629,16 @@ class EffectActivator:
         availability = execution_availability(definition, self._lookup)
         if availability is ExecutionAvailability.EXECUTABLE:
             return None
-        status, reason, missing = _AVAILABILITY_REFUSAL[availability]
+        # **코드도 표에서 가져온다** (Phase 3-E-38). 출처 금지는 "못 한다" 가
+        # 아니라 "이 근거로는 실행하지 않는다" 이므로 ``EXECUTION_FORBIDDEN``
+        # 이고, 미검증·미등록은 그대로 ``RULE_NOT_IMPLEMENTED`` 다. 세 갈래가
+        # 코드 한 줄을 공유하면 그 차이가 사라진다.
+        status, code, reason, missing = _AVAILABILITY_REFUSAL[availability]
         return self._fail(
             status,
             action,
             chain,
-            ValidationCode.RULE_NOT_IMPLEMENTED,
+            code,
             reason,
             missing=missing,
             authorization=verdict,
@@ -663,11 +667,18 @@ class EffectActivator:
         if evaluated.result is ConditionResult.TRUE:
             return None
         if evaluated.result is ConditionResult.FALSE:
+            # **확실한 거부이고 미구현이 아니다** (Phase 3-E-38).
+            # 조건을 끝까지 보고 거짓을 받았으므로 규칙은 **있었다**.
+            # ``RULE_NOT_IMPLEMENTED`` 는 "이 엔진이 아직 못 한다" 이고
+            # ``# --- 모른다 (UNKNOWN) ---`` 묶음의 코드다 — 확실한 거부에
+            # 붙이면 판정과 이유가 어긋난다.
+            # 트리거 계층(``TriggerCollector._judge``)이 같은 사실에 이미
+            # 쓰는 코드를 그대로 쓴다 (Phase 3-E-26).
             return self._fail(
                 ActivationStatus.CONDITION_FALSE,
                 action,
                 chain,
-                ValidationCode.RULE_NOT_IMPLEMENTED,
+                ValidationCode.CANDIDATE_NOT_ELIGIBLE,
                 f"발동 조건이 거짓입니다: {evaluated.description}",
                 authorization=verdict,
             )
@@ -826,20 +837,30 @@ class EffectActivator:
         return f"<EffectActivator lookup={self._lookup!r}>"
 
 
-#: 실행 가능성이 거절로 바뀔 때의 (상태, 설명, 없는 것).
-_AVAILABILITY_REFUSAL: dict[ExecutionAvailability, tuple[ActivationStatus, str, str]] = {
+#: 실행 가능성이 거절로 바뀔 때의 (상태, **코드**, 설명, 없는 것).
+#:
+#: 코드가 여기 있는 이유 (Phase 3-E-38) — 출처 금지는 **확실한 거부**이고
+#: 미검증·미등록은 **모른다** 다. 세 갈래가 상태와 설명은 따로 가지면서 코드
+#: 하나를 공유하면 그 차이가 읽는 쪽에서 사라진다. 한 자리에서 함께 정한다.
+_AVAILABILITY_REFUSAL: dict[
+    ExecutionAvailability, tuple[ActivationStatus, ValidationCode, str, str]
+] = {
     ExecutionAvailability.FORBIDDEN_SOURCE: (
         ActivationStatus.FORBIDDEN,
+        # "이 근거로는 절대 실행하지 않는다" — 판이 바뀌어도 달라지지 않는다.
+        ValidationCode.EXECUTION_FORBIDDEN,
         "공식 텍스트에서 유추한 효과는 발동하지 않습니다 (ADR-004).",
         "executable implementation from official script",
     ),
     ExecutionAvailability.UNVERIFIED: (
         ActivationStatus.UNVERIFIED,
+        ValidationCode.RULE_NOT_IMPLEMENTED,
         "의미가 공식 근거에서 확인되지 않았습니다.",
         "verified semantics",
     ),
     ExecutionAvailability.NO_IMPLEMENTATION: (
         ActivationStatus.NOT_IMPLEMENTED,
+        ValidationCode.RULE_NOT_IMPLEMENTED,
         "실행 구현이 등록되어 있지 않습니다. 해결할 수 없는 효과를 체인에 "
         "올리지 않습니다 (ADR-006).",
         "registered effect implementation",

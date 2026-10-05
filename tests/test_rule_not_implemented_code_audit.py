@@ -94,11 +94,18 @@ MINE = 0
 # 측정값 — 전부 저장소에서 센 수다. 바뀌면 그것이 신호다.
 # ======================================================================
 
-#: ``engine/`` + ``agent/`` 의 **문자열** 등장 수. 프롬프트가 말하는 75다.
-STRING_OCCURRENCES = 75
+#: ``engine/`` + ``agent/`` 의 **문자열** 등장 수.
+#:
+#: 75 → **76** (Phase 3-E-38 이 M1·M2 네 자리를 고치면서 코드 2 감소 ·
+#: 까닭을 적은 주석 3 증가).
+STRING_OCCURRENCES = 76
 
-#: 그중 주석 · docstring (코드가 아니다).
+#: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
+#: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
 PROSE_OCCURRENCES = {
+    ("engine/activation.py", 634),      # M2: 코드도 표에서 가져온다
+    ("engine/activation.py", 672),      # M1: 확실한 거부이고 미구현이 아니다
+    ("engine/effect/executor.py", 922), # M2: 이 근거로는 절대 실행하지 않는다
     ("engine/special_summon.py", 77),
     ("engine/trigger.py", 978),
     ("engine/trigger_chain.py", 553),
@@ -107,8 +114,8 @@ PROSE_OCCURRENCES = {
     ("engine/validation.py", 180),
 }
 
-#: 실제 코드 등장 = 75 - 6.
-CODE_OCCURRENCES = 69
+#: 실제 코드 등장 = 76 - 9. (3-E-38 전에는 69 = 75 - 6.)
+CODE_OCCURRENCES = 67
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {
@@ -124,20 +131,35 @@ FIELD_DEFAULT_OWNERS = {
 
 #: 결과 계층에서 **"모른다" 쪽이 아닌 상태**와 짝지은 자리 (기계로 센다).
 #: 줄 번호는 ``Call`` 의 첫 인자 줄이다.
+#:
+#: .. note::
+#:    **Phase 3-E-38 이 세 자리를 지웠다** (16 → 13). 조건 거짓 ×2 는
+#:    ``CANDIDATE_NOT_ELIGIBLE`` 로, 해결 계층의 출처 금지 ×1 은
+#:    ``EXECUTION_FORBIDDEN`` 으로 바뀌었으므로 더 이상 이 코드를 쓰지
+#:    않는다.
+#:
+#:    네 자리를 고쳤는데 **셋만 줄어든다** — 발동 계층의 출처 금지(M2-a)는
+#:    ``_AVAILABILITY_REFUSAL`` **표 안의 튜플**이라 상태와 짝지은 결과
+#:    자리로 세어지지 않았고, 애초에 이 목록에 없었다. 처음에 네 자리라고
+#:    적었다가 실제 집합을 세어 고쳤다.
+#:
+#:    남은 13곳은 **맞는 ``ValidationCode`` 가 없어서** 그대로인
+#:    것들이다 (구조 오류 · 예외 · 응답 거절).
+#:
+#:    이 테스트가 틀린 가정을 갖고 있던 것은 아니다 — 당시의 사실을 정확히
+#:    세고 있었고, **고치면 깨지도록** 일부러 자리마다 고정했다. 그 설계가
+#:    의도대로 작동해서 3-E-38 이 무엇을 바꿨는지 여기서 먼저 드러났다.
 CONTRACT_VIOLATIONS = {
     ("engine/action_execution.py", 316, "ActionStatus.EXECUTION_ERROR"),
     ("engine/activation.py", 554, "ActivationStatus.INVALID_ACTION"),
     ("engine/activation.py", 586, "ActivationStatus.CHAIN_REFUSED"),
-    ("engine/activation.py", 667, "ActivationStatus.CONDITION_FALSE"),
     ("engine/effect/executor.py", 488, "ResolutionStatus.EXECUTION_ERROR"),
     ("engine/effect/executor.py", 630, "ResolutionStatus.INVALID_OPERATION"),
     ("engine/effect/executor.py", 643, "ResolutionStatus.INVALID_OPERATION"),
     ("engine/effect/executor.py", 766, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/executor.py", 865, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 920, "ResolutionStatus.FORBIDDEN"),
-    ("engine/effect/executor.py", 979, "ResolutionStatus.CONDITION_FALSE"),
-    ("engine/effect/executor.py", 1134, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1329, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1141, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1336, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/resolution.py", 499, "ResolutionStatus.FORBIDDEN"),
     ("engine/payment.py", 372, "PaymentStatus.EXECUTION_ERROR"),
     ("engine/response.py", 476, "ResponseOutcome.REFUSED"),
@@ -378,7 +400,7 @@ def test_02_the_string_count_is_75_but_the_code_count_is_69():
 
     sites = code_sites()
     assert len(sites) == CODE_OCCURRENCES
-    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 6
+    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 9
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()
@@ -454,9 +476,20 @@ def test_04_the_code_and_a_missing_rule_are_not_the_same_fact():
     assert other.missing_rule == "어떤 규칙"
     assert other.code is not ValidationCode.RULE_NOT_IMPLEMENTED
 
-    #: 실제 production 에서도 그렇다 — 조건 거짓은 코드가 있고 규칙 이름이 없다.
+    #: 실제 production 에서도 그렇다 — "모른다" 쪽은 코드가 있고 규칙 이름이
+    #: 없을 수 있다.
+    #:
+    #: .. note::
+    #:    원래 이 자리는 **조건 거짓**으로 그것을 보였다. 3-E-38 이 조건
+    #:    거짓의 코드를 ``CANDIDATE_NOT_ELIGIBLE`` 로 바로잡았으므로, 같은
+    #:    사실을 보이려면 아직 ``RULE_NOT_IMPLEMENTED`` 를 쓰는 자리를
+    #:    골라야 한다 — 정의 미등록이 그것이다.
+    bare_rule = activate(new_state(), synthetic(activation=UnimplementedRule("없는 규칙")))
+    assert bare_rule.code is ValidationCode.RULE_NOT_IMPLEMENTED
+
+    #: 그리고 조건 거짓은 이제 **다른 코드**다.
     false = activate(new_state(), synthetic(activation=Always(ConditionResult.FALSE)))
-    assert false.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert false.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
     assert false.missing is None
 
 
@@ -465,19 +498,23 @@ def test_04_the_code_and_a_missing_rule_are_not_the_same_fact():
 # ======================================================================
 
 
-def test_05_sixteen_result_sites_attach_this_code_to_a_definite_refusal():
+def test_05_thirteen_result_sites_attach_this_code_to_a_definite_refusal():
     """
     **D (§20): status/code 정합성 — enum 의 금지선을 어기는 자리를 센다.**
 
     상태가 "모른다" 쪽인지는 **상태 enum 자신이 적어 둔 묶음**으로 가른다
     (``engine.activation._UNKNOWN_STATUSES``). 내가 새 기준을 만들지 않는다.
 
-    결과: **16곳 위반 · 17곳 적합.** 목록을 그대로 고정한다 — 늘어나면
+    결과: **13곳 위반 · 17곳 적합** (3-E-38 전에는 16곳이었다). 목록을
+    그대로 고정한다 — 늘어나면
     여기서 깨지고, 고쳐서 줄어도 여기서 깨진다. 어느 쪽이든 신호다.
     """
     violations, conforming = status_paired_sites()
     assert set(violations) == CONTRACT_VIOLATIONS
-    assert len(violations) == 16
+    #: 16 → **13** (3-E-38 이 M1 ×2 와 해결 계층 M2-b ×1 을 지웠다. 발동
+    #: 계층 M2-a 는 표 안의 튜플이라 이 목록에 없었고, ``resolution.py`` 의
+    #: dormant 한 출처 금지 1곳은 범위 밖이라 남겼다).
+    assert len(violations) == 13
     assert len(conforming) == CONFORMING_SITES
 
     #: 위반 쪽 상태는 **하나도** ``_UNKNOWN_STATUSES`` 에 없다.
@@ -579,10 +616,40 @@ def test_08_unknown_and_this_code_are_different_axes():
     assert rule.code is not info.code
 
     #: 거꾸로 — 같은 코드가 **다른 상태**에 붙는다 (바로 이것이 §5 의 질문).
+    #:
+    #: .. note::
+    #:    원래 이 자리는 **조건 거짓**을 짝으로 썼다. 3-E-38 이 조건 거짓을
+    #:    ``CANDIDATE_NOT_ELIGIBLE`` 로 바로잡았으므로, 같은 코드가 여러
+    #:    상태에 붙는다는 사실은 **남아 있는** 자리로 보인다 —
+    #:    ``CONDITION_UNKNOWN`` 과 ``NOT_IMPLEMENTED`` 가 그것이다.
+    from engine.chain import Chain
+    from engine.effect import EffectDefinitionRegistry, EffectImplementationRegistry
+
+    unregistered = __import__(
+        "engine.activation", fromlist=["EffectActivator"]
+    ).EffectActivator(EffectDefinitionRegistry(()), EffectImplementationRegistry(()))
+    definition = synthetic(activation=None)
+    state = new_state()
+    not_implemented = unregistered.activate(
+        state,
+        Chain(),
+        PlayerAction.activate_effect(
+            actor=MINE,
+            source=state.player(MINE).monster_zone[0].instance_id,
+            effect_ref=definition.effect_ref,
+        ),
+        authorization=ValidationResult.valid("테스트가 허가했다"),
+    )
+    assert not_implemented.code is rule.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert not_implemented.status is ActivationStatus.NOT_IMPLEMENTED
+    assert not_implemented.status is not rule.status
+
+    #: 그리고 조건 거짓은 이제 **다른 코드**다 (3-E-38).
     false = activate(new_state(), synthetic(activation=Always(ConditionResult.FALSE)))
+    assert false.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    assert false.code is not rule.code
+
     missing = activate(new_state(), synthetic(activation=None))
-    assert false.code is rule.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert false.status is not rule.status
     assert missing.status is ActivationStatus.ACTIVATED
 
 
@@ -618,7 +685,7 @@ def test_09_information_unavailable_is_still_separate():
     ).code is ValidationCode.INFORMATION_UNAVAILABLE
 
 
-def test_10_execution_forbidden_exists_but_the_effect_layers_do_not_use_it():
+def test_10_execution_forbidden_is_now_used_by_the_effect_layers_too():
     """
     **G (§20): ``EXECUTION_FORBIDDEN`` 과의 분리 — 그리고 발견 M2.**
 
@@ -641,19 +708,28 @@ def test_10_execution_forbidden_exists_but_the_effect_layers_do_not_use_it():
     #: 상태는 정확하다.
     assert activated.status is ActivationStatus.FORBIDDEN
     assert resolved.status is ResolutionStatus.FORBIDDEN
-    #: 코드는 거친 이름표다 — **현재 상태를 고정한다.**
-    assert activated.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert resolved.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert activated.code is not ValidationCode.EXECUTION_FORBIDDEN
 
-    #: 트리거 계층은 **다르게** 적는다 — 같은 사실, 정확한 코드.
-    assert "ValidationCode.EXECUTION_FORBIDDEN" in source_of("engine/trigger.py")
-    #: 그리고 그 코드를 **읽는** 자리가 트리거 계층에만 있다.
+    #: .. note::
+    #:    **Phase 3-E-38 이 고쳤다 (M2).** 원래 이 테스트는 "발동·해결 계층은
+    #:    아직 ``RULE_NOT_IMPLEMENTED`` 를 쓴다" 를 고정했고 "고치지 않는다 —
+    #:    현재 상태를 고정해서 바뀌면 알게 한다" 고 적었다. 바로 그 설계대로
+    #:    바뀌었을 때 알려 주었으므로, 이제 **고쳐진 사실**을 고정한다.
+    assert activated.code is ValidationCode.EXECUTION_FORBIDDEN
+    assert resolved.code is ValidationCode.EXECUTION_FORBIDDEN
+    assert activated.code is not ValidationCode.RULE_NOT_IMPLEMENTED
+
+    #: 이제 **세 계층이 같은 코드**를 쓴다 — 트리거 · 발동 · 해결.
+    for rel in (
+        "engine/trigger.py",
+        "engine/activation.py",
+        "engine/effect/executor.py",
+    ):
+        assert "ValidationCode.EXECUTION_FORBIDDEN" in source_of(rel), rel
+    #: 그 코드를 **읽는** 자리는 여전히 트리거 계층에만 있다.
     assert GateVerdict.forbids.__doc__ is not None
-    assert "EXECUTION_FORBIDDEN" in source_of("engine/trigger.py")
 
 
-def test_11_candidate_not_eligible_exists_but_the_effect_layers_do_not_use_it():
+def test_11_candidate_not_eligible_is_now_used_by_the_effect_layers_too():
     """
     **H (§20): ``CANDIDATE_NOT_ELIGIBLE`` 과의 분리 — 그리고 발견 M1.**
 
@@ -667,16 +743,23 @@ def test_11_candidate_not_eligible_exists_but_the_effect_layers_do_not_use_it():
 
     assert activated.status is ActivationStatus.CONDITION_FALSE
     assert resolved.status is ResolutionStatus.CONDITION_FALSE
-    #: **현재 상태를 고정한다** — 조건 거짓인데 "엔진이 못 한다" 고 적는다.
-    assert activated.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert resolved.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert activated.code is not ValidationCode.CANDIDATE_NOT_ELIGIBLE
 
-    #: 트리거 계층의 같은 사실은 정확한 코드를 쓴다 (3-E-26).
+    #: .. note::
+    #:    **Phase 3-E-38 이 고쳤다 (M1).** 원래 이 테스트는 "조건 거짓인데
+    #:    '엔진이 못 한다' 고 적는다" 를 고정했다. 그 자리가 바뀌었으므로
+    #:    **고쳐진 사실**을 고정한다 — 세 계층이 같은 코드를 쓴다.
+    assert activated.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    assert resolved.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    assert activated.code is not ValidationCode.RULE_NOT_IMPLEMENTED
+
+    #: 트리거 계층이 먼저 쓰던 코드와 **같아졌다** (3-E-26 → 3-E-38).
     trigger_source = source_of("engine/trigger.py")
     assert "code=ValidationCode.CANDIDATE_NOT_ELIGIBLE" in trigger_source
     assert "확실한 거부이고 미구현이 아니다" in trigger_source
     assert "판정과 이유가 어긋난다" in trigger_source
+    #: 그리고 발동·해결 계층도 같은 말을 적는다.
+    for rel in ("engine/activation.py", "engine/effect/executor.py"):
+        assert "확실한 거부이고 미구현이 아니다" in source_of(rel), rel
 
 
 # ======================================================================
@@ -780,12 +863,13 @@ def test_14_the_effect_layer_mixes_two_meanings_in_one_code():
     executor_conforming = {
         status for rel, _, status in conforming if rel == "engine/effect/executor.py"
     }
+    #: .. note::
+    #:    3-E-38 이 ``FORBIDDEN`` 과 ``CONDITION_FALSE`` 를 지웠다. 남은 셋은
+    #:    **맞는 ``ValidationCode`` 가 없어서** 그대로다.
     assert executor_violations == {
         "ResolutionStatus.EXECUTION_ERROR",
         "ResolutionStatus.INVALID_OPERATION",
         "ResolutionStatus.INVALID_CONTEXT",
-        "ResolutionStatus.FORBIDDEN",
-        "ResolutionStatus.CONDITION_FALSE",
     }
     assert executor_conforming == {
         "ResolutionStatus.UNCHECKED_RULES",

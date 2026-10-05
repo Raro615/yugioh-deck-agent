@@ -229,12 +229,15 @@ def test_a_text_derived_effect_changes_nothing(state):
     assert state.state_hash() == before
 
     # .. note::
-    #    ``result.code`` 는 ``RULE_NOT_IMPLEMENTED`` 다. 금지를 가리키는
-    #    ``ValidationCode.EXECUTION_FORBIDDEN`` 이 나중에(2-F-1) 생겼는데
-    #    실행기(2-D-2)가 아직 그것을 쓰지 않는다. **판정 자체는 정확하다**
-    #    (``status`` 가 ``FORBIDDEN``) — 코드만 덜 구체적이다. DETAIL 로
-    #    기록하고 여기서 고치지 않는다.
-    assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    #    **Phase 3-E-38 에서 고쳤다.** 이 자리의 원래 주석은 "``result.code``
+    #    는 ``RULE_NOT_IMPLEMENTED`` 다 … DETAIL 로 기록하고 여기서 고치지
+    #    않는다" 였다. 그 DETAIL 이 3-E-37 의 **M2** 이고, 3-E-38 이
+    #    ``EXECUTION_FORBIDDEN`` 으로 바로잡았다.
+    #
+    #    **이 테스트가 잘못된 가정을 갖고 있었던 것은 아니다** — 당시의 사실을
+    #    정확히 적고 있었고, 고쳐야 할 것을 숨기지 않고 note 로 남겨 두었다.
+    #    사실이 바뀌었으므로 단정을 새 사실로 옮긴다. ``status`` 는 그대로다.
+    assert result.code is ValidationCode.EXECUTION_FORBIDDEN
 
 
 @requires_official_db

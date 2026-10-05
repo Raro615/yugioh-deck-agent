@@ -110,12 +110,21 @@ MINE = 0
 #: **이 수**이고 사용처 수가 아니다.
 CODE_MEMBER_COUNT = 48
 
-#: ``engine/`` + ``agent/`` 에서 코드가 **등장하는** 줄 (3-E-36 이 센 수).
-CODE_OCCURRENCES = 69
+#: ``engine/`` + ``agent/`` 에서 코드가 **등장하는** 줄.
+#: 69 → **67** (Phase 3-E-38 이 M1 ×2 · M2 ×2 를 고치면서 2 감소).
+CODE_OCCURRENCES = 67
 
-#: 그중 **거부를 만드는** 자리. 나머지는 enum 정의 1 · 필드 기본값 8 ·
-#: 집합 멤버십 1 · 비교 1 이다.
-REJECTION_PRODUCTIONS = 58
+#: 그중 **거부를 만드는** 자리.
+#:
+#: 58 → **54** (Phase 3-E-38). 넷을 고쳤는데 둘만 줄어든 것이 아니라 넷이
+#: 줄었다 — M1 두 자리는 코드가 바뀌어 사라지고, M2 의 발동 쪽은 생성 자리의
+#: 리터럴이 ``_AVAILABILITY_REFUSAL`` **표의 값**으로 옮겨 갔기 때문이다.
+#: 표 안의 값은 조회용 데이터이므로 "거부를 만드는 자리" 가 아니라
+#: **멤버십**으로 센다 (집합 멤버십 1 → **3**).
+#:
+#: 나머지는 enum 정의 1 · 필드 기본값 8 · 멤버십 3 · 비교 1 = 13.
+#: 54 + 13 = 67 로 맞는다.
+REJECTION_PRODUCTIONS = 54
 
 #: enum 이 **섹션 주석으로 선언한** 묶음 → 멤버 수.
 DECLARED_SECTIONS = {
@@ -376,14 +385,16 @@ def test_02_the_enum_declares_its_validity_groups_with_section_comments():
 # ======================================================================
 
 
-def test_03_the_rejection_usage_count_is_58_not_48():
+def test_03_the_rejection_usage_count_is_54_not_48():
     """
     **B (§21): 거부 사용처 수를 다시 센다.**
 
-    코드 등장 69곳 = **거부 생성 58** + 필드 기본값 8 + enum 정의 1 +
-    집합 멤버십 1 + 비교 1.
+    코드 등장 67곳 = **거부 생성 54** + 필드 기본값 8 + enum 정의 1 +
+    멤버십 3 + 비교 1.
 
     **48 은 enum 크기였다.** 숫자를 그대로 믿지 않고 다시 셌다.
+
+    (3-E-38 이 네 자리를 고쳐 69 → 67 · 58 → 56 이 되었다.)
     """
     productions = rejection_productions()
     assert len(productions) == REJECTION_PRODUCTIONS
@@ -399,7 +410,8 @@ def test_03_the_rejection_usage_count_is_58_not_48():
             if "RULE_NOT_IMPLEMENTED" in line and index not in prose:
                 occurrences += 1
     assert occurrences == CODE_OCCURRENCES
-    assert occurrences - len(productions) == 11
+    #: 11 → **13** (3-E-38 이 표에 값 둘을 더해 멤버십이 1 → 3 이 되었다).
+    assert occurrences - len(productions) == 13
 
 
 def test_04_only_three_members_are_ever_compared():
@@ -438,7 +450,7 @@ def test_04_only_three_members_are_ever_compared():
 # ======================================================================
 
 
-def test_05_condition_false_uses_rule_not_implemented_in_activation_layer():
+def test_05_condition_false_now_uses_candidate_not_eligible_in_activation_layer():
     """
     **C · W (§21 · §22): M1 을 명시적으로 잡는 negative test.**
 
@@ -449,21 +461,26 @@ def test_05_condition_false_uses_rule_not_implemented_in_activation_layer():
     false = synthetic(activation=Always(ConditionResult.FALSE))
     activated = activate(new_state(), false)
 
-    #: 상태는 정확하다.
+    #: 상태는 (전에도 지금도) 정확하다.
     assert activated.status is ActivationStatus.CONDITION_FALSE
-    #: 코드는 ``# --- 모른다 (UNKNOWN) --- `` 묶음의 것이다.
-    assert activated.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert activated.code.name in UNKNOWN_SECTION_MEMBERS
-    #: 그런데 상태는 "모른다" 쪽이 **아니다**.
+    #: 상태가 "모른다" 쪽이 **아니다** — 그것이 이 자리의 핵심이었다.
     from engine.activation import _UNKNOWN_STATUSES
 
     assert activated.status not in _UNKNOWN_STATUSES
 
-    #: 규칙 이름을 적지 않는다 — 모르는 것이 아니기 때문이다 (정직한 부분).
+    #: .. note::
+    #:    **Phase 3-E-38 이 고쳤다 (M1).** 원래 이 negative test 는
+    #:    ``RULE_NOT_IMPLEMENTED`` (``모른다 (UNKNOWN)`` 묶음)를 고정해서
+    #:    "확실한 거부에 모른다 코드가 붙어 있다" 를 드러냈다. 그 불일치가
+    #:    없어졌으므로 **코드가 선언 묶음과 맞는다**는 새 사실을 고정한다.
+    assert activated.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    assert activated.code.name not in UNKNOWN_SECTION_MEMBERS
+
+    #: 규칙 이름을 적지 않는다 — 모르는 것이 아니기 때문이다 (그대로다).
     assert activated.missing is None
 
 
-def test_06_condition_false_uses_rule_not_implemented_in_resolution_layer():
+def test_06_condition_false_now_uses_candidate_not_eligible_in_resolution_layer():
     """
     **C · W (§21 · §22): M1 의 해결 계층 쌍.**
 
@@ -474,9 +491,11 @@ def test_06_condition_false_uses_rule_not_implemented_in_resolution_layer():
     resolved = resolve(new_state(), false)
 
     assert resolved.status is ResolutionStatus.CONDITION_FALSE
-    assert resolved.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    #: **3-E-38 이 고쳤다** — 발동 계층과 같은 코드다.
+    assert resolved.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
 
-    #: 소스에서도 두 자리가 같은 모양임을 확인한다.
+    #: 소스에서도 두 자리가 같은 모양임을 확인한다 — **고친 뒤에도** 같다.
+    #: (한쪽만 고치면 여기서 깨진다.)
     for rel, status in (
         ("engine/activation.py", "ActivationStatus.CONDITION_FALSE"),
         ("engine/effect/executor.py", "ResolutionStatus.CONDITION_FALSE"),
@@ -484,10 +503,10 @@ def test_06_condition_false_uses_rule_not_implemented_in_resolution_layer():
         source = source_of(rel)
         index = source.index(status)
         window = source[index : index + 260]
-        assert "ValidationCode.RULE_NOT_IMPLEMENTED" in window, rel
+        assert "ValidationCode.CANDIDATE_NOT_ELIGIBLE" in window, rel
 
 
-def test_07_the_trigger_layer_chose_a_different_code_for_the_same_fact():
+def test_07_the_trigger_and_action_layers_now_agree_on_the_same_fact():
     """
     **L (§21): Trigger vs Action/Resolution 비교.**
 
@@ -503,10 +522,12 @@ def test_07_the_trigger_layer_chose_a_different_code_for_the_same_fact():
         assert candidate.status is TriggerStatus.INELIGIBLE
         assert candidate.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
 
-    #: 두 계층의 코드가 **다르다** — 같은 사실인데.
+    #: .. note::
+    #:    **3-E-38 이 맞췄다.** 원래 이 자리는 "두 계층의 코드가 **다르다** —
+    #:    같은 사실인데" 를 고정했다. 이제 **같다.**
     activated = activate(new_state(), synthetic(activation=Always(ConditionResult.FALSE)))
-    assert activated.code is not ValidationCode.CANDIDATE_NOT_ELIGIBLE
-    assert activated.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert activated.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    assert activated.code is not ValidationCode.RULE_NOT_IMPLEMENTED
 
 
 # ======================================================================
@@ -514,7 +535,7 @@ def test_07_the_trigger_layer_chose_a_different_code_for_the_same_fact():
 # ======================================================================
 
 
-def test_08_source_forbidden_uses_rule_not_implemented_in_action_layer():
+def test_08_source_forbidden_now_uses_execution_forbidden_in_action_layer():
     """
     **D · X (§21 · §22): M2 를 명시적으로 잡는 negative test.**
 
@@ -528,9 +549,11 @@ def test_08_source_forbidden_uses_rule_not_implemented_in_action_layer():
 
     assert activated.status is ActivationStatus.FORBIDDEN
     assert resolved.status is ResolutionStatus.FORBIDDEN
-    assert activated.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert resolved.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert activated.code is not ValidationCode.EXECUTION_FORBIDDEN
+    #: **3-E-38 이 고쳤다 (M2).** 원래 이 negative test 는
+    #: ``RULE_NOT_IMPLEMENTED`` 를 고정해 불일치를 드러냈다.
+    assert activated.code is ValidationCode.EXECUTION_FORBIDDEN
+    assert resolved.code is ValidationCode.EXECUTION_FORBIDDEN
+    assert activated.code is not ValidationCode.RULE_NOT_IMPLEMENTED
 
 
 def test_09_the_enum_created_execution_forbidden_for_exactly_this_case():
@@ -550,11 +573,14 @@ def test_09_the_enum_created_execution_forbidden_for_exactly_this_case():
     assert "따로 구분한다" in forbidden
     assert "조건이 거짓" in forbidden
 
-    #: 그리고 트리거 계층은 그것을 쓴다.
-    assert "ValidationCode.EXECUTION_FORBIDDEN" in source_of("engine/trigger.py")
-    #: 발동·해결 계층은 쓰지 않는다.
-    assert "EXECUTION_FORBIDDEN" not in source_of("engine/activation.py")
-    assert "EXECUTION_FORBIDDEN" not in source_of("engine/effect/executor.py")
+    #: **이제 세 계층이 모두 그것을 쓴다** (3-E-38). 원래 이 자리는
+    #: "발동·해결 계층은 쓰지 않는다" 를 고정했다.
+    for rel in (
+        "engine/trigger.py",
+        "engine/activation.py",
+        "engine/effect/executor.py",
+    ):
+        assert "ValidationCode.EXECUTION_FORBIDDEN" in source_of(rel), rel
 
 
 def test_10_source_forbidden_is_a_different_code_from_structural_source_forbidden():
@@ -738,10 +764,12 @@ def test_16_the_status_carries_the_decision_and_the_code_carries_the_reason():
     ``permits_execution`` · ``activated`` · ``gives_a_future`` 가 전부
     **상태**만 본다. 코드가 판정을 뒤집는 자리가 없다.
     """
-    #: 같은 코드, 다른 판정.
-    false = activate(new_state(), synthetic(activation=Always(ConditionResult.FALSE)))
+    #: 같은 코드, 다른 판정 — 3-E-38 뒤에는 **조건 거짓이 아니라** 정의
+    #: 미등록과 규칙 미구현이 그 짝이다.
     unknown = activate(new_state(), synthetic(activation=UnimplementedRule("없는 규칙")))
-    assert false.code is unknown.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    false = activate(new_state(), synthetic(activation=Always(ConditionResult.FALSE)))
+    assert unknown.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert false.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
     assert false.status is not unknown.status
 
     #: 허가 판단은 상태만 본다.
@@ -961,13 +989,15 @@ def test_21_the_effect_layer_is_where_the_grouping_breaks_most():
         ):
             statuses.add(first.attr)
 
+    #: 3-E-38 이 ``FORBIDDEN`` 과 ``CONDITION_FALSE`` 를 지웠다 — 남은 셋은
+    #: **맞는 ``ValidationCode`` 가 없어서** 그대로다.
     assert {
         "INVALID_CONTEXT",
         "INVALID_OPERATION",
-        "FORBIDDEN",
-        "CONDITION_FALSE",
         "EXECUTION_ERROR",
     } <= statuses
+    assert "FORBIDDEN" not in statuses
+    assert "CONDITION_FALSE" not in statuses
     assert {"UNSUPPORTED_OPERATION", "UNCHECKED_RULES", "NOT_IMPLEMENTED"} <= statuses
     #: 상태 이름이 코드보다 정확하다 — 그것이 "새 코드가 필요없다" 의 근거다.
     for name in ("INVALID_CONTEXT", "EXECUTION_ERROR", "UNSUPPORTED_OPERATION"):
@@ -1287,5 +1317,5 @@ def test_31_the_distinctions_from_phase_3e24_to_3e36_still_hold():
     assert len(SimulationStatus) == 5
     assert len(TimingPoint) == 8
 
-    #: 3-E-36 이 고정한 수가 그대로다.
+    #: 거부 생성 수가 측정값과 맞는다 (3-E-38 뒤 56).
     assert len(rejection_productions()) == REJECTION_PRODUCTIONS

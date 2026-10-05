@@ -916,9 +916,13 @@ class EffectExecutor:
         if availability is ExecutionAvailability.EXECUTABLE:
             return None
         if availability is ExecutionAvailability.FORBIDDEN_SOURCE:
+            # **"이 근거로는 절대 실행하지 않는다"** 이고 "못 한다" 가 아니다
+            # (Phase 3-E-38). 발동기의 ``_AVAILABILITY_REFUSAL`` 표와 같은
+            # 코드를 쓴다 — 아래 두 갈래(미검증 · 미등록)는 **모른다** 쪽이므로
+            # ``RULE_NOT_IMPLEMENTED`` 그대로다.
             return _fail(
                 ResolutionStatus.FORBIDDEN,
-                ValidationCode.RULE_NOT_IMPLEMENTED,
+                ValidationCode.EXECUTION_FORBIDDEN,
                 "공식 텍스트에서 유추한 효과는 실행하지 않습니다 (ADR-004).",
                 missing="executable implementation from official script",
             )
@@ -975,9 +979,12 @@ class EffectExecutor:
         if verdict.result is ConditionResult.TRUE:
             return None
         if verdict.result is ConditionResult.FALSE:
+            # **확실한 거부이고 미구현이 아니다** (Phase 3-E-38).
+            # 발동기(:meth:`EffectActivator._check_condition`)와 **같은 코드**를
+            # 쓴다 — 한쪽만 고치면 같은 정의가 두 계층에서 다른 이유를 낸다.
             return _fail(
                 ResolutionStatus.CONDITION_FALSE,
-                ValidationCode.RULE_NOT_IMPLEMENTED,
+                ValidationCode.CANDIDATE_NOT_ELIGIBLE,
                 f"발동 조건이 거짓입니다: {verdict.description}",
             )
         # 발동기(:meth:`EffectActivator._check_condition`)와 **같은 태도**를
