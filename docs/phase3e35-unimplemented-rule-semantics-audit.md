@@ -561,7 +561,28 @@ engine → DuelStep.code (ValidationCode)
 
 ### 고의 위반 검증
 
-(아래 §17-A 에 결과를 적는다.)
+주장이 정말 잡히는지 확인하려고 production 에 결함을 **일부러** 넣고 테스트가
+잡는지 보았다. 전부 되돌렸다 (commit 뒤에 실행했으므로 작업 트리로 복구를
+검증할 수 있다).
+
+| 주입 | 잡은 테스트 |
+|---|---|
+| A. `UnimplementedRule` 이 판을 보고 **조건부**로 판정한다 | `test_01` |
+| B. `Condition.missing_rules` 기본 계약 문장을 지운다 | `test_02` |
+| C. `UnimplementedRule` 에 두 번째 필드를 더한다 | `test_01` |
+| D. 발동기가 미구현을 `INFORMATION_UNAVAILABLE` 로 뭉갠다 | `test_06` |
+| E. 미구현을 **거부**(`invalid`)로 적는다 | `test_16` |
+| F. `FALSE` 보다 `UNKNOWN` 을 먼저 돌려준다 (미구현이 거부를 덮는다) | `test_08` |
+| G. `_special_summon` 에서 `UnimplementedRule` 을 떼어낸다 | `test_03` · `test_10` |
+| H. `_NormalSummonProcedure` 가 **거부에도** 규칙 이름을 낸다 | `test_14` |
+| I. `library.py` 에 `UnimplementedRule` 을 등재한다 | `test_13` |
+| J. simulation 이 `RULE_NOT_IMPLEMENTED` 를 `REFUSED` 로 뭉갠다 | `test_15` |
+| K. `SearchCandidate` 가 `UNKNOWN` 에 **0점**을 준다 | `test_15` |
+| L. `agent/` 가 `UnimplementedRule` 을 읽는다 | `test_15` |
+
+**열두 가지 모두 잡혔다.** F · K 가 특히 중요하다 — 전자는 "미구현이 확실한
+거부를 덮는" 방향이고 후자는 "모름을 0점으로 접는" 방향이어서, 둘 다 이
+프로젝트가 금지한 쪽으로 틀리는 변경이다.
 
 ### 회귀
 
