@@ -577,7 +577,61 @@ engine → DuelStep.code → agent/simulation.py:284  step.code in _UNKNOWN_CODE
 
 ### 고의 위반 검증
 
-(§18-A 에 결과를 적는다.)
+주장이 정말 잡히는지 확인하려고 production 에 결함을 **일부러** 넣고 테스트가
+잡는지 보았다. 전부 되돌렸다 (commit 뒤에 실행했으므로 작업 트리로 복구를
+검증할 수 있다).
+
+| 주입 | 잡은 테스트 |
+|---|---|
+| A. enum 의 섹션 주석을 지운다 | `test_02` |
+| B. 새 `ValidationCode` 멤버를 더한다 (48 → 49) | `test_01` · `test_02` · `test_14` |
+| C. 쓰이지 않는 멤버를 더한다 | `test_01` |
+| D. 거부 생성 자리를 하나 더한다 (58 → 59) | `test_03` |
+| E. **M1 을 고친다** (발동 계층) | `test_05` · `test_07` |
+| F. **M1 을 고친다** (해결 계층) | `test_06` · `test_21` |
+| G. **M2 를 고친다** (해결 계층) | `test_08` · `test_09` · `test_21` |
+| H. **M3 를 고친다** (사건 불일치) | `test_11` · `test_12` |
+| I. `_refusal_code` 가 `UNKNOWN` 관문까지 보게 한다 | `test_13` |
+| J. `permits_execution` 이 `code` 도 본다 | `test_16` |
+| K. `ValidationResult` 에 `value` 칸을 더한다 | `test_17` |
+| L. `_UNKNOWN_CODES` 에 거부 코드를 더한다 | `test_23` · `test_04` |
+| M. `targeting.py` 가 이 코드를 쓴다 | `test_22` |
+| N. `SOURCE_FORBIDDEN` 을 한 자리 더 쓴다 | `test_10` |
+| O-1. `Requirement` 의 조건을 `FALSE` 를 내는 것으로 **바꿔치기한다** | `test_18` |
+| O-2. 네 번째 `Requirement` 를 **더한다** | `test_18` · `test_03` |
+
+**열여섯 가지 모두 잡혔다.** E~H 가 특히 중요하다 — **고치는 방향**도
+잡히므로, 다음 Phase 가 M1·M2·M3 를 고치면 이 테스트들이 먼저 깨져서
+"보고서의 측정이 낡았다" 고 알려 준다. 그것이 §21 이 "그 테스트들을 고친
+뒤의 사실로 갱신하고 왜 갱신하는지 적는다" 를 미리 요구하는 이유다.
+
+### 주입이 찾아낸 `test_18` 의 실제 구멍 (고쳤다)
+
+O 를 처음 넣었을 때 **잡히지 않았다.** `test_18` 이 이 코드를 든
+`Requirement` 의 **개수만** 세고 있었기 때문이다.
+
+```python
+# 틀린 방법 — 고쳤다
+carriers.append(node.lineno)
+assert len(carriers) == REQUIREMENT_CARRIERS   # 3
+```
+
+내가 주입한 것은 한 carrier 의 **조건을 바꿔치기**한 것이었다
+(`UnimplementedRule(...)` → `FALSE` 를 낼 수 있는 조건). 개수는 3 그대로이고
+테스트는 통과한다. 그런데 §10 의 결론("간접 경로가 **조건의 성질로** 닫혀
+있다")은 **각 carrier 의 조건**에 걸려 있으므로, 개수만 세는 것은 그 결론을
+지키지 못한다.
+
+carrier 를 **조건 종류와 함께** 세도록 고쳤다.
+
+```python
+kinds = sorted(kind for _, kind in carriers)
+assert kinds == ["UnimplementedRule", "UnimplementedRule", "scope"]
+```
+
+그리고 `_NormalSpellActivation.evaluate` 의 본문에 `ConditionResult.FALSE`
+가 없다는 것까지 AST 로 확인하도록 더했다. 고친 뒤 O 를 둘로 나눠
+(O-1 바꿔치기 · O-2 네 번째 추가) 넣었고 둘 다 잡혔다.
 
 ### 회귀
 

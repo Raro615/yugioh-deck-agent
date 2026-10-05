@@ -811,29 +811,53 @@ def test_18_the_indirect_path_into_invalid_exists_but_is_closed_by_construction(
         source
     )
 
-    #: 이 코드를 든 ``Requirement`` 생성처를 센다.
-    carriers = []
+    #: 이 코드를 든 ``Requirement`` 생성처를 **그 조건과 함께** 센다.
+    #: 수만 세면 조건을 바꿔치기한 변경을 놓친다 — 고의 위반이 그 구멍을
+    #: 찾았다. 그래서 **각 carrier 의 조건 종류**를 고정한다.
+    carriers: list[tuple[int, str]] = []
     tree = ast.parse(source)
     for node in ast.walk(tree):
-        if (
+        if not (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
             and node.func.id == "Requirement"
             and "RULE_NOT_IMPLEMENTED" in _unparse(node)
         ):
-            carriers.append(node.lineno)
+            continue
+        condition = node.args[0] if node.args else None
+        kind = (
+            condition.func.id
+            if isinstance(condition, ast.Call) and isinstance(condition.func, ast.Name)
+            else _unparse(condition)
+        )
+        carriers.append((node.lineno, kind))
     assert len(carriers) == REQUIREMENT_CARRIERS
 
-    #: 그 세 조건이 ``FALSE`` 를 내지 않는다는 것을 실제로 확인한다.
+    #: **조건 종류가 둘뿐이다** — 둘 다 ``FALSE`` 를 내지 않는 것들이다.
+    kinds = sorted(kind for _, kind in carriers)
+    assert kinds == ["UnimplementedRule", "UnimplementedRule", "scope"], kinds
+
+    #: 그 둘이 정말 ``FALSE`` 를 내지 않는지 실제로 돌려 본다.
     from engine.action_validation import _NormalSpellActivation
     from engine.condition import ConditionContext
 
     view = view_of(new_state())
     context = ConditionContext(player=MINE)
     assert UnimplementedRule("x").evaluate(view, context) is ConditionResult.UNKNOWN
+    #: ``UnimplementedRule`` 은 판을 보지 않고 언제나 ``UNKNOWN`` 이다.
+    assert UnimplementedRule("x").evaluate(None, None) is ConditionResult.UNKNOWN
     scope = _NormalSpellActivation(None).evaluate(view, context)
     assert scope in {ConditionResult.TRUE, ConditionResult.UNKNOWN}
     assert scope is not ConditionResult.FALSE
+    #: ``_NormalSpellActivation.evaluate`` 의 본문에 ``FALSE`` 가 **없다**.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == "_NormalSpellActivation":
+            body = next(
+                stmt
+                for stmt in node.body
+                if isinstance(stmt, ast.FunctionDef) and stmt.name == "evaluate"
+            )
+            assert "ConditionResult.FALSE" not in _unparse(body)
 
     #: 소스도 그 사실을 적어 둔다.
     assert "이 조건은 ``FALSE`` 를 **돌려주지 않는다**" in source
