@@ -180,6 +180,35 @@ def _unparse(node) -> str:
         return "<?>"
 
 
+def _reads_a_code(node: ast.Compare) -> bool:
+    """
+    이 비교가 ``.code`` 를 **``ValidationCode`` 와** 견주는가.
+
+    문자열로 ``"ValidationCode"`` 를 찾으면 안 된다 — ``as`` 로 별명을 붙인
+    import (``from engine.validation import ValidationCode as _VC``) 를
+    놓친다. 실제로 그 구멍을 고의 위반으로 찾았다. 그래서 **멤버 이름**을
+    ``ValidationCode.__members__`` 에 맞춰 보고, 집합 멤버십은 피연산자
+    이름으로 본다.
+    """
+    text = _unparse(node)
+    if ".code" not in text:
+        return False
+    members = set(ValidationCode.__members__)
+    for side in [node.left, *node.comparators]:
+        #: ``<무엇이든>.RULE_NOT_IMPLEMENTED`` 처럼 멤버 이름을 가리키는가.
+        if isinstance(side, ast.Attribute) and side.attr in members:
+            return True
+        #: ``step.code in _UNKNOWN_CODES`` 처럼 코드 집합과 견주는가.
+        name = (
+            side.id
+            if isinstance(side, ast.Name)
+            else (side.attr if isinstance(side, ast.Attribute) else "")
+        )
+        if name.endswith("CODES"):
+            return True
+    return False
+
+
 def production_files() -> list[pathlib.Path]:
     files = []
     for pkg in ("engine", "agent"):
@@ -919,9 +948,9 @@ def test_20_only_four_production_sites_read_the_code_as_a_decision():
         for node in ast.walk(tree):
             if not isinstance(node, ast.Compare):
                 continue
-            text = _unparse(node)
-            if ".code" in text and ("ValidationCode" in text or "CODES" in text):
-                readers.add((rel, text))
+            if not _reads_a_code(node):
+                continue
+            readers.add((rel, _unparse(node)))
     assert readers == CODE_READERS
     assert len(readers) == 4
 

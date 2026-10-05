@@ -568,7 +568,49 @@ engine → DuelStep.code
 
 ### 고의 위반 검증
 
-(§20-A 에 결과를 적는다.)
+주장이 정말 잡히는지 확인하려고 production 에 결함을 **일부러** 넣고 테스트가
+잡는지 보았다. 전부 되돌렸다 (commit 뒤에 실행했으므로 작업 트리로 복구를
+검증할 수 있다).
+
+| 주입 | 잡은 테스트 |
+|---|---|
+| A. enum 의 금지선 문장을 지운다 | `test_01` |
+| B. 코드 등장을 한 곳 더한다 (69 → 70) | `test_02` |
+| C. `ValidationResult.invalid` 에 이 코드를 넣는다 | `test_03` · `test_05` |
+| D. 조건 거짓에 `CANDIDATE_NOT_ELIGIBLE` 을 쓴다 (**M1 을 고친다**) | `test_05` · `test_11` |
+| E. 출처 금지에 `EXECUTION_FORBIDDEN` 을 쓴다 (**M2 를 고친다**) | `test_05` · `test_10` |
+| F. `_UNKNOWN_STATUSES` 에 `CONDITION_FALSE` 를 더한다 (위반을 숨긴다) | `test_05` |
+| G. 다섯 번째 `code` 독자를 만든다 | `test_20` |
+| H. `_UNKNOWN_CODES` 에 `CANDIDATE_NOT_ELIGIBLE` 을 더한다 | `test_21` |
+| I. `targeting.py` 가 이 코드를 쓴다 | `test_16` |
+| J. `engine/cost/` 가 이 코드를 쓴다 | `test_15` |
+| K. `ValidationCode` 에 새 멤버를 더한다 | `test_19` · `test_26` |
+| L. 트리거가 조건 거짓에 이 코드를 되돌려 쓴다 | `test_12` · `test_11` |
+
+**열두 가지 모두 잡혔다.** D·E 가 특히 중요하다 — **고치는 방향**의 변경도
+잡힌다는 뜻이고, 그래서 다음 Phase 가 M1·M2 를 고치면 이 테스트가 먼저
+깨져서 "보고서의 측정이 낡았다" 고 알려 준다. F 는 위반을 **숨기는**
+방향이고, 그것도 잡힌다.
+
+### 주입이 찾아낸 `test_20` 의 실제 구멍 (고쳤다)
+
+G 를 처음 넣었을 때 **잡히지 않았다.** 왜 그런지 들여다보니 `test_20` 이
+비교문을 **문자열**로 검사하고 있었다.
+
+```python
+# 틀린 방법 — 고쳤다
+if ".code" in text and ("ValidationCode" in text or "CODES" in text):
+```
+
+내가 주입한 독자는 `from engine.validation import ValidationCode as _VC` 로
+별명을 붙였고, 그래서 `_VC.RULE_NOT_IMPLEMENTED` 라는 문자열에
+`"ValidationCode"` 가 **없었다.** 즉 **별명 import 로 만든 다섯 번째
+독자를 놓친다** — 이 Phase 의 안전 논증이 "독자가 넷뿐" 이라는 데 걸려
+있으므로 작은 구멍이 아니다.
+
+`_reads_a_code()` 헬퍼를 더해, 비교 피연산자의 **멤버 이름**을
+`ValidationCode.__members__` 에 맞춰 보고 집합 멤버십은 이름이 `CODES` 로
+끝나는지 보도록 고쳤다. 고친 뒤 G 가 잡혔다.
 
 ### 회귀
 
