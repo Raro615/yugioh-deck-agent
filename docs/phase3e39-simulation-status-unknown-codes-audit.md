@@ -19,8 +19,8 @@
 | `tests/test_validation_code_minimal_fix.py` | ○ 존재 (24 tests) |
 | working tree | clean (reset · checkout 하지 않았다) |
 | 브랜치 | `claude/pensive-goodall-te1egy` |
-| 결과 commit | `<<SHA1>>` — `Phase 3-E-39: audit simulation status and unknown codes` |
-| push | <<PUSH>> |
+| 결과 commit | `cc17d32` — `Phase 3-E-39: audit simulation status and unknown codes` |
+| push | 완료 — `origin/claude/pensive-goodall-te1egy` (`29a7f5f..cc17d32`) |
 
 **3-E-38 의 회귀 수치를 같은 HEAD 에서 다시 확인했다**: `3874 passed / 4 skipped`
 (376.59s). 보고서의 숫자가 맞다.
