@@ -512,7 +512,7 @@ dataclass 안에서 한 필드만 그 설명을 갖고 있다.
 | 09 | `None` → `FALSE` 변환이 없다 | **Test 6** |
 | 10 | 같은 `Condition` 객체가 다섯 자리에서 같은 `canonical_state` 를 낸다 | **Test 7** |
 | 11 | `activation` 과 `ObservationGrant.condition` 의 계약이 **반대**이고 `TriggerSpec` 은 앞쪽 편이다 | **Test 8** |
-| 12 | 네 consumer 가 모두 **정의 등록 관문 뒤에서** `None` 을 읽는다 (+ 미등록은 실제로 막힌다) | **Test 9** |
+| 12 | 네 consumer 가 모두 **정의 등록 관문 뒤에서** `None` 을 읽는다 — 관문 순서를 **AST 호출 순서**로 확인 (+ 미등록은 실제로 막힌다) | **Test 9** |
 | 13 | 같은 이름이 `Condition` 이 아닌 자리 3곳 | §4-3 |
 | 14 | `ObservationGrant` 는 production 생성 **0곳** · `derive_policy` 호출 **0곳** | §20 |
 | 15 | 같은 `None` 이 한 경로에서 두 뜻으로 읽히지 **않는다** | §15 |
@@ -533,10 +533,51 @@ dataclass 안에서 한 필드만 그 설명을 갖고 있다.
 | D. 비용 계층이 `UNKNOWN` 후보를 `eligible` 로 넣는다 | `test_04` |
 | E. 관측 권한이 `UNKNOWN` 을 허가로 읽는다 | `test_06` |
 | F. `ObservationGrant` 의 `None` 계약을 `activation` 쪽으로 베낀다 | `test_11` |
-| G. 발동기가 정의 등록 관문보다 조건을 먼저 본다 | `test_12` |
+| G. 발동기가 **출처 금지 관문보다 조건을 먼저** 본다 (실제 재배치) | `test_12` |
+| G2. 발동기가 **정의 등록 관문을 조건 뒤로** 옮긴다 | `test_12` |
 | H. 트리거가 정의 미등록을 `ELIGIBLE` 로 읽는다 | `test_15` |
 | I. `agent/search.py` 가 `definition.activation` 을 읽는다 | `test_17` |
 | J. `ConditionResult` 에 네 번째 상태를 더한다 | `test_16` |
+
+열한 가지 모두 잡혔고, 작업 트리는 전부 되돌아갔다.
+
+### 주입이 찾아낸 `test_12` 의 실제 구멍 (고쳤다)
+
+G 를 처음에 **주석 한 줄**로 넣었더니 잡히지 않았다. 주석은 동작을 바꾸지
+않으므로 당연한 결과지만, 왜 잡히지 않았는지 들여다보다가 `test_12` 자체의
+결함을 찾았다.
+
+처음 `test_12` 는 관문 순서를 **소스 문자열 위치**로 재고 있었다.
+
+```python
+# 틀린 방법 — 고쳤다
+assert activation_source.index("definition is None") < activation_source.index(
+    "if definition.activation is None:"
+)
+```
+
+`_check` 와 `_check_condition` 은 **다른 메서드**이므로, 관문을 실제로 뒤로
+옮겨도 두 메서드 본문의 글자 순서는 그대로다. 즉 이 단정은 **재배치를 잡지
+못한다.**
+
+`_statement_order()` 헬퍼를 더해 **호출 순서를 AST 로** 읽도록 고쳤다.
+
+```python
+assert _statement_order("engine/activation.py", "_check") == (
+    "definition-none-gate", "_check_authority", "_check_condition", "_check_targets",
+)
+assert _statement_order("engine/effect/executor.py", "_plan") == (
+    "_check_authority", "_check_supported", "_check_condition",
+)
+```
+
+고친 뒤 G 를 **진짜 재배치**로 다시 넣었고 (`_check_condition` 을
+`_check_authority` 앞으로 옮김), G2 (정의 등록 관문 무력화) 까지 더해 둘 다
+잡히는 것을 확인했다.
+
+고치는 과정에서 또 하나를 바로잡았다 — 실행기의 관문 호출은 `execute` 가
+아니라 **`_plan`** 안에 있다 (`executor.py:532`). 함수 이름을 추측하지 않고
+AST 로 확인했다.
 
 ### 회귀
 

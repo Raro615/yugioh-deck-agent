@@ -213,6 +213,59 @@ def field_docstring(path: str, class_name: str, field_name: str) -> str:
     raise AssertionError(f"{path}:{class_name}.{field_name} 를 찾지 못했습니다.")
 
 
+def _statement_order(path: str, function: str) -> tuple[str, ...]:
+    """
+    ``function`` 본문에서 **관문이 실제로 불리는 순서**를 AST 로 읽는다.
+
+    소스 문자열 위치가 아니라 **문장 순서**다 — 관문을 뒤로 옮기면 여기서
+    바뀌고, 주석을 더하는 것으로는 바뀌지 않는다.
+
+    ``definition-none-gate`` 는 ``if definition is None:`` 관문을 가리킨다
+    (이름 붙은 메서드 호출이 아니라 인라인 ``if`` 이므로 따로 이름을 준다).
+    """
+    tree = ast.parse(source_of(path))
+    target = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == function:
+            target = node
+            break
+    assert target is not None, f"{path}:{function} 을 찾지 못했습니다."
+
+    watched = {
+        "_check_authority",
+        "_check_supported",
+        "_check_condition",
+        "_check_targets",
+    }
+    order: list[str] = []
+    for statement in target.body:
+        #: ``if definition is None:`` 관문.
+        if isinstance(statement, ast.If):
+            test = statement.test
+            if (
+                isinstance(test, ast.Compare)
+                and len(test.ops) == 1
+                and isinstance(test.ops[0], ast.Is)
+                and isinstance(test.left, ast.Name)
+                and test.left.id == "definition"
+                and isinstance(test.comparators[0], ast.Constant)
+                and test.comparators[0].value is None
+            ):
+                order.append("definition-none-gate")
+                continue
+        #: 관문 메서드 호출. ``x = self._check_...(...)`` 또는 ``return ...``.
+        for node in ast.walk(statement):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in watched
+            ):
+                if not order or order[-1] != node.func.attr:
+                    order.append(node.func.attr)
+                break
+    return tuple(order)
+
+
 def view_of(state) -> GameStateView:
     return GameStateView.from_state(state, viewer=MINE)
 
@@ -714,13 +767,20 @@ def test_12_every_consumer_of_activation_reads_none_the_same_way():
         assert "if definition.activation is None:" in source_of(path)
 
     #: 그리고 **그 앞에** 정의 등록 / 실행 권위 관문이 있다.
-    activation_source = source_of("engine/activation.py")
-    assert activation_source.index("definition is None") < activation_source.index(
-        "if definition.activation is None:"
+    #:
+    #: 소스 문자열 위치로 재면 안 된다 — 함수 본문의 **글자 순서**는 호출
+    #: 순서가 아니므로, 관문을 실제로 뒤로 옮겨도 글자 순서는 그대로다.
+    #: 그래서 **호출 순서를 AST 로** 읽는다.
+    assert _statement_order("engine/activation.py", "_check") == (
+        "definition-none-gate",
+        "_check_authority",
+        "_check_condition",
+        "_check_targets",
     )
-    executor_source = source_of("engine/effect/executor.py")
-    assert executor_source.index("_check_authority") < executor_source.index(
-        "if definition.activation is None:"
+    assert _statement_order("engine/effect/executor.py", "_plan") == (
+        "_check_authority",
+        "_check_supported",
+        "_check_condition",
     )
 
     #: 트리거 두 자리 — ``spec.condition`` 과 ``definition.activation`` 을
