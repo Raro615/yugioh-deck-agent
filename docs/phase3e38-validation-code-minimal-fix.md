@@ -15,8 +15,8 @@
 | Base | Phase 3-E-37 (`4b93f48` + 보고서 `bf35d6c`) |
 | 작업 시작 시 실제 HEAD | `bf35d6c` — "Phase 3-E-37 보고서: 고의 위반 16건 + test_18 의 실제 구멍 수정 (AUDIT-ONLY)" |
 | 브랜치 | `claude/pensive-goodall-te1egy` |
-| 결과 commit | `<<SHA1>>` — `Phase 3-E-38: minimal validation code fix` |
-| push | <<PUSH>> |
+| 결과 commit | `913b05a` — `Phase 3-E-38: minimal validation code fix` |
+| push | 완료 — `origin/claude/pensive-goodall-te1egy` (`bf35d6c..913b05a`) |
 
 §2 의 지시대로 3-E-37 보고서를 **믿지 않고** production source 를 직접 다시 읽었다.
 그 과정에서 보고서의 수 하나가 실제와 달랐다 — §19 에 적는다.
