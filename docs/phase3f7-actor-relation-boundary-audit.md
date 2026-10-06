@@ -745,3 +745,26 @@ A 는 "판단해야 할 **명확한 계층이 존재한다**" 다. 의미상 가
    넘긴 뒤에도 유효한가.**
 
 **이 Phase 는 그 작업을 하지 않았다. 다음 Phase 는 임의로 진행하지 않는다.**
+
+---
+
+## Commit · Push 기록
+
+| 항목 | 값 |
+| --- | --- |
+| 작업 commit | `64b783a3ee7ab6ec49973f8ba83e74d2b8d965c0` (`64b783a`) |
+| commit message | `Phase 3-F-7: audit actor relation boundary` |
+| 변경 파일 | `tests/test_actor_relation_boundary_audit.py` (신규) · `docs/phase3f7-actor-relation-boundary-audit.md` (신규) |
+| production diff | **0** — `engine` · `agent` · `app` · `core` · `analysis` · `rules` · `rulings` · `sources` · `scripts` 전부 변경 없음 |
+| `TriggerSpec` 필드 수 | **9** (변경 없음) |
+| `_event_relation` 서명 | `(spec, event)` (변경 없음) |
+| `ValidationCode` 수 | **48** (변경 없음) |
+| branch | `claude/pensive-goodall-te1egy` |
+| push 결과 | `72a0814..64b783a  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy` |
+| base (Phase 3-F-6) | `1f117fe` (작업) · `72a0814` (보고서) |
+| 전체 회귀 | 4,234 passed / 4 skipped (baseline 4,215 +19) |
+| 탐색 순위 digest | `30fa3597a24d4511d8c92ce9f9921412ffada7546675c4d7d5765381402c4175` (6판 611결정 — 3-F-5 · 3-F-6 과 동일) |
+| 최종 판정 | **C. CROSS_LAYER_RELATION_GAP** |
+
+이 절을 더한 commit 은 보고서 기록 commit 이며, 그 commit 역시 production 을
+건드리지 않는다.
