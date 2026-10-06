@@ -561,3 +561,22 @@ $ git diff --stat -- engine agent app core analysis rules rulings sources script
    실행 경로가 live 에 닿는다면 그것은 별도 승인이 필요하다.
 
 **이 Phase 는 그 작업을 하지 않았다. 다음 Phase 는 임의로 진행하지 않는다.**
+
+---
+
+## Commit · Push 기록
+
+| 항목 | 값 |
+| --- | --- |
+| 작업 commit | `f9d95de114cd6e7dadbf48811b62e8bb0a1a0cde` (`f9d95de`) |
+| commit message | `Phase 3-F-4: separate trigger conditions for evaluation scenarios` |
+| 변경 파일 | `tests/test_trigger_condition_separation_audit.py` (신규) · `docs/phase3f4-trigger-condition-separation.md` (신규) |
+| production diff | **0** — `engine` · `agent` · `app` · `core` · `analysis` · `rules` · `rulings` · `sources` · `scripts` 전부 변경 없음 |
+| branch | `claude/pensive-goodall-te1egy` |
+| push 결과 | `e3b3f7f..f9d95de  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy` |
+| base (Phase 3-F-3) | `f1772fe` (작업) · `e3b3f7f` (보고서) |
+| 전체 회귀 | 4,177 passed / 4 skipped (baseline 4,159 +18) |
+| 최종 판정 | **B. SCENARIO_FOUNDATION_INSUFFICIENT** |
+
+이 절을 더한 commit 은 보고서 기록 commit 이며, 그 commit 역시
+production 을 건드리지 않는다.
