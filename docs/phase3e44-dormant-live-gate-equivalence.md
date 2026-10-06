@@ -631,3 +631,18 @@ $ python3 -m pytest -p no:randomly -q
 
 **R-2′ · R-4 는 후보로 올리지 않는다.** 둘 다 "dormant 를 연결하는가" 라는
 훨씬 큰 결정에 달려 있고, 그 결정을 지금 내릴 근거가 없다.
+
+---
+
+## Commit · Push 기록
+
+| 항목 | 값 |
+| --- | --- |
+| 결과 commit | `f32922e` — `Phase 3-E-44: measure dormant-live gate equivalence` |
+| 보고서 commit | 이 섹션을 담은 커밋 (아래) |
+| 브랜치 | `claude/pensive-goodall-te1egy` |
+| Push | `40a7766..f32922e` → `origin/claude/pensive-goodall-te1egy` (성공) |
+| production diff | **0 줄** |
+| 변경 파일 | `tests/test_dormant_live_gate_equivalence.py` (신규) · `docs/phase3e44-dormant-live-gate-equivalence.md` (신규) |
+
+**다음 Phase 는 임의로 진행하지 않는다.**
