@@ -19,8 +19,8 @@
 | `tests/test_simulation_result_search_candidate_audit.py` | ○ 존재 (36 tests) |
 | working tree | clean (reset · checkout 하지 않았다) |
 | 브랜치 | `claude/pensive-goodall-te1egy` |
-| 결과 commit | `<<SHA1>>` — `Phase 3-E-43: audit dormant trigger pipeline structure` |
-| push | <<PUSH>> |
+| 결과 commit | `35e156e` — `Phase 3-E-43: audit dormant trigger pipeline structure` |
+| push | 완료 — `origin/claude/pensive-goodall-te1egy` (`4f009fc..35e156e`) |
 
 ---
 
