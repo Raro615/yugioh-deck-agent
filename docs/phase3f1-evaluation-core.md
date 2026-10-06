@@ -534,4 +534,16 @@ $ git diff --stat -- engine agent app core analysis rules rulings sources script
    Protocol 변경이 선행한다 (`test_11`). Search 의 런타임 검사까지 닿는다.
 5. **Self-play** · **Learned Evaluation** — 위 넷이 안정된 뒤의 일이다.
 
+---
+
+## Commit · Push 기록
+
+| 항목 | 값 |
+| --- | --- |
+| 결과 commit | `bd1f8c3` — `Phase 3-F-1: establish AI evaluation core` |
+| 브랜치 | `claude/pensive-goodall-te1egy` |
+| Push | `077e44a..bd1f8c3` → `origin/claude/pensive-goodall-te1egy` (성공) |
+| production diff | **0 줄** |
+| 변경 파일 | 신규 테스트 1 · 신규 보고서 1 (기존 파일 수정 0건) |
+
 **다음 Phase 는 임의로 진행하지 않는다.**
