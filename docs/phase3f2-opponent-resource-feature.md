@@ -569,4 +569,18 @@ Phase 가 답해야 하는 것이 분명하다.
 4. **ranking 변화를 측정하고 의도된 것임을 문서화한다.** 이번 Phase 의 digest
    비교(510 결정 · 1,551 후보) 를 before 로 쓸 수 있다.
 
+---
+
+## Commit · Push 기록
+
+| 항목 | 값 |
+| --- | --- |
+| 결과 commit | `f476428` — `Phase 3-F-2: establish opponent resource feature` |
+| 브랜치 | `claude/pensive-goodall-te1egy` |
+| Push | `1ef1ebb..f476428` → `origin/claude/pensive-goodall-te1egy` (성공) |
+| production diff | **+220줄 · 삭제 0줄** (`agent/evaluation.py` · `agent/__init__.py`) |
+| `engine/` diff | **0줄** |
+| 기존 테스트 수정 | **0건** |
+| 변경 파일 | production 2 · 신규 테스트 1 · 신규 보고서 1 |
+
 **다음 Phase 는 임의로 진행하지 않는다.**
