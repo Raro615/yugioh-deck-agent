@@ -269,6 +269,223 @@ class Exclusion:
         return self.note
 
 
+# ======================================================================
+# 상대 자원 — **장수만 본다** (Phase 3-F-2)
+# ======================================================================
+
+#: 상대의 자원을 **장수로** 읽는 자리들. 이름과 접근자를 함께 적는다
+#: (:data:`_UNSCORED_ZONES` 와 같은 이유 — 어느 자리를 읽는지 코드에서 읽혀야
+#: 한다).
+#:
+#: **일곱 자리 모두 ``size`` 가 관측에 들어온다.** 내용이 가려진 자리(패 · 덱 ·
+#: 엑스트라 덱)도 장수는 양쪽에 공개된 사실이다 — 실측으로 확인했다
+#: (Phase 3-F-2 §2). 그래서 이 표는 가려진 정보를 읽지 않는다.
+OPPONENT_RESOURCE_ZONES: tuple[tuple[str, "Callable[[PlayerView], ZoneView]"], ...] = (
+    ("hand", lambda player: player.hand),
+    ("deck", lambda player: player.deck),
+    ("grave", lambda player: player.grave),
+    ("removed", lambda player: player.removed),
+    ("monsters", lambda player: player.monster_zone),
+    ("spells", lambda player: player.spell_zone),
+    ("extra", lambda player: player.extra),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class OpponentResources:
+    """
+    **지금 상대가 들고 있는 공개 자원의 장수.** 내용은 하나도 읽지 않는다.
+
+    ``StateValue`` 와 **섞지 않는다.** 이것은 점수가 아니라 관측이다 — 단위는
+    LP 가 아니라 **장**이고, 어떤 가중치도 붙지 않았다 (Phase 3-F-2 §9).
+
+    왜 장수만인가
+    -------------
+    관측은 상대의 패 · 덱 · 엑스트라 덱의 **장수는 주고 내용은 주지 않는다**
+    (``ZoneView.concealed``). 그래서 "몇 장인가" 는 합법적으로 답할 수 있고
+    "무슨 카드인가" 는 답할 수 없다. 전자만 쓴다.
+
+    **장수와 전략적 가치는 다르다.** 이 자료형은 가치를 주장하지 않는다 —
+    장수를 **사실 그대로** 들고 있을 뿐이고, 값을 매기는 일은 가중치가 정해진
+    뒤의 Phase 다.
+    """
+
+    hand: int
+    deck: int
+    grave: int
+    removed: int
+    monsters: int
+    spells: int
+    extra: int
+
+    @classmethod
+    def of(cls, view: GameStateView) -> "OpponentResources":
+        """
+        그 관측에서 **상대** 쪽 장수를 읽는다.
+
+        관점은 ``view.viewer`` 다 — P0 가 읽으면 P1 의 자원이고 그 반대도
+        같다 (:class:`StateEvaluator` 와 같은 자리).
+        """
+        if not isinstance(view, GameStateView):
+            raise EvaluationError(
+                f"관측이 필요합니다 (GameStateView): {type(view).__name__}"
+            )
+        opponent = view.opponent
+        return cls(**{name: zone_of(opponent).size
+                      for name, zone_of in OPPONENT_RESOURCE_ZONES})
+
+    def counts(self) -> tuple[tuple[str, int], ...]:
+        """``(자리 이름, 장수)`` — 표의 순서 그대로."""
+        return tuple(
+            (name, getattr(self, name)) for name, _ in OPPONENT_RESOURCE_ZONES
+        )
+
+    @property
+    def total(self) -> int:
+        """
+        전부 합한 장수. **"상대가 얼마나 강한가" 가 아니다** — 묘지의 한 장과
+        패의 한 장을 같게 세므로, 비교가 아니라 **합이 변했는지** 보는 데만
+        쓴다.
+        """
+        return sum(amount for _, amount in self.counts())
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        return " ".join(f"{name}={amount}" for name, amount in self.counts())
+
+
+@dataclass(frozen=True, slots=True)
+class OpponentResourceDelta:
+    """
+    두 관측 **사이에** 상대의 자원 장수가 어떻게 변했는가 (Phase 3-F-2).
+
+    ``current`` 와 ``delta`` 를 섞지 않는다
+    --------------------------------------
+    "상대에게 3장을 줬다" 와 "상대 패가 지금 3장이다" 는 **다른 사실**이다.
+    앞은 이 자료형의 :attr:`drawn_from_deck` 이고 뒤는
+    :class:`OpponentResources` 의 ``hand`` 다. 하나로 합치면 증식의 G 상황과
+    "상대가 원래 패를 많이 들고 있었다" 를 구분할 수 없다.
+
+    **이동했다고 무조건 +1 자원으로 세지 않는다**
+    --------------------------------------------
+    관측 둘을 비교해서 알 수 있는 것은 **자리별 장수의 차**뿐이고, 그것만으로는
+    어떤 이동이 있었는지 정해지지 않는다. 패가 1 늘어난 것이 드로우인지
+    필드에서 되돌아온 것인지 장수만으로는 같다.
+
+    그래서 **안전하게 "상대가 얻었다" 고 말할 수 있는 한 가지**만 센다.
+
+    ``덱이 줄고 그만큼 패가 늘었다``
+        드로우다. 덱에서 패로 가는 길 외에 이 모양을 만드는 것이 없다.
+        이것이 증식의 G 가 주는 자원의 모양이고 :attr:`drawn_from_deck` 이다.
+
+    나머지 변화는 **값으로 세지 않고** :attr:`unexplained` 에 적는다 —
+    ``ExclusionCategory`` 를 그대로 쓴다 (새 어휘를 만들지 않는다). 적지 않으면
+    :attr:`fully_explained` 가 "다 설명했다" 는 거짓을 말한다
+    (:attr:`StateValue.partial` 과 같은 이유).
+    """
+
+    before: OpponentResources
+    after: OpponentResources
+    drawn_from_deck: int
+    unexplained: tuple[Exclusion, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.drawn_from_deck < 0:
+            raise EvaluationError(
+                f"드로우 수는 음수가 될 수 없습니다: {self.drawn_from_deck}"
+            )
+
+    @classmethod
+    def between(
+        cls, before_view: GameStateView, after_view: GameStateView
+    ) -> "OpponentResourceDelta":
+        """
+        같은 관점의 두 관측을 비교한다. **관점이 다르면 거부한다** — 다른 눈으로
+        본 두 판을 비교하면 "상대" 가 서로 다른 사람이 된다.
+
+        인수 이름에 ``view`` 가 들어 있는 것은 뜻이 있다. 이 계층이 받는 것은
+        **관측뿐**이고 판이 아니라는 사실을 이름으로도 말한다. 저장소에는
+        ``viewer`` 라는 칸을 가진 자료형이 여럿이고 그중 하나는 **읽는 자리가
+        없어야 한다**는 계약을 지고 있으므로 (Phase 3-E-42), 관측의 ``viewer``
+        를 읽는 자리는 이름으로 그것임을 밝혀 둔다.
+        """
+        for view in (before_view, after_view):
+            if not isinstance(view, GameStateView):
+                raise EvaluationError(
+                    f"관측이 필요합니다 (GameStateView): {type(view).__name__}"
+                )
+        if before_view.viewer != after_view.viewer:
+            raise EvaluationError(
+                "두 관측의 관점이 다릅니다 "
+                f"({before_view.viewer} vs {after_view.viewer}) — 같은 눈으로 "
+                "본 것만 비교합니다."
+            )
+
+        start, end = cls.of_views(before_view), cls.of_views(after_view)
+        hand_gain = end.hand - start.hand
+        deck_loss = start.deck - end.deck
+        drawn = min(hand_gain, deck_loss) if hand_gain > 0 and deck_loss > 0 else 0
+
+        unexplained: list[Exclusion] = []
+        for name, _ in OPPONENT_RESOURCE_ZONES:
+            moved = getattr(end, name) - getattr(start, name)
+            if name == "hand":
+                moved -= drawn
+            elif name == "deck":
+                moved += drawn
+            if moved:
+                #: **설명하지 못한 변화는 모름이다.** 장수는 보이지만 그것이
+                #: 상대의 득인지 실인지 이 계층은 알 수 없다 (§6).
+                unexplained.append(
+                    Exclusion(
+                        category=ExclusionCategory.UNKNOWN,
+                        note=f"상대 {name} 장수가 {moved:+d} 바뀐 까닭을 "
+                        "장수만으로는 정할 수 없다",
+                    )
+                )
+        return cls(
+            before=start, after=end, drawn_from_deck=drawn,
+            unexplained=tuple(unexplained),
+        )
+
+    @staticmethod
+    def of_views(view: GameStateView) -> OpponentResources:
+        """``OpponentResources.of`` 의 별명. 읽는 자리를 한 군데로 모은다."""
+        return OpponentResources.of(view)
+
+    @property
+    def changes(self) -> tuple[tuple[str, int], ...]:
+        """자리별 장수의 **차.** 0 인 자리도 적는다 — 안 변했다는 것도 사실이다."""
+        return tuple(
+            (name, getattr(self.after, name) - getattr(self.before, name))
+            for name, _ in OPPONENT_RESOURCE_ZONES
+        )
+
+    @property
+    def gave_resource(self) -> bool:
+        """
+        **상대가 쓸 수 있는 자원을 얻었는가.** ``drawn_from_deck`` 하나로만
+        판단한다 — 나머지는 모르는 것이고, 모르는 것을 "줬다" 로도 "안 줬다"
+        로도 접지 않는다 (:attr:`unexplained` 가 그것을 들고 있다).
+        """
+        return self.drawn_from_deck > 0
+
+    @property
+    def fully_explained(self) -> bool:
+        """장수의 모든 변화를 설명했는가. 거짓이면 :attr:`unexplained` 를 읽는다."""
+        return not self.unexplained
+
+    @property
+    def notes(self) -> tuple[str, ...]:
+        return tuple(item.note for item in self.unexplained)
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        bits = ", ".join(
+            f"{name}{amount:+d}" for name, amount in self.changes if amount
+        )
+        held = f" · 미설명 {len(self.unexplained)}" if self.unexplained else ""
+        return f"상대 자원 [드로우 {self.drawn_from_deck}] ({bits or '변화 없음'}){held}"
+
+
 @dataclass(frozen=True, slots=True)
 class StateValue:
     """
@@ -658,4 +875,7 @@ __all__ = [
     "DECK_CARD_IN_LP",
     "HAND_CARD_IN_LP",
     "GRAVE_IS_COUNTED",
+    "OPPONENT_RESOURCE_ZONES",
+    "OpponentResources",
+    "OpponentResourceDelta",
 ]
