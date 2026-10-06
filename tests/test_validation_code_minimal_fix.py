@@ -409,21 +409,31 @@ def test_13_no_new_validation_code_was_added():
 # ======================================================================
 
 
-def test_14_the_unknown_codes_set_itself_did_not_change():
+def test_14_the_unknown_codes_set_is_now_derived_from_the_engine_policy():
     """
     **K (§15): ``_UNKNOWN_CODES`` 의 멤버를 건드리지 않았다.**
 
     달라진 것은 **어떤 사실이 그 집합에 들어가는가**이고, 집합 자체는 그대로다.
     """
+    #: .. note::
+    #:    **다섯 → 일곱** (Phase 3-E-40). 3-E-38 이 이 줄을 쓸 때 집합은
+    #:    ``agent/simulation.py`` 에 손으로 적힌 다섯이었고, 이 테스트의 요지는
+    #:    "M1·M2 를 고치면서 이 집합을 건드리지 않았다" 였다 — **그 요지는
+    #:    그대로 맞다.** 집합이 바뀐 것은 3-E-40 이 policy 를 엔진으로 옮기고
+    #:    사본을 없앤 결과이고, 그때 ``HIDDEN_CARD`` ·
+    #:    ``PRIORITY_STATE_STALE`` 이 빠져 있었다는 3-E-39 의 측정이 반영됐다.
+    #:    M1·M2 의 두 코드는 **여전히 집합에 없다** (바로 아래).
     assert {code.name for code in _UNKNOWN_CODES} == {
         "RULE_NOT_IMPLEMENTED",
         "COST_NOT_IMPLEMENTED",
         "INFORMATION_UNAVAILABLE",
         "CARD_DEFINITION_UNAVAILABLE",
         "EFFECT_LIST_UNRELIABLE",
+        "HIDDEN_CARD",
+        "PRIORITY_STATE_STALE",
     }
-    assert len(_UNKNOWN_CODES) == 5
-    #: 두 거부 코드는 여전히 집합 **밖**이다.
+    assert len(_UNKNOWN_CODES) == 7
+    #: 두 거부 코드는 여전히 집합 **밖**이다 — 이 Phase 가 지킨 선이다.
     assert ValidationCode.CANDIDATE_NOT_ELIGIBLE not in _UNKNOWN_CODES
     assert ValidationCode.EXECUTION_FORBIDDEN not in _UNKNOWN_CODES
 

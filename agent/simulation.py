@@ -52,7 +52,7 @@ from enum import Enum
 from engine.action import PlayerAction, PlayerActionKind
 from engine.duel import Duel, DuelStep, LegalActions
 from engine.game_state_view import GameStateView
-from engine.validation import ValidationCode
+from engine.validation import ValidationCode, unknown_codes
 
 
 class SimulationError(RuntimeError):
@@ -85,16 +85,18 @@ class SimulationStatus(str, Enum):
         return self is SimulationStatus.SUPPORTED
 
 
-#: 엔진이 "아직 규칙이 없다" 고 말하는 코드들. 이것을 거절과 섞지 않는다.
-_UNKNOWN_CODES: frozenset[ValidationCode] = frozenset(
-    {
-        ValidationCode.RULE_NOT_IMPLEMENTED,
-        ValidationCode.COST_NOT_IMPLEMENTED,
-        ValidationCode.INFORMATION_UNAVAILABLE,
-        ValidationCode.CARD_DEFINITION_UNAVAILABLE,
-        ValidationCode.EFFECT_LIST_UNRELIABLE,
-    }
-)
+#: 엔진이 "판단을 확정할 수 없다" 고 말하는 코드들. 이것을 거절과 섞지 않는다.
+#:
+#: **엔진에서 파생한다** (Phase 3-E-40). 전에는 이 자리에 다섯 멤버를 손으로
+#: 적어 두었고, 그래서 ``engine.validation`` 이 묶음 주석으로 말하던 것과
+#: 어긋났다 — ``HIDDEN_CARD`` 와 ``PRIORITY_STATE_STALE`` 이 빠져 있었다
+#: (Phase 3-E-39 가 측정). 같은 뜻을 두 곳에서 관리하면 반드시 어긋나므로
+#: 사본을 없애고 :func:`~engine.validation.unknown_codes` 하나만 읽는다.
+#:
+#: 이 계층이 정하는 것은 **그 다음 한 걸음뿐이다** — 모름이면
+#: :attr:`SimulationStatus.UNKNOWN`, 아니면 :attr:`SimulationStatus.REFUSED`.
+#: 어느 코드가 모름인지는 엔진이 정한다.
+_UNKNOWN_CODES: frozenset[ValidationCode] = unknown_codes()
 
 
 @dataclass(frozen=True, slots=True)

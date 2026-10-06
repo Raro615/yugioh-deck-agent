@@ -304,6 +304,18 @@ def rejection_productions() -> list[tuple[str, int]]:
                         and element.attr == "RULE_NOT_IMPLEMENTED"
                     ):
                         skip.add(element.lineno)
+            #: **dict 의 키도 멤버십이다** (Phase 3-E-40). 집합의 원소를 거부
+            #: 생성으로 세지 않는 것과 같은 이유다 — 키는 "이 코드가 있다" 는
+            #: **선언**이고 "이 코드로 거절한다" 가 아니다. 3-E-40 이
+            #: ``engine/validation.py`` 에 ``CODE_VALIDITY`` 표를 두면서
+            #: 처음으로 이 모양이 생겼고, 세는 쪽을 그때 맞췄다.
+            if isinstance(node, ast.Dict):
+                for key in node.keys:
+                    if (
+                        isinstance(key, ast.Attribute)
+                        and key.attr == "RULE_NOT_IMPLEMENTED"
+                    ):
+                        skip.add(key.lineno)
             if isinstance(node, ast.Compare) and "RULE_NOT_IMPLEMENTED" in _unparse(
                 node
             ):
@@ -441,8 +453,16 @@ def test_04_only_three_members_are_ever_compared():
     direct = compared - {code.name for code in _UNKNOWN_CODES}
     assert direct <= COMPARED_MEMBERS
     #: 그리고 48개 중 대부분은 어느 쪽으로도 읽히지 않는다.
-    assert len(compared) <= 8
-    assert CODE_MEMBER_COUNT - len(compared) >= 40
+    #:
+    #: .. note::
+    #:    상한이 8 → **10** 으로 늘었다 (Phase 3-E-40). 간접으로 읽히는
+    #:    ``_UNKNOWN_CODES`` 가 다섯에서 **일곱**이 되었기 때문이다 — 엔진의
+    #:    ``CODE_VALIDITY`` policy 가 ``HIDDEN_CARD`` 와
+    #:    ``PRIORITY_STATE_STALE`` 을 모름으로 선언한다. **직접 비교되는 것은
+    #:    여전히 셋뿐이고**(바로 위의 ``direct``) 이 Phase 가 말한 요지는
+    #:    그대로다.
+    assert len(compared) <= 10
+    assert CODE_MEMBER_COUNT - len(compared) >= 38
 
 
 # ======================================================================
@@ -596,10 +616,17 @@ def test_10_source_forbidden_is_a_different_code_from_structural_source_forbidde
     assert "EXECUTION_FORBIDDEN" in sections["우선권 · 응답 기회 (Phase 2-F-1)"]
     assert ValidationCode.SOURCE_FORBIDDEN is not ValidationCode.EXECUTION_FORBIDDEN
 
-    #: ``SOURCE_FORBIDDEN`` 은 한 자리에서만 나온다 — 구조 검사다.
+    #: ``SOURCE_FORBIDDEN`` 은 한 자리에서만 **쓰인다** — 구조 검사다.
+    #:
+    #: .. note::
+    #:    ``engine/validation.py`` 를 뺀다 (Phase 3-E-40). 그 파일은 enum 의
+    #:    집이고, 3-E-40 이 거기에 ``CODE_VALIDITY`` policy 표를 두면서 48개
+    #:    멤버 전부가 **선언으로** 한 번씩 등장하게 되었다. 선언을 사용처로
+    #:    세면 "한 자리에서만 쓰인다" 는 사실을 더 이상 말할 수 없다.
     hits = [
         (str(path.relative_to(PROJECT_ROOT)), node.lineno)
         for path in production_files()
+        if str(path.relative_to(PROJECT_ROOT)) != "engine/validation.py"
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
         if isinstance(node, ast.Attribute) and node.attr == "SOURCE_FORBIDDEN"
     ]
@@ -1029,13 +1056,21 @@ def test_22_the_cost_and_target_layers_use_their_own_codes():
 # ======================================================================
 
 
-def test_23_the_simulation_boundary_reads_five_codes_and_preserves_them():
+def test_23_the_simulation_boundary_reads_seven_codes_and_preserves_them():
     """
     **P · Q (§21): ``SimulationStatus`` 매핑.**
 
-    ``_UNKNOWN_CODES`` 가 다섯 코드를 ``UNKNOWN`` 으로 보낸다. 거부 코드는
+    ``_UNKNOWN_CODES`` 가 코드들을 ``UNKNOWN`` 으로 보낸다. 거부 코드는
     **하나도 들어 있지 않다** — 그래서 M1·M3 가 고쳐지면 그 수들이
     ``REFUSED`` 로 옮겨 간다.
+
+    .. note::
+       **다섯 → 일곱** (Phase 3-E-40). 3-E-37 이 이 자리를 쓸 때 집합은
+       ``agent/simulation.py`` 에 손으로 적힌 다섯이었고, 그것이 당시의
+       사실이었다 — 틀린 가정이 아니다. 3-E-39 가 그 사본이 엔진의 묶음과
+       어긋났음을(``HIDDEN_CARD`` · ``PRIORITY_STATE_STALE`` 누락) 측정하고
+       3-E-40 이 policy 를 엔진으로 옮겨 사본을 없앴다. 이 테스트가 말하려던
+       것("거부 코드는 하나도 없다")은 **그대로 성립한다.**
     """
     assert {code.name for code in _UNKNOWN_CODES} == {
         "RULE_NOT_IMPLEMENTED",
@@ -1043,12 +1078,16 @@ def test_23_the_simulation_boundary_reads_five_codes_and_preserves_them():
         "INFORMATION_UNAVAILABLE",
         "CARD_DEFINITION_UNAVAILABLE",
         "EFFECT_LIST_UNRELIABLE",
+        "HIDDEN_CARD",
+        "PRIORITY_STATE_STALE",
     }
     for name in ("CANDIDATE_NOT_ELIGIBLE", "EXECUTION_FORBIDDEN", "OK"):
         assert getattr(ValidationCode, name) not in _UNKNOWN_CODES
 
-    #: 네 코드 중 넷이 ``모른다 (UNKNOWN)`` 묶음이고 하나는 비용 묶음이다.
-    assert len({code.name for code in _UNKNOWN_CODES} & UNKNOWN_SECTION_MEMBERS) == 4
+    #: 이제 ``모른다 (UNKNOWN)`` 묶음 **다섯 전부**가 들어 있고, 나머지 둘은
+    #: 비용 묶음과 발동 타이밍 묶음에서 온다 — 묶음과 집합이 어긋나지 않는다.
+    assert UNKNOWN_SECTION_MEMBERS <= {code.name for code in _UNKNOWN_CODES}
+    assert len({code.name for code in _UNKNOWN_CODES} & UNKNOWN_SECTION_MEMBERS) == 5
 
 
 def test_24_unknown_is_neither_zero_nor_a_loss_and_ranks_the_same_as_refused():
@@ -1066,12 +1105,17 @@ def test_24_unknown_is_neither_zero_nor_a_loss_and_ranks_the_same_as_refused():
     assert unknown.ordering_key()[0] == 1
     assert unknown.comparable is False
 
-    #: ``agent/`` 가 이 코드를 읽는 자리는 하나다.
+    #: ``agent/`` 가 이 코드를 **이름으로 적는 자리가 없다** (Phase 3-E-40).
+    #:
+    #: 3-E-37 이 이 줄을 쓸 때는 ``_UNKNOWN_CODES`` 리터럴 안에 한 번
+    #: 적혀 있었다(=1). 3-E-40 이 그 사본을 없애고 엔진의 policy 에서
+    #: 파생하게 했으므로 **0** 이다. 읽는 자리가 사라진 것이 아니라,
+    #: 어느 코드가 모름인지를 **엔진이 정하게** 되었다는 뜻이다.
     hits = sum(
         path.read_text(encoding="utf-8").count("RULE_NOT_IMPLEMENTED")
         for path in sorted((PROJECT_ROOT / "agent").rglob("*.py"))
     )
-    assert hits == 1
+    assert hits == 0
 
 
 # ======================================================================

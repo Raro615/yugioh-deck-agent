@@ -1072,12 +1072,18 @@ def test_21_the_ai_sees_unknown_instead_of_refused_but_ranks_them_the_same():
     assert carried.code is ValidationCode.RULE_NOT_IMPLEMENTED
     assert carried.future is None
 
-    #: ``agent/`` 는 이 코드를 **한 자리에서만** 읽는다.
+    #: ``agent/`` 는 이 코드를 **이름으로 적지 않는다** (Phase 3-E-40).
+    #:
+    #: 3-E-36 이 이 줄을 쓸 때는 ``agent/simulation.py`` 의
+    #: ``_UNKNOWN_CODES`` 리터럴에 한 번 적혀 있었다(=1). 3-E-40 이 그 사본을
+    #: 없애고 ``engine.validation`` 의 policy 에서 파생하게 했으므로 **0** 이다.
+    #: 이 테스트가 말하려던 것("에이전트가 이 코드를 거의 읽지 않는다")은
+    #: 더 강하게 성립한다 — 이제 아예 적지 않는다.
     hits = sum(
         path.read_text(encoding="utf-8").count("RULE_NOT_IMPLEMENTED")
         for path in sorted((PROJECT_ROOT / "agent").rglob("*.py"))
     )
-    assert hits == 1
+    assert hits == 0
 
 
 def test_22_hidden_information_never_becomes_this_code():

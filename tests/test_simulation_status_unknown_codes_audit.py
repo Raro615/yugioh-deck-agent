@@ -58,6 +58,11 @@ MINE = 0
 
 #: ``_UNKNOWN_CODES`` 의 현재 전체 멤버 — 2026-10-01 ``40ea6c8`` 이후 **한 번도
 #: 바뀌지 않았다** (``git log -L`` 로 확인).
+#:
+#: **Phase 3-E-40 이 일곱으로 맞췄다.** 3-E-39 가 "다섯이고 둘이 빠졌다" 를
+#: 측정했고, 3-E-40 이 policy 를 ``engine.validation.CODE_VALIDITY`` 로 옮겨
+#: 사본을 없애면서 빠진 둘이 들어왔다. 아래 ``MEASURED_...`` 와 **같아졌다** —
+#: 그것이 3-E-40 의 결과다.
 UNKNOWN_CODE_NAMES = frozenset(
     {
         "RULE_NOT_IMPLEMENTED",
@@ -65,6 +70,8 @@ UNKNOWN_CODE_NAMES = frozenset(
         "INFORMATION_UNAVAILABLE",
         "CARD_DEFINITION_UNAVAILABLE",
         "EFFECT_LIST_UNRELIABLE",
+        "HIDDEN_CARD",
+        "PRIORITY_STATE_STALE",
     }
 )
 
@@ -83,9 +90,12 @@ MEASURED_UNKNOWN_VALIDITY_CODES = frozenset(
     }
 )
 
-#: 위 둘의 차이 — ``_UNKNOWN_CODES`` 에 **빠져 있는** 둘.
-#: 이 Phase 는 이것을 고치지 않는다. 숫자를 여기 고정해 두고 문서에 적는다.
-UNKNOWN_GAP = frozenset({"HIDDEN_CARD", "PRIORITY_STATE_STALE"})
+#: 위 둘의 차이 — ``_UNKNOWN_CODES`` 에 빠져 있던 것.
+#:
+#: 3-E-39 에서는 ``{"HIDDEN_CARD", "PRIORITY_STATE_STALE"}`` 였다. 그 Phase 는
+#: AUDIT-ONLY 라서 고치지 않고 숫자만 고정해 두었고, **3-E-40 이 그 틈을
+#: 닫았다.** 지금은 비어 있어야 한다 — 다시 벌어지면 ``test_10`` 이 깨진다.
+UNKNOWN_GAP = frozenset()
 
 PROD_PREFIXES = ("engine/", "agent/", "core/", "analysis/", "sources/")
 
@@ -250,14 +260,28 @@ def test_05_the_classifier_only_runs_on_a_rejected_duel_step():
 # ======================================================================
 
 
-def test_06_the_unknown_code_set_has_exactly_these_five_members():
-    """**§22-6: 집합 전체를 원소 단위로 고정한다.**"""
+def test_06_the_unknown_code_set_has_exactly_these_seven_members():
+    """
+    **§22-6: 집합 전체를 원소 단위로 고정한다.**
+
+    .. note::
+       **다섯 → 일곱** (Phase 3-E-40). 이 테스트는 틀린 가정을 갖고 있지
+       않았다 — 3-E-39 당시의 사실을 정확히 세고 **고치면 깨지도록** 일부러
+       고정했다. 그 설계가 의도대로 작동해서 3-E-40 이 무엇을 바꿨는지 여기서
+       먼저 드러났다.
+    """
     assert {c.name for c in _UNKNOWN_CODES} == set(UNKNOWN_CODE_NAMES)
+    assert len(UNKNOWN_CODE_NAMES) == 7
 
 
-def test_07_five_of_forty_eight_codes_are_in_the_set():
-    """**§22-7: 48개 중 5개다.** 손으로 고른 집합이라는 사실을 숫자로 적는다."""
-    assert len(_UNKNOWN_CODES) == 5
+def test_07_seven_of_forty_eight_codes_are_in_the_set():
+    """
+    **§22-7: 48개 중 7개다.**
+
+    3-E-39 는 이 자리에 "손으로 고른 집합" 이라고 적었다. 3-E-40 이후로는
+    **엔진의 policy 에서 파생된 집합**이다 — 그 사실은 ``test_17`` 이 센다.
+    """
+    assert len(_UNKNOWN_CODES) == 7
     assert len(ValidationCode) == 48
     #: 집합의 정의가 ``frozenset`` 이다 — 런타임에 늘어날 수 없다.
     assert isinstance(_UNKNOWN_CODES, frozenset)
@@ -286,24 +310,26 @@ def test_09_every_member_has_at_least_one_production_construction_site():
         assert n >= 1, f"{name} 의 production 등장이 0 이다"
 
 
-def test_10_two_codes_are_produced_as_unknown_but_are_not_in_the_set():
+def test_10_the_gap_that_this_audit_found_has_since_been_closed():
     """
-    **§22-10 · §8: 집합이 완전하지 않다 — 빠진 둘을 측정으로 고정한다.**
+    **§22-10 · §8: 집합과 생산 경로가 이제 정확히 같다.**
 
-    ``ValidationResult.unknown(...)`` 또는 ``ValidationResult(UNKNOWN, …)``
-    으로 생산되는 코드는 **일곱**이고 ``_UNKNOWN_CODES`` 는 **다섯**이다.
-    빠진 둘은 ``HIDDEN_CARD`` 와 ``PRIORITY_STATE_STALE`` 이다.
+    3-E-39 가 측정했을 때는 ``ValidationResult.unknown(...)`` 으로 생산되는
+    코드가 **일곱**이고 ``_UNKNOWN_CODES`` 는 **다섯**이었다. 빠진 둘은
+    ``HIDDEN_CARD`` 와 ``PRIORITY_STATE_STALE`` 이었다.
 
     .. note::
-       **이 Phase 는 고치지 않는다** (AUDIT-ONLY). 둘 다 지금은 ``UNKNOWN``
-       validity 로 생산되어 ``legal_actions`` 의 ``withheld`` 로 가므로
-       ``DuelStep`` 까지 내려오지 않는다 (``test_15`` · ``test_26``). 그래서
-       오늘 잘못된 결과를 내는 production 경로가 **없다.** 그 사실과 "집합이
-       불완전하다" 는 사실을 **함께** 적는다.
+       **3-E-40 이 그 틈을 닫았다.** 집합을 손으로 늘린 것이 아니라,
+       ``engine.validation.CODE_VALIDITY`` 가 48개 전부를 분류하고
+       ``agent`` 가 거기서 파생하게 만든 결과다. 그래서 이 테스트는 이제
+       "틈이 없다" 를 지킨다 — 누군가 어떤 코드를 ``unknown`` 으로 생산하기
+       시작하고 policy 에 적지 않으면 여기서 깨진다.
     """
     names = {c.name for c in _UNKNOWN_CODES}
-    assert MEASURED_UNKNOWN_VALIDITY_CODES - names == UNKNOWN_GAP
-    #: 반대 방향 — ``UNKNOWN`` 이 아닌데 집합에 들어가 있는 것은 **없다.**
+    assert MEASURED_UNKNOWN_VALIDITY_CODES - names == UNKNOWN_GAP == frozenset()
+    #: 양쪽이 **같다.**
+    assert names == MEASURED_UNKNOWN_VALIDITY_CODES
+    #: 반대 방향 — ``UNKNOWN`` 이 아닌데 집합에 들어가 있는 것도 없다.
     assert names - MEASURED_UNKNOWN_VALIDITY_CODES == frozenset()
 
     #: 빠진 둘이 정말 ``UNKNOWN`` 쪽인지 enum 자신의 말로 확인한다.
@@ -313,13 +339,17 @@ def test_10_two_codes_are_produced_as_unknown_but_are_not_in_the_set():
     assert "``INVALID`` 가 아니라 ``UNKNOWN`` 에 쓴다" in stale
 
 
-def test_11_the_enum_section_and_the_set_do_not_agree_either():
+def test_11_the_enum_section_is_now_contained_in_the_set():
     """
-    **enum 이 선언한 묶음과 집합이 다르다.**
+    **enum 이 선언한 묶음과 집합이 더 이상 어긋나지 않는다.**
 
-    ``# --- 모른다 (UNKNOWN) ---`` 묶음은 다섯인데 그 다섯과 집합의 다섯이
-    **같지 않다** — 묶음에는 ``HIDDEN_CARD`` 가 있고 집합에는
-    ``COST_NOT_IMPLEMENTED`` 가 있다.
+    3-E-39 당시: 묶음 다섯과 집합 다섯이 **크기는 같고 내용이 달랐다** —
+    묶음에만 ``HIDDEN_CARD`` 가, 집합에만 ``COST_NOT_IMPLEMENTED`` 가 있었다.
+
+    3-E-40 이후: 묶음 다섯이 **집합에 전부 들어 있다.** 집합이 둘 더 큰 것은
+    묶음 밖에서 온 코드가 둘 있기 때문이고 (``COST_NOT_IMPLEMENTED`` 는 비용
+    묶음, ``PRIORITY_STATE_STALE`` 은 발동 타이밍 묶음), 둘 다 설명과 생산
+    경로가 모름이라고 말한다. **묶음은 이제 policy 의 부분집합**이다.
     """
     source = source_of("engine/validation.py")
     start = source.index("# --- 모른다 (UNKNOWN) ---")
@@ -335,10 +365,13 @@ def test_11_the_enum_section_and_the_set_do_not_agree_either():
         "RULE_NOT_IMPLEMENTED",
     }
     names = {c.name for c in _UNKNOWN_CODES}
-    assert len(section) == len(names) == 5
-    assert section != names
-    assert section - names == {"HIDDEN_CARD"}
-    assert names - section == {"COST_NOT_IMPLEMENTED"}
+    assert len(section) == 5
+    assert len(names) == 7
+    #: 묶음이 집합에 **온전히** 들어 있다 — 3-E-39 에서는 그렇지 않았다.
+    assert section <= names
+    assert section - names == frozenset()
+    #: 집합에만 있는 둘은 다른 묶음에서 온다.
+    assert names - section == {"COST_NOT_IMPLEMENTED", "PRIORITY_STATE_STALE"}
 
 
 # ======================================================================
@@ -755,51 +788,63 @@ def test_30_the_distinctions_from_phase_3e24_to_3e38_still_hold():
     assert ActionValidity.UNKNOWN is not ActionValidity.INVALID
 
 
-def test_31_hidden_information_is_not_a_refusal_in_the_engines_own_words():
+def test_31_hidden_information_is_not_a_refusal_on_either_axis_now():
     """
-    **§32-7 · 8: 가려진 정보는 거절이 아니다** — 엔진의 validity 축에서는
-    분명하다. 그런데 ``_UNKNOWN_CODES`` 축에서는 그렇지 않다.
+    **§32-7 · 8: 가려진 정보는 거절이 아니다 — 이제 두 축이 같은 말을 한다.**
 
-    두 사실을 함께 적는다. 이것이 이 Phase 의 가장 중요한 측정이다.
+    3-E-39 가 측정했을 때 두 축이 어긋나 있었다. validity 축에서는
+    ``HIDDEN_CARD`` 가 ``UNKNOWN`` 인데 ``_UNKNOWN_CODES`` 축에서는 집합에
+    없어서, 그 코드가 ``DuelStep`` 까지 내려온다면 "규칙에 따라 거절했다" 로
+    읽힐 상태였다 (도달 경로가 없어 해는 없었다).
+
+    .. note::
+       **3-E-40 이 그 어긋남을 없앴다.** 이제 두 축이 모두 모름이라고 한다.
+       이 테스트는 "어긋남을 기록하는 것" 에서 "어긋나지 않음을 지키는 것" 으로
+       역할이 바뀌었다 — 어느 쪽이 다시 어긋나면 여기서 깨진다.
     """
-    from engine.validation import ValidationResult
+    from engine.validation import CODE_VALIDITY, ValidationResult
 
     #: validity 축 — 가려진 카드는 ``UNKNOWN`` 이고 ``INVALID`` 가 아니다.
     hidden = ValidationResult.unknown(ValidationCode.HIDDEN_CARD, "가려졌다")
     assert hidden.validity is ActionValidity.UNKNOWN
     assert hidden.is_structural_failure is False
 
-    #: ``_UNKNOWN_CODES`` 축 — 같은 코드가 집합에 **없다.**
-    assert ValidationCode.HIDDEN_CARD not in _UNKNOWN_CODES
+    #: policy 축 — 같은 말을 한다.
+    assert CODE_VALIDITY[ValidationCode.HIDDEN_CARD] is ActionValidity.UNKNOWN
 
-    #: 그래서 그 코드가 ``DuelStep`` 까지 내려온다면 ``REFUSED`` 가 된다.
-    #: **그런 경로는 지금 없다** (``test_27`` · ``test_28``). 가정이 아니라
-    #: 분류기의 정의를 그대로 적용한 결과이고, 실제 관측이 아니다.
+    #: ``_UNKNOWN_CODES`` 축 — 이제 집합에 **있다.**
+    assert ValidationCode.HIDDEN_CARD in _UNKNOWN_CODES
+
+    #: 그래서 그 코드가 ``DuelStep`` 까지 내려온다면 ``UNKNOWN`` 이다.
+    #: **그런 경로는 여전히 없다** (``test_27`` · ``test_28``) — 분류기의
+    #: 정의를 그대로 적용한 결과이고 실제 관측이 아니다.
     would_be = (
         SimulationStatus.UNKNOWN
         if ValidationCode.HIDDEN_CARD in _UNKNOWN_CODES
         else SimulationStatus.REFUSED
     )
-    assert would_be is SimulationStatus.REFUSED
+    assert would_be is SimulationStatus.UNKNOWN
 
 
-def test_32_the_production_surface_this_phase_touched_is_empty():
+def test_32_the_agent_layer_no_longer_writes_the_policy_down():
     """
-    **§33: production diff 0 을 파일 내용으로 확인한다.**
+    **이 Phase(3-E-39)가 재던 자리가 3-E-40 에서 어떻게 바뀌었는가.**
 
-    이 Phase 가 손댈 수 있었던 네 자리가 3-E-38 이 남긴 모양 그대로다.
+    3-E-39 는 AUDIT-ONLY 였고 이 테스트로 "production diff 0" 을 지켰다 —
+    ``agent/simulation.py`` 에 코드 다섯 줄이 적혀 있는 모양 그대로였다.
+    3-E-40 이 그 다섯 줄을 **엔진으로 옮겼다.** 그래서 여기서는 이제
+    "에이전트가 policy 를 적지 않는다" 를 센다.
     """
     simulation = source_of("agent/simulation.py")
     search = source_of("agent/search.py")
-    #: 집합이 다섯 줄 그대로다.
+    #: 코드 이름을 적은 줄이 **하나도 없다.**
+    assert simulation.count("ValidationCode.") == 0
     for name in UNKNOWN_CODE_NAMES:
-        assert f"ValidationCode.{name}," in simulation
-    #: ``ValidationCode.<멤버>`` 는 집합의 다섯 줄뿐이다. 타입 주석은
-    #: ``frozenset[ValidationCode]`` 라서 점이 없으므로 여기 세어지지 않는다
-    #: — 처음에 6 으로 적었다가 측정해 5 로 고쳤다.
-    assert simulation.count("ValidationCode.") == 5
-    #: 분류기가 한 자리 그대로다.
-    assert simulation.count("_UNKNOWN_CODES") == 2  # 정의 + 사용
+        assert f"ValidationCode.{name}," not in simulation
+    #: 대신 엔진에서 파생한다.
+    assert "unknown_codes()" in simulation
+    #: 분류기가 한 자리 그대로다 (정의 + 사용).
+    assert simulation.count("_UNKNOWN_CODES") == 2
     #: 탐색의 분기가 한 자리 그대로다.
     assert search.count("SimulationStatus.SUPPORTED") == 1
     #: 그리고 enum 에 새 멤버가 없다 — **구문으로** 센다. 문자열 할당을

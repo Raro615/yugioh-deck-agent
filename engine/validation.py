@@ -190,6 +190,157 @@ class ValidationCode(str, Enum):
     """
 
 
+
+# ======================================================================
+# 어느 판정 묶음의 말인가 — UNKNOWN policy (Phase 3-E-40)
+# ======================================================================
+
+#: 각 :class:`ValidationCode` 가 **어느 판정의 말인가.**
+#:
+#: 왜 필요했나
+#: ----------
+#: 이 enum 은 묶음을 **주석**으로 적어 왔다 (``# --- 모른다 (UNKNOWN) ---``).
+#: 사람은 읽지만 기계는 읽지 못하므로, 그 사실이 필요한 곳에서는 **손으로 쓴
+#: 사본**을 만들어 썼다. ``agent/simulation.py`` 의 ``_UNKNOWN_CODES`` 가 그것
+#: 이었고, 사본이라서 어긋났다 — Phase 3-E-39 가 ``HIDDEN_CARD`` 와
+#: ``PRIORITY_STATE_STALE`` 이 빠진 것을 측정했다. 사본을 고치는 대신 **원본을
+#: 기계가 읽을 수 있게** 적는다.
+#:
+#: 왜 ``ActionValidity`` 인가
+#: -------------------------
+#: "이 코드는 모름 쪽인가" 는 **새 어휘가 필요한 질문이 아니다.** 이미
+#: :class:`ActionValidity` 가 세 값으로 그것을 말한다. 새 enum 을 만들면 같은
+#: 구분이 저장소에 둘이 되고, 그것이 애초의 문제였다.
+#:
+#: ``None`` 은 무엇인가
+#: -------------------
+#: **"이 코드만으로는 정할 수 없다."** 임의로 한쪽에 넣지 않는다 — 모름을
+#: 참/거짓으로 접지 않는 이 저장소의 규칙이 코드 분류에도 적용된다. ``None``
+#: 은 "모름(UNKNOWN)" 과 다르다: 전자는 **분류를 못 한다**, 후자는 **엔진이
+#: 판단을 못 한다** 이다.
+#:
+#: 무엇을 근거로 정했나 (Phase 3-E-40 §4 · §5 가 전수 측정)
+#: -------------------------------------------------------
+#: 1. production 이 ``ValidationResult`` 에 **직접 선언한** validity
+#: 2. 이 enum 의 묶음 주석이 ``(INVALID)`` · ``(UNKNOWN)`` 로 적은 라벨
+#: 3. 생성 자리에서 **짝지은 status** 가 말하는 것
+#:
+#: 셋이 어긋나는 코드는 **하나뿐**이고 (``CHAIN_DEFINITION_UNAVAILABLE``) 그것이
+#: ``None`` 이다. 나머지 47개는 근거가 서로 맞는다.
+#:
+#: 빠뜨리면 어떻게 되나
+#: -------------------
+#: **import 할 때 터진다** (바로 아래의 검사). 멤버를 더하고 분류를 적지 않는
+#: 길이 없다 — 사본이 조용히 낡던 바로 그 일을 막는 자리다.
+CODE_VALIDITY: "dict[ValidationCode, ActionValidity | None]" = {
+    ValidationCode.OK: ActionValidity.VALID,
+    # --- 구조 (INVALID) — 묶음 라벨 · 생성 validity 모두 INVALID ---------
+    ValidationCode.ACTOR_INVALID: ActionValidity.INVALID,
+    ValidationCode.SOURCE_REQUIRED: ActionValidity.INVALID,
+    ValidationCode.SOURCE_FORBIDDEN: ActionValidity.INVALID,
+    ValidationCode.EFFECT_REF_REQUIRED: ActionValidity.INVALID,
+    ValidationCode.EFFECT_REF_FORBIDDEN: ActionValidity.INVALID,
+    ValidationCode.EFFECT_REF_CARD_MISMATCH: ActionValidity.INVALID,
+    ValidationCode.EFFECT_REF_OUT_OF_RANGE: ActionValidity.INVALID,
+    ValidationCode.PHASE_REQUIRED: ActionValidity.INVALID,
+    ValidationCode.PHASE_FORBIDDEN: ActionValidity.INVALID,
+    ValidationCode.TARGET_COUNT_MISMATCH: ActionValidity.INVALID,
+    ValidationCode.TARGET_KIND_INVALID: ActionValidity.INVALID,
+    # --- 판 위의 사실 (INVALID) ----------------------------------------
+    ValidationCode.DUEL_ALREADY_OVER: ActionValidity.INVALID,
+    ValidationCode.NOT_TURN_PLAYER: ActionValidity.INVALID,
+    ValidationCode.SOURCE_NOT_CONTROLLED: ActionValidity.INVALID,
+    ValidationCode.SOURCE_WRONG_ZONE: ActionValidity.INVALID,
+    ValidationCode.SOURCE_WRONG_CARD_TYPE: ActionValidity.INVALID,
+    ValidationCode.ZONE_FULL: ActionValidity.INVALID,
+    ValidationCode.WRONG_PHASE: ActionValidity.INVALID,
+    ValidationCode.SET_THIS_TURN: ActionValidity.INVALID,
+    ValidationCode.TARGET_NOT_OPPONENT: ActionValidity.INVALID,
+    ValidationCode.TARGET_SELF_CONTROLLED: ActionValidity.INVALID,
+    ValidationCode.TARGET_WRONG_ZONE: ActionValidity.INVALID,
+    ValidationCode.PHASE_UNCHANGED: ActionValidity.INVALID,
+    # --- 모른다 (UNKNOWN) ----------------------------------------------
+    #: 다섯 모두 ``ValidationResult.unknown`` 으로만 생산된다.
+    ValidationCode.HIDDEN_CARD: ActionValidity.UNKNOWN,
+    ValidationCode.INFORMATION_UNAVAILABLE: ActionValidity.UNKNOWN,
+    ValidationCode.CARD_DEFINITION_UNAVAILABLE: ActionValidity.UNKNOWN,
+    ValidationCode.EFFECT_LIST_UNRELIABLE: ActionValidity.UNKNOWN,
+    ValidationCode.RULE_NOT_IMPLEMENTED: ActionValidity.UNKNOWN,
+    # --- 비용 · 선택 (Phase 2-C) ---------------------------------------
+    ValidationCode.NO_CANDIDATES: ActionValidity.INVALID,
+    ValidationCode.TOO_FEW_SELECTED: ActionValidity.INVALID,
+    ValidationCode.TOO_MANY_SELECTED: ActionValidity.INVALID,
+    ValidationCode.DUPLICATE_SELECTION: ActionValidity.INVALID,
+    #: 설명은 "관측에 없다" 고 적지만 **코드는 판 전체를 본다**
+    #: (``state.find_instance(...) is None``). 즉 가려진 것이 아니라 **이 듀얼에
+    #: 없는** 카드이고, 두 생성 자리 모두 확정 거부와 짝지었다
+    #: (``PaymentStatus.INVALID_SELECTION`` · ``ResolutionStatus.INVALID_TARGET``).
+    ValidationCode.CANDIDATE_NOT_FOUND: ActionValidity.INVALID,
+    ValidationCode.CANDIDATE_NOT_ELIGIBLE: ActionValidity.INVALID,
+    ValidationCode.INSUFFICIENT_LIFE: ActionValidity.INVALID,
+    #: 묶음은 비용이지만 뜻은 미구현이다 — ``unknown`` 으로만 생산되고
+    #: ``PaymentStatus.UNSUPPORTED_COST`` 와 짝지는다.
+    ValidationCode.COST_NOT_IMPLEMENTED: ActionValidity.UNKNOWN,
+    # --- 효과 실행 (Phase 2-D-2) ---------------------------------------
+    ValidationCode.INSUFFICIENT_DECK: ActionValidity.INVALID,
+    ValidationCode.INVALID_AMOUNT: ActionValidity.INVALID,
+    # --- 우선권 · 응답 기회 (Phase 2-F-1) -------------------------------
+    ValidationCode.NO_RESPONSE_WINDOW: ActionValidity.INVALID,
+    ValidationCode.NOT_PRIORITY_HOLDER: ActionValidity.INVALID,
+    #: ``INVALID`` 중에서 따로 구분하는 것이고 ``UNKNOWN`` 이 아니다 — 판이
+    #: 바뀌어도 달라지지 않는다 (ADR-004, Phase 3-E-38).
+    ValidationCode.EXECUTION_FORBIDDEN: ActionValidity.INVALID,
+    ValidationCode.CHAIN_EMPTY: ActionValidity.INVALID,
+    #: **정할 수 없다.** 두 생성 자리가 서로 다른 말을 한다 —
+    #: ``trigger_chain.py`` 는 ``ChainInsertion.UNKNOWN`` ("확인할 수 없습니다")
+    #: 와 짝짓고 ``chain.py`` 는 ``ChainResolutionStatus.INVALID_CHAIN_LINK``
+    #: 와 짝짓는다. 어느 한쪽으로 접으면 다른 한쪽이 거짓이 된다. 분류를
+    #: 비워 두는 것이 지금 아는 것을 정확히 적는 방법이다 (Phase 3-E-40 §7).
+    ValidationCode.CHAIN_DEFINITION_UNAVAILABLE: None,
+    # --- 일반 소환 (Phase 2-I) -----------------------------------------
+    #: 둘 다 ``Requirement`` 로만 실린다. ``_check_requirements`` 는 조건이
+    #: ``FALSE`` 일 때만 그 코드를 ``invalid()`` 로 쓰고, ``UNKNOWN`` 일 때는
+    #: 코드를 모름 쪽으로 **갈아 끼운다** — 그래서 확정 거부다.
+    ValidationCode.CANNOT_NORMAL_SUMMON: ActionValidity.INVALID,
+    ValidationCode.NORMAL_SUMMON_ALREADY_USED: ActionValidity.INVALID,
+    # --- 발동 타이밍 · 스펠 스피드 (Phase 2-S) --------------------------
+    ValidationCode.SPELL_SPEED_TOO_LOW: ActionValidity.INVALID,
+    #: 설명이 직접 적는다 — "``INVALID`` 가 아니라 ``UNKNOWN`` 에 쓴다".
+    ValidationCode.PRIORITY_STATE_STALE: ActionValidity.UNKNOWN,
+}
+
+_UNCLASSIFIED = set(ValidationCode) - set(CODE_VALIDITY)
+if _UNCLASSIFIED:  # pragma: no cover - 분류를 빠뜨리면 import 가 실패한다
+    raise RuntimeError(
+        "CODE_VALIDITY 가 다루지 않는 ValidationCode 가 있습니다: "
+        + ", ".join(sorted(code.name for code in _UNCLASSIFIED))
+        + ". 새 멤버를 더하면 여기에 **어느 판정의 말인지** 함께 적습니다 — "
+        "분류를 빠뜨린 채로 돌아가면 그 코드는 조용히 '모름이 아닌 것' 이 됩니다."
+    )
+
+
+def codes_declaring(validity: "ActionValidity | None") -> frozenset[ValidationCode]:
+    """
+    그 판정의 말인 코드들. :data:`CODE_VALIDITY` 에서 **파생**된다.
+
+    사본을 만들지 않는다 — 부르는 쪽이 집합을 손으로 적으면 이 Phase 가 고친
+    문제가 그대로 돌아온다.
+    """
+    return frozenset(
+        code for code, declared in CODE_VALIDITY.items() if declared is validity
+    )
+
+
+def unknown_codes() -> frozenset[ValidationCode]:
+    """
+    **"엔진이 판단을 확정할 수 없다" 쪽의 코드들.**
+
+    ``agent`` 계층의 시뮬레이션이 "모른다" 와 "거절했다" 를 가를 때 쓴다.
+    ``None`` 으로 분류한 코드는 **들어가지 않는다** — 정하지 못한 것을 모름으로
+    밀어 넣으면 분류하지 않았다는 사실이 사라진다.
+    """
+    return codes_declaring(ActionValidity.UNKNOWN)
+
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
     """검증 결과 하나. 판정 · 안정적인 코드 · 사람이 읽을 설명."""
