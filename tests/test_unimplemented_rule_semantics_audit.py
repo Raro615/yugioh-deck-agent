@@ -130,7 +130,14 @@ PRODUCTION_CONSTRUCTION_COUNT = 2
 #: 75 → **76** (Phase 3-E-38). 네 자리를 정확한 코드로 바꾸면서 코드 등장이
 #: 2 줄어들고(69 → 67) 그 까닭을 적은 주석이 3 늘었다(6 → 9). 이 수가
 #: 가리키는 요지("코드 등장이 생성의 수십 배다")는 그대로다.
-RULE_NOT_IMPLEMENTED_MENTIONS = 76
+#: ``engine/`` · ``agent/`` 의 문자열 등장 수.
+#:
+#: .. note::
+#:    76 → **79** (Phase 3-E-45). 늘어난 셋은 전부 ``_event_relation`` 의
+#:    docstring 이고, **코드 자리 수는 그대로다** (하나를 빼고 하나를 더했다 —
+#:    ``tests/test_rule_not_implemented_code_audit.py`` 의
+#:    ``CODE_OCCURRENCES`` 가 67 로 고정되어 있다).
+RULE_NOT_IMPLEMENTED_MENTIONS = 79
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7개.
 #: ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
@@ -354,9 +361,14 @@ def test_03_rule_not_implemented_is_almost_never_produced_by_unimplemented_rule(
     """
     **Test 2 (§20): ``RULE_NOT_IMPLEMENTED`` mapping.**
 
-    둘은 같은 개념이 **아니다.** 코드는 production 에 75곳 등장하는데
+    둘은 같은 개념이 **아니다.** 코드는 production 에 79곳 등장하는데
     ``UnimplementedRule`` 생성은 2곳뿐이다. 즉 **그 코드의 거의 전부가
     ``UnimplementedRule`` 과 무관하게 만들어진다.**
+
+    .. note::
+       숫자가 75 → 76 → **79** 로 움직였다 (3-E-38 · 3-E-45). 이 테스트가
+       지키는 사실("그 코드와 ``UnimplementedRule`` 은 같은 개념이 아니다")
+       은 그대로이고, 등장 수만 갱신한다.
     """
     sites = unimplemented_rule_sites()
     assert len(sites["production"]) == PRODUCTION_CONSTRUCTION_COUNT

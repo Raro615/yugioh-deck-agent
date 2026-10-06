@@ -98,7 +98,7 @@ MINE = 0
 #:
 #: 75 → **76** (Phase 3-E-38 이 M1·M2 네 자리를 고치면서 코드 2 감소 ·
 #: 까닭을 적은 주석 3 증가).
-STRING_OCCURRENCES = 76
+STRING_OCCURRENCES = 79
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -108,13 +108,26 @@ PROSE_OCCURRENCES = {
     ("engine/effect/executor.py", 922), # M2: 이 근거로는 절대 실행하지 않는다
     ("engine/special_summon.py", 77),
     ("engine/trigger.py", 978),
+    # 3-E-45: ``_event_relation`` 이 왜 세 갈래인가를 적은 docstring 셋.
+    ("engine/trigger.py", 1318),
+    ("engine/trigger.py", 1324),
+    ("engine/trigger.py", 1347),
     ("engine/trigger_chain.py", 553),
     ("engine/trigger_chain.py", 569),
     ("engine/validation.py", 129),
     ("engine/validation.py", 180),
 }
 
-#: 실제 코드 등장 = 76 - 9. (3-E-38 전에는 69 = 75 - 6.)
+#: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
+#:
+#: .. note::
+#:    **3-E-45 는 이 숫자를 바꾸지 않았다** — 67 그대로다.
+#:
+#:    그 Phase 가 ``_event_relation`` 의 불일치 분기를
+#:    ``CANDIDATE_NOT_ELIGIBLE`` 로 바꾸면서 코드 자리 하나를 **뺐고**,
+#:    ``UNIMPLEMENTED`` 사건을 모름으로 돌려주는 분기에서 하나를 **더했다.**
+#:    차감이 정확히 맞는다. 늘어난 3은 전부 그 까닭을 적은 **산문**이다
+#:    (76 → 79).
 CODE_OCCURRENCES = 67
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
@@ -388,10 +401,20 @@ def test_01_the_enum_itself_forbids_attaching_this_code_to_a_refusal():
     assert len(ValidationCode) == 48
 
 
-def test_02_the_string_count_is_75_but_the_code_count_is_69():
+def test_02_the_string_count_is_79_but_the_code_count_is_67():
     """
-    **75 는 문자열 등장 수다.** 코드로 센 것은 69곳이고, 차이 6곳은
+    **79 는 문자열 등장 수다.** 코드로 센 것은 67곳이고, 차이 12곳은
     주석·docstring 이다. 숫자를 그대로 믿지 않고 다시 센다.
+
+    .. note::
+       **숫자가 세 번 움직였고, 테스트 이름이 첫 숫자에 묶여 있었다.**
+
+       75/69 (3-E-38 전) → 76/67 (3-E-38) → **79/67** (3-E-45). 함수 이름을
+       숫자로 적어 둔 탓에 숫자가 변할 때마다 이름이 거짓이 된다 — 이번에
+       이름도 맞췄다.
+
+       **코드 수 67 은 3-E-45 에서 바뀌지 않았다.** 산문만 셋 늘었다
+       (``CODE_OCCURRENCES`` 의 설명 참조).
     """
     strings = 0
     for path in production_files():
@@ -400,7 +423,7 @@ def test_02_the_string_count_is_75_but_the_code_count_is_69():
 
     sites = code_sites()
     assert len(sites) == CODE_OCCURRENCES
-    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 9
+    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 12
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()

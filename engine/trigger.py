@@ -1304,7 +1304,82 @@ class TriggerEligibilityJudge:
     # 관문들
     # ------------------------------------------------------------------
     def _event_relation(self, spec: TriggerSpec, event: TimingEvent) -> GateVerdict:
-        """이 사건에 반응하는가. 선언이 적어 둔 것만 본다."""
+        """
+        이 사건에 반응하는가. 선언이 적어 둔 것만 본다.
+
+        **답이 셋이고, 그 셋을 하나로 뭉개지 않는다** (Phase 3-E-45).
+
+        ``VALID`` / ``OK``
+            선언과 사건이 맞는다.
+        ``INVALID`` / ``CANDIDATE_NOT_ELIGIBLE``
+            **맞춰 볼 것을 다 보고 다르다는 답을 받았다.** 확실한 거부이고
+            미구현이 아니다 — :meth:`TriggerSpec.matches` 는 규칙 판단이
+            아니라 데이터 비교이므로, 양쪽 값이 다 있으면 답이 확정된다.
+        ``UNKNOWN`` / ``RULE_NOT_IMPLEMENTED`` · ``INFORMATION_UNAVAILABLE``
+            **맞춰 볼 수가 없었다.** 사건 자체가 엔진이 표현하지 못하는
+            것이거나, 선언이 걸어 둔 필터를 사건이 들고 있지 않다.
+
+        왜 셋이어야 했는가 — Phase 3-E-45 가 측정한 것
+        ---------------------------------------------
+        이 관문은 ``INVALID`` 와 ``RULE_NOT_IMPLEMENTED`` 를 **짝지어** 내고
+        있었다. 그 코드는 ``# --- 모른다 (UNKNOWN) ---`` 묶음의 것이고
+        :data:`~engine.validation.CODE_VALIDITY` 도 ``UNKNOWN`` 으로
+        분류하므로, ``_gate(...)`` 생산 17자리 중 **이 한 자리만** policy 와
+        어긋났다 (Phase 3-E-44 의 R-3).
+
+        고치면서 드러난 것이 더 중요하다 — ``matches`` 의 ``False`` 는 **한
+        가지 사실이 아니었다.**
+
+        * 사건이 값을 다 들고 있고 다르다 → **확정된 거부**
+          (``timing`` 선언이 ``LIFE_CHANGED`` 인데 사건은 ``CARD_DRAWN`` 이다)
+        * 사건이 ``UNIMPLEMENTED`` 다 → **무슨 일이 있었는지 모른다.**
+          ``timing_for`` 가 옮길 이름이 없는 변화(셔플 등)를 이 시점으로
+          남기므로 (STRUCTURAL-74) 실제로 들어오는 모양이다.
+        * 선언이 ``operations`` · ``from_zones`` · ``to_zones`` 를 걸었는데
+          사건의 ``movement`` 가 없다 → **필터를 읽을 수 없다.**
+
+        뒤의 둘을 ``INVALID`` 로 적으면 "규칙이 막았다" 는 거짓이 되고,
+        그것은 이 Phase 가 고치려던 바로 그 섞임이다. 그래서 코드만 바꾸지
+        않고 **모름을 모름으로 돌려준다.**
+
+        ``UNKNOWN`` 안에서 까닭을 가르는 방법은 새로 만들지 않았다 —
+        :meth:`_trigger_condition` 이 이미 쓰는 것 그대로다 ("규칙이 없어서
+        모른다" 는 ``RULE_NOT_IMPLEMENTED``, "정보가 없어서 모른다" 는
+        ``INFORMATION_UNAVAILABLE``).
+        """
+        # **사건 자체를 모르면 반응 여부도 모른다.** 지어낸 시점 이름 대신
+        # 무엇을 표현할 수 없었는지 적어 둔 그 ``note`` 를 그대로 실어 보낸다.
+        if event.point is TimingPoint.UNIMPLEMENTED:
+            return _gate(
+                EligibilityGate.EVENT_RELATION,
+                ActionValidity.UNKNOWN,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                "엔진이 표현하지 못하는 사건이라 선언이 반응하는지 확인할 수 "
+                f"없습니다: {event.note}",
+                notes=(event.note,),
+                missing_rule=event.note,
+            )
+        # 선언이 걸어 둔 필터를 사건이 **들고 있지 않은** 자리. 시점이 같을
+        # 때만 묻는다 — 시점이 다르면 그것으로 이미 답이 확정된다.
+        unreadable = tuple(
+            name
+            for name, declared, value in (
+                ("operations", spec.operations, event.operation),
+                ("from_zones", spec.from_zones, event.from_zone),
+                ("to_zones", spec.to_zones, event.to_zone),
+            )
+            if declared is not None and value is None
+        )
+        if event.point is spec.point and unreadable:
+            return _gate(
+                EligibilityGate.EVENT_RELATION,
+                ActionValidity.UNKNOWN,
+                ValidationCode.INFORMATION_UNAVAILABLE,
+                f"{event.point.value} 사건이 "
+                f"{' · '.join(unreadable)} 를 들고 있지 않아 선언과 맞춰 볼 수 "
+                "없습니다.",
+                notes=unreadable,
+            )
         if spec.matches(event):
             return _gate(
                 EligibilityGate.EVENT_RELATION,
@@ -1312,10 +1387,14 @@ class TriggerEligibilityJudge:
                 ValidationCode.OK,
                 f"{event.point.value} 사건에 반응하는 선언입니다.",
             )
+        # **확실한 거부이고 미구현이 아니다.** 같은 사실에 같은 코드를 쓴다 —
+        # ``_trigger_condition`` 과 ``TriggerCollector._judge`` 가 "조건이
+        # 거짓" 에 쓰는 코드이고, ``trigger_chain._refusal_code`` 의 기본값도
+        # 그것이다 (Phase 3-E-26 · 3-E-38 이 맞춰 둔 자리).
         return _gate(
             EligibilityGate.EVENT_RELATION,
             ActionValidity.INVALID,
-            ValidationCode.RULE_NOT_IMPLEMENTED,
+            ValidationCode.CANDIDATE_NOT_ELIGIBLE,
             f"이 선언은 {event.point.value} 사건에 반응하지 않습니다.",
         )
 

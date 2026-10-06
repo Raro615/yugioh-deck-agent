@@ -305,20 +305,44 @@ def test_09_the_trigger_pipeline_is_dormant_so_m3_was_left_alone():
     assert "Trigger" not in duel
 
 
-def test_10_m3_still_carries_the_old_code_and_that_is_recorded_not_hidden():
+def test_10_m3_was_left_to_3e45_and_is_now_fixed():
     """
-    **I (§15): M3 를 고치지 않았다는 사실을 숨기지 않는다.**
+    **I (§15): 3-E-38 이 M3 를 남겼고, Phase 3-E-45 가 고쳤다.**
 
-    ``_event_relation`` 은 여전히 ``ActionValidity.INVALID`` 에
-    ``RULE_NOT_IMPLEMENTED`` 를 붙인다. dormant 라서 지금 해가 없고, "그
-    사건에 반응하지 않는다" 를 ``INVALID`` 로 적는 것이 맞는지 자체가 구조
-    질문이므로 이 Phase 의 범위 밖이다.
+    .. note::
+       **이 테스트의 원래 계약이 뒤집혔다** (3-E-45).
+
+       원래는 "``_event_relation`` 은 **여전히** ``INVALID`` 에
+       ``RULE_NOT_IMPLEMENTED`` 를 붙인다" 를 고정하고 있었다. 그것은
+       3-E-38 이 **범위를 넓히지 않았다는 기록**이었고 올바른 계약이
+       아니었다 — 같은 docstring 이 "맞는지 자체가 구조 질문" 이라고
+       적어 두고 있었다.
+
+       3-E-44 가 그 자리를 측정하고(R-3), 3-E-45 가 고쳤다. 그러므로 이
+       테스트가 지켜야 할 것은 **"그대로 있다"** 가 아니라 **"3-E-38 의
+       범위가 그때 거기까지였다"** 와 **"지금은 고쳐졌다"** 두 가지다.
+
+    M1 · M2 가 이 Phase 의 범위였고 M3 는 아니었다 — 그 사실은 그대로다.
     """
-    source = source_of("engine/trigger.py")
-    index = source.index("EligibilityGate.EVENT_RELATION")
-    window = source[index : index + 700]
-    assert "ActionValidity.INVALID" in window
-    assert "ValidationCode.RULE_NOT_IMPLEMENTED" in window
+    #: **문자열 창이 아니라 함수 본문을 읽는다.** 창 크기로 재면 분기가
+    #: 늘어날 때 조용히 엉뚱한 자리를 보게 된다 (3-E-45 에서 실제로 그랬다).
+    gate = next(
+        node
+        for node in ast.walk(ast.parse(source_of("engine/trigger.py")))
+        if isinstance(node, ast.FunctionDef) and node.name == "_event_relation"
+    )
+    codes = {
+        node.attr
+        for node in ast.walk(gate)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "ValidationCode"
+    }
+    #: 거부는 거부로 — 3-E-26 · 3-E-38 이 쓰는 그 코드다.
+    assert "CANDIDATE_NOT_ELIGIBLE" in codes
+    #: M1 · M2 가 고친 두 자리는 이 Phase 의 몫이었고 그대로다.
+    assert "ValidationCode.CANDIDATE_NOT_ELIGIBLE" in source_of("engine/activation.py")
+    assert "ValidationCode.EXECUTION_FORBIDDEN" in source_of("engine/activation.py")
 
     #: 그리고 ``_refusal_code`` 의 기본값이 여전히 정확한 답을 들고 있다.
     assert "return ValidationCode.CANDIDATE_NOT_ELIGIBLE" in source_of(

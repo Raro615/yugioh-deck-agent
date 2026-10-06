@@ -638,13 +638,25 @@ def test_10_source_forbidden_is_a_different_code_from_structural_source_forbidde
 # ======================================================================
 
 
-def test_11_event_relation_attaches_this_code_to_an_invalid_gate():
+def test_11_event_relation_now_attaches_a_refusal_code_to_its_invalid_gate():
     """
-    **M3: ``_event_relation`` 이 ``INVALID`` 관문에 "미구현" 을 붙인다.**
+    **M3 가 고쳐졌다** (Phase 3-E-45).
 
     "이 선언은 그 사건에 반응하지 않는다" 는 **확실하고 올바른 거부**다 —
     엔진이 못 하는 것이 아니다. 3-E-36 은 이 자리를 "진짜 미구현" 으로
     분류했는데 **틀렸다.**
+
+    .. note::
+       **이 테스트의 원래 단정이 "고치지 않은 상태" 를 고정하고 있었다**
+       (3-E-45 가 뒤집음).
+
+       원래는 ``validity is INVALID`` **그리고**
+       ``code is RULE_NOT_IMPLEMENTED`` 를 단정하면서, 바로 그것이 결함이라고
+       docstring 에 적었다 — 즉 **결함을 계약으로 고정**하고 있었다. 이 감사가
+       내린 진단("확실한 거부인데 모름 쪽 코드다") 은 그대로 맞고, 3-E-45 가
+       그 진단대로 코드를 바꿨다. 그래서 단정만 뒤집는다: 판정은 ``INVALID``
+       그대로, 코드는 ``CANDIDATE_NOT_ELIGIBLE`` 이고 **``UNKNOWN`` 묶음이
+       아니다.**
     """
     state = new_state()
     view = view_of(state)
@@ -674,27 +686,36 @@ def test_11_event_relation_attaches_this_code_to_an_invalid_gate():
     }
     assert EligibilityGate.EVENT_RELATION in gates
     validity, code = gates[EligibilityGate.EVENT_RELATION]
-    #: **확실한 거부인데 "모른다" 쪽 코드다.**
+    #: **확실한 거부에 거부의 코드가 붙는다.** 모름 묶음이 아니다.
     assert validity is ActionValidity.INVALID
-    assert code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert code.name in UNKNOWN_SECTION_MEMBERS
+    assert code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    assert code.name not in UNKNOWN_SECTION_MEMBERS
 
 
-def test_12_refusal_code_picks_up_m3_against_its_own_docstring():
+def test_12_refusal_code_no_longer_contradicts_its_own_docstring():
     """
-    **M3 의 결과 — ``_refusal_code`` 가 자기 docstring 을 어기게 된다.**
+    **M3 의 결과가 사라졌다** (Phase 3-E-45).
 
-    그 함수는 "자리가 틀려서 막힌 후보에 ``RULE_NOT_IMPLEMENTED`` 를 적으면
-    '엔진이 못 한다' 와 '규칙이 막았다' 가 다시 섞인다" 고 적어 두었고,
-    기본값으로 ``CANDIDATE_NOT_ELIGIBLE`` 을 돌려준다. 그런데
-    ``_event_relation`` 이 그 코드를 ``INVALID`` 관문에 붙여 두었으므로
-    **첫 번째 ``INVALID`` 관문의 코드**로 그것이 올라간다.
+    ``_refusal_code`` 는 "자리가 틀려서 막힌 후보에 ``RULE_NOT_IMPLEMENTED``
+    를 적으면 '엔진이 못 한다' 와 '규칙이 막았다' 가 다시 섞인다" 고 적어
+    두고, 기본값으로 ``CANDIDATE_NOT_ELIGIBLE`` 을 돌려준다. 그런데 그 함수는
+    **첫 번째 ``INVALID`` 관문의 코드**를 올리고 ``_event_relation`` 이 첫
+    관문이므로, 그 자리의 ``RULE_NOT_IMPLEMENTED`` 가 그대로 올라가며 자기
+    docstring 을 어기고 있었다.
+
+    .. note::
+       **이 테스트의 원래 이름과 단정이 결함을 고정하고 있었다** (3-E-45).
+
+       원래 단정은 docstring 의 문구만 확인했고 **실제로 올라오는 코드를
+       보지 않았다** — 그래서 M3 가 고쳐져도 그대로 통과했다. 이제 실제
+       ``eligibility`` 를 만들어 ``_refusal_code`` 의 **반환값**을 본다.
+       문구가 아니라 동작을 지키는 자리다.
     """
     doc = _refusal_code.__doc__ or ""
     assert "확실한 거부" in doc
     assert "RULE_NOT_IMPLEMENTED" in doc
     assert "다시 섞인다" in doc
-    #: 기본값이 정확한 코드다 — 즉 저장소가 답을 이미 알고 있다.
+    #: 기본값이 정확한 코드다 — 즉 저장소가 답을 이미 알고 있었다.
     assert "ValidationCode.CANDIDATE_NOT_ELIGIBLE" in source_of(
         "engine/trigger_chain.py"
     )
@@ -719,9 +740,11 @@ def test_12_refusal_code_picks_up_m3_against_its_own_docstring():
         view, EffectDefinitionRegistry((definition,))
     ).judge(candidate, mismatched, drawn_event())
 
-    #: **지금 상태를 고정한다** — 거부인데 "미구현" 이 올라간다.
-    assert _refusal_code(eligibility) is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert _refusal_code(eligibility) is not ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    #: **고쳐진 상태를 고정한다** — 거부에는 거부의 코드가 올라간다
+    #: (Phase 3-E-45). 원래 이 두 줄은 ``RULE_NOT_IMPLEMENTED`` 가 올라가는
+    #: 것을 고정하고 있었고, 그것이 이 감사가 찾아낸 결함이었다.
+    assert _refusal_code(eligibility) is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    assert _refusal_code(eligibility) is not ValidationCode.RULE_NOT_IMPLEMENTED
 
 
 def test_13_undecided_code_is_not_affected_because_it_filters_to_unknown():

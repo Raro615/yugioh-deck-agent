@@ -27,15 +27,21 @@ Base: Phase 3-E-43 (결과 ``35e156e`` · 보고서 ``40a7766`` · STRUCTURAL_RI
                        **묻지 않는다** (열거에서 통째로 뺀다)
 =====================  ==================================================
 
-새로 찾은 위험 **R-3**
----------------------
+새로 찾은 위험 **R-3** → **Phase 3-E-45 가 고쳤다**
+--------------------------------------------------
 ``_event_relation`` 의 불일치 분기가 ``ActionValidity.INVALID`` 와
-``ValidationCode.RULE_NOT_IMPLEMENTED`` 를 **짝지어** 낸다. Phase 3-E-40 의
-``CODE_VALIDITY`` 는 그 코드를 ``UNKNOWN`` 으로 분류한다. ``engine/trigger.py``
-의 ``_gate(...)`` 생산 17자리 중 **이 한 자리만** policy 와 어긋나고, 그 자리가
-**live 대응이 없는 유일한 관문**이다 (``test_28`` · ``test_29``).
+``ValidationCode.RULE_NOT_IMPLEMENTED`` 를 **짝지어** 내고 있었다. Phase
+3-E-40 의 ``CODE_VALIDITY`` 는 그 코드를 ``UNKNOWN`` 으로 분류하므로,
+``engine/trigger.py`` 의 ``_gate(...)`` 생산 중 **그 한 자리만** policy 와
+어긋났고 하필 **live 대응이 없는 유일한 관문**이었다.
 
-고치지 않는다 — 이번 Phase 는 측정이다.
+3-E-44 는 측정만 했고, **Phase 3-E-45 가 고쳤다** — 거부는
+``CANDIDATE_NOT_ELIGIBLE``, 모름(사건이 ``UNIMPLEMENTED`` 이거나 필터를 읽을
+수 없는 자리) 은 ``UNKNOWN`` 으로 갈랐다. 이 파일의 ``test_22`` · ``test_23``
+· ``test_30`` 이 그 뒤의 계약을 지킨다.
+
+**``ACTIVATION_ZONE`` 과 ``COST_FEASIBILITY`` 의 ``DIFFERENT_RESULT`` 는 그대로
+남아 있다** — 3-E-45 는 ``EVENT_RELATION`` 하나만 다뤘다.
 """
 
 import ast
@@ -832,11 +838,24 @@ def test_21_no_registered_effect_has_a_cost_so_the_live_filter_removes_nothing()
     "label, expected",
     [
         ("E1 같은 시점", (ActionValidity.VALID, ValidationCode.OK)),
-        ("E2 다른 시점", (ActionValidity.INVALID, ValidationCode.RULE_NOT_IMPLEMENTED)),
+        (
+            "E2 다른 시점",
+            (ActionValidity.INVALID, ValidationCode.CANDIDATE_NOT_ELIGIBLE),
+        ),
     ],
 )
 def test_22_event_relation_is_a_data_comparison(repository, label, expected):
-    """**E1 · E2** 선언이 적어 둔 것과 사건을 **데이터로** 비교한다."""
+    """
+    **E1 · E2** 선언이 적어 둔 것과 사건을 **데이터로** 비교한다.
+
+    .. note::
+       **E2 의 기대값이 바뀌었다** (Phase 3-E-45).
+
+       3-E-44 가 측정할 때는 ``RULE_NOT_IMPLEMENTED`` 였고, 그것이 R-3 였다.
+       양쪽 시점이 모두 **알려진** 값이므로 다르다는 답은 확정된 거부다 —
+       그래서 코드가 ``CANDIDATE_NOT_ELIGIBLE`` 로 바뀌었다. 판정
+       (``INVALID``) 은 그대로다.
+    """
     state, instance = board(repository)
     definition = definition_of()
     event = (
@@ -859,21 +878,28 @@ def test_22_event_relation_is_a_data_comparison(repository, label, expected):
             "E3 존 필터 불일치",
             Zone.MZONE,
             None,
-            (ActionValidity.INVALID, ValidationCode.RULE_NOT_IMPLEMENTED),
+            (ActionValidity.INVALID, ValidationCode.CANDIDATE_NOT_ELIGIBLE),
         ),
         ("E4 존 필터 일치", Zone.GRAVE, None, (ActionValidity.VALID, ValidationCode.OK)),
         (
             "E5 의미 필터 불일치",
             Zone.GRAVE,
             frozenset({OperationKind.DESTROY}),
-            (ActionValidity.INVALID, ValidationCode.RULE_NOT_IMPLEMENTED),
+            (ActionValidity.INVALID, ValidationCode.CANDIDATE_NOT_ELIGIBLE),
         ),
     ],
 )
 def test_23_event_relation_reads_zone_and_operation_filters(
     repository, label, to_zone, operations, expected
 ):
-    """**E3–E5** 존 · 의미 필터까지 본다. 셋 다 live 에는 묻는 자리가 없다."""
+    """
+    **E3–E5** 존 · 의미 필터까지 본다. 셋 다 live 에는 묻는 자리가 없다.
+
+    .. note::
+       **E3 · E5 의 기대 코드가 바뀌었다** (Phase 3-E-45, ``test_22`` 와 같은
+       까닭). 사건이 ``to_zone`` · ``operation`` 을 **들고 있으므로** 다르다는
+       답이 확정되고, 확정된 거부에는 거부의 코드가 붙는다.
+    """
     state, instance = board(repository)
     definition = definition_of()
     spec = TriggerSpec(
@@ -1147,18 +1173,21 @@ def test_29_r1_chain_code_appears_in_none_of_the_five_gates():
     assert CODE_VALIDITY[ValidationCode.CHAIN_DEFINITION_UNAVAILABLE] is None
 
 
-def test_30_r3_exactly_one_gate_production_contradicts_the_unknown_policy():
+def test_30_r3_is_fixed_and_no_gate_production_contradicts_the_unknown_policy():
     """
-    **R-3 (이번 Phase 의 새 발견).**
+    **R-3 는 고쳐졌다** (Phase 3-E-45). 이제 어긋나는 자리가 **없다.**
 
-    ``engine/trigger.py`` 의 ``_gate(...)`` 생산 **17자리** 중 코드가 리터럴인
-    16자리를 ``CODE_VALIDITY`` 와 맞춰 보면 **정확히 한 자리**가 어긋난다 —
-    ``_event_relation`` 의 불일치 분기가 ``INVALID`` 와
-    ``RULE_NOT_IMPLEMENTED`` (policy 로는 ``UNKNOWN``) 를 짝짓는다.
+    .. note::
+       **이 테스트의 계약이 뒤집혔다** (3-E-45).
 
-    그 한 자리가 **live 대응이 없는 유일한 관문**에 있다. 고치지 않는다 —
-    이번 Phase 는 측정이고, UNKNOWN 을 INVALID 로 접는 쪽도 그 반대쪽도
-    production 변경이다.
+       3-E-44 는 ``_gate(...)`` 생산 17자리 중 **정확히 한 자리**가
+       ``CODE_VALIDITY`` 와 어긋난다고 측정했다 — ``_event_relation`` 의
+       불일치 분기가 ``INVALID`` 와 ``RULE_NOT_IMPLEMENTED`` 를 짝지었다.
+       3-E-45 가 그 자리를 고쳤으므로 이 테스트는 이제 **0개**를 지킨다.
+
+       숫자가 17 → 19 로 늘었다 (리터럴 18 + 조건부 1). 3-E-45 가
+       ``_event_relation`` 에 모름 분기 둘을 더했기 때문이고, **그 둘도
+       policy 와 맞는다.** 어긋남이 다시 1개가 되면 되돌아간 것이다.
     """
     tree = ast.parse(source_of("engine/trigger.py"))
     literal, conditional = [], []
@@ -1185,16 +1214,25 @@ def test_30_r3_exactly_one_gate_production_contradicts_the_unknown_policy():
             }
         )
 
-    assert len(literal) + len(conditional) == 17
+    assert len(literal) + len(conditional) == 19
     assert len(conditional) == 1  # _trigger_condition 의 UNKNOWN 분기
 
     disagreements = [row for row in literal if row["policy"] is not row["declared"]]
-    assert len(disagreements) == 1, disagreements
-    only = disagreements[0]
-    assert only["gate"] == "EVENT_RELATION"
-    assert only["declared"] is ActionValidity.INVALID
-    assert only["code"] == "RULE_NOT_IMPLEMENTED"
-    assert only["policy"] is ActionValidity.UNKNOWN
+    assert disagreements == [], disagreements
+
+    #: 그리고 고쳐진 자리가 **무엇으로** 고쳐졌는지까지 본다 — 거부는 거부
+    #: 코드로, 모름은 모름 코드로 갈렸다.
+    event_gate = {
+        (row["declared"], row["code"])
+        for row in literal
+        if row["gate"] == "EVENT_RELATION"
+    }
+    assert event_gate == {
+        (ActionValidity.VALID, "OK"),
+        (ActionValidity.INVALID, "CANDIDATE_NOT_ELIGIBLE"),
+        (ActionValidity.UNKNOWN, "RULE_NOT_IMPLEMENTED"),
+        (ActionValidity.UNKNOWN, "INFORMATION_UNAVAILABLE"),
+    }
 
 
 def test_31_the_live_layer_never_pairs_invalid_with_rule_not_implemented():

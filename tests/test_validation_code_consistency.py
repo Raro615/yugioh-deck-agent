@@ -442,19 +442,27 @@ def test_11_the_remaining_invalid_sites_are_the_measured_three():
        ``effect/executor.py`` 의 ``CONDITION_FALSE``)를
        ``CANDIDATE_NOT_ELIGIBLE`` 로 바로잡았다.
 
-       남은 1곳(``_event_relation``)은 **의도적으로 남겼다.** "이 선언은 그
-       사건에 반응하지 않는다" 를 ``INVALID`` 로 적는 것이 맞는지 자체가
-       구조 질문이고, 트리거 파이프라인이 dormant 라서 지금 해가 없다
-       (3-E-38 §6).
+       남은 1곳(``_event_relation``)도 **이제 없다** (Phase 3-E-45).
 
-    (3-E-26 이전 6곳 → 3-E-26 이후 3곳 → 3-E-38 이후 **1곳**.
-    숫자가 늘면 새 자리가 생긴 것이다.)
+    .. note::
+       **"의도적으로 남겼다" 는 문장이 더 이상 참이 아니다** (3-E-45).
+
+       3-E-38 은 ``_event_relation`` 을 남기면서 "``INVALID`` 로 적는 것이
+       맞는지 자체가 구조 질문" 이라고 적었다. 3-E-44 가 그 자리를 측정하고
+       (R-3), 3-E-45 가 고쳤다 — ``INVALID`` 는 **맞았고** 코드가 틀렸으므로
+       ``CANDIDATE_NOT_ELIGIBLE`` 로 바꿨다. 이 파일의 ``test_01`` 이 이미
+       "같은 사실에 같은 코드" 라고 적어 둔 그 코드다.
+
+       그리고 같은 ``False`` 안에 **모름**이 섞여 있었다 (사건이
+       ``UNIMPLEMENTED`` 이거나 필터를 읽을 수 없는 자리). 그 둘은
+       ``UNKNOWN`` 으로 갈라졌다.
+
+    (3-E-26 이전 6곳 → 3-E-26 이후 3곳 → 3-E-38 이후 1곳 → 3-E-45 이후
+    **0곳**. 숫자가 늘면 새 자리가 생긴 것이다.)
     """
     #: **자리마다 센다.** 한 파일 안에 같은 모양이 하나 더 생기는 것이 바로
     #: 되돌아가는 모습이라서, 집합으로 묶으면 그것을 놓친다.
-    expected = {
-        ("engine/trigger.py", "ActionValidity.INVALID"): 1,  # _event_relation 하나뿐
-    }
+    expected: "dict[tuple[str, str], int]" = {}
     found: "collections.Counter[tuple[str, str]]" = collections.Counter()
     root = PROJECT_ROOT / "engine"
     for path in sorted(root.rglob("*.py")):

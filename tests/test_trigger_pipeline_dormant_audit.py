@@ -140,14 +140,24 @@ def top_level_names(rel: str) -> dict[str, str]:
 
 
 def test_01_the_three_part_modules_exist_and_are_large():
-    """**§2: 부품 층이 2,602줄이다.** 사라진 것이 없는지부터 센다."""
+    """
+    **§2: 부품 층이 2,681줄이다.** 사라진 것이 없는지부터 센다.
+
+    .. note::
+       **숫자가 2,602 → 2,681 로 늘었다** (Phase 3-E-45).
+
+       ``engine/trigger.py`` 가 1,565 → 1,644 줄이 되었다. 3-E-45 가
+       ``_event_relation`` 의 판정 조합을 고치면서 분기 둘과 그 까닭을 적은
+       docstring 을 더했기 때문이다. **dormant 구조를 활성화하거나 늘린 것이
+       아니다** — 같은 메서드 안의 판정 수정이다.
+    """
     sizes = {rel: len(source_of(rel).splitlines()) for rel in TRIGGER_PARTS}
     assert sizes == {
-        "engine/trigger.py": 1565,
+        "engine/trigger.py": 1644,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
     }
-    assert sum(sizes.values()) == 2602
+    assert sum(sizes.values()) == 2681
 
 
 def test_02_the_two_assembly_modules_exist():
@@ -434,22 +444,45 @@ def test_13_the_two_entry_structures_are_never_constructed_in_production():
 # ======================================================================
 
 
-def test_14_m3_still_attaches_an_unknown_code_to_a_definite_refusal():
+def test_14_m3_was_fixed_by_3e45_and_the_policy_now_agrees():
     """
-    **§6: M3 가 그 자리에 그대로 있다.**
+    **§6: M3 가 고쳐졌다** (Phase 3-E-45).
 
-    ``_event_relation`` 이 ``ActionValidity.INVALID`` 에
-    ``RULE_NOT_IMPLEMENTED`` 를 붙인다. 3-E-38 이 **일부러 남겼고** 그 뒤로
-    바뀌지 않았다.
+    .. note::
+       **이 테스트의 원래 계약이 뒤집혔다** (3-E-45).
+
+       원래는 "``_event_relation`` 이 ``INVALID`` 에 ``RULE_NOT_IMPLEMENTED``
+       를 붙인다 — 3-E-38 이 일부러 남겼다" 를 고정했다. 그것은 **그 시점의
+       사실 기록**이었고 지켜야 할 계약이 아니었다. 3-E-44 가 R-3 로
+       측정하고 3-E-45 가 고쳤다.
+
+    이제 거부에는 거부의 코드(``CANDIDATE_NOT_ELIGIBLE``) 가 붙고, 모름에는
+    모름의 코드가 붙는다. 그래서 그 자리의 짝이 policy 와 **맞는다.**
     """
-    source = source_of("engine/trigger.py")
-    index = source.index("EligibilityGate.EVENT_RELATION")
-    window = source[index : index + 700]
-    assert "ActionValidity.INVALID" in window
-    assert "ValidationCode.RULE_NOT_IMPLEMENTED" in window
-    #: policy 는 그 코드를 **모름**이라고 한다 — 그래서 어긋남이다.
+    #: **문자열 창이 아니라 함수 본문을 읽는다** (3-E-45). 창 크기로 재면
+    #: 분기가 늘어날 때 조용히 엉뚱한 자리를 보게 된다.
+    gate = next(
+        node
+        for node in ast.walk(ast.parse(source_of("engine/trigger.py")))
+        if isinstance(node, ast.FunctionDef) and node.name == "_event_relation"
+    )
+    codes = {
+        node.attr
+        for node in ast.walk(gate)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "ValidationCode"
+    }
+    assert "CANDIDATE_NOT_ELIGIBLE" in codes
+    #: 모름은 모름 쪽 코드로 남는다 — 두 까닭을 가른 그대로다.
+    assert "INFORMATION_UNAVAILABLE" in codes
+    assert "RULE_NOT_IMPLEMENTED" in codes
+    #: policy 는 그 코드를 **모름**이라고 한다 — 이제 거부에 붙지 않는다.
     assert (
         CODE_VALIDITY[ValidationCode.RULE_NOT_IMPLEMENTED] is ActionValidity.UNKNOWN
+    )
+    assert (
+        CODE_VALIDITY[ValidationCode.CANDIDATE_NOT_ELIGIBLE] is ActionValidity.INVALID
     )
 
 
@@ -557,9 +590,14 @@ def test_18_only_four_codes_have_a_dormant_carrier_at_all():
             for arg in list(node.args) + [k.value for k in node.keywords]:
                 if isinstance(arg, ast.Attribute) and arg.attr in members:
                     with_dormant.add(arg.attr)
-    #: 일곱이다. 처음에 넷으로 적었는데, 그 넷은 **같은 호출에서 status 와 짝지은**
-    #: 것만 센 결과였다 — 더 좁은 모양이다. 전체는 일곱이고, 그중 live 쪽과
-    #: **status 가 어긋나는 것은 하나뿐**이다 (``test_17``).
+    #: 여덟이다. 처음에 넷으로 적었는데, 그 넷은 **같은 호출에서 status 와 짝지은**
+    #: 것만 센 결과였다 — 더 좁은 모양이다. 전체는 (3-E-43 당시) 일곱이었고,
+    #: 그중 live 쪽과 **status 가 어긋나는 것이 하나** 있었다 (``test_17``).
+    #:
+    #: **3-E-45 가 ``INFORMATION_UNAVAILABLE`` 을 더해 여덟이 되었다.**
+    #: ``_event_relation`` 이 "필터를 읽을 수 없다" 를 그 코드로 돌려주기
+    #: 때문이다 — 새 코드를 만든 것이 아니라 **이미 있던 코드를 모름 쪽에
+    #: 쓴 것**이고, 그래서 어긋남은 이제 **0개**다.
     assert with_dormant == {
         "OK",
         "RULE_NOT_IMPLEMENTED",
@@ -568,9 +606,10 @@ def test_18_only_four_codes_have_a_dormant_carrier_at_all():
         "CANDIDATE_NOT_ELIGIBLE",
         "HIDDEN_CARD",
         "SOURCE_WRONG_ZONE",
+        "INFORMATION_UNAVAILABLE",
     }
-    #: 41개는 dormant 층과 아무 관계가 없다 — 위험의 범위가 좁다.
-    assert len(members - with_dormant) == 41
+    #: 40개는 dormant 층과 아무 관계가 없다 — 위험의 범위가 좁다.
+    assert len(members - with_dormant) == 40
 
 
 def test_19_four_of_the_five_dormant_gates_duplicate_a_live_question():
@@ -705,13 +744,20 @@ def test_24_the_validation_vocabulary_is_unchanged():
 
 
 def test_25_this_phase_changed_no_production_file():
-    """**AUDIT-ONLY: 다섯 모듈의 줄 수가 그대로다.**"""
+    """
+    **AUDIT-ONLY: 다섯 모듈의 줄 수가 그대로다.**
+
+    .. note::
+       ``engine/trigger.py`` 만 1,565 → 1,644 다 (Phase 3-E-45 의
+       ``_event_relation`` 판정 수정). 3-E-43 자신은 한 줄도 바꾸지
+       않았고, 나머지 다섯 모듈의 숫자가 **그대로인 것**이 그 증거다.
+    """
     sizes = {
         rel: len(source_of(rel).splitlines())
         for rel in TRIGGER_PARTS + TRIGGER_ASSEMBLY + (LIVE_TIMING,)
     }
     assert sizes == {
-        "engine/trigger.py": 1565,
+        "engine/trigger.py": 1644,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
