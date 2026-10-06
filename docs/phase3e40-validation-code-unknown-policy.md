@@ -19,8 +19,8 @@
 | `tests/test_simulation_status_unknown_codes_audit.py` | ○ 존재 (33 tests) |
 | working tree | clean (reset · checkout 하지 않았다) |
 | 브랜치 | `claude/pensive-goodall-te1egy` |
-| 결과 commit | `<<SHA1>>` — `Phase 3-E-40: formalize ValidationCode unknown policy` |
-| push | <<PUSH>> |
+| 결과 commit | `5b9f15b` — `Phase 3-E-40: formalize ValidationCode unknown policy` |
+| push | 완료 — `origin/claude/pensive-goodall-te1egy` (`4299d67..5b9f15b`) |
 
 ---
 
