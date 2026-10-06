@@ -852,3 +852,23 @@ C 는 "production scenario 로 만들려면 Engine V1 변경이 필요하다" �
    적혔는지 다시 읽는다 — 그 금지가 지키려던 것을 깨지 않는 설계여야 한다.
 
 **이 Phase 는 그 작업을 하지 않았다. 다음 Phase 는 임의로 진행하지 않는다.**
+
+---
+
+## Commit · Push 기록
+
+| 항목 | 값 |
+| --- | --- |
+| 작업 commit | `3eccab95875068efecc3ddd6b87ffcf92962d1de` (`3eccab9`) |
+| commit message | `Phase 3-F-5: audit SPECIAL_SUMMON event foundation` |
+| 변경 파일 | `tests/test_special_summon_event_foundation_audit.py` (신규) · `docs/phase3f5-special-summon-event-foundation-audit.md` (신규) |
+| production diff | **0** — `engine` · `agent` · `app` · `core` · `analysis` · `rules` · `rulings` · `sources` · `scripts` 전부 변경 없음 |
+| branch | `claude/pensive-goodall-te1egy` |
+| push 결과 | `5608f17..3eccab9  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy` |
+| base (Phase 3-F-4) | `f9d95de` (작업) · `5608f17` (보고서) |
+| 전체 회귀 | 4,196 passed / 4 skipped (baseline 4,177 +19) |
+| 탐색 순위 digest | `30fa3597a24d4511d8c92ce9f9921412ffada7546675c4d7d5765381402c4175` (6판 611결정) |
+| 최종 판정 | **B. SPECIAL_SUMMON_EVENT_FOUNDATION_PARTIAL** |
+
+이 절을 더한 commit 은 보고서 기록 commit 이며, 그 commit 역시 production 을
+건드리지 않는다.
