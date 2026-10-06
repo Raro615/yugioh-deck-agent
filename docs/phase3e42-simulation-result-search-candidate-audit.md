@@ -20,8 +20,8 @@
 | `tests/test_duelstep_withheld_validation_audit.py` | ○ 존재 (32 tests) |
 | working tree | clean (reset · checkout 하지 않았다) |
 | 브랜치 | `claude/pensive-goodall-te1egy` |
-| 결과 commit | `<<SHA1>>` — `Phase 3-E-42: audit SimulationResult to SearchCandidate information boundary` |
-| push | <<PUSH>> |
+| 결과 commit | `dfd08a6` — `Phase 3-E-42: audit SimulationResult to SearchCandidate information boundary` |
+| push | 완료 — `origin/claude/pensive-goodall-te1egy` (`1184764..dfd08a6`) |
 
 ---
 
