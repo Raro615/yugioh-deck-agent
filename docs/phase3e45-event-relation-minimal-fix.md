@@ -497,4 +497,16 @@ $ python3 -m pytest -p no:randomly -q
 | R-4 | `cost_feasibility` **DIFFERENT_RESULT** (K2 · K3 · K4), ADR-008 충돌 | 3-E-44 |
 | 신규 | `TimingEvent(CARD_MOVED)` 를 `delta` 없이 만들 수 있다 — **형식이 깨진** 사건이다. `_event_relation` 은 이제 그것을 모름으로 받지만, `TimingEvent.__post_init__` 가 막는 것이 더 맞는 자리일 수 있다. 이번 Phase 의 범위 밖이라 **고치지 않고 기록한다** |
 
+---
+
+## Commit · Push 기록
+
+| 항목 | 값 |
+| --- | --- |
+| 결과 commit | `7fd50b6` — `Phase 3-E-45: minimally fix event relation validation semantics` |
+| 브랜치 | `claude/pensive-goodall-te1egy` |
+| Push | `3d3906d..7fd50b6` → `origin/claude/pensive-goodall-te1egy` (성공) |
+| production diff | `engine/trigger.py` **81 insertions · 2 deletions** (실제 코드 32줄) |
+| 변경 파일 | production 1 · 신규 테스트 1 · 고친 테스트 7 · 신규 보고서 1 |
+
 **다음 Phase 는 임의로 진행하지 않는다.**
