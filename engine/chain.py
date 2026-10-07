@@ -463,7 +463,27 @@ class ChainResolution:
     ---------------------------------------
     ``EffectResult`` 에는 이 객체로 돌아올 역참조가 없고, ``to_dict()`` 에도
     사람이 남지 않는다. 그래서 result 만 들고 다니면 행위자를 되찾을 수 없다 —
-    기록(replay)에 남겨야 하는 것은 **이 객체**다.
+    둘을 떼지 말고 **이 객체째로** 넘긴다.
+
+    이 객체는 **기록이 아니다** (Phase 3-F-19)
+    ------------------------------------------
+    ``to_dict()`` 가 있다고 해서 재생(replay) 기록인 것은 아니다. 이 객체는
+    **runtime transient** 다 — :meth:`ChainResolver.resolve_top` 이 만들고,
+    :meth:`engine.duel.Duel._resolve_chain` 이 ``code`` 와 ``reason`` 만 꺼내
+    쓴 뒤 **버린다.** ``DuelStep`` 에도, ``GameState`` 에도, ``state_hash()``
+    에도 남지 않는다.
+
+    되살릴 입구도 없다 — ``from_dict`` 를 가진 클래스는 이 저장소에
+    :class:`~engine.action.PlayerAction` 과 그 안의
+    :class:`~engine.action_target.ActionTarget` **둘뿐**이다. 한 판을 다시
+    재현하는 데 필요한 것은 **행위 기록**이고 (``Transcript``), 앞으로 사건
+    단위로 되살릴 자리는 :class:`~engine.effect.journal.EventJournal` 로
+    지정되어 있다 (ADR-008). 둘 다 이 객체가 아니다.
+
+    그래서 ``to_dict()`` 는 **진단용 한 방향 출력**으로만 쓴다. 이 객체를
+    직렬화해서 보관하고 되살리는 길은 **만들지 않는다** — 만들면 생성 입구가
+    ``resolve_top`` 하나라는 전제가 깨지고, 그 전제가 바로
+    "``result`` 가 있으면 ``link`` 도 있다" 를 보장하는 근거다 (Phase 3-F-18).
 
     ``actor`` 를 ``controller`` · ``player`` 와 **섞지 않는다**
     ----------------------------------------------------------

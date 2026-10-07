@@ -91,6 +91,26 @@ class Transcript:
 
     :attr:`refusals` 가 비어 있지 않으면 정책이 규약을 어긴 것이고, 그것은
     듀얼의 사실이 아니라 **정책의 결함**이다. 그래서 따로 센다.
+
+    재현 입력 계약 (Phase 3-F-19)
+    -----------------------------
+    한 판을 똑같이 되돌리는 데 필요한 것은 **네 가지**이고, 그것뿐이다.
+
+    1. ``seed`` — 난수원을 고정한다 (:meth:`engine.duel.Duel.start`)
+    2. 양쪽 덱
+    3. :attr:`entries` 중 ``accepted`` 인 :class:`~engine.action.PlayerAction`
+       **순서** — ``to_dict()`` / ``from_dict()`` 로 왕복한다
+    4. 🔴 **``Duel.advance()`` 를 행위 사이에 끼워 넣기**
+
+    네 번째를 빼면 **재현되지 않는다.** 드로우와 페이즈 전환은 고르지 않아도
+    일어나는 일이라 행위 기록에 남지 않는데(:attr:`rule_steps` 는 **횟수만**
+    센다), 그것을 건너뛰면 다음 행위의 차례·페이즈가 어긋나서 대부분 거부된다.
+    :meth:`DuelRunner._step` 과 같은 순서로 — **행위를 묻기 전에 먼저
+    ``advance()``** — 돌려야 한다.
+
+    ``ChainResolution`` · ``EffectResult`` 는 **필요하지 않다.** 재현은 결과
+    객체를 되살리는 것이 아니라 **행위를 다시 실행하는 것**이다. 그 둘은
+    runtime transient 이고 되살릴 입구도 없다 (Phase 3-F-19).
     """
 
     entries: tuple[TranscriptEntry, ...] = ()
