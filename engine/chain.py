@@ -439,6 +439,37 @@ class ChainResolution:
 
     :attr:`chain` 은 이 시도 **뒤의** 체인이다. 실패하면 들어온 것과 같다 —
     실패한 링크를 건너뛰지 않는다.
+
+    이 객체가 :attr:`result` 의 **actor 운반자**다
+    -----------------------------------------------
+    :class:`~engine.effect.resolution.EffectResult` 는 **행위자를 들고 있지
+    않다.** 그 결과를 누가 일으켰는지는 **여기서** 읽는다 (Phase 3-F-16 ·
+    3-F-17).
+
+        resolution.link.actor        # 이 result 를 일으킨 행위자
+
+    ``result`` 를 담는 자리는 **언제나 ``link`` 도 함께 담는다.** 그래서
+    "결과는 있는데 누가 했는지 모르는" :class:`ChainResolution` 은 만들어지지
+    않는다.
+
+    .. warning::
+       **타입이 그것을 강제하지는 않는다.** 두 칸 모두 기본값이 ``None`` 이고
+       ``__post_init__`` 은 둘을 보지 않는다 — 지금은 **생성 자리가** 지킬
+       뿐이다 (:class:`~engine.activation.ActivationResult` 는 ``action`` 을
+       필수로 두고 ``link`` 를 ``__post_init__`` 에서 검사하므로 더 강하다).
+       ``result`` 만 넣고 ``link`` 를 빼면 **actor 를 복원할 길이 사라진다.**
+
+    ``result`` 를 **혼자 떼어 내지 않는다**
+    ---------------------------------------
+    ``EffectResult`` 에는 이 객체로 돌아올 역참조가 없고, ``to_dict()`` 에도
+    사람이 남지 않는다. 그래서 result 만 들고 다니면 행위자를 되찾을 수 없다 —
+    기록(replay)에 남겨야 하는 것은 **이 객체**다.
+
+    ``actor`` 를 ``controller`` · ``player`` 와 **섞지 않는다**
+    ----------------------------------------------------------
+    :attr:`ChainLink.actor` 는 **발동한 사람**이다. 그것은 대상 카드의
+    컨트롤러도, 영향을 받은 플레이어도, delta 의 사람 칸도 아니다
+    (Phase 3-F-15).
     """
 
     status: ChainResolutionStatus
@@ -446,11 +477,18 @@ class ChainResolution:
     code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED
     reason: str = ""
     link: ChainLink | None = None
-    """무엇을 해결하려 했는가. 체인이 비어 있으면 ``None``."""
+    """
+    무엇을 해결하려 했는가. 체인이 비어 있으면 ``None``.
+
+    **:attr:`result` 의 actor 운반자다** — ``link.actor`` 가 그 결과를 일으킨
+    행위자다 (Phase 3-F-17).
+    """
     result: EffectResult | None = None
     """
     실행기의 답 그대로. 체인 계층이 뭉갠 세부 이유가 전부 여기 있다.
     실행기까지 가지 못했으면 ``None``.
+
+    **행위자는 여기 없다.** :attr:`link` 의 ``actor`` 에서 읽는다.
     """
 
     def __post_init__(self) -> None:

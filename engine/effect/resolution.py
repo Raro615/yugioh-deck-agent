@@ -325,6 +325,27 @@ class EffectResult:
     ``StateDelta`` 는 여기 없다. :attr:`applied` 는 **무슨 일이 있었는지의
     기록**이지 되돌리기 위한 것이 아니다. 되돌리기는 ADR-008 이 Phase 2-E
     로 미뤄 두었다.
+
+    **행위자(actor)를 들고 있지 않다 — 일부러 그렇다**
+    --------------------------------------------------
+    이 결과를 **누가** 일으켰는지는 여기 없고, 운반자에서 읽는다
+    (Phase 3-F-16 · 3-F-17).
+
+        resolution.link.actor        # ChainResolution 이 함께 들고 있다
+
+    ``actor`` 칸을 두지 않는 까닭은 정보가 없어서가 아니라 **같은 사실을 두
+    곳에 적지 않기 위해서**다. 운반자의 ``link.actor`` 와 이 결과의 칸이
+    갈리면 어느 쪽이 맞는지 말할 방법이 없어진다.
+
+    그래서 ``controller`` 를 actor 로 베껴 넣지 않는다. 문맥의
+    :attr:`ResolutionContext.controller` 는 **효과의** 컨트롤러이고, 대상
+    카드의 컨트롤러와 다르다 (Phase 3-F-15).
+
+    .. warning::
+       이 결과를 **혼자 떼어 내면** 행위자를 되찾을 수 없다 — 운반자로 돌아올
+       역참조가 없고 ``to_dict()`` 에도 사람이 남지 않는다. 사건으로 옮길 때는
+       부르는 쪽이 ``actor`` 를 **반드시 말해야** 한다 (Phase 3-F-14:
+       ``EventReader.read(result)`` 는 ``TypeError`` 다).
     """
 
     status: ResolutionStatus

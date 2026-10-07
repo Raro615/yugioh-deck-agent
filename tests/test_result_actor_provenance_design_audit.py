@@ -1007,19 +1007,36 @@ def test_25_hidden_information_and_the_rng_are_untouched(repository):
 
 def test_26_this_phase_changed_no_production_file():
     """
-    §12 — **AUDIT-ONLY.** production diff 0.
+    §12 — **AUDIT-ONLY: 이 Phase(3-F-16)는 production 을 한 줄도 바꾸지 않았다.**
 
     §13 의 금지 항목도 하나도 들어오지 않았다 — 두 result 에 actor 칸이 없고,
     새 provenance 객체도 enum 도 없다.
+
+    .. note::
+       **Phase 3-F-17 에서 재는 방법을 바꿨다 — 세 번째다.**
+
+       ``git diff HEAD -- engine …`` 은 "지금 작업 나무가 깨끗한가" 이지 "**이
+       Phase** 가 무엇을 바꿨는가" 가 아니다. 뒤의 Phase 가 production 을 바꾸는
+       순간 그 Phase 때문에 깨진다 — 3-F-17 이 docstring 셋을 고치면서 실제로
+       그렇게 되었다.
+
+       3-F-14 가 3-F-12 · 3-F-13 의 같은 단정을 **자기 작업 commit 을 보는** 쪽으로
+       고쳤는데, 그 뒤에 쓴 이 Phase 가 **낡은 모양을 다시 썼다.** 교훈을 한 번
+       적용하고 패턴으로 만들지 않은 탓이다. 이제 같은 모양으로 고친다 —
+       commit 이 건드린 파일 목록은 영원히 바뀌지 않는다.
     """
-    diff = subprocess.run(
-        ["git", "diff", "--stat", "HEAD", "--"] + list(PRODUCTION_ROOTS),
+    PHASE_3F16_WORK = "57da2f6"
+    shown = subprocess.run(
+        ["git", "show", "--stat", "--format=", PHASE_3F16_WORK],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
         check=True,
-    )
-    assert diff.stdout.strip() == "", diff.stdout
+    ).stdout
+    touched = [line.split("|")[0].strip() for line in shown.splitlines() if "|" in line]
+    assert touched == ["tests/test_result_actor_provenance_design_audit.py"], touched
+    for path in touched:
+        assert not path.startswith(PRODUCTION_ROOTS), path
 
     #: 두 result 에 사람 칸이 없다 (이 Phase 가 더하지 않았다).
     assert not {f.name for f in dataclasses.fields(EffectResult)} & {

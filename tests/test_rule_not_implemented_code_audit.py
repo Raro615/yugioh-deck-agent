@@ -171,6 +171,18 @@ FIELD_DEFAULT_OWNERS = {
 #:    이 테스트가 틀린 가정을 갖고 있던 것은 아니다 — 당시의 사실을 정확히
 #:    세고 있었고, **고치면 깨지도록** 일부러 자리마다 고정했다. 그 설계가
 #:    의도대로 작동해서 3-E-38 이 무엇을 바꿨는지 여기서 먼저 드러났다.
+#: .. note::
+#:    **두 자리가 밀렸다** (Phase 3-F-17).
+#:
+#:    ``engine/effect/resolution.py`` 499 → **520**, ``engine/payment.py``
+#:    372 → **402**. 그 Phase 가 ``EffectResult`` · ``CostPaymentResult`` 의
+#:    **class docstring** 에 actor provenance 복원 경로를 적었고, 두 docstring
+#:    이 이 자리들보다 **위**에 있어서 아래가 전부 같은 만큼 밀렸다
+#:    (+21 · +30).
+#:
+#:    **자리의 성격도, 개수도 바뀌지 않았다** — 13곳 그대로이고 짝지은 상태도
+#:    그대로다. 문자열 리터럴을 지운 AST 가 전후 동일함이 그 증거다
+#:    (:mod:`tests.test_result_actor_provenance_contract` 의 ``test_20``).
 CONTRACT_VIOLATIONS = {
     ("engine/action_execution.py", 316, "ActionStatus.EXECUTION_ERROR"),
     ("engine/activation.py", 554, "ActivationStatus.INVALID_ACTION"),
@@ -182,8 +194,8 @@ CONTRACT_VIOLATIONS = {
     ("engine/effect/executor.py", 865, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/executor.py", 1141, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/executor.py", 1336, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/resolution.py", 499, "ResolutionStatus.FORBIDDEN"),
-    ("engine/payment.py", 372, "PaymentStatus.EXECUTION_ERROR"),
+    ("engine/effect/resolution.py", 520, "ResolutionStatus.FORBIDDEN"),
+    ("engine/payment.py", 402, "PaymentStatus.EXECUTION_ERROR"),
     ("engine/response.py", 476, "ResponseOutcome.REFUSED"),
 }
 

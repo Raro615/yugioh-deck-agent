@@ -227,6 +227,36 @@ class CostPaymentResult:
 
     :attr:`paid` 는 "치렀는가", :attr:`changed_state` 는 "판이 달라졌는가"
     다. 빈 묶음은 치렀지만 달라지지 않는다.
+
+    **행위자(actor)를 들고 있지 않다 — 일부러 그렇다**
+    --------------------------------------------------
+    이 지불을 **누가** 일으켰는지는 여기 없고, 운반자에서 읽는다
+    (Phase 3-F-16 · 3-F-17).
+
+        activation.action.actor      # ActivationResult 가 함께 들고 있다
+
+    :attr:`~engine.activation.ActivationResult.action` 은 **필수 필드**이므로,
+    이 결과가 거기 담겨 있으면 행위자가 **언제나** 있다. 조건부가 아니다.
+
+    🔴 :attr:`payments` 안의 사람 칸을 actor 로 쓰지 않는다
+    ------------------------------------------------------
+    :attr:`~engine.cost.receipt.CostPayment.player` 는 **자원이 줄어든 쪽**이고
+    행위자가 아니다. ``LifeCost(who=OPPONENT)`` 로 재면 둘이 갈린다
+    (Phase 3-F-15 · 3-F-16).
+
+    ===============================  =====  ==========================
+    ``PaymentContext.payer``          0      행위자 — 지불을 일으킨 쪽
+    ``CostPaymentEvent.actor``        0      행위자 (payer 에서 온다)
+    ``CostPayment.player``            **1**  **자원이 줄어든 쪽**
+    ``LifeChanged.player``            **1**  변화가 귀속되는 쪽
+    ===============================  =====  ==========================
+
+    그래서 "비용을 지불한 사람" 이라는 말이 두 가지를 가리킨다 — 비용을 **지는**
+    사람(= 발동한 사람)과 **자원을 낸** 쪽이다. actor 는 앞쪽이다.
+
+    .. warning::
+       이 결과를 **혼자 떼어 내면** 행위자를 되찾을 수 없다. 사건으로 옮길 때는
+       부르는 쪽이 ``actor`` 를 **반드시 말해야** 한다 (Phase 3-F-14).
     """
 
     status: PaymentStatus
