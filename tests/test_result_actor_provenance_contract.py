@@ -266,24 +266,68 @@ def test_02_every_site_that_carries_a_result_carries_the_link(repository):
     저장소 **전체**(production + 테스트)의 ``ChainResolution(...)`` 생성 자리를
     AST 로 전수 조사한다. ``result`` 를 주면서 ``link`` 를 빼는 자리가 **하나도
     없다.**
-    """
-    sites = every_construction("ChainResolution")
-    assert len(sites) == 6, sites
 
+    .. note::
+       **이 테스트의 원래 가정이 틀렸고, Phase 3-F-18 에서 실제로 깨졌다.**
+
+       원래는 ``len(sites) == 6`` 으로 **저장소 전체의 생성 자리 총수**를 못 박고
+       있었다. 그 숫자는 "앞으로 어떤 감사도 ``ChainResolution`` 을 새로 만들지
+       않는다" 를 전제한다. 그런데 3-F-18 은 **타입이 불법 조합을 막지 않는다는
+       것을 증명하려고 그 조합을 일부러 만드는** 감사였다. 그래서 총수가 6 → 8 이
+       되고, "result 를 담는 자리는 link 도 담는다" 라는 **진짜 계약과 아무 상관
+       없는 이유로** 이 테스트가 실패했다.
+
+       즉 틀린 가정은 두 겹이었다.
+
+       1. **총수는 계약이 아니다.** 계약은 "result 를 담으면 link 도 담는다" 이고,
+          총수는 그것을 재는 여러 방법 중 가장 부서지기 쉬운 것이다.
+       2. **고의 시연을 위반과 같이 셌다.** 감사 파일이 반례를 만들어 보이는 것은
+          위반이 아니라 **증거**다. 둘을 구분하지 않으면 뒤의 감사가 반례를 만들 때
+          마다 앞의 감사가 깨진다 (3-F-8 · 3-F-13 · 3-F-16 · 3-F-18 에서 반복된
+          자기측정 함정의 **감사 사이 판본**이다).
+
+       고치는 방향은 **숫자를 올리는 것이 아니다** (그러면 다음 감사에 또 깨진다).
+       계약을 그대로 두고, 고의 시연 파일을 **이름으로 명시해서** 따로 센다.
+       단정은 약해지지 않고 **늘어난다** — 시연 파일 밖에는 위반이 0곳이고,
+       시연은 정확히 1곳이며, production 숫자는 그대로임을 모두 단정한다.
+    """
+    #: 🔴 반례를 **일부러** 만드는 감사 파일. 위반이 아니라 증거다.
+    DEMONSTRATION = "tests/test_chain_resolution_link_result_invariant.py"
+
+    sites = every_construction("ChainResolution")
+    audited = [site for site in sites if site[0] != DEMONSTRATION]
+    demonstration = [site for site in sites if site[0] == DEMONSTRATION]
+
+    #: 감사 **대상**의 생성 자리는 여섯 그대로다.
+    assert len(audited) == 6, audited
+    #: 나눈 합이 전체와 맞는다 — 흘린 자리가 없다.
+    assert len(audited) + len(demonstration) == len(sites)
+
+    #: 🟢 계약: ``result`` 를 담는 자리는 ``link`` 도 담는다.
     violations = [
-        site for site in sites if "result" in site[2] and "link" not in site[2]
+        site for site in audited if "result" in site[2] and "link" not in site[2]
     ]
     assert violations == [], violations
+
+    #: 그리고 그 반례는 **시연 파일 안에만** 있고, 정확히 한 곳이다.
+    demonstrated = [
+        site for site in demonstration if "result" in site[2] and "link" not in site[2]
+    ]
+    assert len(demonstrated) == 1, demonstration
 
     #: production 쪽은 다섯이고 전부 ``engine/chain.py`` 안이다.
     production = [site for site in sites if not site[0].startswith("tests")]
     assert len(production) == 5
     assert {site[0] for site in production} == {"engine/chain.py"}
+    #: 🔴 production 에는 위반이 하나도 없다 — 시연과 무관하게 참이다.
+    assert not [s for s in production if "result" in s[2] and "link" not in s[2]]
 
     #: ``result`` 를 주는 자리는 둘, ``link`` 만 주는 자리는 하나다.
-    with_result = [site for site in sites if "result" in site[2]]
+    with_result = [site for site in audited if "result" in site[2]]
     assert len(with_result) == 3  # production 2 + 테스트 1
-    link_only = [site for site in sites if "link" in site[2] and "result" not in site[2]]
+    link_only = [
+        site for site in audited if "link" in site[2] and "result" not in site[2]
+    ]
     assert len(link_only) == 1
 
 
