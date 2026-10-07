@@ -1,5 +1,22 @@
 # Phase 3-F-19 — `ChainResolution` 직렬화 ↔ replay 입력 경계 감사
 
+> ### 🔴 정정 (Phase 3-F-21, 2026-10)
+>
+> 이 보고서는 "`legal_actions` 가 `activate_*` 를 허가하지 않는다" 라고 적었다.
+> **`activate_effect` 에 대해서는 틀렸다.** Phase 3-F-21 이 실측으로 확인했다 —
+> `legal_actions` 는 `activate_effect` 를 **후보로 내놓고**, 고르면 **수락되고
+> 체인까지 쌓인다** (주문 16장 덱에서 후보 292회 · 수락 81회 · 거부 0).
+>
+> 이 보고서의 관측("실제 듀얼에서 `activate_*` 0회")은 **그 덱과 그 정책에서의
+> 사실**이었다. 통상 몬스터 위주 덱이라 탐색 정책이 발동을 고르지 않았을 뿐인데,
+> 그것을 **엔진의 제한으로 일반화한 것이 잘못**이었다.
+>
+> 실제로 막혀 있는 것은 `activate_card` · `special_summon` ·
+> `change_position` · `change_phase` 넷이다. 자세한 분류는
+> `docs/phase3f21-legal-action-engine-boundary-audit.md` §1 · §3 에 있다.
+
+
+
 ## 0. Base 와 실제 HEAD
 
 | 항목 | 값 | 확인 |
