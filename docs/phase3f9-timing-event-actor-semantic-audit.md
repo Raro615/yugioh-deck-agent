@@ -539,3 +539,26 @@ D 로 적으면 "칸을 더하면 된다" 로 읽히는데, 측정은 **행위�
    이 문제와 **독립인가.** 이름을 주는 것과 행위자를 정하는 것을 섞지 않는다.
 
 **이 Phase 는 그 작업을 하지 않았다. 다음 Phase 는 임의로 진행하지 않는다.**
+
+---
+
+## Commit · Push 기록
+
+| 항목 | 값 |
+| --- | --- |
+| 작업 commit | `7481c20db7b6b928e7c245188043de5b5d9c034e` (`7481c20`) |
+| commit message | `Phase 3-F-9: audit TimingEvent actor semantics` |
+| 변경 파일 | `tests/test_timing_event_actor_semantic_audit.py` (신규) · `docs/phase3f9-timing-event-actor-semantic-audit.md` (신규) |
+| production diff | **0** — `engine` · `agent` · `app` · `core` · `analysis` · `rules` · `rulings` · `sources` · `scripts` 전부 변경 없음 |
+| `TimingEvent` 필드 | `point·delta·effect_ref·actor·note` (변경 없음) |
+| `LifeChanged` / `ZoneMoved` 필드 수 | **3** / **6** (변경 없음) |
+| `TimingPoint` 멤버 수 | **8** (변경 없음) |
+| branch | `claude/pensive-goodall-te1egy` |
+| push 결과 | `96db694..7481c20  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy` |
+| base (Phase 3-F-8) | `d684133` (작업) · `96db694` (보고서) |
+| 전체 회귀 | 4,276 passed / 4 skipped (baseline 4,254 +22) |
+| 탐색 순위 digest | `30fa3597a24d4511d8c92ce9f9921412ffada7546675c4d7d5765381402c4175` (6판 611결정 — 3-F-5 ~ 3-F-8 과 동일) |
+| 최종 판정 | **C. ACTOR_EVENT_DEPENDENT** |
+
+이 절을 더한 commit 은 보고서 기록 commit 이며, 그 commit 역시 production 을
+건드리지 않는다.
