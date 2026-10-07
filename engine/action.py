@@ -66,9 +66,43 @@ class PlayerActionKind(str, Enum):
     """일반 소환권을 써서 뒷면 수비 표시로 세트한다."""
     SET_SPELL_TRAP = "set_spell_trap"
     ACTIVATE_CARD = "activate_card"
-    """카드 자체를 발동한다 (마법 · 함정의 발동)."""
+    """
+    **카드 수준**의 발동 선언 — 어느 효과인지 지목하지 않는다.
+
+    .. warning::
+       **Engine V1 에서는 유효한 행위가 아니다** (Phase 3-F-21 · 3-F-22 · 3-F-23).
+       후보로 나오지 않고(``withheld`` 에 이유만 적힌다), ``Duel.apply`` 가 거절
+       하고, :class:`~engine.activation.EffectActivator` 가 **종류만 보고** 거절
+       한다 ("activate_card 는 효과 발동이 아닙니다"). 빠진 규칙은
+       ``activation-timing (Phase 2-C/2-F)`` 로 지목되어 있다
+       (:data:`~engine.action_validation._MISSING_RULE`).
+
+    🔴 **마법 · 함정의 발동을 이 종류로 적지 않는다.** 이 docstring 은 한동안
+    "카드 자체를 발동한다 (마법 · 함정의 발동)" 이라고 적고 있었는데, 그것은
+    **실제 계약과 어긋났다** — Engine V1 에서 마법 · 함정의 발동을 수행하는 것은
+    :attr:`ACTIVATE_EFFECT` 다 (Phase 3-F-23 이 정정했다). 등록된 효과 전부가
+    마법 · 함정이고, 그 발동이 ``ACTIVATE_EFFECT`` 로 체인까지 간다.
+
+    공식 룰북은 메인 페이즈의 행동을 "Activate a Card or Effect" **하나**로 적고
+    마법 · 함정을 "카드" 로 분류한다. 그래서 이 이름은 **공식 개념**을 가리키되
+    **현재 엔진에서는 비어 있는 자리**다 — 공식 용어와 엔진 종류가 1:1 이 아니다.
+    """
     ACTIVATE_EFFECT = "activate_effect"
-    """카드가 가진 **특정 효과**를 발동한다. ``effect_ref`` 로 어느 효과인지 지목한다."""
+    """
+    ``effect_ref`` 로 **지목한 효과**를 발동한다. ``effect_ref`` 는 **필수**다.
+
+    **Engine V1 에서 유효한 발동 행위는 이것 하나다.** 그리고 지금은 마법 · 함정
+    카드의 발동까지 **이 종류가 맡는다** — 엔진은 모든 발동을 "카드 X 의 효과
+    #N" 으로 모델링하고 ``effect_ref`` 가 그 지목 수단이기 때문이다. 공식 용어로
+    "카드의 발동" 인 것도 여기로 들어온다 (Phase 3-F-23 의 대응표).
+
+    .. note::
+       지금 등록된 효과는 **카드마다 하나씩**이고 전부 ``ordinal=0`` 이다. 즉
+       "어느 효과인지" 의 선택지가 실제로 갈리는 카드가 아직 없고, 후보를 여럿으로
+       만드는 것은 **대상**(``target_combinations``)이다. 지목이라는 의미는
+       **선언되어 있으나 아직 쓰이지 않는다** — 몬스터 효과나 복수 효과 카드가
+       등록되는 날 비로소 갈린다.
+    """
     CHANGE_POSITION = "change_position"
     ATTACK = "attack"
     """공격 선언. 대상이 없으면 다이렉트 어택이 아니라 **구조 오류**다 —
