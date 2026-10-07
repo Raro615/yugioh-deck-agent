@@ -102,16 +102,25 @@ STRING_OCCURRENCES = 79
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
+#:
+#: .. note::
+#:    **``engine/trigger.py`` 네 자리가 +17 줄 밀렸다** (Phase 3-F-11).
+#:
+#:    978 → 995 · 1318 → 1335 · 1324 → 1341 · 1347 → 1364. 그 Phase 가
+#:    ``TimingEvent.actor`` 의 docstring 을 사건군별 표로 늘렸고, 그 칸이 이
+#:    네 자리보다 **위**에 있어서 아래가 전부 같은 만큼 밀렸다. 자리가 밀린
+#:    것뿐이고 **산문 12 · 코드 67 · 문자열 79 는 하나도 바뀌지 않았다** —
+#:    바뀐 것이 줄 번호뿐이라는 것이 그 증거다.
 PROSE_OCCURRENCES = {
     ("engine/activation.py", 634),      # M2: 코드도 표에서 가져온다
     ("engine/activation.py", 672),      # M1: 확실한 거부이고 미구현이 아니다
     ("engine/effect/executor.py", 922), # M2: 이 근거로는 절대 실행하지 않는다
     ("engine/special_summon.py", 77),
-    ("engine/trigger.py", 978),
+    ("engine/trigger.py", 995),
     # 3-E-45: ``_event_relation`` 이 왜 세 갈래인가를 적은 docstring 셋.
-    ("engine/trigger.py", 1318),
-    ("engine/trigger.py", 1324),
-    ("engine/trigger.py", 1347),
+    ("engine/trigger.py", 1335),
+    ("engine/trigger.py", 1341),
+    ("engine/trigger.py", 1364),
     ("engine/trigger_chain.py", 553),
     ("engine/trigger_chain.py", 569),
     ("engine/validation.py", 129),

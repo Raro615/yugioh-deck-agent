@@ -231,7 +231,24 @@ class TimingEvent:
     effect_ref: EffectRef | None = None
     """``EFFECT_RESOLVED`` · ``COST_PAID`` 에서 어느 효과였는가."""
     actor: int | None = None
-    """이 사건을 일으킨 플레이어. 알 수 없으면 ``None``."""
+    """
+    **이 변화가 귀속되는 플레이어.** 알 수 없으면 ``None``.
+
+    **행위의 주체가 아니다** (Phase 3-F-9 · 3-F-10). 어느 칸에서 오는지는
+    사건군이 정하고, 그래서 뜻이 사건군마다 다르다.
+
+    =====================  ==================================
+    ``MonsterSummoned``     소환한 사람 (``delta.player``)
+    ``CardDrawn``           뽑은 사람 (``delta.player``)
+    ``LifeChanged``         **LP 가 바뀐 쪽** (``delta.player``)
+    ``ZoneMoved``           **도착지 주인** (``delta.to_player``)
+    ``PhaseChanged``        ``None`` — 규칙이 하는 일이다
+    =====================  ==================================
+
+    그래서 P1 이 P0 을 공격해 P0 의 LP 가 줄면 이 값은 **P0** 이다 — 공격한
+    P1 이 아니다. "누가 했는가" 가 필요하면
+    :attr:`~engine.event_pipeline.EventContext.actor` 를 쓴다.
+    """
     note: str = ""
     """``UNIMPLEMENTED`` 에서 무엇을 표현할 수 없었는가."""
 

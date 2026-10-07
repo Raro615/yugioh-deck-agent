@@ -77,7 +77,19 @@ class EventContext:
     turn_player: int
     phase: Phase
     actor: int | None = None
-    """이 변화를 일으킨 행위의 주체. 규칙이 스스로 한 일이면 ``None``."""
+    """
+    이 변화를 일으킨 **행위의 주체**. 없으면 ``None``.
+
+    **부르는 쪽이 선언한다** — :meth:`EventReader.read` 에 넘긴 값, 없으면
+    ``result.action.actor``, 그것도 없으면 ``None`` 이다. 그래서 ``None`` 인
+    까닭이 둘이다: 규칙이 스스로 한 일이거나, **행위를 들고 있지 않은
+    결과**(``EffectResult`` · ``ProgressionResult`` 는 ``action`` 칸이 없다)를
+    넘겼는데 부르는 쪽이 말해 주지 않은 것이다 (Phase 3-F-10).
+
+    delta 와 **맞춰 보지 않는다.** 이 값이 사실인지는 넘기는 쪽의 책임이고,
+    :class:`~engine.trigger.TimingEvent` 의 ``actor`` (변화의 귀속 대상) 와
+    **같은 뜻이 아니다.**
+    """
     sequence: int = 0
     """한 번의 변화 묶음 안에서 **몇 번째**인가. 순서가 곧 사실이다."""
 

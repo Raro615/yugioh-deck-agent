@@ -297,30 +297,77 @@ def test_02_the_context_actor_is_declared_by_the_caller():
         EventContext(1, MINE, Phase.MAIN1, actor=2)
 
 
-def test_03_both_docstrings_promise_the_same_thing():
+def test_03_the_two_contracts_are_written_down_and_differ(repository):
     """
-    🔴 **이 Phase 가 지목하는 실제 결함.**
+    **두 actor 의 계약이 서로 다르고, 그 다름이 문서에 적혀 있다.**
 
-    두 필드의 설명이 **똑같은 것을 약속한다** — 둘 다 "일으킨" 이다.
-    그런데 하나는 당사자이고 하나는 행위자다. 문서가 둘을 구분하지 않으므로,
-    설명만 읽은 consumer 는 **둘을 바꿔 써도 된다고 믿게 된다.**
+    .. note::
+       **이 테스트는 Phase 3-F-10 에서 다른 것을 단정하고 있었다.**
+
+       그때 이름은 ``test_03_both_docstrings_promise_the_same_thing`` 이고,
+       두 설명에 **"일으킨" 이 둘 다 들어 있다**는 것을 근거로 "두 설명이
+       똑같은 것을 약속한다" 고 적었다. 그 결론은 **그때도 너무 강했다.**
+
+       * ``EventContext.actor`` 는 "일으킨 **행위의 주체**" 라고 적혀
+         있었고 그것은 **맞는 설명**이었다 (행위자).
+       * 틀린 것은 ``TimingEvent.actor`` 쪽 하나였다 — "이 **사건을**
+         일으킨 플레이어" 라고 적어 **행위자라고 단정**했다.
+       * 그리고 3-F-10 은 ``ObservedEvent.actor`` 의 **자기 docstring 을
+         읽지 않았다.** 그 자리는 이미 "'누가 이 행위를 했는가' 와 '이
+         사건이 누구의 것인가' 는 다른 질문이다" 라고 **구분해 두고
+         있었다.**
+
+       즉 결함은 "둘 다 틀렸다" 가 아니라 **"하나가 거짓이고, 구분은 세
+       번째 자리에만 적혀 있었다"** 였다. Phase 3-F-11 이 그 한 문장을
+       고쳤으므로, 이 테스트는 **고쳐진 계약**을 고정하는 쪽으로 바꾼다.
+
+    §8 이 요구한 세 가지를 확인한다 — 같을 수 있고, 다를 수 있고, 달라도
+    각자의 계약을 만족하면 정상이다.
     """
     timing_doc = docstring_of("engine/trigger.py", "TimingEvent", "actor")
     context_doc = docstring_of("engine/event_pipeline.py", "EventContext", "actor")
 
-    assert "일으킨" in timing_doc
-    assert "일으킨" in context_doc
-    #: 둘 다 "알 수 없으면/없으면 None" 까지 같은 모양으로 적어 두었다.
-    assert "None" in timing_doc and "None" in context_doc
+    #: ① ``TimingEvent.actor`` 는 **행위자라고 단정하지 않는다.**
+    assert "귀속" in timing_doc
+    assert "행위의 주체가 아니다" in timing_doc
+    #: 금지된 단정이 사라졌다.
+    assert "이 사건을 일으킨 플레이어" not in timing_doc
+    #: 그리고 어느 쪽을 써야 하는지 가리킨다.
+    assert "EventContext" in timing_doc
 
-    #: 그런데 3-F-9 가 측정한 대로 `TimingEvent.actor` 는 **행위자가 아니다** —
-    #: 즉 이 설명은 불명확한 것이 아니라 **사실과 다르다.**
-    hurt = LifeChanged(player=MINE, before=8000, after=6000)
-    assert timing_for(hurt).actor == MINE          # 맞은 쪽
-    #: 그리고 어느 설명도 "당사자" 라는 말을 쓰지 않는다.
-    for doc in (timing_doc, context_doc):
-        assert "당사자" not in doc
-        assert "대상" not in doc
+    #: ② ``EventContext.actor`` 는 **행위의 주체**라고 적고, 선언이라는
+    #:    사실과 ``None`` 이 되는 두 까닭을 밝힌다.
+    assert "행위의 주체" in context_doc
+    assert "부르는 쪽이 선언" in context_doc
+    assert "EffectResult" in context_doc
+    assert "맞춰 보지 않는다" in context_doc
+
+    #: ③ 세 번째 자리는 **원래부터** 구분해 두었다 — 그대로 둔다 (§5 A).
+    observed_doc = inspect.getdoc(inspect.getattr_static(ObservedEvent, "actor").fget)
+    assert "다른 질문이다" in observed_doc
+
+    #: A. 두 actor 가 **같을 수 있다** — 소환.
+    state, execution = summon_by(repository, MINE)
+    point, timing_actor, context_actor = both_actors(state, execution)[0]
+    assert point is TimingPoint.MONSTER_SUMMONED
+    assert (timing_actor, context_actor) == (MINE, MINE)
+
+    #: B. 두 actor 가 **다를 수 있다** — P1 이 P0 을 공격.
+    state, execution, action, victim_before = battle_by(repository, THEIRS)
+    life = [
+        row for row in both_actors(state, execution) if row[0] is TimingPoint.LIFE_CHANGED
+    ]
+    assert len(life) == 1
+    _, timing_actor, context_actor = life[0]
+    assert timing_actor != context_actor
+
+    #: C. 달라도 **각자의 계약을 만족한다.**
+    #:    - context 쪽은 행위의 주체다.
+    assert context_actor == action.actor
+    #:    - timing 쪽은 변화가 귀속된 쪽이다 (= LP 가 줄어든 플레이어).
+    assert timing_actor == MINE
+    assert state.player(MINE).life_points < victim_before
+    #:    그래서 "다르다" 가 결함이 아니다 — **둘이 다른 질문에 답한 것**이다.
 
 
 # ======================================================================

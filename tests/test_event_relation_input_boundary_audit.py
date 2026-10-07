@@ -623,8 +623,7 @@ def test_15_the_event_actor_means_different_things_per_event_family():
     """
     🔴 **이 Phase 가 새로 찾은 상류 결함.**
 
-    ``TimingEvent.actor`` 의 설명은 "이 사건을 **일으킨** 플레이어" 다.
-    실제로는 사건군마다 다른 것을 가리킨다.
+    ``TimingEvent.actor`` 는 사건군마다 다른 것을 가리킨다.
 
     ===================  ================================  =========
     ``MonsterSummoned``   ``delta.player`` = 소환한 사람      행위자 ○
@@ -635,10 +634,26 @@ def test_15_the_event_actor_means_different_things_per_event_family():
 
     이것은 **세 설계 모두의 상류** 문제다 — A·B·C 어느 쪽을 골라도 같은
     값을 비교하게 된다. 그래서 입력 경계 판정과 **분리해서** 기록한다.
+
+    .. note::
+       **이 테스트의 첫 단정이 바뀌었다** (Phase 3-F-11).
+
+       3-F-8 당시에는 ``engine/trigger.py`` 안에 "이 사건을 일으킨 플레이어"
+       라는 문장이 **그대로 적혀 있었고**, 이 테스트는 그 문장이 있다는 것을
+       결함의 증거로 고정했다. 그 전제가 이제 잘못됐다 — 3-F-11 이 그 거짓
+       문장을 **지웠기** 때문이다. 즉 이 테스트는 "설명이 틀렸다" 를 고정했고,
+       설명이 고쳐지면 반드시 깨지는 모양이었다.
+
+       **결함 자체는 사라지지 않았다.** 아래 실측 (라이프는 당한 쪽 · 이동은
+       도착지 주인) 은 하나도 바뀌지 않았고, 그래서 이 테스트는 삭제되지 않는다.
+       바뀐 것은 증거의 방향뿐이다: 거짓 문장이 **있다**가 아니라, 사건군별
+       뜻을 밝힌 표와 "행위의 주체가 아니다" 라는 경고가 **있다** 를 고정한다.
     """
-    #: 설명이 그렇게 적혀 있다.
+    #: 이제 설명이 사건군마다 다르다는 것을 **밝힌다** — 거짓 단정이 없다.
     trigger_source = source_of("engine/trigger.py")
-    assert "이 사건을 일으킨 플레이어" in trigger_source
+    assert "이 사건을 일으킨 플레이어" not in trigger_source
+    assert "**행위의 주체가 아니다**" in trigger_source
+    assert "사건군마다 다르다" in trigger_source
 
     #: 그런데 `from_delta` 가 사건군마다 **다른 칸**에서 가져온다.
     from_delta, text = method_node("engine/trigger.py", "TimingEvent", "from_delta")

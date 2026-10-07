@@ -141,30 +141,44 @@ def top_level_names(rel: str) -> dict[str, str]:
 
 def test_01_the_three_part_modules_exist_and_are_large():
     """
-    **§2: 부품 층이 2,681줄이다.** 사라진 것이 없는지부터 센다.
+    **§2: 부품 층이 2,698줄이다.** 사라진 것이 없는지부터 센다.
 
     .. note::
-       **숫자가 2,602 → 2,681 로 늘었다** (Phase 3-E-45).
+       **숫자가 2,602 → 2,681 → 2,698 로 늘었다** (Phase 3-E-45 · 3-F-11).
 
-       ``engine/trigger.py`` 가 1,565 → 1,644 줄이 되었다. 3-E-45 가
-       ``_event_relation`` 의 판정 조합을 고치면서 분기 둘과 그 까닭을 적은
-       docstring 을 더했기 때문이다. **dormant 구조를 활성화하거나 늘린 것이
-       아니다** — 같은 메서드 안의 판정 수정이다.
+       ``engine/trigger.py`` 가 1,565 → 1,644 (3-E-45: ``_event_relation`` 의
+       판정 조합 수정과 그 까닭을 적은 docstring) → **1,661** (3-F-11) 이 되었다.
+
+       3-F-11 의 +17 은 **전부 docstring 이다.** ``TimingEvent.actor`` 의 설명이
+       "이 사건을 일으킨 플레이어" 라고 거짓을 적고 있었고 (Phase 3-F-9 가
+       측정한 사건군별 polysemy 와 어긋난다), 그 자리를 사건군별 표로 바꿨다.
+       **dormant 구조를 활성화하거나 늘린 것이 아니다** — 모든 문자열 리터럴을
+       지운 AST 가 전후 동일함이 그 증거다 (:mod:`tests.test_actor_semantic_contract`
+       의 ``test_13`` · ``test_14``).
     """
     sizes = {rel: len(source_of(rel).splitlines()) for rel in TRIGGER_PARTS}
     assert sizes == {
-        "engine/trigger.py": 1644,
+        "engine/trigger.py": 1661,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
     }
-    assert sum(sizes.values()) == 2681
+    assert sum(sizes.values()) == 2698
 
 
 def test_02_the_two_assembly_modules_exist():
-    """**§2: 조립 층이 853줄이다.**"""
+    """
+    **§2: 조립 층이 865줄이다.**
+
+    .. note::
+       **853 → 865** (Phase 3-F-11). ``engine/event_pipeline.py`` 가 417 → 429
+       다. ``EventContext.actor`` 의 docstring 에 "부르는 쪽이 선언한다 ·
+       ``None`` 인 까닭이 둘이다 · delta 와 맞춰 보지 않는다" 를 적은 +12
+       줄이고, **코드는 한 줄도 바뀌지 않았다** (``test_01`` 의 note 가 가리키는
+       AST 증거와 같다).
+    """
     sizes = {rel: len(source_of(rel).splitlines()) for rel in TRIGGER_ASSEMBLY}
-    assert sizes == {"engine/timing.py": 436, "engine/event_pipeline.py": 417}
-    assert sum(sizes.values()) == 853
+    assert sizes == {"engine/timing.py": 436, "engine/event_pipeline.py": 429}
+    assert sum(sizes.values()) == 865
 
 
 def test_03_the_part_modules_declare_thirty_two_top_level_names():
@@ -748,20 +762,23 @@ def test_25_this_phase_changed_no_production_file():
     **AUDIT-ONLY: 다섯 모듈의 줄 수가 그대로다.**
 
     .. note::
-       ``engine/trigger.py`` 만 1,565 → 1,644 다 (Phase 3-E-45 의
-       ``_event_relation`` 판정 수정). 3-E-43 자신은 한 줄도 바꾸지
-       않았고, 나머지 다섯 모듈의 숫자가 **그대로인 것**이 그 증거다.
+       ``engine/trigger.py`` 는 1,565 → 1,644 (Phase 3-E-45 의
+       ``_event_relation`` 판정 수정) → 1,661 (Phase 3-F-11 의 docstring) 이고,
+       ``engine/event_pipeline.py`` 는 417 → 429 (같은 Phase 의 docstring) 다.
+       3-E-43 자신은 한 줄도 바꾸지 않았고, **나머지 네 모듈의 숫자가 그대로인
+       것**이 그 증거다. 움직인 두 모듈도 문자열 리터럴을 지운 AST 가 전후
+       동일하므로 production behavior 는 바뀌지 않았다.
     """
     sizes = {
         rel: len(source_of(rel).splitlines())
         for rel in TRIGGER_PARTS + TRIGGER_ASSEMBLY + (LIVE_TIMING,)
     }
     assert sizes == {
-        "engine/trigger.py": 1644,
+        "engine/trigger.py": 1661,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
-        "engine/event_pipeline.py": 417,
+        "engine/event_pipeline.py": 429,
         "engine/activation_timing.py": 541,
     }
 
