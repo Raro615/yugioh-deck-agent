@@ -639,3 +639,26 @@ D 는 "세 설계 **모두** semantic contract 가 충분히 정의되지 않았
    않은 것)과 일관되는가.
 
 **이 Phase 는 그 작업을 하지 않았다. 다음 Phase 는 임의로 진행하지 않는다.**
+
+---
+
+## Commit · Push 기록
+
+| 항목 | 값 |
+| --- | --- |
+| 작업 commit | `d6841331b7ca62b88fa392c84281eb325bcc1f4e` (`d684133`) |
+| commit message | `Phase 3-F-8: audit EventRelation input boundary` |
+| 변경 파일 | `tests/test_event_relation_input_boundary_audit.py` (신규) · `docs/phase3f8-event-relation-input-boundary-audit.md` (신규) |
+| production diff | **0** — `engine` · `agent` · `app` · `core` · `analysis` · `rules` · `rulings` · `sources` · `scripts` 전부 변경 없음 |
+| `_event_relation` 서명 | `(spec, event)` (변경 없음) |
+| `TriggerSpec` / `TriggerCandidate` 필드 수 | **9** / **10** (변경 없음) |
+| `ValidationCode` 수 | **48** (변경 없음) |
+| branch | `claude/pensive-goodall-te1egy` |
+| push 결과 | `9bec29c..d684133  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy` |
+| base (Phase 3-F-7) | `64b783a` (작업) · `9bec29c` (보고서) |
+| 전체 회귀 | 4,254 passed / 4 skipped (baseline 4,234 +20) |
+| 탐색 순위 digest | `30fa3597a24d4511d8c92ce9f9921412ffada7546675c4d7d5765381402c4175` (6판 611결정 — 3-F-5 · 3-F-6 · 3-F-7 과 동일) |
+| 최종 판정 | **A. MINIMAL_RELATION_INPUTS_SUFFICIENT** (범위 조건: §17) |
+
+이 절을 더한 commit 은 보고서 기록 commit 이며, 그 commit 역시 production 을
+건드리지 않는다.
