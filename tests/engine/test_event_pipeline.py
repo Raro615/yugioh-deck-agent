@@ -214,7 +214,9 @@ def test_a_phase_change_names_no_actor():
 def test_a_turn_progression_result_can_be_read(state, registry):
     """Phase 2-H 의 결과도 같은 입구로 들어온다."""
     result = TurnProgressor().advance(state)
-    events = EventReader(view_of(state)).read(result)
+    #: 페이즈 전이는 **규칙이 하는 일**이다 — 행위자가 없다고 **적어서** 말한다
+    #: (Phase 3-F-14). 생략하면 TypeError 다.
+    events = EventReader(view_of(state)).read(result, actor=None)
 
     assert len(events) == 1
     assert events[0].point is TimingPoint.PHASE_CHANGED
@@ -228,7 +230,7 @@ def test_reading_a_phase_change_does_not_move_the_board_again(state):
     result = TurnProgressor().advance(state)
     after = state.state_hash()
 
-    EventReader(view_of(state)).read(result)
+    EventReader(view_of(state)).read(result, actor=None)
 
     assert state.state_hash() == after
 
@@ -241,7 +243,7 @@ def test_reading_a_phase_change_does_not_move_the_board_again(state):
 @requires_official_db
 def test_a_summon_execution_becomes_one_observed_event(state):
     execution = summon_execution(state)
-    events = EventReader(view_of(state)).read(execution)
+    events = EventReader(view_of(state)).read(execution, actor=MINE)
 
     assert len(events) == 1
     event = events[0]
@@ -255,7 +257,7 @@ def test_a_summon_execution_becomes_one_observed_event(state):
 def test_the_event_remembers_when_it_happened(state):
     """§5 — 턴 · 페이즈 · 턴 플레이어가 사건과 함께 남는다."""
     state.turn.set_phase(Phase.MAIN2)
-    events = EventReader(view_of(state)).read(summon_execution(state))
+    events = EventReader(view_of(state)).read(summon_execution(state), actor=MINE)
 
     context = events[0].context
     assert context.turn_number == 1
@@ -270,7 +272,7 @@ def test_the_event_carries_the_instance_not_the_card_object(state):
     execution = summoning_executor().execute(
         state, PlayerAction.normal_summon(MINE, card)
     )
-    event = EventReader(view_of(state)).read(execution)[0]
+    event = EventReader(view_of(state)).read(execution, actor=MINE)[0]
 
     assert event.instance == card
     assert isinstance(event.instance, InstanceId)
@@ -318,7 +320,10 @@ def test_a_delta_with_no_timing_name_is_kept_not_dropped():
         def describe_ko(self):
             return "아직 이름이 없는 변화"
 
-    events = reader.read_deltas((_UnknownChange(),))
+    #: 이 synthetic 변화는 **어떤 행위자도 주장하지 않는다** — 그래서
+    #: actor=None 이라고 적는다. 이 테스트가 보는 것은 "이름을 못 붙인 변화를
+    #: 버리지 않는가" 하나다.
+    events = reader.read_deltas((_UnknownChange(),), actor=None)
 
     assert len(events) == 1
     assert events[0].point is TimingPoint.UNIMPLEMENTED
@@ -329,8 +334,10 @@ def test_a_delta_with_no_timing_name_is_kept_not_dropped():
 def test_the_reader_refuses_a_result_without_deltas():
     reader = EventReader(GameStateView.from_state(GameState.create(), viewer=MINE))
 
+    #: actor 를 **넘긴다** — 넘기지 않으면 actor 계약 위반으로도 TypeError 가
+    #: 나서 이 테스트가 무엇을 거부하는지 모호해진다 (Phase 3-F-14).
     with pytest.raises(TypeError):
-        reader.read(object())
+        reader.read(object(), actor=MINE)
 
 
 def test_the_reader_refuses_a_mutable_board():
@@ -348,8 +355,8 @@ def test_the_reader_refuses_a_mutable_board():
 def test_the_same_board_and_action_give_the_same_event_id(repository):
     first, second = new_state(repository), new_state(repository)
 
-    left = EventReader(view_of(first)).read(summon_execution(first))[0]
-    right = EventReader(view_of(second)).read(summon_execution(second))[0]
+    left = EventReader(view_of(first)).read(summon_execution(first), actor=MINE)[0]
+    right = EventReader(view_of(second)).read(summon_execution(second), actor=MINE)[0]
 
     assert left.event_id == right.event_id
     assert left.canonical_state() == right.canonical_state()
@@ -358,8 +365,8 @@ def test_the_same_board_and_action_give_the_same_event_id(repository):
 @requires_official_db
 def test_a_clone_produces_the_same_event(state):
     copy = state.clone()
-    original = EventReader(view_of(state)).read(summon_execution(state))[0]
-    cloned = EventReader(view_of(copy)).read(summon_execution(copy))[0]
+    original = EventReader(view_of(state)).read(summon_execution(state), actor=MINE)[0]
+    cloned = EventReader(view_of(copy)).read(summon_execution(copy), actor=MINE)[0]
 
     assert original.event_id == cloned.event_id
 
@@ -379,7 +386,7 @@ def test_the_event_id_uses_no_addresses_or_clocks():
 
 def test_different_events_in_one_batch_get_different_ids():
     reader = EventReader(GameStateView.from_state(GameState.create(), viewer=MINE))
-    events = reader.read_deltas((a_summon_delta(1), a_summon_delta(2)))
+    events = reader.read_deltas((a_summon_delta(1), a_summon_delta(2)), actor=MINE)
 
     assert events[0].event_id != events[1].event_id
 
@@ -406,7 +413,7 @@ def test_a_summon_reaches_the_existing_candidate_collector(state, registry):
     execution = summon_execution(state)
     pipeline = EventPipeline(view_of(state), registry)
 
-    observations = pipeline.collect(execution)
+    observations = pipeline.collect(execution, actor=MINE)
 
     assert len(observations) == 1
     assert isinstance(observations[0].collection, TriggerCollection)
@@ -420,7 +427,7 @@ def test_one_event_can_carry_several_candidates(state, registry):
     페더맨이 두 장 보이므로 후보도 둘이다.
     """
     observations = EventPipeline(view_of(state), registry).collect(
-        summon_execution(state)
+        summon_execution(state), actor=MINE
     )
     candidates = observations[0].candidates
 
@@ -432,7 +439,7 @@ def test_one_event_can_carry_several_candidates(state, registry):
 @requires_official_db
 def test_the_candidates_stay_tied_to_their_event(state, registry):
     observation = EventPipeline(view_of(state), registry).collect(
-        summon_execution(state)
+        summon_execution(state), actor=MINE
     )[0]
 
     assert observation.collection.event is observation.event.timing
@@ -458,7 +465,7 @@ def test_a_summon_with_no_registered_trigger_finds_nothing(state):
     (자동 생성 컴파일러는 없다).
     """
     observations = EventPipeline(view_of(state), TriggerRegistry()).collect(
-        summon_execution(state)
+        summon_execution(state), actor=MINE
     )
 
     assert observations[0].candidates == ()
@@ -471,7 +478,7 @@ def test_what_the_observer_cannot_see_is_recorded_not_ignored(state, registry):
     없다" 고 답하면 모르는 것을 거짓으로 접는 것이다.
     """
     observation = EventPipeline(view_of(state), registry).collect(
-        summon_execution(state)
+        summon_execution(state), actor=MINE
     )[0]
 
     assert observation.fully_checked is False
@@ -483,7 +490,7 @@ def test_what_the_observer_cannot_see_is_recorded_not_ignored(state, registry):
 def test_the_opponents_hand_does_not_leak_through_the_pipeline(state, registry):
     """확인하지 못한 곳은 **장수만** 남는다. 카드 정체가 새지 않는다."""
     observation = EventPipeline(view_of(state), registry).collect(
-        summon_execution(state)
+        summon_execution(state), actor=MINE
     )[0]
     text = str(observation.to_dict())
 
@@ -507,7 +514,7 @@ def test_an_unknown_candidate_stays_unknown(state):
         )
     )
     observation = EventPipeline(view_of(state), registry).collect(
-        summon_execution(state)
+        summon_execution(state), actor=MINE
     )[0]
 
     assert observation.candidates
@@ -530,7 +537,7 @@ def test_observing_never_changes_the_board(state, registry):
     pipeline = EventPipeline(view_of(state), registry)
 
     for _ in range(3):
-        pipeline.collect(execution)
+        pipeline.collect(execution, actor=MINE)
 
     assert state.state_hash() == after
 
@@ -540,8 +547,8 @@ def test_collecting_the_same_events_twice_gives_the_same_answer(state, registry)
     pipeline = EventPipeline(view_of(state), registry)
     execution = summon_execution(state)
 
-    first = pipeline.collect(execution)
-    second = pipeline.collect(execution)
+    first = pipeline.collect(execution, actor=MINE)
+    second = pipeline.collect(execution, actor=MINE)
 
     assert [o.canonical_state() for o in first] == [
         o.canonical_state() for o in second
@@ -568,7 +575,7 @@ def test_a_clone_is_observed_on_its_own(state, registry):
     execution = summon_execution(copy)
     before = state.state_hash()
 
-    EventPipeline(view_of(copy), registry).collect(execution)
+    EventPipeline(view_of(copy), registry).collect(execution, actor=MINE)
 
     assert state.state_hash() == before
     assert len(state.player(MINE).monster_zone) == 0
@@ -695,7 +702,7 @@ def test_the_timing_coordinator_still_takes_events_from_outside(state, registry)
     from engine.priority import PriorityHolder, PriorityState, ResponseWindow
     from engine.timing import TimingCoordinator
 
-    event = EventReader(view_of(state)).read(summon_execution(state))[0]
+    event = EventReader(view_of(state)).read(summon_execution(state), actor=MINE)[0]
     coordinator = TimingCoordinator(view_of(state), registry)
     priority = PriorityState(
         holder=PriorityHolder.PLAYER_0,

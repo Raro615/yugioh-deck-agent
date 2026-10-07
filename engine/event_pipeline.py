@@ -63,6 +63,35 @@ class EventPipelineError(RuntimeError):
     """사건으로 옮길 수 없는 것을 받았다."""
 
 
+class _ActorOmitted:
+    """
+    ``actor`` 를 **넘기지 않았다**는 표시. ``None`` 과 **다른 것**이다.
+
+    세 가지를 가르기 위해 있다 (Phase 3-F-14).
+
+    ===================  ======================  =============================
+    부르는 모양            뜻                       결과
+    ===================  ======================  =============================
+    ``read(r, actor=1)``  행위자가 P1 이다           그대로 들어간다
+    ``read(r, actor=None)``  **행위자가 없다**        ``None`` 이 들어간다
+    ``read(r)``           **말하지 않았다**          ``TypeError``
+    ===================  ======================  =============================
+
+    기본값을 ``None`` 으로 두면 뒤의 둘이 같은 모양이 되고, 그러면 "규칙이 한
+    일" 과 "부르는 쪽이 선언을 빠뜨린 것" 을 **구분할 수 없다** (Phase 3-F-12
+    가 측정하고 3-F-13 이 판정한 그 자리다).
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return "<actor 를 넘기지 않음>"
+
+
+#: 넘기지 않았다는 표시 하나. ``is`` 로만 비교한다.
+_ACTOR_OMITTED = _ActorOmitted()
+
+
 @dataclass(frozen=True, slots=True)
 class EventContext:
     """
@@ -80,11 +109,15 @@ class EventContext:
     """
     이 변화를 일으킨 **행위의 주체**. 없으면 ``None``.
 
-    **부르는 쪽이 선언한다** — :meth:`EventReader.read` 에 넘긴 값, 없으면
-    ``result.action.actor``, 그것도 없으면 ``None`` 이다. 그래서 ``None`` 인
-    까닭이 둘이다: 규칙이 스스로 한 일이거나, **행위를 들고 있지 않은
-    결과**(``EffectResult`` · ``ProgressionResult`` 는 ``action`` 칸이 없다)를
-    넘겼는데 부르는 쪽이 말해 주지 않은 것이다 (Phase 3-F-10).
+    **부르는 쪽이 선언한다** — :meth:`EventReader.read` 에 넘긴 값이 그대로
+    들어온다. 결과에서 찾아내지도, delta 에서 파생하지도 **않는다**
+    (Phase 3-F-14).
+
+    그래서 이 값이 ``None`` 이면 뜻이 **하나**다: 부르는 쪽이 "이 변화에는
+    행위자가 없다" 고 **말했다.** 페이즈 전환처럼 규칙이 스스로 한 일이 그것이다.
+    말하지 않은 경우는 여기까지 오지 못한다 — :meth:`EventReader.read_deltas`
+    가 ``TypeError`` 를 낸다 (Phase 3-F-12 가 "말하지 않은 것" 과 "없다고 말한
+    것" 이 구분되지 않는다고 측정했고, 3-F-13 이 호출자 책임으로 판정했다).
 
     delta 와 **맞춰 보지 않는다.** 이 값이 사실인지는 넘기는 쪽의 책임이고,
     :class:`~engine.trigger.TimingEvent` 의 ``actor`` (변화의 귀속 대상) 와
@@ -311,15 +344,29 @@ class EventReader:
         return self._view
 
     # ------------------------------------------------------------------
-    def read(self, result, actor: int | None = None) -> tuple[ObservedEvent, ...]:
+    def read(
+        self, result, actor: "int | None | _ActorOmitted" = _ACTOR_OMITTED
+    ) -> tuple[ObservedEvent, ...]:
         """
         실행 결과 하나를 사건들로 옮긴다.
 
-        ``result`` 는 **변화를 들고 있는 것**이면 무엇이든 된다
-        (``ActionExecution`` · ``ProgressionResult`` · ``EffectResult``).
-        특정 실행기를 가져오지 않는 이유가 그것이다 — 이 파일이 실행기를
-        알면 실행기가 사건을 만들어야 한다는 뜻이 되고, 그러면 상태 변경과
-        사건 관찰이 다시 붙는다.
+        ``result`` 는 **변화를 들고 있는 것**이면 무엇이든 된다. 실제로 일곱
+        가지다 — ``ActionExecution`` · ``ActivationResult`` · ``EffectResult`` ·
+        ``CostPaymentResult`` · ``ProgressionResult`` · ``EffectEvent`` ·
+        ``CostPaymentEvent``. 특정 실행기를 가져오지 않는 이유가 그것이다 — 이
+        파일이 실행기를 알면 실행기가 사건을 만들어야 한다는 뜻이 되고, 그러면
+        상태 변경과 사건 관찰이 다시 붙는다.
+
+        **``actor`` 는 반드시 말해야 한다** (Phase 3-F-14). 넘기지 않으면
+        ``TypeError`` 다. 행위자가 없는 사건이면 ``actor=None`` 이라고 **적어서**
+        말한다 — 생략은 그 뜻이 아니다.
+
+        **결과에서 actor 를 알아서 찾아내지 않는다.** ``result.action.actor`` 도,
+        ``delta.player`` 도, journal 의 ``actor`` 도 보지 않는다. 자동으로 찾으면
+        어떤 사건에서는 행위자를, 어떤 사건에서는 **당한 쪽**을 집는다 —
+        ``ZoneMoved`` 의 두 사람 칸은 둘 다 카드 주인이고, 강욕의 보은은
+        발동한 쪽이 delta 어디에도 없다 (Phase 3-F-13). 누가 했는지는 **부른
+        쪽만** 안다.
         """
         deltas = getattr(result, "deltas", None)
         if deltas is None:
@@ -327,12 +374,12 @@ class EventReader:
                 f"변화(deltas)를 들고 있는 결과가 필요합니다: "
                 f"{type(result).__name__}"
             )
-        if actor is None:
-            actor = getattr(getattr(result, "action", None), "actor", None)
+        #: 판정은 :meth:`read_deltas` **한 곳**이 한다. 같은 규칙을 두 벌 두면
+        #: 언제든 갈린다 (``_timing_for`` 가 적어 둔 것과 같은 이유다).
         return self.read_deltas(deltas, actor=actor)
 
     def read_deltas(
-        self, deltas, actor: int | None = None
+        self, deltas, actor: "int | None | _ActorOmitted" = _ACTOR_OMITTED
     ) -> tuple[ObservedEvent, ...]:
         """
         변화들을 **순서 그대로** 사건으로 옮긴다.
@@ -340,7 +387,17 @@ class EventReader:
         옮길 이름이 없는 변화는 **버리지 않는다.**
         :meth:`~engine.trigger.TimingEvent.unimplemented` 로 남겨서, "사건이
         없었다" 와 "옮길 이름이 없었다" 가 구분되게 한다.
+
+        **actor 입력 계약이 여기서 판정된다** — :meth:`read` 도 이리로 넘긴다.
         """
+        if actor is _ACTOR_OMITTED:
+            raise TypeError(
+                "actor 를 말해야 합니다. 이 변화를 **누가** 일으켰는지는 부르는 "
+                "쪽만 압니다 — 결과나 delta 에서 알아낼 수 없습니다. 행위자가 "
+                "있으면 actor=0 또는 actor=1 로, 규칙이 스스로 한 일(페이즈 "
+                "전환 등)이면 actor=None 이라고 **적어서** 넘기세요. 생략은 "
+                "'행위자가 없다'는 뜻이 아니라 '말하지 않았다'는 뜻입니다."
+            )
         base = EventContext.of(self._view, actor=actor)
         found: list[ObservedEvent] = []
         for index, delta in enumerate(deltas):
@@ -400,12 +457,26 @@ class EventPipeline:
         return self._collector
 
     # ------------------------------------------------------------------
-    def observe(self, result, actor: int | None = None) -> tuple[ObservedEvent, ...]:
-        """변화를 사건으로만 옮긴다. 후보는 모으지 않는다."""
+    def observe(
+        self, result, actor: "int | None | _ActorOmitted" = _ACTOR_OMITTED
+    ) -> tuple[ObservedEvent, ...]:
+        """
+        변화를 사건으로만 옮긴다. 후보는 모으지 않는다.
+
+        ``actor`` 는 :meth:`EventReader.read` 와 **같은 계약**이다 — 생략하면
+        ``TypeError`` 다. 기본값을 ``None`` 으로 두면 이 자리가 계약의 구멍이
+        된다 (여기로 들어오면 "선언된 None" 으로 보이기 때문이다).
+        """
         return self._reader.read(result, actor=actor)
 
-    def collect(self, result, actor: int | None = None) -> tuple[EventObservation, ...]:
-        """사건마다 후보를 모은다. **사건별로 따로 남긴다** — 합치지 않는다."""
+    def collect(
+        self, result, actor: "int | None | _ActorOmitted" = _ACTOR_OMITTED
+    ) -> tuple[EventObservation, ...]:
+        """
+        사건마다 후보를 모은다. **사건별로 따로 남긴다** — 합치지 않는다.
+
+        ``actor`` 계약은 :meth:`observe` 와 같다.
+        """
         return self.collect_events(self.observe(result, actor=actor))
 
     def collect_events(self, events) -> tuple[EventObservation, ...]:

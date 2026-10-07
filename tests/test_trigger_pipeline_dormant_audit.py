@@ -170,15 +170,25 @@ def test_02_the_two_assembly_modules_exist():
     **§2: 조립 층이 865줄이다.**
 
     .. note::
-       **853 → 865** (Phase 3-F-11). ``engine/event_pipeline.py`` 가 417 → 429
-       다. ``EventContext.actor`` 의 docstring 에 "부르는 쪽이 선언한다 ·
-       ``None`` 인 까닭이 둘이다 · delta 와 맞춰 보지 않는다" 를 적은 +12
-       줄이고, **코드는 한 줄도 바뀌지 않았다** (``test_01`` 의 note 가 가리키는
-       AST 증거와 같다).
+       **853 → 865 → 936** (Phase 3-F-11 · 3-F-14).
+
+       ``engine/event_pipeline.py`` 가 417 → 429 → **500** 이다.
+
+       * 3-F-11 의 +12 는 ``EventContext.actor`` 의 docstring 뿐이고 **코드는
+         한 줄도 바뀌지 않았다**.
+       * 🔴 **3-F-14 의 +71 은 코드를 바꿨다** — 이 Phase 계열에서 처음이다.
+         ``read``/``read_deltas``/``observe``/``collect`` 의 actor 기본값을
+         보초값(``_ACTOR_OMITTED``)으로 바꾸고, ``result.action.actor`` 자동
+         파생을 **지웠다**. 생략과 "없다고 말한 것" 을 가르는 계약이다
+         (3-F-12 가 측정 · 3-F-13 이 판정 · 3-F-14 가 구현).
+
+       **그래도 dormant 는 그대로다.** 이 모듈의 production importer 는 여전히
+       0개이고 (``test_03`` · ``test_04``), trigger pipeline 은 켜지지 않았다 —
+       바뀐 것은 **아무도 부르지 않는 입구의 입력 계약**이다.
     """
     sizes = {rel: len(source_of(rel).splitlines()) for rel in TRIGGER_ASSEMBLY}
-    assert sizes == {"engine/timing.py": 436, "engine/event_pipeline.py": 429}
-    assert sum(sizes.values()) == 865
+    assert sizes == {"engine/timing.py": 436, "engine/event_pipeline.py": 500}
+    assert sum(sizes.values()) == 936
 
 
 def test_03_the_part_modules_declare_thirty_two_top_level_names():
@@ -764,10 +774,13 @@ def test_25_this_phase_changed_no_production_file():
     .. note::
        ``engine/trigger.py`` 는 1,565 → 1,644 (Phase 3-E-45 의
        ``_event_relation`` 판정 수정) → 1,661 (Phase 3-F-11 의 docstring) 이고,
-       ``engine/event_pipeline.py`` 는 417 → 429 (같은 Phase 의 docstring) 다.
-       3-E-43 자신은 한 줄도 바꾸지 않았고, **나머지 네 모듈의 숫자가 그대로인
-       것**이 그 증거다. 움직인 두 모듈도 문자열 리터럴을 지운 AST 가 전후
-       동일하므로 production behavior 는 바뀌지 않았다.
+       ``engine/event_pipeline.py`` 는 417 → 429 (같은 Phase 의 docstring)
+       → **500** (Phase 3-F-14 의 actor 입력 계약) 다. 3-E-43 자신은 한 줄도
+       바꾸지 않았고, **나머지 네 모듈의 숫자가 그대로인 것**이 그 증거다.
+
+       🔴 3-F-14 는 ``event_pipeline.py`` 의 **코드**를 바꿨다 (앞의 Phase 들과
+       다르다). 그래도 이 테스트가 보는 다섯 모듈 중 넷은 그대로이고, 트리거
+       파이프라인은 여전히 dormant 다 — 바뀐 것은 입구의 입력 계약뿐이다.
     """
     sizes = {
         rel: len(source_of(rel).splitlines())
@@ -778,7 +791,7 @@ def test_25_this_phase_changed_no_production_file():
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
-        "engine/event_pipeline.py": 429,
+        "engine/event_pipeline.py": 500,
         "engine/activation_timing.py": 541,
     }
 

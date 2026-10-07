@@ -643,8 +643,11 @@ def test_13_two_actors_disagree_on_the_same_event(repository):
     )
     view = GameStateView.from_state(state, viewer=MINE)
 
-    #: `actor` 를 넘기지 않으면 **행위에서** 가져온다.
-    observed = EventReader(view).read(execution)
+    #: 🔴 **Phase 3-F-14 에서 이 줄이 바뀌었다.** 전에는 "넘기지 않으면 행위에서
+    #: 가져온다" 였고, 그 자동 파생이 3-F-13 의 판정 C 로 제거되었다. 이제
+    #: **부르는 쪽이 선언한다** — 공격한 쪽이 누구인지는 이 테스트가 안다.
+    #: 아래 단정들은 하나도 바뀌지 않았다: 귀속자는 맞은 쪽, 행위자는 공격자다.
+    observed = EventReader(view).read(execution, actor=action.actor)
     life = [o for o in observed if o.point is TimingPoint.LIFE_CHANGED]
     assert len(life) == 1
     event = life[0]
@@ -654,9 +657,13 @@ def test_13_two_actors_disagree_on_the_same_event(repository):
     assert event.context.actor == THEIRS       # EventContext.actor — 공격자
     assert event.actor != event.context.actor
 
-    #: 그 경로가 코드에 적혀 있다.
+    #: 🔴 **Phase 3-F-14 에서 이 단정이 바뀌었다.** 전에는 "``read`` 본문에
+    #: ``action`` 이 적혀 있다" 를 자동 파생 경로의 증거로 고정했다. 그 경로가
+    #: 3-F-13 의 판정 C 로 제거되었으므로, 이제 고정하는 것은 **그것이
+    #: 없다**는 사실과 **선언이 그대로 전달된다**는 사실이다.
     reader = method_body("engine/event_pipeline.py", "EventReader", "read")
-    assert "action" in reader and "actor" in reader
+    assert "self.read_deltas(deltas, actor=actor)" in reader
+    assert "action" not in reader
     #: `ObservedEvent.actor` 는 `timing` 쪽을 돌려준다.
     observed_actor = method_body("engine/event_pipeline.py", "ObservedEvent", "actor")
     assert "self.timing.actor" in observed_actor
@@ -829,7 +836,7 @@ def test_20_reading_the_actor_touches_no_hidden_information(repository):
         state, action, authorization=ValidationResult.valid()
     )
     view = GameStateView.from_state(state, viewer=MINE)
-    observed = EventReader(view).read(execution)
+    observed = EventReader(view).read(execution, actor=action.actor)
 
     assert observed
     for event in observed:
@@ -853,7 +860,7 @@ def test_21_the_state_and_the_rng_do_not_move(repository):
     before_hash, before_rng = state.state_hash(), repr(state.rng)
     view = GameStateView.from_state(state, viewer=MINE)
     for _ in range(3):
-        EventReader(view).read(execution)
+        EventReader(view).read(execution, actor=action.actor)
         for delta in execution.deltas:
             timing_for(delta)
     assert state.state_hash() == before_hash

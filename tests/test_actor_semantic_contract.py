@@ -151,8 +151,15 @@ def battle_by(repository, attacker: int):
 
 
 def observed_of(state, execution, *, viewer: int = MINE):
+    """
+    .. note::
+       **Phase 3-F-14 에서 actor 를 명시하도록 고쳤다.** 전에는 생략하면 엔진이
+       ``result.action.actor`` 로 채워 주었는데, 3-F-13 의 판정 C 로 그 자동
+       파생이 제거되었다. 이제 **테스트가 선언한다** — 값은 같고 책임자가
+       바뀐다.
+    """
     view = GameStateView.from_state(state, viewer=viewer)
-    return EventReader(view).read(execution)
+    return EventReader(view).read(execution, actor=execution.action.actor)
 
 
 # ======================================================================
@@ -196,16 +203,36 @@ def test_02_the_context_actor_contract_is_written_with_both_none_reasons():
     """
     §4 — ``EventContext.actor`` 의 계약: **행위의 주체**이고 **선언**이다.
 
-    ``None`` 이 되는 까닭이 **둘**이라는 것과, delta 와 맞춰 보지 않는다는
-    것이 적혀 있어야 한다.
+    ``None`` 의 뜻과, delta 와 맞춰 보지 않는다는 것이 적혀 있어야 한다.
+
+    .. note::
+       **Phase 3-F-14 에서 이 테스트가 세던 "까닭의 수" 가 둘에서 하나로
+       줄었다.**
+
+       3-F-11 당시 ``None`` 인 까닭은 둘이었다 — (가) 규칙이 스스로 한 일,
+       (나) ``action`` 을 들고 있지 않은 결과를 넘겼는데 부르는 쪽이 말해 주지
+       않은 것. 이 테스트는 그 둘이 **모두 적혀 있는지**를 고정했고, 그래서
+       설명에 ``EffectResult`` · ``ProgressionResult`` 가 예로 나오는 것까지
+       단정했다.
+
+       3-F-12 가 "(나)를 (가)와 구분할 수 없다" 를 결함으로 측정했고, 3-F-13 이
+       호출자 책임으로 판정했고, 3-F-14 가 **(나)를 ``TypeError`` 로 바꿨다.**
+       그래서 ``None`` 의 뜻이 **하나**가 되었다 — 부르는 쪽이 "없다" 고 말한
+       것. 까닭이 줄어든 것이 **계약이 좁아진 것**이고, 이 테스트는 그 좁아진
+       계약을 고정하는 쪽으로 바뀐다. 단정 수는 줄지 않았다.
     """
     doc = field_doc("engine/event_pipeline.py", "EventContext", "actor")
 
     assert "행위의 주체" in doc
     assert "부르는 쪽이 선언" in doc
-    #: `None` 의 두 까닭.
+    #: 🔴 ``None`` 의 뜻이 **하나**라고 적혀 있다.
+    assert "뜻이 **하나**다" in doc
     assert "규칙이 스스로 한 일" in doc
-    assert "EffectResult" in doc and "ProgressionResult" in doc
+    #: 그리고 말하지 않은 경우는 **여기까지 오지 못한다**.
+    assert "TypeError" in doc
+    assert "말하지 않은 경우는 여기까지 오지 못한다" in doc
+    #: 자동 파생이 없다는 것도 적혀 있다.
+    assert "파생하지도 **않는다**" in doc
     #: 검증되지 않는다는 사실.
     assert "맞춰 보지 않는다" in doc
     assert "책임" in doc
@@ -381,23 +408,39 @@ def test_08_the_timing_actor_is_none_only_where_the_delta_has_no_player():
         assert timing_for(delta).actor == expected
 
 
-def test_09_the_context_actor_is_none_for_two_different_reasons(repository):
+def test_09_the_context_actor_is_none_only_when_the_caller_says_so(repository):
     """
-    §12 9 — 문맥 쪽 ``None``: **규칙이 한 일**이거나 **선언되지 않은 것**이다.
+    §12 9 — 문맥 쪽 ``None`` 은 **"없다고 말한 것"** 하나다.
 
-    두 까닭을 구분하는 것이 계약의 일부다.
+    .. note::
+       **Phase 3-F-14 가 이 테스트의 두 갈래를 하나로 만들었다.**
+
+       3-F-11 당시 이 테스트의 ①은 "선언하지 않으면 ``None`` 이 된다" 였고,
+       그것이 3-F-12 가 ``OMITTED_INPUT`` 으로 분류한 결함이다 — **없다**와
+       **말하지 않았다**가 같은 값으로 나왔다. 3-F-14 가 생략을 ``TypeError``
+       로 바꿨으므로 ①은 **이제 성립하지 않는다.**
+
+       그래서 ①을 **거부되는 것**으로 바꾼다. ②(말해 주면 채워진다)는 그대로
+       두고, 그 사이에 **"없다고 말하면 ``None`` 이 된다"** 를 더한다 — 세
+       갈래가 서로 다른 결과를 내는 것이 이 Phase 의 계약이다.
     """
-    #: ① 행위를 들고 있지 않은 결과 — 선언이 없으면 `None`.
+    #: 행위를 들고 있지 않은 결과라는 사실 자체는 그대로다.
     assert "action" not in EffectResult.__dataclass_fields__
     assert "action" not in ProgressionResult.__dataclass_fields__
 
     duel = live_duel(repository)
     view = GameStateView.from_state(duel.state, viewer=MINE)
-    bare = EventReader(view).read_deltas(
-        (LifeChanged(player=MINE, before=8000, after=6000),)
-    )
-    assert bare[0].context.actor is None
-    assert bare[0].actor == MINE          # 사건 쪽은 값이 있다
+    hurt = (LifeChanged(player=MINE, before=8000, after=6000),)
+
+    #: ① 🔴 **말하지 않으면 거부된다.** 전에는 ``None`` 이 되었다.
+    with pytest.raises(TypeError) as omitted:
+        EventReader(view).read_deltas(hurt)
+    assert "actor 를 말해야 합니다" in str(omitted.value)
+
+    #: ①′ **없다고 말하면** ``None`` 이 된다 — 같은 값, 다른 뜻.
+    said_none = EventReader(view).read_deltas(hurt, actor=None)
+    assert said_none[0].context.actor is None
+    assert said_none[0].actor == MINE     # 사건 쪽은 값이 있다
 
     #: ② 부르는 쪽이 말해 주면 채워진다.
     told = EventReader(view).read_deltas(

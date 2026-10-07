@@ -224,11 +224,32 @@ def draw_by_effect(repository, controller: int, *, journal: EventJournal | None 
     return state, result
 
 
-def both_actors(state, result, *, viewer: int = MINE, actor=None):
-    """같은 실행에서 두 ``actor`` 를 함께 읽는다."""
+#: 이 헬퍼 전용 "안 넘김" 표시.
+_UNSET = object()
+
+
+def both_actors(state, result, *, viewer: int = MINE, actor=_UNSET):
+    """
+    같은 실행에서 두 ``actor`` 를 함께 읽는다.
+
+    .. note::
+       **Phase 3-F-14 에서 헬퍼의 기본값 관용구를 고쳤다.**
+
+       전에는 ``actor=None`` 을 "안 넘겼다" 는 표시로 썼고, ``read`` 의 기본값도
+       ``None`` 이라 그것이 통했다. 이제 ``actor=None`` 은 **"행위자가 없다"**
+       는 선언이고 생략은 ``TypeError`` 다. 그래서 이 헬퍼도 자기 표시
+       (``_UNSET``) 를 따로 들어야 한다 — 두 뜻이 한 값에 겹쳐 있던 것이
+       바로 3-F-12 가 찾은 결함이고, 헬퍼가 그 결함을 복제하고 있었다.
+
+       ``actor`` 를 주지 않으면 **결과의 행위에서 꺼내 명시적으로 선언한다**
+       (``result.action.actor``). 엔진이 파생하는 것이 아니라 **테스트가 선언**
+       하는 것이고, 그 차이가 이 Phase 의 요점이다.
+    """
     view = GameStateView.from_state(state, viewer=viewer)
     reader = EventReader(view)
-    observed = reader.read(result) if actor is None else reader.read(result, actor=actor)
+    if actor is _UNSET:
+        actor = getattr(getattr(result, "action", None), "actor", None)
+    observed = reader.read(result, actor=actor)
     return [(o.point, o.actor, o.context.actor) for o in observed]
 
 
@@ -275,18 +296,38 @@ def test_02_the_context_actor_is_declared_by_the_caller():
     """
     §2 B · §3 — ``EventContext.actor`` 는 **부르는 쪽이 선언**한다.
 
-    세 단계로 정해진다: 넘긴 값 → ``result.action.actor`` → ``None``.
+    .. note::
+       **Phase 3-F-14 가 이 테스트의 전제를 바꿨다.**
+
+       3-F-10 당시 계약은 **세 단계**였다: 넘긴 값 → ``result.action.actor``
+       → ``None``. 이 테스트는 그 가운데 단계 — ``read`` 본문에 ``action`` 이
+       나오고 ``actor is None`` 분기가 있다 — 를 고정했다.
+
+       3-F-13 이 그 가운데 단계를 **계약에서 뺐다** (판정 C:
+       ``READ_ACTOR_CALLER_MUST_DECLARE``). 결과에서 찾아내면 어떤 사건에서는
+       행위자를, 어떤 사건에서는 당한 쪽을 집기 때문이다. 3-F-14 가 그것을
+       구현해 ``read`` 본문에서 fallback 을 **지웠다.**
+
+       그래서 "``action`` 이 본문에 있다" 는 단정이 **이제 거짓이고, 거짓인
+       것이 맞다.** 고정 대상을 바꾼다 — 선언이 **그대로** 들어오는 것과,
+       자동 추론이 **없는** 것.
     """
     read = method_body("engine/event_pipeline.py", "EventReader", "read")
-    #: 넘기지 않으면 **행위에서** 가져온다.
-    assert "action" in read and "actor" in read
-    assert "if actor is None" in read.replace("\n", " ") or "actor is None" in read
+    #: 🔴 넘긴 값을 그대로 아래로 보낸다. **찾아내는 코드가 없다.**
+    assert "self.read_deltas(deltas, actor=actor)" in read
+    for forbidden in ("action", "player", "controller", "owner"):
+        assert forbidden not in read.replace("actor", ""), forbidden
 
     of_body = method_body("engine/event_pipeline.py", "EventContext", "of")
     assert "actor=actor" in of_body
 
-    #: `.action` 을 갖는 결과는 **하나**뿐이다 — 그래서 자동 충전은
-    #: action 경로에서만 일어난다.
+    #: 생략은 거부된다 — 판정은 ``read_deltas`` 한 곳이 한다.
+    read_deltas = method_body("engine/event_pipeline.py", "EventReader", "read_deltas")
+    assert "_ACTOR_OMITTED" in read_deltas
+    assert "raise TypeError" in read_deltas
+
+    #: `.action` 을 갖는 결과가 있다는 사실 자체는 그대로다 — 다만 ``read`` 가
+    #: 그것을 **보지 않는다** (3-F-12 가 전수로 센 7개 중 둘이 갖고 있다).
     assert "action" in ActionExecution.__dataclass_fields__
     assert "action" not in EffectResult.__dataclass_fields__
     assert "action" not in ProgressionResult.__dataclass_fields__
@@ -339,8 +380,13 @@ def test_03_the_two_contracts_are_written_down_and_differ(repository):
     #:    사실과 ``None`` 이 되는 두 까닭을 밝힌다.
     assert "행위의 주체" in context_doc
     assert "부르는 쪽이 선언" in context_doc
-    assert "EffectResult" in context_doc
     assert "맞춰 보지 않는다" in context_doc
+    #: 🔴 3-F-14 에서 이 단정이 바뀌었다. 전에는 ``None`` 인 까닭이 **둘**
+    #: 이었고 (규칙이 한 일 / 선언을 빠뜨림) 설명이 ``EffectResult`` 를 그
+    #: 예로 들었다. 이제 빠뜨림은 ``TypeError`` 라서 까닭이 **하나**다 —
+    #: 그래서 설명도 그렇게 적혀 있다.
+    assert "뜻이 **하나**다" in context_doc
+    assert "TypeError" in context_doc
 
     #: ③ 세 번째 자리는 **원래부터** 구분해 두었다 — 그대로 둔다 (§5 A).
     observed_doc = inspect.getdoc(inspect.getattr_static(ObservedEvent, "actor").fget)
@@ -821,7 +867,7 @@ def test_20_reading_both_actors_touches_no_hidden_information(repository):
     """§13 — 둘 다 공개 정보이고 관측 경계를 넓히지 않는다."""
     state, execution, _, _ = battle_by(repository, THEIRS)
     view = GameStateView.from_state(state, viewer=MINE)
-    for event in EventReader(view).read(execution):
+    for event in EventReader(view).read(execution, actor=execution.action.actor):
         assert event.actor in (None, MINE, THEIRS)
         assert event.context.actor in (None, MINE, THEIRS)
 
@@ -836,7 +882,7 @@ def test_21_the_state_and_the_rng_do_not_move(repository):
     before_hash, before_rng = state.state_hash(), repr(state.rng)
     view = GameStateView.from_state(state, viewer=MINE)
     for _ in range(3):
-        EventReader(view).read(execution)
+        EventReader(view).read(execution, actor=execution.action.actor)
         for delta in execution.deltas:
             timing_for(delta)
     assert state.state_hash() == before_hash

@@ -365,11 +365,15 @@ def test_03_the_code_never_writes_result_action_actor_it_duck_types_twice():
     된다. 그 조용함이 §5 의 핵심이다 — 왜 ``None`` 인지 아무 데도 남지 않는다.
     """
     read_code = method_code("engine/event_pipeline.py", "EventReader", "read")
-    #: 점 표기법은 코드에 없다.
+    #: 점 표기법은 코드에 없다 — 이것은 그대로다.
     assert "result.action.actor" not in read_code
-    #: 겹 getattr 이다.
-    assert read_code.count("getattr") == 3  # deltas 1 + action/actor 2
-    assert "getattr(getattr(result, 'action', None), 'actor', None)" in read_code
+    #: 🔴 **Phase 3-F-14 에서 겹 getattr 자체가 사라졌다.** 이 Phase(3-F-12)는
+    #: "조용히 None 이 된다" 를 결함으로 적었고, 3-F-13 이 호출자 책임으로
+    #: 판정했고, 3-F-14 가 fallback 을 지웠다. 그래서 고정 대상이 **존재**에서
+    #: **부재**로 바뀐다 — 아래 결함 서술(§5)은 그 역사로 그대로 둔다.
+    assert read_code.count("getattr") == 1  # deltas 하나만 남았다
+    assert "getattr(getattr(result, 'action', None), 'actor', None)" not in read_code
+    assert "'action'" not in read_code
 
     #: 그런데 **설명에는** 점 표기법으로 적혀 있다 — 그래서 이 Phase 가
     #: 코드를 먼저 읽었다.
@@ -476,19 +480,20 @@ def test_06_both_action_bearing_results_hand_a_real_actor_to_the_context(reposit
     state, execution = summon(repository, THEIRS)
     assert isinstance(execution, ActionExecution)
     assert execution.deltas
-    for observed in read_with(state, execution):
+    #: 🔴 3-F-14: **선언한다.** 전에는 생략하면 엔진이 채워 주었다.
+    for observed in read_with(state, execution, actor=execution.action.actor):
         assert observed.context.actor == execution.action.actor == THEIRS
 
     #: ② ActivationResult — 발동만으로는 delta 가 없다.
     state2, result, action = activation(repository, THEIRS)
     assert isinstance(result, ActivationResult)
     assert result.activated and result.deltas == ()
-    assert read_with(state2, result, viewer=THEIRS) == ()
+    assert read_with(state2, result, viewer=THEIRS, actor=action.actor) == ()
 
     #: delta 를 하나 얹으면 actor 가 ``action`` 에서 온다.
     borrowed = execution.deltas[:1]
     with_delta = dataclasses.replace(result, deltas=borrowed)
-    observed = read_with(state2, with_delta, viewer=THEIRS)
+    observed = read_with(state2, with_delta, viewer=THEIRS, actor=action.actor)
     assert len(observed) == 1
     assert observed[0].context.actor == action.actor == THEIRS
 
@@ -515,17 +520,30 @@ def test_07_the_journal_events_carry_an_actor_that_read_refuses_to_look_at(repos
     assert str(actor_field.type) == "int"
     assert event.actor == MINE
 
-    #: 그런데 read() 가 만든 문맥은 비어 있다.
-    observed = read_with(state, event)
-    assert observed
-    assert all(o.context.actor is None for o in observed)
+    #: 🔴 **Phase 3-F-14 뒤에도 공백은 그대로다 — 오히려 드러났다.**
+    #:
+    #: 전에는 생략하면 조용히 ``None`` 이 되었다. 이제 생략은 거부되므로,
+    #: ``EffectEvent`` 를 읽는 쪽은 **반드시 actor 를 말해야** 한다. 즉 객체가
+    #: 들고 있는 ``event.actor`` 를 ``read()`` 가 여전히 **쓰지 않는다** —
+    #: 다만 그 사실이 조용한 ``None`` 이 아니라 **TypeError** 로 나타난다.
+    with pytest.raises(TypeError) as omitted:
+        read_with(state, event)
+    assert "actor 를 말해야 합니다" in str(omitted.value)
 
-    #: 까닭은 하나다 — ``read`` 가 ``action`` 만 본다.
+    #: 객체에 값이 있는데도 **부르는 쪽이 옮겨 적어야** 한다.
+    observed = read_with(state, event, actor=event.actor)
+    assert observed
+    assert all(o.context.actor == MINE for o in observed)
+
+    #: 그리고 "없다" 고 말하면 그대로 ``None`` 이 된다 — ``event.actor`` 를
+    #: 보지 않는다는 증거다.
+    assert all(o.context.actor is None for o in read_with(state, event, actor=None))
+
+    #: 코드에 result 자신의 actor 칸을 보는 줄이 **없다** (그대로다).
     read_code = method_code("engine/event_pipeline.py", "EventReader", "read")
-    assert "'action'" in read_code
-    assert "'actor'" in read_code
-    #: result 자신의 actor 칸을 보는 코드가 없다.
     assert "getattr(result, 'actor'" not in read_code
+    #: ``action`` 을 보는 줄도 이제 없다 (3-F-14).
+    assert "'action'" not in read_code
 
 
 def test_08_the_read_docstring_names_three_of_the_seven_result_types():
@@ -551,8 +569,18 @@ def test_08_the_read_docstring_names_three_of_the_seven_result_types():
         )
         if name in doc
     }
-    assert named == {"ActionExecution", "ProgressionResult", "EffectResult"}, named
-    assert len(every_delta_bearing_result()) == 7
+    #: 🔴 **Phase 3-F-14 가 설명을 고쳤다 — 이제 일곱을 전부 적는다.**
+    #: 이 Phase(3-F-12)가 "셋만 적혀 있다" 를 결함으로 찾았고, 그것이 고쳐졌다.
+    assert named == {
+        "ActionExecution",
+        "ActivationResult",
+        "EffectResult",
+        "CostPaymentResult",
+        "ProgressionResult",
+        "EffectEvent",
+        "CostPaymentEvent",
+    }, named
+    assert len(every_delta_bearing_result()) == 7 == len(named)
 
 
 # ======================================================================
@@ -575,8 +603,11 @@ def test_09_the_effect_result_has_no_actor_anywhere_on_it(repository):
     assert isinstance(result, EffectResult)
     assert result.deltas
 
-    #: 선언이 없으면 비어 있다.
-    assert all(o.context.actor is None for o in read_with(state, result))
+    #: 🔴 3-F-14: 선언이 **없으면 거부된다.** 전에는 비어 있었다.
+    with pytest.raises(TypeError):
+        read_with(state, result)
+    #: "없다" 고 말하면 비어 있다.
+    assert all(o.context.actor is None for o in read_with(state, result, actor=None))
     #: 선언하면 들어간다 — 즉 **경로가 막힌 것이 아니라 비어 있는 것**이다.
     assert all(
         o.context.actor == MINE for o in read_with(state, result, actor=MINE)
@@ -616,7 +647,8 @@ def test_11_a_phase_change_gives_none_on_both_actors(repository):
     progression = TurnProgressor().advance(state)
     assert progression.deltas
 
-    observed = read_with(state, progression)
+    #: 🔴 3-F-14: 규칙이 한 일이라고 **적어서** 말한다.
+    observed = read_with(state, progression, actor=None)
     assert observed
     for event in observed:
         assert event.point is TimingPoint.PHASE_CHANGED
@@ -624,62 +656,99 @@ def test_11_a_phase_change_gives_none_on_both_actors(repository):
         assert event.context.actor is None  # EventContext.actor
 
 
-def test_12_read_cannot_express_an_explicit_none(repository):
+def test_12_read_now_distinguishes_an_explicit_none_from_an_omission(repository):
     """
-    🔴 §5 ``EXPLICIT_NONE`` 을 **선언할 수 없다.**
+    🟢 §5 ``EXPLICIT_NONE`` — **Phase 3-F-14 가 이 결함을 고쳤다.**
 
-    ``read(result, actor=None)`` 은 "안 넘긴 것" 과 **구별되지 않는다** —
-    ``if actor is None:`` 이 언제나 fallback 을 켠다. 그래서 행위를 들고 있는
-    결과에 대해 "이 사건에는 주체가 없다" 를 말할 방법이 ``read()`` 에 없다.
+    .. note::
+       **이 테스트는 결함을 pin 하고 있었다.**
 
-    §4 의 C(EXPLICIT_NONE) 와 D(MISSING) 를 **입력 쪽에서부터** 가를 수 없다는
-    뜻이다.
+       3-F-12(이 Phase)는 ``read(result, actor=None)`` 이 생략과 **같은 값**을
+       낸다는 것을 결함의 증거로 고정했다. 그 모양은 **고치면 반드시 깨진다** —
+       3-F-8 의 ``test_15`` 가 거짓 docstring 의 존재를 pin 했다가 3-F-11 에서
+       깨진 것과 똑같다. 3-F-13 §12 가 "다음 Phase 가 고치면 이 테스트가
+       깨진다" 고 미리 적어 두었고, 그대로 되었다.
+
+       **삭제하지 않는다.** 결함이 사라졌으므로 고정 대상을 **고쳐진 계약**으로
+       바꾼다 — 세 모양이 **서로 다른 결과**를 낸다는 것. 단정 수는 5 → 9 로
+       늘었다.
     """
     state, execution, action, _ = battle(repository, THEIRS)
 
-    #: 생략해도, 명시적으로 None 을 넘겨도 **같은 값**이 나온다.
-    omitted = read_with(state, execution)
-    explicit = read_with(state, execution, actor=None)
-    assert [o.context.actor for o in omitted] == [THEIRS]
-    assert [o.context.actor for o in explicit] == [THEIRS]
-    assert omitted[0].context == explicit[0].context
+    #: ① 생략 → **거부된다.**
+    with pytest.raises(TypeError) as omitted:
+        read_with(state, execution)
+    message = str(omitted.value)
+    assert "actor 를 말해야 합니다" in message
+    #: 무엇을 해야 하는지 알려 준다.
+    assert "actor=None" in message and "말하지 않았다" in message
 
-    #: 코드가 그렇게 쓰여 있다.
+    #: ② ``actor=None`` → **"행위자가 없다" 는 선언으로** 받아들인다.
+    said_none = read_with(state, execution, actor=None)
+    assert [o.context.actor for o in said_none] == [None]
+
+    #: ③ 값을 주면 그 값이다 — 행위가 P1 이어도 선언이 이긴다.
+    assert [o.context.actor for o in read_with(state, execution, actor=THEIRS)] == [
+        THEIRS
+    ]
+    assert action.actor == THEIRS
+
+    #: 세 모양이 서로 다르다 — 그것이 이 Phase 가 못 하던 일이다.
+    assert said_none[0].context.actor is not THEIRS
+
+    #: 코드가 그렇게 쓰여 있다 — 보초값이 있고, ``actor is None`` 분기가 없다.
     read_code = method_code("engine/event_pipeline.py", "EventReader", "read")
-    assert "if actor is None" in read_code
-    #: "넘겼는가" 를 구분하는 보초값(sentinel)이 없다.
-    assert "sentinel" not in read_code.lower()
-    assert "MISSING" not in read_code
+    assert "if actor is None" not in read_code
+    deltas_code = method_code("engine/event_pipeline.py", "EventReader", "read_deltas")
+    assert "_ACTOR_OMITTED" in deltas_code
 
 
-def test_13_read_deltas_can_express_what_read_cannot(repository):
+def test_13_read_and_read_deltas_now_have_the_same_expressive_power(repository):
     """
-    §5 — **두 메서드의 표현력이 다르다.**
+    🟢 §5 — **Phase 3-F-14 가 두 메서드의 표현력 차이를 없앴다.**
 
-    ``read_deltas`` 에는 result 가 없으므로 fallback 이 없다. 그래서
-    ``actor=None`` 이 그대로 ``None`` 으로 남는다. 즉 "주체 없음" 을
-    표현하려면 **더 낮은 API 로 내려가야 한다** — 그 사실이 어디에도 적혀
-    있지 않다.
+    .. note::
+       **이 테스트도 결함을 pin 하고 있었다.**
+
+       3-F-12 는 ``read`` 가 "주체 없음" 을 말할 수 없고 ``read_deltas`` 만 말할
+       수 있다는 **비대칭**을 고정했다 — "표현하려면 더 낮은 API 로 내려가야
+       한다". 3-F-14 가 두 메서드에 같은 보초값을 두었으므로 그 비대칭이
+       사라졌다. 고정 대상을 **대칭**으로 바꾼다.
     """
     state, execution, _, _ = battle(repository, THEIRS)
     view = GameStateView.from_state(state, viewer=MINE)
     reader = EventReader(view)
 
-    assert [o.context.actor for o in reader.read(execution)] == [THEIRS]
-    assert [o.context.actor for o in reader.read_deltas(execution.deltas)] == [None]
+    #: 둘 다 생략을 거부한다. (``lambda`` 로 묶지 않는다 — 호출이
+    #: ``with pytest.raises`` 블록 **안에** 있어야 "거부를 시험하는 자리" 로
+    #: 읽히고, 그러지 않으면 계약 위반 호출로 세어진다.)
+    with pytest.raises(TypeError) as omitted_read:
+        reader.read(execution)
+    assert "actor 를 말해야 합니다" in str(omitted_read.value)
+
+    with pytest.raises(TypeError) as omitted_deltas:
+        reader.read_deltas(execution.deltas)
+    assert "actor 를 말해야 합니다" in str(omitted_deltas.value)
+
+    #: 둘 다 "없다" 를 말할 수 있다.
+    assert [o.context.actor for o in reader.read(execution, actor=None)] == [None]
     assert [
         o.context.actor for o in reader.read_deltas(execution.deltas, actor=None)
     ] == [None]
 
-    deltas_code = method_code("engine/event_pipeline.py", "EventReader", "read_deltas")
-    assert "getattr" not in deltas_code
-    assert "action" not in deltas_code
+    #: 둘 다 값을 받는다.
+    assert [o.context.actor for o in reader.read(execution, actor=THEIRS)] == [THEIRS]
+    assert [
+        o.context.actor for o in reader.read_deltas(execution.deltas, actor=THEIRS)
+    ] == [THEIRS]
 
-    #: 그리고 그 차이를 설명하는 문장이 두 docstring 어디에도 없다.
-    both = method_doc(
-        "engine/event_pipeline.py", "EventReader", "read"
-    ) + method_doc("engine/event_pipeline.py", "EventReader", "read_deltas")
-    assert "read_deltas" not in both
+    #: ``read_deltas`` 는 여전히 result 를 보지 않는다 — 그것은 그대로다.
+    deltas_code = method_code("engine/event_pipeline.py", "EventReader", "read_deltas")
+    assert "action" not in deltas_code
+    #: 그리고 ``read`` 는 **판정을 한 곳에 맡긴다** — 규칙이 한 벌뿐이다.
+    read_code = method_code("engine/event_pipeline.py", "EventReader", "read")
+    assert "_ACTOR_OMITTED" not in read_code
+    assert "self.read_deltas(deltas, actor=actor)" in read_code
 
 
 def test_14_the_declared_actor_is_never_checked_against_the_deltas(repository):
@@ -757,7 +826,7 @@ def test_16_the_battle_case_keeps_both_meanings_by_two_independent_routes(reposi
     assert victim_before == 8000
     assert state.player(MINE).life_points == 6100
 
-    observed = read_with(state, execution)
+    observed = read_with(state, execution, actor=action.actor)
     assert len(observed) == 1
     event = observed[0]
     assert event.point is TimingPoint.LIFE_CHANGED
@@ -773,7 +842,7 @@ def test_16_the_battle_case_keeps_both_meanings_by_two_independent_routes(reposi
     state2, execution2, action2, before2 = battle(repository, MINE)
     assert before2 == 8000
     assert state2.player(THEIRS).life_points == 6100
-    flipped = read_with(state2, execution2, viewer=THEIRS)
+    flipped = read_with(state2, execution2, viewer=THEIRS, actor=action2.actor)
     assert len(flipped) == 1
     assert flipped[0].actor == THEIRS
     assert flipped[0].context.actor == MINE
@@ -814,24 +883,34 @@ def test_17_each_execution_path_maps_to_one_result_type_and_one_actor_source(
         state, execution = summon(repository, THEIRS, kind)
         if not execution.deltas:
             continue
-        actors = {o.context.actor for o in read_with(state, execution)}
+        actors = {
+            o.context.actor
+            for o in read_with(state, execution, actor=execution.action.actor)
+        }
         rows[label] = (type(execution).__name__, actors)
 
     state, execution, _, _ = battle(repository, THEIRS)
     rows["직접 공격"] = (
         type(execution).__name__,
-        {o.context.actor for o in read_with(state, execution)},
+        {
+            o.context.actor
+            for o in read_with(state, execution, actor=execution.action.actor)
+        },
     )
 
     journal = EventJournal()
     state, result = effect_draw(repository, MINE, journal=journal)
+    #: 🔴 3-F-14: 행위를 들고 있지 않은 결과도 **말해야** 한다. 여기서는 이
+    #: 표가 "선언하지 않으면 무엇이 되는가" 를 재던 자리였으므로, **없다고
+    #: 말한 경우**를 재서 같은 질문을 유지한다 — 자동으로 채워지지 않는다는
+    #: 사실이 요점이기 때문이다.
     rows["효과 해결"] = (
         type(result).__name__,
-        {o.context.actor for o in read_with(state, result)},
+        {o.context.actor for o in read_with(state, result, actor=None)},
     )
     rows["journal 기록"] = (
         type(journal.events[0]).__name__,
-        {o.context.actor for o in read_with(state, journal.events[0])},
+        {o.context.actor for o in read_with(state, journal.events[0], actor=None)},
     )
 
     duel = live_duel(repository)
@@ -839,7 +918,7 @@ def test_17_each_execution_path_maps_to_one_result_type_and_one_actor_source(
     progression = TurnProgressor().advance(progression_state)
     rows["페이즈 전환"] = (
         type(progression).__name__,
-        {o.context.actor for o in read_with(progression_state, progression)},
+        {o.context.actor for o in read_with(progression_state, progression, actor=None)},
     )
 
     #: 행위가 있는 경로는 **전부** 실제 행위자를 준다.
@@ -995,47 +1074,48 @@ def test_21_the_observation_boundary_never_exposes_an_event_actor():
 
 def test_22_this_phase_changed_no_production_file():
     """
-    §14 — **production diff 가 0이어야 정상이다.**
+    §14 — **이 Phase(3-F-12)는 production 을 한 줄도 바꾸지 않았다.**
 
-    이 Phase 는 provenance 를 **재기만** 한다. 측정한 결과 B/C/D 가 나와도
-    구조를 고치지 않는다 (§15).
+    .. note::
+       **Phase 3-F-14 에서 재는 방법을 바꿨다.**
+
+       전에는 ``git diff HEAD -- engine …`` 이 비어 있는지를 봤다. 그것은 "작업
+       나무가 깨끗한가" 이지 "**이 Phase** 가 무엇을 바꿨는가" 가 아니다. 뒤의
+       Phase 가 production 을 바꾸는 순간 (3-F-14 가 그렇게 했다) 이 단정은
+       **그 Phase 때문에** 깨진다 — 재는 대상이 틀렸던 것이다.
+
+       그래서 **이 Phase 의 작업 commit 자체**를 본다. ``3a10656`` 이 건드린
+       파일 목록은 영원히 바뀌지 않으므로, 이 단정은 뒤의 어떤 Phase 에도
+       흔들리지 않는다.
     """
-    diff = subprocess.run(
-        ["git", "diff", "--stat", "HEAD", "--"] + list(PRODUCTION_ROOTS),
+    PHASE_3F12_WORK = "3a10656"
+    shown = subprocess.run(
+        ["git", "show", "--stat", "--format=", PHASE_3F12_WORK],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
         check=True,
-    )
-    assert diff.stdout.strip() == "", diff.stdout
+    ).stdout
+    touched = [
+        line.split("|")[0].strip()
+        for line in shown.splitlines()
+        if "|" in line
+    ]
+    assert touched == ["tests/test_event_context_actor_provenance.py"], touched
+    for path in touched:
+        assert not path.startswith(PRODUCTION_ROOTS), path
 
-    #: 그리고 이 감사가 **의지한 코드 자체**를 그대로 고정한다. 줄 수가
-    #: 아니라 본문이다 — 누가 fallback 을 바꾸면 이 감사의 결론이 무효가
-    #: 되므로, 그때 깨지는 것이 맞다.
-    assert method_code("engine/event_pipeline.py", "EventReader", "read") == (
-        "deltas = getattr(result, 'deltas', None)\n"
-        "if deltas is None:\n"
-        "    raise TypeError(f'변화(deltas)를 들고 있는 결과가 필요합니다: "
-        "{type(result).__name__}')\n"
-        "if actor is None:\n"
-        "    actor = getattr(getattr(result, 'action', None), 'actor', None)\n"
-        "return self.read_deltas(deltas, actor=actor)"
-    )
-
-    #: 금지 항목이 실제로 들어오지 않았는지도 본다 (§10 · §11).
+    #: §9 의 금지 항목은 **지금도** 들어오지 않았다 (현재 나무를 본다).
     pipeline_source = source_of("engine/event_pipeline.py")
     for forbidden in (
         "cause_player",
         "affected_player",
         "action_player",
         "actor_player",
-        "EventBus",
     ):
-        if forbidden == "EventBus":
-            #: 이 말은 "만들지 않는다" 는 설명으로 한 번 나온다 — 고정해 둔다.
-            assert pipeline_source.count("EventBus") == 1
-            continue
         assert forbidden not in pipeline_source, forbidden
+    #: ``EventBus`` 라는 말은 "만들지 않는다" 는 설명으로 한 번 나온다.
+    assert pipeline_source.count("EventBus") == 1
 
     trigger_source = source_of("engine/trigger.py")
     assert "EVENT_RELATION" in trigger_source  # dormant 그대로 있다
@@ -1054,16 +1134,16 @@ def test_23_reading_events_changes_neither_the_board_nor_the_rng(repository):
     state, execution, _, _ = battle(repository, THEIRS)
     before = state.state_hash()
 
-    read_with(state, execution)
+    read_with(state, execution, actor=THEIRS)
     read_with(state, execution, actor=MINE)
     view = GameStateView.from_state(state, viewer=MINE)
-    EventReader(view).read_deltas(execution.deltas)
+    EventReader(view).read_deltas(execution.deltas, actor=None)
     assert state.state_hash() == before
 
     journal = EventJournal()
     effect_state, _ = effect_draw(repository, MINE, journal=journal)
     effect_before = effect_state.state_hash()
-    read_with(effect_state, journal.events[0])
+    read_with(effect_state, journal.events[0], actor=MINE)
     assert effect_state.state_hash() == effect_before
 
     #: 같은 seed 는 같은 판을 준다 — 이 Phase 가 RNG 를 건드리지 않았다.
