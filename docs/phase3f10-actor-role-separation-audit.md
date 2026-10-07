@@ -567,3 +567,26 @@ production 주석만)**
    것이 아니라, **고친 사실을 측정으로 다시 고정**하는 쪽으로.
 
 **이 Phase 는 그 작업을 하지 않았다. 다음 Phase 는 임의로 진행하지 않는다.**
+
+---
+
+## Commit · Push 기록
+
+| 항목 | 값 |
+| --- | --- |
+| 작업 commit | `5d6d0a7a854ddbceb41481f6a867c0dba8f5c47f` (`5d6d0a7`) |
+| commit message | `Phase 3-F-10: audit actor role separation` |
+| 변경 파일 | `tests/test_actor_role_separation_audit.py` (신규) · `docs/phase3f10-actor-role-separation-audit.md` (신규) |
+| production diff | **0** — `engine` · `agent` · `app` · `core` · `analysis` · `rules` · `rulings` · `sources` · `scripts` 전부 변경 없음 |
+| `TimingEvent` 필드 수 | **5** (변경 없음) |
+| `EventContext` 필드 수 | **5** (변경 없음) |
+| `LifeChanged` 필드 수 | **3** (변경 없음 — 새 field 0) |
+| branch | `claude/pensive-goodall-te1egy` |
+| push 결과 | `c5a0ba8..5d6d0a7  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy` |
+| base (Phase 3-F-9) | `7481c20` (작업) · `c5a0ba8` (보고서) |
+| 전체 회귀 | 4,299 passed / 4 skipped (baseline 4,276 +23) |
+| 탐색 순위 digest | `30fa3597a24d4511d8c92ce9f9921412ffada7546675c4d7d5765381402c4175` (6판 611결정 — 3-F-5 ~ 3-F-9 과 동일) |
+| 최종 판정 | **B. ACTOR_ROLES_NEED_DOCUMENTATION** |
+
+이 절을 더한 commit 은 보고서 기록 commit 이며, 그 commit 역시 production 을
+건드리지 않는다.
