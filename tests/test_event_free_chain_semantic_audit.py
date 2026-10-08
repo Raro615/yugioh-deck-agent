@@ -1153,11 +1153,19 @@ def test_30_production_change_is_documentation_only():
     added = git("log", "--diff-filter=A", "--format=%H", "--", MYSELF).split()
     #: commit 전에는 base ↔ 작업 트리로 되돌아간다 (**skip 하지 않는다**).
     base = f"{added[-1]}^" if added else PHASE_3F25_BASE
-    head = "HEAD" if added else None
+    #: 🔴 **이 Phase 의 commit 까지만** 본다 — ``HEAD`` 가 아니다.
+    #:
+    #: .. warning::
+    #:    처음에는 끝점을 ``HEAD`` 로 썼다. 그러면 **뒤에 오는 Phase 의 변경이
+    #:    전부 섞여** 들어온다 — Phase 3-F-26 이 ``engine/activation_timing.py``
+    #:    의 docstring 을 고치자 이 테스트가 깨졌다. "내 Phase 가 무엇을
+    #:    바꿨는가" 를 묻는 테스트의 끝점은 **내 commit** 이다 (3-F-24 의
+    #:    ``test_25`` 가 ``git show <그 commit>`` 으로 한 것과 같다).
+    tip = added[-1] if added else None
 
     scope = ["--", *PRODUCTION_ROOTS]
     changed = git(
-        "diff", "--name-only", base, *( [head] if head else [] ), *scope
+        "diff", "--name-only", base, *([tip] if tip else []), *scope
     ).split()
 
     assert set(changed) <= {
@@ -1170,8 +1178,8 @@ def test_30_production_change_is_documentation_only():
     for relative in changed:
         before = git("show", f"{base}:{relative}")
         after = (
-            git("show", f"HEAD:{relative}")
-            if head
+            git("show", f"{tip}:{relative}")
+            if tip
             else (PROJECT_ROOT / relative).read_text(encoding="utf-8")
         )
         assert code_only(before) == code_only(after), relative

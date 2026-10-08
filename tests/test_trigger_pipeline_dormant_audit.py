@@ -781,6 +781,21 @@ def test_25_this_phase_changed_no_production_file():
        🔴 3-F-14 는 ``event_pipeline.py`` 의 **코드**를 바꿨다 (앞의 Phase 들과
        다르다). 그래도 이 테스트가 보는 다섯 모듈 중 넷은 그대로이고, 트리거
        파이프라인은 여전히 dormant 다 — 바뀐 것은 입구의 입력 계약뿐이다.
+
+       ``engine/activation_timing.py`` 는 541 → **570** (Phase 3-F-26 의 모듈
+       docstring) 이다.
+
+    .. warning::
+       🔴 **Phase 3-F-26 이 이 테스트의 가정을 정정했다.** 원래 이 테스트는
+       *"줄 수가 그대로다"* 만으로 dormant 를 주장했는데, **줄 수는 주석과
+       코드를 구분하지 못한다.** 그래서 docstring 만 고친 Phase 가 올 때마다
+       숫자를 갱신해야 했고 (3-E-45 · 3-F-11 · 3-F-14 · 3-F-26), 그 갱신은
+       "코드가 그대로인가" 를 **증명하지 않는다.**
+
+       약화하지 않고 **보강**했다 — 문자열 리터럴을 벗긴(즉 **주석 · docstring
+       에 둔감한**) 줄 수를 함께 못 박는다. 이 숫자는 docstring 을 고쳐도
+       움직이지 않고, **실행 코드를 고치면 움직인다.** 원래의 원본 줄 수 핀은
+       그대로 남겨 둔다.
     """
     sizes = {
         rel: len(source_of(rel).splitlines())
@@ -792,7 +807,31 @@ def test_25_this_phase_changed_no_production_file():
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
         "engine/event_pipeline.py": 500,
-        "engine/activation_timing.py": 541,
+        "engine/activation_timing.py": 570,
+    }
+
+    #: 🔴 주석 · docstring 에 둔감한 핀 (Phase 3-F-26 이 더했다).
+    class _StripStrings(ast.NodeTransformer):
+        def visit_Constant(self, node):  # noqa: N802 - ast 규약
+            if isinstance(node.value, str):
+                return ast.copy_location(ast.Constant(value=""), node)
+            return node
+
+    executable = {
+        rel: len(
+            ast.unparse(
+                _StripStrings().visit(ast.parse(source_of(rel)))
+            ).splitlines()
+        )
+        for rel in TRIGGER_PARTS + TRIGGER_ASSEMBLY + (LIVE_TIMING,)
+    }
+    assert executable == {
+        "engine/trigger.py": 735,
+        "engine/trigger_chain.py": 257,
+        "engine/trigger_order.py": 194,
+        "engine/timing.py": 194,
+        "engine/event_pipeline.py": 227,
+        "engine/activation_timing.py": 227,
     }
 
 

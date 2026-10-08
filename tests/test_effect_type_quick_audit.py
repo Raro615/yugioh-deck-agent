@@ -1018,9 +1018,12 @@ def test_30_production_change_is_documentation_only():
     added = git("log", "--diff-filter=A", "--format=%H", "--", MYSELF).split()
     #: commit 전에는 base ↔ 작업 트리로 되돌아간다 (**skip 하지 않는다**).
     base = f"{added[-1]}^" if added else PHASE_3F26_BASE
-    head = ["HEAD"] if added else []
+    #: 🔴 끝점은 **이 Phase 의 commit** 이다 — ``HEAD`` 가 아니다. ``HEAD`` 로
+    #: 쓰면 뒤에 오는 Phase 의 변경이 섞여 들어와 이 테스트가 깨진다 (3-F-25 가
+    #: 실제로 그렇게 깨졌고, 이 Phase 가 그 테스트도 함께 고쳤다).
+    tip = [added[-1]] if added else []
 
-    changed = git("diff", "--name-only", base, *head, "--", *PRODUCTION_ROOTS).split()
+    changed = git("diff", "--name-only", base, *tip, "--", *PRODUCTION_ROOTS).split()
 
     assert set(changed) == {
         "core/card_model.py",
@@ -1030,8 +1033,8 @@ def test_30_production_change_is_documentation_only():
     for relative in changed:
         before = git("show", f"{base}:{relative}")
         after = (
-            git("show", f"HEAD:{relative}")
-            if head
+            git("show", f"{tip[0]}:{relative}")
+            if tip
             else (PROJECT_ROOT / relative).read_text(encoding="utf-8")
         )
         assert code_only(before) == code_only(after), relative
