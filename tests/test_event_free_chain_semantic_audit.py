@@ -290,7 +290,13 @@ def test_01_the_constant_exists_in_the_corpus(scripts):
 
     #: 전체 블록 중 차지하는 비중 — 최다이지만 과반이 아니다.
     total = sum(len(info.effects) for info in scripts.values())
-    assert total == 34680
+    #: 🔴 Phase 3-F-28 에서 34,680 → 34,681 (로더가 블록 주석 안의 효과를 세던 것을
+    #: 그만두고(``c9409625`` −1), ``c:RegisterEffect`` 로 이 카드에 등록되는 ``local``
+    #: 없는 / ``e`` 로 시작하지 않는 블록을 세기 시작했다(``c9839115`` · ``c74506079``
+    #: +2)).
+    #: ``EVENT_FREE_CHAIN`` 블록 수 4,914 는 **바뀌지 않았다** — 세 스크립트
+    #: 중 어느 쪽도 ``EVENT_FREE_CHAIN`` 블록을 더하거나 빼지 않는다.
+    assert total == 34681
     assert 0.14 < len(blocks) / total < 0.15
 
 

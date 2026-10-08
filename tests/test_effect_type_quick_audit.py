@@ -177,12 +177,26 @@ def replace_rule(source: str) -> list[dict]:
 
     production 파서를 건드리지 않고 같은 이벤트 흐름을 다시 돌린다. 이 함수와
     production 의 차이가 곧 누적 결함의 규모다 (``test_07``).
+
+    🔴 Phase 3-F-28 정정 — 이 함수는 production 의 정규식을 **그룹 번호로** 읽고
+    있었다. 3-F-28 이 ``_RE_CREATE_EFFECT`` · ``_RE_CLONE_EFFECT`` 에 ``local``
+    포획 그룹을 추가하면서 그룹 번호가 하나씩 밀려, 이 함수는 변수명 대신
+    문자열 ``"local"`` 을 변수명으로 집고 있었다 (블록 0개). 그룹 번호를
+    맞추고, production 과 **같은 흐름**이 되도록 블록 주석 제거와
+    ``_is_card_effect`` 판정도 함께 반영한다.
     """
     events: list[tuple[int, str, str]] = []
+    source = lua_loader._RE_BLOCK_COMMENT.sub("", source)
     for match in lua_loader._RE_CREATE_EFFECT.finditer(source):
-        events.append((match.start(), "create", match.group(1)))
+        if not lua_loader._is_card_effect(source, match.group(1), match.group(2), None):
+            continue
+        events.append((match.start(), "create", match.group(2)))
     for match in lua_loader._RE_CLONE_EFFECT.finditer(source):
-        events.append((match.start(), "clone", f"{match.group(1)}={match.group(2)}"))
+        if not lua_loader._is_card_effect(
+            source, match.group(1), match.group(2), match.group(3)
+        ):
+            continue
+        events.append((match.start(), "clone", f"{match.group(2)}={match.group(3)}"))
     for match in lua_loader._RE_SETTER.finditer(source):
         events.append(
             (match.start(), "set", f"{match.group(1)}|{match.group(2)}|{match.end() - 1}")
@@ -511,11 +525,13 @@ def test_07_quick_o_plus_ignition_is_a_parser_artifact(scripts):
     #: 🔴 고친 뒤 **QUICK_O 블록에서는 두 규칙이 완전히 일치한다.**
     assert accumulated == replaced, (accumulated, replaced)
 
-    #: 남아 있는 차이는 **단 1건**이고 ``Clone`` 이 아니다 — ``c9839115`` 의
-    #: ``local`` 없는 ``e1=Effect.CreateEffect(c)`` 가 설정자를 흘리는 **별개
-    #: 버그**다 (3-F-27 보고서 §7 · 범위 밖).
-    assert differing == 1
-    assert differing_scripts == 1
+    #: 🔴 Phase 3-F-28 에서 1 → 0. 남아 있던 그 1건은 ``c9839115`` 의
+    #: ``local`` 없는 ``e1=Effect.CreateEffect(c)`` 가 설정자를 흘리는
+    #: **별개 버그**였고 (3-F-27 보고서 §7 · 당시 범위 밖), 3-F-28 이
+    #: 그 블록을 따로 세기 시작하면서 사라졌다. 이제 누적 규칙과 교체
+    #: 규칙은 corpus **전체**에서 같다 — 결론이 약해진 것이 아니라 강해졌다.
+    assert differing == 0
+    assert differing_scripts == 0
     assert quick_differing == 0
     assert cloned == 0
 
@@ -576,7 +592,11 @@ def test_09_the_scope_axis_is_mutually_exclusive(scripts):
                         together[(left, right)] += 1
 
     assert sum(together.values()) == 0, dict(together)
-    assert alone["SINGLE"] == 14731
+    #: 🔴 Phase 3-F-28 에서 ``SINGLE`` 14,731 → 14,732. 새로 세는 두 블록
+    #: (``c9839115`` ``e1`` · ``c74506079`` ``ae``) 이 둘 다 ``SINGLE`` 이고,
+    #: 더 이상 세지 않는 ``c9409625`` 의 주석 안 블록도 ``SINGLE`` 이었다
+    #: (+2 −1). ``FIELD`` · ``EQUIP`` 는 그대로다.
+    assert alone["SINGLE"] == 14732
     assert alone["FIELD"] == 8881
     assert alone["EQUIP"] == 639
     #: corpus 에 **한 번도 나오지 않는** 플래그가 둘 있다.

@@ -560,8 +560,8 @@ def test_17_a_second_setcode_overwrites_the_first_in_three_different_ways():
     """
     **파서는 블록마다 ``code`` 를 하나만 들고, 마지막 ``SetCode`` 를 남긴다.**
 
-    전 corpus 34,680 블록 중 ``SetCode`` 가 두 번 적용되는 블록은 **10개**다.
-    세 가지 모양이 섞여 있고, **의미 손실은 하나뿐이다.**
+    전 corpus 34,681 블록 중 ``SetCode`` 가 두 번 적용되는 블록은 **10개**다.
+    세 가지 모양이 섞여 있고, **의미 손실은 하나뿐이었다.**
 
     1. **분기** — ``if … then SetCode(A) else SetCode(B) end``. Lua 는 **둘 중
        하나만** 실행하지만 파서는 **뒤에 쓰인 쪽**을 적는다. A 는 사라진다.
@@ -570,17 +570,24 @@ def test_17_a_second_setcode_overwrites_the_first_in_three_different_ways():
        두 코드가 **둘 다 남고** 변수 배정만 뒤바뀐다 — 손실이 아니다.
        (``c62171834`` · ``c75047173``)
     3. **비-``local`` 재생성** — ``e1=Effect.CreateEffect(c)`` (``local`` 없음).
-       ``_RE_CREATE_EFFECT`` 가 ``local`` 을 요구하므로 새 spec 이 생기지
-       않고, **앞선 spec 의 ``code`` 가 덮어쓰인다.** (``c9839115``)
+       파서가 ``local`` 을 요구하던 동안은 새 spec 이 생기지 않고 **앞선
+       spec 의 ``code`` 가 덮어쓰였다.** (``c9839115``)
 
-    3번은 전 corpus 에서 **1장**이다 (``local`` 없는 생성을 쓰는 스크립트 2장
-    중 덮어쓰기가 실제로 일어나는 것 1장). 이 Phase 는 파서를 바꾸지 않으므로
-    **현재 상태를 그대로 고정**한다 — 고치는 Phase 는 이 테스트를 **의도적으로**
-    갱신해야 하고, 그 이유를 보고서에 적어야 한다.
+    .. note::
+       🔴 **Phase 3-F-28 이 3번을 고쳤다.** 이 docstring 이 "고치는 Phase 는
+       이 테스트를 의도적으로 갱신해야 한다" 고 적어 둔 그 갱신이다.
 
-    고쳐도 ``EVENT_SPSUMMON_SUCCESS`` 자체가 사라진 것은 아니다 —
-    ``LuaScriptInfo.trigger_events`` 는 파일 전체에서 긁으므로 **남아 있다.**
-    그래서 이것은 "정보 소실" 이 아니라 **"귀속 오류"** 다.
+       3-F-28 은 ``local`` 요구를 **없애지 않았다** — 그 관례는 전역 효과
+       245건과 다른 카드에 주는 효과 4건을 걸러 내는 데 249/251 로 옳다.
+       대신 그 관례가 놓친 자리에서만 ``c:RegisterEffect(var)`` 라는 **명시적
+       증거**로 보강했고, ``c9839115`` 의 두 번째 ``e1`` 이 거기에 걸린다.
+
+       그 결과 이 블록은 **따로 세어지고**, 앞 블록의 ``code`` 는 원래
+       값인 ``EVENT_SPSUMMON_SUCCESS`` 로 되돌았다. 아래 1·2 번은 3-F-28 이
+       건드리지 않았으므로 **그대로 고정**한다.
+
+    1·2 번에서는 ``LuaScriptInfo.trigger_events`` 가 파일 전체를 긁으므로
+    코드 자체는 남아 있다 — "정보 소실" 이 아니라 **"귀속 오류"** 다.
     """
     # 1. 분기 — else 쪽만 남는다.
     branch = _parse_file(50789693)
@@ -596,20 +603,30 @@ def test_17_a_second_setcode_overwrites_the_first_in_three_different_ways():
     assert ("e2", "EFFECT_UPDATE_DEFENSE", None) in codes
     assert ("e3", "EFFECT_UPDATE_ATTACK", "e2") in codes
 
-    # 3. 비-local 재생성 — 앞선 spec 의 code 가 덮어쓰인다.
-    poisoned = _parse_file(9839115)
+    # 3. 비-local 재생성 — 🔴 Phase 3-F-28 이 고쳤다.
+    repaired = _parse_file(9839115)
     source = pathlib.Path("c9839115.lua").read_text(encoding="utf-8")
     creations = [
         line.strip() for line in source.splitlines() if "e1=Effect.CreateEffect" in line
     ]
-    #: 두 번째 생성에 ``local`` 이 없다 — 그래서 새 spec 이 생기지 않는다.
+    #: Lua 원문은 그대로다 — 두 번째 생성에 여전히 ``local`` 이 없다.
+    #: (``Lua 파일을 일괄 수정하지 말 것`` — 고친 것은 파서다.)
     assert creations == ["local e1=Effect.CreateEffect(c)", "e1=Effect.CreateEffect(c)"]
     assert "e1:SetCode(EVENT_SPSUMMON_SUCCESS)" in source
-    #: 유발은 ``e1`` 의 것이었는데 지금 ``e1`` 에 적힌 것은 나중 값이다.
-    assert ("e1", "EFFECT_UPDATE_ATTACK") in [(s.index, s.code) for s in poisoned.effects]
-    assert "EVENT_SPSUMMON_SUCCESS" not in [s.code for s in poisoned.effects]
-    #: 그래도 파일 단위 목록에는 남아 있다 — 소실이 아니라 귀속 오류다.
-    assert "EVENT_SPSUMMON_SUCCESS" in poisoned.trigger_events
+    #: 🔴 이제 **두 블록**이고, 각자 자기 ``code`` 를 갖는다.
+    codes = [(spec.index, spec.code) for spec in repaired.effects]
+    assert codes == [
+        ("e0", "EFFECT_MATERIAL_CHECK"),
+        ("e1", "EVENT_SPSUMMON_SUCCESS"),
+        ("e1", "EFFECT_UPDATE_ATTACK"),
+    ], codes
+    #: 덮어쓰기가 실제로 사라졌다 — 두 값이 **둘 다** 남아 있다.
+    assert "EVENT_SPSUMMON_SUCCESS" in [spec.code for spec in repaired.effects]
+    assert "EFFECT_UPDATE_ATTACK" in [spec.code for spec in repaired.effects]
+    #: 두 번째 블록은 ``Clone`` 이 아니라 **새 생성**이다.
+    assert [spec.cloned_from for spec in repaired.effects] == [None, None, None]
+    #: 파일 단위 목록에도 그대로 있다.
+    assert "EVENT_SPSUMMON_SUCCESS" in repaired.trigger_events
 
 
 def _parse_file(card_id: int) -> LuaScriptInfo:
@@ -711,10 +728,18 @@ def test_19_the_cache_signature_must_change_when_the_parser_changes():
        옛 캐시를 계속 읽는다는 것을 실험으로 확인했다 (수정 전 캐시가
        ``c324483`` ``e2`` 를 ``['IGNITION', 'QUICK_O']`` 로 들고 있었다).
        **이 테스트가 설계대로 작동해 그 상승을 요구했다.**
+
+    .. note::
+       🔴 **Phase 3-F-28 이 ``v5`` → ``v6`` 로 올렸다.** 그 Phase 가
+       ``CreateEffect`` 탐지를 고쳤다 (블록 주석 제거 + ``c:RegisterEffect``
+       보강). **이 테스트가 두 번째로 설계대로 작동했다** — 두 Phase 연속으로
+       파서 수정을 잡아냈다. ``v4`` · ``v5`` 로 되돌아가지 않았음도 함께
+       못 박는다.
     """
     source = pathlib.Path("sources/lua_loader.py").read_text(encoding="utf-8")
-    assert 'return f"v5:{count}:{newest:.0f}"' in source
+    assert 'return f"v6:{count}:{newest:.0f}"' in source
     #: 되돌아가지 않았는지도 본다.
+    assert 'return f"v5:{count}:{newest:.0f}"' not in source
     assert 'return f"v4:{count}:{newest:.0f}"' not in source
     #: 서명 계산에 파서 버전·코드 해시가 들어가지 않는다 — 그래서 손으로 올린다.
     signature_body = source.split("def _signature(self)")[1].split("def ")[0]

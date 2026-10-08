@@ -230,9 +230,15 @@ def test_03_event_codes_live_in_the_parser_layer(repository):
 
     events = {name: n for name, n in counts.items()
               if name and name.startswith("EVENT_")}
-    assert sum(counts.values()) == 34631
-    assert sum(n for name, n in counts.items() if name) == 30084
-    assert sum(events.values()) == 16381
+    #: 🔴 Phase 3-F-28 에서 34,631 → 34,632 · 30,084 → 30,085 ·
+    #: ``EVENT_*`` 16,381 → 16,382 (로더가 블록 주석 안의 효과를 세던 것을
+    #: 그만두고(``c9409625`` −1), ``c:RegisterEffect`` 로 이 카드에 등록되는 ``local``
+    #: 없는 / ``e`` 로 시작하지 않는 블록을 세기 시작했다(``c9839115`` · ``c74506079``
+    #: +2)).
+    #: ``EVENT_*`` 종류 수 70 은 그대로다.
+    assert sum(counts.values()) == 34632
+    assert sum(n for name, n in counts.items() if name) == 30085
+    assert sum(events.values()) == 16382
     assert len(events) == 70
 
 

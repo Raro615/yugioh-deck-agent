@@ -88,11 +88,20 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 # ======================================================================
 
 #: 효과 블록 총합 (``EffectRef.ordinal`` 기준).
-TOTAL_BLOCKS = 34631
+#:
+#: 🔴 Phase 3-F-28 에서 34,631 → 34,632 (로더가 블록 주석 안의 효과를 세던 것을
+#: 그만두고(``c9409625`` −1), ``c:RegisterEffect`` 로 이 카드에 등록되는 ``local``
+#: 없는 / ``e`` 로 시작하지 않는 블록을 세기 시작했다(``c9839115`` · ``c74506079``
+#: +2)). 이 테스트가 세는
+#: 네 범주 중 ``(False, False)`` 하나만 +1 이고 나머지 셋과
+#: ``WITH_CONDITION`` · ``WITH_TARGET`` · ``WITH_COST`` ·
+#: ``FREE_CHAIN_*`` 은 **그대로다** — 새로 세는 두 블록과 더 이상 세지
+#: 않는 한 블록 모두 ``SetCondition`` · ``SetTarget`` 이 없다.
+TOTAL_BLOCKS = 34632
 
 #: 네 범주 ``(SetCondition 있음, SetTarget 있음) → 블록 수``.
 QUADRANTS = {
-    (False, False): 11626,
+    (False, False): 11627,
     (False, True): 10568,
     (True, True): 8694,
     (True, False): 3743,

@@ -711,13 +711,20 @@ def test_15_the_script_corpus_separates_events_from_restrictions(repository):
             if spec.code:
                 counts[spec.code] = counts.get(spec.code, 0) + 1
 
-    assert blocks == 34631
-    assert sum(counts.values()) == 30084
+    #: 🔴 Phase 3-F-28 에서 34,631 → 34,632, ``code`` 있는 블록 30,084 →
+    #: 30,085. 로더가 블록 주석 안의 효과를 세던 것을 그만두고
+    #: (``c9409625`` −1), ``c:RegisterEffect`` 로 이 카드에 등록되는
+    #: ``local`` 없는 / ``e`` 로 시작하지 않는 블록을 세기 시작했다
+    #: (``c9839115`` · ``c74506079`` +2). ``code`` 종류 수 298 은 그대로다.
+    assert blocks == 34632
+    assert sum(counts.values()) == 30085
     assert len(counts) == 298
 
     summon_codes = {code: n for code, n in counts.items() if "SUMMON" in code}
     assert len(summon_codes) == 26
-    assert sum(summon_codes.values()) == 5979
+    #: 🔴 Phase 3-F-28 에서 5,979 → 5,980 — ``c9839115`` 의 ``e1`` 에 흘러든
+    #: 값이 치워지면서 ``EVENT_SPSUMMON_SUCCESS`` 가 제 블록으로 돌아왔다.
+    assert sum(summon_codes.values()) == 5980
 
     events = {code: n for code, n in summon_codes.items() if code.startswith("EVENT_")}
     statics = {
@@ -725,11 +732,13 @@ def test_15_the_script_corpus_separates_events_from_restrictions(repository):
     }
     assert set(summon_codes) == set(events) | set(statics)
     #: 사건 쪽이 더 많고, 둘이 섞여 있다.
-    assert sum(events.values()) == 3622
+    #: 🔴 Phase 3-F-28 에서 사건 쪽만 3,622 → 3,623 (위 참고).
+    assert sum(events.values()) == 3623
     assert sum(statics.values()) == 2357
 
     #: 성공 · 선언 · 무효가 **서로 다른 이름**으로 구분되어 있다.
-    assert summon_codes["EVENT_SPSUMMON_SUCCESS"] == 2114
+    #: 🔴 Phase 3-F-28 에서 2,114 → 2,115.
+    assert summon_codes["EVENT_SPSUMMON_SUCCESS"] == 2115
     assert summon_codes["EVENT_SPSUMMON"] == 50
     assert summon_codes["EVENT_SPSUMMON_NEGATED"] == 3
     #: 엔진의 ``TimingPoint`` 에는 그 셋에 해당하는 이름이 **하나**뿐이다.

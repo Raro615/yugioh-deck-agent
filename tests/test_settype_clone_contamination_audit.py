@@ -129,12 +129,25 @@ TRIGGER_F_CLONE = 102380             # Clone 상속 사례
 MULTI_TYPE_ONE_CALL = 176392         # 한 호출 OR: CONTINUOUS+FIELD / FIELD+TRIGGER_O
 
 #: 형제 칸의 corpus 총계 — 이 Phase 가 건드리지 않았다는 증거 (``test_34``).
-RANGES_TOTAL = 15076
+#:
+#: 🔴 Phase 3-F-28 이 블록 수를 34,680 → 34,681 로 바꾸면서
+#: (``c9409625`` 가 블록 주석 안의 블록 하나를 잃고 −1, ``c9839115`` ·
+#: ``c74506079`` 가 ``c:RegisterEffect`` 로 등록되는 블록 하나씩을 얻어 +2)
+#: 블록에 **딸린** 총계도 그만큼 움직였다. 전수 비교로 확인한 내역:
+#:
+#: * ``ranges`` 15,076 → 15,075 — 사라진 ``c9409625`` 블록의 ``SZONE`` 1건.
+#: * ``properties`` 23,909 → 23,907 — 같은 블록의 ``SINGLE_RANGE`` ·
+#:   ``NO_TURN_RESET`` 2건.
+#: * ``count_limit`` 11,188 → 11,187 — 같은 블록의 ``1`` 1건.
+#: * ``code`` 30,126 → 30,127 — 그 블록의 ``EFFECT_INDESTRUCTABLE_COUNT``
+#:   −1, 새 블록 둘의 ``EFFECT_SET_ATTACK`` · ``EFFECT_UPDATE_ATTACK`` +2.
+#: * ``target_ranges`` · ``categories`` · ``cloned_from`` 은 **그대로다.**
+RANGES_TOTAL = 15075
 TARGET_RANGES_TOTAL = 2072
 CATEGORIES_TOTAL = 20534
-PROPERTIES_TOTAL = 23909
-CODE_TOTAL = 30126
-COUNT_LIMIT_TOTAL = 11188
+PROPERTIES_TOTAL = 23907
+CODE_TOTAL = 30127
+COUNT_LIMIT_TOTAL = 11187
 
 LUSTER_DRAGON = 11091375
 POT_OF_GREED = 55144522
@@ -201,12 +214,24 @@ def walk_replace_rule(source: str) -> list[dict]:
 
     production 과 비교하는 **외부 기준**이다. production 을 호출하지 않으므로
     같은 버그를 같이 갖지 않는다.
+
+    🔴 Phase 3-F-28 정정 — 이 함수도 production 정규식을 **그룹 번호로** 읽고
+    있었다. 3-F-28 이 ``local`` 포획 그룹을 추가해 번호가 밀렸으므로 맞추고,
+    production 과 같은 흐름이 되도록 블록 주석 제거와 ``_is_card_effect``
+    판정을 함께 반영한다.
     """
     events: list[tuple[int, str, str]] = []
+    source = lua_loader._RE_BLOCK_COMMENT.sub("", source)
     for match in lua_loader._RE_CREATE_EFFECT.finditer(source):
-        events.append((match.start(), "create", match.group(1)))
+        if not lua_loader._is_card_effect(source, match.group(1), match.group(2), None):
+            continue
+        events.append((match.start(), "create", match.group(2)))
     for match in lua_loader._RE_CLONE_EFFECT.finditer(source):
-        events.append((match.start(), "clone", f"{match.group(1)}={match.group(2)}"))
+        if not lua_loader._is_card_effect(
+            source, match.group(1), match.group(2), match.group(3)
+        ):
+            continue
+        events.append((match.start(), "clone", f"{match.group(2)}={match.group(3)}"))
     for match in lua_loader._RE_SETTER.finditer(source):
         events.append(
             (match.start(), "set", f"{match.group(1)}|{match.group(2)}|{match.end() - 1}")
@@ -513,10 +538,18 @@ def test_12_accumulation_would_create_contradictions(corpus):
 
 
 def test_13_no_single_call_ever_writes_such_a_combination(corpus):
-    """
+    r"""
     🔴 §6 — 그 조합을 **한 ``SetType`` 호출 안에서 적는 카드는 0장**이다.
 
-    31,933건 전수. 이것이 교체가 맞다는 가장 강한 내부 증거다.
+    32,153건 전수. 이것이 교체가 맞다는 가장 강한 내부 증거다.
+
+    .. note::
+       🔴 Phase 3-F-28 에서 31,933 → 32,153 (+220). 이 테스트는 production
+       의 ``_RE_SETTER`` 를 그대로 쓰는데, 3-F-28 이 그 변수명 범위를
+       ``e\w*`` 에서 ``[A-Za-z_]\w*`` 로 넓혔다. 늘어난 220건은 ``ge1`` ·
+       ``g`` · ``ae`` 같은 이름의 ``SetType`` 호출이다 — **위반 수는 둘 다
+       0 으로 그대로다.** 즉 넓힌 범위에서도 모순 조합을 한 호출에 적는
+       카드는 없다. 판정이 약해진 것이 아니라 표본이 커졌다.
     """
     calls = 0
     scope_violations = 0
@@ -538,7 +571,7 @@ def test_13_no_single_call_ever_writes_such_a_combination(corpus):
             if len(flags & ACTIVATION_FLAGS) > 1:
                 activation_violations += 1
 
-    assert calls == 31933
+    assert calls == 32153
     assert scope_violations == 0
     assert activation_violations == 0
 
@@ -676,17 +709,15 @@ def test_19_corpus_wide_diff_is_only_clone_flag_removal(corpus):
                 differing.append((card_id, spec.index, spec.cloned_from,
                                   spec.effect_types, fixed["types"]))
 
-    assert blocks == 34680
-    assert len(differing) == 1, differing
-    card_id, index, cloned_from, produced, replaced_types = differing[0]
-    assert card_id == NON_LOCAL_CREATE
-    assert index == "e1"
-    assert cloned_from is None            # 🔴 Clone 이 아니다
-    assert produced == ["SINGLE", "TRIGGER_O"]
-    assert replaced_types == ["SINGLE"]
+    #: 🔴 Phase 3-F-28 에서 34,680 → 34,681.
+    assert blocks == 34681
 
-    #: ``Clone`` 유래 블록은 **하나도** 다르지 않다.
-    assert not [d for d in differing if d[2] is not None]
+    #: 🔴 Phase 3-F-28 에서 1 → 0. 3-F-27 때 남아 있던 그 1건은
+    #: ``c9839115`` 의 ``local`` 없는 ``e1=Effect.CreateEffect(c)`` 가
+    #: 자기 설정자를 앞 블록에 흘린 것이었고, 3-F-28 이 그 블록을 **따로
+    #: 세기 시작하면서 사라졌다.** 그래서 이제 production 과 교체 규칙은
+    #: corpus 전체에서 **완전히 같다** — 더 강한 결론이다.
+    assert differing == [], differing
 
 
 def test_20_no_two_specs_share_a_mutable_container(corpus):
@@ -708,7 +739,8 @@ def test_20_no_two_specs_share_a_mutable_container(corpus):
                 assert id(container) not in seen
                 seen.add(id(container))
                 checked += 1
-    assert checked == 34680 * 5
+    #: 🔴 Phase 3-F-28 에서 34,680 → 34,681.
+    assert checked == 34681 * 5
 
 
 def test_21_parsing_is_deterministic(corpus):
@@ -725,17 +757,23 @@ def test_21_parsing_is_deterministic(corpus):
 
 def test_22_the_cache_signature_was_bumped():
     """
-    🔴 §10 — ``_signature`` 가 ``v5`` 다.
+    🔴 §10 — ``_signature`` 가 파서를 고칠 때마다 올라간다.
 
     그 값에 파서 버전이 없으면 **고친 파서가 옛 캐시를 계속 읽는다** —
     signature 는 스크립트 파일 개수와 최신 mtime 만 보기 때문이다.
+
+    .. note::
+       🔴 Phase 3-F-28 에서 ``v5`` → ``v6``. 이 테스트는 **설계대로 걸렸다** —
+       3-F-28 도 파서를 고쳤으므로 prefix 가 올라가야 한다. 되돌아가지
+       않았음도 함께 못 박는다.
     """
     source = inspect.getsource(LuaScriptSource._signature)
-    assert "v5:" in source
+    assert "v6:" in source
+    assert "v5:" not in source
     assert "v4:" not in source
 
     signature = LuaScriptSource(PROJECT_ROOT)._signature()
-    assert signature.startswith("v5:")
+    assert signature.startswith("v6:")
 
     #: 캐시가 있다면 새 signature 로 쓰여 있어야 한다 (없으면 건너뛰지 않고
     #: 그냥 signature 형식만 확인한다).
@@ -743,7 +781,7 @@ def test_22_the_cache_signature_was_bumped():
     if cache.is_file():
         with cache.open(encoding="utf-8") as handle:
             blob = json.load(handle)
-        assert blob["signature"].startswith("v5:"), blob["signature"]
+        assert blob["signature"].startswith("v6:"), blob["signature"]
 
 
 # ======================================================================
@@ -938,7 +976,9 @@ def test_28_block_count_index_and_identity_are_unchanged(corpus):
             b["cloned_from"] for b in replaced
         ], card_id
 
-    assert blocks == 34680
+    #: 🔴 Phase 3-F-28 에서 34,680 → 34,681. ``Clone`` 블록 수 2,744 는
+    #: 그대로다 — 새로 세는 두 블록과 사라진 한 블록 모두 ``Clone`` 이 아니다.
+    assert blocks == 34681
     assert cloned == 2744
 
 
@@ -959,12 +999,22 @@ def test_29_the_sibling_fields_still_have_the_same_defect(corpus):
         for _card_id, text, _production, _replaced in corpus:
             if ":Clone()" not in text:
                 continue
+            #: 🔴 Phase 3-F-28 — 그룹 번호 정정 + production 과 같은 전처리.
+            text = lua_loader._RE_BLOCK_COMMENT.sub("", text)
             events: list[tuple[int, str, str]] = []
             for match in lua_loader._RE_CREATE_EFFECT.finditer(text):
-                events.append((match.start(), "create", match.group(1)))
+                if not lua_loader._is_card_effect(
+                    text, match.group(1), match.group(2), None
+                ):
+                    continue
+                events.append((match.start(), "create", match.group(2)))
             for match in lua_loader._RE_CLONE_EFFECT.finditer(text):
+                if not lua_loader._is_card_effect(
+                    text, match.group(1), match.group(2), match.group(3)
+                ):
+                    continue
                 events.append(
-                    (match.start(), "clone", f"{match.group(1)}={match.group(2)}")
+                    (match.start(), "clone", f"{match.group(2)}={match.group(3)}")
                 )
             for match in lua_loader._RE_SETTER.finditer(text):
                 events.append(
@@ -1111,6 +1161,14 @@ def test_33_no_block_carries_a_contradictory_combination(corpus):
        은 ``SINGLE`` 이었고, 이미 있던 ``SINGLE`` 과 합쳐져 **우연히 같은 집합**이
        됐다. 그 카드에서 실제로 틀린 것은 :attr:`EffectSpec.code` 다 —
        ``EVENT_SPSUMMON_SUCCESS`` 가 ``EFFECT_UPDATE_ATTACK`` 으로 덮였다.
+
+    .. note::
+       🔴 **Phase 3-F-28 이 그 흘림 자체를 없앴다.** 이제 ``c9839115`` 는
+       ``e1`` 이름을 쓰는 블록이 **둘**이고, 각자 자기 ``SetType`` 과
+       ``code`` 를 갖는다. 그래서 아래 두 번째 묶음의 기대값이 "1개 · 흘린
+       값" 에서 "2개 · 각자 제 값" 으로 바뀐다 — 모순 0건이라는 이 테스트의
+       **주장은 그대로이고 오히려 강해졌다** (``test_19`` 의 production ↔
+       교체 규칙 차이도 1 → 0 이 됐다).
     """
     offenders = []
     for card_id, _text, production, _replaced in corpus:
@@ -1120,14 +1178,17 @@ def test_33_no_block_carries_a_contradictory_combination(corpus):
 
     assert offenders == [], offenders
 
-    #: 🔴 교체 규칙과 아직 다른 그 1블록은 **모순이 아니다** — 우연히 같은 집합.
+    #: 🔴 그 카드의 ``e1`` 은 이제 **두 블록**이고 둘 다 모순이 아니다.
     produced = spec_map(NON_LOCAL_CREATE)["e1"]
-    assert len(produced) == 1
-    assert produced[0].cloned_from is None
-    assert produced[0].effect_types == ["SINGLE", "TRIGGER_O"]
-    assert not contradictory(produced[0].effect_types)
-    #: 그 카드에서 실제로 흘러든 것은 ``code`` 다.
-    assert produced[0].code == "EFFECT_UPDATE_ATTACK"
+    assert len(produced) == 2
+    assert [spec.cloned_from for spec in produced] == [None, None]
+    assert [spec.effect_types for spec in produced] == [["SINGLE", "TRIGGER_O"], ["SINGLE"]]
+    assert not any(contradictory(spec.effect_types) for spec in produced)
+    #: 🔴 ``code`` 의 흘림도 사라졌다 — 유발 코드가 제 블록으로 돌아왔다.
+    assert [spec.code for spec in produced] == [
+        "EVENT_SPSUMMON_SUCCESS",
+        "EFFECT_UPDATE_ATTACK",
+    ]
     assert "EVENT_SPSUMMON_SUCCESS" in script_source(NON_LOCAL_CREATE)
 
 
@@ -1155,7 +1216,8 @@ def test_34_the_sibling_fields_were_not_touched(corpus):
             totals["count_limit"] += 1 if spec.count_limit is not None else 0
             totals["cloned_from"] += 1 if spec.cloned_from is not None else 0
 
-    assert blocks == 34680
+    #: 🔴 Phase 3-F-28 에서 34,680 → 34,681 (위 ``*_TOTAL`` 주석 참고).
+    assert blocks == 34681
     assert dict(totals) == {
         "ranges": RANGES_TOTAL,
         "target_ranges": TARGET_RANGES_TOTAL,

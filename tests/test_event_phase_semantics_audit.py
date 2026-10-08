@@ -128,17 +128,29 @@ def phase_setcode_calls() -> tuple[tuple[str, str, str], ...]:
     파서의 이벤트 루프를 그대로 재현한다 — 파일 전체를 정규식으로 긁으면
     묶이지 않은 변수와 함수마다 재사용되는 ``e1`` 때문에 수가 틀린다
     (Phase 3-E-18 이 E-17 의 숫자를 바로잡은 이유).
+
+    🔴 Phase 3-F-28 정정 — 이 함수도 production 정규식을 **그룹 번호로** 읽고
+    있었다. 3-F-28 이 ``local`` 포획 그룹을 추가해 번호가 밀렸으므로 맞추고,
+    production 과 같은 흐름이 되도록 블록 주석 제거와 ``_is_card_effect``
+    판정을 함께 반영한다.
     """
     out: list[tuple[str, str, str]] = []
     for path in script_files():
         source = path.read_text(encoding="utf-8", errors="replace")
         if "EVENT_PHASE" not in source:
             continue
+        source = lua_loader._RE_BLOCK_COMMENT.sub("", source)
         events: list[tuple[int, str, str]] = []
         for m in lua_loader._RE_CREATE_EFFECT.finditer(source):
-            events.append((m.start(), "bind", m.group(1)))
+            if not lua_loader._is_card_effect(source, m.group(1), m.group(2), None):
+                continue
+            events.append((m.start(), "bind", m.group(2)))
         for m in lua_loader._RE_CLONE_EFFECT.finditer(source):
-            events.append((m.start(), "bind", m.group(1)))
+            if not lua_loader._is_card_effect(
+                source, m.group(1), m.group(2), m.group(3)
+            ):
+                continue
+            events.append((m.start(), "bind", m.group(2)))
         for m in lua_loader._RE_SETTER.finditer(source):
             events.append((m.start(), "set", f"{m.group(1)}|{m.group(2)}|{m.end() - 1}"))
         events.sort(key=lambda e: e[0])

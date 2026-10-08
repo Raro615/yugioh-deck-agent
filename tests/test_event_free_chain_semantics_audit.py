@@ -162,7 +162,10 @@ def test_03_the_trap_type_cannot_infer_the_free_chain_code(repository):
 
     #: Q1 — 모든 TRAP 이 EVENT_FREE_CHAIN 인가 → 아니다 (측정 38.6%).
     free_in_trap = [b for b in trap_blocks if b.code == "EVENT_FREE_CHAIN"]
-    assert len(trap_blocks) >= 4_745
+    #: 🔴 Phase 3-F-28 에서 4,745 → 4,744 — ``c9409625`` (함정) 이 블록 주석
+    #: ``--[[ untested version ... --]]`` 안의 블록 하나를 더 이상 세지 않는다.
+    #: ``EVENT_FREE_CHAIN`` 총수(4,909)와 아래 비율은 그대로다.
+    assert len(trap_blocks) >= 4_744
     ratio = len(free_in_trap) / len(trap_blocks)
     assert 0.30 < ratio < 0.50, f"TRAP 중 EVENT_FREE_CHAIN 비율 {ratio:.3f}"
 
