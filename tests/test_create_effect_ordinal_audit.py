@@ -1262,27 +1262,30 @@ def test_36_the_production_change_is_confined_to_the_parser_and_the_analyzer():
 
 def _changed_files() -> set[str]:
     """
-    이 Phase 의 worktree/commit diff 에 등장하는 파일.
+    이 Phase 의 diff 에 등장하는 파일.
 
-    🔴 ``HEAD`` 가 아니라 **이 파일을 추가한 commit 의 부모**를 기준으로 잡는다.
-    ``HEAD`` 로 잡으면 **다음 Phase 가 production 을 건드릴 때 이 테스트가
-    엉뚱하게 깨진다** (3-F-25 의 ``test_30`` 이 3-F-26 에서 그렇게 깨졌다).
-    아직 commit 되지 않았으면 worktree diff 를 쓴다.
+    🔴 ``HEAD`` 를 기준으로 잡으면 **다음 Phase 가 production 을 건드릴 때 이
+    테스트가 엉뚱하게 깨진다** (3-F-25 의 ``test_30`` 이 3-F-26 에서 그렇게
+    깨졌다). 그래서 **제목이 ``Phase 3-F-28:`` 으로 시작하는 commit 들**을
+    찾아 *가장 오래된 것의 부모 → 가장 최근 것* 을 본다. 이 Phase 는 작업 ·
+    테스트 · 보고서를 나눠 커밋하므로 **파일을 추가한 commit 하나만 보면
+    작업 commit 의 production 변경이 보이지 않는다** — 실제로 그렇게 짰다가
+    ``test_36`` 이 빈 집합을 받았다.
+
+    아직 commit 되지 않은 것은 worktree diff 로 더한다.
     """
     def run(*args: str) -> str:
         return subprocess.run(
             ["git", *args], cwd=PROJECT_ROOT, capture_output=True, text=True, check=False
         ).stdout
 
-    added = run("log", "--diff-filter=A", "--format=%H", "--", MYSELF).split()
-    if added:
-        base = added[-1] + "~1"
-        head = added[-1]
-        #: 이 Phase 는 작업/테스트/보고서를 나눠 커밋하므로 **추가 commit 까지**
-        #: 가 아니라 그 commit 을 포함한 범위를 본다.
-        out = run("diff", "--name-only", base, head)
-        out += run("diff", "--name-only", head)
+    phase = run("log", "--format=%H", "--grep=^Phase 3-F-28:", "HEAD").split()
+    out = ""
+    if phase:
+        newest, oldest = phase[0], phase[-1]
+        out += run("diff", "--name-only", f"{oldest}~1", newest)
+        out += run("diff", "--name-only", newest)
     else:
-        out = run("diff", "--name-only", "HEAD")
-        out += run("diff", "--name-only", "--cached", "HEAD")
+        out += run("diff", "--name-only", "HEAD")
+    out += run("diff", "--name-only", "--cached", "HEAD")
     return {line for line in out.splitlines() if line}
