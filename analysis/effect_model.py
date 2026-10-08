@@ -458,10 +458,28 @@ class EffectAnalysis:
 
     **``is not None`` 을 "유발 효과다" 로 읽지 않는다** (Phase 3-E-17).
     ``EVENT_FREE_CHAIN`` 이 이 자리에 들어오는데, 그것은 유발 이벤트가 아니라
-    **"유발 조건이 없다"** 를 적은 값이다. 둘은 ``EVENT_`` 로 시작하는 같은
-    모양이고 번호대도 같아서 (``constant.lua``: ``EVENT_FREE_CHAIN = 1002`` ·
-    ``EVENT_CHAINING = 1027``) 구문으로 가를 수 없다. 가르는 것은 함께 쓰인
-    :attr:`effect_types` 다.
+    **"특정 유발 사건을 요구하지 않는다"** 를 적은 값이다. 둘은 ``EVENT_`` 로
+    시작하는 같은 모양이고 번호대도 같아서 (``constant.lua``:
+    ``EVENT_FREE_CHAIN = 1002`` · ``EVENT_CHAINING = 1027``) 구문으로 가를 수
+    없다. 가르는 것은 함께 쓰인 :attr:`effect_types` 다.
+
+    .. warning::
+       🔴 **Phase 3-F-25 정정 두 가지.**
+
+       1. 이 값은 "유발 조건이 없다" 의 **유일한 표기가 아니다.**
+          ``EFFECT_TYPE_IGNITION`` 블록 4,180개 중 **98.5%(4,119)가
+          ``SetCode`` 를 아예 부르지 않는다** — 같은 "없다" 를 생략으로
+          적는다. 반대로 ``ACTIVATE`` · ``QUICK_O`` 블록은 ``None`` 이
+          **0건**이다. 자세한 표는 :attr:`core.card_model.EffectSpec.code`.
+       2. 이 값을 공식 규칙의 "Free Chain" 으로 읽지 않는다. 이 저장소의
+          공식 자료(룰북 · 공식 재정 686파일 · 한국어 공식 DB) 전체에서
+          그 표현은 **0회** 나오고, 공식 스펠 스피드와의 대응은 끝에서
+          **뒤집힌다** — 필드 마법(공식 SS1)의 ``ACTIVATE`` 블록은
+          312/312 = 100% 가 이 값인데, 카운터 함정(공식 SS3)은 210블록 중
+          **3건(1.4%)** 뿐이다.
+
+       ``analysis`` 는 이 값을 **읽지만**, ``engine`` 은 읽지 않는다
+       (production 코드 등장 0회 — Phase 3-F-25 ``test_05``).
 
     그리고 ``None`` 은 **세 가지가 합쳐진 값**이다 — SetCode 가 없었다 /
     ``EFFECT_*`` 였다 (:attr:`effect_code` 가 받는다) / 읽지 못했다. 마지막
