@@ -237,8 +237,15 @@ def test_03_event_codes_live_in_the_parser_layer(repository):
     #: +2)).
     #: ``EVENT_*`` 종류 수 70 은 그대로다.
     assert sum(counts.values()) == 34632
-    assert sum(n for name, n in counts.items() if name) == 30085
-    assert sum(events.values()) == 16382
+    #: 🔴 Phase 3-F-31 에서 30,085 → **30,084** (``c44887817`` ordinal 1 의
+    #: ``code`` 가 귀속 오류로 생긴 값이었다). ``EVENT_*`` 16,382 는 그대로다.
+    assert sum(n for name, n in counts.items() if name) == 30084
+    #: 🔴 Phase 3-F-31 에서 ``EVENT_*`` 16,382 → **16,383**. ``c4997565``
+    #: ordinal 1 의 제 값 ``EVENT_CHAINING`` 이 복원됐다 (전에는
+    #: ``local e2=Effect.Clone(e1)`` 뒤 ``SetCode(EFFECT_DISABLE_EFFECT)`` 가
+    #: 덮고 있었다). ``EFFECT_*`` 쪽이 그만큼 줄고, ``code`` 있는 블록 총수는
+    #: ``c44887817`` 때문에 −1 이다.
+    assert sum(events.values()) == 16383
     assert len(events) == 70
 
 

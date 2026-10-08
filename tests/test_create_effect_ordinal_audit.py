@@ -696,7 +696,9 @@ def test_19_the_cache_round_trip_returns_the_same_blocks(scripts, tmp_path):
     #: 🔴 Phase 3-F-29 에서 ``v6`` → ``v7`` (그 Phase 가 ``Clone`` 의 네 목록
     #: 칸을 고쳤다). 이 테스트의 주장은 "캐시가 **지금** 파서의 결과를
     #: 돌려준다" 이므로 그대로 유지되고, 고정값만 따라 올린다.
-    assert blob["signature"].startswith("v7:")
+    #: 🔴 Phase 3-F-31 에서 ``v7`` → ``v8``. 주장("캐시가 **지금** 파서의
+    #: 결과를 돌려준다")은 그대로이고 고정값만 따라 올린다.
+    assert blob["signature"].startswith("v8:")
 
 
 def test_20_the_cache_signature_was_bumped_for_this_parser_change():
@@ -710,11 +712,11 @@ def test_20_the_cache_signature_was_bumped_for_this_parser_change():
     body = inspect.getsource(LuaScriptSource._signature)
     #: 🔴 Phase 3-F-29 에서 ``v6`` → ``v7``. 3-F-28 이 올린 ``v6`` 이 **되돌아
     #: 가지 않았는지**가 이 테스트의 관심이고, 그것은 아래 목록이 지킨다.
-    assert 'f"v7:{count}:{newest:.0f}"' in body
+    assert 'f"v8:{count}:{newest:.0f}"' in body
     #: 되돌아가지 않았는지도 본다.
-    for old in ("v6:", "v5:", "v4:", "v3:"):
+    for old in ("v7:", "v6:", "v5:", "v4:", "v3:"):
         assert f'f"{old}' not in body, old
-    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v7:")
+    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v8:")
 
     #: 🔴 서명에 파서 버전·코드 해시가 **들어 있지 않다** — 그래서 손으로 올린다.
     for token in ("parse_lua_source", "__version__", "md5", "sha", "_is_card_effect",
@@ -736,14 +738,14 @@ def test_21_a_stale_cache_is_rejected(tmp_path):
     cache.write_text(
         json.dumps(
             {
-                "signature": "v6:12702:0",
+                "signature": "v7:12702:0",
                 "scripts": {str(NON_LOCAL_CARD_EFFECT): {"file_name": "poisoned.lua"}},
             }
         ),
         encoding="utf-8",
     )
     source = LuaScriptSource(PROJECT_ROOT)
-    assert source._signature() != "v6:12702:0"
+    assert source._signature() != "v7:12702:0"
 
     loaded = source.load_cached(cache)
     #: 심은 거짓 내용이 **하나도** 살아남지 않았다.
@@ -752,7 +754,7 @@ def test_21_a_stale_cache_is_rejected(tmp_path):
         parse_card(NON_LOCAL_CARD_EFFECT).effects
     )
     #: 캐시 파일이 새 서명으로 다시 쓰였다.
-    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v7:")
+    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v8:")
 
     #: 깨진 캐시도 조용히 재파싱된다 (예외를 던지지 않는다).
     cache.write_text("{ not json", encoding="utf-8")
@@ -1292,8 +1294,13 @@ def _changed_files() -> set[str]:
     out = ""
     if phase:
         newest, oldest = phase[0], phase[-1]
+        #: 🔴 Phase 3-F-31 정정 — 여기에 ``run("diff", "--name-only", newest)``
+        #: (= worktree vs 그 commit) 가 있었다. 그러면 **다음 Phase 가
+        #: worktree 에서 production 을 건드리는 동안** 그 변경이 이 Phase 의
+        #: diff 로 새어 들어온다. 실제로 3-F-31 이 ``sources/lua_loader.py`` 를
+        #: 고치자 3-F-30 의 ``test_27`` 이 그렇게 깨졌다.
+        #: Phase commit 이 있으면 **commit 범위만** 본다.
         out += run("diff", "--name-only", f"{oldest}~1", newest)
-        out += run("diff", "--name-only", newest)
     else:
         out += run("diff", "--name-only", "HEAD")
     out += run("diff", "--name-only", "--cached", "HEAD")

@@ -154,7 +154,8 @@ TOTALS = {
     "effect_types": 45337,         # 🔴 3-F-27 의 결과 — 이 Phase 가 건드리지 않았다
     "ranges": 15063,               # 15,075 에서 −12
     "target_ranges": 2062,         # 2,072 에서 −10
-    "categories": 20505,           # 20,534 에서 −29
+    #: 🔴 Phase 3-F-31 에서 −2. 그 Phase 가 ``c52445243`` 의 ``local e1=e:GetLabelObject()`` 뒤 ``SetCategory`` 3건이 엉뚱한 블록에 붙던 것을 고쳤고, 그 블록의 두 category 가 사라졌다.
+    "categories": 20503,           # 20,534 에서 −29, 3-F-31 에서 다시 −2
     "properties": 23884,           # 23,907 에서 −23
 }
 
@@ -887,7 +888,8 @@ def test_25_the_cache_round_trip_returns_the_corrected_blocks(scripts, tmp_path)
 
     blob = json.loads(cache.read_text(encoding="utf-8"))
     assert blob["signature"] == source._signature()
-    assert blob["signature"].startswith("v7:")
+    #: 🔴 Phase 3-F-31 에서 ``v7`` → ``v8``.
+    assert blob["signature"].startswith("v8:")
 
 
 def test_26_the_cache_signature_was_bumped():
@@ -898,10 +900,10 @@ def test_26_the_cache_signature_was_bumped():
     **세 Phase 연속으로 설계대로 걸렸다** (3-F-27 · 3-F-28 · 3-F-29).
     """
     body = inspect.getsource(LuaScriptSource._signature)
-    assert 'f"v7:{count}:{newest:.0f}"' in body
-    for old in ("v6:", "v5:", "v4:"):
+    assert 'f"v8:{count}:{newest:.0f}"' in body
+    for old in ("v7:", "v6:", "v5:", "v4:"):
         assert f'f"{old}' not in body, old
-    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v7:")
+    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v8:")
     #: 🔴 서명에 파서 버전·코드 해시가 **없다** — 그래서 손으로 올린다.
     for token in ("parse_lua_source", "__version__", "md5", "sha", "_write_list"):
         assert token not in body, token
@@ -912,18 +914,18 @@ def test_27_a_stale_cache_is_rejected(tmp_path):
     cache = tmp_path / "lua_scripts.json"
     cache.write_text(
         json.dumps({
-            "signature": "v6:12702:0",
+            "signature": "v7:12702:0",
             "scripts": {str(CLEAR_PROPERTY): {"file_name": "poisoned.lua"}},
         }),
         encoding="utf-8",
     )
     source = LuaScriptSource(PROJECT_ROOT)
-    assert source._signature() != "v6:12702:0"
+    assert source._signature() != "v7:12702:0"
     loaded = source.load_cached(cache)
     assert loaded[CLEAR_PROPERTY].file_name == f"c{CLEAR_PROPERTY}.lua"
     #: 🔴 고친 값이 들어 있다 — 옛 캐시의 더하기 결과가 아니다.
     assert loaded[CLEAR_PROPERTY].effects[1].properties == []
-    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v7:")
+    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v8:")
     #: 깨진 캐시도 조용히 재파싱된다.
     cache.write_text("{ not json", encoding="utf-8")
     assert len(source.load_cached(cache)) == SCRIPTS
@@ -1388,8 +1390,13 @@ def _changed_files() -> set[str]:
     out = ""
     if phase:
         newest, oldest = phase[0], phase[-1]
+        #: 🔴 Phase 3-F-31 정정 — 여기에 ``run("diff", "--name-only", newest)``
+        #: (= worktree vs 그 commit) 가 있었다. 그러면 **다음 Phase 가
+        #: worktree 에서 production 을 건드리는 동안** 그 변경이 이 Phase 의
+        #: diff 로 새어 들어온다. 실제로 3-F-31 이 ``sources/lua_loader.py`` 를
+        #: 고치자 3-F-30 의 ``test_27`` 이 그렇게 깨졌다.
+        #: Phase commit 이 있으면 **commit 범위만** 본다.
         out += run("diff", "--name-only", f"{oldest}~1", newest)
-        out += run("diff", "--name-only", newest)
     else:
         out += run("diff", "--name-only", "HEAD")
     out += run("diff", "--name-only", "--cached", "HEAD")

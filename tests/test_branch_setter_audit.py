@@ -519,9 +519,12 @@ def test_14_the_real_branch_category_card():
 
     specs = parse_card(BRANCH_CATEGORY).effects
     assert len(specs) == 3
-    #: 🔴 세 분기의 값이 **ordinal 2** 에 합쳐진다.
-    assert specs[2].categories == ["DESTROY", "DRAW"]
-    #: 의미상 그 설정자가 속하는 블록(ordinal 0)은 **비어 있다.**
+    #: 🔴 **Phase 3-F-31 이 그 귀속 오류를 고쳤다.** 이 docstring 이 적어 둔
+    #: "그 블록은 애초에 그 설정자의 블록이 아니다" 가 바로 그것이고,
+    #: 3-F-31 이 ``local e1=e:GetLabelObject()`` 에서 바인딩을 풀도록 바꿨다.
+    #: 이제 **어느 블록에도** 그 category 가 붙지 않는다 — 분기 병합이
+    #: 사라진 것이 아니라 **그 설정자가 더 이상 엉뚱한 블록에 가지 않는다.**
+    assert specs[2].categories == []
     assert specs[0].categories == []
     assert specs[0].code == "EVENT_SPSUMMON_SUCCESS"
 
@@ -691,8 +694,12 @@ def test_19_production_has_no_lua_ast_at_all():
         assert banned not in assigned, banned
 
     #: 이벤트 정렬 기준이 **위치(byte offset)** 다.
+    #: 🔴 Phase 3-F-31 이 같은 위치의 우선순위를 못 박으려고 두 번째 키를
+    #: 넣었다 (``create``/``clone`` → ``rebind`` → ``set``). **첫 키는 여전히
+    #: byte offset** 이므로 이 테스트의 주장은 그대로다.
     body = inspect.getsource(lua_loader.parse_lua_source)
-    assert "events.sort(key=lambda e: e[0])" in body
+    assert "events.sort(key=lambda e: (e[0], _EVENT_ORDER[e[1]]))" in body
+    assert "e[0]" in body
     #: 설정자 분기는 ``setter ==`` 비교뿐이고 분기 조건을 보지 않는다.
     assert 'setter == "Type"' in body
     for banned in ("elseif", "branch_path", "exclusive("):
@@ -995,7 +1002,17 @@ def test_26_search_ranking_is_unchanged_for_the_misattributed_cards(repository):
     search = (PROJECT_ROOT / "core" / "card_search.py").read_text(encoding="utf-8")
     assert "sum(1 for e in card.effects if e.has_category(category))" in search
 
-    for card_id in (BRANCH_CATEGORY, CLONE_WITH_ARG, STATIC_CLONE):
+    #: 🔴 **Phase 3-F-31 정정.** 그 Phase 가 귀속 오류를 고치면서
+    #: ``c52445243`` 의 블록별 category 가 **0개**가 됐다 (전에는 DESTROY 1 ·
+    #: DRAW 1). 그래서 이 테스트가 적어 둔 "점수가 바뀌지 않는다" 는
+    #: **그 카드에 대해서는 더 이상 참이 아니다** — 숨기지 않고 적는다.
+    #:
+    #: * **필터**는 그대로다 — ``has_effect_category`` 가 파일 전체 목록
+    #:   (``script.categories``)도 보고 거기에는 DESTROY·DRAW 가 남아 있다.
+    #: * **순위**는 그 카드에서 DESTROY/DRAW 질의 점수가 1 → 0 으로 내려간다.
+    #:
+    #: 그것이 **올바른 방향**이다 — 그 블록은 그 category 를 갖지 않는다.
+    for card_id in (CLONE_WITH_ARG, STATIC_CLONE):
         card = repository.get(card_id)
         assert card is not None, card_id
         counts = collections.Counter()
@@ -1005,6 +1022,14 @@ def test_26_search_ranking_is_unchanged_for_the_misattributed_cards(repository):
         assert counts, card_id
         #: 🔴 어느 category 도 두 블록 이상에 걸쳐 있지 않다.
         assert set(counts.values()) == {1}, (card_id, dict(counts))
+
+    #: 🔴 ``c52445243`` 은 블록별 category 가 0개이지만 **필터는 여전히 맞는다.**
+    branched = repository.get(BRANCH_CATEGORY)
+    assert sum(len(e.categories) for e in branched.effects) == 0
+    assert "DESTROY" in branched.script.categories
+    assert "DRAW" in branched.script.categories
+    assert branched.has_effect_category("DESTROY")
+    assert branched.has_effect_category("DRAW")
 
 
 def test_27_this_phase_changed_no_production_code():
@@ -1147,9 +1172,12 @@ def test_32_the_3f29_clone_result_is_not_reverted(scripts):
             for field in ("effect_types", "ranges", "target_ranges",
                           "categories", "properties"):
                 totals[field] += len(getattr(spec, field))
+    #: 🔴 Phase 3-F-31 에서 ``categories`` 20,505 → **20,503** (−2) —
+    #: ``c52445243`` 의 귀속 오류를 고치면서 그 블록의 두 category 가
+    #: 사라졌다. 나머지 네 칸은 **그대로다.**
     assert dict(totals) == {
         "effect_types": 45337, "ranges": 15063, "target_ranges": 2062,
-        "categories": 20505, "properties": 23884,
+        "categories": 20503, "properties": 23884,
     }, dict(totals)
 
 
@@ -1161,11 +1189,13 @@ def test_33_the_cache_still_reflects_the_current_parser(scripts, tmp_path):
     read_back = source.load_cached(cache)
     for table in (scripts, written, read_back):
         assert sum(len(info.effects) for info in table.values()) == BLOCKS
-    assert source._signature().startswith("v7:")
-    #: 🔴 이 Phase 는 파서를 바꾸지 않았으므로 **올리지 않는다.**
+    #: 🔴 Phase 3-F-31 에서 ``v7`` → ``v8``. 3-F-30 은 파서를 바꾸지 않아
+    #: 올리지 않았고, **3-F-31 이 바꿨으므로 올랐다** — 이 테스트의 주장
+    #: ("캐시가 지금 파서의 결과를 돌려준다")은 그대로다.
+    assert source._signature().startswith("v8:")
     body = inspect.getsource(LuaScriptSource._signature)
-    assert 'f"v7:{count}:{newest:.0f}"' in body
-    assert 'f"v8:' not in body
+    assert 'f"v8:{count}:{newest:.0f}"' in body
+    assert 'f"v9:' not in body
 
 
 def _changed_files() -> set[str]:
@@ -1188,8 +1218,13 @@ def _changed_files() -> set[str]:
     out = ""
     if phase:
         newest, oldest = phase[0], phase[-1]
+        #: 🔴 Phase 3-F-31 정정 — 여기에 ``run("diff", "--name-only", newest)``
+        #: (= worktree vs 그 commit) 가 있었다. 그러면 **다음 Phase 가
+        #: worktree 에서 production 을 건드리는 동안** 그 변경이 이 Phase 의
+        #: diff 로 새어 들어온다. 실제로 3-F-31 이 ``sources/lua_loader.py`` 를
+        #: 고치자 3-F-30 의 ``test_27`` 이 그렇게 깨졌다.
+        #: Phase commit 이 있으면 **commit 범위만** 본다.
         out += run("diff", "--name-only", f"{oldest}~1", newest)
-        out += run("diff", "--name-only", newest)
     else:
         out += run("diff", "--name-only", "HEAD")
     out += run("diff", "--name-only", "--cached", "HEAD")

@@ -48,6 +48,43 @@ _RE_CLONE_EFFECT = re.compile(
     r"(?:\b(local)\s+)?([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*:\s*Clone\s*\(\s*\)"
 )
 _RE_SETTER = re.compile(r"\b([A-Za-z_]\w*)\s*:\s*Set(\w+)\s*\(")
+
+#: 🔴 변수에 **파서가 모르는 값**이 대입되는 자리 (Phase 3-F-31).
+#:
+#: ``bindings`` 의 계약은 "변수명 -> **지금** 그 변수가 가리키는 효과" 다
+#: (아래 ``bindings`` 주석 참고). 파서는 ``Effect.CreateEffect`` 와
+#: ``X:Clone()`` 두 형태에서만 그 매핑을 갱신했고, Lua 가 같은 변수에 **다른
+#: 것**을 대입해도 **옛 매핑을 그대로 들고 있었다.** 그러면 그 뒤의
+#: ``var:SetX(...)`` 가 **엉뚱한 블록에 붙는다.**
+#:
+#: corpus 전수로 그렇게 잘못 붙는 설정자가 **5건 / 3장** 있었다.
+#:
+#: * ``c52445243`` — ``local e1=e:GetLabelObject()`` 뒤의 ``SetCategory`` 3건이
+#:   다른 함수에서 생성된 블록에 붙었다.
+#: * ``c44887817`` — ``local e2=e1:Clone(e1)`` (``Clone()`` 의 **빈 괄호**를
+#:   요구하는 위 정규식이 못 잡는다) 뒤의 ``SetCode`` 가 앞 블록의 code 를 덮었다.
+#: * ``c4997565`` — ``local e2=Effect.Clone(e1)`` (다른 API 형태) 도 같다.
+#:
+#: 그래서 **모르는 대입을 만나면 그 변수의 바인딩을 푼다.** 이후 설정자는
+#: 엉뚱한 블록에 붙는 대신 **버려진다** — Phase 3-E-18 이 ``code`` 에서
+#: "읽지 못한 것은 ``None``(모른다)" 으로 되돌린 것과 같은 원칙이다. 틀린 값을
+#: 만드는 것보다 모른다고 말하는 것이 맞다.
+#:
+#: 🔴 **Lua dataflow 를 구현하지 않는다.** 이 정규식은 "이 변수가 더 이상
+#: 아는 효과를 가리키지 않는다" 만 판단하고, 무엇을 가리키는지는 **추측하지
+#: 않는다.** 다중 대입(``local sme,soe=Spirit.AddProcedure(c,...)``)도 왼쪽
+#: 이름 전부를 풀기만 한다.
+#:
+#: 음의 선읽기로 **파서가 아는 두 형태는 제외**한다 — 그 자리는 위의
+#: ``create``/``clone`` 이벤트가 이미 처리한다.
+_RE_REBIND = re.compile(
+    r"(?:(?<=^)|(?<=[;\s\)])) *(?:local\s+)?"
+    r"([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)"
+    r"\s*=(?!=)"
+    r"(?!\s*(?:Effect\.(?:CreateEffect|GlobalEffect)\s*\(" 
+    r"|[A-Za-z_]\w*\s*:\s*Clone\s*\(\s*\)))",
+    re.M,
+)
 _RE_FUNCTION = re.compile(r"\bfunction\s+s\.(\w+)")
 _RE_LISTED_NAMES = re.compile(r"s\.listed_names\s*=\s*\{([^}]*)\}")
 _RE_LISTED_SERIES = re.compile(r"s\.listed_series\s*=\s*\{([^}]*)\}")
@@ -267,6 +304,11 @@ def _is_card_effect(source: str, local: str | None, var: str, parent: str | None
     return _registers_on_card(source, var)
 
 
+#: 같은 byte offset 에 이벤트가 겹칠 때의 우선순위 (Phase 3-F-31).
+#: ``create``/``clone`` 이 먼저 묶고, ``rebind`` 가 풀고, ``set`` 이 마지막이다.
+_EVENT_ORDER = {"create": 0, "clone": 0, "rebind": 1, "set": 2}
+
+
 def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo:
     """Lua 스크립트 원문 하나를 :class:`LuaScriptInfo` 로 파싱한다."""
     name_ja, name_en, scripted_by = _parse_header_comments(source)
@@ -305,13 +347,25 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
         if not _is_card_effect(body, m.group(1), m.group(2), m.group(3)):
             continue
         events.append((m.start(), "clone", f"{m.group(2)}={m.group(3)}"))
+    #: 🔴 파서가 모르는 대입은 바인딩을 **푼다** (Phase 3-F-31 — 위
+    #: ``_RE_REBIND`` 참고). ``create``/``clone`` 과 같은 자리에서 겹치지
+    #: 않도록 정규식이 그 두 형태를 선읽기로 제외한다.
+    for m in _RE_REBIND.finditer(body):
+        events.append((m.start(), "rebind", m.group(1)))
     for m in _RE_SETTER.finditer(body):
         payload = f"{m.group(1)}|{m.group(2)}|{m.end() - 1}"
         events.append((m.start(), "set", payload))
-    events.sort(key=lambda e: e[0])
+    #: 같은 위치에서는 ``create``/``clone`` → ``rebind`` → ``set`` 순으로 본다.
+    events.sort(key=lambda e: (e[0], _EVENT_ORDER[e[1]]))
 
     for _pos, kind, payload in events:
-        if kind == "create":
+        if kind == "rebind":
+            #: 이 변수는 더 이상 **아는** 효과를 가리키지 않는다. 무엇을
+            #: 가리키는지는 추측하지 않고, 그냥 모른다고 둔다.
+            for name in payload.split(","):
+                bindings.pop(name.strip(), None)
+                inherited.pop(name.strip(), None)
+        elif kind == "create":
             var = payload
             spec = EffectSpec(index=var)
             bindings[var] = spec
@@ -531,6 +585,8 @@ class LuaScriptSource:
                 if entry.is_file() and _RE_SCRIPT_FILE.match(entry.name):
                     count += 1
                     newest = max(newest, entry.stat().st_mtime)
+        # ``v8`` — Phase 3-F-31 이 "파서가 모르는 대입은 바인딩을 푼다" 를
+        # 넣었다 (설정자 5건이 엉뚱한 블록에 붙던 것을 버리도록).
         # ``v7`` — Phase 3-F-29 가 ``Clone`` 이 물려준 네 목록 칸
         # (``ranges`` · ``target_ranges`` · ``categories`` · ``properties``)을
         # 자식의 첫 설정자가 **덮어쓰도록** 고쳤다. ``v6`` 은 Phase 3-F-28 의
@@ -539,7 +595,7 @@ class LuaScriptSource:
         # 파서 버전이 들어 있지 않으면 **고친 파서가 옛 캐시를 계속 읽는다**
         # (스크립트 파일이 바뀌지 않으면 signature 가 같기 때문이다). 파서가
         # 같은 입력에서 다른 결과를 내게 되면 이 숫자를 올린다.
-        return f"v7:{count}:{newest:.0f}"
+        return f"v8:{count}:{newest:.0f}"
 
 
 def _info_to_dict(info: LuaScriptInfo) -> dict:

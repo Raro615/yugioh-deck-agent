@@ -960,9 +960,14 @@ def test_25_free_chain_is_not_the_only_way_to_say_no_event(scripts):
     #: 이 58 → **17** 로 줄었다. ``None`` 4,119 는 **그대로**이므로 이 테스트의
     #: 결론("없다 를 생략으로 적는다")은 오히려 **더 선명해졌다** (98.5% →
     #: 99.6%).
+    #: 🔴 Phase 3-F-31 에서 ``None`` 4,119 → **4,120**. 그 Phase 가
+    #: ``c44887817`` 의 ``local e2=e1:Clone(e1)`` 뒤 ``SetCode`` 가 엉뚱한
+    #: 블록(ordinal 1)에 붙던 것을 고쳤고, 그 블록은 Lua 에 **자기 ``SetCode``
+    #: 가 없다.** 블록 수 4,137 은 그대로이므로 이 테스트의 결론("없다 를
+    #: 생략으로 적는다")은 **또 한 번 더 선명해졌다** (99.6% → 99.6%+).
     ignition = per["IGNITION"]
     assert sum(ignition.values()) == 4137
-    assert ignition[None] == 4119
+    assert ignition[None] == 4120
     assert ignition[FREE_CHAIN] == 17
     assert ignition[None] / sum(ignition.values()) > 0.99
 

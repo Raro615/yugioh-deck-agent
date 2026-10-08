@@ -159,9 +159,13 @@ MULTI_TYPE_ONE_CALL = 176392         # 한 호출 OR: CONTINUOUS+FIELD / FIELD+T
 #: 3-F-29 가 그것을 고쳤으므로 숫자가 움직이는 것이 **설계된 신호**다.
 RANGES_TOTAL = 15063
 TARGET_RANGES_TOTAL = 2062
-CATEGORIES_TOTAL = 20505
+#: 🔴 Phase 3-F-31 에서 −2. 그 Phase 가 ``c52445243`` 의 ``local e1=e:GetLabelObject()`` 뒤 ``SetCategory`` 3건이 엉뚱한 블록에 붙던 것을 고쳤고, 그 블록의 두 category 가 사라졌다.
+CATEGORIES_TOTAL = 20503
 PROPERTIES_TOTAL = 23884
-CODE_TOTAL = 30127
+#: 🔴 Phase 3-F-31 에서 30,127 → 30,126. ``c44887817`` ordinal 1 의 ``code``
+#: 는 ``local e2=e1:Clone(e1)`` 뒤 ``SetCode`` 가 엉뚱하게 붙어 생긴 값이었고,
+#: 그 블록은 Lua 에 자기 ``SetCode`` 가 없다. 이제 ``None`` 이다.
+CODE_TOTAL = 30126
 COUNT_LIMIT_TOTAL = 11187
 
 LUSTER_DRAGON = 11091375
@@ -778,18 +782,20 @@ def test_22_the_cache_signature_was_bumped():
     signature 는 스크립트 파일 개수와 최신 mtime 만 보기 때문이다.
 
     .. note::
-       🔴 Phase 3-F-28 에서 ``v5`` → ``v6``, Phase 3-F-29 에서 ``v6`` → ``v7``.
-       이 테스트는 **두 번 다 설계대로 걸렸다** — 두 Phase 가 모두 파서를
-       고쳤으므로 prefix 가 올라가야 한다. 되돌아가지 않았음도 함께 못 박는다.
+       🔴 Phase 3-F-28 에서 ``v5`` → ``v6``, 3-F-29 에서 ``v6`` → ``v7``,
+       3-F-31 에서 ``v7`` → ``v8``. 이 테스트는 **세 번 다 설계대로 걸렸다** —
+       세 Phase 가 모두 파서를 고쳤으므로 prefix 가 올라가야 한다.
+       되돌아가지 않았음도 함께 못 박는다.
     """
     source = inspect.getsource(LuaScriptSource._signature)
-    assert "v7:" in source
+    assert "v8:" in source
+    assert "v7:" not in source
     assert "v6:" not in source
     assert "v5:" not in source
     assert "v4:" not in source
 
     signature = LuaScriptSource(PROJECT_ROOT)._signature()
-    assert signature.startswith("v7:")
+    assert signature.startswith("v8:")
 
     #: 캐시가 있다면 새 signature 로 쓰여 있어야 한다 (없으면 건너뛰지 않고
     #: 그냥 signature 형식만 확인한다).
@@ -797,7 +803,7 @@ def test_22_the_cache_signature_was_bumped():
     if cache.is_file():
         with cache.open(encoding="utf-8") as handle:
             blob = json.load(handle)
-        assert blob["signature"].startswith("v7:"), blob["signature"]
+        assert blob["signature"].startswith("v8:"), blob["signature"]
 
 
 # ======================================================================

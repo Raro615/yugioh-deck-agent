@@ -741,10 +741,16 @@ def test_19_the_cache_signature_must_change_when_the_parser_changes():
        이 물려준 네 목록 칸(``ranges`` · ``target_ranges`` · ``categories`` ·
        ``properties``)을 자식의 첫 설정자가 **덮어쓰도록** 고쳤다.
        **이 테스트가 세 Phase 연속으로 설계대로 작동했다.**
+
+    .. note::
+       🔴 **Phase 3-F-31 이 ``v7`` → ``v8`` 로 올렸다.** 그 Phase 가 "파서가
+       모르는 대입을 만나면 변수 바인딩을 푼다" 를 넣어 설정자 5건이 엉뚱한
+       블록에 붙던 것을 버리도록 했다. **네 Phase 연속**이다.
     """
     source = pathlib.Path("sources/lua_loader.py").read_text(encoding="utf-8")
-    assert 'return f"v7:{count}:{newest:.0f}"' in source
+    assert 'return f"v8:{count}:{newest:.0f}"' in source
     #: 되돌아가지 않았는지도 본다.
+    assert 'return f"v7:{count}:{newest:.0f}"' not in source
     assert 'return f"v6:{count}:{newest:.0f}"' not in source
     assert 'return f"v5:{count}:{newest:.0f}"' not in source
     assert 'return f"v4:{count}:{newest:.0f}"' not in source
