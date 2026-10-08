@@ -41,15 +41,28 @@ from analysis.effect_model import (
 )
 from core import constants as C
 from core.card_model import Card
-from sources.lua_loader import _extract_call_args
+from sources.lua_loader import (
+    _extract_call_args,
+    _is_card_effect,
+    _RE_BLOCK_COMMENT,
+    _RE_CLONE_EFFECT,
+    _RE_CREATE_EFFECT,
+)
 
 # --- Lua 패턴 -------------------------------------------------------------
 _RE_FUNCTION_DEF = re.compile(r"function\s+s\.(\w+)\s*\(")
-_RE_SETTER = re.compile(r"\b(e\w*)\s*:\s*Set(Cost|Condition|Target|Operation)\s*\(")
-_RE_CREATE_EFFECT = re.compile(
-    r"\blocal\s+(e\w*)\s*=\s*Effect\.(?:CreateEffect|GlobalEffect)\s*\("
+#: 🔴 변수명 범위는 :mod:`sources.lua_loader` 와 **같아야 한다** (Phase 3-F-28).
+#: 좁히면 그쪽이 세는 블록의 설정자를 여기서 놓치고, 그만큼 핸들러가 밀린다.
+#: 설정자 **종류**만 좁다 — 이 모듈이 쓰는 네 개뿐이다.
+_RE_SETTER = re.compile(
+    r"\b([A-Za-z_]\w*)\s*:\s*Set(Cost|Condition|Target|Operation)\s*\("
 )
-_RE_CLONE_EFFECT = re.compile(r"\blocal\s+(e\w*)\s*=\s*(e\w*)\s*:\s*Clone\s*\(\s*\)")
+#: 🔴 블록 탐지 정규식은 **직접 쓰지 않는다** — :mod:`sources.lua_loader` 의
+#: 것을 그대로 import 한다 (Phase 3-F-28). 여기에 따로 복사해 두면
+#: :meth:`EffectAnalyzer._collect_handlers` 가 돌려주는 목록의 길이가
+#: ``card.script.effects`` 와 달라질 수 있고, 아래 ``entries[position]`` 이
+#: **다른 블록의 핸들러를 붙인다**. 3-F-28 이전에는 두 복사본이 우연히
+#: 같았고(12,702 스크립트 전부 일치), 로더만 고친 순간 3개가 어긋났다.
 _RE_HANDLER_NAME = re.compile(r"^\s*(?:s\.)?(\w+(?:\.\w+)*)\s*$")
 _RE_DUEL_CALL = re.compile(r"\bDuel\.(\w+)\s*\(")
 _RE_LOCATION = re.compile(r"\bLOCATION_(\w+)")
@@ -317,12 +330,29 @@ class EffectAnalyzer:
 
         :mod:`sources.lua_loader` 와 같은 방식으로 변수 바인딩을 추적한다.
         Clone 은 부모의 핸들러를 물려받은 뒤 일부만 덮어쓴다.
+
+        🔴 블록을 **세는 규칙은 로더와 글자 그대로 같다** (Phase 3-F-28) —
+        같은 정규식, 같은 블록 주석 제거, 같은 ``_is_card_effect`` 판정.
+        돌려주는 목록의 ``i`` 번째가 ``card.script.effects[i]`` 여야 하고,
+        그것이 곧 ``EffectRef(card_id, i)`` 다.
         """
+        #: 로더와 같은 전처리. 주석을 지우면 위치가 밀리므로 함수 구간도
+        #: 지운 본문에서 다시 잡는다 — 그러지 않으면 ``_enclosing_function``
+        #: 이 엉뚱한 함수를 돌려주고 ``is_registered`` 가 틀어진다.
+        body = _RE_BLOCK_COMMENT.sub("", source)
+        if body != source:
+            spans = cls._function_spans(body)
+        source = body
+
         events: list[tuple[int, str, str]] = []
         for m in _RE_CREATE_EFFECT.finditer(source):
-            events.append((m.start(), "create", m.group(1)))
+            if not _is_card_effect(source, m.group(1), m.group(2), None):
+                continue
+            events.append((m.start(), "create", m.group(2)))
         for m in _RE_CLONE_EFFECT.finditer(source):
-            events.append((m.start(), "clone", f"{m.group(1)}={m.group(2)}"))
+            if not _is_card_effect(source, m.group(1), m.group(2), m.group(3)):
+                continue
+            events.append((m.start(), "clone", f"{m.group(2)}={m.group(3)}"))
         for m in _RE_SETTER.finditer(source):
             events.append(
                 (m.start(), "set", f"{m.group(1)}|{m.group(2)}|{m.end() - 1}")

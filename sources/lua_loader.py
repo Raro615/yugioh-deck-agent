@@ -32,11 +32,22 @@ from core.card_model import EffectSpec, LuaScriptInfo
 # 정규식
 # ---------------------------------------------------------------------------
 _RE_SCRIPT_FILE = re.compile(r"^c(\d+)\.lua$")
+#: ``--[[ ... ]]`` 블록 주석. **효과 블록 탐지 전에 지운다** (Phase 3-F-28).
+#: 지우지 않으면 주석 안에 적힌 효과를 세고, 그만큼 뒤쪽 ``ordinal`` 이 밀린다
+#: (``c9409625`` 가 ``--[[ untested version ... --]]`` 안에 블록 하나를 갖고
+#: 있어서 ``e3`` 가 ordinal 3, ``e4`` 가 4 로 밀려 있었다 — 각각 2 · 3 이 맞다).
+#: 줄 주석(``--``)은 **남긴다** — 헤더의 카드명을 그것으로 읽는다.
+_RE_BLOCK_COMMENT = re.compile(r"--\[\[.*?(?:--\]\]|\]\])", re.S)
+
+#: ``local`` 과 변수명 접두사를 **요구하지 않는다** (Phase 3-F-28). 받아들일지는
+#: 아래 ``_is_card_effect`` 가 정한다.
 _RE_CREATE_EFFECT = re.compile(
-    r"\blocal\s+(e\w*)\s*=\s*Effect\.(?:CreateEffect|GlobalEffect)\s*\("
+    r"(?:\b(local)\s+)?([A-Za-z_]\w*)\s*=\s*Effect\.(?:CreateEffect|GlobalEffect)\s*\("
 )
-_RE_CLONE_EFFECT = re.compile(r"\blocal\s+(e\w*)\s*=\s*(e\w*)\s*:\s*Clone\s*\(\s*\)")
-_RE_SETTER = re.compile(r"\b(e\w*)\s*:\s*Set(\w+)\s*\(")
+_RE_CLONE_EFFECT = re.compile(
+    r"(?:\b(local)\s+)?([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*:\s*Clone\s*\(\s*\)"
+)
+_RE_SETTER = re.compile(r"\b([A-Za-z_]\w*)\s*:\s*Set(\w+)\s*\(")
 _RE_FUNCTION = re.compile(r"\bfunction\s+s\.(\w+)")
 _RE_LISTED_NAMES = re.compile(r"s\.listed_names\s*=\s*\{([^}]*)\}")
 _RE_LISTED_SERIES = re.compile(r"s\.listed_series\s*=\s*\{([^}]*)\}")
@@ -128,6 +139,40 @@ def _parse_header_comments(source: str) -> tuple[str | None, str | None, str | N
     return name_ja, name_en, scripted_by
 
 
+def _registers_on_card(source: str, var: str) -> bool:
+    """스크립트가 ``c:RegisterEffect(var)`` 로 **이 카드에** 등록하는가."""
+    pattern = r"(?<![\w.])c\s*:\s*RegisterEffect\s*\(\s*" + re.escape(var) + r"\b"
+    return re.search(pattern, source) is not None
+
+
+def _is_card_effect(source: str, local: str | None, var: str, parent: str | None) -> bool:
+    """
+    이 ``CreateEffect`` / ``Clone`` 을 **이 카드의 효과 블록**으로 셀 것인가.
+
+    기존 규칙은 ``local`` + ``e`` 로 시작하는 변수명이었다. 그것은 **"카드 자신의
+    효과" 의 대리 지표**이고, corpus 전수로 보면 251건을 걸러 내는데 그중
+    **249건이 옳다** (Phase 3-F-28 측정):
+
+    * ``Duel.RegisterEffect`` 로 **듀얼에** 등록되는 전역 효과 245건
+      (213건은 ``aux.GlobalCheck`` 안이다). 관례상 ``ge1`` 처럼 쓴다.
+    * ``tc:RegisterEffect`` · ``token:RegisterEffect`` 로 **다른 카드에** 부여하는
+      효과 4건.
+
+    둘 다 이 카드의 효과가 아니므로 세면 ``ordinal`` 이 틀어진다. 그래서 대리
+    지표를 **버리지 않고**, 그것이 놓친 자리에서만 **명시적 증거**로 보강한다 —
+    스크립트가 ``c:RegisterEffect(var)`` 로 직접 등록하면 카드의 효과다.
+
+    그렇게 보강되는 블록은 corpus 전체에 **둘**이다.
+
+    * ``c9839115`` — ``e1=Effect.CreateEffect(c)`` 에 ``local`` 이 없다.
+    * ``c74506079`` — ``local ae=Effect.CreateEffect(c)`` 의 변수명이 ``e`` 로
+      시작하지 않는다.
+    """
+    if local and var.startswith("e") and (parent is None or parent.startswith("e")):
+        return True
+    return _registers_on_card(source, var)
+
+
 def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo:
     """Lua 스크립트 원문 하나를 :class:`LuaScriptInfo` 로 파싱한다."""
     name_ja, name_en, scripted_by = _parse_header_comments(source)
@@ -150,11 +195,19 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
     inherited_types: dict[str, bool] = {}
     events: list[tuple[int, str, str]] = []  # (위치, 종류, 페이로드)
 
-    for m in _RE_CREATE_EFFECT.finditer(source):
-        events.append((m.start(), "create", m.group(1)))
-    for m in _RE_CLONE_EFFECT.finditer(source):
-        events.append((m.start(), "clone", f"{m.group(1)}={m.group(2)}"))
-    for m in _RE_SETTER.finditer(source):
+    #: 🔴 블록 주석을 먼저 지운다 — 주석 안의 효과를 세면 ``ordinal`` 이 밀린다.
+    #: 헤더의 카드명은 위에서 **원문**으로 이미 읽었고, 줄 주석은 남아 있다.
+    body = _RE_BLOCK_COMMENT.sub("", source)
+
+    for m in _RE_CREATE_EFFECT.finditer(body):
+        if not _is_card_effect(body, m.group(1), m.group(2), None):
+            continue
+        events.append((m.start(), "create", m.group(2)))
+    for m in _RE_CLONE_EFFECT.finditer(body):
+        if not _is_card_effect(body, m.group(1), m.group(2), m.group(3)):
+            continue
+        events.append((m.start(), "clone", f"{m.group(2)}={m.group(3)}"))
+    for m in _RE_SETTER.finditer(body):
         payload = f"{m.group(1)}|{m.group(2)}|{m.end() - 1}"
         events.append((m.start(), "set", payload))
     events.sort(key=lambda e: e[0])
@@ -187,7 +240,9 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
             spec = bindings.get(var)
             if spec is None:
                 continue
-            args = _extract_call_args(source, int(idx_s))
+            #: 🔴 ``body`` 기준 offset 이므로 ``body`` 에서 잘라야 한다 —
+            #: ``source`` 에 쓰면 블록 주석을 지운 만큼 자리가 밀린다.
+            args = _extract_call_args(body, int(idx_s))
             if setter == "Type":
                 found = _RE_EFFECT_TYPE.findall(args)
                 if inherited_types.get(var):
@@ -262,6 +317,11 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
                 spec.count_limit = args.strip()
 
     # --- 파일 전체 단위 수집 ---------------------------------------------
+    #: 🔴 아래 '파일 전체 긁기' 들은 **``source``** 를 그대로 쓴다 (Phase 3-F-28).
+    #: 이 값들은 설계상 블록에 귀속되지 않는 "스크립트에 등장한 상수" 목록이고,
+    #: ``body`` 로 바꾸면 블록 주석이 있는 5개 스크립트의 숫자가 움직인다 —
+    #: 이번 Phase 의 범위(``CreateEffect`` 탐지 · ``ordinal`` · ``EffectRef``)가
+    #: 아니므로 건드리지 않는다.
     info.functions = _strip_prefix(_RE_FUNCTION.findall(source))
     info.trigger_events = [f"EVENT_{e}" for e in _strip_prefix(_RE_EVENT.findall(source))]
     info.locations = _strip_prefix(_RE_LOCATION.findall(source))
@@ -373,11 +433,12 @@ class LuaScriptSource:
                 if entry.is_file() and _RE_SCRIPT_FILE.match(entry.name):
                     count += 1
                     newest = max(newest, entry.stat().st_mtime)
-        # ``v5`` — Phase 3-F-27 이 ``SetType`` 의 Clone 노후값을 고쳤다. 이 값에
+        # ``v6`` — Phase 3-F-28 이 ``CreateEffect`` 탐지를 고쳤다 (블록 주석 제거 +
+        # ``c:RegisterEffect`` 보강). ``v5`` 는 Phase 3-F-27 의 ``SetType`` 수정이었다. 이 값에
         # 파서 버전이 들어 있지 않으면 **고친 파서가 옛 캐시를 계속 읽는다**
         # (스크립트 파일이 바뀌지 않으면 signature 가 같기 때문이다). 파서가
         # 같은 입력에서 다른 결과를 내게 되면 이 숫자를 올린다.
-        return f"v5:{count}:{newest:.0f}"
+        return f"v6:{count}:{newest:.0f}"
 
 
 def _info_to_dict(info: LuaScriptInfo) -> dict:
