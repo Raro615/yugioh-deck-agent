@@ -145,6 +145,100 @@ def _registers_on_card(source: str, var: str) -> bool:
     return re.search(pattern, source) is not None
 
 
+#: ``Clone()`` 이 부모에게서 물려주는 **목록 칸**들. 이 칸에 자식이 자기
+#: 설정자를 부르면 물려받은 값을 **덮어쓴다** (더하지 않는다).
+#:
+#: 🔴 근거는 corpus 전수 측정이다 (Phase 3-F-29). EDOPro 의 ``SetCategory`` ·
+#: ``SetProperty`` · ``SetRange`` · ``SetTargetRange`` API 가 대입인지 OR 인지는
+#: 이 저장소에 문서화돼 있지 않으므로 **Lua 의미를 추측하지 않고** 스크립트가
+#: 실제로 쓰는 모양으로만 판단했다.
+#:
+#: 1. **자식이 물려받은 플래그를 자기 호출 안에 다시 적는 블록이 43개 있다.**
+#:    ``target_ranges`` 11 · ``properties`` 23 · ``categories`` 8 ·
+#:    ``ranges`` 1. 더하기라면 다시 적는 것은 **아무 효과도 없는 죽은 코드**다 —
+#:    서로 다른 43개 스크립트가 그럴 이유가 없다. 덮어쓰기라면 **유지하려는
+#:    플래그를 반드시 다시 적어야 한다.** 실제 모양이 정확히 그렇다 —
+#:    ``c13708888`` ``e2`` 는 부모의 ``CARD_TARGET+DELAY`` 를 다시 적고
+#:    ``DAMAGE_STEP`` 을 더해 ``CARD_TARGET+DELAY+DAMAGE_STEP`` 을 쓴다.
+#: 2. **명시적으로 비우는 스크립트가 있다.** ``c55262310`` ``e2`` 가
+#:    ``e2:SetProperty(0)`` 을 부른다. 대입이 아니면 의미가 없는 줄이다.
+#: 3. **더하기는 그 카드가 쓰지 않는 조합을 만든다.** ``c93473606`` ``e2`` 는
+#:    ATK/DEF 를 바꾸는 효과인데 더하기로는 부모의 ``TODECK+DRAW`` 가 남아
+#:    ``TODECK+DRAW+ATKCHANGE+DEFCHANGE`` 가 된다 — corpus 의 어떤 카드도 한
+#:    호출로 적지 않는 조합이다. ``c55262310`` ``e2`` 도 같다.
+#: 4. **``effect_types`` 가 같은 결론을 이미 받았다** (Phase 3-F-27). 같은
+#:    ``Clone`` 분기가 물려주는 칸인데 규칙이 서로 달랐다.
+#:
+#: 반대 방향 증거도 측정했고 **기각했다**: 한 블록이 같은 설정자를 순차로 두 번
+#: 부르며 서로 다른 값을 쓰는 사례가 ``properties`` 에 5건 있다. 그러나 그중 4건은
+#: ``SetDescription(...)`` + ``SetProperty(EFFECT_FLAG_CLIENT_HINT)`` 라는 **같은
+#: 복사-붙여넣기 관용구**이고 (``c49460512`` · ``c50619462`` · ``c64867422`` ·
+#: ``c73899015``), 1건(``c76685519``)은 ``e2`` 를 쓸 자리에 ``e1`` 을 쓴 **스크립트
+#: 오타**다. 독립 증거 1건은 위 1~4 를 뒤집지 못한다. ``categories`` ·
+#: ``ranges`` · ``target_ranges`` 에는 그런 사례가 **0건**이다.
+#:
+#: 🔴 ``code`` 와 ``count_limit`` 은 애초에 대입이라 여기 없다. ``Clone`` 이
+#: 물려주지 않는 칸도 없다 — 이 집합이 ``clone`` 분기가 복사하는 목록 칸 전부다.
+_CLONE_INHERITED_LISTS = (
+    "effect_types",
+    "ranges",
+    "target_ranges",
+    "categories",
+    "properties",
+)
+
+
+#: ``SetX(0)`` · ``SetX(0,0)`` — 스크립트가 그 칸을 **명시적으로 비운다**.
+#: 읽을 수 없는 인자와 **구별해야 한다** (아래 :func:`_write_list` 참고).
+_RE_LITERAL_ZERO = re.compile(r"0(?:\s*,\s*0)*\s*\Z")
+
+
+def _write_list(
+    spec: EffectSpec,
+    inherited: dict[str, set[str]],
+    var: str,
+    field: str,
+    regex: "re.Pattern[str]",
+    args: str,
+) -> None:
+    """
+    목록 칸 하나에 설정자 결과를 쓴다.
+
+    그 칸의 현재 값이 ``Clone`` 이 물려준 것이면 **덮어쓰고**, 아니면
+    **더한다**. :data:`_CLONE_INHERITED_LISTS` 가 왜 덮어쓰기인지 적는다.
+
+    두 번째 이후 호출은 물려받은 값이 아니므로 **더하기로 돌아간다** — 한
+    블록이 같은 설정자를 두 번 부르는 경우의 기존 동작을 바꾸지 않는다.
+
+    🔴 **읽을 수 없는 인자로는 덮어쓰지 않는다.** 상수를 하나도 읽지 못한
+    호출은 두 가지일 수 있다.
+
+    * ``SetProperty(0)`` · ``SetCategory(0)`` — 스크립트가 **비운다**.
+      corpus 에 11건 있고, 덮어써서 ``[]`` 로 만드는 것이 맞다.
+    * ``SetTargetRange(0,1)`` — 플레이어 대상 형식이라 ``LOCATION_*`` 이
+      **애초에 없다.** corpus 에 16건 있다. 이것을 "대상 범위가 없다" 로 읽으면
+      **읽지 못한 것을 빈 값으로 단정**하는 것이다.
+
+    그래서 플래그를 하나도 못 읽었고 인자가 리터럴 0 도 아니면 **물려받은 값을
+    그대로 두고 칸을 상속 상태로 남긴다** — 뒤에 읽을 수 있는 호출이 오면 그때
+    덮어쓴다. Phase 3-E-18 이 :attr:`EffectSpec.code` 에서 "읽지 못한 것은
+    ``None``(모른다)" 으로 되돌린 것과 같은 원칙이다. 목록 칸에는 "모른다" 를
+    표현할 값이 없으므로, 틀린 단정을 만들지 않는 쪽을 고른다.
+
+    🔴 현재 corpus 에서는 이 분기가 **동작을 바꾸지 않는다** — 읽을 수 없는
+    16건은 전부 물려받은 값이 비어 있다. 즉 이 분기는 **지금의 숫자를 위한 것이
+    아니라, 나중에 그런 스크립트가 들어와도 틀리지 않기 위한 것**이다.
+    """
+    found = regex.findall(args)
+    if field in inherited.get(var, ()):
+        if not found and not _RE_LITERAL_ZERO.match(args.strip()):
+            return                      # 읽지 못했다 — 단정하지 않는다
+        setattr(spec, field, _strip_prefix(found))
+        inherited[var].discard(field)
+    else:
+        setattr(spec, field, _strip_prefix(getattr(spec, field) + found))
+
+
 def _is_card_effect(source: str, local: str | None, var: str, parent: str | None) -> bool:
     """
     이 ``CreateEffect`` / ``Clone`` 을 **이 카드의 효과 블록**으로 셀 것인가.
@@ -189,10 +283,14 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
     # 변수명 -> 현재 바인딩된 EffectSpec. 같은 변수(e1)가 여러 함수에서
     # 재사용되므로, 새 CreateEffect 를 만나면 바인딩을 교체한다.
     bindings: dict[str, EffectSpec] = {}
-    #: 변수명 -> 그 변수에 묶인 spec 의 ``effect_types`` 가 **Clone 이 물려준
-    #: 것인지** (``True``). ``SetType`` 을 처음 만나면 물려받은 목록을 **덮어쓰고**
-    #: ``False`` 로 내린다 (Phase 3-F-27 — 아래 ``setter == "Type"`` 참고).
-    inherited_types: dict[str, bool] = {}
+    #: 변수명 -> 그 변수에 묶인 spec 의 **어느 목록 칸이 ``Clone`` 이 물려준
+    #: 값인지**. 그 칸에 자기 설정자가 처음 오면 물려받은 목록을 **덮어쓰고**
+    #: 칸을 집합에서 뺀다. 두 번째 이후 호출은 기존대로 더한다.
+    #:
+    #: Phase 3-F-27 이 ``effect_types`` 에만 이 추적을 넣었고, Phase 3-F-29 가
+    #: 나머지 네 칸(``ranges`` · ``target_ranges`` · ``categories`` ·
+    #: ``properties``)으로 넓혔다. 근거는 ``_CLONE_INHERITED_LISTS`` 참고.
+    inherited: dict[str, set[str]] = {}
     events: list[tuple[int, str, str]] = []  # (위치, 종류, 페이로드)
 
     #: 🔴 블록 주석을 먼저 지운다 — 주석 안의 효과를 세면 ``ordinal`` 이 밀린다.
@@ -217,7 +315,7 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
             var = payload
             spec = EffectSpec(index=var)
             bindings[var] = spec
-            inherited_types[var] = False
+            inherited[var] = set()
             info.effects.append(spec)
         elif kind == "clone":
             dst, src = payload.split("=", 1)
@@ -233,7 +331,13 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
                 spec.properties = list(parent.properties)
                 spec.count_limit = parent.count_limit
             bindings[dst] = spec
-            inherited_types[dst] = bool(spec.effect_types)
+            #: 물려받아 **비어 있지 않은** 칸만 추적한다 — 빈 목록을 덮어쓰는
+            #: 것은 더하기와 결과가 같으므로 추적할 필요가 없다.
+            inherited[dst] = {
+                field
+                for field in _CLONE_INHERITED_LISTS
+                if getattr(spec, field)
+            }
             info.effects.append(spec)
         else:  # set
             var, setter, idx_s = payload.split("|", 2)
@@ -245,7 +349,7 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
             args = _extract_call_args(body, int(idx_s))
             if setter == "Type":
                 found = _RE_EFFECT_TYPE.findall(args)
-                if inherited_types.get(var):
+                if "effect_types" in inherited.get(var, ()):
                     # **Clone 이 물려준 목록을 그대로 두면 안 된다** (Phase 3-F-27).
                     #
                     # ``SetType`` 을 더하기로 처리하면, 스크립트가 분명히 다시
@@ -273,7 +377,7 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
                     # 이미 고쳐 두었다 (아래 ``setter == "Code"`` 참고). 이 칸은
                     # 그때 함께 고쳐지지 않았다.
                     spec.effect_types = _strip_prefix(found)
-                    inherited_types[var] = False
+                    inherited[var].discard("effect_types")
                 else:
                     spec.effect_types = _strip_prefix(spec.effect_types + found)
             elif setter == "Code":
@@ -300,19 +404,13 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
                         # 남기는 것보다 모른다고 말하는 것이 맞다.
                         spec.code = None
             elif setter == "Range":
-                spec.ranges = _strip_prefix(spec.ranges + _RE_LOCATION.findall(args))
+                _write_list(spec, inherited, var, "ranges", _RE_LOCATION, args)
             elif setter == "TargetRange":
-                spec.target_ranges = _strip_prefix(
-                    spec.target_ranges + _RE_LOCATION.findall(args)
-                )
+                _write_list(spec, inherited, var, "target_ranges", _RE_LOCATION, args)
             elif setter == "Category":
-                spec.categories = _strip_prefix(
-                    spec.categories + _RE_CATEGORY.findall(args)
-                )
+                _write_list(spec, inherited, var, "categories", _RE_CATEGORY, args)
             elif setter == "Property":
-                spec.properties = _strip_prefix(
-                    spec.properties + _RE_EFFECT_FLAG.findall(args)
-                )
+                _write_list(spec, inherited, var, "properties", _RE_EFFECT_FLAG, args)
             elif setter == "CountLimit":
                 spec.count_limit = args.strip()
 
@@ -433,12 +531,15 @@ class LuaScriptSource:
                 if entry.is_file() and _RE_SCRIPT_FILE.match(entry.name):
                     count += 1
                     newest = max(newest, entry.stat().st_mtime)
-        # ``v6`` — Phase 3-F-28 이 ``CreateEffect`` 탐지를 고쳤다 (블록 주석 제거 +
-        # ``c:RegisterEffect`` 보강). ``v5`` 는 Phase 3-F-27 의 ``SetType`` 수정이었다. 이 값에
+        # ``v7`` — Phase 3-F-29 가 ``Clone`` 이 물려준 네 목록 칸
+        # (``ranges`` · ``target_ranges`` · ``categories`` · ``properties``)을
+        # 자식의 첫 설정자가 **덮어쓰도록** 고쳤다. ``v6`` 은 Phase 3-F-28 의
+        # ``CreateEffect`` 탐지 수정(블록 주석 제거 + ``c:RegisterEffect`` 보강),
+        # ``v5`` 는 Phase 3-F-27 의 ``SetType`` 수정이었다. 이 값에
         # 파서 버전이 들어 있지 않으면 **고친 파서가 옛 캐시를 계속 읽는다**
         # (스크립트 파일이 바뀌지 않으면 signature 가 같기 때문이다). 파서가
         # 같은 입력에서 다른 결과를 내게 되면 이 숫자를 올린다.
-        return f"v6:{count}:{newest:.0f}"
+        return f"v7:{count}:{newest:.0f}"
 
 
 def _info_to_dict(info: LuaScriptInfo) -> dict:
