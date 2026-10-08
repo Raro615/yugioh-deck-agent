@@ -63,27 +63,41 @@ class EffectSpec:
 
     ``TARGET`` · ``ACTIONS`` 는 corpus 에 **0블록**이다.
 
-    .. warning::
-       🔴 **이 목록은 누적된다** (Phase 3-F-26 이 측정). ``SetType`` 을 만날
-       때마다 ``spec.effect_types + findall(args)`` 로 **더하고**, ``Clone`` 은
-       부모의 목록을 **물려준다**. 그래서 ``Clone`` 뒤에 ``SetType`` 을 다시
-       부른 블록은 **물려받은 플래그를 그대로 달고 있다.**
+    같은 블록에 ``SetType`` 이 여러 번 걸리면 **더한다.** 단, ``Clone`` 이
+    물려준 목록은 그 블록의 **첫 ``SetType`` 이 덮어쓴다** —
+    ``sources.lua_loader.parse_lua_source`` 참고.
+
+    .. note::
+       🔴 **Phase 3-F-26 이 찾고 3-F-27 이 고친 결함.** 3-F-26 시점에는
+       ``Clone`` 이 물려준 목록 위에 자식의 ``SetType`` 이 **더해져서**, 자식이
+       분명히 다시 적은 type 위에 부모의 type 이 남았다.
 
        실제 카드로: ``c324483`` 은 ``e1:SetType(EFFECT_TYPE_IGNITION)`` →
        ``local e2=e1:Clone()`` → ``e2:SetType(EFFECT_TYPE_QUICK_O)`` 인데
-       ``e2.effect_types`` 가 ``['IGNITION', 'QUICK_O']`` 가 된다.
+       ``e2.effect_types`` 가 ``['IGNITION', 'QUICK_O']`` 였다. 지금은
+       ``['QUICK_O']`` 다.
 
-       규모는 **78블록 / 75스크립트**(전체 34,680블록의 0.22%)이고 그중
-       **46건이 ``QUICK_O`` 관련**이다 — ``IGNITION+QUICK_O`` 41 ·
-       ``ACTIVATE+QUICK_O`` 5 는 **전부** 이 누적의 산물이다. 한 ``SetType``
-       호출 안에서 그 둘을 함께 적는 카드는 corpus 전체에 **0장**이다.
+       규모는 **77블록 / 74스크립트**(전체 34,680블록의 0.22%)였고 그중
+       **46건이 ``QUICK_O`` 관련**이었다 — ``IGNITION+QUICK_O`` 41 ·
+       ``ACTIVATE+QUICK_O`` 5 는 **전부** 이 누적의 산물이었고 지금은 0 이다.
+       77건 가운데 **76건이 상호배타 조합**을 만들고 있었다 (적용 범위 25 ·
+       발동 분류 51). 그 조합은 한 ``SetType`` 호출 안에서는 **31,933건 중
+       0건**이다.
 
-       그러므로 ``effect_types`` 의 조합을 "카드가 그렇게 적었다" 로 읽으면
-       78블록에서 틀린다. :attr:`code` 는 같은 위험을 Phase 3-E-18 이 고쳐
-       놓았지만(그 설명 참고) **이 칸은 고쳐지지 않았다.**
+       :attr:`code` 는 같은 위험을 Phase 3-E-18 이 먼저 고쳤다 (그 설명 참고).
+       이 칸은 3-F-27 이 고쳤다.
 
-       이 Phase 는 파서를 **바꾸지 않았다** — 무엇이 올바른 등재 규칙인지
-       정해지기 전에 바꾸면 무엇을 잃는지 알 수 없다.
+    .. warning::
+       🔴 **같은 유형이 형제 칸에 남아 있다** (3-F-27 이 측정하고 범위 밖이라
+       고치지 않았다). ``Clone`` 뒤에 자기 설정자를 부르면서 부모 값을 다시
+       적지 않은 블록: :attr:`categories` 24 · :attr:`properties` 19 ·
+       :attr:`target_ranges` 9 · :attr:`ranges` 12.
+
+       그리고 ``local`` 없이 ``e1=Effect.CreateEffect(c)`` 로 대입하는 자리가
+       **217곳 / 195파일** 있고, 파서가 그것을 새 블록으로 보지 않아 **그 뒤
+       설정자가 이전 바인딩으로 흘러든다** (``c9839115`` ``e1`` 의 :attr:`code`
+       가 그래서 ``EFFECT_UPDATE_ATTACK`` 이다). 이것은 ``Clone`` 과 **다른
+       원인**이고 3-F-27 의 수정 범위가 아니다.
     """
 
     code: str | None = None

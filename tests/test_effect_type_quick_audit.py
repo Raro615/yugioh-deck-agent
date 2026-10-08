@@ -446,7 +446,12 @@ def test_06_quick_o_never_co_occurs_with_trigger_flags(typed_cards):
 def test_07_quick_o_plus_ignition_is_a_parser_artifact(scripts):
     """
     🔴 §5 — **이 Phase 의 핵심 발견.** ``IGNITION+QUICK_O`` 41블록과
-    ``ACTIVATE+QUICK_O`` 5블록은 **카드 데이터가 아니다.**
+    ``ACTIVATE+QUICK_O`` 5블록은 **카드 데이터가 아니었다.**
+
+    .. note::
+       🔴 **Phase 3-F-27 이 파서를 고쳤다.** 그래서 이 테스트는 이제 "결함이
+       있다" 가 아니라 **"결함이 사라졌고 정상 조합은 보존된다"** 를 못 박는다.
+       아래 서술은 고치기 전 상태의 기록이다.
 
     파서는 ``SetType`` 을 만날 때마다 **더하고**(``spec.effect_types +
     findall(args)``) ``Clone`` 은 부모 목록을 **물려준다**. 그래서 ``Clone`` 뒤에
@@ -490,25 +495,32 @@ def test_07_quick_o_plus_ignition_is_a_parser_artifact(scripts):
         if changed:
             differing_scripts += 1
 
-    #: production 이 주장하는 조합.
-    assert accumulated[("IGNITION", Q)] == 41
-    assert accumulated[("ACTIVATE", Q)] == 5
-    #: 교체 규칙에서는 **사라진다.**
+    #: 🔴 **Phase 3-F-27 이 이 결함을 고쳤다.** production 이 이제 교체 규칙과
+    #: 같은 답을 낸다 — 아래 네 줄이 그것을 못 박는다.
+    assert accumulated[("IGNITION", Q)] == 0
+    assert accumulated[("ACTIVATE", Q)] == 0
     assert replaced[("IGNITION", Q)] == 0
     assert replaced[("ACTIVATE", Q)] == 0
-    #: 남는 실제 조합은 둘뿐이다 — 둘 다 한 호출 안의 OR 다.
-    assert replaced[("FIELD", Q)] == 4
-    assert replaced[(Q, "XMATERIAL")] == 4
-    assert replaced[(Q,)] == 1867
 
-    #: 결함의 규모.
-    assert differing == 78
-    assert differing_scripts == 75
-    assert quick_differing == 46
-    #: 🔴 QUICK_O 관련 46건이 **전부** Clone 에서 왔다.
-    assert cloned == 46
+    #: 남는 실제 조합은 둘뿐이다 — 둘 다 한 호출 안의 OR 다. 보존된다.
+    for table in (accumulated, replaced):
+        assert table[("FIELD", Q)] == 4
+        assert table[(Q, "XMATERIAL")] == 4
+        assert table[(Q,)] == 1867
 
-    #: QUICK_O 자체의 개수는 영향을 받지 않는다 — 더하기만 한다.
+    #: 🔴 고친 뒤 **QUICK_O 블록에서는 두 규칙이 완전히 일치한다.**
+    assert accumulated == replaced, (accumulated, replaced)
+
+    #: 남아 있는 차이는 **단 1건**이고 ``Clone`` 이 아니다 — ``c9839115`` 의
+    #: ``local`` 없는 ``e1=Effect.CreateEffect(c)`` 가 설정자를 흘리는 **별개
+    #: 버그**다 (3-F-27 보고서 §7 · 범위 밖).
+    assert differing == 1
+    assert differing_scripts == 1
+    assert quick_differing == 0
+    assert cloned == 0
+
+    #: QUICK_O 자체의 개수는 고치기 전에도 후에도 같다 — 더하기만 했으므로
+    #: QUICK_O 가 추가되거나 사라진 블록은 **0건**이다.
     assert sum(accumulated.values()) == sum(replaced.values()) == 1875
 
 
@@ -1053,11 +1065,16 @@ def test_31_the_two_docstrings_record_what_was_measured():
         encoding="utf-8"
     )
 
-    #: 누적 결함을 적는다.
-    assert model.count("**이 목록은 누적된다**") == 1
-    assert "78블록 / 75스크립트" in model
+    #: 🔴 누적 결함을 적는다 — **Phase 3-F-27 이 고친 뒤의 서술**로 갱신됐다.
+    assert model.count("Phase 3-F-26 이 찾고 3-F-27 이 고친 결함") == 1
+    assert "77블록 / 74스크립트" in model
     assert "0.22%" in model
     assert "c324483" in model
+    #: 고쳐졌다는 사실과 고친 뒤의 값이 함께 적혀 있다.
+    assert "지금은" in model and "['QUICK_O']" in model
+    #: 🔴 아직 남은 형제 칸 결함도 적혀 있다 (범위 밖이라 고치지 않았다).
+    assert "같은 유형이 형제 칸에 남아 있다" in model
+    assert "217곳 / 195파일" in model
     #: 축 구조를 적는다.
     assert "플래그 집합" in model
     assert "독립 비트" in model

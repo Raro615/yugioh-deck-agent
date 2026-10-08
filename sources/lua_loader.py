@@ -144,6 +144,10 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
     # 변수명 -> 현재 바인딩된 EffectSpec. 같은 변수(e1)가 여러 함수에서
     # 재사용되므로, 새 CreateEffect 를 만나면 바인딩을 교체한다.
     bindings: dict[str, EffectSpec] = {}
+    #: 변수명 -> 그 변수에 묶인 spec 의 ``effect_types`` 가 **Clone 이 물려준
+    #: 것인지** (``True``). ``SetType`` 을 처음 만나면 물려받은 목록을 **덮어쓰고**
+    #: ``False`` 로 내린다 (Phase 3-F-27 — 아래 ``setter == "Type"`` 참고).
+    inherited_types: dict[str, bool] = {}
     events: list[tuple[int, str, str]] = []  # (위치, 종류, 페이로드)
 
     for m in _RE_CREATE_EFFECT.finditer(source):
@@ -160,6 +164,7 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
             var = payload
             spec = EffectSpec(index=var)
             bindings[var] = spec
+            inherited_types[var] = False
             info.effects.append(spec)
         elif kind == "clone":
             dst, src = payload.split("=", 1)
@@ -175,6 +180,7 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
                 spec.properties = list(parent.properties)
                 spec.count_limit = parent.count_limit
             bindings[dst] = spec
+            inherited_types[dst] = bool(spec.effect_types)
             info.effects.append(spec)
         else:  # set
             var, setter, idx_s = payload.split("|", 2)
@@ -183,9 +189,38 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
                 continue
             args = _extract_call_args(source, int(idx_s))
             if setter == "Type":
-                spec.effect_types = _strip_prefix(
-                    spec.effect_types + _RE_EFFECT_TYPE.findall(args)
-                )
+                found = _RE_EFFECT_TYPE.findall(args)
+                if inherited_types.get(var):
+                    # **Clone 이 물려준 목록을 그대로 두면 안 된다** (Phase 3-F-27).
+                    #
+                    # ``SetType`` 을 더하기로 처리하면, 스크립트가 분명히 다시
+                    # 적은 type 위에 부모의 type 이 남는다. 그 결과는 **어떤
+                    # 카드도 적지 않은 조합**이 된다 — corpus 전수로 측정하면
+                    # 한 ``SetType`` 호출 안에서 적용 범위
+                    # (``SINGLE``/``FIELD``/``EQUIP``)를 둘 이상 적거나 발동 분류
+                    # (``ACTIVATE``/``IGNITION``/``TRIGGER_O``/``QUICK_O``/
+                    # ``TRIGGER_F``/``QUICK_F``/``CONTINUOUS``)를 둘 이상 적는
+                    # 호출이 **31,933건 중 0건**인데, 더하기는 77건 가운데 76건에서
+                    # 바로 그 조합을 만든다 (적용 범위 25 · 발동 분류 51).
+                    #
+                    # 실제 카드로: ``c324483`` 은
+                    # ``e1:SetType(EFFECT_TYPE_IGNITION)`` →
+                    # ``local e2=e1:Clone()`` →
+                    # ``e2:SetType(EFFECT_TYPE_QUICK_O)`` 인데 ``e2`` 가
+                    # ``['IGNITION', 'QUICK_O']`` 가 됐다.
+                    #
+                    # 부모의 type 을 **유지하려는** 스크립트는 자식에서 그것을
+                    # 다시 적는다 — 77건 중 그렇게 한 유일한 블록
+                    # (``c4928565`` ``e4``)이 ``SINGLE+TRIGGER_O`` 를 그대로
+                    # 다시 적는다. 더하기였다면 다시 적을 이유가 없다.
+                    #
+                    # :attr:`EffectSpec.code` 는 같은 위험을 Phase 3-E-18 이
+                    # 이미 고쳐 두었다 (아래 ``setter == "Code"`` 참고). 이 칸은
+                    # 그때 함께 고쳐지지 않았다.
+                    spec.effect_types = _strip_prefix(found)
+                    inherited_types[var] = False
+                else:
+                    spec.effect_types = _strip_prefix(spec.effect_types + found)
             elif setter == "Code":
                 event = _RE_EVENT.search(args)
                 if event:
@@ -338,7 +373,11 @@ class LuaScriptSource:
                 if entry.is_file() and _RE_SCRIPT_FILE.match(entry.name):
                     count += 1
                     newest = max(newest, entry.stat().st_mtime)
-        return f"v4:{count}:{newest:.0f}"
+        # ``v5`` — Phase 3-F-27 이 ``SetType`` 의 Clone 노후값을 고쳤다. 이 값에
+        # 파서 버전이 들어 있지 않으면 **고친 파서가 옛 캐시를 계속 읽는다**
+        # (스크립트 파일이 바뀌지 않으면 signature 가 같기 때문이다). 파서가
+        # 같은 입력에서 다른 결과를 내게 되면 이 숫자를 올린다.
+        return f"v5:{count}:{newest:.0f}"
 
 
 def _info_to_dict(info: LuaScriptInfo) -> dict:
