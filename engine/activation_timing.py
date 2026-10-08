@@ -40,6 +40,35 @@
 그래서 몬스터는 ``UNKNOWN`` 이다. **추측해서 1 로도 2 로도 만들지
 않는다** — 1 로 만들면 퀵 이펙트가 영영 응수하지 못하고, 2 로 만들면
 기동 효과가 상대 턴에 발동한다.
+
+.. warning::
+   🔴 **"``QUICK_O`` 를 읽으면 풀린다" 가 아니다** (Phase 3-F-26 이 측정).
+   위 문장은 *읽는 계층이 없다*는 사실만 말하고, 그래서 읽기만 하면 된다고
+   읽히기 쉽다. 측정하면 **입도(granularity)가 먼저 어긋난다.**
+
+   1. :func:`classify_spell_speed` 는 **카드 하나**를 받는다
+      (:class:`~engine.game_state_view.CardDefinitionView`). 그런데 공식
+      분류는 **효과 하나**에 붙는다 — ``MONSTER_CLASSIFICATION_MISSING`` 의
+      문장 자체가 *"monster effect classification"* 이라고 적는다.
+   2. 몬스터 **856장(10.4%)** 이 공식 스펠 스피드 1 계열 블록
+      (``IGNITION`` · ``TRIGGER_O`` · ``TRIGGER_F`` · ``FLIP``)과 2 계열
+      블록(``QUICK_O`` · ``QUICK_F``)을 **둘 다** 가진다. ``QUICK_O`` 를
+      가진 몬스터 1,338장 중 **847장(63.3%)** 이 그렇다. 그런 카드에는
+      **카드 단위의 답이 존재하지 않는다.**
+   3. :meth:`ActivationTimingChecker.speed_of_link` 는
+      :attr:`~engine.chain.ChainLink.effect_ref` 를 **이미 들고 있는데**
+      버리고 ``self.spell_speed(link.source)`` 를 부른다. 효과 단위 정보가
+      거기서 사라진다.
+
+   그리고 공식 의미도 확정되지 않았다 — ``QUICK_O`` 라는 이름은 이 저장소의
+   공식 자료 **829파일 전체에서 0회**이고, ``QUICK_O`` 를 가진 카드는 공식
+   스펠 스피드 **1 · 2 · 3 전부**에 걸쳐 있다 (지속/필드/장착 마법 13 ·
+   함정 414 · **카운터 함정 16**). 그러므로 ``QUICK_O → 스펠 스피드 2`` 는
+   카드 단위에서 성립하지 **않는다.**
+
+   요약: ``UNKNOWN`` 의 원인은 "데이터가 없다" 가 아니라 **데이터의 입도와
+   이 함수의 입도가 다르고, 공식 대응이 미확정**이라는 것이다. 읽는 계층을
+   더하는 것만으로는 풀리지 않는다.
 """
 
 from __future__ import annotations

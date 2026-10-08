@@ -45,7 +45,46 @@ class EffectSpec:
     """Lua 변수명 (e1, e2, ...)"""
 
     effect_types: list[str] = field(default_factory=list)
-    """SetType() 에서 추출한 EFFECT_TYPE_* 목록"""
+    """
+    ``SetType()`` 에서 추출한 ``EFFECT_TYPE_*`` 목록.
+
+    15개 상수는 ``constant.lua`` 에서 **독립 비트**(``0x1`` ~ ``0x4000``)이고
+    ``SetType`` 은 그것을 ``+`` 로 묶어 받는다. 그래서 이 값은 **하나의 분류가
+    아니라 플래그 집합**이다. 최소 두 축이 섞여 있다 (교체 규칙 기준 전수 측정):
+
+    ======================  =============================================
+    적용 범위 축              ``SINGLE`` 14,731 · ``FIELD`` 8,881 ·
+                            ``EQUIP`` 639 — 서로 **0회** 공존
+    발동 분류 축              ``TRIGGER_O`` 6,087 · ``ACTIVATE`` 4,297 ·
+                            ``IGNITION`` 4,137 · ``CONTINUOUS`` 2,456 ·
+                            ``TRIGGER_F`` 1,972 · ``QUICK_O`` 1,875 ·
+                            ``FLIP`` 189 · ``QUICK_F`` 16
+    ======================  =============================================
+
+    ``TARGET`` · ``ACTIONS`` 는 corpus 에 **0블록**이다.
+
+    .. warning::
+       🔴 **이 목록은 누적된다** (Phase 3-F-26 이 측정). ``SetType`` 을 만날
+       때마다 ``spec.effect_types + findall(args)`` 로 **더하고**, ``Clone`` 은
+       부모의 목록을 **물려준다**. 그래서 ``Clone`` 뒤에 ``SetType`` 을 다시
+       부른 블록은 **물려받은 플래그를 그대로 달고 있다.**
+
+       실제 카드로: ``c324483`` 은 ``e1:SetType(EFFECT_TYPE_IGNITION)`` →
+       ``local e2=e1:Clone()`` → ``e2:SetType(EFFECT_TYPE_QUICK_O)`` 인데
+       ``e2.effect_types`` 가 ``['IGNITION', 'QUICK_O']`` 가 된다.
+
+       규모는 **78블록 / 75스크립트**(전체 34,680블록의 0.22%)이고 그중
+       **46건이 ``QUICK_O`` 관련**이다 — ``IGNITION+QUICK_O`` 41 ·
+       ``ACTIVATE+QUICK_O`` 5 는 **전부** 이 누적의 산물이다. 한 ``SetType``
+       호출 안에서 그 둘을 함께 적는 카드는 corpus 전체에 **0장**이다.
+
+       그러므로 ``effect_types`` 의 조합을 "카드가 그렇게 적었다" 로 읽으면
+       78블록에서 틀린다. :attr:`code` 는 같은 위험을 Phase 3-E-18 이 고쳐
+       놓았지만(그 설명 참고) **이 칸은 고쳐지지 않았다.**
+
+       이 Phase 는 파서를 **바꾸지 않았다** — 무엇이 올바른 등재 규칙인지
+       정해지기 전에 바꾸면 무엇을 잃는지 알 수 없다.
+    """
 
     code: str | None = None
     """
