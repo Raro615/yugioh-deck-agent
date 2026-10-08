@@ -699,7 +699,9 @@ def test_13_trap_corpus_and_the_counter_trap_counter_example(typed_cards):
         for spec in card.script.effects:
             if "ACTIVATE" in spec.effect_types:
                 normal[spec.code == FREE_CHAIN] += 1
-    assert normal[True] == 918
+    #: 🔴 918 → **917**. Phase 3-F-27 이 ``Clone`` 오염을 고치면서 한 블록의
+    #: ``ACTIVATE`` 가 (물려받은 것이었으므로) 사라졌다. 결론은 그대로다.
+    assert normal[True] == 917
 
 
 def test_14_official_spell_speed_is_not_a_one_to_one_function(typed_cards):
@@ -947,14 +949,19 @@ def test_25_free_chain_is_not_the_only_way_to_say_no_event(scripts):
     """
     per = blocks_by_effect_type(scripts)
 
+    #: 🔴 Phase 3-F-27 이 ``Clone`` 오염을 고친 뒤의 값이다. 물려받은
+    #: ``IGNITION`` 이 사라져 블록 수가 4,180 → **4,137**, 그중 ``FREE_CHAIN``
+    #: 이 58 → **17** 로 줄었다. ``None`` 4,119 는 **그대로**이므로 이 테스트의
+    #: 결론("없다 를 생략으로 적는다")은 오히려 **더 선명해졌다** (98.5% →
+    #: 99.6%).
     ignition = per["IGNITION"]
-    assert sum(ignition.values()) == 4180
+    assert sum(ignition.values()) == 4137
     assert ignition[None] == 4119
-    assert ignition[FREE_CHAIN] == 58
-    assert ignition[None] / sum(ignition.values()) > 0.98
+    assert ignition[FREE_CHAIN] == 17
+    assert ignition[None] / sum(ignition.values()) > 0.99
 
     #: 거울상 — ``ACTIVATE`` · ``QUICK_O`` 는 ``None`` 이 **0건**이다.
-    for kind, blocks, free in (("ACTIVATE", 4305, 3642), ("QUICK_O", 1875, 1257)):
+    for kind, blocks, free in (("ACTIVATE", 4297, 3639), ("QUICK_O", 1875, 1257)):
         counter = per[kind]
         assert sum(counter.values()) == blocks, kind
         assert counter[None] == 0, kind
@@ -979,9 +986,12 @@ def test_25_free_chain_is_not_the_only_way_to_say_no_event(scripts):
     assert "유일한 표기다." not in model
 
     #: 되돌린 주장이 다시 들어오지 않았는지 — 수치가 함께 적혀 있어야 한다.
+    #:
+    #: 🔴 Phase 3-F-27 이 ``Clone`` 오염을 고친 뒤 비율이 98.5% → **99.6%** 로
+    #: 올라갔다 (``None`` 4,119 는 그대로이고 분모가 4,180 → 4,137 로 줄었다).
     assert "4,119" in model
-    assert "98.5" in model
-    assert "98.5%(4,119)" in analysis
+    assert "99.6" in model
+    assert "99.6%(4,119)" in analysis
     assert "유일한 표기가 아니다" in analysis
 
 
@@ -1001,10 +1011,13 @@ def test_26_the_co_occurrence_enumeration_was_incomplete(scripts):
             if spec.code == FREE_CHAIN:
                 kinds.update(spec.effect_types)
 
+    #: 🔴 Phase 3-F-27 이 ``Clone`` 오염을 고친 뒤의 값이다 — 물려받은
+    #: ``IGNITION`` 41 · ``ACTIVATE`` 3 이 사라졌다. **열거가 불완전했다는
+    #: 이 테스트의 결론은 그대로다** (``FIELD`` 3 · ``CONTINUOUS`` 1 이 남는다).
     assert dict(kinds) == {
-        "ACTIVATE": 3642,
+        "ACTIVATE": 3639,
         "QUICK_O": 1257,
-        "IGNITION": 58,
+        "IGNITION": 17,
         "FIELD": 3,
         "CONTINUOUS": 1,
     }, dict(kinds)

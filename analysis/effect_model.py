@@ -467,7 +467,7 @@ class EffectAnalysis:
        🔴 **Phase 3-F-25 정정 두 가지.**
 
        1. 이 값은 "유발 조건이 없다" 의 **유일한 표기가 아니다.**
-          ``EFFECT_TYPE_IGNITION`` 블록 4,180개 중 **98.5%(4,119)가
+          ``EFFECT_TYPE_IGNITION`` 블록 4,137개 중 **99.6%(4,119)가
           ``SetCode`` 를 아예 부르지 않는다** — 같은 "없다" 를 생략으로
           적는다. 반대로 ``ACTIVATE`` · ``QUICK_O`` 블록은 ``None`` 이
           **0건**이다. 자세한 표는 :attr:`core.card_model.EffectSpec.code`.

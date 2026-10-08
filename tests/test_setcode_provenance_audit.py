@@ -704,9 +704,18 @@ def test_19_the_cache_signature_must_change_when_the_parser_changes():
 
     E-17 이 고의 위반 A 를 놓친 이유가 정확히 이것이다 — 캐시가 이전 파서의
     결과를 돌려주고 있었다.
+
+    .. note::
+       🔴 **Phase 3-F-27 이 ``v4`` → ``v5`` 로 올렸다.** 그 Phase 가
+       ``SetType`` 의 ``Clone`` 노후값을 고쳤고, 올리지 않으면 고친 파서가
+       옛 캐시를 계속 읽는다는 것을 실험으로 확인했다 (수정 전 캐시가
+       ``c324483`` ``e2`` 를 ``['IGNITION', 'QUICK_O']`` 로 들고 있었다).
+       **이 테스트가 설계대로 작동해 그 상승을 요구했다.**
     """
     source = pathlib.Path("sources/lua_loader.py").read_text(encoding="utf-8")
-    assert 'return f"v4:{count}:{newest:.0f}"' in source
+    assert 'return f"v5:{count}:{newest:.0f}"' in source
+    #: 되돌아가지 않았는지도 본다.
+    assert 'return f"v4:{count}:{newest:.0f}"' not in source
     #: 서명 계산에 파서 버전·코드 해시가 들어가지 않는다 — 그래서 손으로 올린다.
     signature_body = source.split("def _signature(self)")[1].split("def ")[0]
     for token in ("parse_lua_source", "__version__", "md5", "sha"):
