@@ -735,10 +735,17 @@ def test_19_the_cache_signature_must_change_when_the_parser_changes():
        보강). **이 테스트가 두 번째로 설계대로 작동했다** — 두 Phase 연속으로
        파서 수정을 잡아냈다. ``v4`` · ``v5`` 로 되돌아가지 않았음도 함께
        못 박는다.
+
+    .. note::
+       🔴 **Phase 3-F-29 가 ``v6`` → ``v7`` 로 올렸다.** 그 Phase 가 ``Clone``
+       이 물려준 네 목록 칸(``ranges`` · ``target_ranges`` · ``categories`` ·
+       ``properties``)을 자식의 첫 설정자가 **덮어쓰도록** 고쳤다.
+       **이 테스트가 세 Phase 연속으로 설계대로 작동했다.**
     """
     source = pathlib.Path("sources/lua_loader.py").read_text(encoding="utf-8")
-    assert 'return f"v6:{count}:{newest:.0f}"' in source
+    assert 'return f"v7:{count}:{newest:.0f}"' in source
     #: 되돌아가지 않았는지도 본다.
+    assert 'return f"v6:{count}:{newest:.0f}"' not in source
     assert 'return f"v5:{count}:{newest:.0f}"' not in source
     assert 'return f"v4:{count}:{newest:.0f}"' not in source
     #: 서명 계산에 파서 버전·코드 해시가 들어가지 않는다 — 그래서 손으로 올린다.

@@ -142,10 +142,25 @@ MULTI_TYPE_ONE_CALL = 176392         # 한 호출 OR: CONTINUOUS+FIELD / FIELD+T
 #: * ``code`` 30,126 → 30,127 — 그 블록의 ``EFFECT_INDESTRUCTABLE_COUNT``
 #:   −1, 새 블록 둘의 ``EFFECT_SET_ATTACK`` · ``EFFECT_UPDATE_ATTACK`` +2.
 #: * ``target_ranges`` · ``categories`` · ``cloned_from`` 은 **그대로다.**
-RANGES_TOTAL = 15075
-TARGET_RANGES_TOTAL = 2072
-CATEGORIES_TOTAL = 20534
-PROPERTIES_TOTAL = 23907
+#:
+#: 🔴 **Phase 3-F-29 가 네 칸을 고쳤다.** ``Clone`` 이 물려준 값을 자식의 첫
+#: 설정자가 덮어쓰도록 바꾸면서, 더하기가 남겨 놓았던 부모의 플래그가
+#: 사라졌다 (59 스크립트 / 75 블록-칸 쌍).
+#:
+#: * ``ranges`` 15,075 → 15,063 (−12)
+#: * ``target_ranges`` 2,072 → 2,062 (−10)
+#: * ``categories`` 20,534 → 20,505 (−29)
+#: * ``properties`` 23,907 → 23,884 (−23)
+#: * ``code`` · ``count_limit`` · ``cloned_from`` 은 **그대로다** — 3-F-29 는
+#:   목록 칸만 건드렸다.
+#:
+#: 🔴 이 테스트는 3-F-27 이 "범위 밖" 으로 **세어 두기만 한** 결함이고,
+#: ``test_29`` 가 그 수(64)를 다음 Phase 후보의 근거로 고정해 두었다.
+#: 3-F-29 가 그것을 고쳤으므로 숫자가 움직이는 것이 **설계된 신호**다.
+RANGES_TOTAL = 15063
+TARGET_RANGES_TOTAL = 2062
+CATEGORIES_TOTAL = 20505
+PROPERTIES_TOTAL = 23884
 CODE_TOTAL = 30127
 COUNT_LIMIT_TOTAL = 11187
 
@@ -763,17 +778,18 @@ def test_22_the_cache_signature_was_bumped():
     signature 는 스크립트 파일 개수와 최신 mtime 만 보기 때문이다.
 
     .. note::
-       🔴 Phase 3-F-28 에서 ``v5`` → ``v6``. 이 테스트는 **설계대로 걸렸다** —
-       3-F-28 도 파서를 고쳤으므로 prefix 가 올라가야 한다. 되돌아가지
-       않았음도 함께 못 박는다.
+       🔴 Phase 3-F-28 에서 ``v5`` → ``v6``, Phase 3-F-29 에서 ``v6`` → ``v7``.
+       이 테스트는 **두 번 다 설계대로 걸렸다** — 두 Phase 가 모두 파서를
+       고쳤으므로 prefix 가 올라가야 한다. 되돌아가지 않았음도 함께 못 박는다.
     """
     source = inspect.getsource(LuaScriptSource._signature)
-    assert "v6:" in source
+    assert "v7:" in source
+    assert "v6:" not in source
     assert "v5:" not in source
     assert "v4:" not in source
 
     signature = LuaScriptSource(PROJECT_ROOT)._signature()
-    assert signature.startswith("v6:")
+    assert signature.startswith("v7:")
 
     #: 캐시가 있다면 새 signature 로 쓰여 있어야 한다 (없으면 건너뛰지 않고
     #: 그냥 signature 형식만 확인한다).
@@ -781,7 +797,7 @@ def test_22_the_cache_signature_was_bumped():
     if cache.is_file():
         with cache.open(encoding="utf-8") as handle:
             blob = json.load(handle)
-        assert blob["signature"].startswith("v6:"), blob["signature"]
+        assert blob["signature"].startswith("v7:"), blob["signature"]
 
 
 # ======================================================================

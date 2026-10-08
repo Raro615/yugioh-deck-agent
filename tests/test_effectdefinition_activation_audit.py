@@ -149,6 +149,23 @@ def source_of(path: str) -> str:
     return (PROJECT_ROOT / path).read_text(encoding="utf-8")
 
 
+class _StripStrings(ast.NodeTransformer):
+    """문자열 리터럴을 비운다 — docstring 안의 이름이 '사용' 으로 세어지지 않게."""
+
+    def visit_Constant(self, node):  # noqa: N802 - ast 규약
+        if isinstance(node.value, str):
+            return ast.copy_location(ast.Constant(value=""), node)
+        return node
+
+
+def code_only(path: str) -> str:
+    """주석·docstring 을 걷어낸 **실행 코드만**.
+
+    🔴 Phase 3-F-29 추가 — 원문 문자열 검색은 주석과 코드를 구분하지 못한다.
+    """
+    return ast.unparse(_StripStrings().visit(ast.parse(source_of(path))))
+
+
 def lua_of(card_id: int) -> str:
     return (PROJECT_ROOT / f"c{card_id}.lua").read_text(
         encoding="utf-8", errors="replace"
@@ -719,9 +736,22 @@ def test_13_the_raw_lua_condition_text_is_still_reachable_from_production(
 
     #: 파서(``sources/lua_loader.py``)는 네 슬롯을 **읽지 않는다** — 그 역할이
     #: ``analysis`` 에 있다는 계층 경계를 고정한다.
-    loader = source_of("sources/lua_loader.py")
+    #:
+    #: 🔴 Phase 3-F-29 정정 — 원문 문자열 검색이었다. Phase 3-F-29 가 로더
+    #: 주석에 ``SetTargetRange`` 를 적자 (``SetTarget`` 을 **부분 문자열로**
+    #: 포함한다) 코드가 그대로인데 이 테스트가 깨졌다. 주석과 코드를 구분하는
+    #: ``code_only`` 로 바꾼다 — 계약은 같고 **측정이 정확해졌다.**
+    loader = code_only("sources/lua_loader.py")
     for slot in ("SetCondition", "SetTarget", "SetOperation"):
-        assert slot not in loader
+        assert slot not in loader, slot
+    #: 🔴 그리고 ``analysis`` 는 그 네 슬롯을 **실제로 읽는다** — 경계의 반대쪽.
+    #: 🔴 이 쪽은 ``code_only`` 로 볼 수 없다 — 슬롯 이름이 정규식 **문자열
+    #: 리터럴** 안에 있어서 문자열을 비우면 같이 사라진다. 그래서 컴파일된
+    #: 패턴을 런타임에 읽는다.
+    import analysis.effect_analyzer as analyzer_module
+
+    for slot in ("Cost", "Condition", "Target", "Operation"):
+        assert slot in analyzer_module._RE_SETTER.pattern, slot
 
 
 def test_14_only_the_activation_and_execution_layers_read_activation():
