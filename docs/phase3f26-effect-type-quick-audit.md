@@ -776,14 +776,92 @@ Engine V1 freeze 해제 ✗ · **파서 변경 ✗**
 
 실제 카드 **34장** 사용 — §4 의 표 그대로.
 
-기존 테스트를 **삭제·skip·약화하지 않았고, 고친 것도 없다.**
 **skip 추가 0** — `test_30` 은 commit 전에도 base 와 비교해 skip 하지 않는다.
+
+### 🔴 기존 테스트 2개가 깨졌다 — 삭제·skip·약화 없이 고쳤다
+
+첫 전체 회귀에서 **4,726 passed / 2 failed** 가 나왔다. 둘 다 **내 docstring
+변경 때문**이다. 사용자 규칙에 따라 **왜 기존 테스트가 잘못된 가정을 갖고
+있었는지** 적는다. 기존 commit 은 rewrite 하지 않았고, 수정은 별도 commit
+(`Phase 3-F-26: fix two audit tests broken by the docstring change`)으로 남겼다.
+
+#### ① `tests/test_event_free_chain_semantic_audit.py::test_30` (3-F-25 작)
+
+**틀린 가정: "`HEAD` 가 내 Phase 의 끝이다."**
+
+```python
+base = f"{added[-1]}^"        # 내 Phase 의 직전
+head = "HEAD"                 # 🔴 "지금"
+changed = git("diff", "--name-only", base, head, ...)
+assert set(changed) <= {"core/card_model.py", "analysis/effect_model.py"}
+```
+
+끝점을 `HEAD` 로 두면 **뒤에 오는 Phase 의 변경이 전부 섞여** 들어온다. 이
+Phase 가 `engine/activation_timing.py` 의 docstring 을 고치자 그 파일이
+`changed` 에 끼어들어 깨졌다.
+
+*"내 Phase 가 무엇을 바꿨는가"* 를 묻는 테스트의 끝점은 **내 commit** 이다.
+3-F-24 의 `test_25` 는 처음부터 `git show --stat <그 commit>` 으로 **그
+commit 하나만** 봤다 — 3-F-25 를 쓸 때 내가 그 방식을 `base..HEAD` 로 바꾸면서
+결함을 넣었다.
+
+**고친 방법**: 끝점을 `added[-1]`(그 Phase 의 commit)로 바꿨다. 단정 강도는
+그대로다 — `⊆ 두 파일` · `len == 2` · 문자열 제거 AST 동일.
+
+**같은 결함이 이 Phase 의 `test_30` 에도 있었다.** 함께 고쳤다. 고치지
+않았다면 **다음 Phase 에서 똑같이 깨졌을 것**이다.
+
+> 🔴 정직하게 적는다 — commit 이 역사에 들어간 뒤로는 `base..tip` 범위가
+> **불변**이므로 이 테스트는 "그 commit 이 rewrite 되지 않았는가" 를 지키는
+> 역사 검증이 된다. Phase 진행 중(commit 전)에는 base ↔ 작업 트리를 비교하는
+> **살아 있는 가드**다. 3-F-24 의 `test_25` 와 같은 성질이다.
+
+#### ② `tests/test_trigger_pipeline_dormant_audit.py::test_25` (3-E-43 작)
+
+**틀린 가정: "원본 줄 수가 dormant 의 증거다."**
+
+```python
+assert sizes == {..., "engine/activation_timing.py": 541}
+```
+
+**줄 수는 주석과 코드를 구분하지 못한다.** 그래서 docstring 만 고친 Phase 가
+올 때마다 숫자를 갱신해야 했고 — 그 테스트의 docstring 자체가 **3-E-45 ·
+3-F-11 · 3-F-14** 세 번의 갱신을 기록하고 있다 — 갱신은 *"코드가 그대로인가"* 를
+**증명하지 않는다.**
+
+**고친 방법**: 약화하지 않고 **보강**했다.
+
+1. `541` → `570` 으로 갱신하고 사유를 docstring 에 적었다 (그 파일의 기존
+   관례와 같다).
+2. 🔴 **문자열 리터럴을 벗긴 줄 수 6개를 함께 못 박았다** —
+   `trigger.py` 735 · `trigger_chain.py` 257 · `trigger_order.py` 194 ·
+   `timing.py` 194 · `event_pipeline.py` 227 · `activation_timing.py` 227.
+   이 숫자는 **docstring 을 고쳐도 움직이지 않고 실행 코드를 고치면
+   움직인다.** 원래의 원본 줄 수 핀은 **그대로 남겼다.**
+
+측정으로 확인했다 — 여섯 모듈 **전부** base(`adcd877`) 대비 문자열 제거 AST 가
+**동일**하다. 즉 트리거 파이프라인은 여전히 dormant 다.
 
 ### 전체 회귀
 
 ```
-PHASE3F26_REGRESSION_PLACEHOLDER
+$ python -m pytest -p no:randomly -q
+4728 passed, 4 skipped in 598.49s (0:09:58)
 ```
+
+| 항목 | 값 |
+|---|---|
+| Phase 3-F-25 종료 시점 baseline | 4,692 passed |
+| 이번 Phase 신규 테스트 | **+36** |
+| 합계 (측정값) | **4,728 passed** |
+| 실패 | **0** |
+| skip | **4** — 3-F-25 와 **동일**. 이번 Phase 가 추가한 skip 은 0건 |
+
+36 = 4,728 − 4,692 가 정확히 맞고 skip 수가 그대로다.
+
+> 🔴 **첫 회귀는 2건이 실패했다** (4,726 passed / 2 failed). 둘 다 기존 감사
+> 테스트였고, 아래 절에 원인과 수정을 적었다. 위 숫자는 **수정 후 재실행**
+> 결과다. 첫 결과를 숨기지 않는다.
 
 ### 🔴 고의 위반 주입 13건 — 전부 검출
 
@@ -843,7 +921,7 @@ PHASE3F26_REGRESSION_PLACEHOLDER
 | 기존 테스트 baseline + 신규 | ✅ | §18 |
 | 기존 테스트 삭제 | **0** | — |
 | skip 추가 | **0** | `test_30` 이 fallback 으로 skip 회피 |
-| assertion 약화 | **0** | — |
+| assertion 약화 | **0** | 🔴 기존 테스트 **2개를 고쳤다** — §18 에 각각의 잘못된 가정을 적었다. `test_25` 는 핀 6개를 **더해** 보강했고 기존 핀은 남겼다 |
 
 ---
 
@@ -857,6 +935,7 @@ PHASE3F26_REGRESSION_PLACEHOLDER
 | 🟠 | **`effect_types` 이름이 둘** (Lua 15플래그 vs 공식 5종). 부분 문자열 측정이 조용히 섞인다 | §3 |
 | 🟠 | **`_O`/`_F` 뜻풀이가 근거 없이 보고서에 적혀 있다** (3-E-31). 엔진의 `MANDATORY`/`OPTIONAL` 축과 이름이 비슷해 잇고 싶어진다 — 잇는 근거는 없다 | §6 |
 | 🟡 | **`speed_of_link` 가 `effect_ref` 를 버린다.** 효과 단위 정보가 있는 유일한 자리에서 버려진다 | §8 |
+| 🟠 | **감사 테스트가 서로를 깨뜨린다.** 이 Phase 가 docstring 두 개를 고치자 앞선 Phase 의 테스트 2개가 깨졌다 — 끝점을 `HEAD` 로 둔 것과 주석 포함 줄 수를 핀으로 쓴 것. 둘 다 고쳤고 **같은 유형을 전수 조사했다**: 원본 줄 수를 핀으로 쓰는 테스트는 `test_trigger_pipeline_dormant_audit.py` **하나뿐**이고(이번에 보강), 끝점을 `HEAD` 로 쓰는 테스트는 3-F-25 · 3-F-26 **둘뿐**이었다(둘 다 고침). 다만 **다음 Phase 가 production docstring 을 고치면 또 다른 핀을 건드릴 수 있으므로**, 회귀를 반드시 끝까지 보고 2건이 아닌지 확인해야 한다 | §18 |
 | 🟢 | `effect_types` 가 engine 에 없는 것은 **미지원 경계**이고 `UNKNOWN` 이 후보로 새지 않는다 | §12 |
 
 ---
