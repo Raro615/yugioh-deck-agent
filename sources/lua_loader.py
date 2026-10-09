@@ -44,9 +44,56 @@ _RE_BLOCK_COMMENT = re.compile(r"--\[\[.*?(?:--\]\]|\]\])", re.S)
 _RE_CREATE_EFFECT = re.compile(
     r"(?:\b(local)\s+)?([A-Za-z_]\w*)\s*=\s*Effect\.(?:CreateEffect|GlobalEffect)\s*\("
 )
+#: 🔴 ``Clone`` 의 **세 가지 호출 형태**를 받는다 (Phase 3-F-32).
+#:
+#: 코퍼스의 ``Clone(`` 토큰 2,831개를 정규화해 보면 서로 다른 형태가 **4개**뿐이다.
+#:
+#: ===================================== ======= =========== ===================
+#: 형태                                   호출    스크립트     이 정규식
+#: ===================================== ======= =========== ===================
+#: ``V=V:V()``                             2,827       2,213  받는다 (예전부터)
+#: ``V=V:V(V)``                                2           2  🔴 받는다 (3-F-32)
+#: ``V=V.V(V)`` (``Effect.Clone(e1)``)         1           1  🔴 받는다 (3-F-32)
+#: ``V=V.V(0,V):V()``                          1           1  **배제한다**
+#: ===================================== ======= =========== ===================
+#:
+#: 마지막 것은 ``c63708033`` 의
+#: ``local tg=Duel.GetChainInfo(0,CHAININFO_TARGET_CARDS):Clone()`` 이고
+#: **Effect 가 아니라 Group 의 Clone** 이다. 그래서 **받는 쪽을 맨 식별자로
+#: 묶어 둔다** — 식(expression) receiver 를 허용하면 Group clone 에 가짜 효과
+#: 블록이 생긴다. 이것이 이 정규식을 "인자만" 넓히는 이유다.
+#:
+#: ``Effect.Clone(e1)`` 이 ``e1:Clone()`` 과 같은 함수라는 근거도 **코퍼스
+#: 안에** 있다 — 점 형태 ``Class.Method`` 상위 40개 가운데 **37개**가 같은
+#: 이름으로 콜론 메서드로도 쓰인다 (``Card.IsFaceup`` 은 점 1,219 · 콜론
+#: 7,732). 그렇지 않은 셋(``Effect.CreateEffect`` · ``Group.FromCards`` ·
+#: ``Group.CreateGroup``)은 진짜 정적 생성자다. ``Clone`` 은 콜론 2,829 ·
+#: 점 1 이므로 메서드 쪽이다.
+#:
+#: 🔴 ``[^()\n]*`` 은 **한 줄 안**으로 제한한다. 여러 줄에 걸친 인자나 중첩
+#: 괄호는 받지 않는다 — 코퍼스에 그런 ``Clone`` 은 없고, 넓히면 어디서
+#: 끝나는지 모르는 호출을 받게 된다.
+#:
+#: 🔴 이 정규식을 바꿀 때는 **``_RE_REBIND`` 의 선읽기도 같이** 바꿔야 한다.
+#: 그러지 않으면 블록은 생기지만 뒤따르는 설정자가 계속 버려져서, 파서가
+#: **부모의 값을 자식의 값처럼 주장**하게 된다 (지금 없는 것보다 나쁘다).
 _RE_CLONE_EFFECT = re.compile(
-    r"(?:\b(local)\s+)?([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*:\s*Clone\s*\(\s*\)"
+    r"(?:\b(local)\s+)?([A-Za-z_]\w*)\s*=\s*"
+    r"(?:([A-Za-z_]\w*)\s*:\s*Clone\s*\([^()\n]*\)"
+    r"|Effect\s*\.\s*Clone\s*\(\s*([A-Za-z_]\w*)\s*\))"
 )
+
+
+def _clone_source(match: "re.Match[str]") -> str:
+    """``_RE_CLONE_EFFECT`` 매치에서 **원본 변수 이름**을 돌려준다.
+
+    콜론 형태(``e2=e1:Clone(...)``)는 3번 그룹, 점 형태
+    (``e2=Effect.Clone(e1)``)는 4번 그룹에 들어 있다. 두 군데(이 모듈과
+    :mod:`analysis.effect_analyzer`)에서 같은 규칙을 써야 하므로 여기 한
+    곳에만 둔다 — Phase 3-F-28 이 탐지 정규식의 복사본 때문에 블록이
+    어긋났던 것과 같은 이유다.
+    """
+    return match.group(3) or match.group(4)
 _RE_SETTER = re.compile(r"\b([A-Za-z_]\w*)\s*:\s*Set(\w+)\s*\(")
 
 #: 🔴 변수에 **파서가 모르는 값**이 대입되는 자리 (Phase 3-F-31).
@@ -81,8 +128,13 @@ _RE_REBIND = re.compile(
     r"(?:(?<=^)|(?<=[;\s\)])) *(?:local\s+)?"
     r"([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)"
     r"\s*=(?!=)"
-    r"(?!\s*(?:Effect\.(?:CreateEffect|GlobalEffect)\s*\(" 
-    r"|[A-Za-z_]\w*\s*:\s*Clone\s*\(\s*\)))",
+    #: 🔴 아래 세 형태는 ``_RE_CLONE_EFFECT`` 와 **반드시 같아야 한다**
+    #: (Phase 3-F-32). 한쪽만 넓히면 블록은 생기지만 뒤따르는 설정자가
+    #: 계속 버려져서, 파서가 **부모의 값을 자식의 값처럼 주장**한다 —
+    #: 블록이 아예 없는 지금보다 나쁘다.
+    r"(?!\s*(?:Effect\.(?:CreateEffect|GlobalEffect)\s*\("
+    r"|[A-Za-z_]\w*\s*:\s*Clone\s*\([^()\n]*\)"
+    r"|Effect\s*\.\s*Clone\s*\(\s*[A-Za-z_]\w*\s*\)))",
     re.M,
 )
 _RE_FUNCTION = re.compile(r"\bfunction\s+s\.(\w+)")
@@ -344,9 +396,11 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
             continue
         events.append((m.start(), "create", m.group(2)))
     for m in _RE_CLONE_EFFECT.finditer(body):
-        if not _is_card_effect(body, m.group(1), m.group(2), m.group(3)):
+        #: 원본 변수는 형태에 따라 3번/4번 그룹에 있다 — ``_clone_source`` 참고.
+        src_var = _clone_source(m)
+        if not _is_card_effect(body, m.group(1), m.group(2), src_var):
             continue
-        events.append((m.start(), "clone", f"{m.group(2)}={m.group(3)}"))
+        events.append((m.start(), "clone", f"{m.group(2)}={src_var}"))
     #: 🔴 파서가 모르는 대입은 바인딩을 **푼다** (Phase 3-F-31 — 위
     #: ``_RE_REBIND`` 참고). ``create``/``clone`` 과 같은 자리에서 겹치지
     #: 않도록 정규식이 그 두 형태를 선읽기로 제외한다.
@@ -585,6 +639,11 @@ class LuaScriptSource:
                 if entry.is_file() and _RE_SCRIPT_FILE.match(entry.name):
                     count += 1
                     newest = max(newest, entry.stat().st_mtime)
+        # ``v9`` — Phase 3-F-32 가 ``Clone`` 의 **인자 있는 형태**
+        # (``e1:Clone(e1)`` · ``e2:Clone(c)``)와 **점 형태**
+        # (``Effect.Clone(e1)``)를 블록으로 인정했다 — 3개 스크립트에
+        # 효과 블록 3개가 생기고 그중 한 장(``c4997565``)은 뒤 블록의
+        # ``ordinal`` 이 하나 밀린다.
         # ``v8`` — Phase 3-F-31 이 "파서가 모르는 대입은 바인딩을 푼다" 를
         # 넣었다 (설정자 5건이 엉뚱한 블록에 붙던 것을 버리도록).
         # ``v7`` — Phase 3-F-29 가 ``Clone`` 이 물려준 네 목록 칸
@@ -595,7 +654,7 @@ class LuaScriptSource:
         # 파서 버전이 들어 있지 않으면 **고친 파서가 옛 캐시를 계속 읽는다**
         # (스크립트 파일이 바뀌지 않으면 signature 가 같기 때문이다). 파서가
         # 같은 입력에서 다른 결과를 내게 되면 이 숫자를 올린다.
-        return f"v8:{count}:{newest:.0f}"
+        return f"v9:{count}:{newest:.0f}"
 
 
 def _info_to_dict(info: LuaScriptInfo) -> dict:

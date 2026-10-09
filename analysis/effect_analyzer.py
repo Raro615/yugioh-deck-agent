@@ -42,6 +42,7 @@ from analysis.effect_model import (
 from core import constants as C
 from core.card_model import Card
 from sources.lua_loader import (
+    _clone_source,
     _extract_call_args,
     _is_card_effect,
     _RE_BLOCK_COMMENT,
@@ -350,9 +351,14 @@ class EffectAnalyzer:
                 continue
             events.append((m.start(), "create", m.group(2)))
         for m in _RE_CLONE_EFFECT.finditer(source):
-            if not _is_card_effect(source, m.group(1), m.group(2), m.group(3)):
+            #: 🔴 원본 변수의 그룹 번호를 **직접 쓰지 않는다** (Phase 3-F-32).
+            #: ``Clone`` 형태가 둘이라 3번/4번으로 갈리고, 여기서 틀리면
+            #: ``order`` 길이가 ``card.script.effects`` 와 어긋나
+            #: **다른 블록의 핸들러를 붙인다.**
+            src_var = _clone_source(m)
+            if not _is_card_effect(source, m.group(1), m.group(2), src_var):
                 continue
-            events.append((m.start(), "clone", f"{m.group(2)}={m.group(3)}"))
+            events.append((m.start(), "clone", f"{m.group(2)}={src_var}"))
         for m in _RE_SETTER.finditer(source):
             events.append(
                 (m.start(), "set", f"{m.group(1)}|{m.group(2)}|{m.end() - 1}")
