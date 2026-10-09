@@ -296,7 +296,8 @@ def test_01_the_constant_exists_in_the_corpus(scripts):
     #: +2)).
     #: ``EVENT_FREE_CHAIN`` 블록 수 4,914 는 **바뀌지 않았다** — 세 스크립트
     #: 중 어느 쪽도 ``EVENT_FREE_CHAIN`` 블록을 더하거나 빼지 않는다.
-    assert total == 34681
+    #: 🔴 Phase 3-F-32 에서 34,681 → **34,684**.
+    assert total == 34684
     assert 0.14 < len(blocks) / total < 0.15
 
 
@@ -781,7 +782,10 @@ def test_16_multiple_codes_and_duplicate_indices_in_one_script(scripts):
             duplicated += 1
             extra_blocks += surplus
     assert duplicated == 4795
-    assert extra_blocks == 6802
+    #: 🔴 Phase 3-F-32 에서 6,802 → **6,804**. 새 clone 블록 둘이
+    #: 같은 스크립트에서 이미 쓰인 ``index`` (``e2``)를 다시 쓴다 —
+    #: ``EffectSpec.index`` 가 유일하지 않다는 기존 위험(E6)의 재확인이다.
+    assert extra_blocks == 6804
 
     #: 유언장 — ``e1`` 이 **둘**이고 둘 다 ``EVENT_FREE_CHAIN`` 인데
     #: ``effect_types`` 가 다르다.

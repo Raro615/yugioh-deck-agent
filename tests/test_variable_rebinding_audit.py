@@ -114,7 +114,9 @@ MYSELF = "tests/test_variable_rebinding_audit.py"
 # ======================================================================
 
 SCRIPTS = 12702
-BLOCKS = 34681                     # 3-F-28 · 3-F-29 · 3-F-30 과 같다
+BLOCKS = 34684                     # 🔴 Phase 3-F-32 에서 +3 — ``Clone`` 의 인자 있는 형태
+# (``e1:Clone(e1)`` · ``e2:Clone(c)``)와 점 형태 (``Effect.Clone(e1)``)를
+# 블록으로 인정했다. 세 스크립트에 효과 블록이 하나씩 생겼다.
 
 #: 설정자 호출 receiver 추적 (수정 **후**).
 #:
@@ -124,10 +126,18 @@ BLOCKS = 34681                     # 3-F-28 · 3-F-29 · 3-F-30 과 같다
 #: 읽는다). 그 차이가 정확히 2건이고 ``c69526976`` 의 **주석 처리된 설정자**
 #: 두 줄이다 (``test_23``). 재측정해서 고쳤다.
 SET_TOTAL = 121636
-SET_TRACKED = 120301
+#: 🔴 Phase 3-F-32 에서 120,301 → **120,306**. 되살린 5건은
+#: ``c44887817``(1) · ``c4997565``(1) · ``c56410769``(3) 이다.
+SET_TRACKED = 120306
 SET_MISATTRIBUTED_BEFORE = 5       # 🔴 수정 전. 수정 후에는 0 이다
 SET_DROPPED_BEFORE = 1330
-SET_DROPPED_AFTER = 1335           # = 1,330 + 되살린 5
+#: 🔴 Phase 3-F-32 에서 1,335 → **1,330**. 총계가 3-F-30 때와 같아졌지만
+#: **같은 집합이 아니다** — 3-F-31 이 새로 버린 5건은 ``c44887817``(1) ·
+#: ``c4997565``(1) · ``c52445243``(3) 이고, 3-F-32 가 되살린 5건은
+#: ``c44887817``(1) · ``c4997565``(1) · ``c56410769``(3) 이다. 겹치는 것은
+#: 2건뿐이고, ``c52445243`` 의 3건은 ``e:GetLabelObject()`` 라서 계속
+#: UNKNOWN 이 맞다. (새 감사 파일의 ``test_38`` 이 이 비동일성을 못 박는다.)
+SET_DROPPED_AFTER = 1330
 
 #: 버려지는 1,330건의 정체.
 DROPPED_PARAMETER_E = 661          # function s.op(e,tp,...) 의 e
@@ -147,7 +157,10 @@ EFFECT_ALIASES = 0                 # 🔴 Effect 를 Effect 에 alias 하는 자
 
 #: 이미 묶인 변수에 **다시** create/clone 하는 자리 (정상 처리된다).
 REBIND_SAME_VAR_CREATE = 6345
-REBIND_SAME_VAR_CLONE = 457
+#: 🔴 Phase 3-F-32 에서 457 → **459**. 그 Phase 가 인정한 세 clone
+#: 자리 가운데 둘(``c44887817`` ``e2`` · ``c4997565`` ``e2``)이 같은
+#: 스크립트에서 이미 쓰인 이름을 다시 묶는 자리다.
+REBIND_SAME_VAR_CLONE = 459
 #: 🔴 이미 묶인 변수를 **파서가 모르는 RHS** 로 덮는 자리.
 SHADOWING_REBINDS = 25
 
@@ -245,7 +258,7 @@ def trace_receivers(body: str):
         ok = lua_loader._is_card_effect(body, m.group(1), m.group(2), None)
         events.append((m.start(), "create" if ok else "skip", m.group(2)))
     for m in lua_loader._RE_CLONE_EFFECT.finditer(body):
-        ok = lua_loader._is_card_effect(body, m.group(1), m.group(2), m.group(3))
+        ok = lua_loader._is_card_effect(body, m.group(1), m.group(2), lua_loader._clone_source(m))
         events.append((m.start(), "clone" if ok else "skip", m.group(2)))
     for m in lua_loader._RE_REBIND.finditer(body):
         events.append((m.start(), "rebind", m.group(1)))
@@ -582,8 +595,11 @@ def test_13_setter_receivers_are_tracked_or_dropped_never_misattributed(bodies):
     assert total == SET_TOTAL, total
     assert tracked == SET_TRACKED, tracked
     assert dropped == SET_DROPPED_AFTER, dropped
-    #: 수정 전 1,330 + 되살린 5 = 1,335.
-    assert dropped == SET_DROPPED_BEFORE + SET_MISATTRIBUTED_BEFORE
+    #: 🔴 Phase 3-F-32 에서 이 등식이 깨졌다. 그 Phase 가 ``Clone`` 세 형태를
+    #: 인정해 설정자 5건을 되살렸고, 버려짐이 1,335 → **1,330** 으로 돌아왔다.
+    #: 🔴 숫자가 3-F-30 때와 같아졌지만 **같은 집합이 아니다** —
+    #: ``SET_DROPPED_AFTER`` 주석과 새 감사 파일의 ``test_38`` 을 보라.
+    assert dropped == SET_DROPPED_BEFORE
 
 
 def test_14_what_the_dropped_receivers_actually_are(bodies):
@@ -650,7 +666,7 @@ def test_16_rebinding_kinds_across_the_corpus(bodies):
 
     이미 묶인 변수에 **다시 ``create``** 하는 것이 **6,345곳**으로 압도적이고,
     파서는 그것을 **정확히 처리한다** (새 블록, 옛 ordinal 불변). ``clone`` 재바인딩
-    **457곳**도 같다.
+    **459곳**도 같다 (3-F-32 에서 457 → 459).
 
     🔴 문제는 **파서가 모르는 RHS 로 덮는 25곳**이었다.
     """
@@ -662,7 +678,7 @@ def test_16_rebinding_kinds_across_the_corpus(bodies):
             if lua_loader._is_card_effect(body, m.group(1), m.group(2), None):
                 events.append((m.start(), "create", m.group(2)))
         for m in lua_loader._RE_CLONE_EFFECT.finditer(body):
-            if lua_loader._is_card_effect(body, m.group(1), m.group(2), m.group(3)):
+            if lua_loader._is_card_effect(body, m.group(1), m.group(2), lua_loader._clone_source(m)):
                 events.append((m.start(), "clone", m.group(2)))
         for m in _ANY_ASSIGN.finditer(clean):
             if classify_rhs(m.group(3)) in ("create", "clone_std"):
@@ -683,8 +699,14 @@ def test_16_rebinding_kinds_across_the_corpus(bodies):
                 shadowing += 1
     assert recreate == REBIND_SAME_VAR_CREATE, recreate
     assert reclone == REBIND_SAME_VAR_CLONE, reclone
-    #: 🔴 3-F-30 이 25 로 센 것과 같다 — 교차 검증된다.
-    assert shadowing == SHADOWING_REBINDS, shadowing
+    #: 🔴 Phase 3-F-32 에서 25 → **26**. 이 테스트가 세는 ``shadowing`` 은
+    #: "production 이 묶은 이름을, 그 뒤 create/clone 이 아닌 대입이 다시
+    #: 묶는 자리" 다. 3-F-32 가 ``c56410769`` 의 ``e3`` 를 블록으로 인정하면서
+    #: 그 파일에 묶인 이름이 하나 늘어 그런 자리가 하나 더 보인다.
+    #: 🔴 ``branch_setter::test_23`` 쪽 집계는 거꾸로 25 → **23** 으로 줄었다 —
+    #: 그 테스트는 production 규칙으로 clone 을 **제외**하고 세기 때문이다.
+    #: 같은 이름이라 혼동하기 쉽지만 **서로 다른 것을 센다.**
+    assert shadowing == 26, shadowing
 
 
 def test_17_the_real_label_object_card():
@@ -711,22 +733,35 @@ def test_18_the_real_clone_with_argument_card():
     """
     🔴 §8 — ``c44887817``: ``local e2=e1:Clone(e1)``.
 
-    ``Clone()`` 의 **빈 괄호**를 요구하는 정규식이 못 잡으므로 블록이 생기지
-    않는다. 고치기 전에는 그 뒤 ``SetCode`` 가 ordinal 1 의 code 를 **만들어
-    냈다** — ordinal 1 은 Lua 에 **자기 ``SetCode`` 가 없다.**
+    .. note::
+       🔴 **Phase 3-F-32 가 이 형태를 블록으로 인정했다.** 그래서 아래 두 줄의
+       방향이 **뒤집혔다**: 이 Phase 가 쓴 "정규식이 못 잡는다" 는
+       ``Clone()`` 의 빈 괄호를 요구하던 그때의 사실이고, 3-F-32 가 받는
+       쪽(맨 식별자)만 유지하고 **인자만** 허용하도록 넓혔다. 코퍼스의
+       ``Clone(`` 형태가 4개뿐이고 그중 하나(식 receiver)는 **Group** 의
+       Clone 임을 전수로 확인한 뒤에 넓힌 것이다.
+
+       이 Phase 가 고친 것은 그대로 유지된다 — ordinal 1 은 Lua 에 자기
+       ``SetCode`` 가 없고, 그 값은 여전히 ``None`` 이다. 달라진 것은
+       ``SetCode(EFFECT_CANNOT_MSET)`` 가 **버려지는 대신 제 블록(ordinal
+       4)에 붙는다**는 점이다.
     """
     text = script_text(CLONE_WITH_ARG_CARD)
     assert "local e2=e1:Clone(e1)" in text
-    assert not lua_loader._RE_CLONE_EFFECT.search("local e2=e1:Clone(e1)")
+    #: 🔴 3-F-32 이후에는 **잡는다.**
+    assert lua_loader._RE_CLONE_EFFECT.search("local e2=e1:Clone(e1)")
 
     specs = parse_card(CLONE_WITH_ARG_CARD).effects
-    #: 🔴 ordinal 1 의 code 가 ``None`` 이다 (전에는 ``EFFECT_CANNOT_MSET``).
+    #: 🔴 이 Phase 의 결론은 유지된다 — ordinal 1 의 code 는 ``None`` 이다.
     assert specs[1].code is None
     assert specs[0].code == "EVENT_FREE_CHAIN"
     #: 그 블록에 ``SetCode`` 가 없다는 것을 원문으로 확인한다.
     head = text.split("local e3=")[0]
     assert "local e2=Effect.CreateEffect(c)" in head
     assert "e2:SetCode(" not in head
+    #: 🔴 그 ``SetCode`` 는 이제 **제 블록**(clone, ordinal 4)에 붙는다.
+    assert specs[4].cloned_from == "e1"
+    assert specs[4].code == "EFFECT_CANNOT_MSET"
 
 
 def test_19_the_real_static_clone_card():
@@ -738,11 +773,21 @@ def test_19_the_real_static_clone_card():
     """
     text = script_text(STATIC_CLONE_CARD)
     assert "local e2=Effect.Clone(e1)" in text
-    assert not lua_loader._RE_CLONE_EFFECT.search("local e2=Effect.Clone(e1)")
+    #: 🔴 **Phase 3-F-32 가 점 형태를 인정했다** — 방향이 뒤집혔다.
+    #: 근거는 코퍼스 안에 있다: 점 형태 ``Class.Method`` 상위 40개 가운데
+    #: 37개가 같은 이름으로 콜론 메서드로도 쓰이고, ``Clone`` 은 콜론 2,829 ·
+    #: 점 1 이다 (새 감사 파일의 ``test_10``).
+    assert lua_loader._RE_CLONE_EFFECT.search("local e2=Effect.Clone(e1)")
 
     specs = parse_card(STATIC_CLONE_CARD).effects
-    #: 🔴 제 값이 복원됐다.
+    #: 🔴 이 Phase 가 복원한 값은 그대로다.
     assert specs[1].code == "EVENT_CHAINING"
+    #: 🔴 그 ``SetCode(EFFECT_DISABLE_EFFECT)`` 는 이제 제 블록(ordinal 3)에
+    #: 붙고, 밀려난 ``e3`` 가 ordinal 4 다 — 코퍼스에서 **기존 ordinal 이
+    #: 움직인 유일한 자리**다.
+    assert specs[3].index == "e2" and specs[3].cloned_from == "e1"
+    assert specs[3].code == "EFFECT_DISABLE_EFFECT"
+    assert specs[4].index == "e3" and specs[4].code == "EFFECT_UPDATE_DEFENSE"
     assert "e2:SetCode(EVENT_CHAINING)" in text
     #: 등록된 효과다 — 유발 사건이 틀렸으면 분석이 틀린다.
     assert "c:RegisterEffect(e2" in text
@@ -763,7 +808,7 @@ def test_20_the_five_misattributed_calls_are_gone(bodies):
             if lua_loader._is_card_effect(body, m.group(1), m.group(2), None):
                 events.append((m.start(), 0, "bind", m.group(2)))
         for m in lua_loader._RE_CLONE_EFFECT.finditer(body):
-            if lua_loader._is_card_effect(body, m.group(1), m.group(2), m.group(3)):
+            if lua_loader._is_card_effect(body, m.group(1), m.group(2), lua_loader._clone_source(m)):
                 events.append((m.start(), 0, "bind", m.group(2)))
         for m in lua_loader._RE_SETTER.finditer(body):
             if m.group(2) in SET_TRACKED_NAMES:
@@ -789,12 +834,22 @@ def test_20_the_five_misattributed_calls_are_gone(bodies):
             if old_ord is None and new["ordinal"] is not None:
                 current_hits.append((card_id, var, setter))
 
-    #: 🔴 옛 규칙이 **잘못 붙이던** 5건.
-    assert len(legacy_hits) == SET_MISATTRIBUTED_BEFORE, legacy_hits
-    assert {row[0] for row in legacy_hits} == set(CHANGED_CARDS)
-    assert collections.Counter(row[2] for row in legacy_hits) == {
-        "Category": 3, "Code": 2,
-    }
+    #: 🔴 옛 규칙이 **잘못 붙이던** 자리.
+    #:
+    #: **Phase 3-F-32 에서 5 → 3 으로 줄었다.** 이 테스트가 비교하는
+    #: ``legacy_trace`` 는 ``_RE_REBIND`` **없는** 규칙이고, 바인딩은 production
+    #: 의 ``_RE_CLONE_EFFECT`` 로 만든다. 3-F-32 가 ``e1:Clone(e1)`` 과
+    #: ``Effect.Clone(e1)`` 을 블록으로 인정하면서, 그 두 자리에서는 옛 규칙도
+    #: **더 이상 엉뚱한 블록을 가리키지 않는다** (제 블록을 가리킨다). 남은 3건은
+    #: ``c52445243`` 의 ``e:GetLabelObject()`` 뿐이고, 그것은 정적으로 풀 수
+    #: 없어 **계속 UNKNOWN 이 맞다.**
+    #:
+    #: 🔴 이 Phase 의 결론이 약해진 것이 아니다 — "옛 규칙은 틀린 값을
+    #: 만들었고 지금은 만들지 않는다" 는 그대로이고, 그중 2건은 3-F-32 가
+    #: **값을 버리는 대신 제자리에 붙이는** 데까지 갔다.
+    assert len(legacy_hits) == 3, legacy_hits
+    assert {row[0] for row in legacy_hits} == {LABEL_OBJECT_CARD}
+    assert collections.Counter(row[2] for row in legacy_hits) == {"Category": 3}
     #: 🔴 반대 방향(새로 붙는 것)은 **0건** — 잃기만 하고 만들지 않는다.
     assert current_hits == [], current_hits
 
@@ -899,8 +954,8 @@ def test_24_ordinal_equals_the_event_order_across_the_whole_corpus(bodies, scrip
             if lua_loader._is_card_effect(body, m.group(1), m.group(2), None):
                 order.append((m.start(), m.group(2), None))
         for m in lua_loader._RE_CLONE_EFFECT.finditer(body):
-            if lua_loader._is_card_effect(body, m.group(1), m.group(2), m.group(3)):
-                order.append((m.start(), m.group(2), m.group(3)))
+            if lua_loader._is_card_effect(body, m.group(1), m.group(2), lua_loader._clone_source(m)):
+                order.append((m.start(), m.group(2), lua_loader._clone_source(m)))
         order.sort(key=lambda e: e[0])
         derived = [(var, parent) for _position, var, parent in order]
         actual = [(s.index, s.cloned_from) for s in scripts[card_id].effects]
@@ -1020,7 +1075,13 @@ def test_29_the_analysis_layer_is_the_one_that_changed(repository):
     )
     codes = [b.trigger_event or b.effect_code for b in blocks]
     assert "EVENT_CHAINING" in codes
-    assert "EFFECT_DISABLE_EFFECT" not in codes
+    #: 🔴 **Phase 3-F-32 에서 방향이 바뀌었다.** 이 Phase 는
+    #: ``EFFECT_DISABLE_EFFECT`` 가 **어느 블록에도 없어야** 한다고 적었다 —
+    #: 그때는 그 clone 블록 자체가 없었기 때문이다. 3-F-32 가 그 블록을
+    #: 만들었으니, 이제 그 값은 **제 블록에** 있어야 한다. 중요한 것은
+    #: ``EVENT_CHAINING`` 을 **덮지 않는다**는 것이고 그것은 위 줄이 지킨다.
+    assert "EFFECT_DISABLE_EFFECT" in codes
+    assert codes.count("EVENT_CHAINING") == 1
 
     #: 🔴 ``c44887817`` — 없던 code 가 사라졌다.
     card = repository.get(CLONE_WITH_ARG_CARD)
@@ -1028,8 +1089,11 @@ def test_29_the_analysis_layer_is_the_one_that_changed(repository):
         analyzer.analyze(card).resolution_effects
     )
     codes = [b.trigger_event or b.effect_code for b in blocks]
-    assert "EFFECT_CANNOT_MSET" not in codes
+    #: 🔴 같은 이유로 방향이 바뀌었다 — ``EFFECT_CANNOT_MSET`` 은 **제 블록에**
+    #: 있고, 이 Phase 가 ``None`` 으로 되돌린 ordinal 1 은 그대로 ``None`` 이다.
+    assert "EFFECT_CANNOT_MSET" in codes
     assert None in codes
+    assert parse_card(CLONE_WITH_ARG_CARD).effects[1].code is None
 
     #: 🔴 ``c52445243`` — 엉뚱한 category 가 사라졌다.
     card = repository.get(LABEL_OBJECT_CARD)
@@ -1070,13 +1134,14 @@ def test_30_the_corpus_diff_is_exactly_three_scripts(scripts):
             totals["code"] += spec.code is not None
             totals["cloned_from"] += spec.cloned_from is not None
     assert dict(totals) == {
-        "effect_types": 45337,
-        "ranges": 15063,
-        "target_ranges": 2062,
-        "categories": 20503,      # 🔴 3-F-29 의 20,505 에서 −2
-        "properties": 23884,
-        "code": 30126,            # 🔴 3-F-29 의 30,127 에서 −1
-        "cloned_from": 2744,
+        #: 🔴 Phase 3-F-32 에서 +3 블록만큼 늘었다 (``categories`` 는 그대로).
+        "effect_types": 45340,
+        "ranges": 15064,
+        "target_ranges": 2063,
+        "categories": 20503,      # 🔴 3-F-29 의 20,505 에서 −2, 3-F-32 는 변화 없음
+        "properties": 23887,
+        "code": 30129,            # 🔴 3-F-29 의 30,127 에서 −1, 3-F-32 에서 +3
+        "cloned_from": 2747,      # 🔴 3-F-32 에서 +3
     }, dict(totals)
 
 
@@ -1154,10 +1219,13 @@ def test_33_the_cache_reflects_the_fixed_parser(scripts, tmp_path):
         assert sum(len(info.effects) for info in table.values()) == BLOCKS
         assert table[STATIC_CLONE_CARD].effects[1].code == "EVENT_CHAINING"
         assert table[CLONE_WITH_ARG_CARD].effects[1].code is None
-    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v8:")
+    #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
+    #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
+    #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
+    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v9:")
 
     body = inspect.getsource(LuaScriptSource._signature)
-    assert 'f"v8:{count}:{newest:.0f}"' in body
+    assert 'f"v9:{count}:{newest:.0f}"' in body
     for old in ("v7:", "v6:", "v5:"):
         assert f'f"{old}' not in body, old
     #: 🔴 서명에 파서 버전·코드 해시가 **없다** — 그래서 손으로 올린다.
@@ -1197,7 +1265,7 @@ def test_34_effect_to_effect_aliasing_does_not_occur_in_the_corpus(bodies):
             if lua_loader._is_card_effect(body, m.group(1), m.group(2), None):
                 bound.add(m.group(2))
         for m in lua_loader._RE_CLONE_EFFECT.finditer(body):
-            if lua_loader._is_card_effect(body, m.group(1), m.group(2), m.group(3)):
+            if lua_loader._is_card_effect(body, m.group(1), m.group(2), lua_loader._clone_source(m)):
                 bound.add(m.group(2))
         for m in _ANY_ASSIGN.finditer(clean):
             if classify_rhs(m.group(3)) != "bare_var":

@@ -128,9 +128,13 @@ CLONE_SITES_OF_EFFECT = 2773
 CLONE_SITES_OF_GROUP = 54
 
 #: 파서가 만드는 블록 — 수정 후.
-BLOCKS = 34681
+BLOCKS = 34684  # 🔴 Phase 3-F-32 에서 +3 — ``Clone`` 의 인자 있는 형태
+# (``e1:Clone(e1)`` · ``e2:Clone(c)``)와 점 형태 (``Effect.Clone(e1)``)를
+# 블록으로 인정했다. 세 스크립트에 효과 블록이 하나씩 생겼다.
 BLOCKS_FROM_CREATE = 31937
-BLOCKS_FROM_CLONE = 2744
+# 🔴 Phase 3-F-32 에서 +3 — ``Clone`` 의 인자 있는 형태와 점 형태를
+# 블록으로 인정했다 (c44887817 · c4997565 · c56410769).
+BLOCKS_FROM_CLONE = 2747
 #: 수정 전.
 BLOCKS_BEFORE = 34680
 
@@ -698,7 +702,10 @@ def test_19_the_cache_round_trip_returns_the_same_blocks(scripts, tmp_path):
     #: 돌려준다" 이므로 그대로 유지되고, 고정값만 따라 올린다.
     #: 🔴 Phase 3-F-31 에서 ``v7`` → ``v8``. 주장("캐시가 **지금** 파서의
     #: 결과를 돌려준다")은 그대로이고 고정값만 따라 올린다.
-    assert blob["signature"].startswith("v8:")
+    #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
+    #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
+    #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
+    assert blob["signature"].startswith("v9:")
 
 
 def test_20_the_cache_signature_was_bumped_for_this_parser_change():
@@ -712,11 +719,11 @@ def test_20_the_cache_signature_was_bumped_for_this_parser_change():
     body = inspect.getsource(LuaScriptSource._signature)
     #: 🔴 Phase 3-F-29 에서 ``v6`` → ``v7``. 3-F-28 이 올린 ``v6`` 이 **되돌아
     #: 가지 않았는지**가 이 테스트의 관심이고, 그것은 아래 목록이 지킨다.
-    assert 'f"v8:{count}:{newest:.0f}"' in body
+    assert 'f"v9:{count}:{newest:.0f}"' in body
     #: 되돌아가지 않았는지도 본다.
-    for old in ("v7:", "v6:", "v5:", "v4:", "v3:"):
+    for old in ("v8:", "v7:", "v6:", "v5:", "v4:", "v3:"):
         assert f'f"{old}' not in body, old
-    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v8:")
+    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v9:")
 
     #: 🔴 서명에 파서 버전·코드 해시가 **들어 있지 않다** — 그래서 손으로 올린다.
     for token in ("parse_lua_source", "__version__", "md5", "sha", "_is_card_effect",
@@ -738,14 +745,14 @@ def test_21_a_stale_cache_is_rejected(tmp_path):
     cache.write_text(
         json.dumps(
             {
-                "signature": "v7:12702:0",
+                "signature": "v8:12702:0",
                 "scripts": {str(NON_LOCAL_CARD_EFFECT): {"file_name": "poisoned.lua"}},
             }
         ),
         encoding="utf-8",
     )
     source = LuaScriptSource(PROJECT_ROOT)
-    assert source._signature() != "v7:12702:0"
+    assert source._signature() != "v8:12702:0"
 
     loaded = source.load_cached(cache)
     #: 심은 거짓 내용이 **하나도** 살아남지 않았다.
@@ -754,7 +761,7 @@ def test_21_a_stale_cache_is_rejected(tmp_path):
         parse_card(NON_LOCAL_CARD_EFFECT).effects
     )
     #: 캐시 파일이 새 서명으로 다시 쓰였다.
-    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v8:")
+    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v9:")
 
     #: 깨진 캐시도 조용히 재파싱된다 (예외를 던지지 않는다).
     cache.write_text("{ not json", encoding="utf-8")
@@ -1085,7 +1092,8 @@ def test_33_the_corpus_diff_is_exactly_three_scripts(scripts, sources):
     assert blocks - from_clone == BLOCKS_FROM_CREATE
     assert from_clone == BLOCKS_FROM_CLONE
     #: 수정 전보다 **정확히 하나** 많다 (+2 −1).
-    assert blocks == BLOCKS_BEFORE + 1
+    #: 🔴 Phase 3-F-32 에서 +3 이 더 붙었다 — 이 Phase(3-F-28)의 +1 은 그대로다.
+    assert blocks == BLOCKS_BEFORE + 1 + 3
 
     #: 🔴 세 스크립트 말고는 블록 수가 그대로다 — 다른 칸은 **원문 전체**에서
     #: 긁으므로 블록 주석 제거에 영향받지 않는다는 것도 함께 본다.
@@ -1146,7 +1154,10 @@ def test_34_every_skipped_site_is_a_duel_global_or_another_cards_effect(sources)
             [("create", m) for m in matches]
             + [("clone", m) for m in lua_loader._RE_CLONE_EFFECT.finditer(body)]
         ):
-            parent = match.group(3) if kind == "clone" else None
+            #: 🔴 Phase 3-F-32 — 그룹 번호를 직접 읽으면 점 형태
+            #: (``Effect.Clone(e1)``)에서 ``None`` 이 나와 ``startswith`` 가
+            #: 터진다. 원본 변수는 ``_clone_source`` 로 읽는다.
+            parent = lua_loader._clone_source(match) if kind == "clone" else None
             if kind == "clone" and not (
                 parent.startswith("e")
                 or any(m.group(2) == parent for m in matches)

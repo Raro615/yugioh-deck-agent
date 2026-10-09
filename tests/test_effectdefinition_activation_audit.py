@@ -97,18 +97,26 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 #: ``WITH_CONDITION`` · ``WITH_TARGET`` · ``WITH_COST`` ·
 #: ``FREE_CHAIN_*`` 은 **그대로다** — 새로 세는 두 블록과 더 이상 세지
 #: 않는 한 블록 모두 ``SetCondition`` · ``SetTarget`` 이 없다.
-TOTAL_BLOCKS = 34632
+# 🔴 Phase 3-F-32 에서 +3 — ``Clone`` 세 형태를 블록으로 인정했다.
+# (이 숫자는 ``cards.cdb`` 에 있는 카드에 붙은 블록만 센다 — 전체는 34,684.)
+TOTAL_BLOCKS = 34635
 
 #: 네 범주 ``(SetCondition 있음, SetTarget 있음) → 블록 수``.
+#: 🔴 Phase 3-F-32 에서 ``(False, False)`` 11,627 → **11,629** ·
+#: ``(True, False)`` 3,743 → **3,744** (합 +3). ``Clone`` 세 형태를 블록으로
+#: 인정했고, 세 새 블록 가운데 ``c56410769`` 의 것만 ``SetCondition`` 을 갖는다.
 QUADRANTS = {
-    (False, False): 11627,
+    (False, False): 11629,
     (False, True): 10568,
     (True, True): 8694,
-    (True, False): 3743,
+    (True, False): 3744,
 }
 
 #: 슬롯별 블록 수.
-WITH_CONDITION = 12437
+#: 🔴 Phase 3-F-32 에서 ``WITH_CONDITION`` 12,437 → **12,438**
+#: (``c56410769`` 의 clone 이 ``SetCondition(s.poscon(POS_DEFENSE))`` 를 갖는다).
+#: ``WITH_TARGET`` · ``WITH_COST`` 는 그대로다.
+WITH_CONDITION = 12438
 WITH_TARGET = 19262
 WITH_COST = 5007
 

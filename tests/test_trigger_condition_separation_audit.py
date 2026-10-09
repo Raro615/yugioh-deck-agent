@@ -236,10 +236,13 @@ def test_03_event_codes_live_in_the_parser_layer(repository):
     #: 없는 / ``e`` 로 시작하지 않는 블록을 세기 시작했다(``c9839115`` · ``c74506079``
     #: +2)).
     #: ``EVENT_*`` 종류 수 70 은 그대로다.
-    assert sum(counts.values()) == 34632
+    #: 🔴 Phase 3-F-32 에서 +3 (``cards.cdb`` 에 붙은 블록 기준).
+    assert sum(counts.values()) == 34635
     #: 🔴 Phase 3-F-31 에서 30,085 → **30,084** (``c44887817`` ordinal 1 의
     #: ``code`` 가 귀속 오류로 생긴 값이었다). ``EVENT_*`` 16,382 는 그대로다.
-    assert sum(n for name, n in counts.items() if name) == 30084
+    #: 🔴 Phase 3-F-32 에서 30,084 → **30,087** — 새 clone 블록 셋 다 자기
+    #: ``SetCode`` 를 갖는다.
+    assert sum(n for name, n in counts.items() if name) == 30087
     #: 🔴 Phase 3-F-31 에서 ``EVENT_*`` 16,382 → **16,383**. ``c4997565``
     #: ordinal 1 의 제 값 ``EVENT_CHAINING`` 이 복원됐다 (전에는
     #: ``local e2=Effect.Clone(e1)`` 뒤 ``SetCode(EFFECT_DISABLE_EFFECT)`` 가

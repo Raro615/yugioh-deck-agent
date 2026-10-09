@@ -122,9 +122,13 @@ MYSELF = "tests/test_clone_sibling_contamination_audit.py"
 # ======================================================================
 
 SCRIPTS = 12702
-BLOCKS = 34681                     # 🔴 3-F-28 과 같다 — 이 Phase 는 블록을 더하지 않는다
-CLONE_BLOCKS = 2744
-SCRIPTS_WITH_CLONE = 2145
+BLOCKS = 34684  # 🔴 Phase 3-F-32 에서 +3 — ``Clone`` 의 인자 있는 형태
+# (``e1:Clone(e1)`` · ``e2:Clone(c)``)와 점 형태 (``Effect.Clone(e1)``)를
+# 블록으로 인정했다. 세 스크립트에 효과 블록이 하나씩 생겼다.                     # 🔴 3-F-28 과 같다 — 이 Phase 는 블록을 더하지 않는다
+# 🔴 Phase 3-F-32 에서 +3 — ``Clone`` 의 인자 있는 형태와 점 형태를
+# 블록으로 인정했다 (c44887817 · c4997565 · c56410769).
+CLONE_BLOCKS = 2747
+SCRIPTS_WITH_CLONE = 2148
 
 #: ``Clone()`` 이 물려주는 목록 칸 — 이 Phase 가 규칙을 통일한 대상.
 INHERITED_LISTS = ("effect_types", "ranges", "target_ranges", "categories", "properties")
@@ -151,12 +155,16 @@ CHANGED_PAIRS = 75                 # 블록-칸 쌍 (직접 64 + 연쇄 7 + 순�
 
 #: 칸별 corpus 총계 — 수정 후.
 TOTALS = {
-    "effect_types": 45337,         # 🔴 3-F-27 의 결과 — 이 Phase 가 건드리지 않았다
-    "ranges": 15063,               # 15,075 에서 −12
-    "target_ranges": 2062,         # 2,072 에서 −10
+    # 🔴 Phase 3-F-32 에서 ``Clone`` 의 인자 있는 형태와 점 형태를 블록으로
+    # 인정해 블록 3개가 늘었다. 그 세 블록이 부모에게서 물려받거나 자기
+    # 설정자로 적은 값만큼 아래 총계가 늘어난다 (``categories`` 는 세 블록
+    # 모두 비어 있어 **그대로**다).
+    "effect_types": 45340,         # 🔴 3-F-27 의 결과 · 3-F-32 에서 +3
+    "ranges": 15064,               # 15,075 에서 −12, 3-F-32 에서 +1
+    "target_ranges": 2063,         # 2,072 에서 −10, 3-F-32 에서 +1
     #: 🔴 Phase 3-F-31 에서 −2. 그 Phase 가 ``c52445243`` 의 ``local e1=e:GetLabelObject()`` 뒤 ``SetCategory`` 3건이 엉뚱한 블록에 붙던 것을 고쳤고, 그 블록의 두 category 가 사라졌다.
     "categories": 20503,           # 20,534 에서 −29, 3-F-31 에서 다시 −2
-    "properties": 23884,           # 23,907 에서 −23
+    "properties": 23887,           # 23,907 에서 −23, 3-F-32 에서 +3
 }
 
 #: 측정으로 확인한 실제 카드.
@@ -232,8 +240,8 @@ def replay(body: str, field: str):
         if lua_loader._is_card_effect(body, m.group(1), m.group(2), None):
             events.append((m.start(), "create", m.group(2), None))
     for m in lua_loader._RE_CLONE_EFFECT.finditer(body):
-        if lua_loader._is_card_effect(body, m.group(1), m.group(2), m.group(3)):
-            events.append((m.start(), "clone", m.group(2), m.group(3)))
+        if lua_loader._is_card_effect(body, m.group(1), m.group(2), lua_loader._clone_source(m)):
+            events.append((m.start(), "clone", m.group(2), lua_loader._clone_source(m)))
     for m in lua_loader._RE_SETTER.finditer(body):
         if m.group(2) == setter:
             events.append((m.start(), "set", m.group(1), str(m.end() - 1)))
@@ -889,7 +897,10 @@ def test_25_the_cache_round_trip_returns_the_corrected_blocks(scripts, tmp_path)
     blob = json.loads(cache.read_text(encoding="utf-8"))
     assert blob["signature"] == source._signature()
     #: 🔴 Phase 3-F-31 에서 ``v7`` → ``v8``.
-    assert blob["signature"].startswith("v8:")
+    #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
+    #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
+    #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
+    assert blob["signature"].startswith("v9:")
 
 
 def test_26_the_cache_signature_was_bumped():
@@ -900,10 +911,10 @@ def test_26_the_cache_signature_was_bumped():
     **세 Phase 연속으로 설계대로 걸렸다** (3-F-27 · 3-F-28 · 3-F-29).
     """
     body = inspect.getsource(LuaScriptSource._signature)
-    assert 'f"v8:{count}:{newest:.0f}"' in body
-    for old in ("v7:", "v6:", "v5:", "v4:"):
+    assert 'f"v9:{count}:{newest:.0f}"' in body
+    for old in ("v8:", "v7:", "v6:", "v5:", "v4:"):
         assert f'f"{old}' not in body, old
-    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v8:")
+    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v9:")
     #: 🔴 서명에 파서 버전·코드 해시가 **없다** — 그래서 손으로 올린다.
     for token in ("parse_lua_source", "__version__", "md5", "sha", "_write_list"):
         assert token not in body, token
@@ -914,18 +925,18 @@ def test_27_a_stale_cache_is_rejected(tmp_path):
     cache = tmp_path / "lua_scripts.json"
     cache.write_text(
         json.dumps({
-            "signature": "v7:12702:0",
+            "signature": "v8:12702:0",
             "scripts": {str(CLEAR_PROPERTY): {"file_name": "poisoned.lua"}},
         }),
         encoding="utf-8",
     )
     source = LuaScriptSource(PROJECT_ROOT)
-    assert source._signature() != "v7:12702:0"
+    assert source._signature() != "v8:12702:0"
     loaded = source.load_cached(cache)
     assert loaded[CLEAR_PROPERTY].file_name == f"c{CLEAR_PROPERTY}.lua"
     #: 🔴 고친 값이 들어 있다 — 옛 캐시의 더하기 결과가 아니다.
     assert loaded[CLEAR_PROPERTY].effects[1].properties == []
-    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v8:")
+    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v9:")
     #: 깨진 캐시도 조용히 재파싱된다.
     cache.write_text("{ not json", encoding="utf-8")
     assert len(source.load_cached(cache)) == SCRIPTS

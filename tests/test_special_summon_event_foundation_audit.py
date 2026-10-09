@@ -716,11 +716,14 @@ def test_15_the_script_corpus_separates_events_from_restrictions(repository):
     #: (``c9409625`` −1), ``c:RegisterEffect`` 로 이 카드에 등록되는
     #: ``local`` 없는 / ``e`` 로 시작하지 않는 블록을 세기 시작했다
     #: (``c9839115`` · ``c74506079`` +2). ``code`` 종류 수 298 은 그대로다.
-    assert blocks == 34632
+    #: 🔴 Phase 3-F-32 에서 +3 (``cards.cdb`` 에 붙은 블록 기준).
+    assert blocks == 34635
     #: 🔴 Phase 3-F-31 에서 ``code`` 있는 블록 30,085 → **30,084**.
     #: ``c44887817`` ordinal 1 의 ``code`` 가 귀속 오류로 생긴 값이었고
     #: 이제 ``None`` 이다. 블록 수 34,632 는 그대로다.
-    assert sum(counts.values()) == 30084
+    #: 🔴 Phase 3-F-32 에서 30,084 → **30,087** — 새 clone 블록 셋 다 자기
+    #: ``SetCode`` 를 갖는다.
+    assert sum(counts.values()) == 30087
     assert len(counts) == 298
 
     summon_codes = {code: n for code, n in counts.items() if "SUMMON" in code}

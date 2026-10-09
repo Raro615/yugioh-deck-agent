@@ -157,15 +157,19 @@ MULTI_TYPE_ONE_CALL = 176392         # 한 호출 OR: CONTINUOUS+FIELD / FIELD+T
 #: 🔴 이 테스트는 3-F-27 이 "범위 밖" 으로 **세어 두기만 한** 결함이고,
 #: ``test_29`` 가 그 수(64)를 다음 Phase 후보의 근거로 고정해 두었다.
 #: 3-F-29 가 그것을 고쳤으므로 숫자가 움직이는 것이 **설계된 신호**다.
-RANGES_TOTAL = 15063
-TARGET_RANGES_TOTAL = 2062
+# 🔴 Phase 3-F-32 에서 +3 블록만큼 늘었다 (``categories`` 는 그대로).
+RANGES_TOTAL = 15064
+TARGET_RANGES_TOTAL = 2063
 #: 🔴 Phase 3-F-31 에서 −2. 그 Phase 가 ``c52445243`` 의 ``local e1=e:GetLabelObject()`` 뒤 ``SetCategory`` 3건이 엉뚱한 블록에 붙던 것을 고쳤고, 그 블록의 두 category 가 사라졌다.
 CATEGORIES_TOTAL = 20503
-PROPERTIES_TOTAL = 23884
+PROPERTIES_TOTAL = 23887
 #: 🔴 Phase 3-F-31 에서 30,127 → 30,126. ``c44887817`` ordinal 1 의 ``code``
 #: 는 ``local e2=e1:Clone(e1)`` 뒤 ``SetCode`` 가 엉뚱하게 붙어 생긴 값이었고,
 #: 그 블록은 Lua 에 자기 ``SetCode`` 가 없다. 이제 ``None`` 이다.
-CODE_TOTAL = 30126
+# 🔴 Phase 3-F-32 에서 30,126 → **30,129**. 새 clone 블록 셋 다 자기
+# ``SetCode`` 를 갖는다 (``EFFECT_CANNOT_MSET`` · ``EFFECT_DISABLE_EFFECT`` ·
+# ``EFFECT_CANNOT_ATTACK_ANNOUNCE``).
+CODE_TOTAL = 30129
 COUNT_LIMIT_TOTAL = 11187
 
 LUSTER_DRAGON = 11091375
@@ -247,10 +251,10 @@ def walk_replace_rule(source: str) -> list[dict]:
         events.append((match.start(), "create", match.group(2)))
     for match in lua_loader._RE_CLONE_EFFECT.finditer(source):
         if not lua_loader._is_card_effect(
-            source, match.group(1), match.group(2), match.group(3)
+            source, match.group(1), match.group(2), lua_loader._clone_source(match)
         ):
             continue
-        events.append((match.start(), "clone", f"{match.group(2)}={match.group(3)}"))
+        events.append((match.start(), "clone", f"{match.group(2)}={lua_loader._clone_source(match)}"))
     for match in lua_loader._RE_SETTER.finditer(source):
         events.append(
             (match.start(), "set", f"{match.group(1)}|{match.group(2)}|{match.end() - 1}")
@@ -680,7 +684,9 @@ def test_17_real_inheritance_cards_are_untouched(corpus):
             #: 자기 SetType 이 없으면 production 과 교체 규칙이 **같아야** 한다.
             assert spec.effect_types == fixed["types"], (card_id, spec.index)
 
-    assert inherited_only == 2667
+    #: 🔴 Phase 3-F-32 에서 2,667 → **2,670**. 새 clone 블록 셋 다 자기
+    #: ``SetType`` 이 없어 물려받은 type 이 그대로 남는다.
+    assert inherited_only == 2670
 
     #: 실제 카드 둘로 값까지 확인한다. 🔴 ``index`` 가 겹치므로 **``Clone`` 인
     #: 블록만** 골라 본다 — ``c39015`` 에는 ``e2`` 가 둘, ``c102380`` 에도 둘이다.
@@ -729,7 +735,7 @@ def test_19_corpus_wide_diff_is_only_clone_flag_removal(corpus):
                                   spec.effect_types, fixed["types"]))
 
     #: 🔴 Phase 3-F-28 에서 34,680 → 34,681.
-    assert blocks == 34681
+    assert blocks == 34684
 
     #: 🔴 Phase 3-F-28 에서 1 → 0. 3-F-27 때 남아 있던 그 1건은
     #: ``c9839115`` 의 ``local`` 없는 ``e1=Effect.CreateEffect(c)`` 가
@@ -759,7 +765,7 @@ def test_20_no_two_specs_share_a_mutable_container(corpus):
                 seen.add(id(container))
                 checked += 1
     #: 🔴 Phase 3-F-28 에서 34,680 → 34,681.
-    assert checked == 34681 * 5
+    assert checked == 34684 * 5
 
 
 def test_21_parsing_is_deterministic(corpus):
@@ -788,14 +794,17 @@ def test_22_the_cache_signature_was_bumped():
        되돌아가지 않았음도 함께 못 박는다.
     """
     source = inspect.getsource(LuaScriptSource._signature)
-    assert "v8:" in source
-    assert "v7:" not in source
+    #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
+    #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
+    #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
+    assert "v9:" in source
+    assert "v8:" not in source
     assert "v6:" not in source
     assert "v5:" not in source
     assert "v4:" not in source
 
     signature = LuaScriptSource(PROJECT_ROOT)._signature()
-    assert signature.startswith("v8:")
+    assert signature.startswith("v9:")
 
     #: 캐시가 있다면 새 signature 로 쓰여 있어야 한다 (없으면 건너뛰지 않고
     #: 그냥 signature 형식만 확인한다).
@@ -803,7 +812,7 @@ def test_22_the_cache_signature_was_bumped():
     if cache.is_file():
         with cache.open(encoding="utf-8") as handle:
             blob = json.load(handle)
-        assert blob["signature"].startswith("v8:"), blob["signature"]
+        assert blob["signature"].startswith("v9:"), blob["signature"]
 
 
 # ======================================================================
@@ -998,10 +1007,12 @@ def test_28_block_count_index_and_identity_are_unchanged(corpus):
             b["cloned_from"] for b in replaced
         ], card_id
 
-    #: 🔴 Phase 3-F-28 에서 34,680 → 34,681. ``Clone`` 블록 수 2,744 는
-    #: 그대로다 — 새로 세는 두 블록과 사라진 한 블록 모두 ``Clone`` 이 아니다.
-    assert blocks == 34681
-    assert cloned == 2744
+    #: 🔴 Phase 3-F-28 에서 34,680 → 34,681. 그때는 ``Clone`` 블록 수 2,744 가
+    #: 그대로였다 — 새로 세는 두 블록과 사라진 한 블록 모두 ``Clone`` 이 아니었다.
+    #: 🔴 Phase 3-F-32 에서 34,681 → **34,684**, ``Clone`` 블록 2,744 → **2,747**.
+    #: 이번에는 늘어난 셋이 **전부 ``Clone``** 이다 (인자 있는 형태 2 · 점 형태 1).
+    assert blocks == 34684
+    assert cloned == 2747
 
 
 def test_29_the_sibling_fields_still_have_the_same_defect(corpus):
@@ -1032,11 +1043,11 @@ def test_29_the_sibling_fields_still_have_the_same_defect(corpus):
                 events.append((match.start(), "create", match.group(2)))
             for match in lua_loader._RE_CLONE_EFFECT.finditer(text):
                 if not lua_loader._is_card_effect(
-                    text, match.group(1), match.group(2), match.group(3)
+                    text, match.group(1), match.group(2), lua_loader._clone_source(match)
                 ):
                     continue
                 events.append(
-                    (match.start(), "clone", f"{match.group(2)}={match.group(3)}")
+                    (match.start(), "clone", f"{match.group(2)}={lua_loader._clone_source(match)}")
                 )
             for match in lua_loader._RE_SETTER.finditer(text):
                 events.append(
@@ -1239,7 +1250,7 @@ def test_34_the_sibling_fields_were_not_touched(corpus):
             totals["cloned_from"] += 1 if spec.cloned_from is not None else 0
 
     #: 🔴 Phase 3-F-28 에서 34,680 → 34,681 (위 ``*_TOTAL`` 주석 참고).
-    assert blocks == 34681
+    assert blocks == 34684
     assert dict(totals) == {
         "ranges": RANGES_TOTAL,
         "target_ranges": TARGET_RANGES_TOTAL,
@@ -1247,7 +1258,8 @@ def test_34_the_sibling_fields_were_not_touched(corpus):
         "properties": PROPERTIES_TOTAL,
         "code": CODE_TOTAL,
         "count_limit": COUNT_LIMIT_TOTAL,
-        "cloned_from": 2744,
+        #: 🔴 Phase 3-F-32 에서 2,744 → **2,747** — 늘어난 블록 셋이 전부 ``Clone``.
+        "cloned_from": 2747,
     }, dict(totals)
 
     #: ``Clone`` 분기가 여섯 칸을 **전부** 복사한다는 것을 구문으로도 본다.

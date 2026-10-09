@@ -748,9 +748,12 @@ def test_19_the_cache_signature_must_change_when_the_parser_changes():
        블록에 붙던 것을 버리도록 했다. **네 Phase 연속**이다.
     """
     source = pathlib.Path("sources/lua_loader.py").read_text(encoding="utf-8")
-    assert 'return f"v8:{count}:{newest:.0f}"' in source
+    #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
+    #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
+    #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
+    assert 'return f"v9:{count}:{newest:.0f}"' in source
     #: 되돌아가지 않았는지도 본다.
-    assert 'return f"v7:{count}:{newest:.0f}"' not in source
+    assert 'return f"v8:{count}:{newest:.0f}"' not in source
     assert 'return f"v6:{count}:{newest:.0f}"' not in source
     assert 'return f"v5:{count}:{newest:.0f}"' not in source
     assert 'return f"v4:{count}:{newest:.0f}"' not in source

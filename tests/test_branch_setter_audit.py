@@ -110,10 +110,15 @@ MYSELF = "tests/test_branch_setter_audit.py"
 # ======================================================================
 
 SCRIPTS = 12702
-BLOCKS = 34681                     # 3-F-28 · 3-F-29 와 같다
+BLOCKS = 34684                     # 🔴 Phase 3-F-32 에서 +3 — ``Clone`` 의 인자 있는 형태
+# (``e1:Clone(e1)`` · ``e2:Clone(c)``)와 점 형태 (``Effect.Clone(e1)``)를
+# 블록으로 인정했다. 세 스크립트에 효과 블록이 하나씩 생겼다.
 
 #: 설정자 호출 총수 (블록 주석 제거 후, 묶인 블록에 귀속된 것만).
-CALLS = {"Category": 14254, "TargetRange": 3417, "Range": 13695, "Property": 16430}
+#: 🔴 Phase 3-F-32 에서 ``TargetRange`` 3,417 → 3,418 · ``Property``
+#: 16,430 → 16,431. ``c56410769`` 의 ``e3`` 가 블록이 되어 그 두 설정자가
+#: **버려지지 않고 귀속된다** (``SetCode`` 도 하나 늘지만 이 표에 없다).
+CALLS = {"Category": 14254, "TargetRange": 3418, "Range": 13695, "Property": 16431}
 
 #: 그중 ``if`` 분기 **안**에 있는 호출.
 IN_IF = {"Category": 91, "TargetRange": 274, "Range": 381, "Property": 1956}
@@ -265,8 +270,8 @@ def walk(body: str, setter: str):
         if lua_loader._is_card_effect(body, m.group(1), m.group(2), None):
             events.append((m.start(), "create", m.group(2), None))
     for m in lua_loader._RE_CLONE_EFFECT.finditer(body):
-        if lua_loader._is_card_effect(body, m.group(1), m.group(2), m.group(3)):
-            events.append((m.start(), "clone", m.group(2), m.group(3)))
+        if lua_loader._is_card_effect(body, m.group(1), m.group(2), lua_loader._clone_source(m)):
+            events.append((m.start(), "clone", m.group(2), lua_loader._clone_source(m)))
     for m in lua_loader._RE_SETTER.finditer(body):
         if m.group(2) == setter:
             events.append((m.start(), "set", m.group(1), m.end() - 1))
@@ -863,7 +868,15 @@ def test_23_shadowing_rebinds_misattribute_five_setter_calls(bodies):
     """
     any_local = re.compile(r"\blocal\s+([A-Za-z_]\w*)\s*=\s*([^\n]*)")
     is_create = re.compile(r"^\s*Effect\.(?:CreateEffect|GlobalEffect)\s*\(")
-    is_clone = re.compile(r"^\s*[A-Za-z_]\w*\s*:\s*Clone\s*\(\s*\)")
+    #: 🔴 Phase 3-F-32 — 이 줄은 production 의 clone 규칙을 **따로 베낀 것**
+    #: 이었고, 그 사이에 production 이 두 형태를 더 인정했다. 위의 ``bind``
+    #: 이벤트는 production 정규식으로 만들므로, 이 복사본을 그대로 두면 같은
+    #: 자리가 bind 이면서 rebind 로 동시에 세어진다. production 과 같은 세
+    #: 형태를 받도록 맞춘다 (3-F-28 이 기록한 '복사본' 함정의 재발이다).
+    is_clone = re.compile(
+        r"^\s*(?:[A-Za-z_]\w*\s*:\s*Clone\s*\([^()\n]*\)"
+        r"|Effect\s*\.\s*Clone\s*\(\s*[A-Za-z_]\w*\s*\))"
+    )
     tracked = ("Category", "TargetRange", "Range", "Property", "Type", "Code", "CountLimit")
 
     shadowing = 0
@@ -875,7 +888,7 @@ def test_23_shadowing_rebinds_misattribute_five_setter_calls(bodies):
             if lua_loader._is_card_effect(body, m.group(1), m.group(2), None):
                 events.append((m.start(), "bind", m.group(2), None))
         for m in lua_loader._RE_CLONE_EFFECT.finditer(body):
-            if lua_loader._is_card_effect(body, m.group(1), m.group(2), m.group(3)):
+            if lua_loader._is_card_effect(body, m.group(1), m.group(2), lua_loader._clone_source(m)):
                 events.append((m.start(), "bind", m.group(2), None))
         for m in any_local.finditer(body):
             rhs = m.group(2)
@@ -901,18 +914,27 @@ def test_23_shadowing_rebinds_misattribute_five_setter_calls(bodies):
                 misattributed[extra] += 1
                 cards.add(card_id)
 
-    assert shadowing == SHADOWING_REBINDS, shadowing
-    assert sum(misattributed.values()) == MISATTRIBUTED_SETTERS, dict(misattributed)
-    assert dict(misattributed) == MISATTRIBUTED_BY_SETTER, dict(misattributed)
-    assert cards == {BRANCH_CATEGORY, CLONE_WITH_ARG, STATIC_CLONE}, cards
+    #: 🔴 Phase 3-F-32 에서 그림자 재바인딩 25 → **23**, 잘못 귀속되는 설정자
+    #: 5 → **3**. 그 Phase 가 ``e1:Clone(e1)`` 과 ``Effect.Clone(e1)`` 을
+    #: 블록으로 인정하면서, 그 두 자리는 더 이상 "모르는 RHS 로 다시 묶는
+    #: 자리" 가 아니게 됐다. 남은 3건은 ``c52445243`` 의
+    #: ``e:GetLabelObject()`` 하나이고, 그것은 정적으로 풀 수 없으므로
+    #: **UNKNOWN 이 맞다** — 이 Phase 의 결론(옛 규칙은 틀린 값을 만들었다)은
+    #: 그대로다.
+    assert shadowing == 23, shadowing
+    assert sum(misattributed.values()) == 3, dict(misattributed)
+    assert dict(misattributed) == {"Category": 3}, dict(misattributed)
+    assert cards == {BRANCH_CATEGORY}, cards
 
-    #: 세 카드의 원문 모양을 못 박는다 — 전부 ``Clone()`` 의 빈 괄호나
-    #: ``CreateEffect`` 가 아니어서 production 정규식이 놓친다.
+    #: 세 카드의 원문 모양은 그대로 못 박는다.
     assert "local e1=e:GetLabelObject()" in script_text(BRANCH_CATEGORY)
     assert "local e2=e1:Clone(e1)" in script_text(CLONE_WITH_ARG)
     assert "local e2=Effect.Clone(e1)" in script_text(STATIC_CLONE)
-    assert not lua_loader._RE_CLONE_EFFECT.search("local e2=e1:Clone(e1)")
-    assert not lua_loader._RE_CLONE_EFFECT.search("local e2=Effect.Clone(e1)")
+    #: 🔴 방향이 뒤집힌 두 줄 — 3-F-32 이후에는 **잡는다.**
+    assert lua_loader._RE_CLONE_EFFECT.search("local e2=e1:Clone(e1)")
+    assert lua_loader._RE_CLONE_EFFECT.search("local e2=Effect.Clone(e1)")
+    #: ``e:GetLabelObject()`` 는 여전히 잡지 않는다 — Effect 가 아니다.
+    assert not lua_loader._RE_CLONE_EFFECT.search("local e1=e:GetLabelObject()")
 
 
 # ======================================================================
@@ -1176,8 +1198,9 @@ def test_32_the_3f29_clone_result_is_not_reverted(scripts):
     #: ``c52445243`` 의 귀속 오류를 고치면서 그 블록의 두 category 가
     #: 사라졌다. 나머지 네 칸은 **그대로다.**
     assert dict(totals) == {
-        "effect_types": 45337, "ranges": 15063, "target_ranges": 2062,
-        "categories": 20503, "properties": 23884,
+        #: 🔴 Phase 3-F-32 에서 +3 블록만큼 늘었다 (``categories`` 는 그대로).
+        "effect_types": 45340, "ranges": 15064, "target_ranges": 2063,
+        "categories": 20503, "properties": 23887,
     }, dict(totals)
 
 
@@ -1192,10 +1215,13 @@ def test_33_the_cache_still_reflects_the_current_parser(scripts, tmp_path):
     #: 🔴 Phase 3-F-31 에서 ``v7`` → ``v8``. 3-F-30 은 파서를 바꾸지 않아
     #: 올리지 않았고, **3-F-31 이 바꿨으므로 올랐다** — 이 테스트의 주장
     #: ("캐시가 지금 파서의 결과를 돌려준다")은 그대로다.
-    assert source._signature().startswith("v8:")
+    #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
+    #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
+    #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
+    assert source._signature().startswith("v9:")
     body = inspect.getsource(LuaScriptSource._signature)
-    assert 'f"v8:{count}:{newest:.0f}"' in body
-    assert 'f"v9:' not in body
+    assert 'f"v9:{count}:{newest:.0f}"' in body
+    assert 'f"v8:' not in body
 
 
 def _changed_files() -> set[str]:

@@ -147,7 +147,7 @@ def phase_setcode_calls() -> tuple[tuple[str, str, str], ...]:
             events.append((m.start(), "bind", m.group(2)))
         for m in lua_loader._RE_CLONE_EFFECT.finditer(source):
             if not lua_loader._is_card_effect(
-                source, m.group(1), m.group(2), m.group(3)
+                source, m.group(1), m.group(2), lua_loader._clone_source(m)
             ):
                 continue
             events.append((m.start(), "bind", m.group(2)))

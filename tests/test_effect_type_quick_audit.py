@@ -193,10 +193,10 @@ def replace_rule(source: str) -> list[dict]:
         events.append((match.start(), "create", match.group(2)))
     for match in lua_loader._RE_CLONE_EFFECT.finditer(source):
         if not lua_loader._is_card_effect(
-            source, match.group(1), match.group(2), match.group(3)
+            source, match.group(1), match.group(2), lua_loader._clone_source(match)
         ):
             continue
-        events.append((match.start(), "clone", f"{match.group(2)}={match.group(3)}"))
+        events.append((match.start(), "clone", f"{match.group(2)}={lua_loader._clone_source(match)}"))
     for match in lua_loader._RE_SETTER.finditer(source):
         events.append(
             (match.start(), "set", f"{match.group(1)}|{match.group(2)}|{match.end() - 1}")
@@ -523,6 +523,10 @@ def test_07_quick_o_plus_ignition_is_a_parser_artifact(scripts):
         assert table[(Q,)] == 1867
 
     #: 🔴 고친 뒤 **QUICK_O 블록에서는 두 규칙이 완전히 일치한다.**
+    #: 🔴 Phase 3-F-32 — 위의 ``replace_rule`` 이 ``_RE_CLONE_EFFECT`` 의
+    #: 3번 그룹을 직접 읽고 있었다. Clone 형태가 둘로 갈려 점 형태에서
+    #: ``None`` 이 나왔다. ``_clone_source`` 로 바꿨다 (3-F-28 이 같은 함정을
+    #: 이미 기록해 두었는데 또 걸렸다).
     assert accumulated == replaced, (accumulated, replaced)
 
     #: 🔴 Phase 3-F-28 에서 1 → 0. 남아 있던 그 1건은 ``c9839115`` 의
@@ -596,8 +600,12 @@ def test_09_the_scope_axis_is_mutually_exclusive(scripts):
     #: (``c9839115`` ``e1`` · ``c74506079`` ``ae``) 이 둘 다 ``SINGLE`` 이고,
     #: 더 이상 세지 않는 ``c9409625`` 의 주석 안 블록도 ``SINGLE`` 이었다
     #: (+2 −1). ``FIELD`` · ``EQUIP`` 는 그대로다.
-    assert alone["SINGLE"] == 14732
-    assert alone["FIELD"] == 8881
+    #: 🔴 Phase 3-F-32 에서 14,732 → **14,733**. ``c4997565`` 의 새 clone
+    #: 블록이 부모에게서 ``SINGLE`` 을 물려받는다.
+    assert alone["SINGLE"] == 14733
+    #: 🔴 Phase 3-F-32 에서 8,881 → **8,883**. ``c44887817`` 와
+    #: ``c56410769`` 의 새 clone 블록이 부모에게서 ``FIELD`` 만 물려받는다.
+    assert alone["FIELD"] == 8883
     assert alone["EQUIP"] == 639
     #: corpus 에 **한 번도 나오지 않는** 플래그가 둘 있다.
     assert alone["TARGET"] == 0
