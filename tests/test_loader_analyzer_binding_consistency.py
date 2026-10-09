@@ -271,19 +271,40 @@ def _changed_files() -> set[str]:
 # 0. 계측 신뢰성 — 이것이 먼저다
 # ===========================================================================
 def test_01_the_variant_reproduces_production_exactly():
-    r"""🔴 스위치를 끈 ``_collect`` 가 production 과 **전수로 같아야** 한다.
+    r"""🔴 ``_collect`` 가 production 과 **전수로 같아야** 한다.
 
     이 테스트가 깨지면 아래 모든 측정이 무의미하다.
+
+    .. note::
+       🔴 **Phase 3-F-34 에서 비교 대상이 바뀌었다.** 이 Phase(3-F-33)가
+       쓸 때 production analyzer 는 ``_RE_REBIND`` 가 **없었으므로**
+       스위치를 **끈** 쪽이 production 이었다. 3-F-34 가 규칙을 맞췄으니
+       이제 스위치를 **켠** 쪽이 production 이다.
+
+       🔴 재미있게도 **양쪽 다 통과한다** — 이 코퍼스가 그 스위치에
+       무감하다는 것이 바로 이 Phase 가 측정한 사실(``test_03``)이기
+       때문이다. 그래도 "무엇이 production 인가" 를 틀리게 적어 두면
+       계측 검증이라는 이 테스트의 목적이 사라지므로 바로잡는다.
+       끈 쪽도 같다는 것은 아래에서 **따로** 확인한다.
     """
-    bad = []
+    bad_on = []
+    bad_off = []
     for path in _script_paths():
         source = _raw(path)
         spans = EffectAnalyzer._function_spans(source)
         production = _shape(_analyzer_entries(path))
-        mine = _shape(_collect(source, spans, with_rebind=False, loader_order=False))
-        if production != mine:
-            bad.append(path.name)
-    assert bad == [], bad[:5]
+        #: 🔴 production 과 같은 설정 — 계측 신뢰성의 근거다.
+        if production != _shape(
+            _collect(source, spans, with_rebind=True, loader_order=True)
+        ):
+            bad_on.append(path.name)
+        #: 끈 쪽도 이 코퍼스에서는 같다 (``test_03`` 과 같은 사실).
+        if production != _shape(
+            _collect(source, spans, with_rebind=False, loader_order=False)
+        ):
+            bad_off.append(path.name)
+    assert bad_on == [], bad_on[:5]
+    assert bad_off == [], bad_off[:5]
 
 
 # ===========================================================================
@@ -307,7 +328,14 @@ def test_02_both_paths_see_the_same_number_of_blocks():
 
 
 def test_03_adding_rebind_to_the_analyzer_changes_nothing_corpuswide():
-    r"""🔴 **핵심 질문 1 의 답.** ``_RE_REBIND`` 를 analyzer 에 넣어도 전수 변화 0."""
+    r"""🔴 **핵심 질문 1 의 답.** ``_RE_REBIND`` 스위치가 전수 산출물을 바꾸지 않는다.
+
+    .. note::
+       🔴 **Phase 3-F-34 이후에는 방향이 반대로 읽힌다.** 그 Phase 가
+       규칙을 적용했으므로, 지금 이 0 은 "넣어도 안 바뀐다" 가 아니라
+       **"빼도 안 바뀐다"** 를 뜻한다. 어느 쪽으로 읽어도 같은 사실
+       (코퍼스가 이 스위치에 무감하다)이고, 어서션은 그대로다.
+    """
     changed_scripts = 0
     changed_blocks = 0
     total = 0
@@ -1102,10 +1130,19 @@ def test_39_this_phase_changed_no_production_file():
 
 
 def test_40_the_rebind_rule_still_lives_only_in_the_loader():
-    r"""🔴 현재 상태를 명시적으로 고정한다 — analyzer 에는 ``_RE_REBIND`` 가 **없다.**
+    r"""🔴 **의도적으로 뒤집힌 테스트.**
 
-    이 테스트는 "없는 것이 옳다" 는 주장이 **아니다.** 지금 상태가 무엇인지를
-    못 박아, 다음 Phase 가 넣을 때 **의도적으로** 이 줄을 바꾸게 만든다.
+    이 Phase(3-F-33)는 "analyzer 에 ``_RE_REBIND`` 가 **없다**" 를 못 박았고,
+    그 docstring 에 이렇게 적었다 — *"이 테스트는 '없는 것이 옳다' 는 주장이
+    아니다. 지금 상태가 무엇인지를 못 박아, 다음 Phase 가 넣을 때
+    **의도적으로** 이 줄을 바꾸게 만든다."*
+
+    🔴 **Phase 3-F-34 가 넣었고, 그래서 이 테스트가 뒤집혔다.** 장치가
+    설계대로 작동했다 — 조용히 통과하지 않고 **정확히 한 줄**에서 멈춰
+    세웠다 (40개 중 이것 하나만 깨졌다).
+
+    이제 못 박는 것은 "규칙이 **한 곳에 정의되고 양쪽이 import 한다**" 다.
+    복사본을 만들면 이 테스트가 다시 깨진다.
     """
     analyzer_source = Path(analyzer_module.__file__).read_text(encoding="utf-8")
     tree = ast.parse(analyzer_source)
@@ -1113,11 +1150,21 @@ def test_40_the_rebind_rule_still_lives_only_in_the_loader():
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module == "sources.lua_loader":
             imported |= {a.name for a in node.names}
-    assert "_RE_CREATE_EFFECT" in imported
-    assert "_RE_CLONE_EFFECT" in imported
-    assert "_clone_source" in imported
-    #: 🔴 지금은 import 하지 않는다.
-    assert "_RE_REBIND" not in imported
-    assert not hasattr(analyzer_module, "_RE_REBIND")
-    #: loader 에는 있다.
-    assert hasattr(loader_module, "_RE_REBIND")
+    #: 탐지 규칙과 바인딩 규칙을 **전부** 로더에서 가져온다.
+    for name in ("_RE_CREATE_EFFECT", "_RE_CLONE_EFFECT", "_clone_source",
+                 "_RE_REBIND", "_EVENT_ORDER"):
+        assert name in imported, name
+    #: 🔴 그리고 **자기 복사본을 만들지 않는다** — 같은 객체여야 한다.
+    assert analyzer_module._RE_REBIND is loader_module._RE_REBIND
+    assert analyzer_module._EVENT_ORDER is loader_module._EVENT_ORDER
+    assert analyzer_module._RE_CLONE_EFFECT is loader_module._RE_CLONE_EFFECT
+    assert analyzer_module._RE_CREATE_EFFECT is loader_module._RE_CREATE_EFFECT
+    #: 모듈 안에서 그 이름을 **다시 대입**하지 않았는지 AST 로 본다.
+    assigned = {
+        t.id
+        for node in tree.body if isinstance(node, ast.Assign)
+        for t in node.targets if isinstance(t, ast.Name)
+    }
+    for name in ("_RE_REBIND", "_EVENT_ORDER", "_RE_CLONE_EFFECT",
+                 "_RE_CREATE_EFFECT"):
+        assert name not in assigned, name
