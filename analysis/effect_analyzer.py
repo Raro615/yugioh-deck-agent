@@ -43,11 +43,13 @@ from core import constants as C
 from core.card_model import Card
 from sources.lua_loader import (
     _clone_source,
+    _EVENT_ORDER,
     _extract_call_args,
     _is_card_effect,
     _RE_BLOCK_COMMENT,
     _RE_CLONE_EFFECT,
     _RE_CREATE_EFFECT,
+    _RE_REBIND,
 )
 
 # --- Lua 패턴 -------------------------------------------------------------
@@ -359,16 +361,47 @@ class EffectAnalyzer:
             if not _is_card_effect(source, m.group(1), m.group(2), src_var):
                 continue
             events.append((m.start(), "clone", f"{m.group(2)}={src_var}"))
+        #: 🔴 파서가 모르는 대입은 바인딩을 **푼다** (Phase 3-F-34).
+        #:
+        #: 이 규칙은 :data:`sources.lua_loader._RE_REBIND` 에서 **그대로
+        #: import 한다** — 여기에 복사해 두면 로더만 고친 순간 두 경로가
+        #: 갈린다 (Phase 3-F-28 이 탐지 정규식에서, Phase 3-F-32 가 ``Clone``
+        #: 형태에서 각각 겪었다).
+        #:
+        #: 없으면 무슨 일이 생기는가 — Phase 3-F-33 이 재현했다. 로더는
+        #: ``e1=e:GetLabelObject()`` 뒤의 설정자를 **버리는데** 이쪽은 **옛
+        #: 블록에 붙였다.** 그리고 ``local e2=e1:Clone()`` 에서 로더는
+        #: ``parent=None`` 이라 **여섯 칸을 하나도 물려주지 않는데** 이쪽은
+        #: 옛 부모의 핸들러를 **그대로 물려줬다** — 같은 블록에 대해
+        #: "물려받은 것 없음" 과 "둘 물려받음" 이 동시에 주장됐다.
+        #:
+        #: 🔴 코퍼스 산출물은 이 수정으로 **바뀌지 않는다** (Phase 3-F-33 이
+        #: 전수로 0 을 측정했고 Phase 3-F-34 가 다시 확인했다). 바뀐 것은
+        #: **계약**이다 — 두 경로가 같은 규칙을 쓴다.
+        for m in _RE_REBIND.finditer(source):
+            events.append((m.start(), "rebind", m.group(1)))
         for m in _RE_SETTER.finditer(source):
             events.append(
                 (m.start(), "set", f"{m.group(1)}|{m.group(2)}|{m.end() - 1}")
             )
-        events.sort(key=lambda e: e[0])
+        #: 같은 위치에서는 ``create``/``clone`` → ``rebind`` → ``set`` 순으로
+        #: 본다 — 로더의 :data:`sources.lua_loader._EVENT_ORDER` 를 쓴다.
+        events.sort(key=lambda e: (e[0], _EVENT_ORDER[e[1]]))
 
         bindings: dict[str, dict[str, str]] = {}
         order: list[dict] = []
         for pos, kind, payload in events:
-            if kind == "create":
+            if kind == "rebind":
+                #: 이 변수는 더 이상 **아는** 효과를 가리키지 않는다. 무엇을
+                #: 가리키는지는 추측하지 않고 그냥 모른다고 둔다 — 그래서
+                #: 뒤따르는 핸들러 설정자는 **버려진다.**
+                #:
+                #: 🔴 ``order`` 는 건드리지 않는다. 블록은 ``create``/``clone``
+                #: 만 만들고, 재바인딩은 **이미 만들어진 블록의 자리나
+                #: 부모 관계를 바꾸지 않는다** (``ordinal`` 불변).
+                for name in payload.split(","):
+                    bindings.pop(name.strip(), None)
+            elif kind == "create":
                 handlers: dict[str, str] = {}
                 bindings[payload] = handlers
                 order.append(
