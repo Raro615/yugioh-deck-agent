@@ -654,12 +654,20 @@ def test_30_the_existing_analyze_cli_still_works_on_a_real_card(
 
 @requires_official_db
 def test_31_the_status_table_still_adds_up(capsys, repository):
-    r"""🟢 §6 ㉔ — 기존 카드 갱신 요약(분석 상태 표)이 그대로 맞는다."""
+    r"""🟢 §6 ㉔ — 기존 카드 갱신 요약(분석 상태 표)이 그대로 맞는다.
+
+    .. note:: 🟢 **Phase 3-F-40 정정.** 첫 라벨은 원래 ``"Lua 검증됨"``
+       이었다. 그 라벨이 검증을 주장하는데 production 은 검증을 한 적이
+       없다 — 조건은 ``card.script is not None`` 하나다 (3-F-40 §2).
+       라벨을 고쳤으므로 여기도 새 라벨을 확인하고, "검증" 주장이
+       사라졌음을 **추가로** 확인한다.
+    """
     summarise(repository)
     out = capsys.readouterr().out
     assert "표에 없는 분석 상태" not in out
-    for label in ("Lua 검증됨", "텍스트 유래", "효과 없음", "분석 근거 없음"):
+    for label in ("Lua 근거 있음", "텍스트 유래", "효과 없음", "분석 근거 없음"):
         assert label in out
+    assert "Lua 검증됨" not in out
     assert f"{CARD_TOTAL:,}" in out
 
 

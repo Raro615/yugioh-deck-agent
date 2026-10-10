@@ -543,8 +543,19 @@ def test_25_the_status_summary_rows_now_add_up(capsys, repository):
     assert dict(status) == STATUS_COUNTS
     assert sum(status.values()) == CARD_TOTAL
     #: 네 라벨이 모두 출력에 있다
-    assert "Lua 검증됨" in out and "텍스트 유래" in out
+    #:
+    #: .. note:: 🟢 **Phase 3-F-40 정정.** 이 줄은 원래
+    #:    ``"Lua 검증됨" in out`` 을 확인했다. 그 라벨이 **잘못된 가정**을
+    #:    담고 있었다 — 그 행의 조건은 ``card.script is not None`` 하나이고
+    #:    분석을 돌려 확인한 값이 아니다. 실측으로 그 행에 든 12,687장 중
+    #:    215장은 등록 효과가 0개이며(183장은 효과 블록 자체가 0개), 낡은
+    #:    캐시에서는 ``MISMATCHED``·``UNPROVABLE``·``SOURCE_MISSING`` 과
+    #:    동시에 그 행에 들어온다. 그래서 production 라벨에서 "검증" 을
+    #:    뺐고, 이 테스트는 **새 라벨을 확인하고 "검증" 주장이 사라졌음을
+    #:    추가로 확인한다** (약화가 아니라 강화다).
+    assert "Lua 근거 있음" in out and "텍스트 유래" in out
     assert "효과 없음" in out and "분석 근거 없음" in out
+    assert "Lua 검증됨" not in out
     #: 실제로 존재하는 세 상태의 건수가 전부 찍혔다
     for value in STATUS_COUNTS.values():
         assert f"{value:,}장" in out
