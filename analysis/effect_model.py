@@ -231,6 +231,45 @@ class HandlerBinding(str, Enum):
     """
 
 
+#: :class:`HandlerBinding` -> (사람이 읽는 이름, 복구 안내) (Phase 3-F-38).
+#:
+#: 🔴 **두 소비자가 이것을 import 한다 — 복사하지 않는다.** ``app/main.py`` 의
+#: 분석 출력과 ``scripts/update_cards.py`` 의 갱신 요약이 같은 문장을 써야
+#: 하고, 복사본을 두면 한쪽만 고친 순간 두 경로가 서로 다른 안내를 한다
+#: (Phase 3-F-28 이 탐지 정규식에서, 3-F-32 가 ``Clone`` 형태에서 각각
+#: 겪었다). 그래서 ``HandlerBinding`` 바로 아래에 둔다.
+#:
+#: 🔴 **안내는 원인을 단정하지 않는다.** 결합이 어긋났다는 것은 측정된
+#: 사실이지만, *왜* 어긋났는지는 이 자료만으로 알 수 없다 (캐시 노후 ·
+#: ``--scripts`` 경로 · 소스 편집이 모두 같은 모양을 만든다). 그래서
+#: "확인하세요" 로 적고 "캐시가 낡았습니다" 로 적지 않는다.
+#:
+#: 🔴 **네 상태를 하나의 성공/실패로 합치지 않는다.** ``MISMATCHED`` 는
+#: "틀렸다", ``UNPROVABLE`` 은 "모른다" 이고 복구 방법이 서로 다르다.
+_BINDING_GUIDANCE_KO: dict[HandlerBinding, tuple[str, str]] = {
+    HandlerBinding.MATCHED: (
+        "정상 연결",
+        "",
+    ),
+    HandlerBinding.MISMATCHED: (
+        "대응 불일치 확인",
+        "파싱 시점의 스크립트와 분석 시점의 스크립트가 서로 다릅니다. "
+        "``--scripts`` 경로와 해당 ``c*.lua`` 를 확인하세요.",
+    ),
+    HandlerBinding.UNPROVABLE: (
+        "대응 관계 증명 불가",
+        "블록 식별 정보가 없어 어느 핸들러가 어느 블록인지 증명할 수 "
+        "없습니다. 파싱 캐시(``data/cache/lua_scripts.json``)를 다시 "
+        "만들면 풀릴 수 있습니다.",
+    ),
+    HandlerBinding.SOURCE_MISSING: (
+        "입력 소스 없음",
+        "분석 시점에 스크립트 파일을 읽지 못했습니다. ``--scripts`` "
+        "디렉터리에 해당 ``c*.lua`` 가 있는지 확인하세요.",
+    ),
+}
+
+
 class LimitScope(str, Enum):
     """
     발동 제한의 범위. "1턴에 1번"이 무엇을 기준으로 하는지에 따라 실제 제약이

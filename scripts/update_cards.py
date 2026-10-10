@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import sys
 from pathlib import Path
 
@@ -69,6 +70,53 @@ def report_plan(plan) -> None:
     return affected
 
 
+def report_bindings(bindings, analysed: int, unbound_blocks: int,
+                    unbound_cards: list[int]) -> None:
+    """
+    효과 블록과 핸들러의 **결합 상태**를 갱신 요약에 적는다 (Phase 3-F-38).
+
+    🔴 **네 상태를 하나의 성공/실패로 합치지 않는다.** ``MISMATCHED`` 는
+    "두 소스가 실제로 다르다", ``UNPROVABLE`` 은 "증명할 정보가 없다" 이고
+    복구 방법이 서로 다르다. 안내 문구는
+    :data:`analysis.effect_model._BINDING_GUIDANCE_KO` 에서 가져온다 —
+    CLI 출력과 **같은 표**를 쓰므로 두 경로가 갈리지 않는다.
+
+    🔴 **갱신의 성공·실패 판정을 바꾸지 않는다.** :func:`validate` 의 계약은
+    "데이터가 덜 모였다는 이유로 카드가 사라지지 않는다" 이고, 그것은 카드
+    레코드의 온전함에 관한 것이다. 결합 상태는 **효과 분석의 증명 여부**라서
+    같은 축이 아니다. 그래서 여기서는 **보고만** 하고 종료 코드를 건드리지
+    않는다. 그 판단을 바꾸는 것은 갱신 정책 재설계이고 이번 Phase의 범위가
+    아니다 (보고서 §6 참고).
+    """
+    from analysis.effect_model import _BINDING_GUIDANCE_KO, HandlerBinding
+
+    if not analysed:
+        return
+    matched = bindings.get(HandlerBinding.MATCHED, 0)
+    print("\n  효과 블록 결합 상태")
+    print(f"    {_BINDING_GUIDANCE_KO[HandlerBinding.MATCHED][0]:22}: "
+          f"{matched:,}장")
+    for binding in (HandlerBinding.MISMATCHED, HandlerBinding.UNPROVABLE,
+                    HandlerBinding.SOURCE_MISSING):
+        count = bindings.get(binding, 0)
+        if not count:
+            continue
+        name, hint = _BINDING_GUIDANCE_KO[binding]
+        print(f"    ✗ {name:20}: {count:,}장")
+        print(f"      {hint}")
+    #: 🔴 합이 맞는지 **직접 확인**한다. 어느 상태도 누락되지 않았음을
+    #: 요약 자체가 보장해야 한다.
+    if sum(bindings.values()) != analysed:
+        print(f"    ✗ 상태 합계 {sum(bindings.values()):,} != 분석 {analysed:,}")
+    if unbound_blocks:
+        sample = ", ".join(str(x) for x in unbound_cards[:5])
+        more = " …" if len(unbound_cards) > 5 else ""
+        print(f"    증명되지 않은 블록 {unbound_blocks:,}개"
+              f" (카드 {len(unbound_cards):,}장: {sample}{more})")
+        print("      이 블록들은 등록·해결 효과 어느 쪽으로도 집계하지"
+              " 않았습니다 — 어느 쪽이라고 주장할 근거가 없기 때문입니다.")
+
+
 def validate(repository) -> list[str]:
     """
     업데이트 뒤 데이터가 온전한지 확인한다.
@@ -98,8 +146,6 @@ def validate(repository) -> list[str]:
 
 
 def summarise(repository) -> None:
-    import collections
-
     status = collections.Counter(
         c.provenance.analysis_status.value for c in repository.all_cards()
     )
@@ -107,13 +153,22 @@ def summarise(repository) -> None:
     print("-" * 60)
     stats = repository.stats()
     print(f"  카드            : {stats['canonical']:,}장 (판본 포함 {stats['total']:,})")
+    #: 🔴 ``NO_EFFECT`` 행이 **빠져 있었다** (Phase 3-F-38 이 발견).
+    #: 실측 684장이 이 상태인데 표에 없어서, 출력된 행의 합이 카드 총수와
+    #: 맞지 않았다 (12,687 + 756 = 13,443 ≠ 14,127). 상태 요약이 자기
+    #: 자신과 어긋나는 것은 숨기면 안 되는 종류의 결함이다.
     labels = {
         AnalysisStatus.LUA_VERIFIED.value: "Lua 검증됨",
         AnalysisStatus.TEXT_DERIVED.value: "텍스트 유래 (Lua 없음)",
+        AnalysisStatus.NO_EFFECT.value: "효과 없음 (통상 몬스터·토큰)",
         AnalysisStatus.UNAVAILABLE.value: "분석 근거 없음",
     }
     for key, label in labels.items():
-        print(f"  {label:22}: {status.get(key, 0):,}장")
+        print(f"  {label:26}: {status.get(key, 0):,}장")
+    #: 🔴 열거한 상태가 전부인지 확인한다 — 합이 안 맞으면 표가 낡은 것이다.
+    unlisted = {k: v for k, v in status.items() if k not in labels}
+    if unlisted:
+        print(f"  ✗ 표에 없는 분석 상태: {unlisted}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -165,12 +220,24 @@ def main(argv: list[str] | None = None) -> int:
 
         analyzer = EffectAnalyzer(repository)
         analysed = 0
+        #: 🔴 **분석 결과를 버리지 않는다** (Phase 3-F-38). 여기서는
+        #: ``analyzer.analyze(card)`` 를 부르고 반환값을 그냥 버렸고, 그래서
+        #: Phase 3-F-37 이 만든 결합 상태가 갱신 요약까지 오지 못했다.
+        #: 카드 단위 ``handler_binding`` 과 증명되지 않은 블록 수를 센다.
+        bindings: collections.Counter = collections.Counter()
+        unbound_blocks = 0
+        unbound_cards: list[int] = []
         for card_id in affected:
             card = repository.get(card_id)
             if card is not None:
-                analyzer.analyze(card)
+                analysis = analyzer.analyze(card)
+                bindings[analysis.handler_binding] += 1
+                if analysis.unbound_effects:
+                    unbound_blocks += len(analysis.unbound_effects)
+                    unbound_cards.append(card_id)
                 analysed += 1
         print(f"  변경된 카드 {analysed:,}장만 다시 분석했습니다.")
+        report_bindings(bindings, analysed, unbound_blocks, unbound_cards)
 
     problems = validate(repository)
     summarise(repository)

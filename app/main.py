@@ -416,6 +416,8 @@ def cmd_analyze(agent: DeckAgent, args) -> int:
         print(f"카드를 찾을 수 없습니다: {args.card_id}", file=sys.stderr)
         return 1
 
+    from analysis.effect_model import _BINDING_GUIDANCE_KO, HandlerBinding
+
     analysis = EffectAnalyzer(agent.repository).analyze(card)
     print("=" * 72)
     print(card.summary_ko())
@@ -473,6 +475,46 @@ def cmd_analyze(agent: DeckAgent, args) -> int:
 
     if analysis.resolution_effects:
         print(f"\n  처리 중 생성되는 효과 {len(analysis.resolution_effects)}개 (적용 제약 등)")
+
+    #: 🔴 **결합 상태를 사용자에게 보인다** (Phase 3-F-38).
+    #:
+    #: Phase 3-F-37 이 블록과 핸들러의 대응을 ``(소스 지문, 블록 offset)``
+    #: 쌍으로 증명하고 그 결과를 :attr:`CardAnalysis.handler_binding` 과
+    #: ``unbound_effects`` 에 적었는데, 그때까지 **이 출력은 그 값을 읽지
+    #: 않았다.** 증명되지 않은 블록은 ``effects`` 에도 ``resolution_effects``
+    #: 에도 들어가지 않으므로, 사용자 눈에는 **그냥 효과가 적게 보였다.**
+    #:
+    #: 🔴 건수는 세 목록 전부에서 **실제 필드를 읽어** 센다. "``effects`` 에
+    #: 있으면 ``MATCHED``" 라고 가정하지 않는다 — 그 가정이 깨지는 날
+    #: 조용히 틀린 요약을 내게 된다.
+    counts: dict[HandlerBinding, int] = {}
+    for effect in (list(analysis.effects) + list(analysis.resolution_effects)
+                   + list(analysis.unbound_effects)):
+        counts[effect.handler_binding] = counts.get(effect.handler_binding, 0) + 1
+    total_blocks = sum(counts.values())
+    matched = counts.get(HandlerBinding.MATCHED, 0)
+    if total_blocks:
+        if matched == total_blocks:
+            label = _BINDING_GUIDANCE_KO[HandlerBinding.MATCHED][0]
+            print(f"\n  결합 상태  : {label} (블록 {total_blocks}개 전부 증명됨)")
+        else:
+            print(f"\n  🔴 결합 상태  : 증명된 블록 {matched}/{total_blocks}")
+            #: 상태마다 **다른 안내**를 준다. 하나의 성공/실패로 합치지 않는다.
+            for binding in (HandlerBinding.MISMATCHED, HandlerBinding.UNPROVABLE,
+                            HandlerBinding.SOURCE_MISSING):
+                count = counts.get(binding, 0)
+                if not count:
+                    continue
+                name, hint = _BINDING_GUIDANCE_KO[binding]
+                blocks = ", ".join(
+                    effect.index for effect in analysis.unbound_effects
+                    if effect.handler_binding is binding
+                )
+                print(f"      · {name} {count}개 [{blocks}]")
+                print(f"        {hint}")
+            print("      (증명되지 않은 블록은 위 효과 목록에 넣지 않았습니다 —"
+                  " 등록/해결 중 어느 쪽이라고 주장할 근거가 없기 때문입니다.)")
+
     coverage = analysis.coverage()
     print(
         f"\n  구조화 정도 : 효과 {coverage['effects']}개 | "
