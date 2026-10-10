@@ -758,7 +758,17 @@ def test_19_the_cache_signature_must_change_when_the_parser_changes():
     assert 'return f"v6:{count}:{newest:.0f}"' not in source
     assert 'return f"v5:{count}:{newest:.0f}"' not in source
     assert 'return f"v4:{count}:{newest:.0f}"' not in source
-    #: 서명 계산에 파서 버전·코드 해시가 들어가지 않는다 — 그래서 손으로 올린다.
+    #: 🟢 **Phase 3-F-37 정정.** 여기에는 "서명 계산에 파서 버전·코드 해시가
+    #: 들어가지 않는다 — 그래서 손으로 올린다" 고 적혀 있었고, 위 note 들이
+    #: 네 Phase 연속 수동 승급을 기록했다 (위험 E4). 3-F-37 이 **저장되는 칸
+    #: 목록의 해시**(``_CACHE_SHAPE_TAG``)를 서명에 넣어 그 절반을 자동화했다.
+    #:
+    #: 🔴 여전히 들어가지 않는 것은 **파서 코드 자체의 해시**다. 모양은 같은데
+    #: 의미만 바뀌는 변경(정규식 수정 등)은 자동으로 잡히지 않고, 그 경우에는
+    #: 번호를 손으로 올려야 한다. 이 테스트가 요구하는 바는 그대로다.
     signature_body = source.split("def _signature(self)")[1].split("def ")[0]
-    for token in ("parse_lua_source", "__version__", "md5", "sha"):
+    for token in ("parse_lua_source", "__version__", "md5", "_RE_CREATE_EFFECT"):
         assert token not in signature_body, token
+    #: 🟢 대신 모양 해시는 **있어야** 한다.
+    assert "_CACHE_SHAPE_TAG" in signature_body
+    assert "_CACHE_TOP_KEYS" in source and "_CACHE_EFFECT_KEYS" in source

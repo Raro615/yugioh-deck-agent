@@ -94,7 +94,9 @@ ANALYSIS_TOTALS = {
 SEARCH_CATEGORIES = 31
 SEARCH_LOCATIONS = 31
 #: 🔴 Phase 3-F-37 이 올렸다 (``effect_offsets`` · ``source_digest`` 추가).
-CACHE_PREFIX = "v10:"
+#: 번호 뒤의 ``-<shape>`` 는 저장되는 칸 목록의 해시이고 **자동으로** 바뀐다
+#: (``test_10`` 참고) — 그래서 접두사는 ``v10-`` 까지만 고정한다.
+CACHE_PREFIX = "v10-"
 
 #: Phase 3-F-32~36 의 대표 회귀 사례 — (블록 수, Clone 된 ordinal, code, 부모)
 PHASE32_CARDS = {
@@ -380,11 +382,39 @@ def test_09_an_old_cache_restores_to_unknown_not_to_zero():
     assert len(old.effects) == 2          # 블록 자체는 그대로 복원된다
 
 
-def test_10_the_cache_signature_was_bumped():
-    r"""🟢 자료구조가 바뀌었으므로 캐시를 무효화한다 — ``v9:`` → ``v10:``."""
+def test_10_the_cache_signature_was_bumped_and_tracks_the_stored_shape():
+    r"""🟢 자료구조가 바뀌었으므로 캐시를 무효화한다 — ``v9:`` → ``v10-<shape>:``.
+
+    🔴 **번호만으로는 부족하다.** 이 Phase 작업 중 ``effect_offsets`` 를 넣고
+    ``v10`` 으로 올린 뒤 ``source_digest`` 를 **같은 ``v10`` 아래에서** 더했다.
+    그 사이에 한 번 쓰인 캐시는 서명 검사를 통과하는데 새 칸이 없어서, 전
+    코퍼스가 ``UNPROVABLE`` 로 복원되고 기존 테스트 86건이 깨졌다. 그래서
+    서명이 **저장되는 칸 목록의 해시**를 함께 담는다.
+    """
     source = inspect.getsource(loader_module)
-    assert CACHE_PREFIX in source
+    assert 'return f"v10-{_CACHE_SHAPE_TAG}:{count}:{newest:.0f}"' in source
     assert 'f"v9:' not in source
+    signature = LuaScriptSource(PROJECT_ROOT)._signature()
+    assert signature.startswith(CACHE_PREFIX)
+    assert signature.split(":")[0] == f"v10-{loader_module._CACHE_SHAPE_TAG}"
+
+    #: 🟢 칸 목록이 바뀌면 태그도 바뀐다 — 자동이라는 것을 직접 확인한다.
+    import hashlib as _h
+
+    def tag(top, eff):
+        return _h.sha256(("|".join(top) + "#" + "|".join(eff))
+                         .encode("utf-8")).hexdigest()[:8]
+
+    top = loader_module._CACHE_TOP_KEYS
+    eff = loader_module._CACHE_EFFECT_KEYS
+    assert tag(top, eff) == loader_module._CACHE_SHAPE_TAG
+    assert tag(tuple(x for x in top if x != "source_digest"), eff) != tag(top, eff)
+
+    #: 🔴 그 목록이 실제 직렬화와 **같아야** 한다 — 어긋나면 태그가 거짓이 된다.
+    info = parse_lua_source(1, "c1.lua", textwrap.dedent(TWO_COND_COST))
+    payload = _info_to_dict(info)
+    assert tuple(payload) == top
+    assert tuple(payload["effects"][0]) == eff
 
 
 def test_11_a_real_cache_round_trip_preserves_every_script(tmp_path):
@@ -1056,15 +1086,25 @@ def test_53_no_forbidden_path_was_touched():
 
 
 def test_54_no_test_was_deleted_and_no_skip_was_added():
-    r"""🔴 기존 테스트를 지우지도, skip 을 더하지도 않았다."""
+    r"""🔴 기존 테스트를 **지우지** 않았고 skip 을 더하지 않았다.
+
+    🔴 **이름이 바뀐 것을 삭제로 세지 않는다.** 이 Phase 는 3-F-35/3-F-36 의
+    결함 스냅샷 14건을 "지금은 이렇다" 로 **옮겨 적었고**, 그 과정에서 함수
+    이름이 바뀌었다 (``..._has_no_identifier_field`` →
+    ``..._now_has_the_identifier_field``). ``-def test_`` 줄만 세면 그것이
+    삭제로 보이는데, 같은 파일의 테스트 **개수**는 줄지 않았다. 그래서
+    파일별 개수를 부모 커밋과 비교한다 — 그것이 "삭제하지 않았다" 의 실제
+    내용이다.
+    """
     shas = subprocess.run(
-        ["git", "log", "--format=%H", "--grep=^Phase 3-F-37:"],
+        ["git", "log", "--format=%H", "--reverse", "--grep=^Phase 3-F-37:"],
         cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
     ).stdout.split()
     if not shas:
         pytest.skip("이 Phase 의 commit 이 아직 없다")
+
+    #: --- skip 추가 0 -------------------------------------------------
     added_skips = 0
-    removed_tests = 0
     for sha in shas:
         diff = subprocess.run(
             ["git", "show", "--format=", "--unified=0", sha, "--", "tests/"],
@@ -1075,7 +1115,39 @@ def test_54_no_test_was_deleted_and_no_skip_was_added():
                 if re.search(r"@pytest\.mark\.skip|pytest\.skip\(", line):
                     if "commit 이 아직 없다" not in line:
                         added_skips += 1
-            if line.startswith("-def test_"):
-                removed_tests += 1
     assert added_skips == 0
-    assert removed_tests == 0
+
+    #: --- 파일별 테스트 개수가 줄지 않았다 ------------------------------
+    base = f"{shas[0]}^"
+    changed = subprocess.run(
+        ["git", "diff", "--name-only", base, "HEAD", "--", "tests/"],
+        cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
+    ).stdout.split()
+
+    def count_tests(text: str) -> int:
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:        # pragma: no cover
+            return -1
+        return sum(
+            1 for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
+        )
+
+    shrunk = []
+    for path in changed:
+        before = subprocess.run(
+            ["git", "show", f"{base}:{path}"],
+            cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
+        )
+        if before.returncode != 0:          # 이 Phase 가 새로 만든 파일
+            continue
+        after = subprocess.run(
+            ["git", "show", f"HEAD:{path}"],
+            cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
+        ).stdout
+        old_count = count_tests(before.stdout)
+        new_count = count_tests(after)
+        if new_count < old_count:
+            shrunk.append((path, old_count, new_count))
+    assert shrunk == [], shrunk
