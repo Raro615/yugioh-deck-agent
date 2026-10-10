@@ -177,6 +177,60 @@ class ConditionKind(str, Enum):
     UNKNOWN = "unknown"
 
 
+class HandlerBinding(str, Enum):
+    """
+    효과 블록과 핸들러 목록의 **대응 관계가 어떤 근거로 맺어졌는가**
+    (Phase 3-F-37).
+
+    🔴 왜 따로 필요한가 — :class:`core.provenance.AnalysisStatus` 로는 이
+    구분을 적을 수 없다. 그쪽은 **카드 한 장의 분석이 무엇에 근거하는가**
+    (Lua / 공식 텍스트 / 효과 없음)를 말하고, 듀얼 엔진이 ``TEXT_DERIVED``
+    를 실행 차단에 쓴다. 여기서 필요한 것은 **블록 하나의 핸들러 연결이
+    증명되었는가**이고, 두 축은 교차한다 — ``LUA_VERIFIED`` 인 카드 안에서도
+    블록 하나는 증명되고 다른 하나는 증명되지 않을 수 있다. 그래서 기존
+    enum 을 재사용하지 않고 분리했다.
+
+    🔴 **파싱 실패 상태는 넣지 않았다.** :func:`sources.lua_loader.parse_lua_source`
+    는 정규식 기반이라 실패하지 않고, 파일을 못 읽으면
+    :meth:`~sources.lua_loader.LuaScriptSource.load` 가 그 카드를 건너뛴다 —
+    그 결과는 ``card.script is None`` (= ``has_script=False``) 이고 이미
+    표현된다. 도달하지 않는 값을 미리 만들지 않는다.
+
+    .. warning::
+       🔴 **이 값이 ``MATCHED`` 가 아닌 블록을 "조건 없음 · 비용 없음 ·
+       처리 없음" 으로 읽지 않는다.** Phase 3-F-36 이 측정했듯 그 모양은
+       코퍼스에 실재하는 빈 블록 9,887개(그중 미등록 6,022개)와
+       **구별되지 않는다.** 구별하라고 있는 칸이 이것이다.
+    """
+
+    MATCHED = "matched"
+    """
+    🟢 파싱 시점에 기록한 블록 offset 과 **같은 offset 을 가진 핸들러
+    항목**이 정확히 하나 있었다. 핸들러가 비어 있어도 이 값이다 —
+    "핸들러가 없는 유효한 블록" 은 정상이고 코퍼스에 9,887개 있다.
+    증명된 것은 **대응 관계**이지 핸들러의 존재가 아니다.
+    """
+    MISMATCHED = "mismatched"
+    """
+    🔴 식별자는 있는데 **짝이 없다.** 두 목록이 서로 다른 텍스트에서
+    나왔다는 뜻이다 (캐시 노후 · ``script_dir`` 어긋남 · 소스 편집).
+    길이가 같고 변수 이름 순서까지 같아도 여기서 걸린다.
+    """
+    UNPROVABLE = "unprovable"
+    """
+    🟠 **증명할 정보 자체가 없다.** ``v10`` 이전 캐시에서 복원해
+    :attr:`~core.card_model.LuaScriptInfo.effect_offsets` 가 비었거나, 그
+    길이가 ``effects`` 와 달라 믿을 수 없거나, 핸들러 쪽 offset 이 중복이다.
+    ``MISMATCHED`` 와 다르다 — 저쪽은 "틀렸다", 이쪽은 "모른다" 다.
+    """
+    SOURCE_MISSING = "source_missing"
+    """
+    🔴 분석 시점에 ``c*.lua`` 를 **읽지 못했다.** 블록은 있는데 핸들러
+    목록을 만들 입력이 없다. 3-F-36 까지는 이 경우 효과가 하나도 없는
+    분석을 조용히 돌려줬고, 블록이 0개인 카드와 구별되지 않았다.
+    """
+
+
 class LimitScope(str, Enum):
     """
     발동 제한의 범위. "1턴에 1번"이 무엇을 기준으로 하는지에 따라 실제 제약이
@@ -518,6 +572,15 @@ class EffectAnalysis:
     없다")는 카드가 가진 효과가 아니라 해결 중에 적용되는 제약이다. 콤보 탐색이
     "이 카드가 무엇을 할 수 있는가"를 볼 때 섞이면 안 되므로 따로 둔다."""
 
+    handler_binding: HandlerBinding = HandlerBinding.UNPROVABLE
+    """
+    🔴 이 블록의 핸들러가 **무슨 근거로** 붙었는가 (Phase 3-F-37).
+
+    기본값이 ``UNPROVABLE`` 인 것은 의도한 것이다 — 아무도 증명하지 않은
+    :class:`EffectAnalysis` 는 "증명되지 않았다" 로 시작해야 하고,
+    ``MATCHED`` 는 결합 자리가 **실제로 식별자를 맞춰 본 뒤에만** 적는다.
+    """
+
     def has_action(self, kind: ActionKind) -> bool:
         return any(a.kind is kind for a in self.actions)
 
@@ -596,6 +659,28 @@ class CardAnalysis:
     unparsed_calls: list[str] = field(default_factory=list)
     """어떤 효과에도 붙이지 못한 Lua 호출."""
 
+    unbound_effects: list[EffectAnalysis] = field(default_factory=list)
+    """
+    🔴 **핸들러 대응을 증명하지 못한 블록** (Phase 3-F-37).
+
+    ``effects`` / ``resolution_effects`` 로 가르는 기준은
+    ``is_registered`` 인데, 그 값은 **핸들러 항목의 ``function`` 이름**에서
+    온다. 대응이 증명되지 않았다면 그 이름도 믿을 수 없고, 둘 중 하나를
+    고르는 순간 ``False`` 를 지어내게 된다 (3-F-36 이 "위조" 로 기록한
+    바로 그 동작). 그래서 **어느 쪽에도 넣지 않고** 여기에 모은다.
+
+    🟢 정상 코퍼스에서는 **언제나 비어 있다** — 34,635 블록 전부가
+    offset 으로 짝지어진다 (Phase 3-F-36 전수 측정, 3-F-37 재확인).
+    비어 있지 않다면 캐시가 낡았거나 ``script_dir`` 이 어긋난 것이다.
+    """
+    handler_binding: HandlerBinding = HandlerBinding.MATCHED
+    """
+    카드 한 장 수준의 요약. 블록이 하나라도 ``MATCHED`` 가 아니면 그중
+    가장 심각한 값을 적는다 (``SOURCE_MISSING`` > ``MISMATCHED`` >
+    ``UNPROVABLE`` > ``MATCHED``). 블록이 아예 없는 카드는 어긋날 자리가
+    없으므로 ``MATCHED`` 다.
+    """
+
     def coverage(self) -> dict[str, float]:
         """
         분석이 얼마나 구조화했는지.
@@ -650,6 +735,11 @@ class CardAnalysis:
             "with_costs": with_costs,
             "with_selection": with_selection,
             "resolution_effects": len(self.resolution_effects),
+            #: 🔴 Phase 3-F-37 — 이 값을 빼면 **커버리지가 실제보다 좋아
+            #: 보인다.** 대응을 증명하지 못한 블록은 :attr:`effects` 에
+            #: 들어가지 않으므로 분모에서 조용히 빠지기 때문이다. 정상
+            #: 코퍼스에서는 언제나 0 이지만, 0 이 아닐 때 숨지 않아야 한다.
+            "unbound_effects": len(self.unbound_effects),
             "unparsed_calls": len(self.unparsed_calls),
             "action_ratio": (with_actions / total) if total else 0.0,
         }

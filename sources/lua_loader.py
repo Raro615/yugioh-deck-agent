@@ -20,6 +20,7 @@ EDOPro / ygopro 카드 스크립트(``c<id>.lua``) 로더.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -371,6 +372,10 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
         name_ja=name_ja,
         name_en=name_en,
         scripted_by=scripted_by,
+        #: 🔴 **원문 그대로** 해시한다 (Phase 3-F-37) — 블록 주석을 지운
+        #: ``body`` 가 아니다. analyzer 도 자기가 읽은 원문을 그대로 해시하므로
+        #: 두 값은 같은 것을 가리킨다.
+        source_digest=hashlib.sha256(source.encode("utf-8")).hexdigest(),
     )
 
     # --- 효과 블록 단위 파싱 ---------------------------------------------
@@ -412,7 +417,11 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
     #: 같은 위치에서는 ``create``/``clone`` → ``rebind`` → ``set`` 순으로 본다.
     events.sort(key=lambda e: (e[0], _EVENT_ORDER[e[1]]))
 
-    for _pos, kind, payload in events:
+    #: 🔴 ``_pos`` 가 아니라 ``pos`` 다 (Phase 3-F-37). 이 값은 블록을 만든
+    #: 매치가 ``body`` 안에서 시작한 자리이고, ``create``/``clone`` 분기가
+    #: 그것을 :attr:`LuaScriptInfo.effect_offsets` 에 **기록한다**. 3-F-36
+    #: 까지는 여기서 버렸고, 그래서 두 목록을 잇는 증거가 없었다.
+    for pos, kind, payload in events:
         if kind == "rebind":
             #: 이 변수는 더 이상 **아는** 효과를 가리키지 않는다. 무엇을
             #: 가리키는지는 추측하지 않고, 그냥 모른다고 둔다.
@@ -425,6 +434,9 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
             bindings[var] = spec
             inherited[var] = set()
             info.effects.append(spec)
+            #: 🔴 ``effects`` 와 **같은 자리에** 넣는다 — 두 목록의 길이와
+            #: 순서가 같다는 것이 이 값의 계약이다.
+            info.effect_offsets.append(pos)
         elif kind == "clone":
             dst, src = payload.split("=", 1)
             parent = bindings.get(src)
@@ -447,6 +459,10 @@ def parse_lua_source(card_id: int, file_name: str, source: str) -> LuaScriptInfo
                 if getattr(spec, field)
             }
             info.effects.append(spec)
+            #: 🔴 Clone 자식은 **자기 자리**를 갖는다. 부모의 offset 을
+            #: 물려주지 않는다 — 복제 관계는 ``cloned_from`` 이 따로 적고,
+            #: 식별자와 의미 관계를 섞지 않는다 (Phase 3-F-36 §4.4).
+            info.effect_offsets.append(pos)
         else:  # set
             var, setter, idx_s = payload.split("|", 2)
             spec = bindings.get(var)
@@ -654,7 +670,40 @@ class LuaScriptSource:
         # 파서 버전이 들어 있지 않으면 **고친 파서가 옛 캐시를 계속 읽는다**
         # (스크립트 파일이 바뀌지 않으면 signature 가 같기 때문이다). 파서가
         # 같은 입력에서 다른 결과를 내게 되면 이 숫자를 올린다.
-        return f"v9:{count}:{newest:.0f}"
+        #: v9 -> v10 (Phase 3-F-37): ``effect_offsets`` 와 ``source_digest``
+        #: 가 생겼다. 🔴 숫자는 **파서의 의미**가 바뀔 때 손으로 올리고,
+        #: 뒤에 붙는 ``_CACHE_SHAPE_TAG`` 는 **저장 모양**이 바뀔 때
+        #: 자동으로 바뀐다 — 같은 번호 아래에서 칸이 달라지는 사고를
+        #: 구조로 막는다 (``_CACHE_TOP_KEYS`` 설명 참고).
+        return f"v10-{_CACHE_SHAPE_TAG}:{count}:{newest:.0f}"
+
+
+#: 🔴 **캐시에 실제로 적히는 칸 목록** (Phase 3-F-37).
+#:
+#: 이것이 필요한 이유는 실제로 겪은 사고다. Phase 3-F-37 작업 중
+#: ``effect_offsets`` 를 넣고 signature 를 ``v10`` 으로 올린 뒤,
+#: ``source_digest`` 를 **같은 ``v10`` 아래에서** 추가했다. 그 사이에 한 번
+#: 쓰인 캐시는 signature 검사를 통과하는데 ``source_digest`` 가 없어서,
+#: 코퍼스 전체가 ``UNPROVABLE`` 로 복원됐다 (틀린 값은 아니지만 쓸 수 없는
+#: 값이다 — 기존 테스트 113건이 그래서 깨졌다).
+#:
+#: 손으로 올리는 태그 하나로는 **같은 버전 안에서의 모양 변경**을 구별할 수
+#: 없다. 그래서 signature 가 이 목록의 해시를 **자동으로** 포함한다. 칸이
+#: 늘거나 줄거나 이름이 바뀌면 그 순간 캐시가 무효가 된다. Phase 3-F-30 부터
+#: 다섯 Phase 를 따라다닌 위험(수동 승급 누락)을 구조로 막는다.
+_CACHE_TOP_KEYS: tuple[str, ...] = (
+    "card_id", "file_name", "name_ja", "name_en", "scripted_by",
+    "effects", "effect_offsets", "source_digest",
+    "listed_names", "listed_name_constants", "listed_series", "functions",
+    "trigger_events", "locations", "categories", "effect_codes",
+)
+_CACHE_EFFECT_KEYS: tuple[str, ...] = (
+    "index", "effect_types", "code", "ranges", "target_ranges",
+    "categories", "properties", "count_limit", "cloned_from",
+)
+_CACHE_SHAPE_TAG = hashlib.sha256(
+    ("|".join(_CACHE_TOP_KEYS) + "#" + "|".join(_CACHE_EFFECT_KEYS)).encode("utf-8")
+).hexdigest()[:8]
 
 
 def _info_to_dict(info: LuaScriptInfo) -> dict:
@@ -678,6 +727,10 @@ def _info_to_dict(info: LuaScriptInfo) -> dict:
             }
             for e in info.effects
         ],
+        #: 🔴 Phase 3-F-37 — 캐시에서 복원한 블록도 자기 자리를 알아야 한다.
+        #: 이것이 빠지면 analyzer 는 짝지을 증거가 없어 ``UNPROVABLE`` 이 된다.
+        "effect_offsets": info.effect_offsets,
+        "source_digest": info.source_digest,
         "listed_names": info.listed_names,
         "listed_name_constants": info.listed_name_constants,
         "listed_series": info.listed_series,
@@ -706,4 +759,12 @@ def _info_from_dict(data: dict) -> LuaScriptInfo:
         effect_codes=data.get("effect_codes", []),
     )
     info.effects = [EffectSpec(**e) for e in data.get("effects", [])]
+    #: 🔴 **없으면 비워 둔다 — 0 으로 채우지 않는다** (Phase 3-F-37).
+    #: ``v9`` 이전 캐시에는 이 칸이 없다. 그때 "모른다" 를 "offset 0" 으로
+    #: 바꾸면 모든 블록이 같은 식별자를 갖게 되고, 위치 기반 결합보다 더
+    #: 나쁘게 **잘못 합쳐진다.** 비워 두면 analyzer 가 ``UNPROVABLE`` 을
+    #: 적고 추측하지 않는다.
+    info.effect_offsets = list(data.get("effect_offsets", []))
+    #: ``None`` 이면 "모른다" 다 — 빈 문자열로 바꾸지 않는다.
+    info.source_digest = data.get("source_digest")
     return info

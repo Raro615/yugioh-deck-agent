@@ -198,6 +198,54 @@ class LuaScriptInfo:
     name_en: str | None = None
     scripted_by: str | None = None
     effects: list[EffectSpec] = field(default_factory=list)
+    effect_offsets: list[int] = field(default_factory=list)
+    """
+    🔴 **파싱 시점에 기록한 블록 식별 정보** (Phase 3-F-37).
+
+    ``effects[i]`` 를 만든 ``CreateEffect``/``Clone`` 매치가 **블록 주석을
+    지운 본문**(``body``) 안에서 시작한 바이트 offset 이다. 길이와 순서가
+    :attr:`effects` 와 같다.
+
+    왜 필요한가 — ``analysis`` 계층은 ``c*.lua`` 를 **다시 읽어** 핸들러
+    목록을 따로 만든다. 두 목록은 같은 파싱의 두 뷰가 아니라 **서로 다른
+    시점의 두 파싱**이고, 캐시가 낡거나 ``script_dir`` 이 어긋나면 길이가
+    같고 변수 이름 순서까지 같은데도 의미가 뒤바뀐다 (Phase 3-F-36 이
+    실제 production 경로로 재현했다). 그때 두 목록을 잇는 유일한 증거가
+    이 값이다. 결합 자리에서 **다시 계산하면 두 값이 같은 텍스트에서
+    나오므로 정의상 일치하고, 잡아야 할 바로 그 상황을 못 잡는다** —
+    그래서 파싱 시점에 저장한다.
+
+    .. warning::
+       🔴 **버전 간 영구 ID 가 아니다.** 소스 텍스트가 편집되면 그 앞의
+       모든 offset 이 밀린다. 이것은 "이 소스 버전 안에서 그 블록이 있던
+       자리" 이고, "서로 다른 두 버전에서 같은 효과" 를 뜻하지 않는다.
+       그 구분이 바로 이 값의 쓸모다 — 두 목록이 **같은 텍스트**에서
+       나왔는지를 판정한다.
+
+       그리고 **빈 목록은 "offset 0" 이 아니라 "모른다"** 다. 낡은 캐시
+       (``v9`` 이전)에서 복원하면 이 칸이 비어 있고, 그때 analyzer 는
+       위치로 짝짓지 않고 :class:`~analysis.effect_model.HandlerBinding`
+       ``UNPROVABLE`` 을 적는다.
+    """
+    source_digest: str | None = None
+    """
+    🔴 **파싱한 원문 그 자체의 지문** (Phase 3-F-37).
+    ``sha256`` 16진수 문자열이고, :attr:`effect_offsets` 와 **함께** 하나의
+    식별자를 이룬다 — (어느 소스 버전인가, 그 안의 어느 자리인가).
+
+    왜 offset 만으로는 부족한가 — offset 이 같다는 것은 두 파싱이 **같은
+    바이트 자리**를 봤다는 뜻이지, **같은 텍스트**를 봤다는 뜻이 아니다.
+    길이가 변하지 않는 제자리 수정(``SetCondition`` → ``SetCost``)은 그
+    앞의 offset 을 밀지 않으므로, offset 만 비교하면 **우연히 일치**하고
+    analyzer 는 바뀐 텍스트의 핸들러를 붙이면서 "증명됐다" 고 말한다.
+    그것이 바로 "서로 다른 block 을 같은 식별자로 잘못 합치는" 경우다.
+
+    지문이 같으면 같은 텍스트이므로 같은 파서가 뽑은 offset 목록도 반드시
+    같다. 그래서 **지문이 증명을 맡고, offset 이 블록별 짝짓기를 맡는다.**
+
+    ``None`` 은 "모른다" 다 (``v10`` 이전 캐시). 0 이나 빈 문자열로
+    채우지 않는다.
+    """
     listed_names: list[int] = field(default_factory=list)
     """s.listed_names — 카드 텍스트가 명시적으로 참조하는 카드 ID"""
     listed_name_constants: list[str] = field(default_factory=list)

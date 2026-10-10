@@ -15,6 +15,7 @@ Lua 카드 스크립트 심층 분석기.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -38,6 +39,7 @@ from analysis.effect_model import (
     EffectAnalysis,
     EffectCost,
     EffectSelection,
+    HandlerBinding,
 )
 from core import constants as C
 from core.card_model import Card
@@ -62,10 +64,12 @@ _RE_SETTER = re.compile(
 )
 #: 🔴 블록 탐지 정규식은 **직접 쓰지 않는다** — :mod:`sources.lua_loader` 의
 #: 것을 그대로 import 한다 (Phase 3-F-28). 여기에 따로 복사해 두면
-#: :meth:`EffectAnalyzer._collect_handlers` 가 돌려주는 목록의 길이가
-#: ``card.script.effects`` 와 달라질 수 있고, 아래 ``entries[position]`` 이
-#: **다른 블록의 핸들러를 붙인다**. 3-F-28 이전에는 두 복사본이 우연히
-#: 같았고(12,702 스크립트 전부 일치), 로더만 고친 순간 3개가 어긋났다.
+#: :meth:`EffectAnalyzer._collect_handlers` 가 돌려주는 목록이
+#: ``card.script.effects`` 와 **다른 블록을 세게** 되고, 그 둘은 서로 짝이
+#: 없으므로 전부 ``MISMATCHED`` 가 된다 — 3-F-37 이전에는 더 나빴다.
+#: 위치로 짝지었기 때문에 **다른 블록의 핸들러를 조용히 붙였다.**
+#: 3-F-28 이전에는 두 복사본이 우연히 같았고(12,702 스크립트 전부 일치),
+#: 로더만 고친 순간 3개가 어긋났다.
 _RE_HANDLER_NAME = re.compile(r"^\s*(?:s\.)?(\w+(?:\.\w+)*)\s*$")
 _RE_DUEL_CALL = re.compile(r"\bDuel\.(\w+)\s*\(")
 _RE_LOCATION = re.compile(r"\bLOCATION_(\w+)")
@@ -226,6 +230,16 @@ _RE_PRED_COMMA = re.compile(
 )
 
 
+#: 카드 한 장의 ``handler_binding`` 요약을 고를 때의 심각도 (Phase 3-F-37).
+#: 블록이 하나라도 ``MATCHED`` 가 아니면 **가장 큰 값**이 카드의 값이 된다.
+_BINDING_SEVERITY: dict[HandlerBinding, int] = {
+    HandlerBinding.MATCHED: 0,
+    HandlerBinding.UNPROVABLE: 1,
+    HandlerBinding.MISMATCHED: 2,
+    HandlerBinding.SOURCE_MISSING: 3,
+}
+
+
 class EffectAnalyzer:
     """카드 스크립트를 :class:`CardAnalysis` 로 구조화한다."""
 
@@ -273,22 +287,98 @@ class EffectAnalyzer:
 
         source = self._read_source(card.script.file_name)
         if source is None:
+            #: 🔴 블록은 있는데 **핸들러 목록을 만들 입력이 없다**
+            #: (Phase 3-F-37). 3-F-36 까지는 효과가 하나도 없는 분석을
+            #: 조용히 돌려줬고, 그 결과는 "블록이 0개인 카드" 와
+            #: 구별되지 않았다. 이제는 블록을 버리지도, 등록/해결 중
+            #: 어느 쪽이라고 주장하지도 않고 그대로 표시해 둔다.
+            analysis.handler_binding = HandlerBinding.SOURCE_MISSING
+            for spec in card.script.effects:
+                effect = self._analyze_effect(spec, {}, {}, analysis)
+                effect.handler_binding = HandlerBinding.SOURCE_MISSING
+                analysis.unbound_effects.append(effect)
             return analysis
 
         functions = self._collect_functions(source)
         spans = self._function_spans(source)
         entries = self._collect_handlers(source, spans)
 
+        #: 🔴 **식별자 기반 결합** (Phase 3-F-37). 파싱 시점에 기록한
+        #: ``effect_offsets`` 와 핸들러 항목의 ``offset`` 을 맞춘다.
+        #: 위치로 짝짓지 않는다 — 두 목록은 같은 파싱의 두 뷰가 아니라
+        #: 서로 다른 시점의 두 파싱이고, 길이가 같고 변수 이름 순서까지
+        #: 같은데도 의미가 뒤바뀌는 사례가 실재한다 (Phase 3-F-36).
+        stored = card.script.effect_offsets
+        by_offset: dict[int, dict] = {}
+        duplicated = False
+        missing_offset = False
+        for entry in entries:
+            #: 🔴 ``entry["offset"]`` 로 바로 읽지 않는다. 핸들러 수집기를
+            #: 갈아끼운 호출자(테스트의 대체 구현 등)가 이 칸을 넣지 않을 수
+            #: 있는데, 그때 터지면 "증명할 수 없다" 가 **예외**로 바뀐다.
+            #: 없는 것은 없다고 적고 ``UNPROVABLE`` 로 간다.
+            offset = entry.get("offset")
+            if offset is None:
+                missing_offset = True
+                continue
+            if offset in by_offset:
+                duplicated = True
+            by_offset[offset] = entry
+
+        #: 🔴 **식별자는 (소스 지문, 블록 offset) 한 쌍이다.** 지문이
+        #: 증명을 맡고 offset 이 블록별 짝짓기를 맡는다 — offset 만
+        #: 비교하면 길이가 변하지 않는 제자리 수정에서 **우연히 일치**해
+        #: 바뀐 텍스트의 핸들러를 붙이면서 증명됐다고 말하게 된다.
+        digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+        #: 증명할 정보 자체가 없는 경우 — 낡은 캐시(지문 없음), 믿을 수
+        #: 없는 평행 목록(길이 불일치), 고를 수 없는 핸들러(offset 중복).
+        #: "틀렸다" 가 아니라 **"모른다"** 다.
+        unprovable = (
+            card.script.source_digest is None
+            or missing_offset
+            or len(stored) != len(card.script.effects)
+            or duplicated
+        )
+        #: 지문이 다르면 **두 목록이 서로 다른 텍스트에서 나왔다.** 그
+        #: 사실을 알고 있으므로 이것은 "모른다" 가 아니라 "틀렸다" 다.
+        same_source = card.script.source_digest == digest
+
         for position, spec in enumerate(card.script.effects):
-            entry = entries[position] if position < len(entries) else {}
+            if unprovable:
+                entry, binding = None, HandlerBinding.UNPROVABLE
+            elif not same_source:
+                entry, binding = None, HandlerBinding.MISMATCHED
+            else:
+                entry = by_offset.get(stored[position])
+                binding = (
+                    HandlerBinding.MATCHED
+                    if entry is not None
+                    else HandlerBinding.MISMATCHED
+                )
+
+            #: 🔴 짝이 없으면 **다른 항목의 핸들러를 대신 붙이지 않는다.**
             effect = self._analyze_effect(
-                spec, entry.get("handlers", {}), functions, analysis
+                spec, entry["handlers"] if entry is not None else {},
+                functions, analysis,
             )
+            effect.handler_binding = binding
+            if entry is None:
+                #: ``is_registered`` 는 핸들러 항목의 ``function`` 이름에서
+                #: 온다. 대응이 증명되지 않았으면 그 이름도 믿을 수 없고,
+                #: 등록/해결 중 하나를 고르는 순간 거짓을 지어낸다.
+                analysis.unbound_effects.append(effect)
+                continue
             effect.is_registered = entry.get("function") == "initial_effect"
             if effect.is_registered:
                 analysis.effects.append(effect)
             else:
                 analysis.resolution_effects.append(effect)
+
+        #: 카드 한 장의 요약 — 가장 심각한 값이 이긴다.
+        for effect in analysis.unbound_effects:
+            if (_BINDING_SEVERITY[effect.handler_binding]
+                    > _BINDING_SEVERITY[analysis.handler_binding]):
+                analysis.handler_binding = effect.handler_binding
         return analysis
 
     @staticmethod
@@ -408,6 +498,10 @@ class EffectAnalyzer:
                     {
                         "handlers": handlers,
                         "function": cls._enclosing_function(pos, spans),
+                        #: 🔴 Phase 3-F-37 — 이 항목이 **어느 자리에서**
+                        #: 나왔는지. 로더가 같은 규칙으로 기록한
+                        #: ``LuaScriptInfo.effect_offsets`` 와 맞춰 본다.
+                        "offset": pos,
                     }
                 )
             elif kind == "clone":
@@ -418,6 +512,7 @@ class EffectAnalyzer:
                     {
                         "handlers": handlers,
                         "function": cls._enclosing_function(pos, spans),
+                        "offset": pos,
                     }
                 )
             else:
@@ -426,7 +521,9 @@ class EffectAnalyzer:
                 if target is not None:
                     target[setter] = _extract_call_args(source, int(idx)).strip()
 
-        # lua_loader 와 같은 순서로 효과 블록이 만들어지므로 순번으로 짝짓는다.
+        #: 🔴 **순번으로 짝짓지 않는다** (Phase 3-F-37). 순번이 같다는 것은
+        #: 대응의 증거가 아니다 — 두 목록은 서로 다른 시점의 두 파싱이다.
+        #: 각 항목이 들고 있는 ``offset`` 이 증거다.
         return order
 
     # ------------------------------------------------------------------

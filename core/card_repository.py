@@ -143,8 +143,15 @@ class CardRepository:
         #: **두 목록이 서로 다른 디렉터리에서 왔다** —
         #: ``card.script.effects`` 는 ``--scripts`` 의 Lua 를 파싱한 것이고
         #: analyzer 의 ``entries`` 는 **저장소 루트**의 Lua 를 다시 읽은 것이다.
-        #: 길이가 다르면 ``entries[position]`` 이 조용히 ``{}`` 를 돌려주고
-        #: 그 블록은 "해결 중 생성" 으로 **오분류**됐다. 예외도 경고도 없었다.
+        #: 길이가 다르면 결합 자리가 조용히 ``{}`` 를 돌려주고 그 블록은
+        #: "해결 중 생성" 으로 **오분류**됐다. 예외도 경고도 없었다.
+        #:
+        #: 🟢 **Phase 3-F-37 보강.** 그 결합이 이제 파싱 시점 식별자
+        #: (``LuaScriptInfo.source_digest`` + ``effect_offsets``)로 이루어지므로,
+        #: 두 목록이 다른 텍스트에서 왔으면 **길이가 같아도**
+        #: :class:`~analysis.effect_model.HandlerBinding` ``MISMATCHED`` 로
+        #: 적히고 오분류되지 않는다. 그래도 이 속성은 계속 필요하다 —
+        #: 애초에 같은 디렉터리를 읽게 하는 것이 **첫 번째 방어**다.
         #:
         #: 그래서 리포지토리가 **자기가 읽은 자리를 기억한다.** 기본값
         #: (``None``)이면 analyzer 의 기존 fallback 이 그대로 쓰이므로
