@@ -724,8 +724,35 @@ class CardAnalysis:
         """
         분석이 얼마나 구조화했는지.
 
-        비율은 '해당 요소를 가진 효과' 를 분모로 한다. 비용이 없는 효과까지
-        분모에 넣으면 비용 구조화율이 실제보다 낮게 보인다.
+        🔴 **분모는 세 가지이고 전부 :attr:`effects` 의 부분집합이다**
+        (Phase 3-F-39 가 명시). 비율은 '해당 요소를 가진 효과' 를 분모로
+        한다 — 비용이 없는 효과까지 분모에 넣으면 비용 구조화율이 실제보다
+        낮게 보인다.
+
+        * ``condition_ratio`` = ``condition_structured`` / ``has_condition``
+          (등록 효과 중 condition 함수를 가진 것)
+        * ``cost_ratio``      = ``cost_structured`` / ``with_costs``
+          (등록 효과 중 비용이 있는 것)
+        * ``action_ratio``    = ``with_actions`` / ``len(effects)``
+
+        🔴 **어떤 분모에도 들어가지 않는 두 부류가 있다.**
+
+        1. :attr:`resolution_effects` — 처리 중 생성되는 효과. 코퍼스 전수
+           8,283개로 **전체 블록의 23.9%** 다. 등록 효과가 아니므로
+           ``effects`` 에 없고, 여기서는 건수로만 나온다.
+        2. :attr:`unbound_effects` — 핸들러 대응을 증명하지 못한 블록
+           (Phase 3-F-37). 정상 코퍼스에서는 0개다.
+
+        🔴 **미증명 블록을 분모에 섞지 않는다.** 섞으면 "구조화하지 못했다"
+        로 세지는데, 그것은 **결합 실패를 구조화 실패로 보고하는** 것이다.
+        두 실패는 원인도 복구 방법도 다르다 (Phase 3-F-38 이 하나의
+        성공/실패로 합치지 말라고 못 박은 바로 그 구분). 대신 ``effects`` ·
+        ``resolution_effects`` · ``unbound_effects`` 세 칸의 합이 **파싱한
+        블록 수와 정확히 같아서**, 호출자가 빠진 분모를 직접 되살릴 수 있다.
+
+        🔴 **분모가 0 이면 비율도 0.0 이다.** 0/0 을 1.0 으로 치지 않는다.
+        블록이 전부 미증명이면 ``effects`` 가 비므로 세 비율이 모두 0.0 이
+        되고, ``unbound_effects`` 가 그 이유를 말한다.
         """
         total = len(self.effects)
         with_actions = sum(1 for e in self.effects if e.actions)

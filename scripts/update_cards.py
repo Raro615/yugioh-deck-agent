@@ -93,7 +93,10 @@ def report_bindings(bindings, analysed: int, unbound_blocks: int,
     if not analysed:
         return
     matched = bindings.get(HandlerBinding.MATCHED, 0)
-    print("\n  효과 블록 결합 상태")
+    #: 🔴 **집계 범위를 적는다** (Phase 3-F-39 / §4). 이 표는 "다시 분석한
+    #: 카드" 기준이고, 바로 아래 :func:`summarise` 의 표는 "저장소 전체"
+    #: 기준이다. 3장과 14,127장이 아무 표시 없이 붙어 있었다.
+    print(f"\n  효과 블록 결합 상태 (다시 분석한 {analysed:,}장 기준)")
     print(f"    {_BINDING_GUIDANCE_KO[HandlerBinding.MATCHED][0]:22}: "
           f"{matched:,}장")
     for binding in (HandlerBinding.MISMATCHED, HandlerBinding.UNPROVABLE,
@@ -149,7 +152,8 @@ def summarise(repository) -> None:
     status = collections.Counter(
         c.provenance.analysis_status.value for c in repository.all_cards()
     )
-    print("\n카드 데이터 현황")
+    #: 🔴 집계 범위를 적는다 (Phase 3-F-39 / §4) — 위 결합 표와 기준이 다르다.
+    print("\n카드 데이터 현황 (저장소 전체)")
     print("-" * 60)
     stats = repository.stats()
     print(f"  카드            : {stats['canonical']:,}장 (판본 포함 {stats['total']:,})")
@@ -177,10 +181,23 @@ def main(argv: list[str] | None = None) -> int:
         "--check", action="store_true", help="변경 내역만 보고 아무것도 바꾸지 않는다"
     )
     parser.add_argument("--update", action="store_true", help="변경을 반영한다")
+    #: 🔴 **이 flag 는 분석을 켜고 끄는 스위치가 아니다** (Phase 3-F-39).
+    #: Phase 3-F-38 이 N30 으로 적어 둔 그대로, ``action="store_true"`` 의
+    #: 기본값은 ``False`` 인데 help 는 "(기본 동작)" 이라고 적혀 있었다.
+    #: 그래서 ``--update`` 만 주면 **분석 단계가 통째로 빠졌고**, 이 모듈
+    #: docstring 이 적어 둔 흐름(수집 -> 변경 감지 -> 병합 -> **분석** ->
+    #: 인덱스 -> 검증)과 어긋났다.
+    #:
+    #: 🔴 **기본값을 뒤집지 않았다.** 끄는 쪽("전부 다시 분석")이 코드에
+    #: 아예 없어서 ``False`` 에는 가리킬 동작이 없다. 기본값만 ``True`` 로
+    #: 바꾸면 끌 수 없는 flag 가 되고, 없는 반대 동작을 있는 것처럼 만들게
+    #: 된다. 고친 것은 **실행 조건**이다 (아래 ``if affected:``). 이 flag 는
+    #: 같은 것을 명시적으로 적는 수단으로 남고, 주던 쪽의 출력은 글자 단위로
+    #: 같다.
     parser.add_argument(
         "--changed-only",
         action="store_true",
-        help="변경된 카드만 다시 분석한다 (기본 동작)",
+        help="변경된 카드만 다시 분석한다 (기본 동작이며 현재 유일한 동작)",
     )
     parser.add_argument(
         "--source",
@@ -215,7 +232,12 @@ def main(argv: list[str] | None = None) -> int:
 
     repository = CardRepository.build()
 
-    if args.changed_only and affected:
+    #: 🔴 **flag 로 막지 않는다** (Phase 3-F-39 / N30). 변경된 카드 분석은
+    #: 이제 항상 돈다. 안전한 근거: ``EffectAnalyzer.analyze`` 는 파일을 쓰지
+    #: 않고 ``Card`` 를 변형하지 않는다 (메모리 캐시만 둔다). 그래서 늘
+    #: 돌려도 **저장되는 것이 하나도 바뀌지 않는다** — 늘어나는 것은 출력과
+    #: 실행시간뿐이고, 최악(바뀐 카드가 전수 14,127장)이 실측 약 34~54초다.
+    if affected:
         from analysis import EffectAnalyzer
 
         analyzer = EffectAnalyzer(repository)

@@ -516,12 +516,23 @@ def cmd_analyze(agent: DeckAgent, args) -> int:
                   " 등록/해결 중 어느 쪽이라고 주장할 근거가 없기 때문입니다.)")
 
     coverage = analysis.coverage()
+    #: 🔴 **분모가 무엇인지 말한다** (Phase 3-F-39 / N31). 예전 문구는
+    #: "효과 N개" 였고, N 이 **증명된 등록 효과만**이라는 사실이 어디에도
+    #: 없었다. 처리 중 생성되는 효과(코퍼스 전수 8,283개 — 전체 블록의
+    #: 23.9%)와 증명되지 않은 블록은 이 N 에 들어 있지 않다.
     print(
-        f"\n  구조화 정도 : 효과 {coverage['effects']}개 | "
+        f"\n  구조화 정도 : 등록 효과 {coverage['effects']}개 기준 | "
         f"조건 {coverage['condition_structured']}/{coverage['has_condition']} · "
         f"비용 {coverage['cost_structured']}/{coverage['with_costs']} · "
         f"선택 {coverage['with_selection']} · 처리 {coverage['with_actions']}"
     )
+    #: 🔴 미증명 블록이 있을 때만 **빠진 수**를 적는다. 정상 카드의 출력에는
+    #: 붙지 않는다 (소음 금지). 분모에 섞지 않는 이유도 함께 적는다 — 결합
+    #: 실패를 구조화 실패로 세면 서로 다른 두 실패가 합쳐진다.
+    if coverage["unbound_effects"]:
+        print(f"      (이 분모에 미증명 블록 {coverage['unbound_effects']}개는"
+              " 없습니다 — 증명되지 않은 블록을 구조화 실패로 세면 결합"
+              " 실패와 구조화 실패가 합쳐집니다.)")
     print("  (~ 표시는 구조화하지 못한 단계)")
     print("=" * 72)
     return 0
