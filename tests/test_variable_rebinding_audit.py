@@ -1219,18 +1219,24 @@ def test_33_the_cache_reflects_the_fixed_parser(scripts, tmp_path):
         assert sum(len(info.effects) for info in table.values()) == BLOCKS
         assert table[STATIC_CLONE_CARD].effects[1].code == "EVENT_CHAINING"
         assert table[CLONE_WITH_ARG_CARD].effects[1].code is None
-    #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
-    #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
-    #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
-    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v9:")
+    #: 🔴 Phase 3-F-32 에서 ``v8`` → ``v9``, Phase 3-F-37 에서
+    #: ``v9`` → **``v10-<shape>``** (``effect_offsets`` · ``source_digest`` 추가).
+    assert json.loads(
+        cache.read_text(encoding="utf-8"))["signature"].startswith("v10-")
 
     body = inspect.getsource(LuaScriptSource._signature)
-    assert 'f"v9:{count}:{newest:.0f}"' in body
-    for old in ("v7:", "v6:", "v5:"):
+    assert 'f"v10-{_CACHE_SHAPE_TAG}:{count}:{newest:.0f}"' in body
+    for old in ("v9:", "v7:", "v6:", "v5:"):
         assert f'f"{old}' not in body, old
-    #: 🔴 서명에 파서 버전·코드 해시가 **없다** — 그래서 손으로 올린다.
+    #: 🟢 **Phase 3-F-37 정정.** 이 자리에는 "서명에 파서 버전·코드 해시가
+    #: 없어서 손으로 올린다" 고 적혀 있었다 (위험 E4). 지금은 **저장되는 칸
+    #: 목록의 해시**(``_CACHE_SHAPE_TAG``)가 서명에 들어 있어서, 캐시에 적히는
+    #: 모양이 달라지면 자동으로 무효가 된다. 여전히 **손으로** 올려야 하는
+    #: 것은 "모양은 같은데 **의미**가 달라진" 경우(정규식 수정 등)뿐이고,
+    #: 그래서 아래 토큰들은 계속 없어야 한다.
     for token in ("parse_lua_source", "__version__", "md5", "_RE_REBIND"):
         assert token not in body, token
+    assert "_CACHE_SHAPE_TAG" in body
 
     #: 직전 버전(``v7``) 캐시는 **거부된다.**
     stale = tmp_path / "stale.json"

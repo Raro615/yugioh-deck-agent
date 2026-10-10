@@ -1218,9 +1218,17 @@ def test_33_the_cache_still_reflects_the_current_parser(scripts, tmp_path):
     #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
     #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
     #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
-    assert source._signature().startswith("v9:")
+    #: 🔴 Phase 3-F-37 이 ``v9:`` -> ``v10-<shape>:`` 로 바꿨다.
+    #: ``LuaScriptInfo`` 에 ``effect_offsets`` 와 ``source_digest`` 가 생겨
+    #: 캐시 모양이 달라졌기 때문이다. 뒤의 ``<shape>`` 는 저장되는 칸 목록의
+    #: 해시이고 **자동으로** 바뀐다 — 같은 번호 아래에서 칸이 달라지는 사고를
+    #: 막는다 (3-F-37 작업 중 실제로 겪었고, 기존 테스트 103건이 그래서 한 번
+    #: 깨졌다). 이 테스트의 주장은 그대로다: **파서 산출물이 달라지면 캐시
+    #: 서명도 달라져야 한다.**
+    assert source._signature().startswith("v10-")
     body = inspect.getsource(LuaScriptSource._signature)
-    assert 'f"v9:{count}:{newest:.0f}"' in body
+    assert 'f"v10-{_CACHE_SHAPE_TAG}:{count}:{newest:.0f}"' in body
+    assert 'f"v9:' not in body
     assert 'f"v8:' not in body
 
 

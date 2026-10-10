@@ -86,7 +86,14 @@ ANALYSIS_TOTALS = {
 }
 SEARCH_CATEGORIES = 31
 SEARCH_LOCATIONS = 31
-CACHE_PREFIX = "v9:"
+#: 🔴 Phase 3-F-37 이 ``v9:`` -> ``v10-<shape>:`` 로 바꿨다.
+#: ``LuaScriptInfo`` 에 ``effect_offsets`` 와 ``source_digest`` 가 생겨
+#: 캐시 모양이 달라졌기 때문이다. 뒤의 ``<shape>`` 는 저장되는 칸 목록의
+#: 해시이고 **자동으로** 바뀐다 — 같은 번호 아래에서 칸이 달라지는 사고를
+#: 막는다 (3-F-37 작업 중 실제로 겪었고, 기존 테스트 103건이 그래서 한 번
+#: 깨졌다). 이 테스트의 주장은 그대로다: **파서 산출물이 달라지면 캐시
+#: 서명도 달라져야 한다.**
+CACHE_PREFIX = "v10-"
 
 #: Phase 3-F-32 의 세 대표 사례
 PHASE32_CARDS = {
@@ -206,22 +213,33 @@ def _changed_files() -> set[str]:
 # ===========================================================================
 # A. 결합 자리의 구조 — 계약이 어디에 있고 누가 소유하는가
 # ===========================================================================
-def test_01_the_join_site_indexes_by_position_only():
-    r"""🔴 결합이 **위치만으로** 이루어진다 — 식별자가 없다."""
+def test_01_the_join_site_no_longer_indexes_by_position():
+    r"""🟢 결합이 **식별자로** 이루어진다.
+
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-35 가 적은 사실은 그때는 맞았다 — 이
+       Phase 의 역할은 결함을 재현하고 기록하는 것이었고, §5 가 설계 변경을
+       금지했다. 3-F-37 이 ``(source_digest, effect_offsets[i])`` 쌍을 파싱
+       시점에 보존해 그 결함을 고쳤으므로 **사실이 바뀌었다.** 가정이 틀렸던
+       것이 아니라 대상이 바뀌었다.
+
+       3-F-35 당시: ``entries[position]`` 첨자가 정확히 하나 있었고 그
+       첨자가 ``enumerate`` 의 위치 변수였다.
+    """
     source = textwrap.dedent(inspect.getsource(EffectAnalyzer._analyze_card))
     tree = ast.parse(source)
-    #: ``entries[position]`` 형태의 첨자 접근이 있다.
     subscripts = [
         node for node in ast.walk(tree)
         if isinstance(node, ast.Subscript)
         and isinstance(node.value, ast.Name)
         and node.value.id == "entries"
     ]
-    assert len(subscripts) == 1
-    #: 그 첨자가 ``enumerate`` 의 위치 변수다 — 블록 고유 식별자가 아니다.
-    assert isinstance(subscripts[0].slice, ast.Name)
-    assert subscripts[0].slice.id == "position"
-    #: 🔴 ``index`` 나 ``EffectRef`` 로 맞추는 코드가 없다.
+    assert subscripts == []
+    #: 🟢 그 자리에 파싱 시점 식별자가 들어왔다.
+    assert "source_digest" in source
+    assert "effect_offsets" in source
+    #: 🔴 ``EffectRef`` 로 맞추지는 **않는다** — ordinal 은 목록 위치 그
+    #: 자체여서 목록 대응의 증거가 될 수 없다 (3-F-36 이 측정).
     assert "EffectRef" not in source
     assert "spec.index" not in source
 
@@ -290,32 +308,47 @@ def test_07_one_block_one_entry_is_correct():
     assert _rows(analysis) == [(True, "e1", True, False, 0)]
 
 
-def test_08_two_blocks_one_entry_silently_misclassifies():
-    r"""🔴 블록 2 / entries 1 — 뒤 블록이 ``{}`` 를 받아 **오분류**된다.
+def test_08_two_blocks_one_entry_no_longer_misclassifies():
+    r"""🟢 블록 2 / entries 1 — 더 이상 **오분류되지 않는다.**
 
-    ``entries[position] if position < len(entries) else {}`` 때문에
-    ``e2`` 는 핸들러가 없고 ``is_registered`` 가 ``False`` 가 된다. 그러나
-    파싱된 Lua 는 ``e2`` 를 ``initial_effect`` 에서 등록한다.
-    **예외도 경고도 없다.**
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-35 가 적은 사실은 그때는 맞았다 — 이
+       Phase 의 역할은 결함을 재현하고 기록하는 것이었고, §5 가 설계 변경을
+       금지했다. 3-F-37 이 ``(source_digest, effect_offsets[i])`` 쌍을 파싱
+       시점에 보존해 그 결함을 고쳤으므로 **사실이 바뀌었다.** 가정이 틀렸던
+       것이 아니라 대상이 바뀌었다.
+
+       3-F-35 당시: ``e2`` 가 ``{}`` 를 받아 ``is_registered=False`` 가 되고
+       "해결 중 생성 효과" 로 밀려났다. 파싱된 Lua 는 ``e2`` 를
+       ``initial_effect`` 에서 등록하는데도 그랬고, 예외도 경고도 없었다.
     """
     blocks, entries, analysis = _analyze_with(TWO_COND_COST, ONE_COND)
     assert (len(blocks), len(entries)) == (2, 1)
-    rows = _rows(analysis)
-    #: e1 은 (우연히) 맞고, e2 가 "해결 중 생성" 으로 밀려났다.
-    assert rows[0] == (True, "e1", True, False, 0)
-    assert rows[1] == (False, "e2", False, False, 0)
-    #: 🔴 올바른 결과는 둘 다 등록이고 e2 는 비용이 있어야 한다.
-    assert len(analysis.effects) == 1
-    assert len(analysis.resolution_effects) == 1
+    #: 🟢 어느 목록에도 들어가지 않는다 — 등록/해결 중 하나를 고르지 않는다.
+    assert _rows(analysis) == []
+    assert analysis.effects == []
+    assert analysis.resolution_effects == []
+    assert [e.index for e in analysis.unbound_effects] == ["e1", "e2"]
 
 
-def test_09_one_block_two_entries_silently_drops_the_extra():
-    r"""🔴 블록 1 / entries 2 — 남는 entry 가 **조용히 버려진다.**"""
+def test_09_one_block_two_entries_is_now_reported_not_dropped():
+    r"""🟢 블록 1 / entries 2 — **조용히 버려지지 않는다.**
+
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-35 가 적은 사실은 그때는 맞았다 — 이
+       Phase 의 역할은 결함을 재현하고 기록하는 것이었고, §5 가 설계 변경을
+       금지했다. 3-F-37 이 ``(source_digest, effect_offsets[i])`` 쌍을 파싱
+       시점에 보존해 그 결함을 고쳤으므로 **사실이 바뀌었다.** 가정이 틀렸던
+       것이 아니라 대상이 바뀌었다.
+
+       3-F-35 당시: 남는 entry 가 조용히 버려지고 ``e1`` 은 (우연히) 맞는
+       값을 받아 아무 이상이 없는 것처럼 보였다. 지금은 두 소스의 지문이
+       다르다는 사실 자체가 ``MISMATCHED`` 로 적힌다.
+    """
     blocks, entries, analysis = _analyze_with(ONE_COND, TWO_COND_COST)
     assert (len(blocks), len(entries)) == (1, 2)
-    #: 두 번째 entry(비용)는 어디에도 반영되지 않는다.
-    assert _rows(analysis) == [(True, "e1", True, False, 0)]
-    assert not any(bool(e.costs) for e in analysis.effects)
+    assert _rows(analysis) == []
+    assert [e.index for e in analysis.unbound_effects] == ["e1"]
 
 
 def test_10_a_length_mismatch_raises_nothing():
@@ -328,8 +361,19 @@ def test_10_a_length_mismatch_raises_nothing():
         assert analysis is not None
 
 
-def test_11_trailing_blocks_get_an_empty_handler_dict():
-    """🔴 길이가 짧으면 **뒤쪽 전부**가 빈 핸들러를 받는다 (앞쪽만이 아니다)."""
+def test_11_trailing_blocks_are_now_marked_instead_of_emptied():
+    """🟢 길이가 짧아도 **빈 핸들러를 받지 않는다** — 표시된다.
+
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-35 가 적은 사실은 그때는 맞았다 — 이
+       Phase 의 역할은 결함을 재현하고 기록하는 것이었고, §5 가 설계 변경을
+       금지했다. 3-F-37 이 ``(source_digest, effect_offsets[i])`` 쌍을 파싱
+       시점에 보존해 그 결함을 고쳤으므로 **사실이 바뀌었다.** 가정이 틀렸던
+       것이 아니라 대상이 바뀌었다.
+
+       3-F-35 당시: 뒤쪽 블록 전부가 빈 dict 를 받아 "해결 중 생성" 으로
+       분류됐다 (``e2``·``e3``).
+    """
     three = TWO_COND_COST.replace("end\n", """
         local e3=Effect.CreateEffect(c)
         e3:SetCode(EVENT_TO_GRAVE)
@@ -340,23 +384,33 @@ def test_11_trailing_blocks_get_an_empty_handler_dict():
     blocks, entries, analysis = _analyze_with(three, ONE_COND)
     assert len(blocks) == 3
     assert len(entries) == 1
-    rows = _rows(analysis)
-    assert rows[0][0] is True          # e1 만 등록으로 남는다
-    assert [r[1] for r in rows if r[0] is False] == ["e2", "e3"]
+    assert _rows(analysis) == []
+    assert [e.index for e in analysis.unbound_effects] == ["e1", "e2", "e3"]
 
 
 # ===========================================================================
 # C. 🔴 순서 — 길이 계약으로 **잡히지 않는** 부분
 # ===========================================================================
-def test_12_equal_length_different_order_still_joins_wrongly():
-    r"""🔴 **§3.3 의 답: 그렇다.** 길이가 같고 순서만 달라도 잘못 붙는다."""
+def test_12_equal_length_different_order_no_longer_joins_wrongly():
+    r"""🟢 길이가 같고 순서만 달라도 **잘못 붙지 않는다.**
+
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-35 가 적은 사실은 그때는 맞았다 — 이
+       Phase 의 역할은 결함을 재현하고 기록하는 것이었고, §5 가 설계 변경을
+       금지했다. 3-F-37 이 ``(source_digest, effect_offsets[i])`` 쌍을 파싱
+       시점에 보존해 그 결함을 고쳤으므로 **사실이 바뀌었다.** 가정이 틀렸던
+       것이 아니라 대상이 바뀌었다.
+
+       3-F-35 당시: 조건과 비용이 정확히 뒤바뀌었고, 길이 검사는 통과했다.
+       그것이 3-F-35 의 "길이 계약은 필요하지만 충분하지 않다" 는 결론이었고
+       3-F-36 이 식별자가 필요하다고 판정한 근거였다.
+    """
     blocks, entries, analysis = _analyze_with(TWO_COND_COST, TWO_SWAPPED)
     #: 길이는 같다 — 어떤 길이 검사도 통과한다.
     assert len(blocks) == len(entries) == 2
-    rows = _rows(analysis)
-    #: 🔴 조건과 비용이 **정확히 뒤바뀐다.**
-    assert rows[0] == (True, "e1", False, True, 0)
-    assert rows[1] == (True, "e2", True, False, 0)
+    #: 🟢 그런데도 뒤바뀐 값을 주장하지 않는다.
+    assert _rows(analysis) == []
+    assert len(analysis.unbound_effects) == 2
 
 
 def test_13_the_correct_answer_for_that_input():
@@ -735,7 +789,8 @@ def test_34_the_cache_signature_was_not_bumped():
     assert LuaScriptSource(PROJECT_ROOT)._signature().startswith(CACHE_PREFIX)
     import sources.lua_loader as loader_module
     loader_source = Path(loader_module.__file__).read_text(encoding="utf-8")
-    assert 'return f"v9:{count}:{newest:.0f}"' in loader_source
+    assert ('return f"v10-{_CACHE_SHAPE_TAG}:{count}:{newest:.0f}"'
+            in loader_source)
 
 
 def test_35_no_graph_or_id_system_was_added():
@@ -798,16 +853,24 @@ def test_37_no_test_was_deleted_and_no_skip_was_added():
     assert removed_tests == 0
 
 
-def test_38_the_residual_risk_is_recorded_not_silently_fixed():
-    r"""🔴 남은 위험을 **숨기지 않았다**는 것을 코드로 확인한다.
+def test_38_the_residual_risk_was_resolved_without_an_exception():
+    r"""🟢 3-F-35 가 남긴 위험이 **예외를 던지지 않고** 해결됐다.
 
-    순서 불일치는 여전히 조용히 잘못 붙는다 (``test_12``). 길이 검사를
-    넣어 "고쳤다" 고 주장하지 않았다 — 그 검사로는 잡히지 않기 때문이다
-    (``test_14``). 결합 자리에 길이 assertion 이 **없다**는 것을 못 박는다.
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-35 는 "순서 불일치는 여전히 조용히
+       잘못 붙는다" 를 기록했고, 길이 assertion 을 넣어 "고쳤다" 고 주장하지
+       않았다 (그 검사로는 잡히지 않으므로). 3-F-37 이 식별자로 해결했다.
+
+    🔴 그리고 **지금도 예외를 던지지 않는다** — 3-F-35 의 판단이 그 점에서는
+    그대로 유효하다. 어긋남은 터뜨릴 일이 아니라 **적어 둘 일**이고, 그래서
+    ``HandlerBinding`` 과 ``unbound_effects`` 로 표현한다. 길이만 비교해
+    예외를 던지는 코드도 여전히 없다 (길이는 충분한 근거가 아니다).
     """
     source = textwrap.dedent(inspect.getsource(EffectAnalyzer._analyze_card))
-    #: 길이를 비교해 예외를 던지는 코드가 없다 — 의도적이다.
     assert "raise" not in source
     assert "len(entries) != " not in source
-    #: 지금 방어는 위치 경계 검사 하나뿐이다.
-    assert "position < len(entries)" in source
+    #: 🟢 위치 경계 검사가 사라지고 식별자 비교가 들어왔다.
+    assert "position < len(entries)" not in source
+    assert "HandlerBinding.MISMATCHED" in source
+    assert "HandlerBinding.UNPROVABLE" in source
+    assert "unbound_effects" in source

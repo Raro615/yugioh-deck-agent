@@ -122,7 +122,14 @@ GROUP_CLONE_CARD = 63708033
 #: ``e:GetLabelObject()`` 로 바인딩이 풀리는 카드 (3-F-31 N3)
 LABEL_OBJECT_CARD = 52445243
 
-CACHE_PREFIX = "v9:"
+#: 🔴 Phase 3-F-37 이 ``v9:`` -> ``v10-<shape>:`` 로 바꿨다.
+#: ``LuaScriptInfo`` 에 ``effect_offsets`` 와 ``source_digest`` 가 생겨
+#: 캐시 모양이 달라졌기 때문이다. 뒤의 ``<shape>`` 는 저장되는 칸 목록의
+#: 해시이고 **자동으로** 바뀐다 — 같은 번호 아래에서 칸이 달라지는 사고를
+#: 막는다 (3-F-37 작업 중 실제로 겪었고, 기존 테스트 103건이 그래서 한 번
+#: 깨졌다). 이 테스트의 주장은 그대로다: **파서 산출물이 달라지면 캐시
+#: 서명도 달라져야 한다.**
+CACHE_PREFIX = "v10-"
 
 
 # ===========================================================================
@@ -207,13 +214,27 @@ def _collect(source: str, spans, *, with_rebind: bool, loader_order: bool):
             handlers: dict[str, str] = {}
             bindings[payload] = handlers
             order.append({"handlers": handlers,
-                          "function": EffectAnalyzer._enclosing_function(pos, spans)})
+                          "function": EffectAnalyzer._enclosing_function(pos, spans),
+                          #: 🔴 Phase 3-F-37 — production 의 결합이 이 칸을
+                          #: 쓴다. 복제본이 넣지 않으면 그 결합은 "증명할 수
+                          #: 없다"(``UNPROVABLE``)가 되고, 이 파일이 비교하려는
+                          #: 바인딩 규칙의 차이가 아니라 **식별자의 부재**를
+                          #: 재는 셈이 된다. 복제본은 production 과 같은 값을
+                          #: 같은 방식으로 담아야 비교가 성립한다.
+                          "offset": pos})
         elif kind == "clone":
             dst, src = payload.split("=", 1)
             handlers = dict(bindings.get(src, {}))
             bindings[dst] = handlers
             order.append({"handlers": handlers,
-                          "function": EffectAnalyzer._enclosing_function(pos, spans)})
+                          "function": EffectAnalyzer._enclosing_function(pos, spans),
+                          #: 🔴 Phase 3-F-37 — production 의 결합이 이 칸을
+                          #: 쓴다. 복제본이 넣지 않으면 그 결합은 "증명할 수
+                          #: 없다"(``UNPROVABLE``)가 되고, 이 파일이 비교하려는
+                          #: 바인딩 규칙의 차이가 아니라 **식별자의 부재**를
+                          #: 재는 셈이 된다. 복제본은 production 과 같은 값을
+                          #: 같은 방식으로 담아야 비교가 성립한다.
+                          "offset": pos})
         else:
             var, setter, idx = payload.split("|", 2)
             target = bindings.get(var)

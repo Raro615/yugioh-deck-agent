@@ -705,7 +705,7 @@ def test_19_the_cache_round_trip_returns_the_same_blocks(scripts, tmp_path):
     #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
     #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
     #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
-    assert blob["signature"].startswith("v9:")
+    assert blob["signature"].startswith("v10-")
 
 
 def test_20_the_cache_signature_was_bumped_for_this_parser_change():
@@ -719,11 +719,11 @@ def test_20_the_cache_signature_was_bumped_for_this_parser_change():
     body = inspect.getsource(LuaScriptSource._signature)
     #: 🔴 Phase 3-F-29 에서 ``v6`` → ``v7``. 3-F-28 이 올린 ``v6`` 이 **되돌아
     #: 가지 않았는지**가 이 테스트의 관심이고, 그것은 아래 목록이 지킨다.
-    assert 'f"v9:{count}:{newest:.0f}"' in body
+    assert 'f"v10-{_CACHE_SHAPE_TAG}:{count}:{newest:.0f}"' in body
     #: 되돌아가지 않았는지도 본다.
-    for old in ("v8:", "v7:", "v6:", "v5:", "v4:", "v3:"):
+    for old in ("v9:", "v8:", "v7:", "v6:", "v5:", "v4:", "v3:"):
         assert f'f"{old}' not in body, old
-    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v9:")
+    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v10-")
 
     #: 🔴 서명에 파서 버전·코드 해시가 **들어 있지 않다** — 그래서 손으로 올린다.
     for token in ("parse_lua_source", "__version__", "md5", "sha", "_is_card_effect",
@@ -761,7 +761,8 @@ def test_21_a_stale_cache_is_rejected(tmp_path):
         parse_card(NON_LOCAL_CARD_EFFECT).effects
     )
     #: 캐시 파일이 새 서명으로 다시 쓰였다.
-    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v9:")
+    assert json.loads(
+        cache.read_text(encoding="utf-8"))["signature"].startswith("v10-")
 
     #: 깨진 캐시도 조용히 재파싱된다 (예외를 던지지 않는다).
     cache.write_text("{ not json", encoding="utf-8")

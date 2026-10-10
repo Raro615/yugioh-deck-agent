@@ -900,7 +900,7 @@ def test_25_the_cache_round_trip_returns_the_corrected_blocks(scripts, tmp_path)
     #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
     #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
     #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
-    assert blob["signature"].startswith("v9:")
+    assert blob["signature"].startswith("v10-")
 
 
 def test_26_the_cache_signature_was_bumped():
@@ -911,10 +911,10 @@ def test_26_the_cache_signature_was_bumped():
     **세 Phase 연속으로 설계대로 걸렸다** (3-F-27 · 3-F-28 · 3-F-29).
     """
     body = inspect.getsource(LuaScriptSource._signature)
-    assert 'f"v9:{count}:{newest:.0f}"' in body
-    for old in ("v8:", "v7:", "v6:", "v5:", "v4:"):
+    assert 'f"v10-{_CACHE_SHAPE_TAG}:{count}:{newest:.0f}"' in body
+    for old in ("v9:", "v8:", "v7:", "v6:", "v5:", "v4:"):
         assert f'f"{old}' not in body, old
-    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v9:")
+    assert LuaScriptSource(PROJECT_ROOT)._signature().startswith("v10-")
     #: 🔴 서명에 파서 버전·코드 해시가 **없다** — 그래서 손으로 올린다.
     for token in ("parse_lua_source", "__version__", "md5", "sha", "_write_list"):
         assert token not in body, token
@@ -936,7 +936,8 @@ def test_27_a_stale_cache_is_rejected(tmp_path):
     assert loaded[CLEAR_PROPERTY].file_name == f"c{CLEAR_PROPERTY}.lua"
     #: 🔴 고친 값이 들어 있다 — 옛 캐시의 더하기 결과가 아니다.
     assert loaded[CLEAR_PROPERTY].effects[1].properties == []
-    assert json.loads(cache.read_text(encoding="utf-8"))["signature"].startswith("v9:")
+    assert json.loads(
+        cache.read_text(encoding="utf-8"))["signature"].startswith("v10-")
     #: 깨진 캐시도 조용히 재파싱된다.
     cache.write_text("{ not json", encoding="utf-8")
     assert len(source.load_cached(cache)) == SCRIPTS

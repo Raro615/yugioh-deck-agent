@@ -69,7 +69,7 @@ import pytest
 import analysis.effect_analyzer as analyzer_module
 import sources.lua_loader as loader_module
 from analysis.effect_analyzer import EffectAnalyzer
-from analysis.effect_model import CardAnalysis
+from analysis.effect_model import CardAnalysis, HandlerBinding
 from core.card_model import Card, EffectSpec
 from core.card_repository import CardRepository
 from core.card_search import CardSearchEngine, EffectLocationFilter, SearchFilters
@@ -124,7 +124,14 @@ SEARCH_LOCATION_COUNTS = [
     1, 33, 0, 0, 5, 65, 304, 1603, 0, 1798, 0, 0, 0, 0, 0, 0, 0, 1, 5170, 0,
     3, 0, 0, 346, 0, 0, 0, 56, 0, 0, 1227,
 ]
-CACHE_PREFIX = "v9:"
+#: 🔴 Phase 3-F-37 이 ``v9:`` -> ``v10-<shape>:`` 로 바꿨다.
+#: ``LuaScriptInfo`` 에 ``effect_offsets`` 와 ``source_digest`` 가 생겨
+#: 캐시 모양이 달라졌기 때문이다. 뒤의 ``<shape>`` 는 저장되는 칸 목록의
+#: 해시이고 **자동으로** 바뀐다 — 같은 번호 아래에서 칸이 달라지는 사고를
+#: 막는다 (3-F-37 작업 중 실제로 겪었고, 기존 테스트 103건이 그래서 한 번
+#: 깨졌다). 이 테스트의 주장은 그대로다: **파서 산출물이 달라지면 캐시
+#: 서명도 달라져야 한다.**
+CACHE_PREFIX = "v10-"
 
 #: Phase 3-F-36 이 측정한 값 — 테스트가 다시 산출한다
 EMPTY_HANDLER_BLOCKS = 9887
@@ -377,30 +384,62 @@ def test_01_effect_spec_has_no_identifier_field():
     assert not {n for n in names if re.search(r"offset|span|pos|uid|ident", n)}
 
 
-def test_02_lua_script_info_has_no_identifier_field():
-    r"""🔴 ``LuaScriptInfo`` 14칸에도 식별자를 담는 자리가 **없다**."""
+def test_02_lua_script_info_now_has_the_identifier_field():
+    r"""🟢 ``LuaScriptInfo`` 가 식별자를 담는다 (3-F-37 이 넣었다).
+
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-36 이 적어 둔 사실은 **그때는 맞았다** —
+       이 Phase 의 역할은 결함을 측정하고 기록하는 것이었다. 3-F-37 이 바로
+       그 결함을 고쳤으므로 **사실이 바뀌었고**, 이 테스트는 "그때 그랬다" 를
+       지우지 않고 "지금은 이렇다" 로 옮겨 적는다. 가정이 틀렸던 것이 아니라
+       **대상이 바뀌었다.**
+
+       3-F-36 당시: 14칸, offset 을 담는 자리 **없음**.
+       3-F-37 이후: 16칸, ``effect_offsets`` + ``source_digest``.
+    """
     names = {f.name for f in dataclasses.fields(LuaScriptInfo)}
-    assert len(names) == 14
-    assert not {n for n in names if re.search(r"offset|span|uid|ident", n)}
+    assert len(names) == 16
+    assert "effect_offsets" in names
+    assert "source_digest" in names
 
 
-def test_03_the_cache_round_trip_carries_no_identifier():
-    r"""🔴 캐시 직렬화도 식별자를 **담지 않는다** — 캐시에서 온 블록은 더더욱
-    자기 출처 위치를 모른다."""
+def test_03_the_cache_round_trip_now_carries_the_identifier():
+    r"""🟢 캐시 직렬화가 식별자를 함께 싣는다 (3-F-37).
+
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-36 이 적어 둔 사실은 **그때는 맞았다** —
+       이 Phase 의 역할은 결함을 측정하고 기록하는 것이었다. 3-F-37 이 바로
+       그 결함을 고쳤으므로 **사실이 바뀌었고**, 이 테스트는 "그때 그랬다" 를
+       지우지 않고 "지금은 이렇다" 로 옮겨 적는다. 가정이 틀렸던 것이 아니라
+       **대상이 바뀌었다.**
+
+       🔴 ``EffectSpec`` 쪽 9칸은 **그대로**다 — §7 이 그 API 변경을
+       금지했고, 식별자는 ``LuaScriptInfo`` 의 평행 목록으로 들어갔다.
+    """
     info = parse_lua_source(1, "c1.lua", textwrap.dedent(TWO_COND_COST))
     data = _info_to_dict(info)
     assert set(data["effects"][0]) == {
         "index", "effect_types", "code", "ranges", "target_ranges",
         "categories", "properties", "count_limit", "cloned_from",
     }
+    assert data["effect_offsets"] == info.effect_offsets
+    assert data["source_digest"] == info.source_digest
     back = _info_from_dict(data)
     assert [s.index for s in back.effects] == [s.index for s in info.effects]
-    assert not any(hasattr(s, "offset") for s in back.effects)
+    assert back.effect_offsets == info.effect_offsets
+    assert back.source_digest == info.source_digest
 
 
-def test_04_the_loader_computes_the_offset_and_then_discards_it():
-    r"""🔴 로더는 ``m.start()`` 를 **이벤트에 넣고**, 블록을 만들 때 **읽지
-    않는다**. 즉 식별자는 파싱 순간에 존재했다가 그 자리에서 사라진다."""
+def test_04_the_loader_now_keeps_the_offset_it_used_to_discard():
+    r"""🟢 로더가 ``m.start()`` 를 **이벤트에 넣고 블록을 만들 때 읽는다**.
+
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-36 당시 루프 변수 이름이 ``_pos`` 였고
+       본문에서 **한 번도 읽지 않았다** — 식별자가 파싱 순간에 존재했다가
+       그 자리에서 사라졌다는 증거였다. 3-F-37 이 그 값을
+       ``LuaScriptInfo.effect_offsets`` 에 기록하도록 고쳤으므로 이름이
+       ``pos`` 로 바뀌고 Load 가 생겼다.
+    """
     source = inspect.getsource(loader_module)
     tree = ast.parse(source)
     func = next(
@@ -415,7 +454,7 @@ def test_04_the_loader_computes_the_offset_and_then_discards_it():
         and node.func.attr == "start"
     ]
     assert len(starts) >= 4
-    #: 재생 루프의 변수 이름이 ``_pos`` 다 — 쓰지 않겠다는 선언이다
+    #: 재생 루프의 변수 이름이 ``pos`` 다 — 쓰겠다는 선언이다
     loops = [
         node for node in ast.walk(func)
         if isinstance(node, ast.For) and isinstance(node.target, ast.Tuple)
@@ -423,13 +462,16 @@ def test_04_the_loader_computes_the_offset_and_then_discards_it():
     ]
     assert len(loops) == 1
     names = {e.id for e in loops[0].target.elts if isinstance(e, ast.Name)}
-    assert "_pos" in names
-    #: 루프 본문 전체에서 ``_pos`` 를 **읽는 곳이 없다**
+    assert "pos" in names
+    assert "_pos" not in names
+    #: 🟢 루프 본문에서 **읽는다** — 3-F-36 때는 Load 가 0개였다
     loaded = {
         node.id for node in ast.walk(loops[0])
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
     }
-    assert "_pos" not in loaded
+    assert "pos" in loaded
+    #: 그리고 그 값이 평행 목록에 들어간다
+    assert "effect_offsets" in inspect.getsource(loader_module)
 
 
 def test_05_the_analyzer_uses_the_offset_only_to_name_the_function():
@@ -461,16 +503,17 @@ def test_05_the_analyzer_uses_the_offset_only_to_name_the_function():
     assert users == {"_enclosing_function"}
 
 
-def test_06_the_join_site_uses_position_and_nothing_else():
-    r"""🔴 결합 자리에 식별자 비교가 **없다** — ``entries[position]`` 뿐이다.
+def test_06_the_join_site_no_longer_uses_position():
+    r"""🟢 결합 자리가 **식별자로** 짝짓는다 — 위치 색인이 사라졌다.
 
-    문자열 포함 검사로 때우지 않는다. ``entries`` 를 색인하는 **모든** 구문을
-    AST 로 찾아 그 색인이 ``position`` 하나뿐임을 확인한다.
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-36 당시 ``entries`` 를 색인하는 구문이
+       정확히 하나 있었고 그 색인이 ``position`` 이었다 — 그것이 "위치뿐"
+       이라는 증거였다. 3-F-37 이 ``(source_digest, effect_offsets[i])`` 쌍
+       으로 짝짓도록 고쳤으므로 그 구문 자체가 **없어졌다.**
 
-    🔴 ``spans`` 는 반례가 아니다 — 그것은 **함수 경계** 목록이고 블록의
-    source span 이 아니다. ``_enclosing_function`` 이 "이 블록이 어느 함수
-    안에 있나" 를 답하는 데만 쓰이며, 한 함수에 블록이 여럿이면 구별하지
-    못한다 (``test_09``).
+    🔴 ``spans`` 는 지금도 식별자가 아니다 — 그것은 **함수 경계** 목록이고
+    블록의 source span 이 아니다. 한 함수에 블록이 여럿이면 구별하지 못한다.
     """
     func = next(
         node for node in ast.walk(ast.parse(textwrap.dedent(
@@ -482,14 +525,13 @@ def test_06_the_join_site_uses_position_and_nothing_else():
         if isinstance(node, ast.Subscript)
         and isinstance(node.value, ast.Name) and node.value.id == "entries"
     ]
-    assert len(subscripts) == 1
-    assert isinstance(subscripts[0].slice, ast.Name)
-    assert subscripts[0].slice.id == "position"
+    assert subscripts == []
     source = textwrap.dedent(inspect.getsource(EffectAnalyzer._analyze_card))
-    assert "position < len(entries)" in source
-    #: 식별자를 뜻하는 이름은 하나도 없다
-    for token in ("offset", "uid", "start()"):
-        assert token not in source
+    assert "position < len(entries)" not in source
+    assert "entries[position]" not in source
+    #: 🟢 그 자리에 식별자가 들어왔다
+    for token in ("source_digest", "effect_offsets", "offset"):
+        assert token in source
 
 
 def test_07_ordinal_is_the_list_position_so_it_cannot_verify_the_list():
@@ -530,10 +572,13 @@ def test_09_no_parser_entry_id_exists_in_either_structure():
         textwrap.dedent(TWO_COND_COST),
         EffectAnalyzer._function_spans(textwrap.dedent(TWO_COND_COST)),
     )
-    assert [sorted(e) for e in entry] == [["function", "handlers"]] * 2
-    #: entry 가 들고 있는 것은 핸들러와 **함수 이름**뿐 — 함수 이름은 한
-    #: 함수에 블록이 여럿이면 구별하지 못한다
+    #: 🟢 **Phase 3-F-37 정정** — entry 가 이제 ``offset`` 도 들고 있다.
+    #: 3-F-36 당시에는 ``handlers`` 와 ``function`` 뿐이었고, 함수 이름은 한
+    #: 함수에 블록이 여럿이면 구별하지 못하므로 식별자가 될 수 없었다.
+    assert [sorted(e) for e in entry] == [["function", "handlers", "offset"]] * 2
     assert {e["function"] for e in entry} == {"initial_effect"}
+    assert [e["offset"] for e in entry] == parse_lua_source(
+        1, "c1.lua", textwrap.dedent(TWO_COND_COST)).effect_offsets
 
 
 # ===========================================================================
@@ -706,45 +751,62 @@ def test_19_case_matching_length_and_order_joins_correctly():
     ]
 
 
-def test_20_case_different_length_misjoins_silently():
-    r"""🔴 ② 길이가 다른 사례 — ``e1`` 이 **다른 블록의 핸들러**를 받고
-    ``e2`` 는 빈 dict 를 받아 미등록으로 오분류된다. 예외도 경고도 없다."""
+def test_20_case_different_length_no_longer_misjoins_silently():
+    r"""🟢 ② 길이가 다른 사례 — **더 이상 조용히 붙지 않는다.**
+
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-36 당시 이 입력은 ``e1`` 에 다른 블록의
+       핸들러를 붙이고 ``e2`` 에 빈 dict 를 줘서 **미등록으로 오분류**했다.
+       예외도 경고도 없었다. 3-F-37 이 식별자 기반 결합을 넣은 뒤로는 두
+       블록 모두 ``MISMATCHED`` 로 적히고 ``unbound_effects`` 로 간다 —
+       등록/해결 어느 쪽도 주장하지 않는다.
+    """
     result = _analyze_with(TWO_COND_COST, ONE_COND)
+    analysis = result["analysis"]
     assert len(result["blocks"]) == 2
     assert len(result["entries"]) == 1
-    rows = _rows(result["analysis"])
-    assert rows == [(True, "e1", True, False, 0), (False, "e2", False, False, 0)]
-    #: 올바른 답은 ``e2`` 가 **비용을 갖고 등록된 효과**다 — 둘 다 틀렸다
-    assert rows[1][2:] == (False, False, 0)
+    assert _rows(analysis) == []                  # 🟢 아무것도 주장하지 않는다
+    assert analysis.handler_binding is HandlerBinding.MISMATCHED
+    assert [e.index for e in analysis.unbound_effects] == ["e1", "e2"]
+    #: 🟢 남의 핸들러를 받지 않았다
+    assert all(not e.has_condition and not e.costs and not e.actions
+               for e in analysis.unbound_effects)
 
 
-def test_21_case_same_length_and_same_name_order_but_inverted_semantics():
-    r"""🔴 ③ **§4.5 의 결정적 답** — 길이 2, 이름 순서 ``['e1','e2']`` 까지
-    같은데 의미가 **뒤바뀐다**.
+def test_21_case_same_length_and_same_name_order_is_no_longer_inverted():
+    r"""🟢 ③ **3-F-36 의 결정적 사례가 더는 뒤집히지 않는다.**
 
-    근거: 파싱된 Lua 에서 ``e1`` 은 조건을, ``e2`` 는 비용을 받는다. 디스크
-    Lua 에서는 그 반대다. 어떤 길이·index·이름 검사도 통과하고, 결과는
-    정확히 뒤집힌다.
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 길이 2, 이름 순서 ``['e1','e2']`` 까지 같은
+       입력이다. 3-F-36 당시 결과는 정확히 뒤집혀서 ``e1`` 이
+       ``cond=False/cost=True`` 를, ``e2`` 가 그 반대를 **주장**했다. 어떤
+       길이·index·이름 검사도 그것을 잡지 못했다 — 그것이 그 Phase 의 결론
+       (``IDENTITY_REQUIRES_DATA_MODEL_CHANGE``)이었다. 3-F-37 이
+       ``(source_digest, offset)`` 쌍을 보존하자 ``MISMATCHED`` 로 걸린다.
     """
     result = _analyze_with(TWO_COND_COST, SAME_ORDER_DIFFERENT_SEMANTICS)
+    analysis = result["analysis"]
     blocks = [s.index for s in result["blocks"]]
     entries_names = [v for _o, v, _p in result["disk_offsets"]]
     assert blocks == entries_names == ["e1", "e2"]            # 🔴 전부 같다
     assert len(result["blocks"]) == len(result["entries"]) == 2
-    assert _rows(result["analysis"]) == [
-        (True, "e1", False, True, 0),      # 🔴 조건이 아니라 비용
-        (True, "e2", True, False, 0),      # 🔴 비용이 아니라 조건
-    ]
+    #: 🟢 그런데도 통과하지 않는다
+    assert analysis.handler_binding is HandlerBinding.MISMATCHED
+    assert _rows(analysis) == []
+    assert len(analysis.unbound_effects) == 2
 
 
-def test_22_case_same_length_different_order_also_misjoins():
-    r"""🔴 ④ 길이는 같고 **순서만** 다른 사례 — 역시 조용히 뒤집힌다."""
+def test_22_case_same_length_different_order_is_also_caught_now():
+    r"""🟢 ④ 길이는 같고 순서만 다른 사례 — 역시 걸린다.
+
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-36 당시 조용히 뒤집혔다.
+    """
     result = _analyze_with(TWO_COND_COST, TWO_SWAPPED)
+    analysis = result["analysis"]
     assert len(result["blocks"]) == len(result["entries"]) == 2
-    assert _rows(result["analysis"]) == [
-        (True, "e1", False, True, 0),
-        (True, "e2", True, False, 0),
-    ]
+    assert analysis.handler_binding is HandlerBinding.MISMATCHED
+    assert _rows(analysis) == []
 
 
 def test_23_case_a_valid_block_with_no_handler():
@@ -1092,7 +1154,7 @@ def test_41_this_phase_changed_no_production_file():
 def test_42_the_cache_signature_was_not_bumped():
     r"""🟢 파서 결과가 바뀌지 않았으므로 캐시 signature 도 그대로다."""
     source = inspect.getsource(loader_module)
-    assert f'return f"{CACHE_PREFIX}' in source.replace("v9:", "v9:")
+    assert f'return f"{CACHE_PREFIX}' in source
     assert CACHE_PREFIX in source
 
 
@@ -1209,21 +1271,32 @@ def test_49_no_test_was_deleted_and_no_skip_was_added():
     assert removed_tests == 0
 
 
-def test_50_the_design_options_are_recorded_not_silently_implemented():
-    r"""🔴 **이 Phase 가 고치지 않았다는 것을 코드로 못 박는다.**
+def test_50_the_design_option_b_was_implemented_in_the_next_phase():
+    r"""🟢 **3-F-36 이 보고한 안 B 가 3-F-37 에서 실제로 구현됐다.**
 
-    식별자는 존재하고 유효하지만(``test_12``~``test_14``), 쓰려면 파싱
-    시점에 저장해야 한다(``test_17``/``test_18``). 저장 자리는 §6 이 금지한
-    ``EffectSpec`` API 변경이거나 ``LuaScriptInfo`` + 캐시 직렬화 + 캐시
-    signature 까지 바꾸는 광범위한 변경이다. 그래서 보고서에 적고 **구현하지
-    않았다** — 결합 자리는 여전히 위치 기반이다.
+    .. note::
+       🟢 **Phase 3-F-37 정정.** 3-F-36 은 audit-only 로 끝났고, 이 테스트는
+       "결합 자리가 여전히 위치 기반" 임을 못 박아 **구현하지 않았다는 사실**
+       을 기록했다. 3-F-37 이 그 안을 그대로 실행했으므로 이제는 **구현됐다는
+       사실**을 못 박는다. 두 보고서가 모두 남아 있어야 한다 — 하나는 왜
+       필요했는지, 하나는 무엇을 했는지.
+
+    🔴 §6 이 금지한 ``EffectSpec`` API 변경은 **하지 않았다** — 식별자는
+    ``LuaScriptInfo`` 의 평행 목록으로 들어갔다.
     """
     source = textwrap.dedent(inspect.getsource(EffectAnalyzer._analyze_card))
-    assert "entries[position]" in source
+    assert "entries[position]" not in source
     collect = textwrap.dedent(inspect.getsource(EffectAnalyzer._collect_handlers))
-    assert '"offset"' not in collect
-    report = PROJECT_ROOT / "docs" / "phase3f36-effect-block-handler-identity-audit.md"
-    if not report.is_file():
-        pytest.skip("보고서 commit 이 아직 없다")
-    text = report.read_text(encoding="utf-8")
-    assert "IDENTITY_REQUIRES_DATA_MODEL_CHANGE" in text
+    assert '"offset"' in collect
+    assert len(dataclasses.fields(EffectSpec)) == 9      # §6 금지 준수
+
+    for name, verdict in (
+        ("phase3f36-effect-block-handler-identity-audit.md",
+         "IDENTITY_REQUIRES_DATA_MODEL_CHANGE"),
+        ("phase3f37-effect-block-handler-identity-model.md", None),
+    ):
+        report = PROJECT_ROOT / "docs" / name
+        if not report.is_file():
+            pytest.skip(f"{name} commit 이 아직 없다")
+        if verdict:
+            assert verdict in report.read_text(encoding="utf-8")

@@ -794,17 +794,24 @@ def test_22_the_cache_signature_was_bumped():
        되돌아가지 않았음도 함께 못 박는다.
     """
     source = inspect.getsource(LuaScriptSource._signature)
-    #: 🔴 Phase 3-F-32 에서 ``v8`` → **``v9``** — ``Clone`` 의 인자 있는
-    #: 형태와 점 형태를 블록으로 인정했다. 캐시 서명에 파서 버전이
-    #: 들어 있지 않아 **다섯 Phase 연속 수동**으로 올리고 있다 (위험 E4).
-    assert "v9:" in source
+    #: 🔴 Phase 3-F-32 에서 ``v8`` → ``v9``, Phase 3-F-37 에서
+    #: ``v9`` → **``v10-<shape>``** — ``LuaScriptInfo`` 에 ``effect_offsets`` 와
+    #: ``source_digest`` 가 생겨 캐시 모양이 달라졌다.
+    #:
+    #: 🟢 **위 note 가 적어 둔 위험 E4("다섯 Phase 연속 수동 승급")를 3-F-37
+    #: 이 구조로 막았다.** 번호 뒤의 ``<shape>`` 는 저장되는 칸 목록의 해시이고
+    #: 자동으로 바뀐다. 3-F-37 작업 중 같은 ``v10`` 아래에서 칸을 하나 더
+    #: 넣었다가 중간 캐시가 서명 검사를 통과해 기존 테스트 103건이 깨지는 일을
+    #: 실제로 겪은 뒤 넣은 장치다.
+    assert "v10-" in source
+    assert "v9:" not in source
     assert "v8:" not in source
     assert "v6:" not in source
     assert "v5:" not in source
     assert "v4:" not in source
 
     signature = LuaScriptSource(PROJECT_ROOT)._signature()
-    assert signature.startswith("v9:")
+    assert signature.startswith("v10-")
 
     #: 캐시가 있다면 새 signature 로 쓰여 있어야 한다 (없으면 건너뛰지 않고
     #: 그냥 signature 형식만 확인한다).
@@ -812,7 +819,7 @@ def test_22_the_cache_signature_was_bumped():
     if cache.is_file():
         with cache.open(encoding="utf-8") as handle:
             blob = json.load(handle)
-        assert blob["signature"].startswith("v9:"), blob["signature"]
+        assert blob["signature"].startswith("v10-"), blob["signature"]
 
 
 # ======================================================================
