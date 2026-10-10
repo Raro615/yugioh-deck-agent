@@ -161,14 +161,28 @@ def summarise(repository) -> None:
     #: 실측 684장이 이 상태인데 표에 없어서, 출력된 행의 합이 카드 총수와
     #: 맞지 않았다 (12,687 + 756 = 13,443 ≠ 14,127). 상태 요약이 자기
     #: 자신과 어긋나는 것은 숨기면 안 되는 종류의 결함이다.
+    #: 🔴 **"Lua 검증됨" 이라고 적고 있었다** (Phase 3-F-40 이 발견).
+    #: 이 행의 조건은 ``card.script is not None`` 하나이고, 분석을 돌려
+    #: 확인한 값이 아니다. 실측으로 이 행에 든 12,687장 중 **215장은 등록
+    #: 효과가 0개**이며(183장은 효과 블록 자체가 0개), 캐시가 낡으면
+    #: ``MISMATCHED``·``UNPROVABLE``·``SOURCE_MISSING`` 과 **동시에** 이
+    #: 행에 들어온다. 그래서 "검증" 이라는 말을 쓰지 않는다.
     labels = {
-        AnalysisStatus.LUA_VERIFIED.value: "Lua 검증됨",
+        AnalysisStatus.LUA_VERIFIED.value: "Lua 근거 있음 (스크립트 첨부)",
         AnalysisStatus.TEXT_DERIVED.value: "텍스트 유래 (Lua 없음)",
         AnalysisStatus.NO_EFFECT.value: "효과 없음 (통상 몬스터·토큰)",
         AnalysisStatus.UNAVAILABLE.value: "분석 근거 없음",
     }
     for key, label in labels.items():
-        print(f"  {label:26}: {status.get(key, 0):,}장")
+        print(f"  {label:28}: {status.get(key, 0):,}장")
+    #: 🔴 **이 표가 무엇을 센 값인지 적는다.** 근거 계층과 증명 계층을 한
+    #: 숫자로 합치지 않는다 — 합치면 "증명 못 한 카드" 가 "검증됨" 으로
+    #: 사라진다.
+    #: 🔴 결합 표의 **제목을 그대로 쓰지 않는다.** 그 문구를 여기 넣으면
+    #: "결합 표가 출력됐는가" 를 그 문구로 확인하던 기존 테스트가 이 설명
+    #: 줄에도 걸려서, 표가 없을 때도 통과하는 거짓 양성이 된다.
+    print("  (이 표는 분석 근거만 셉니다 — 블록·핸들러 결합 증명은 별도"
+          " 표에서 셉니다.)")
     #: 🔴 열거한 상태가 전부인지 확인한다 — 합이 안 맞으면 표가 낡은 것이다.
     unlisted = {k: v for k, v in status.items() if k not in labels}
     if unlisted:

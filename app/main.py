@@ -487,6 +487,16 @@ def cmd_analyze(agent: DeckAgent, args) -> int:
     #: 🔴 건수는 세 목록 전부에서 **실제 필드를 읽어** 센다. "``effects`` 에
     #: 있으면 ``MATCHED``" 라고 가정하지 않는다 — 그 가정이 깨지는 날
     #: 조용히 틀린 요약을 내게 된다.
+    #: 🔴 **근거와 증명을 같은 자리에서 보여준다** (Phase 3-F-40).
+    #: ``AnalysisStatus`` 는 "어느 소스가 근거인가", ``HandlerBinding`` 은
+    #: "그 소스와의 대응을 증명했는가" 이고 서로 다른 계층이다. 지금까지
+    #: 이 화면은 증명만 보여줬고 근거는 갱신 요약에만 있었다 — 한 카드에서
+    #: 두 값을 함께 볼 수 있는 자리가 없었다. **합치지 않고 나란히** 적는다.
+    record = getattr(card, "provenance", None)
+    status = getattr(record, "analysis_status", None)
+    if status is not None:
+        print(f"\n  분석 근거  : {status.value} (근거 계층 — 증명은 다음 줄)")
+
     counts: dict[HandlerBinding, int] = {}
     for effect in (list(analysis.effects) + list(analysis.resolution_effects)
                    + list(analysis.unbound_effects)):

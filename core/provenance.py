@@ -56,16 +56,53 @@ class FieldStatus(str, Enum):
 
 class AnalysisStatus(str, Enum):
     """
-    효과 분석이 어디에 근거하는가.
+    효과 분석이 어디에 **근거하는가** — 그 분석이 **옳은가가 아니다**.
 
     Lua 분석과 텍스트 유래 분석을 절대 같게 취급하지 않는다.
+
+    🔴 **이 enum 은 근거(출처) 계층이다** (Phase 3-F-40 이 명시). 값을 만드는
+    자리는 :meth:`core.card_repository.CardRepository._record_provenance`
+    **한 곳**이고, 그 분기들은 전부 "어느 소스가 붙어 있는가" 만 본다.
+    분석을 실제로 돌려 보고 결정하는 값이 아니다.
+
+    🔴 **결합 증명은 다른 계층이다.** 블록과 핸들러의 대응이 증명됐는지는
+    :class:`analysis.effect_model.HandlerBinding` 이 재고, 그것은 분석
+    시점에 ``c*.lua`` 를 다시 읽어 ``(소스 지문, 블록 offset)`` 쌍으로
+    판정한다 (Phase 3-F-37). **두 값은 서로 다른 시점·다른 근거이고 어긋날
+    수 있다.** 실측으로 ``LUA_VERIFIED`` 가 ``MISMATCHED`` ·
+    ``UNPROVABLE`` · ``SOURCE_MISSING`` 과 **동시에 성립한다**
+    (Phase 3-F-40 §4 의 사례 ②③⑤⑥).
+
+    🔴 **그래서 둘을 하나로 합치지 않는다.** ``HandlerBinding.MATCHED`` 를
+    보고 이 상태를 올려서도 안 되고(결합 성공은 의미의 정확성이 아니다),
+    결합이 어긋났다고 이 상태를 일괄 강등해서도 안 된다(근거가 사라진 것은
+    아니다).
     """
 
     LUA_VERIFIED = "lua_verified"
-    """실제 카드 스크립트에서 구조화했다."""
+    """
+    **Lua 스크립트가 분석 근거로 붙어 있다** — 조건은 ``card.script is not
+    None`` 하나다.
+
+    🔴 **"효과를 구조화했다" 는 뜻이 아니다.** 실측: 이 상태인 12,687장 중
+    **215장**은 등록 효과가 **0개**다. 그중 183장은 파서가 효과 블록을
+    하나도 뽑지 못했고(``Fusion.AddProcMix`` · ``EnableReviveLimit`` 만 있는
+    융합 몬스터 등), 32장은 블록이 전부 해결 효과다. 스크립트가 붙었다는
+    사실과 거기서 무엇을 뽑았다는 사실은 다르다.
+
+    🔴 **"검증했다" 는 뜻도 아니다.** 결합 증명은 ``HandlerBinding`` 이,
+    구조화 정도는 :meth:`analysis.effect_model.CardAnalysis.coverage` 가
+    따로 보고한다.
+    """
     TEXT_DERIVED = "text_derived"
     """
-    Lua 가 없어 공식 텍스트에서 유추했다. 게임 처리와 어긋날 수 있다.
+    **공식 텍스트만이 근거다** (Lua 가 없다). 게임 처리와 어긋날 수 있다.
+
+    🔴 실측 주의: 이 상태가 붙는 조건은 "Lua 가 없고 효과 텍스트가 있다"
+    이고, **텍스트 분석을 실제로 돌린 결과가 아니다.**
+    :class:`analysis.text_effect_analyzer.TextEffectAnalyzer` 는 현재
+    production 호출자가 **하나도 없다** (Phase 3-F-40 전수 확인). 즉 이
+    상태는 "텍스트에서 유추할 수 있다" 는 근거 표시다.
 
     **효과가 있는 카드에만 쓴다.** 효과 자체가 없는 통상 몬스터까지 여기
     넣으면, 듀얼 엔진이 "text_derived 는 실행 차단" 규칙을 적용할 때 푸른 눈의
