@@ -127,11 +127,29 @@ class ExactNameMatch:
 class CardRepository:
     """카드 적재/보관/조회 계층."""
 
-    def __init__(self, cards: dict[int, Card], constants=None):
+    def __init__(self, cards: dict[int, Card], constants=None, script_dir=None):
         from sources.script_constants import ScriptConstants
 
         self._cards: dict[int, Card] = cards
         self.constants = constants if constants is not None else ScriptConstants()
+        #: 🔴 **이 리포지토리가 ``c*.lua`` 를 실제로 읽은 디렉터리** (Phase 3-F-35).
+        #:
+        #: :class:`analysis.effect_analyzer.EffectAnalyzer` 는 생성자에서
+        #: ``getattr(repository, "script_dir", None)`` 로 이 값을 **이미 찾고
+        #: 있었다.** 그런데 여기에 그 속성이 없어서 언제나 ``None`` 이 나오고,
+        #: 저장소 루트로 fallback 했다.
+        #:
+        #: 그 결과 ``--scripts`` 로 다른 디렉터리를 준 CLI 경로에서
+        #: **두 목록이 서로 다른 디렉터리에서 왔다** —
+        #: ``card.script.effects`` 는 ``--scripts`` 의 Lua 를 파싱한 것이고
+        #: analyzer 의 ``entries`` 는 **저장소 루트**의 Lua 를 다시 읽은 것이다.
+        #: 길이가 다르면 ``entries[position]`` 이 조용히 ``{}`` 를 돌려주고
+        #: 그 블록은 "해결 중 생성" 으로 **오분류**됐다. 예외도 경고도 없었다.
+        #:
+        #: 그래서 리포지토리가 **자기가 읽은 자리를 기억한다.** 기본값
+        #: (``None``)이면 analyzer 의 기존 fallback 이 그대로 쓰이므로
+        #: 지금까지의 동작은 바뀌지 않는다.
+        self.script_dir = script_dir
         self._by_normalized_name: dict[str, list[int]] = defaultdict(list)
         self._by_race: dict[int, list[int]] = defaultdict(list)
         self._by_attribute: dict[int, list[int]] = defaultdict(list)
@@ -197,7 +215,9 @@ class CardRepository:
             korean_source.apply(cards)
 
         cls._record_provenance(cards)
-        return cls(cards, constants=constants)
+        #: 🔴 analyzer 가 **같은 디렉터리**를 다시 읽도록 실제로 읽은 자리를
+        #: 함께 넘긴다 (Phase 3-F-35 — 위 ``script_dir`` 주석 참고).
+        return cls(cards, constants=constants, script_dir=lua.script_dir)
 
     @staticmethod
     def _record_provenance(cards: dict[int, Card]) -> None:
