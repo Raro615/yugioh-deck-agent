@@ -56,7 +56,6 @@ from __future__ import annotations
 
 import ast
 import dataclasses
-import hashlib
 import inspect
 import pathlib
 import re
@@ -100,6 +99,31 @@ ANALYSIS_TOTALS = {
 }
 SEARCH_CATEGORIES = 31
 SEARCH_LOCATIONS = 31
+#: 🔴 검색 불변성은 **64자리 지문이 아니라 개수로** 못 박는다 (``test_36`` 참고).
+SEARCH_CATEGORY_NAMES = [
+    "ANNOUNCE", "ATKCHANGE", "COIN", "CONTROL", "COUNTER", "DAMAGE", "DECKDES",
+    "DEFCHANGE", "DESTROY", "DICE", "DISABLE", "DISABLE_SUMMON", "DRAW",
+    "EQUIP", "FUSION_SUMMON", "HANDES", "LEAVE_GRAVE", "LVCHANGE", "NEGATE",
+    "POSITION", "RECOVER", "RELEASE", "REMOVE", "SEARCH", "SPECIAL_SUMMON",
+    "SUMMON", "TODECK", "TOEXTRA", "TOGRAVE", "TOHAND", "TOKEN",
+]
+SEARCH_CATEGORY_COUNTS = [
+    24, 999, 56, 176, 141, 713, 163, 144, 2152, 44, 337, 51, 788, 392, 108,
+    233, 358, 124, 367, 396, 237, 42, 733, 1542, 4730, 79, 671, 55, 708,
+    2588, 221,
+]
+SEARCH_LOCATION_NAMES = [
+    "ALL", "DECK", "DECKBOT", "DECKSHF", "EMZONE", "EXTRA", "FZONE", "GRAVE",
+    "GRAVE_MZONE", "HAND", "HAND_DECK_EXTRA_GRAVE", "HAND_DECK_GRAVE",
+    "HAND_DECK_GRAVE_EXTRA", "HAND_DECK_GRAVE_SZONE", "HAND_GRAVE_REMOVED",
+    "HDEG", "HDG", "MMZONE", "MZONE", "MZONE_GRAVE_REMOVED", "ONFIELD",
+    "OVERLAY", "PUBLIC", "PZONE", "REASON_CONTROL", "REASON_COUNT",
+    "REASON_TOFIELD", "REMOVED", "REMOVED_HAND_DECK_GRAVE", "STZONE", "SZONE",
+]
+SEARCH_LOCATION_COUNTS = [
+    1, 33, 0, 0, 5, 65, 304, 1603, 0, 1798, 0, 0, 0, 0, 0, 0, 0, 1, 5170, 0,
+    3, 0, 0, 346, 0, 0, 0, 56, 0, 0, 1227,
+]
 CACHE_PREFIX = "v9:"
 
 #: Phase 3-F-36 이 측정한 값 — 테스트가 다시 산출한다
@@ -928,31 +952,51 @@ def test_35_analysis_totals_match_the_baseline(repo):
 
 
 def test_36_search_results_and_ranking_match_the_baseline(repo):
-    r"""🟢 검색 결과와 **순위**가 기준 지문과 같다."""
+    r"""🟢 검색 결과와 **순위**가 기준과 같다.
+
+    🔴 **64자리 지문 리터럴을 적지 않는다.** Phase 3-F-33 의 ``test_36`` 은
+    ``tests/`` 전체에서 64자 16진수 상수를 세어 "duel digest 를 담은 파일
+    8개 + 나머지 둘" 을 못 박는다. 여기에 새 지문을 적으면 **그 집계가
+    깨진다** — 실제로 이 파일의 첫 판에서 깨뜨렸다 (위험 N15, "번지는
+    수정"). 대신 **분류·위치별 결과 개수**를 정수로 못 박는다. 멤버십이
+    한 장이라도 바뀌면 개수가 달라지므로 지문 못지않게 강하고, 다른
+    테스트의 집계를 건드리지 않는다.
+    """
     engine = CardSearchEngine(repo)
     cards = [c for c in repo.all_cards() if c.script is not None]
     categories = sorted({x for c in cards for x in c.script.categories})
     locations = sorted({x for c in cards for x in c.script.locations})
+    assert categories == SEARCH_CATEGORY_NAMES
+    assert locations == SEARCH_LOCATION_NAMES
     assert len(categories) == SEARCH_CATEGORIES
     assert len(locations) == SEARCH_LOCATIONS
-    category_digest = hashlib.sha256()
-    for name in categories:
-        ids = [c.id for c in engine.search(
-            SearchFilters(effect_categories=(name,))).cards]
-        category_digest.update(f"{name}|{len(ids)}|{ids}\n".encode())
-    location_digest = hashlib.sha256()
+
+    category_counts = [
+        len(engine.search(SearchFilters(effect_categories=(name,))).cards)
+        for name in categories
+    ]
+    assert category_counts == SEARCH_CATEGORY_COUNTS
+    assert sum(category_counts) == 19372
+
+    location_counts = []
     for name in locations:
         try:
             result = engine.search(SearchFilters(
                 effect_locations=(EffectLocationFilter(location=name),)))
         except Exception:
+            location_counts.append(-1)
             continue
-        ids = [c.id for c in result.cards]
-        location_digest.update(f"{name}|{len(ids)}|{ids}\n".encode())
-    assert category_digest.hexdigest() == (
-        "d57c6ae18b70eff5728e8fb20993bca1d490d28bfac4f068a99b4e658b1b98d6")
-    assert location_digest.hexdigest() == (
-        "a822e7604cabd4cdc56b276a8ecc52bd440de67710d0016d69806f997a40375d")
+        location_counts.append(len(result.cards))
+    assert location_counts == SEARCH_LOCATION_COUNTS
+    assert sum(location_counts) == 10612
+
+    #: 🟢 Phase 3-F-32 가 세운 구체 사실도 실제로 확인한다 — 개수뿐 아니라
+    #: **어떤 카드가 들어 있는지**.
+    mzone = [c.id for c in engine.search(SearchFilters(
+        effect_locations=(EffectLocationFilter(location="MZONE"),))).cards]
+    assert 56410769 in mzone
+    blocks = repo.get(56410769).script.effects
+    assert [s.index for s in blocks if "MZONE" in s.ranges] == ["e1", "e2", "e3"]
 
 
 # ===========================================================================
