@@ -244,12 +244,40 @@ if desc: ...; card.desc = desc
 | C. 오버레이 | 6 | `use_korean` 미전달 · 끄는 플래그 없음 · 상태 분포 동일 · `desc` 700장 차이 · 753/748 · **표시 동일** |
 | D. 표시 정책 | 7 | 원문 미표시 · 상세의 언어 라벨 · **라벨이 이름으로 결정(재현)** · 실제 0장 · Lua·텍스트 배타 · 승격 없음 · `UNAVAILABLE` 0장 |
 | E. 불변·결정성 | 7 | 반복 동일 · 상태 분포 · 분석·결합 집계 · 검색·`EffectRef` · `state_hash` 결정성 · RNG 재현 · **hidden information 경계** |
-| F. 범위·금지 | 4 | **production diff 0** · 변경 파일 2개 · 금지 경로 · 기존 테스트 수정 0 |
+| F. 범위·금지 | 4 | **production diff 0** · 변경 파일 3개 · 금지 경로 · 기존 테스트 삭제 0·개수 변화 0 |
 
 단독 실행 (commit 전): **33 passed / 4 skipped** — skip 4개는
 `test_34`~`test_37` (이 Phase 의 commit 이 생길 때까지 조건부).
 
-전체 회귀: §7.1.
+### 7.1 🔴 전체 회귀가 내 예측을 깨뜨렸다
+
+첫 전체 회귀 결과:
+
+```
+1 failed, 5398 passed, 4 skipped in 3280.82s (0:54:40)
+FAILED tests/test_provenance_consumer_audit.py::test_02_only_one_test_calls_it_and_that_is_the_whole_story
+```
+
+**원인은 내 예측 오류다.** 나는 "production 을 바꾸지 않았으니 기존 테스트가
+깨질 이유가 없다" 고 `test_37` 의 docstring 에까지 적었다. 그런데 3-F-41 의
+`test_02` 는 **텍스트 분석기를 호출하는 테스트 파일의 정확한 목록**을
+고정하는 **의도적 지뢰선**이고, 이 Phase 가 분석기를 실제로 돌려 여섯 상태를
+구성하는 감사 파일을 추가했으니 **세 번째 호출자**가 생긴 것이다.
+production 이 아니라 **테스트 추가**가 기존 테스트를 건드릴 수 있다는 것을
+놓쳤다.
+
+**고친 방법:** 목록에 이 Phase 의 파일을 더했다. "tests/ 아래면 통과" 같은
+느슨한 조건으로 **바꾸지 않았다** — 그러면 지뢰선이 죽는다. 그 assertion 의
+의미("production 호출자 0개, 테스트만 부른다")는 그대로이고, production
+0개는 `test_01`·`test_04` 가 따로 지킨다. **테스트 삭제 0 · 파일별 테스트
+개수 변화 0 · 약화 0**, 고친 것은 **기대 목록 한 줄**이다.
+
+그래서 이 Phase 의 변경 파일은 **3개**가 되었다 (§6 의 "production 0건" 은
+그대로다 — `test_34` 가 production 디렉터리 diff 가 비어 있음을 확인한다).
+
+### 7.2 전체 회귀 (재측정)
+
+(측정 후 기록한다.)
 
 ### 7.1 전체 회귀 (실측)
 
