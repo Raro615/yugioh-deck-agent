@@ -211,7 +211,17 @@ def test_01_the_text_analyzer_is_never_called_in_production():
 
 
 def test_02_only_one_test_calls_it_and_that_is_the_whole_story():
-    r"""🟢 §2 ① — 호출자는 **테스트 한 곳**뿐이다. CLI·갱신 경로와 구분한다."""
+    r"""🟢 §2 ① — 호출자는 **테스트뿐**이다. CLI·갱신 경로와 구분한다.
+
+    .. note:: 🟢 **Phase 3-F-42 에서 목록이 하나 늘었다.** 이 assertion 은
+       "production 은 부르지 않고 테스트만 부른다" 를 지키는 **의도적
+       지뢰선**이라서, 호출자가 생기면 반드시 누군가 알아차리게 되어 있다.
+       3-F-42 가 텍스트 분석기를 실제로 돌려 상태 여섯 개를 구성하는 감사
+       파일을 추가했고, 그것이 세 번째 호출자다. **production 호출자는
+       여전히 0개**이며 그 사실은 ``test_01`` 이 따로 지킨다. 목록을 느슨한
+       조건("tests/ 아래면 통과")으로 바꾸지 않고 **정확한 집합을 유지**해
+       지뢰선을 그대로 둔다.
+    """
     #: 🔴 문자열 검색으로는 **"실제 호출" 과 "스캔용 리터럴" 을 가를 수
     #: 없다.** 이 파일과 3-F-40 의 감사 파일은 둘 다 ``"TextEffectAnalyzer("``
     #: 라는 **문자열**을 자기 검사에 쓴다 — 그것은 호출이 아니다. AST 로
@@ -223,8 +233,11 @@ def test_02_only_one_test_calls_it_and_that_is_the_whole_story():
             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                     and node.func.id == "TextEffectAnalyzer"):
                 callers.append(path.name)
-    assert sorted(set(callers)) == ["test_provenance_consumer_audit.py",
-                                    "test_update_pipeline.py"], callers
+    assert sorted(set(callers)) == [
+        "test_provenance_consumer_audit.py",
+        "test_text_analysis_consumer_policy_audit.py",   # Phase 3-F-42
+        "test_update_pipeline.py",
+    ], callers
 
 
 @requires_official_db

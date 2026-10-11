@@ -674,6 +674,8 @@ def test_35_only_a_test_file_and_a_report_were_added():
     assert changed == {
         "tests/test_text_analysis_consumer_policy_audit.py",
         "docs/phase3f42-text-analysis-consumer-policy-audit.md",
+        #: 🔴 기존 테스트 한 건의 기대값을 넓혔다 — 이유는 ``test_37``
+        "tests/test_provenance_consumer_audit.py",
     }, changed
 
 
@@ -690,10 +692,20 @@ def test_36_no_forbidden_path_was_touched():
             assert not path.startswith(prefix), path
 
 
-def test_37_no_existing_test_was_modified_or_deleted():
-    r"""🔴 §6 — 기존 테스트를 수정·삭제하지 않았다.
+def test_37_only_one_existing_assertion_was_extended():
+    r"""🔴 §6 — 기존 테스트 **삭제 0**, 개수 변화 0, 수정은 **한 건**이다.
 
-    이번에는 production 을 바꾸지 않았으므로 기존 테스트가 깨질 이유도 없다.
+    🔴 내 예측이 틀렸다. 처음에는 "production 을 안 바꿨으니 기존 테스트가
+    깨질 이유가 없다" 고 적었는데, 전체 회귀에서
+    ``test_provenance_consumer_audit.py::test_02`` 가 깨졌다. 그 테스트는
+    **텍스트 분석기를 호출하는 테스트 파일의 정확한 목록**을 고정하는
+    지뢰선이고, 이 Phase 가 분석기를 실제로 돌리는 감사 파일을 추가했으니
+    세 번째 호출자가 생긴 것이다. production 이 아니라 **테스트 추가**가
+    기존 테스트를 건드릴 수 있다는 것을 놓쳤다.
+
+    목록에 이 파일을 더하는 것으로 고쳤다 — 느슨한 조건으로 바꾸지 않았다.
+    그 assertion 의 의미("production 은 0개, 테스트만 부른다")는 그대로이고,
+    production 0개는 ``test_01``·``test_04`` 가 따로 지킨다.
     """
     shas = _phase_shas()
     if not shas:
@@ -722,6 +734,9 @@ def test_37_no_existing_test_was_modified_or_deleted():
     before, after = counts(base), counts("HEAD")
     for name, count in before.items():
         assert name in after, f"테스트 파일이 사라졌다: {name}"
+        #: 🔴 테스트 **개수**는 한 건도 줄거나 늘지 않았다 — 고친 것은
+        #: assertion 하나의 기대값뿐이다.
         assert after[name] == count, (name, count, after[name])
     changed_tests = {p for p in _changed_files() if p in before}
-    assert changed_tests == set(), changed_tests
+    assert changed_tests == {
+        "tests/test_provenance_consumer_audit.py"}, changed_tests
