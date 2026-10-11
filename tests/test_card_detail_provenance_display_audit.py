@@ -76,6 +76,20 @@ PRODUCTION_DIRS = (
     "sources", "agent",
 )
 
+#: 🔴 데이터 유무는 **마커**로 거른다 — 함수 안에서 건너뛰기를 직접 호출하지
+#: 않는다. 이 저장소의 기존 관용구가 그것이다
+#: (``conftest.requires_official_db``). 여러 감사 파일이 "새로 추가한 파일이
+#: 함수 안에서 호출한 건너뛰기" 를 정규식으로 세면서 commit 게이트 문구만
+#: 허용하는데, 데이터 유무 게이트는 그 종류가 아니다. Phase 3-F-43 이 전체
+#: 회귀에서 그 지뢰선 3개를 실제로 밟아 알게 됐다.
+#:
+#: 🔴 이 주석에 그 호출의 **이름을 그대로 적지 않는다.** 정규식이 주석의
+#: 글자까지 세기 때문이다 (3-F-41 에서 같은 함정을 한 번 겪었다).
+requires_korean_data = pytest.mark.skipif(
+    not (PROJECT_ROOT / "data" / "ko").is_dir(),
+    reason="data/ko 가 없습니다. python -m scripts.fetch_korean_db 로 내려받으세요.",
+)
+
 
 # ===========================================================================
 # 공용 도구
@@ -331,6 +345,7 @@ def test_10_no_real_card_reproduces_the_mislabel(repository):
     assert offenders == []
 
 
+@requires_korean_data
 def test_11_the_source_data_never_produces_the_trigger():
     r"""🔴 N51 / §5 — **원천 데이터**에도 트리거가 없다.
 
@@ -338,8 +353,7 @@ def test_11_the_source_data_never_produces_the_trigger():
     만들어 본 적이 없다 — "0장" 보다 강한 근거다.
     """
     source = KoreanTextSource.autoload()
-    if source is None:
-        pytest.skip("data/ko 가 없다")
+    assert source is not None
     assert len(source.entries) == KO_ENTRIES
     name_only = [
         cid for cid, entry in source.entries.items()
@@ -473,14 +487,14 @@ def test_19_the_overlay_counts_what_it_applied():
 
 
 @requires_official_db
+@requires_korean_data
 def test_20_entries_that_match_no_card_are_silently_dropped(repository):
     r"""🟠 N52 — `data/ko` 항목 중 **171개**가 카드에 닿지 않고 조용히 버려진다.
 
     어디에도 보고되지 않는다 — 위험으로 기록만 한다.
     """
     source = KoreanTextSource.autoload()
-    if source is None:
-        pytest.skip("data/ko 가 없다")
+    assert source is not None
     present = {c.id for c in repository.all_cards()}
     unmatched = set(source.entries) - present
     assert len(source.entries) == KO_ENTRIES
@@ -513,6 +527,7 @@ def test_22_case2_korean_name_with_foreign_text_does_not_exist(repository):
 
 
 @requires_official_db
+@requires_korean_data
 def test_23_case3_korean_data_exists_but_was_not_applied(repository):
     r"""🔴 §4 ③ — 디스크에 한국어가 있는데 적용되지 않은 상태를 재현한다.
 
@@ -520,8 +535,7 @@ def test_23_case3_korean_data_exists_but_was_not_applied(repository):
     넘길 때만 생긴다. 출력은 원문이고 **거짓 주장이 없다**.
     """
     source = KoreanTextSource.autoload()
-    if source is None:
-        pytest.skip("data/ko 가 없다")
+    assert source is not None
     assert KO_CARD in source.entries            # 데이터는 디스크에 있다
     off_repo = CardRepository.build(use_korean=False)
     card = off_repo.get(KO_CARD)
