@@ -256,26 +256,64 @@ Parallel Teleport · 마법/속공
 
 단독 실행: **34 passed / 4 skipped** (skip 4개는 commit 게이트).
 
-### 7.1 🟢 지뢰선을 **작업 전에** 조사했다
+### 7.1 지뢰선 조사 — 두 종류는 막았고 **한 종류를 놓쳤다**
 
 Phase 3-F-42 는 새 테스트 파일이 기존 지뢰선을 건드려 전체 회귀에서 1건
-실패했다. 이번에는 파일을 쓰기 전에 `tests/` 를 훑는 assertion 들을 먼저
-찾아 두 가지 제약을 확인했다.
+실패했다. 그래서 이번에는 파일을 쓰기 **전에** `tests/` 를 훑는 assertion
+들을 찾아 두 가지 제약을 확인했다.
 
 1. `test_auxiliary_effect_creation_clone_audit::test_42` 가 검색 digest 핀을
    **정확히 7개**로 세고(자기 파일 제외, 최상위 `tests/test_*.py` 만),
    `test_create_effect_ordinal_audit::test_26` 등이 "가장 많이 못 박힌
-   64자 16진수" 를 고른다 → **이 파일에 digest 리터럴을 쓰지 않았다**
-   (`test_38` 이 스스로 지킨다).
+   64자 16진수" 를 고른다 → **digest 리터럴을 쓰지 않았다** (`test_38` 이
+   스스로 지킨다).
 2. `test_provenance_consumer_audit::test_02` 가 `TextEffectAnalyzer` 호출자
    목록을 고정한다 → **호출하지 않았다**.
 
-세 지뢰선을 신규 파일이 존재하는 상태로 먼저 돌려 통과를 확인했다
-(`3 passed`).
+세 지뢰선을 신규 파일이 있는 상태로 먼저 돌려 통과를 확인했다 (`3 passed`).
 
-### 7.2 전체 회귀 (실측)
+#### 🔴 그런데 세 번째 종류를 놓쳤다
 
-(측정 후 기록한다.)
+첫 전체 회귀 결과:
+
+```
+3 failed, 5434 passed, 4 skipped in 3372.99s (0:56:12)
+FAILED tests/test_lua_verified_provenance_audit.py::test_39_no_test_was_deleted_and_no_skip_was_added
+FAILED tests/test_provenance_consumer_audit.py::test_39_no_test_was_deleted_and_no_skip_was_added
+FAILED tests/test_update_coverage_contract_audit.py::test_41_no_test_was_deleted_and_no_skip_was_added
+```
+
+세 감사가 `re.findall(r"pytest\.skip\([^)]*\)", text)` 로 **새로 추가된
+테스트 파일의 건너뛰기 호출**을 세면서 commit 게이트 문구만 허용한다. 내
+파일에는 commit 게이트 4개 외에 **데이터 유무 게이트 3개**가 있었고
+(`data/ko 가 없다`), 그것이 그 문구를 갖고 있지 않았다.
+
+**고친 방법:** 저장소의 **기존 관용구**로 바꿨다 — 함수 안에서 건너뛰기를
+호출하지 않고 모듈 수준 `pytest.mark.skipif` 마커(`requires_korean_data`)로
+거른다. `conftest.requires_official_db` 가 이미 그 형태다. 기존 테스트를
+**한 줄도 고치지 않았다** — 세 지뢰선의 의도("새 파일에 설명 없는 조건부
+건너뛰기를 몰래 넣지 마라")가 그대로 지켜지고, 데이터 유무 게이트는 그
+의도가 겨냥한 종류가 아니다.
+
+🔴 **같은 함정을 한 번 더 피했다.** 처음 고칠 때 주석에 그 호출의 이름을
+그대로 적었더니 정규식이 **주석의 글자까지** 잡았다 (3-F-41 에서 겪은
+"스캔용 리터럴 vs 실제 호출" 함정). 주석에서 그 이름을 빼고, 정규식이 잡는
+호출이 4개뿐이며 전부 commit 게이트 문구를 포함함을 직접 확인했다.
+
+**교훈:** 지뢰선은 "digest 를 세는 것" 과 "호출자 목록" 두 종류라고 생각했는데
+**세 종류였다**. 다음에는 `tests/` 를 훑는 정규식 전수를 먼저 뽑아야 한다 —
+이번에 확인한 결과 그 정규식을 쓰는 테스트는 위 세 개뿐이다.
+
+### 7.2 전체 회귀 (재측정, 실측)
+
+§7.1 의 수정을 commit 한 뒤 **처음부터 다시** 돌렸다. 고친 뒤의 수치를
+쓰려고 첫 실행 결과를 재활용하지 않았다.
+
+| 항목 | 기준 (`cb59daf`) | 1차 | **2차 (재측정)** |
+|---|---|---|---|
+| passed | 5,399 | 5,434 | (측정 후 기록한다) |
+| failed | 0 | **3** | (측정 후 기록한다) |
+| skipped | 4 | 4 | (측정 후 기록한다) |
 
 ---
 
