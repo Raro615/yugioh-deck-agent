@@ -418,11 +418,49 @@ def cmd_analyze(agent: DeckAgent, args) -> int:
 
     from analysis.effect_model import _BINDING_GUIDANCE_KO, HandlerBinding
 
+    from core.provenance import AnalysisStatus
+
+    #: 🔴 **Lua 가 없는 카드에게 거짓 이유를 말하고 있었다** (Phase 3-F-41).
+    #: 예전 문구는 ``"Lua 스크립트가 없습니다 (일반 몬스터 등)."`` 하나였고,
+    #: Lua 가 없는 **1,440장 전부**에게 그것을 찍었다. 그 안에는 효과가
+    #: 분명히 있는 카드 **756장**(`text_derived`)이 섞여 있다 — 실측 예:
+    #: 「패러렐 텔레포트 · 마법/속공」. 속공 마법을 "일반 몬스터 등" 이라고
+    #: 부르는 것은 추측이고, 카드에 이미 붙어 있는 상태를 읽으면 알 수 있는
+    #: 사실을 추측으로 덮은 것이다.
+    #:
+    #: 🔴 **텍스트 분석을 돌렸다고 말하지 않는다.** ``TextEffectAnalyzer`` 는
+    #: production 호출자가 0개다 (Phase 3-F-40·41 전수 확인). 그래서
+    #: "텍스트만이 근거" 라고 적고 "텍스트에서 분석했다" 로 적지 않는다.
+    _NO_SCRIPT_REASON_KO = {
+        AnalysisStatus.NO_EFFECT:
+            "공식 DB 가 효과 없는 카드로 분류합니다 (통상 몬스터·토큰).",
+        AnalysisStatus.TEXT_DERIVED:
+            "효과가 있는 카드인데 스크립트가 아직 없습니다."
+            " 효과 텍스트만이 근거이고, 구조화된 텍스트 분석은 돌지 않습니다.",
+        AnalysisStatus.UNAVAILABLE:
+            "분석 근거가 없습니다 (효과가 없다는 뜻이 아닙니다).",
+    }
+
     analysis = EffectAnalyzer(agent.repository).analyze(card)
     print("=" * 72)
     print(card.summary_ko())
+
+    #: 🔴 **근거 줄을 이른 반환보다 **위**로 올린다** (Phase 3-F-41).
+    #: Phase 3-F-40 이 이 줄을 결합 상태 바로 앞에 넣었는데, 그 자리는 아래
+    #: ``has_script`` 반환 **뒤**였다. 그래서 설명이 가장 필요한 1,440장은
+    #: 근거를 한 번도 보지 못했다.
+    record = getattr(card, "provenance", None)
+    status = getattr(record, "analysis_status", None)
+    if status is not None:
+        suffix = " (근거 계층 — 증명은 아래 결합 상태)" if analysis.has_script else ""
+        print(f"  분석 근거  : {status.value}{suffix}")
+
     if not analysis.has_script:
-        print("  Lua 스크립트가 없습니다 (일반 몬스터 등).")
+        reason = _NO_SCRIPT_REASON_KO.get(status)
+        if reason is None:
+            #: 상태를 모르면 모른다고 적는다. 이유를 지어내지 않는다.
+            reason = "이 카드의 분석 근거를 판단할 수 없습니다."
+        print(f"  Lua 스크립트가 없습니다 — {reason}")
         print("=" * 72)
         return 0
 
@@ -487,16 +525,6 @@ def cmd_analyze(agent: DeckAgent, args) -> int:
     #: 🔴 건수는 세 목록 전부에서 **실제 필드를 읽어** 센다. "``effects`` 에
     #: 있으면 ``MATCHED``" 라고 가정하지 않는다 — 그 가정이 깨지는 날
     #: 조용히 틀린 요약을 내게 된다.
-    #: 🔴 **근거와 증명을 같은 자리에서 보여준다** (Phase 3-F-40).
-    #: ``AnalysisStatus`` 는 "어느 소스가 근거인가", ``HandlerBinding`` 은
-    #: "그 소스와의 대응을 증명했는가" 이고 서로 다른 계층이다. 지금까지
-    #: 이 화면은 증명만 보여줬고 근거는 갱신 요약에만 있었다 — 한 카드에서
-    #: 두 값을 함께 볼 수 있는 자리가 없었다. **합치지 않고 나란히** 적는다.
-    record = getattr(card, "provenance", None)
-    status = getattr(record, "analysis_status", None)
-    if status is not None:
-        print(f"\n  분석 근거  : {status.value} (근거 계층 — 증명은 다음 줄)")
-
     counts: dict[HandlerBinding, int] = {}
     for effect in (list(analysis.effects) + list(analysis.resolution_effects)
                    + list(analysis.unbound_effects)):

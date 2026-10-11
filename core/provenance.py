@@ -194,6 +194,13 @@ class DataAvailability:
     effect_analysis_available: bool = False
     text_analysis_available: bool = False
 
+    #: 🔴 **``text_analysis_available`` 이 두 메서드에서 빠져 있었다**
+    #: (Phase 3-F-41 이 발견). 여섯 칸 중 다섯 칸만 요약했다. 그래서 Lua 가
+    #: 없는 카드에서 유일하게 켜지는 플래그가 **요약에 나타나지 않았다** —
+    #: ``describe_ko()`` 가 ``✗효과분석`` 만 보여 주고 "텍스트가 근거다" 는
+    #: 사실을 떨어뜨렸다 (실측 756장이 그 상태다). 자기 자신을 요약하는
+    #: 메서드가 자기 필드를 빠뜨리는 것은 숨기면 안 되는 결함이다
+    #: (Phase 3-F-38 의 ``NO_EFFECT`` 행 누락과 같은 모양).
     def missing(self) -> list[str]:
         return [
             name
@@ -203,6 +210,7 @@ class DataAvailability:
                 ("korean", self.korean_available),
                 ("lua", self.lua_available),
                 ("effect_analysis", self.effect_analysis_available),
+                ("text_analysis", self.text_analysis_available),
             )
             if not present
         ]
@@ -214,6 +222,7 @@ class DataAvailability:
             "한국어": self.korean_available,
             "Lua": self.lua_available,
             "효과분석": self.effect_analysis_available,
+            "텍스트근거": self.text_analysis_available,
         }
         return " ".join(f"{'✓' if ok else '✗'}{name}" for name, ok in marks.items())
 
