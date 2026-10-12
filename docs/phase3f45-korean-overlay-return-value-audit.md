@@ -385,16 +385,55 @@ skip 3개는 전부 `이 Phase 의 commit 이 아직 없다` 게이트다. commi
 
 ### 9.3 Tripwire 사전 점검
 
-🔴 **이 보고서를 commit 하는 시점에는 아직 실행 중이다.** 실제로 실행하지
-않은 값을 적지 않는다. 측정이 끝나면 **별도 commit**
-(`Phase 3-F-45: record the measured tripwire and regression results`) 으로
-이 절들을 채운다. Phase 3-F-43-K0 · 3-F-44 와 같은 방식이다.
+전체 회귀 **전에** 과거에 실제로 깨뜨린 tripwire 들을 먼저 돌렸다
+(digest 리터럴을 세는 감사 · 텍스트 분석기 인스턴스화 파일 목록 · 신규
+테스트 파일의 skip 문구 검사), 한국어 오버레이 관련 기존 테스트까지 함께.
+
+| 대상 | 파일 수 | 결과 |
+|---|---|---|
+| `auxiliary_effect_creation_clone` · `create_effect_ordinal` · `provenance_consumer` · `update_coverage_contract` · `lua_verified_provenance` · `korean_overlay_unapplied` · `korean_overlay_display_boundary` · `korean_overlay` · `handler_binding_diagnostics` · `text_analysis_consumer_policy` · `card_detail_provenance_display` · `chain_resolution_link_result_invariant` · `result_actor_provenance_contract` | 13 | **450 passed in 1178.74s (0:19:38)** |
+
+**실패 0건.** 신규 파일이 기존 감사 전제를 하나도 깨지 않는다.
 
 ### 9.4 전체 회귀
 
-위 §9.3 과 같은 이유로 측정 후 별도 commit 으로 기입한다.
-예상치는 기준 5,501 + 신규 15 = 5,516 이지만 이것은 **예상이고
-측정값이 아니다.** 확정 전에는 결과로 인용하지 않는다.
+실제로 실행했다. `python3 -m pytest -q -p no:randomly` (전체).
+
+```
+5516 passed, 4 skipped in 4370.05s (1:12:50)
+```
+
+**실패 0건.** 숫자가 전부 설명된다.
+
+| 항목 | 기준 (`cdeaf7a`) | 이번 (`a312415`) | 차이 |
+|---|---|---|---|
+| passed | 5,501 | **5,516** | **+15** |
+| skipped | 4 | **4** | 0 |
+| failed | 0 | **0** | 0 |
+| 수집 합계 | 5,505 | **5,520** | **+15** |
+
++15 는 신규 파일의 테스트 함수 수와 **정확히 일치한다** (parametrize 를
+쓰지 않았으므로 함수 수 = 수집 수). 기존 테스트가 하나도 사라지지 않았고
+하나도 추가로 skip 되지 않았다.
+
+🔴 **skipped 가 4 로 그대로인 이유.** 신규 파일의 commit 게이트 skip
+3개는 §9.2 단독 실행 시점에는 commit 이 없어 skip 되었다. 이번 전체
+회귀는 commit 2개가 생긴 뒤에 돌았으므로 그 3개가 **실행되어 통과했다**.
+남은 skipped 4 는 기준에 이미 있던 것이다 — 숫자가 같을 뿐 같은 테스트가
+아니다.
+
+| 항목 | 값 |
+|---|---|
+| 기준 commit | `cdeaf7a` |
+| 측정 commit | `a312415` (테스트 `4e045c7` + 보고서) |
+| 실행 시각 worktree | clean |
+| 기존 테스트 삭제·수정·skip 추가·assertion 약화 | **0건** |
+
+소요 시간이 직전 회귀(49:45)보다 긴 것은 §9.3 의 tripwire 실행이 초반에
+겹쳤기 때문이다. 통과·실패 수에는 영향이 없다.
+
+이 수치는 이번 실행에서 실제로 측정한 값이다. 이전 Phase 의 수치를
+재사용하지 않았다.
 
 ---
 
