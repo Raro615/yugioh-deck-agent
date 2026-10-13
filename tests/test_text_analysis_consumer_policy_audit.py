@@ -660,7 +660,16 @@ def test_34_this_phase_changed_no_production_file():
         cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
     ).stdout.strip()
     diff = subprocess.run(
-        ["git", "diff", "--name-only", base, "HEAD", "--", *PRODUCTION_DIRS],
+        #: 🔴 **``HEAD`` 가 아니라 이 Phase 의 마지막 commit 과 비교한다**
+        #: (Phase 4-B 가 정정). ``HEAD`` 로 비교하면 이 단정의 뜻이
+        #: "이 Phase 가 production 을 바꾸지 않았다" 에서 "이 Phase 이후
+        #: **아무도** production 을 바꾸지 않았다" 로 바뀐다. 그래서 뒤에
+        #: 오는 Phase 가 production 을 건드리는 순간 과거 audit 단계가
+        #: 실패했다 — 실제로 Phase 4-B 가 ``app/main.py`` 에 명령을
+        #: 더하자 여섯 파일이 함께 깨졌다. ``shas`` 는 ``git log`` 순서라
+        #: ``shas[0]`` 이 이 Phase 의 가장 최근 commit 이다.
+        ["git", "diff", "--name-only", base, shas[0], "--",
+         *PRODUCTION_DIRS],
         cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
     ).stdout.strip()
     assert diff == "", diff

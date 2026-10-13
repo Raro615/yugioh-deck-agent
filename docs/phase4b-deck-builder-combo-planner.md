@@ -367,7 +367,56 @@ Protocol 은 경계 선언이고 구현체가 아니다. `_is_protocol` 로 걸�
 🔴 **이 보고서를 commit 하는 시점에는 아직 실행 중이다.** 실제로 실행하지
 않은 값을 적지 않는다. 측정이 끝나면 **별도 commit** 으로 이 절을 채운다.
 
-### 7.4 전체 회귀
+### 7.4 🔴 기존 테스트 6개를 수정했다 — 왜 그 가정이 잘못이었는가
+
+스윕에서 **6건이 실패**했고, 전부 같은 패턴이었다.
+
+```python
+base = <그 Phase 의 첫 commit>^
+diff = git diff --name-only base HEAD -- <production 디렉터리들>
+assert diff == ""
+```
+
+**무엇이 잘못된 가정인가.** 이 단정의 의도는 *"이 Phase 가 production 을
+바꾸지 않았다"* 다. 그런데 `HEAD` 와 비교하면 뜻이 *"이 Phase **이후**
+아무도 production 을 바꾸지 않았다"* 로 바뀐다. 두 문장은 다르고, 뒤의
+것은 **아무도 보증할 수 없는 주장**이다.
+
+그래서 이 테스트들은 **다음 production 변경이 있기만 하면 깨질 운명**
+이었다. Phase 4-B 가 `app/main.py` 에 서브커맨드 두 개를 더하자 여섯
+파일이 함께 깨졌다 — 그 Phase 들의 audit 결론이 틀린 것이 아니라,
+단정의 **범위**가 틀렸다.
+
+**어떻게 고쳤는가.** 비교 대상을 `HEAD` 에서 **그 Phase 의 마지막
+commit**(`shas[0]`)으로 바꿨다. `shas` 는 `git log` 순서라 `shas[0]` 이
+가장 최근 commit이다.
+
+🔴 **약화가 아니라 정확화다.** 원래 주장을 더 정확히 검사한다 — 범위를
+그 Phase 자신의 commit 구간으로 한정하므로, 그 Phase 가 production 을
+건드렸다면 **여전히 실패한다**. 단정을 삭제하지도, skip 하지도, 느슨하게
+하지도 않았고, 테스트 함수 수도 변하지 않았다.
+
+| 수정한 파일 | 해당 Phase |
+|---|---|
+| `test_text_analysis_consumer_policy_audit.py` | 3-F-42 |
+| `test_card_detail_provenance_display_audit.py` | 3-F-43 |
+| `test_korean_overlay_unapplied_audit.py` | 3-F-43-K0 |
+| `test_korean_overlay_display_boundary_audit.py` | 3-F-44 |
+| `test_korean_overlay_return_value_audit.py` | 3-F-45 |
+| `test_summary_korean_display_policy_audit.py` | 3-F-46 |
+
+**건드리지 않은 것**: `test_handler_binding_diagnostics.py` 와
+`test_effect_block_handler_identity_model.py` 도 `base..HEAD` 를 쓰지만
+대상이 `tests/` 이고 **단조 검사**(테스트 수가 줄지 않았는지)라서 성질이
+다르다. 통과하므로 그대로 두었다.
+
+🔴 **이것은 구조적 문제이므로 §8 에 S5 로 올렸다.** 같은 형태의
+"Phase 범위" 검사가 앞으로도 계속 추가될 것이고, 그때마다 같은 실수를
+반복하지 않으려면 **범위 비교를 공용 도구로 빼는** 것이 맞다. 그 작업은
+20개가 넘는 감사 파일을 건드리므로 이번 단계에서 하지 않았다.
+
+### 7.5 전체 회귀
+
 
 위 §7.3 과 같은 이유로 측정 후 별도 commit 으로 기입한다. 예상치를 적지
 않는다 — 이번 단계는 production 을 **추가**했으므로 기존 수치에서 단순히
@@ -385,6 +434,7 @@ Protocol 은 경계 선언이고 구현체가 아니다. `_is_protocol` 로 걸�
 | S2 | **동일명 매수 상한이 룰북 구조화 데이터에 없다.** 구조화 범위의 공백이다 | `data/rules/structured/` 를 늘리는 작업이고 Phase 3-F 계열의 룰 구조화 단계에 속한다 |
 | S3 | **효과 컴파일러가 없다** (`STRUCTURAL-7`). 파싱된 34,635 블록이 엔진 실행으로 넘어가지 못한다 | Engine V1 동결 해제 결정이 필요하다. Phase 4-A §6.2 의 4단계 |
 | S4 | 덱 보강 기준이 신호 하나뿐이라 **카드 품질 판단이 없다** | 품질 판단의 근거(메타 데이터·채용률)가 저장소에 없다. 지어내면 안 된다 |
+| S5 | **"Phase 범위" 검사가 파일마다 손으로 복사돼 있다.** §7.4 의 결함이 8개 파일에 퍼져 있었고 6개가 동시에 깨졌다 | 공용 도구로 빼는 것이 맞지만 20개 넘는 감사 파일을 건드린다. §8 의 "즉시 대규모 수정하지 말고 보고한다" 에 따라 보고만 한다 |
 
 ---
 
