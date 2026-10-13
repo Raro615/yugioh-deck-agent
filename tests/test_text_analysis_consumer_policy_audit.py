@@ -655,24 +655,26 @@ def test_34_this_phase_changed_no_production_file():
     shas = _phase_shas()
     if not shas:
         pytest.skip("이 Phase 의 commit 이 아직 없다")
-    base = subprocess.run(
-        ["git", "rev-parse", f"{shas[-1]}^"],
-        cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
-    ).stdout.strip()
-    diff = subprocess.run(
-        #: 🔴 **``HEAD`` 가 아니라 이 Phase 의 마지막 commit 과 비교한다**
-        #: (Phase 4-B 가 정정). ``HEAD`` 로 비교하면 이 단정의 뜻이
-        #: "이 Phase 가 production 을 바꾸지 않았다" 에서 "이 Phase 이후
-        #: **아무도** production 을 바꾸지 않았다" 로 바뀐다. 그래서 뒤에
-        #: 오는 Phase 가 production 을 건드리는 순간 과거 audit 단계가
-        #: 실패했다 — 실제로 Phase 4-B 가 ``app/main.py`` 에 명령을
-        #: 더하자 여섯 파일이 함께 깨졌다. ``shas`` 는 ``git log`` 순서라
-        #: ``shas[0]`` 이 이 Phase 의 가장 최근 commit 이다.
-        ["git", "diff", "--name-only", base, shas[0], "--",
-         *PRODUCTION_DIRS],
-        cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
-    ).stdout.strip()
-    assert diff == "", diff
+    #: 🔴 **commit 범위가 아니라 이 Phase 의 commit 들 자체를 본다**
+    #: (Phase 4-B 가 두 번에 걸쳐 정정했다).
+    #:
+    #: 처음 이 단정은 ``git diff <base> HEAD`` 였다. 그러면 뜻이 "이 Phase
+    #: 가 production 을 바꾸지 않았다" 에서 "이 Phase **이후** 아무도
+    #: 바꾸지 않았다" 로 바뀐다 — 뒤에 오는 Phase 가 production 을
+    #: 건드리는 순간 과거 audit 단계가 깨졌다.
+    #:
+    #: 그래서 끝점을 ``shas[0]`` 으로 바꿨는데 **그것도 틀렸다.** 범위
+    #: 비교는 그 Phase 의 commit 이 히스토리 끝에 **연속**이라고 가정한다.
+    #: 이 Phase 의 회귀 기록 commit 이 다른 Phase 의 작업 **뒤에** 붙는
+    #: 순간 범위가 남의 commit 을 삼킨다 (실제로 그렇게 깨졌다).
+    #:
+    #: 범위가 아니라 **commit 하나하나가 건드린 파일**을 보면 순서와
+    #: 무관하다. ``_changed_files()`` 가 이미 그렇게 센다.
+    touched = sorted(
+        path for path in _changed_files()
+        if path.split("/")[0] in PRODUCTION_DIRS
+    )
+    assert touched == [], touched
 
 
 def test_35_only_a_test_file_and_a_report_were_added():
