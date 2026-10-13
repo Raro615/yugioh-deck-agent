@@ -373,16 +373,74 @@ tests/test_summary_korean_display_policy_audit.py  +  test_41
 
 ### 9.3 Tripwire 사전 점검
 
-🔴 **이 보고서를 commit 하는 시점에는 아직 실행 중이다.** 실제로 실행하지
-않은 값을 적지 않는다. 측정이 끝나면 **별도 commit**
-(`Phase 3-F-46: record the measured tripwire and regression results`) 으로
-이 절들을 채운다. Phase 3-F-44 · 3-F-45 와 같은 방식이다.
+전체 회귀 **전에** 관련 감사 14개 파일을 먼저 돌렸다. 1차에서 1건
+실패했고(§9.2.2), 고친 뒤 재실행했다.
+
+| 실행 | 결과 |
+|---|---|
+| 1차 (수정 전) | **1 failed, 464 passed in 1269.08s** |
+| 2차 (수정 후) | **475 passed in 1300.43s (0:21:40)** |
+
+실패 0건.
 
 ### 9.4 전체 회귀
 
-위 §9.3 과 같은 이유로 측정 후 별도 commit 으로 기입한다.
-예상치는 기준 5,516 + 신규 10 = 5,526 이지만 이것은 **예상이고
-측정값이 아니다.** 확정 전에는 결과로 인용하지 않는다.
+실제로 실행했다. `python3 -m pytest -q -p no:randomly` (전체).
+
+```
+2 failed, 5524 passed, 4 skipped in 5044.61s (1:24:04)
+```
+
+| 항목 | 기준 (`6055937`) | 이번 | 차이 |
+|---|---|---|---|
+| passed | 5,516 | **5,524** | +8 |
+| failed | 0 | **2** | +2 |
+| skipped | 4 | **4** | 0 |
+| 수집 합계 | 5,520 | **5,530** | **+10** |
+
+수집 합계 +10 은 이 Phase 가 추가한 테스트 함수 수와 **정확히 일치한다**.
+passed 가 +8 인 것은 그중 2개가 실패했기 때문이다 (8 + 2 = 10).
+
+🔴 **실패 2건은 이 Phase 의 결함이 아니다. 그리고 숨기지 않는다.**
+
+```
+FAILED test_summary_korean_display_policy_audit::test_08_this_phase_changed_no_production_file
+FAILED test_text_analysis_consumer_policy_audit::test_34_this_phase_changed_no_production_file
+```
+
+경위:
+
+* 이 회귀는 **Phase 4-B 작업 전에 시작**했다. 그런데 그 안의 git 기반
+  테스트들은 **실행 시점의 `HEAD`** 를 본다.
+* 회귀가 도는 중에 Phase 4-B 가 `app/main.py` 에 서브커맨드를 더하고
+  commit 했다. 그 순간 위 두 테스트의 `git diff <base> HEAD` 에
+  `app/main.py` 가 나타났다.
+* 두 테스트는 "이 Phase 가 production 을 바꾸지 않았다" 를 주장하려
+  했는데, `HEAD` 와 비교해서 실제로는 "이 Phase **이후** 아무도 바꾸지
+  않았다" 를 검사하고 있었다. **단정의 범위가 틀린 것**이고, 이 Phase 의
+  audit 결론이 틀린 것이 아니다.
+* Phase 4-B 가 그 결함을 고쳤다 — 비교 대상을 그 Phase 의 마지막
+  commit 으로 한정했다. 경위는
+  `docs/phase4b-deck-builder-combo-planner.md` §7.4 에 있다.
+
+🔴 **그래서 이 수치는 "3-F-46 만의 격리된 측정" 이 아니다.** 수집은
+Phase 4-B 의 파일이 생기기 **전**에 끝났으므로 수집 합계 5,530 은
+3-F-46 기준으로 정확하지만, 실행 도중 HEAD 가 움직였다. 격리된 측정이
+필요하면 `2517a8f` 를 checkout 해 다시 돌려야 한다 — 이번에는 그렇게
+하지 않았고, 하지 않았다는 사실을 적는다.
+
+**이 Phase 가 추가한 10개 테스트는 전부 통과했다** (§9.2 의 단독 실행과
+§9.3 의 2차 tripwire 실행에서 확인).
+
+| 항목 | 값 |
+|---|---|
+| 기준 commit | `6055937` |
+| 수집 시점 commit | `2517a8f` |
+| 실행 중 HEAD 이동 | 🔴 **있었다** (Phase 4-B 의 `7bdd95a` 이후) |
+| 기존 테스트 삭제·skip 추가·assertion 약화 | **0건** |
+
+이 수치는 이번 실행에서 실제로 측정한 값이다. 이전 Phase 의 수치를
+재사용하지 않았다.
 
 ---
 
