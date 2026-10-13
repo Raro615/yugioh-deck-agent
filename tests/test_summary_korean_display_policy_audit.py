@@ -79,9 +79,17 @@ PRODUCTION_DIRS = (
 # ===========================================================================
 @pytest.fixture(scope="module")
 def repo_without_korean():
-    """오버레이를 끈 리포지토리. 빌드가 느리므로 모듈당 한 번만 만든다."""
-    if not CARDS_CDB.is_file():
-        pytest.skip("cards.cdb 없음")
+    """
+    오버레이를 끈 리포지토리. 빌드가 느리므로 모듈당 한 번만 만든다.
+
+    🔴 **데이터 유무를 여기서 거르지 않는다.** 이 저장소는 새로 추가된
+    테스트 파일에서 조건부 건너뛰기를 "이 Phase 의 commit 이 아직 없다"
+    한 가지로만 허용한다 (`test_update_coverage_contract_audit::test_41`
+    이 전수로 검사한다). 그래서 데이터 게이트는 **이 fixture 를 쓰는
+    테스트에 붙은 `requires_cards_cdb` 마커**가 담당한다. 마커는 fixture
+    생성보다 먼저 평가되므로 데이터가 없으면 이 함수는 돌지 않는다.
+    이 fixture 를 새로 쓸 때는 그 마커를 함께 붙여야 한다.
+    """
     return CardRepository.build(db_path=CARDS_CDB, script_dir=PROJECT_ROOT,
                                use_korean=False)
 
@@ -332,6 +340,9 @@ def test_10_this_file_respects_the_repository_tripwires():
     ]
     assert analyzer_calls == []
 
+    #: 🔴 저장소의 규칙은 **예외가 없다** — 새 파일의 모든 조건부 건너뛰기는
+    #: "이 Phase 의 commit 이 아직 없다" 하나뿐이다. 데이터 게이트까지
+    #: 여기에 허용했다가 실제로 걸렸다 (보고서 §9.2.2). 이제 저장소와
+    #: 똑같이 엄격하게 본다.
     for match in re.findall(r"pytest\.skip\(([^)]*)\)", text):
-        assert ("commit 이 아직 없다" in match
-                or "cards.cdb 없음" in match), match
+        assert "commit 이 아직 없다" in match, match

@@ -331,6 +331,46 @@ skip 2개는 `이 Phase 의 commit 이 아직 없다` 게이트다.
 두 개였다. 정규식을 고치면서 두 테스트에 `"공식 DB" in rows` 선행 단정을
 넣어 **표가 비어 있으면 먼저 실패하도록** 바꿨다.
 
+#### 9.2.2 🔴 저장소 tripwire 에 실제로 걸렸다
+
+전체 회귀 **전에** 돌린 사전 점검에서 **1건 실패**했다.
+
+```
+FAILED tests/test_update_coverage_contract_audit.py::test_41_no_test_was_deleted_and_no_skip_was_added
+AssertionError: ('tests/test_summary_korean_display_policy_audit.py',
+                 'pytest.skip("cards.cdb 없음")')
+```
+
+원인: `repo_without_korean` fixture 안에서 데이터 유무를
+`pytest.skip("cards.cdb 없음")` 으로 걸렀다. 이 저장소는 **새로 추가된
+테스트 파일의 모든 조건부 건너뛰기**가 `"이 Phase 의 commit 이 아직
+없다"` 여야 한다고 못 박아 두었고(`test_41` 이 전수 검사),
+**예외가 없다.** `tests/conftest.py` 의 `repository` fixture 가 같은
+문구를 쓰고 있어서 그 관용구를 그대로 가져왔는데, conftest 는 **기존
+파일**이라 이 검사 대상이 아니었다.
+
+고친 방법 — **테스트를 약화시키지 않고 내 쪽을 저장소 규칙에 맞췄다.**
+
+1. fixture 안의 skip 을 **없앴다.** 데이터 게이트는 이 fixture 를 쓰는
+   두 테스트(`test_05` · `test_06`)에 이미 붙어 있는
+   `requires_cards_cdb` **마커**가 담당한다. 마커는 fixture 생성보다
+   먼저 평가되므로 데이터가 없으면 fixture 자체가 돌지 않는다. 그
+   전제를 fixture docstring 에 적어 두었다.
+2. 내 파일의 자체 점검(`test_10`)이 `"cards.cdb 없음"` 을 **예외로
+   허용하고 있었다.** 그래서 내 tripwire 자체 점검이 이 문제를 놓쳤다.
+   그 예외를 **제거해** 저장소와 똑같이 엄격하게 만들었다.
+
+🔴 즉 이번 실패는 "저장소 규칙이 과하다" 가 아니라 **내 자체 점검이
+저장소보다 느슨했다**는 문제였다. 느슨한 쪽을 조인 것이 맞는 방향이다.
+기존 테스트는 한 글자도 바꾸지 않았다.
+
+재확인:
+
+```
+tests/test_summary_korean_display_policy_audit.py  +  test_41
+11 passed in 9.42s
+```
+
 ### 9.3 Tripwire 사전 점검
 
 🔴 **이 보고서를 commit 하는 시점에는 아직 실행 중이다.** 실제로 실행하지
