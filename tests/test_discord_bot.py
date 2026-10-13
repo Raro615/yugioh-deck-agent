@@ -1188,9 +1188,22 @@ def test_43_a_real_deck_request_stays_inside_the_discord_limits():
         assert len(text) <= bot.DISCORD_MESSAGE_LIMIT, len(text)
 
     joined = "\n".join(texts)
-    assert "**메인 40장**" in joined
+    #: 🔴 **Phase 5-D 가 이 단정을 고쳤다.** 전에는 ``"**메인 40장**"`` 을
+    #: 고정했다. 그 40장은 테마 카드 24장 + ``has_effect_from("HAND")`` 만
+    #: 보고 카드 ID 순서로 넣은 16장이었고, 그 16장의 근거가 신뢰할 수
+    #: 없다는 것이 Phase 5-D 가 고친 결함이다. 목표를 주지 않은 요청은
+    #: 이제 보강하지 않으므로 24장이고, 그 사실과 장수 위반이 응답에
+    #: 적힌다 — **약화가 아니라 더 좁은 고정이다**: 아래에서 "보강하지
+    #: 않았다" 와 "위반" 을 함께 확인한다.
+    assert "**메인 24장**" in joined, joined[:400]
     assert "해석된 카드군: ORCUST" in joined
     assert "오르페골" in joined
+    assert "보강하지 않았습니다" in joined
+    assert "메인 덱 장수: 위반" in joined
+    #: 🔴 근거 없이 넣은 카드를 "패트랩 계열" 로 적지 않는다
+    assert "패트랩 계열" not in joined
+    #: 역할의 출처를 역할과 따로 적는다
+    assert "**[역할의 출처]**" in joined
     #: 🔴 잘렸다는 말이 없다 — 나눠 보냈으므로 버린 것이 없다
     assert bot.TRUNCATION_NOTICE.strip() not in joined
     assert "보내지 못했습니다" not in joined

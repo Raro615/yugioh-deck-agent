@@ -469,3 +469,353 @@ def test_32_this_file_respects_the_repository_tripwires():
     assert re.search(r"[0-9a-f]{64}", text) is None
     for match in re.findall(r"pytest\.skip\(([^)]*)\)", text):
         assert "commit 이 아직 없다" in match, match
+
+
+# ===========================================================================
+# F. Phase 5-D — 보강 카드 오분류 수정
+#
+# `/deck request:"오르페골 덱 짜줘"` 가 아래 8장을 **전부 같은 근거**
+# ("패에서 발동 (패트랩 계열)") 로 메인 덱에 넣은 것이 이 절의 출발점이다.
+# 🔴 이 8장은 **이름으로 걸러내지 않는다** — 하드코딩 제외 목록을 만들면
+# 같은 결함이 다른 카드에서 그대로 재발한다. 여기서 확인하는 것은 **효과
+# 데이터가 이 8장을 서로 다르게 판정하는가** 다.
+# ===========================================================================
+#: 실제 보고된 8장. 🔴 **제외 목록이 아니다** — 판정이 갈리는지 보는 표본이다.
+MISCLASSIFIED_SAMPLE: tuple[tuple[int, str], ...] = (
+    (2511, "라뷰린스 쿠클락"),
+    (10000, "텐사우전드 드래곤"),
+    (35699, "SPYRAL－보텍스"),
+    (122520, "EM 스카이 퓨필"),
+    (132308, "육화의 하얀 공주"),
+    (218704, "펜리르"),
+    (263926, "독법사"),
+    (291414, "하나된 마음의 용"),
+)
+
+
+@requires_cards_cdb
+def test_33_hand_range_alone_is_not_an_activatable_effect(repository):
+    r"""🔴 §A — ``LOCATION_HAND`` 은 **발동 가능**과 같지 않다.
+
+    이것이 오분류의 뿌리다. ``card.has_effect_from("HAND")`` 는
+    ``SetRange`` 에 ``HAND`` 이 있는지만 보므로 **특수 소환 절차**
+    (``EFFECT_SPSUMMON_PROC``, ``EFFECT_TYPE_FIELD``) 에도 참이 된다.
+    절차는 발동이 아니다.
+    """
+    from deck.evidence import hand_effect_facts
+
+    loc_only = activatable = 0
+    for card in repository.all_cards():
+        if card.is_extra_deck or not card.is_monster:
+            continue
+        if card.has_effect_from("HAND"):
+            loc_only += 1
+        if hand_effect_facts(card).activatable_from_hand:
+            activatable += 1
+
+    #: 🔴 두 수가 같다면 가르는 일이 일어나지 않은 것이다
+    assert activatable < loc_only, (activatable, loc_only)
+    #: 실측: 1,795 대 1,208 — 587장이 발동 가능한 효과가 아니었다
+    assert loc_only - activatable > 400, (loc_only, activatable)
+
+
+@requires_cards_cdb
+def test_34_the_eight_reported_cards_do_not_share_one_verdict(repository):
+    r"""🔴 §C-2 — 보고된 8장이 **한 역할로 묶이지 않는다.**
+
+    묶였던 것이 결함이었다. 지금은 효과 데이터만으로 **세 등급**으로
+    갈린다 — 이름을 보지 않는다.
+    """
+    from deck.evidence import HandTrapEvidence, hand_effect_facts
+
+    verdicts: dict[int, HandTrapEvidence] = {}
+    for card_id, expected_name in MISCLASSIFIED_SAMPLE:
+        card = repository.get(card_id)
+        assert card is not None, card_id
+        #: 표본이 바뀌지 않았는지 확인한다 (ID 가 다른 카드를 가리키면
+        #: 이 테스트는 다른 것을 재고 있다)
+        assert card.display_name() == expected_name, card.display_name()
+        verdicts[card_id] = hand_effect_facts(card).evidence
+
+    #: 🔴 전부 같은 판정이면 결함이 돌아온 것이다
+    assert len(set(verdicts.values())) == 3, verdicts
+
+    #: 네 장은 패에서 **발동할 수 있는 효과가 없다** (특수 소환 절차)
+    not_activatable = {cid for cid, v in verdicts.items()
+                       if v is HandTrapEvidence.NOT_ACTIVATABLE_FROM_HAND}
+    assert not_activatable == {10000, 35699, 218704, 263926}, not_activatable
+
+    #: 세 장은 발동은 가능하지만 **무엇을 하는지 판정하지 못한다**
+    activatable_only = {cid for cid, v in verdicts.items()
+                        if v is HandTrapEvidence.ACTIVATABLE_ONLY}
+    assert activatable_only == {2511, 122520, 291414}, activatable_only
+
+    #: 한 장만 무효/무력화 근거가 있다
+    negation = {cid for cid, v in verdicts.items()
+                if v is HandTrapEvidence.NEGATION_FROM_HAND}
+    assert negation == {132308}, negation
+
+
+@requires_cards_cdb
+def test_35_the_role_follows_the_evidence_not_the_location(repository):
+    r"""🔴 §C-1 · §C-3 — 역할이 **근거 등급을 따라간다.**
+
+    패에서 발동 가능하다는 사실만으로 :attr:`CardRole.HAND_TRAP` 이 되지
+    않는다. 그 사실은 :attr:`CardRole.HAND_ACTIVATABLE` 이고, 역할의
+    출처도 따로 적힌다.
+    """
+    from deck.builder import ThemeCandidates
+    from deck.evidence import HandTrapEvidence, hand_effect_facts
+    from deck.model import RoleEvidence
+
+    group = ThemeCandidates(term="테스트", resolved_names=["TESTSET"])
+    builder = DeckBuilder(repository)
+
+    expected = {
+        HandTrapEvidence.NEGATION_FROM_HAND:
+            (CardRole.HAND_TRAP, RoleEvidence.LUA_EFFECT_CATEGORY),
+        HandTrapEvidence.ACTIVATABLE_ONLY:
+            (CardRole.HAND_ACTIVATABLE, RoleEvidence.LUA_EFFECT_BLOCK),
+    }
+
+    checked = set()
+    for card_id, _name in MISCLASSIFIED_SAMPLE:
+        card = repository.get(card_id)
+        role, reason, evidence = builder._classify(card, group)
+        facts = hand_effect_facts(card)
+
+        if card.can_self_special_summon_from_hand:
+            #: 특수 소환 절차는 **그 역할**로 간다 — 패트랩이 아니다
+            assert role is CardRole.SELF_SPECIAL_SUMMON, (card_id, role)
+            assert evidence is RoleEvidence.LUA_EFFECT_BLOCK
+            checked.add("self_sp")
+            continue
+
+        if facts.evidence in expected:
+            want_role, want_evidence = expected[facts.evidence]
+            assert role is want_role, (card_id, role, facts.evidence)
+            assert evidence is want_evidence, (card_id, evidence)
+            checked.add(facts.evidence.value)
+
+        #: 🔴 근거가 약한 카드를 패트랩이라고 적지 않는다
+        if role is not CardRole.HAND_TRAP:
+            assert "패트랩" not in reason or "근거는 아닙니다" in reason, reason
+
+    #: 표본이 세 경로를 모두 밟았다 — 하나라도 빠지면 반쪽만 본 것이다
+    assert checked == {"self_sp", "activatable_only",
+                       "negation_from_hand"}, checked
+
+
+@requires_cards_cdb
+def test_36_a_shortfall_alone_does_not_pick_any_card(repository):
+    r"""🔴 §B-1 — **장수 부족은 카드 선정의 근거가 아니다.**
+
+    장수가 부족하다는 사실은 '몇 장' 만 알려 주고 '어떤 카드' 인지는
+    알려 주지 않는다. 목표가 없으면 보강하지 않고, 부족하다는 사실과
+    그 이유를 적는다.
+    """
+    draft = DeckBuilder(repository).build(parse_deck_request("오르페골 덱"))
+
+    #: 테마 카드만 들어 있다 — 테마 밖 카드가 하나도 없다
+    assert draft.main, draft.notes
+    assert all(slot.theme for slot in draft.main), [
+        slot.name for slot in draft.main if not slot.theme]
+    assert draft.main_count < 40, draft.main_count
+
+    #: 그 사실을 적는다
+    assert any("보강하지 않았습니다" in note for note in draft.notes), draft.notes
+    assert any("판정할 데이터가 없" in note for note in draft.notes), draft.notes
+
+    #: 🔴 그리고 검증이 장수 위반을 **숨기지 않는다**
+    validation = DeckValidator().validate(draft)
+    sizes = [f for f in validation.findings if f.rule == "메인 덱 장수"]
+    assert len(sizes) == 1
+    assert sizes[0].outcome is ValidationOutcome.VIOLATED, sizes[0]
+
+
+@requires_cards_cdb
+def test_37_filling_requires_both_a_goal_and_measured_evidence(repository):
+    r"""🟢 §B — 보강은 **요청된 목표 + 측정된 근거** 둘이 있을 때만 한다."""
+    from deck.evidence import HandTrapEvidence, hand_effect_facts
+    from deck.model import RoleEvidence
+
+    draft = DeckBuilder(repository).build(
+        parse_deck_request("오르페골 덱, 패트랩 비중 우선"))
+    filled = [slot for slot in draft.main if slot.theme is None]
+    assert filled, draft.notes
+
+    for slot in filled:
+        card = repository.get(slot.card_id)
+        #: 🔴 넣은 카드마다 **무효/무력화 범주가 실제로 있다**
+        facts = hand_effect_facts(card)
+        assert facts.evidence is HandTrapEvidence.NEGATION_FROM_HAND, slot
+        assert facts.negation_blocks >= 1, slot
+        assert slot.role is CardRole.HAND_TRAP, slot
+        assert slot.evidence is RoleEvidence.LUA_EFFECT_CATEGORY, slot
+
+    #: 🔴 보고된 8장 중 **근거가 없는 7장은 들어오지 않는다**
+    present = {slot.card_id for slot in draft.main}
+    for card_id, name in MISCLASSIFIED_SAMPLE:
+        if card_id == 132308:      # 무효 근거가 있는 한 장
+            continue
+        assert card_id not in present, (card_id, name)
+
+    #: 순서가 임의라는 사실을 적는다 — 추천이라고 적지 않는다
+    assert any("임의" in note for note in draft.notes), draft.notes
+
+
+@requires_cards_cdb
+def test_38_no_filler_claims_to_fit_the_theme(repository):
+    r"""🔴 §C-4 — 테마 적합성을 **주장하지 않는다.**
+
+    이 저장소에는 "이 카드가 오르페골 덱에 맞는가" 를 판정할 데이터가
+    없다. 그래서 보강 카드의 근거에 테마 이름이 들어가지 않고, 맞는지
+    판정하지 않았다는 사실이 적힌다.
+    """
+    draft = DeckBuilder(repository).build(
+        parse_deck_request("오르페골 덱, 패트랩 비중 우선"))
+    filled = [slot for slot in draft.main if slot.theme is None]
+    assert filled
+
+    for slot in filled:
+        assert slot.theme is None, slot
+        assert "오르페골" not in slot.reason, slot.reason
+        assert "ORCUST" not in slot.reason, slot.reason
+        assert "판정하지 않았습니다" in slot.reason, slot.reason
+        #: 추천·시너지·강함을 주장하는 말이 없다
+        for claim in ("추천", "시너지", "강력", "최적", "좋은", "필수"):
+            assert claim not in slot.reason, (claim, slot.reason)
+
+
+def test_39_the_evidence_layer_holds_no_card_name_list():
+    r"""🔴 §4 — 효과 판정이 **카드 이름이나 ID 목록에 기대지 않는다.**
+
+    8장을 하드코딩으로 빼면 같은 결함이 다른 카드에서 그대로 재발한다.
+    그래서 :mod:`deck.evidence` 에는 카드 이름도, 카드 ID 리터럴도 없다.
+    """
+    import deck.evidence as evidence_module
+
+    source = Path(evidence_module.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    #: 실행되는 코드에 **카드 ID 가 없다.** 🔴 "정수 리터럴이 하나도
+    #: 없다" 로 적었더니 ``> 0`` 과 ``sum(1 for …)`` 의 0·1 이 걸렸다 —
+    #: 그것은 블록 **개수**이고 카드 ID 가 아니다. 이 저장소의 카드 ID 는
+    #: 네 자리 이상이므로(표본 최솟값 2,511) 9 를 넘는 리터럴만 본다.
+    numbers = [
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, int)
+        and not isinstance(node.value, bool) and node.value > 9
+    ]
+    assert numbers == [], numbers
+
+    #: 카드 이름을 쓰는 비교가 없다
+    for forbidden in ("display_name", "name_ko", "name_en", ".name"):
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr in (
+                    "display_name", "name_ko", "name_en", "name"):
+                raise AssertionError(f"이름을 읽는다: {node.attr}")
+        assert forbidden not in _code_only(source), forbidden
+
+
+def _code_only(source: str) -> str:
+    """docstring 과 주석을 지운 본문. 표에 적힌 카드 이름을 세지 않는다."""
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            node.value = ""
+    return ast.unparse(tree)
+
+
+@requires_cards_cdb
+def test_40_the_negation_pool_is_far_smaller_than_the_old_one(repository):
+    r"""🟢 §B — 좁힌 기준의 **크기를 기록한다.**
+
+    1,795장이 37장이 됐다. 이 수가 다시 커지면 기준이 느슨해진 것이다.
+    """
+    from deck.evidence import HandTrapEvidence, hand_effect_facts
+
+    old_pool = negation_pool = 0
+    for card in repository.all_cards():
+        if card.is_extra_deck or not card.is_monster:
+            continue
+        if card.has_effect_from("HAND"):
+            old_pool += 1
+        if (hand_effect_facts(card).evidence
+                is HandTrapEvidence.NEGATION_FROM_HAND):
+            negation_pool += 1
+
+    assert negation_pool >= 1, negation_pool
+    #: 실측 1,795 대 37 — 48배. 10배 안으로 좁혀지면 기준이 풀린 것이다
+    assert negation_pool * 10 < old_pool, (negation_pool, old_pool)
+
+
+@requires_cards_cdb
+def test_41_the_repository_cannot_say_whose_activation_is_chained(repository):
+    r"""🔴 §A — "**상대의** 행동을 방해한다" 를 이 저장소는 말할 수 없다.
+
+    ``EVENT_CHAINING`` 은 "발동에 체인한다" 는 사실이고 **누구의** 발동
+    인지는 Lua 블록에 없다. 그래서 그 말을 쓰는 함수도, 그 말을 적는
+    근거 문장도 없다.
+    """
+    import deck.evidence as evidence_module
+
+    source = Path(evidence_module.__file__).read_text(encoding="utf-8")
+    code = _code_only(source)
+    #: 코드에 "상대" 가 없다 (docstring 에서는 왜 없는지 설명한다)
+    assert "상대" not in code, code
+
+    #: 그래도 사실 자체는 읽는다 — 읽지 않는 것과 다르다
+    from deck.evidence import chains_on_activation, hand_effect_facts
+
+    card = repository.get(132308)        # 육화의 하얀 공주
+    assert chains_on_activation(card) is True
+    assert hand_effect_facts(card).chain_response_blocks == 1
+
+    #: 보강 근거 문장에도 "상대" 가 없다
+    draft = DeckBuilder(repository).build(
+        parse_deck_request("오르페골 덱, 패트랩 비중 우선"))
+    for slot in draft.all_slots():
+        assert "상대" not in slot.reason, slot.reason
+
+
+@requires_cards_cdb
+def test_42_role_and_evidence_are_separate_fields(repository):
+    r"""🔴 §A — 역할과 **그 근거**가 서로 다른 칸이다.
+
+    합쳐 두면 "근거 없이 붙은 역할" 과 "측정으로 붙은 역할" 이 구별되지
+    않는다. 그것이 Phase 5-C 결함의 형태였다.
+    """
+    from deck.model import RoleEvidence
+
+    #: 기본값은 "근거 없음" 이다 — 조용히 그럴듯한 값이 붙지 않는다
+    bare = DeckSlot(card_id=1, name="x", copies=1,
+                    role=CardRole.THEME_CORE, reason="r")
+    assert bare.evidence is RoleEvidence.NONE
+
+    draft = DeckBuilder(repository).build(
+        parse_deck_request("오르페골 덱, 패트랩 비중 우선"))
+    #: 실제 덱의 모든 칸에 근거가 적혀 있다
+    for slot in draft.all_slots():
+        assert isinstance(slot.evidence, RoleEvidence), slot
+        assert slot.evidence is not RoleEvidence.NONE, slot
+
+    #: 같은 역할이 서로 다른 근거로 붙을 수 있다 — 그래서 따로 적는다
+    pairs = {(slot.role, slot.evidence) for slot in draft.all_slots()}
+    roles = {role for role, _ in pairs}
+    assert len(pairs) > len(roles) or len(roles) > 1, pairs
+
+
+def test_43_the_role_label_no_longer_claims_hand_trap_for_a_location():
+    r"""🔴 §B-3 — 역할 **이름**이 측정한 것만 말한다.
+
+    ``"패에서 발동 (패트랩 계열)"`` 은 위치 사실에 역할 이름을 붙인
+    표기였다. 지금은 무엇을 측정했는지만 적는다.
+    """
+    labels = {role: role.describe_ko() for role in CardRole}
+    assert "패트랩 계열" not in " ".join(labels.values()), labels
+    assert labels[CardRole.HAND_TRAP] == "패에서 발동 · 무효/무력화 범주 확인"
+    assert labels[CardRole.HAND_ACTIVATABLE] == (
+        "패에서 발동 가능 (효과 내용 미판정)")
+    #: 두 역할이 다른 값이다 — 합치면 결함이 돌아온다
+    assert CardRole.HAND_TRAP is not CardRole.HAND_ACTIVATABLE
