@@ -681,6 +681,69 @@ def _add_common_options(target: argparse.ArgumentParser, *, top_level: bool) -> 
     )
 
 
+def _parse_card_ids(raw: str, agent: DeckAgent) -> tuple[list[int], list[str]]:
+    """
+    쉼표로 구분한 카드 지정을 ID 목록으로 바꾼다. 이름도 받는다.
+
+    🔴 **장수를 제한하지 않는다** (Phase 4-B). 룰북 데이터의 패 상한 6 은
+    엔드 페이즈 종료 시점의 상한이고, 그 파일이 "그 외 시점의 상한은
+    룰북에 없다" 고 적어 두었다. 그래서 몇 장을 주든 그대로 넘긴다.
+    """
+    ids: list[int] = []
+    unresolved: list[str] = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if token.isdigit():
+            ids.append(int(token))
+            continue
+        found = agent.repository.find_by_exact_name(token)
+        if found:
+            ids.append(found[0].id)
+        else:
+            unresolved.append(token)
+    return ids, unresolved
+
+
+def cmd_deck(agent: DeckAgent, args) -> int:
+    """테마 요청으로 덱 초안을 만들고 검증한다 (Phase 4-B)."""
+    from deck.builder import DeckBuilder
+    from deck.report import render_draft, render_request, render_validation
+    from deck.request import parse_deck_request
+    from deck.validator import DeckValidator
+
+    request = parse_deck_request(args.request)
+    print(render_request(request))
+    if request.is_empty:
+        return 1
+
+    draft = DeckBuilder(agent.repository).build(request)
+    print(render_draft(draft))
+    validation = DeckValidator().validate(draft)
+    print(render_validation(validation))
+    return 1 if validation.has_violation else 0
+
+
+def cmd_combo(agent: DeckAgent, args) -> int:
+    """사용자가 지정한 초기 패로 전개 계획을 만든다 (Phase 4-B)."""
+    from deck.hand import FixedHand
+    from deck.planner import ComboPlanner
+    from deck.report import render_plan, render_simulator_steps
+
+    hand_ids, unresolved = _parse_card_ids(args.hand, agent)
+    board_ids, board_unresolved = _parse_card_ids(
+        getattr(args, "board", "") or "", agent)
+    for name in unresolved + board_unresolved:
+        print(f"  🔴 카드를 찾지 못했습니다: {name}")
+
+    plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
+                                               board=board_ids)
+    print(render_plan(plan))
+    print(render_simulator_steps(plan))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yugioh-deck-agent",
@@ -723,6 +786,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("repl", parents=[common], help="대화형 검색")
     p.set_defaults(func=cmd_repl)
+
+    p = sub.add_parser("deck", parents=[common],
+                       help="테마로 덱 초안 구성 + 규격 검증")
+    p.add_argument("request", help='예: "오르페골 + K9 덱, 초동 안정성 우선"')
+    p.set_defaults(func=cmd_deck)
+
+    p = sub.add_parser("combo", parents=[common],
+                       help="지정한 초기 패로 전개 계획 (무작위 패 생성은 미구현)")
+    p.add_argument("hand",
+                   help="쉼표로 구분한 카드 ID 또는 카드명 (장수 제한 없음)")
+    p.add_argument("--board", default="",
+                   help="이미 필드·묘지에 있는 카드 (선택)")
+    p.set_defaults(func=cmd_combo)
 
     return parser
 
