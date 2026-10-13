@@ -56,6 +56,7 @@ import asyncio
 import logging
 import os
 import sys
+from enum import Enum
 
 #: 🔴 **검색 파이프라인을 다시 쓰지 않는다.** CLI 와 같은 함수를 부른다.
 #: ``app.main`` 은 ``discord`` 를 쓰지 않으므로 여기서 최상위 import 해도
@@ -70,6 +71,7 @@ BOT_NAME = "갈라테아"
 PING_DESCRIPTION = "갈라테아가 살아 있는지 확인합니다"
 SEARCH_DESCRIPTION = "한국어로 카드를 검색합니다"
 DECK_DESCRIPTION = "한국어 요청으로 덱 초안을 만들고 규격을 검증합니다"
+COMBO_DESCRIPTION = "지정한 초기 패로 전개 계획을 세웁니다 (실행 검증 아님)"
 
 #: 환경변수 이름 — 테스트와 문서가 같은 상수를 본다.
 TOKEN_ENV = "DISCORD_BOT_TOKEN"
@@ -106,6 +108,18 @@ DECK_UNAVAILABLE_MESSAGE = (
 #: 않는다** — 경로나 내부 구조가 드러난다. 그것은 로그로만 간다.
 DECK_ERROR_MESSAGE = (
     "덱을 만드는 중 오류가 발생했습니다. 요청을 다르게 적어 보시고, "
+    "계속 실패하면 봇 로그를 확인해 주세요."
+)
+
+#: 리포지토리가 준비되지 않았을 때 ``/combo`` 의 안내.
+COMBO_UNAVAILABLE_MESSAGE = (
+    "지금은 전개 계획을 세울 수 없습니다. 카드 데이터 초기화가 실패했습니다 "
+    "— 봇 로그를 확인해 주세요."
+)
+
+#: 콤보 플래너가 예외를 던졌을 때의 안내. 🔴 예외 내용을 담지 않는다.
+COMBO_ERROR_MESSAGE = (
+    "전개 계획을 세우는 중 오류가 발생했습니다. 입력을 다르게 적어 보시고, "
     "계속 실패하면 봇 로그를 확인해 주세요."
 )
 
@@ -416,6 +430,247 @@ def deck_messages(agent, request_text: str) -> "list[str]":
     return paginate(lines)
 
 
+class ComboVerdict(str, Enum):
+    """
+    전개 계획 하나에 대한 **표시용 판정.** Discord 출력 계층에만 있다.
+
+    🔴 **엔진 계약을 바꾸지 않는다.** 걸음별 상태는 이미
+    :class:`~deck.model.StepStatus` 가, 근거 층은
+    :class:`~deck.model.StepBasis` 가 적는다. 여기 있는 것은 그 걸음들을
+    **한 줄로 요약하는 표시**이고, 새 상태를 엔진이나 ``deck/`` 에
+    추가하지 않았다.
+
+    🔴 **``VERIFIED`` 와 ``PARTIALLY_VERIFIED`` 가 없는 것이 의도다.**
+    :class:`~deck.planner.ComboPlanner` 는 **엔진을 실행하지 않는다** —
+    ``EFFECT_LIBRARY`` 를 **읽어** 실행 구현이 등록된 카드 ID 집합(실측
+    13장)을 만들고, 패의 카드마다 걸음을 **정적으로** 만든다. ``Duel`` ·
+    ``GameState`` · ``ActionValidator`` 호출이 그 모듈에 하나도 없다.
+
+    그러므로 "실행해서 검증했다" 고 말할 수 있는 전개가 **지금은 하나도
+    없다.** :attr:`~deck.model.StepStatus.CONFIRMED` 조차 "엔진에 실행
+    구현이 있어 **돌려볼 수 있다**" 는 뜻이고 "돌려 봤다" 가 아니다.
+    그래서 가장 높은 판정이 :attr:`GROUNDED_UNEXECUTED` 다.
+    """
+
+    GROUNDED_UNEXECUTED = "grounded_unexecuted"
+    """근거 있는 걸음이 있다. 🔴 **실행 검증은 하지 않았다.**"""
+    UNVERIFIED = "unverified"
+    """근거 있는 걸음을 찾지 못했다. 전개 후보라고도 말하지 않는다."""
+    UNSUPPORTED = "unsupported"
+    """필요한 절차가 엔진에 없어 계획 자체를 세우지 못했다."""
+
+    def describe_ko(self) -> str:
+        return {
+            ComboVerdict.GROUNDED_UNEXECUTED:
+                "근거 있음 · 🔴 실행 검증 안 됨",
+            ComboVerdict.UNVERIFIED: "검증되지 않음 (근거 있는 걸음 없음)",
+            ComboVerdict.UNSUPPORTED: "엔진 미지원 (계획 불가)",
+        }[self]
+
+    def detail_ko(self) -> str:
+        return {
+            ComboVerdict.GROUNDED_UNEXECUTED:
+                "근거 있는 걸음이 있습니다. 🔴 그래도 **실제로 돌려 본"
+                " 것이 아닙니다** — 이 저장소의 전개 계획은 엔진을 실행하지"
+                " 않고 등록된 구현 목록을 읽어 만듭니다. 합법인지는 사람이"
+                " 확인해야 합니다.",
+            ComboVerdict.UNVERIFIED:
+                "근거 있는 걸음을 하나도 찾지 못했습니다. 🔴 전개가"
+                " 불가능하다는 뜻이 아니라, **이 저장소가 판정하지 못했다**"
+                " 는 뜻입니다.",
+            ComboVerdict.UNSUPPORTED:
+                "이 패로 하려면 엔진에 없는 절차가 필요합니다 (아래 미지원"
+                " 목록). 🔴 미구현이라는 사실이지 불가능이라는 뜻은"
+                " 아닙니다.",
+        }[self]
+
+
+#: :class:`~deck.model.StepStatus` 의 표시 기호. :mod:`deck.report` 와 같다.
+_STEP_MARK = {
+    "confirmed": "✔",
+    "conditional": "~",
+    "unknown": "?",
+    "unsupported": "✗",
+}
+
+
+def combo_verdict(plan) -> ComboVerdict:
+    """
+    계획을 **한 줄로 요약한다.** 🔴 없는 검증을 만들지 않는다.
+
+    판정은 걸음들의 :class:`~deck.model.StepStatus` 에서만 나온다 —
+    이 함수가 카드를 다시 보거나 효과를 다시 해석하지 않는다.
+    """
+    statuses = [step.status.value for step in plan.steps]
+    if not statuses:
+        #: 걸음이 없다. 패가 비었거나 저장소가 아무 근거도 찾지 못했다.
+        return ComboVerdict.UNVERIFIED
+    if all(status == "unsupported" for status in statuses):
+        return ComboVerdict.UNSUPPORTED
+    if any(status in ("confirmed", "conditional") for status in statuses):
+        return ComboVerdict.GROUNDED_UNEXECUTED
+    return ComboVerdict.UNVERIFIED
+
+
+def _hand_activation_correction(agent, step) -> "str | None":
+    """
+    🔴 플래너가 **패에서 발동한다고 적은 걸음**을 효과 데이터로 되짚는다.
+
+    ``deck/planner.py`` 의 효과 걸음은 ``card.has_effect_from("HAND")`` 로
+    갈린다. 그 메서드는 ``SetRange`` 에 ``LOCATION_HAND`` 이 있는지만 보므로
+    **특수 소환 절차**(``EFFECT_SPSUMMON_PROC``)에도 참이 된다 — 덱 빌더에서
+    같은 신호가 8장을 "패트랩 계열" 로 만든 것과 **같은 결함**이다.
+
+    실측: `/combo hand:펜리르` 는 "'펜리르' 의 패에서 발동하는 효과를
+    씁니다" 를 **조건부**로 적는다. 그런데 펜리르의 패 범위 블록은 특수
+    소환 절차 하나이고, 패에서 발동 가능한 효과는 **0개**다. 독법사 ·
+    텐사우전드 드래곤도 같다.
+
+    🔴 **플래너를 고치지 않는다.** 그것은 이번 단계의 범위 밖이고, 구조적
+    TODO 를 임의로 고치지 않기로 했다. 대신 **틀린 행동을 그대로 전달하지
+    않는다** — 출력 계층에서 효과 데이터로 정정한다
+    (:mod:`deck.evidence` 는 이미 있는 것을 쓴다).
+    """
+    from deck.evidence import hand_effect_facts
+    from deck.model import StepBasis
+
+    if step.basis is not StepBasis.LUA_PARSED:
+        return None
+    card = agent.repository.get(step.card_id)
+    if card is None or not card.has_effect_from("HAND"):
+        return None
+    facts = hand_effect_facts(card)
+    if facts.activatable_from_hand:
+        return None
+    return ("🔴 **정정**: 이 카드에는 패에서 **발동 가능한 효과가"
+            " 없습니다** — 패 범위 블록"
+            f" {facts.hand_range_blocks}개가 전부 발동이 아닌 절차·지속"
+            " 효과입니다 (특수 소환 절차 등). 위 걸음은 전개 계획이"
+            " 발동 위치만 보고 적은 것이므로 **그대로 믿지 마세요.**")
+
+
+def _combo_step_lines(agent, plan) -> "list[str]":
+    """걸음마다 상태·근거·조건·기대를 적는다. 🔴 효과를 서술하지 않는다."""
+    if not plan.steps:
+        return ["", "계획된 걸음이 없습니다."]
+    lines = ["", f"**[전개 걸음]** {len(plan.steps)}걸음"]
+    for step in plan.steps:
+        mark = _STEP_MARK.get(step.status.value, "?")
+        lines.append(f"  {step.order}. {mark} {step.action}")
+        lines.append(f"      상태: {step.status.describe_ko()}"
+                     f"  ·  근거: {step.basis.describe_ko()}")
+        for requirement in step.requires:
+            lines.append(f"      필요: {requirement}")
+        lines.append(f"      기대: {step.expected}")
+        if step.note:
+            lines.append(f"      비고: {step.note}")
+        correction = _hand_activation_correction(agent, step)
+        if correction is not None:
+            lines.append(f"      {correction}")
+    return lines
+
+
+def combo_messages(agent, hand_text: str, board_text: str = "",
+                   deck_text: str = "") -> "list[str]":
+    """
+    ``/combo`` 의 응답. **discord 를 모른다.** 메시지 여러 개를 돌려준다.
+
+    기존 콤보 플래너를 그대로 부른다 — 새 전개 엔진을 만들지 않는다:
+    :func:`app.main._parse_card_ids` →
+    :class:`~deck.hand.FixedHand` →
+    :meth:`~deck.planner.ComboPlanner.plan`.
+
+    ``deck_text`` 를 주면 :class:`~deck.builder.DeckBuilder` 로 초안을
+    만들어 ``plan(draft=…)`` 에 넘긴다 — 그러면 플래너가 "이 패가 덱에서
+    나올 수 있는가" 를 **실제로** 본다. 주지 않으면 플래너가 그 검증을
+    하지 않았다고 적는다.
+
+    🔴 **입력을 추측해서 해석하지 않는다.** 이름을 찾지 못한 토큰은
+    버리지 않고 그대로 적는다 — 해석된 카드만으로 계획을 세우면 사용자는
+    자기가 적은 카드가 들어간 계획을 봤다고 믿는다.
+    """
+    from app.main import _parse_card_ids
+    from deck.hand import FixedHand
+    from deck.planner import ComboPlanner
+
+    hand_ids, hand_unresolved = _parse_card_ids(hand_text or "", agent)
+    board_ids, board_unresolved = _parse_card_ids(board_text or "", agent)
+
+    lines = [f"🌀 전개 요청 — 패: `{hand_text}`"]
+    if board_text:
+        lines.append(f"필드·묘지: `{board_text}`")
+
+    def _named(card_ids: "list[int]") -> str:
+        bits = []
+        for card_id in card_ids:
+            card = agent.repository.get(card_id)
+            bits.append(f"{card.display_name()} [{card_id}]" if card
+                        else f"🔴 저장소에 없는 ID [{card_id}]")
+        return ", ".join(bits)
+
+    if hand_ids:
+        lines.append(f"해석된 패 {len(hand_ids)}장: {_named(hand_ids)}")
+    if board_ids:
+        lines.append(f"해석된 필드·묘지 {len(board_ids)}장: {_named(board_ids)}")
+
+    unresolved = hand_unresolved + board_unresolved
+    if unresolved:
+        names = ", ".join(f"`{name}`" for name in unresolved)
+        lines.append(f"⚠️ 카드를 찾지 못했습니다: {names}"
+                     f" — **계획에 넣지 않았습니다.**")
+
+    if not hand_ids:
+        lines.append("")
+        lines.append("🔴 초기 패를 하나도 해석하지 못해 **계획을 세우지"
+                     " 않았습니다.**")
+        lines.append("카드 이름이나 카드 ID 를 쉼표로 적어 주세요. 예:")
+        lines.append("  `/combo hand:오르페골 디베르, 오르페골 스켈레촌`")
+        lines.append("  `/combo hand:55144522`")
+        lines.append("🔴 무작위 패 생성은 구현되어 있지 않습니다 — 패는"
+                     " 직접 지정해야 합니다.")
+        return paginate(lines)
+
+    draft = None
+    if deck_text and deck_text.strip():
+        from deck.builder import DeckBuilder
+        from deck.request import parse_deck_request
+
+        request = parse_deck_request(deck_text)
+        if request.is_empty:
+            lines.append(f"⚠️ 덱 요청 `{deck_text}` 에서 테마도 목표도"
+                         f" 읽지 못해 **덱과 맞는지는 확인하지 않았습니다.**")
+        else:
+            draft = DeckBuilder(agent.repository).build(request)
+            lines.append(f"덱 초안과 비교: `{deck_text}`"
+                         f" → 메인 {draft.main_count}장")
+
+    plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
+                                               board=board_ids, draft=draft)
+
+    verdict = combo_verdict(plan)
+    lines.append("")
+    lines.append(f"**판정: {verdict.describe_ko()}**")
+    lines.append(verdict.detail_ko())
+
+    lines.extend(_combo_step_lines(agent, plan))
+
+    if plan.stopped_reason:
+        lines.append("")
+        lines.append(f"🔴 중단: {plan.stopped_reason}")
+
+    if plan.unsupported:
+        lines.append("")
+        lines.append("**[엔진이 지원하지 않아 계획에 넣지 않은 절차]**")
+        lines.extend(f"  - {item}" for item in plan.unsupported)
+
+    if plan.manual_checks:
+        lines.append("")
+        lines.append("**[사람이 직접 확인할 것]**")
+        lines.extend(f"  - {item}" for item in plan.manual_checks)
+
+    return paginate(lines)
+
+
 class SearchService:
     """
     카드 데이터를 **한 번만** 만들어 들고 있는 자리.
@@ -490,6 +745,27 @@ class SearchService:
         if self._agent is None:
             return UNAVAILABLE_MESSAGE
         return search_message(self._agent, query, limit=limit)
+
+    def combo_texts(self, hand_text: str, board_text: str = "",
+                    deck_text: str = "") -> "list[str]":
+        """
+        전개 계획을 세워 **메시지 목록**을 돌려준다.
+
+        🔴 ``/search`` · ``/deck`` 과 **같은 카드 데이터를 쓴다.** 콤보
+        플래너가 요구하는 것은 ``repository`` 하나이고 그것은 이미 여기
+        있다.
+
+        🔴 **예외를 밖으로 내보내지 않는다** (``deck_texts`` 와 같은 이유).
+        """
+        if self._agent is None:
+            return [COMBO_UNAVAILABLE_MESSAGE]
+        try:
+            return combo_messages(self._agent, hand_text, board_text,
+                                  deck_text)
+        except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
+            logger.exception("전개 계획 생성에 실패했습니다. 패=%r 필드=%r"
+                             " 덱=%r", hand_text, board_text, deck_text)
+            return [COMBO_ERROR_MESSAGE]
 
     def deck_texts(self, request_text: str) -> "list[str]":
         """
@@ -605,6 +881,7 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
     #: ``/deck`` 도 **같은 서비스**를 쓴다. 카드 데이터를 두 번 만들지
     #: 않는다. 이름을 따로 두는 것은 핸들러가 읽히게 하기 위한 것뿐이다.
     deck_service = search_service
+    combo_service = search_service
 
     intents = discord.Intents.default()
     client = discord.Client(intents=intents)
@@ -643,6 +920,22 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         texts = await asyncio.to_thread(deck_service.deck_texts, request)
         #: 🔴 **첫 메시지는 ``followup.send``, 나머지도 같다.** 덱 출력은
         #: 한 메시지 상한을 넘으므로 나눠 보낸다 (:func:`paginate`).
+        for text in texts:
+            await interaction.followup.send(text)
+
+    @tree.command(name="combo", description=COMBO_DESCRIPTION)
+    @app_commands.describe(
+        hand="초기 패 — 카드 이름이나 ID 를 쉼표로. 예: 오르페골 디베르,"
+             " 오르페골 스켈레촌",
+        board="(선택) 이미 필드·묘지에 있는 카드",
+        deck="(선택) 덱 요청 — 주면 이 패가 덱에서 나올 수 있는지 함께 봅니다")
+    async def combo_command(interaction: "discord.Interaction",
+                            hand: str, board: str = "",
+                            deck: str = "") -> None:
+        #: 🔴 ``/search`` · ``/deck`` 과 같은 순서다.
+        await interaction.response.defer()
+        texts = await asyncio.to_thread(
+            combo_service.combo_texts, hand, board, deck)
         for text in texts:
             await interaction.followup.send(text)
 
@@ -740,33 +1033,35 @@ def main(argv: "list[str] | None" = None) -> int:
 
 
 # ===========================================================================
-# 확장 지점 — 앞으로 /combo 를 붙이는 자리
+# 구현한 것과 구현하지 않은 것
 # ===========================================================================
-#: 🔴 ``/combo`` 는 **아직 구현하지 않았다.** 지원하는 것처럼 적지 않고,
-#: 명령으로 등록하지도 않았다. ``deck/planner.py`` 는 이미 있지만
-#: Phase 5-C 의 범위가 ``/deck`` 하나였다.
+#: 등록된 명령은 **``/ping`` · ``/search`` · ``/deck`` · ``/combo`` 넷**이고
+#: 그것이 지금 구현된 전부다. 아래는 **구현되어 있지 않다** — 지원하는
+#: 것처럼 적지 않는다:
 #:
-#: ``/search`` 와 ``/deck`` 이 세운 것 (그대로 따르면 된다):
+#: * 🔴 **무작위 초기 패 생성.** ``deck/hand.py`` 의 구현은
+#:   :class:`~deck.hand.FixedHand` 하나이고 사용자가 지정한 패를 그대로
+#:   돌려준다. `/combo` 는 패를 **직접 받는다**.
+#: * 🔴 **전개의 실행 검증.** :class:`~deck.planner.ComboPlanner` 는 엔진을
+#:   실행하지 않는다 — ``EFFECT_LIBRARY`` 를 읽어 실행 구현이 등록된 카드
+#:   ID 집합(실측 13장)을 만들고 걸음을 정적으로 만든다. 그래서
+#:   :class:`ComboVerdict` 에 ``VERIFIED`` 가 없다.
+#: * 🔴 **초동 확률 · 전개 성공률.** 무작위 패가 없으므로 계산할 표본이
+#:   없다.
+#: * 🔴 **특수 소환 · 융합 · 싱크로 · 엑시즈 · 링크 절차.** 엔진에 없고
+#:   ``ComboPlan.unsupported`` 가 그 목록을 돌려준다.
+#: * 🔴 **EDOPro 연동.** 이 파일에 그 코드가 없다.
 #:
-#: * 순수 함수(:func:`search_message` · :func:`deck_messages`)가 문구를 만들고
-#:   핸들러는 넘기기만 한다
+#: 네 명령이 공유하는 모양 (새 명령을 붙일 때 그대로 따르면 된다):
+#:
+#: * 순수 함수(:func:`search_message` · :func:`deck_messages` ·
+#:   :func:`combo_messages`)가 문구를 만들고 핸들러는 넘기기만 한다
 #: * 핸들러가 ``defer()`` 를 먼저 부르고 무거운 작업을 ``asyncio.to_thread``
 #:   로 보낸다
 #: * 무거운 초기화는 :class:`SearchService` 가 ``on_ready`` 에서 한 번만 한다
 #: * 한 메시지에 들어가는 출력은 :func:`clamp_to_discord_limit`,
 #:   들어가지 않는 출력은 :func:`paginate` 로 나눠 보낸다
-#: * 빌더가 예외를 던져도 봇이 죽지 않는다 (:meth:`SearchService.deck_texts`)
-#:
-#: ``/combo`` 에 미리 보이는 것:
-#:
-#: * ``ComboPlanner.plan(hand_source, board=(), draft=None)`` 은 초기 패를
-#:   **사용자가 지정**해야 한다. 무작위 패 생성은 구현되어 있지 않다
-#:   (``deck/hand.py`` 에 :class:`~deck.hand.FixedHand` 하나뿐).
-#: * 그래서 Discord 인자로 카드 ID 나 이름 목록을 받아야 하고,
-#:   ``app.main._parse_card_ids`` 가 이미 그 변환을 한다 — 다시 쓰지 않는다.
-#: * Phase 4-C 측정: 엔진에 효과 실행 구현이 있는 카드는 14,127장 중 13장
-#:   이다. 전개 계획의 대부분이 ``UNKNOWN`` 으로 나오는 것이 정상이며,
-#:   그것을 성공으로 바꿔 적지 않는다.
+#: * 서비스 메서드가 예외를 잡아 봇을 죽이지 않는다
 
 if __name__ == "__main__":
     raise SystemExit(main())
