@@ -69,6 +69,7 @@ BOT_NAME = "갈라테아"
 #: ``f"{BOT_NAME} 가 …"`` 로 쓰면 "갈라테아 가" 처럼 띄어 쓰게 된다.
 PING_DESCRIPTION = "갈라테아가 살아 있는지 확인합니다"
 SEARCH_DESCRIPTION = "한국어로 카드를 검색합니다"
+DECK_DESCRIPTION = "한국어 요청으로 덱 초안을 만들고 규격을 검증합니다"
 
 #: 환경변수 이름 — 테스트와 문서가 같은 상수를 본다.
 TOKEN_ENV = "DISCORD_BOT_TOKEN"
@@ -93,6 +94,26 @@ UNAVAILABLE_MESSAGE = (
 
 #: 길이 때문에 잘렸을 때 덧붙이는 말. 잘린 사실을 숨기지 않는다.
 TRUNCATION_NOTICE = "\n… (길이 제한으로 줄였습니다)"
+
+#: 리포지토리가 준비되지 않았을 때 ``/deck`` 의 안내. ``/search`` 와 문구를
+#: 공유하지 않는 이유: 사용자가 무엇을 못 하는지 알아야 한다.
+DECK_UNAVAILABLE_MESSAGE = (
+    "지금은 덱을 만들 수 없습니다. 카드 데이터 초기화가 실패했습니다 "
+    "— 봇 로그를 확인해 주세요."
+)
+
+#: 덱 빌더가 예외를 던졌을 때의 안내. 🔴 **예외 내용을 사용자에게 보내지
+#: 않는다** — 경로나 내부 구조가 드러난다. 그것은 로그로만 간다.
+DECK_ERROR_MESSAGE = (
+    "덱을 만드는 중 오류가 발생했습니다. 요청을 다르게 적어 보시고, "
+    "계속 실패하면 봇 로그를 확인해 주세요."
+)
+
+#: 🔴 한 명령의 응답을 나눠 보낼 때의 최대 메시지 수. 덱 출력은 실측
+#: 3,109~3,617자로 상한의 1.6~1.8배라 한 메시지에 들어가지 않는다. 잘라서
+#: 덱의 뒷부분을 버리지 않고 **나눠 보낸다** — 덱은 일부만 보여 주면 되는
+#: 목록이 아니다. 상한을 두는 이유는 사고로 수십 개를 쏟지 않기 위해서다.
+DECK_MESSAGE_LIMIT = 4
 
 
 class MissingTokenError(RuntimeError):
@@ -182,9 +203,207 @@ def search_message(agent, query: str,
     return clamp_to_discord_limit("\n".join(lines))
 
 
+#: :class:`~deck.model.ValidationOutcome` 의 표시 기호. :mod:`deck.report` 가
+#: 쓰는 것과 같은 기호를 쓴다 — 두 출력에서 같은 결과가 다르게 보이면 안 된다.
+#:
+#: 키는 ``.value`` 문자열로 두고 조회할 때도 ``.value`` 를 쓴다. 측정해 보면
+#: ``ValidationOutcome`` 은 ``str.__hash__`` 를 쓰므로 멤버를 그대로 키로
+#: 넣어도 맞지만, 그것은 ``(str, Enum)`` 이라는 선언 방식에 딸린 성질이다.
+#: ``.value`` 로 고정하면 그 성질에 기대지 않는다.
+_OUTCOME_MARK = {
+    "satisfied": "✔",
+    "violated": "✗",
+    "unverifiable": "?",
+}
+
+
+def paginate(lines: "list[str]",
+             limit: int = DISCORD_MESSAGE_LIMIT,
+             max_messages: int = DECK_MESSAGE_LIMIT) -> "list[str]":
+    """
+    줄 목록을 **상한을 넘지 않는 메시지 여러 개**로 묶는다.
+
+    🔴 ``clamp_to_discord_limit`` 와 역할이 다르다. 저쪽은 **버리고** 버렸다고
+    적는다 — 검색 결과처럼 "상위 몇 건" 이 원래 의미인 출력에 맞다. 덱은
+    그렇지 않다. 40장 중 뒤 15장이 사라진 덱은 그 덱이 아니므로 **나눠
+    보낸다.**
+
+    줄을 쪼개지 않는다. 한 줄이 그 자체로 상한을 넘으면 그 줄만
+    :func:`clamp_to_discord_limit` 로 줄인다 — 그때는 버린 사실이 적힌다.
+
+    ``max_messages`` 를 넘으면 마지막 메시지에 **몇 줄을 못 보냈는지**
+    적는다. 조용히 끊지 않는다.
+    """
+    pages: list[str] = []
+    current: list[str] = []
+    size = 0
+
+    def flush() -> None:
+        nonlocal current, size
+        if current:
+            pages.append("\n".join(current))
+            current = []
+            size = 0
+
+    for index, line in enumerate(lines):
+        piece = clamp_to_discord_limit(line, limit)
+        #: 줄바꿈 한 글자를 함께 센다 — 세지 않으면 이어 붙인 뒤 상한을 넘는다.
+        extra = len(piece) + (1 if current else 0)
+        if current and size + extra > limit:
+            flush()
+            if len(pages) >= max_messages:
+                remaining = len(lines) - index
+                notice = f"… (길이 제한으로 {remaining}줄을 보내지 못했습니다)"
+                pages[-1] = clamp_to_discord_limit(
+                    pages[-1] + "\n" + notice, limit)
+                return pages
+            extra = len(piece)
+        current.append(piece)
+        size += extra
+    flush()
+    return pages
+
+
+def _deck_slot_lines(title: str, slots) -> "list[str]":
+    """한 칸 한 줄. 매수·이름·카드 ID·역할만 적는다."""
+    if not slots:
+        return []
+    count = sum(slot.copies for slot in slots)
+    lines = ["", f"**[{title}]** {count}장 (종류 {len(slots)})"]
+    lines.extend(
+        f"  {slot.copies}x {slot.name}  [{slot.card_id}]"
+        f"  · {slot.role.describe_ko()}"
+        for slot in slots
+    )
+    return lines
+
+
+def _deck_reason_lines(draft) -> "list[str]":
+    """
+    **채택 근거**를 역할별로 한 번만 적는다.
+
+    🔴 근거를 버리지 않는다. :class:`~deck.model.DeckSlot` 의 ``reason`` 은
+    (테마, 역할) 조합으로 정해지므로 카드마다 같은 문장이 반복된다. 카드마다
+    한 줄씩 적으면 덱 하나가 3,600자를 넘고, 그러면 나눠 보낼 메시지 수만
+    늘어난다. 그래서 **같은 문장을 묶어 몇 종류가 그 근거로 들어왔는지**
+    함께 적는다 — 요약이 아니라 같은 정보의 다른 배치다.
+    """
+    grouped: dict[str, int] = {}
+    for slot in draft.all_slots():
+        grouped[slot.reason] = grouped.get(slot.reason, 0) + 1
+    if not grouped:
+        return []
+    lines = ["", "**[채택 근거]**"]
+    lines.extend(f"  - {reason} ({kinds}종류)"
+                 for reason, kinds in grouped.items())
+    return lines
+
+
+def _deck_validation_lines(validation) -> "list[str]":
+    """규격 검증 결과. 🔴 '검증 불가' 를 '통과' 로 적지 않는다."""
+    lines = ["", "**[덱 규격 검증]**"]
+    for finding in validation.findings:
+        mark = _OUTCOME_MARK.get(finding.outcome.value, "?")
+        lines.append(f"  {mark} {finding.rule}: "
+                     f"{finding.outcome.describe_ko()} — {finding.detail}")
+        if finding.source:
+            lines.append(f"      근거 규칙: {finding.source}")
+    if validation.unverifiable:
+        lines.append("  🔴 검증 불가 항목은 **통과가 아닙니다.** "
+                     "사람이 확인해야 합니다.")
+    return lines
+
+
+def deck_messages(agent, request_text: str) -> "list[str]":
+    """
+    ``/deck`` 의 응답. **discord 를 모른다.** 메시지 여러 개를 돌려준다.
+
+    기존 덱 빌더를 그대로 부른다 — 새로 만들지 않는다:
+    :func:`~deck.request.parse_deck_request` →
+    :meth:`~deck.builder.DeckBuilder.build` →
+    :meth:`~deck.validator.DeckValidator.validate`.
+
+    🔴 **세 가지를 구분해서 처리한다.**
+
+    1. 요청에서 테마도 목표도 읽지 못했다 (``is_empty``) → **덱을 만들지
+       않고** 어떻게 적어야 하는지 안내한다. CLI 도 같은 자리에서 멈춘다
+       (``app.main.cmd_deck`` 가 ``is_empty`` 면 종료 코드 1).
+    2. 테마를 하나도 카드군으로 해석하지 못했다 → **덱을 보내지 않는다.**
+       빌더는 이때도 덱을 돌려주지만(실측: "존재하지않는테마 덱" → 보강
+       카드 20종 40장) 그것은 요청한 테마와 **아무 관계가 없는** 덱이다.
+       Discord 에서 그것을 보내면 사용자는 그 테마의 덱을 받았다고 믿는다.
+       🔴 ``deck/`` 을 고치지 않고 어댑터에서 막는다 — 빌더의 계약은 그대로
+       두고, 보여 줄지 말지만 여기서 정한다.
+    3. 일부만 해석됐다 → 덱을 보내되 **해석 실패한 테마를 맨 앞에** 적는다.
+    """
+    from deck.builder import DeckBuilder
+    from deck.request import parse_deck_request
+    from deck.validator import DeckValidator
+
+    request = parse_deck_request(request_text)
+
+    header = [f"🃏 덱 요청: `{request_text}`", request.describe_ko()]
+
+    if request.is_empty:
+        return ["\n".join(header + [
+            "",
+            "🔴 테마도 목표도 해석하지 못해 **덱을 만들지 않았습니다.**",
+            "카드군 이름을 넣어 다시 적어 주세요. 예:",
+            "  `오르페골 덱 짜줘`",
+            "  `오르페골 + K9으로 덱을 짜 줘. 초동 안정성을 우선하고"
+            " 패트랩도 충분히`",
+            "지정할 수 있는 목표: 초동 안정성 · 견제(제압) · 패트랩 비중",
+        ])]
+
+    draft = DeckBuilder(agent.repository).build(request)
+
+    if draft.unresolved_themes and not draft.resolved_themes:
+        failed = ", ".join(f"`{t}`" for t in draft.unresolved_themes)
+        return ["\n".join(header + [
+            "",
+            f"🔴 테마를 카드군으로 해석하지 못했습니다: {failed}",
+            "**그래서 덱을 보내지 않습니다.** 덱 빌더는 이 경우에도 테마"
+            " 밖의 카드로 40장을 채우지만, 그것은 요청한 테마의 덱이"
+            " 아닙니다.",
+            "카드군 이름을 다시 확인해 주세요 — `/search` 로 카드 이름을"
+            " 먼저 찾아볼 수 있습니다.",
+        ])]
+
+    validation = DeckValidator().validate(draft)
+
+    lines = list(header)
+    if draft.unresolved_themes:
+        failed = ", ".join(f"`{t}`" for t in draft.unresolved_themes)
+        lines.append(f"🔴 해석하지 못한 테마: {failed} — **이 테마에서"
+                     f" 가져온 카드는 없습니다.**")
+    lines.append("")
+    lines.append(f"**메인 {draft.main_count}장** (종류 {len(draft.main)})"
+                 f" · **엑스트라 {draft.extra_count}장**"
+                 f" (종류 {len(draft.extra)})")
+    if draft.resolved_themes:
+        lines.append(f"해석된 카드군: {', '.join(draft.resolved_themes)}")
+
+    lines.extend(_deck_slot_lines("메인 덱", draft.main))
+    lines.extend(_deck_slot_lines("엑스트라 덱", draft.extra))
+    lines.extend(_deck_reason_lines(draft))
+    lines.extend(_deck_validation_lines(validation))
+    if draft.notes:
+        lines.append("")
+        lines.append("**[구성 기록]**")
+        lines.extend(f"  - {note}" for note in draft.notes)
+
+    return paginate(lines)
+
+
 class SearchService:
     """
     카드 데이터를 **한 번만** 만들어 들고 있는 자리.
+
+    이름에 ``Search`` 가 남아 있지만 ``/search`` 와 ``/deck`` 이 **같은**
+    :class:`~app.main.DeckAgent` 를 쓴다. 이름을 바꾸지 않은 이유: 이름만
+    바꾸는 변경이 Phase 5-C 의 목적이 아니고, 이 클래스를 가리키는 기존
+    테스트들을 함께 건드려야 한다. 역할은 "명령들이 공유하는 카드 데이터
+    보관소" 하나다.
 
     왜 클래스인가: "한 번만 만들었다" 를 테스트가 확인할 수 있어야 한다.
     모듈 전역 변수로 두면 그 사실을 세어 볼 방법이 없고, 테스트가 서로의
@@ -250,6 +469,28 @@ class SearchService:
         if self._agent is None:
             return UNAVAILABLE_MESSAGE
         return search_message(self._agent, query, limit=limit)
+
+    def deck_texts(self, request_text: str) -> "list[str]":
+        """
+        덱 초안을 만들어 **메시지 목록**을 돌려준다.
+
+        🔴 ``/search`` 와 **같은 카드 데이터를 쓴다.** 덱 빌더가 요구하는
+        것은 :attr:`app.main.DeckAgent.repository` 하나이고 그것은 이미
+        여기 있다 — 덱 때문에 리포지토리를 다시 만들지 않는다.
+
+        🔴 **예외를 밖으로 내보내지 않는다.** 핸들러에서 터지면
+        ``discord.py`` 가 그 상호작용을 실패로 끝내고 사용자는 "애플리케이션이
+        응답하지 않습니다" 만 본다. 여기서 잡아 로그에 스택을 남기고
+        사용자에게는 :data:`DECK_ERROR_MESSAGE` 를 돌려준다 — 예외 내용은
+        **사용자에게 보내지 않는다.**
+        """
+        if self._agent is None:
+            return [DECK_UNAVAILABLE_MESSAGE]
+        try:
+            return deck_messages(self._agent, request_text)
+        except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
+            logger.exception("덱 생성에 실패했습니다. 요청=%r", request_text)
+            return [DECK_ERROR_MESSAGE]
 
 
 #: 봇 하나가 쓰는 서비스 하나. ``build_client`` 가 이것을 핸들러에 묶는다.
@@ -340,6 +581,9 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
     #: 이 변수를 가린다 — 핸들러가 ``Command`` 객체에서 ``search_text`` 를
     #: 찾다가 ``AttributeError`` 로 죽는다. 작업 중 실제로 그렇게 깨졌다.
     search_service = service if service is not None else SEARCH_SERVICE
+    #: ``/deck`` 도 **같은 서비스**를 쓴다. 카드 데이터를 두 번 만들지
+    #: 않는다. 이름을 따로 두는 것은 핸들러가 읽히게 하기 위한 것뿐이다.
+    deck_service = search_service
 
     intents = discord.Intents.default()
     client = discord.Client(intents=intents)
@@ -363,6 +607,23 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         #: 시간 동안 봇 전체가 멈추고 ``/ping`` 도 응답하지 않는다.
         text = await asyncio.to_thread(search_service.search_text, query)
         await interaction.followup.send(text)
+
+    @tree.command(name="deck", description=DECK_DESCRIPTION)
+    @app_commands.describe(
+        request="예: 오르페골 덱 짜줘 / 오르페골 + K9으로 덱을 짜 줘."
+                " 초동 안정성을 우선하고 패트랩도 충분히")
+    async def deck_command(interaction: "discord.Interaction",
+                           request: str) -> None:
+        #: 🔴 ``/search`` 와 같은 순서다. 덱 구성은 실측 0.11~0.22초지만
+        #: 카드 데이터가 아직 준비되지 않았으면 그 자리에서 기다릴 수 있다.
+        await interaction.response.defer()
+        #: 동기 작업을 이벤트 루프에서 돌리지 않는다 — 돌리면 그 동안
+        #: 봇 전체가 멈춘다.
+        texts = await asyncio.to_thread(deck_service.deck_texts, request)
+        #: 🔴 **첫 메시지는 ``followup.send``, 나머지도 같다.** 덱 출력은
+        #: 한 메시지 상한을 넘으므로 나눠 보낸다 (:func:`paginate`).
+        for text in texts:
+            await interaction.followup.send(text)
 
     @client.event
     async def on_ready() -> None:
@@ -458,29 +719,33 @@ def main(argv: "list[str] | None" = None) -> int:
 
 
 # ===========================================================================
-# 확장 지점 — 앞으로 /deck · /combo 를 붙이는 자리
+# 확장 지점 — 앞으로 /combo 를 붙이는 자리
 # ===========================================================================
-#: 🔴 ``/deck`` 과 ``/combo`` 는 **아직 구현하지 않았다.** 지원하는 것처럼
-#: 적지 않고, 명령으로 등록하지도 않았다.
+#: 🔴 ``/combo`` 는 **아직 구현하지 않았다.** 지원하는 것처럼 적지 않고,
+#: 명령으로 등록하지도 않았다. ``deck/planner.py`` 는 이미 있지만
+#: Phase 5-C 의 범위가 ``/deck`` 하나였다.
 #:
-#: ``/search`` 가 이미 세운 것 (그대로 따르면 된다):
+#: ``/search`` 와 ``/deck`` 이 세운 것 (그대로 따르면 된다):
 #:
-#: * 순수 함수(:func:`search_message`)가 문구를 만들고 핸들러는 넘기기만 한다
+#: * 순수 함수(:func:`search_message` · :func:`deck_messages`)가 문구를 만들고
+#:   핸들러는 넘기기만 한다
 #: * 핸들러가 ``defer()`` 를 먼저 부르고 무거운 작업을 ``asyncio.to_thread``
 #:   로 보낸다
 #: * 무거운 초기화는 :class:`SearchService` 가 ``on_ready`` 에서 한 번만 한다
-#: * 출력은 :func:`clamp_to_discord_limit` 로 상한을 보장한다
+#: * 한 메시지에 들어가는 출력은 :func:`clamp_to_discord_limit`,
+#:   들어가지 않는 출력은 :func:`paginate` 로 나눠 보낸다
+#: * 빌더가 예외를 던져도 봇이 죽지 않는다 (:meth:`SearchService.deck_texts`)
 #:
-#: ``/deck`` 에 남은 **결정 두 가지** (그래서 이번에 하지 않았다):
+#: ``/combo`` 에 미리 보이는 것:
 #:
-#: 1. 🔴 **출력이 상한을 넘는다.** 실측으로 덱 전체 출력이 3,102~3,367자이고
-#:    Discord 상한의 1.6~1.7배다. 자를지, 나눠 보낼지, 파일로 붙일지를
-#:    정해야 한다. :func:`clamp_to_discord_limit` 로 자르면 덱의 뒷부분이
-#:    사라지는데 그것이 맞는 선택인지 결정되지 않았다.
-#: 2. 🔴 **테마 해석에 실패해도 덱이 만들어진다.** 실측: "존재하지않는테마
-#:    덱" 이 보강 카드 20종 40장을 돌려준다. ``notes`` 에 실패가 적히지만
-#:    긴 출력에서는 묻힌다. 어댑터에서 "해석 실패면 덱을 보내지 않는다" 로
-#:    막는 것이 ``deck/`` 을 건드리지 않는 방법이고, 그 정책을 정해야 한다.
+#: * ``ComboPlanner.plan(hand_source, board=(), draft=None)`` 은 초기 패를
+#:   **사용자가 지정**해야 한다. 무작위 패 생성은 구현되어 있지 않다
+#:   (``deck/hand.py`` 에 :class:`~deck.hand.FixedHand` 하나뿐).
+#: * 그래서 Discord 인자로 카드 ID 나 이름 목록을 받아야 하고,
+#:   ``app.main._parse_card_ids`` 가 이미 그 변환을 한다 — 다시 쓰지 않는다.
+#: * Phase 4-C 측정: 엔진에 효과 실행 구현이 있는 카드는 14,127장 중 13장
+#:   이다. 전개 계획의 대부분이 ``UNKNOWN`` 으로 나오는 것이 정상이며,
+#:   그것을 성공으로 바꿔 적지 않는다.
 
 if __name__ == "__main__":
     raise SystemExit(main())
