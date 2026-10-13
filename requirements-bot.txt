@@ -1,0 +1,10 @@
+# 갈라테아 Discord 봇 전용 의존성 (Phase 5-A).
+#
+# 이 저장소의 본체(카드 검색 · 효과 분석 · 듀얼 엔진 · 덱 구축)는
+# 표준 라이브러리만으로 돈다. 봇을 띄울 때만 아래를 설치한다.
+#
+#   python3 -m pip install -r requirements-bot.txt
+#
+# app/discord_bot.py 는 discord 를 함수 안에서 import 하므로, 이것을
+# 설치하지 않아도 모듈을 읽고 토큰·문구 테스트를 돌릴 수 있다.
+discord.py>=2.3,<3

@@ -23,3 +23,8 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# 🔴 Discord 봇 토큰 등 비밀 값. .env.example 만 커밋한다 (Phase 5-A).
+.env
+.env.*
+!.env.example
