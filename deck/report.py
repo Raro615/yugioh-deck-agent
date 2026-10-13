@@ -62,7 +62,11 @@ def render_draft(draft: DeckDraft) -> str:
         lines.append(f"  [{title}]")
         for slot in slots:
             lines.append(f"    {slot.copies}x  {slot.name}  [{slot.card_id}]")
-            lines.append(f"         역할: {slot.role.describe_ko()}")
+            #: 🔴 역할과 **그 역할의 출처**를 따로 적는다. 합쳐 적으면
+            #: "근거 없이 붙은 역할" 이 "측정된 역할" 처럼 보인다
+            #: (Phase 5-D).
+            lines.append(f"         역할: {slot.role.describe_ko()}"
+                         f"  (출처: {slot.evidence.describe_ko()})")
             lines.append(f"         근거: {slot.reason}")
     if draft.notes:
         lines.append("")

@@ -28,7 +28,25 @@ class CardRole(str, Enum):
     THEME_CORE = "theme_core"
     """테마(공식 setcode)에 속한 카드."""
     HAND_TRAP = "hand_trap"
-    """패에서 발동하는 효과를 가진 몬스터 — 흔히 '패트랩'."""
+    """
+    패에서 발동 가능한 효과에 **무효/무력화 범주가 확인된** 몬스터.
+
+    🔴 Phase 5-D 가 기준을 좁혔다. 그 전에는 ``has_effect_from("HAND")``
+    하나로 붙였고, 그것은 ``SetRange`` 에 ``LOCATION_HAND`` 이 있는지만
+    보므로 **특수 소환 절차까지** 이 역할로 들어왔다 (실측: 메인 덱 몬스터
+    1,795장이 해당, 그중 587장은 발동 가능한 효과가 아예 없음). 지금 기준에
+    맞는 것은 **37장**이다.
+
+    🔴 그래도 "상대를 막는다" 는 뜻이 아니다 — 무효화의 대상이 누구인지는
+    Lua 범주에 없다 (:mod:`deck.evidence` 참조).
+    """
+    HAND_ACTIVATABLE = "hand_activatable"
+    """
+    패에서 **발동은 가능하지만** 무엇을 하는 효과인지 판정하지 못했다.
+
+    🔴 :attr:`HAND_TRAP` 과 **다른 역할이다.** 합치면 Phase 5-D 가 고친
+    결함이 돌아온다.
+    """
     SELF_SPECIAL_SUMMON = "self_special_summon"
     """패에서 스스로 특수 소환하는 절차를 가진 몬스터."""
     GENERIC_SPELL_TRAP = "generic_spell_trap"
@@ -44,12 +62,47 @@ class CardRole(str, Enum):
 
 _ROLE_KO: dict[CardRole, str] = {
     CardRole.THEME_CORE: "테마 카드",
-    CardRole.HAND_TRAP: "패에서 발동 (패트랩 계열)",
+    #: 🔴 "패트랩 계열" 이라고 적지 않는다. 측정한 것은 발동 위치와 범주
+    #: 이고, 그것이 곧 패트랩이라는 역할은 아니다 (Phase 5-D).
+    CardRole.HAND_TRAP: "패에서 발동 · 무효/무력화 범주 확인",
+    CardRole.HAND_ACTIVATABLE: "패에서 발동 가능 (효과 내용 미판정)",
     CardRole.SELF_SPECIAL_SUMMON: "패에서 자체 특수 소환",
     CardRole.GENERIC_SPELL_TRAP: "범용 마법·함정",
     CardRole.EXTRA_DECK: "엑스트라 덱",
     CardRole.UNCLASSIFIED: "분류 근거 없음",
 }
+
+
+class RoleEvidence(str, Enum):
+    """
+    역할이 **어디서 나왔는가**. 🔴 역할 자체와 분리해서 적는다.
+
+    같은 역할이 서로 다른 근거로 붙을 수 있고, 근거가 없을 수도 있다.
+    합쳐 두면 "근거 없이 붙은 역할" 과 "측정으로 붙은 역할" 이 구별되지
+    않는다 — 그것이 Phase 5-D 가 고친 결함의 형태다. 이 저장소가
+    :class:`~analysis.effect_model.AnalysisStatus` (근거 계층) 와
+    ``HandlerBinding`` (증명 계층) 을 합치지 않기로 한 것과 같은 이유다.
+    """
+
+    OFFICIAL_SETCODE = "official_setcode"
+    """공식 setcode 소속 — 카드군 판정에서 나왔다."""
+    PRINTED_CARD_TYPE = "printed_card_type"
+    """카드 종류(몬스터·마법·함정·엑스트라 덱)에서 나왔다."""
+    LUA_EFFECT_BLOCK = "lua_effect_block"
+    """Lua 효과 블록의 발동 위치·종류에서 나왔다."""
+    LUA_EFFECT_CATEGORY = "lua_effect_category"
+    """Lua 효과 블록의 ``CATEGORY_*`` 까지 확인했다. 가장 좁은 근거."""
+    NONE = "none"
+    """🔴 **근거가 없다.** 그래도 있는 것처럼 적지 않는다."""
+
+    def describe_ko(self) -> str:
+        return {
+            RoleEvidence.OFFICIAL_SETCODE: "공식 카드군 소속",
+            RoleEvidence.PRINTED_CARD_TYPE: "카드 종류",
+            RoleEvidence.LUA_EFFECT_BLOCK: "Lua 효과 블록 (발동 위치·종류)",
+            RoleEvidence.LUA_EFFECT_CATEGORY: "Lua 효과 범주",
+            RoleEvidence.NONE: "근거 없음",
+        }[self]
 
 
 class ValidationOutcome(str, Enum):
@@ -140,6 +193,14 @@ class DeckSlot:
     """채택 이유. 측정된 신호를 적는다 — 평가나 감상을 적지 않는다."""
     theme: str | None = None
     """이 카드를 끌어온 테마 이름 (카드군 상수). 테마 밖이면 ``None``."""
+    evidence: RoleEvidence = RoleEvidence.NONE
+    """
+    🔴 :attr:`role` 의 **근거**. 역할과 따로 적는다 (:class:`RoleEvidence`).
+
+    기본값이 :attr:`RoleEvidence.NONE` 인 것은 의도다 — 근거를 적지 않고
+    만든 칸은 "근거 없음" 으로 보여야 한다. 조용히 그럴듯한 근거가 붙으면
+    안 된다.
+    """
 
 
 @dataclass(slots=True)

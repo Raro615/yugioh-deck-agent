@@ -278,6 +278,26 @@ def _deck_slot_lines(title: str, slots) -> "list[str]":
     return lines
 
 
+def _deck_role_evidence_lines(draft) -> "list[str]":
+    """
+    🔴 역할의 **출처**를 역할과 따로 적는다 (Phase 5-D).
+
+    역할만 보여 주면 "근거 없이 붙은 역할" 과 "Lua 효과 범주까지 확인한
+    역할" 이 같아 보인다. Phase 5-C 의 `/deck` 이 실제로 그렇게 8종을
+    "패트랩 계열" 로 보여 줬다.
+    """
+    grouped: dict[tuple[str, str], int] = {}
+    for slot in draft.all_slots():
+        key = (slot.role.describe_ko(), slot.evidence.describe_ko())
+        grouped[key] = grouped.get(key, 0) + 1
+    if not grouped:
+        return []
+    lines = ["", "**[역할의 출처]**"]
+    lines.extend(f"  - {role} ← {evidence} ({kinds}종류)"
+                 for (role, evidence), kinds in grouped.items())
+    return lines
+
+
 def _deck_reason_lines(draft) -> "list[str]":
     """
     **채택 근거**를 역할별로 한 번만 적는다.
@@ -385,6 +405,7 @@ def deck_messages(agent, request_text: str) -> "list[str]":
 
     lines.extend(_deck_slot_lines("메인 덱", draft.main))
     lines.extend(_deck_slot_lines("엑스트라 덱", draft.extra))
+    lines.extend(_deck_role_evidence_lines(draft))
     lines.extend(_deck_reason_lines(draft))
     lines.extend(_deck_validation_lines(validation))
     if draft.notes:
