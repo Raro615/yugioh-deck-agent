@@ -257,7 +257,9 @@ def test_15_the_bot_reuses_app_main_and_touches_no_other_layer():
     #: 그리고 검색·덱 로직을 다시 쓰지 않았다 — 기존 함수를 부른다
     source = Path(bot.__file__).read_text(encoding="utf-8")
     for reused in ("search_korean(", "format_card_line(",
-                   "parse_deck_request(", "DeckBuilder(", "DeckValidator("):
+                   "parse_deck_request(", "DeckBuilder(", "DeckValidator(",
+                   "_parse_card_ids(", "FixedHand(", "ComboPlanner(",
+                   "hand_effect_facts("):
         assert reused in source, reused
     #: 직접 필터·검색 엔진을 세우거나, 덱 구성·검증을 다시 구현하지 않는다.
     #: 🔴 ``resolve_archetype`` 은 카드군 해석이고 ``DeckBuilder`` 가 한다 —
@@ -293,7 +295,10 @@ def test_17_the_bot_requirements_file_declares_discord_py():
 def test_18_future_commands_are_marked_unimplemented_not_claimed():
     r"""🔴 §6 — 아직 없는 기능을 **있는 것처럼 적지 않는다.**"""
     source = Path(bot.__file__).read_text(encoding="utf-8")
-    assert "아직 구현하지 않았다" in source
+    #: 🔴 Phase 5-D 가 ``/combo`` 를 구현해 확장 지점이 비었다. 그래도
+    #: "구현하지 않은 것을 적지 않는다" 는 계약은 **미구현 항목 목록**으로
+    #: 계속 지킨다 — 무작위 패 생성과 실행 검증이 그것이다.
+    assert "구현되어 있지 않습니다" in source
     #: /deck · /combo 가 실제 명령으로 등록되어 있지 않다
     tree = ast.parse(source)
     registered = {
@@ -302,12 +307,10 @@ def test_18_future_commands_are_marked_unimplemented_not_claimed():
         for kw in node.keywords
         if kw.arg == "name" and isinstance(kw.value, ast.Constant)
     }
-    #: 🔴 Phase 5-B 가 ``search`` 를, Phase 5-C 가 ``deck`` 을 더했다.
-    #: ``combo`` 는 **여전히 등록되지 않았다** — 구현하지 않은 것을
-    #: 등록하지 않는다. 집합을 정확히 고정하므로 ``combo`` 가 등록되면
-    #: (구현 없이 등록하면) 이 테스트가 실패한다.
-    assert registered == {"ping", "search", "deck"}, registered
-    assert "combo" not in registered
+    #: 🔴 Phase 5-B 가 ``search``, 5-C 가 ``deck``, 5-D 가 ``combo`` 를
+    #: 더했다. 집합을 **정확히** 고정하므로 구현 없는 명령이 등록되면
+    #: 이 테스트가 실패한다. 네 개가 지금 구현된 전부다.
+    assert registered == {"ping", "search", "deck", "combo"}, registered
 
 def test_19_the_real_command_tree_registers_ping_and_sends_the_text():
     r"""🟢 §5-4 — **실제 ``app_commands`` 핸들러**를 거쳐 문구를 확인한다.
@@ -322,12 +325,11 @@ def test_19_the_real_command_tree_registers_ping_and_sends_the_text():
 
     client, tree = bot.build_client(dev_guild_id=None)
     commands = {command.name: command for command in tree.get_commands()}
-    #: 🔴 Phase 5-A 에서는 ``["ping"]`` 하나였다. Phase 5-B 가 ``/search``,
-    #: Phase 5-C 가 ``/deck`` 을 실제로 등록했으므로 사실이 두 번 바뀌었다 —
-    #: 목록을 이름 집합으로 고정하고 ``/ping`` 을 이름으로 꺼낸다. 느슨해진
-    #: 게 아니라 등록 집합을 여전히 정확히 고정한다 (``/combo`` 가 끼면
-    #: 실패한다).
-    assert set(commands) == {"ping", "search", "deck"}
+    #: 🔴 Phase 5-A 에서는 ``["ping"]`` 하나였다. 5-B 가 ``/search``,
+    #: 5-C 가 ``/deck``, 5-D 가 ``/combo`` 를 실제로 등록했으므로 사실이
+    #: 세 번 바뀌었다 — 목록을 이름 집합으로 고정하고 ``/ping`` 을 이름으로
+    #: 꺼낸다. 느슨해진 게 아니라 등록 집합을 여전히 정확히 고정한다.
+    assert set(commands) == {"ping", "search", "deck", "combo"}
     ping = commands["ping"]
     assert ping.description == bot.PING_DESCRIPTION
 
@@ -823,7 +825,7 @@ def test_32_the_deck_command_is_registered_with_one_request_argument():
 
     _client, tree = bot.build_client(dev_guild_id=None, service=object())
     commands = {command.name: command for command in tree.get_commands()}
-    assert set(commands) == {"ping", "search", "deck"}
+    assert set(commands) == {"ping", "search", "deck", "combo"}
 
     deck = commands["deck"]
     assert deck.description == bot.DECK_DESCRIPTION
@@ -1215,3 +1217,586 @@ def test_43_a_real_deck_request_stays_inside_the_discord_limits():
 
     #: 덱을 만들어도 카드 데이터는 한 번만 만들었다
     assert service.build_count == 1
+
+
+# ===========================================================================
+# Phase 5-D — ``/combo``
+# ===========================================================================
+class _SpyPlanner:
+    """``ComboPlanner`` 자리에 끼워 **무엇이 전달됐는지** 본다."""
+
+    seen: list = []
+    plan_factory = None
+
+    def __init__(self, repository, executable_ids=None):
+        type(self).seen.append(("init", repository))
+
+    def plan(self, hand_source, board=(), draft=None):
+        type(self).seen.append(("plan", hand_source, list(board), draft))
+        factory = type(self).plan_factory
+        return factory() if factory else _plan()
+
+
+def _plan(statuses=("confirmed",), *, stopped=None, unsupported=("절차 하나",),
+          manual=("사람이 확인할 것 하나",), hand=(1000,)):
+    """
+    **실제** :mod:`deck.model` 타입으로 계획을 만든다.
+
+    🔴 가짜 모델을 만들지 않는다. 어댑터가 읽는 속성이 진짜와 다르면
+    테스트가 통과해도 봇은 깨진다.
+    """
+    from deck.model import ComboPlan, PlanStep, StepBasis, StepStatus
+
+    basis_for = {
+        "confirmed": StepBasis.ENGINE_EXECUTABLE,
+        "conditional": StepBasis.ENGINE_ACTION,
+        "unknown": StepBasis.NONE,
+        "unsupported": StepBasis.PRINTED_TYPE_ONLY,
+    }
+    plan = ComboPlan(hand=list(hand), board=[])
+    for index, status in enumerate(statuses, start=1):
+        plan.steps.append(PlanStep(
+            order=index, card_id=1000 + index, card_name=f"카드{index}",
+            action=f"걸음 {index} 을 합니다",
+            requires=(f"조건 {index}",), expected=f"기대 {index}",
+            basis=basis_for[status], status=StepStatus(status),
+            note=f"비고 {index}"))
+    plan.stopped_reason = stopped
+    plan.unsupported.extend(unsupported)
+    plan.manual_checks.extend(manual)
+    return plan
+
+
+class _ComboAgent:
+    """``repository`` 하나만 가진 가짜 에이전트 — 플래너가 요구하는 전부다."""
+
+    def __init__(self, cards=None):
+        self.repository = _ComboRepository(cards or {})
+
+
+class _ComboRepository:
+    def __init__(self, cards):
+        self._cards = cards
+
+    def get(self, card_id):
+        return self._cards.get(card_id)
+
+    def find_by_exact_name(self, name):
+        return [card for card in self._cards.values()
+                if card.display_name() == name]
+
+
+class _ComboCard:
+    """``_parse_card_ids`` 와 어댑터가 읽는 속성만 가진 가짜 카드."""
+
+    def __init__(self, card_id, name, hand_ranges=0, activatable=0):
+        self.id = card_id
+        self._name = name
+        self._hand_ranges = hand_ranges
+        self._activatable = activatable
+
+    def display_name(self):
+        return self._name
+
+    def has_effect_from(self, location, category=None):
+        return location.upper() == "HAND" and self._hand_ranges > 0
+
+    @property
+    def effects(self):
+        from core.card_model import EffectSpec
+
+        blocks = []
+        for index in range(self._hand_ranges):
+            activatable = index < self._activatable
+            blocks.append(EffectSpec(
+                index=f"e{index}",
+                effect_types=["QUICK_O"] if activatable else ["FIELD"],
+                code=None if activatable else "EFFECT_SPSUMMON_PROC",
+                ranges=["HAND"]))
+        return blocks
+
+
+def test_44_the_combo_command_is_registered_with_its_three_arguments():
+    r"""🟢 §8-1 — ``/combo`` 가 실제 트리에 등록되고 인자가 맞다.
+
+    인자 셋은 :meth:`~deck.planner.ComboPlanner.plan` 이 **실제로 받는
+    것**이다 (``hand_source`` · ``board`` · ``draft``). 플래너가 받지 않는
+    입력은 만들지 않았다.
+    """
+    pytest.importorskip("discord", reason="봇 전용 의존성 (requirements-bot.txt)")
+
+    _client, tree = bot.build_client(dev_guild_id=None, service=object())
+    commands = {command.name: command for command in tree.get_commands()}
+    assert set(commands) == {"ping", "search", "deck", "combo"}
+
+    combo = commands["combo"]
+    assert combo.description == bot.COMBO_DESCRIPTION
+    assert [p.name for p in combo.parameters] == ["hand", "board", "deck"]
+    #: 패는 필수, 나머지는 선택 — 무작위 패 생성이 없으므로 패는 받아야 한다
+    assert [p.required for p in combo.parameters] == [True, False, False]
+
+
+def test_45_a_valid_hand_reaches_the_existing_combo_planner(monkeypatch):
+    r"""🔴 §8-2 · §8-3 — 패가 **기존 플래너에 그대로** 전달된다.
+
+    새 전개 엔진을 만들지 않고 기존 것을 부르는지 확인한다:
+    :func:`app.main._parse_card_ids` → :class:`~deck.hand.FixedHand` →
+    :meth:`~deck.planner.ComboPlanner.plan`.
+    """
+    import deck.planner
+
+    _SpyPlanner.seen = []
+    _SpyPlanner.plan_factory = None
+    monkeypatch.setattr(deck.planner, "ComboPlanner", _SpyPlanner)
+
+    agent = _ComboAgent({
+        57835716: _ComboCard(57835716, "오르페골 디베르"),
+        21441617: _ComboCard(21441617, "오르페골 스켈레촌"),
+    })
+    texts = bot.combo_messages(agent, "오르페골 디베르, 21441617")
+
+    kinds = [row[0] for row in _SpyPlanner.seen]
+    assert kinds == ["init", "plan"], kinds
+    #: 🔴 저장소를 새로 만들지 않고 에이전트의 것을 넘긴다
+    assert _SpyPlanner.seen[0][1] is agent.repository
+
+    _kind, hand_source, board, draft = _SpyPlanner.seen[1]
+    from deck.hand import FixedHand, HandProvider
+
+    #: 🔴 기존 ``HandProvider`` 경계를 쓴다 — 패를 날 목록으로 넘기지 않는다
+    assert isinstance(hand_source, FixedHand), hand_source
+    assert isinstance(hand_source, HandProvider)
+    #: 이름과 ID 가 섞여도 둘 다 해석된다
+    assert hand_source.hand() == [57835716, 21441617]
+    assert board == []
+    assert draft is None
+
+    assert texts and all(len(text) <= bot.DISCORD_MESSAGE_LIMIT
+                         for text in texts)
+
+
+def test_46_the_plan_becomes_a_discord_answer_with_every_field(monkeypatch):
+    r"""🟢 §8-4 — 계획이 **플래너가 준 정보만으로** 메시지가 된다."""
+    import deck.planner
+
+    _SpyPlanner.seen = []
+    _SpyPlanner.plan_factory = lambda: _plan(
+        statuses=("confirmed", "conditional", "unknown"),
+        stopped="여기서 멈췄습니다",
+        unsupported=("특수 소환 (조건 판정 계층 없음)",),
+        manual=("사람이 직접 확인할 항목",))
+    monkeypatch.setattr(deck.planner, "ComboPlanner", _SpyPlanner)
+
+    agent = _ComboAgent({1: _ComboCard(1, "카드하나")})
+    text = "\n".join(bot.combo_messages(agent, "1"))
+
+    assert "🌀 전개 요청 — 패: `1`" in text
+    assert "해석된 패 1장: 카드하나 [1]" in text
+    #: 걸음마다 상태·근거·조건·기대·비고
+    assert "**[전개 걸음]** 3걸음" in text
+    assert "1. ✔ 걸음 1 을 합니다" in text
+    assert "2. ~ 걸음 2 을 합니다" in text
+    assert "3. ? 걸음 3 을 합니다" in text
+    assert "상태: 확정  ·  근거: 엔진에 효과 실행 구현 있음" in text
+    assert "필요: 조건 1" in text
+    assert "기대: 기대 1" in text
+    assert "비고: 비고 1" in text
+    #: 중단 사유 · 미지원 절차 · 사람이 확인할 것
+    assert "🔴 중단: 여기서 멈췄습니다" in text
+    assert "특수 소환 (조건 판정 계층 없음)" in text
+    assert "사람이 직접 확인할 항목" in text
+
+
+def test_47_no_plan_is_ever_called_verified():
+    r"""🔴 §5 — **검증 근거가 없는 전개를 ``VERIFIED`` 로 적지 않는다.**
+
+    :class:`~deck.planner.ComboPlanner` 는 엔진을 실행하지 않는다 — 그
+    모듈에 ``Duel`` · ``GameState`` · ``ActionValidator`` 호출이 없고
+    ``EFFECT_LIBRARY`` 를 **읽기만** 한다. 그러므로 "실행해서 검증했다" 고
+    말할 수 있는 전개가 지금은 하나도 없다.
+    """
+    import deck.planner
+
+    #: 🔴 플래너가 엔진을 실행하지 않는다는 사실을 AST 로 고정한다
+    source = Path(deck.planner.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    called = {
+        node.func.id for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    for engine_entry in ("Duel", "GameState", "ActionValidator",
+                         "DuelRunner"):
+        assert engine_entry not in called, engine_entry
+
+    #: 그래서 판정에 VERIFIED 가 없다
+    values = {verdict.value for verdict in bot.ComboVerdict}
+    assert "verified" not in values, values
+    assert "partially_verified" not in values, values
+    assert values == {"grounded_unexecuted", "unverified", "unsupported"}
+
+    #: 가장 높은 판정조차 "실행 검증 안 됨" 을 적는다
+    best = bot.ComboVerdict.GROUNDED_UNEXECUTED
+    assert "실행 검증 안 됨" in best.describe_ko()
+    assert "실제로 돌려 본 것이 아닙니다" in best.detail_ko()
+
+
+def test_48_the_verdict_follows_the_step_statuses_only():
+    r"""🔴 §5 — 판정이 **걸음 상태에서만** 나온다. 카드를 다시 보지 않는다."""
+    verdict = bot.combo_verdict
+
+    #: 근거 있는 걸음이 하나라도 있으면 "근거 있음 · 미실행"
+    assert verdict(_plan(("confirmed",))) is (
+        bot.ComboVerdict.GROUNDED_UNEXECUTED)
+    assert verdict(_plan(("unknown", "conditional"))) is (
+        bot.ComboVerdict.GROUNDED_UNEXECUTED)
+
+    #: 전부 미확인이면 검증되지 않음 — "전개 후보" 라고도 적지 않는다
+    assert verdict(_plan(("unknown",))) is bot.ComboVerdict.UNVERIFIED
+    assert verdict(_plan(("unknown", "unknown"))) is (
+        bot.ComboVerdict.UNVERIFIED)
+
+    #: 걸음이 없으면 검증되지 않음
+    assert verdict(_plan(())) is bot.ComboVerdict.UNVERIFIED
+
+    #: 전부 미지원이면 엔진 미지원
+    assert verdict(_plan(("unsupported",))) is bot.ComboVerdict.UNSUPPORTED
+    assert verdict(_plan(("unsupported", "unsupported"))) is (
+        bot.ComboVerdict.UNSUPPORTED)
+
+    #: 🔴 미지원이 섞였어도 근거 있는 걸음이 있으면 그쪽이 이긴다
+    assert verdict(_plan(("unsupported", "confirmed"))) is (
+        bot.ComboVerdict.GROUNDED_UNEXECUTED)
+
+    #: 불확실을 숨기지 않는다 — 세 판정 모두 그 사실을 적는다
+    for value in bot.ComboVerdict:
+        assert "🔴" in value.detail_ko(), value
+
+
+def test_49_an_unreadable_hand_plans_nothing_and_says_how(monkeypatch):
+    r"""🔴 §8-5 · §8-6 — 패를 해석하지 못하면 **계획을 세우지 않는다.**
+
+    플래너를 부르지 않는 것까지 확인한다 — 부르면 빈 패로 쓸모없는 계획이
+    나온다. 그리고 🔴 무작위 패 생성이 없다는 사실을 적는다.
+    """
+    import deck.planner
+
+    _SpyPlanner.seen = []
+    _SpyPlanner.plan_factory = None
+    monkeypatch.setattr(deck.planner, "ComboPlanner", _SpyPlanner)
+
+    agent = _ComboAgent({1: _ComboCard(1, "카드하나")})
+    for bad in ("", "   ", ",,,"):
+        texts = bot.combo_messages(agent, bad)
+        assert len(texts) == 1, (bad, len(texts))
+        text = texts[0]
+        assert "계획을 세우지 않았습니다" in text, bad
+        assert "무작위 패 생성은 구현되어 있지 않습니다" in text, bad
+        assert len(text) <= bot.DISCORD_MESSAGE_LIMIT
+
+    #: 🔴 플래너를 아예 부르지 않았다
+    assert _SpyPlanner.seen == []
+
+
+def test_50_unresolved_card_names_are_named_and_excluded(monkeypatch):
+    r"""🔴 §7-1 — 해석하지 못한 입력을 **들어간 것처럼 보이게 하지 않는다.**"""
+    import deck.planner
+
+    _SpyPlanner.seen = []
+    _SpyPlanner.plan_factory = None
+    monkeypatch.setattr(deck.planner, "ComboPlanner", _SpyPlanner)
+
+    agent = _ComboAgent({1: _ComboCard(1, "카드하나")})
+    text = "\n".join(bot.combo_messages(agent, "카드하나, 없는카드"))
+
+    assert "⚠️ 카드를 찾지 못했습니다: `없는카드`" in text
+    assert "계획에 넣지 않았습니다" in text
+    #: 해석된 카드로는 계획을 세웠다 — 입력 전체를 버리지 않는다
+    _kind, hand_source, _board, _draft = _SpyPlanner.seen[1]
+    assert hand_source.hand() == [1]
+
+    #: 저장소에 없는 ID 는 그 사실을 적는다 (조용히 빼지 않는다)
+    text = "\n".join(bot.combo_messages(agent, "999999999"))
+    assert "🔴 저장소에 없는 ID [999999999]" in text
+
+
+def test_51_an_unsupported_only_plan_is_not_called_a_candidate(monkeypatch):
+    r"""🔴 §8-7 — 미구현 규칙뿐이면 **전개 후보라고 적지 않는다.**
+
+    🔴 그리고 "미구현" 과 "불가능" 을 구분한다.
+    """
+    import deck.planner
+
+    _SpyPlanner.seen = []
+    _SpyPlanner.plan_factory = lambda: _plan(
+        statuses=("unsupported",),
+        unsupported=("특수 소환 (조건 판정 계층이 없어 언제나 UNKNOWN)",
+                     "융합 소환 (재료 선택 절차 없음)"))
+    monkeypatch.setattr(deck.planner, "ComboPlanner", _SpyPlanner)
+
+    agent = _ComboAgent({1: _ComboCard(1, "카드하나")})
+    text = "\n".join(bot.combo_messages(agent, "1"))
+
+    assert "**판정: 엔진 미지원 (계획 불가)**" in text
+    assert "미구현이라는 사실이지 불가능이라는 뜻은 아닙니다" in text
+    assert "융합 소환 (재료 선택 절차 없음)" in text
+    #: 성공으로 보이게 하는 표시가 없다
+    assert "✔" not in text
+
+
+def test_52_a_long_plan_is_split_not_truncated(monkeypatch):
+    r"""🔴 §8-8 — 긴 계획은 **나눠 보낸다.** Phase 5-C 의 유틸을 그대로 쓴다."""
+    import deck.planner
+
+    _SpyPlanner.seen = []
+    _SpyPlanner.plan_factory = lambda: _plan(
+        statuses=("conditional",) * 40,
+        manual=tuple(f"확인할 항목 {index}" for index in range(20)))
+    monkeypatch.setattr(deck.planner, "ComboPlanner", _SpyPlanner)
+
+    agent = _ComboAgent({1: _ComboCard(1, "카드하나")})
+    texts = bot.combo_messages(agent, "1")
+
+    assert len(texts) > 1, len(texts)
+    for text in texts:
+        assert len(text) <= bot.DISCORD_MESSAGE_LIMIT, len(text)
+    joined = "\n".join(texts)
+    #: 🔴 버린 것이 없다
+    assert bot.TRUNCATION_NOTICE.strip() not in joined
+    assert "보내지 못했습니다" not in joined
+    for index in range(1, 41):
+        assert f"{index}. ~ 걸음 {index} 을 합니다" in joined, index
+
+
+def test_53_a_planner_crash_does_not_take_the_bot_down(monkeypatch, caplog):
+    r"""🔴 §8-9 — 플래너가 예외를 던져도 **봇이 죽지 않는다.**
+
+    🔴 예외 내용을 사용자에게 보내지 않는다 — 경로가 드러난다.
+    """
+    import deck.planner
+
+    boom = RuntimeError("내부 경로 /home/secret/cards.cdb 가 깨졌습니다")
+
+    class _Exploding(_SpyPlanner):
+        def plan(self, hand_source, board=(), draft=None):
+            raise boom
+
+    monkeypatch.setattr(deck.planner, "ComboPlanner", _Exploding)
+
+    agent = _ComboAgent({1: _ComboCard(1, "카드하나")})
+    service = bot.SearchService(builder=lambda: agent)
+    assert service.prepare() is True
+    with caplog.at_level(logging.ERROR, logger=bot.LOGGER_NAME):
+        texts = service.combo_texts("1")
+
+    assert texts == [bot.COMBO_ERROR_MESSAGE]
+    assert any(record.exc_info for record in caplog.records)
+    assert any("전개 계획 생성에 실패" in record.getMessage()
+               for record in caplog.records)
+    assert "/home/secret" not in texts[0]
+    assert str(boom) not in texts[0]
+
+
+def test_54_combo_is_unavailable_but_explained_before_the_cards_are_ready():
+    r"""🔴 §8-9 — 카드 데이터가 없으면 **전용 안내 문구**를 돌려준다."""
+    service = bot.SearchService(builder=lambda: (_ for _ in ()).throw(
+        RuntimeError("초기화 실패")))
+    assert service.prepare() is False
+
+    texts = service.combo_texts("오르페골 디베르")
+    assert texts == [bot.COMBO_UNAVAILABLE_MESSAGE]
+    #: 세 명령의 안내가 서로 다르다 — 무엇을 못 하는지 알아야 한다
+    assert texts[0] != bot.UNAVAILABLE_MESSAGE
+    assert texts[0] != bot.DECK_UNAVAILABLE_MESSAGE
+    assert "전개 계획을 세울 수 없습니다" in texts[0]
+    service.combo_texts("또 다른 패")
+    assert service.build_count == 1
+
+
+def test_55_a_hand_activation_step_is_corrected_from_the_effect_data():
+    r"""🔴 §7-1 · §7-3 — 플래너의 **과대 진술을 그대로 전달하지 않는다.**
+
+    ``deck/planner.py`` 의 효과 걸음은 ``has_effect_from("HAND")`` 로
+    갈린다. 그 신호는 ``SetRange`` 만 보므로 **특수 소환 절차**에도
+    참이 된다 — 실측으로 `/combo hand:펜리르` 가 "패에서 발동하는 효과를
+    씁니다" 를 조건부로 적는데, 펜리르의 패 범위 블록은 절차 하나이고
+    발동 가능한 효과는 0개다.
+
+    🔴 **플래너를 고치지 않는다** (범위 밖, 구조적 TODO). 대신 출력
+    계층이 효과 데이터로 정정한다.
+    """
+    from deck.model import PlanStep, StepBasis, StepStatus
+
+    def _step(card_id, basis=StepBasis.LUA_PARSED):
+        return PlanStep(
+            order=1, card_id=card_id, card_name="x",
+            action="패에서 발동하는 효과를 씁니다", requires=(),
+            expected="(없음)", basis=basis, status=StepStatus.CONDITIONAL)
+
+    #: 패 범위 블록은 있는데 발동 가능한 것이 없다 → 정정한다
+    procedure_only = _ComboCard(1, "절차만", hand_ranges=1, activatable=0)
+    agent = _ComboAgent({1: procedure_only})
+    correction = bot._hand_activation_correction(agent, _step(1))
+    assert correction is not None
+    assert "발동 가능한 효과가 없습니다" in correction
+    assert "그대로 믿지 마세요" in correction
+
+    #: 발동 가능한 블록이 있으면 정정하지 않는다 — 참인 걸음을 깎지 않는다
+    real = _ComboCard(2, "발동 가능", hand_ranges=1, activatable=1)
+    agent = _ComboAgent({2: real})
+    assert bot._hand_activation_correction(agent, _step(2)) is None
+
+    #: 다른 근거 층의 걸음은 건드리지 않는다
+    agent = _ComboAgent({1: procedure_only})
+    assert bot._hand_activation_correction(
+        agent, _step(1, StepBasis.ENGINE_EXECUTABLE)) is None
+    #: 저장소에 없는 카드도 건드리지 않는다
+    assert bot._hand_activation_correction(agent, _step(99)) is None
+
+
+def test_56_the_deck_option_actually_runs_the_hand_against_deck_check(
+        monkeypatch):
+    r"""🟢 §4 — ``deck`` 인자를 주면 플래너가 **그 검증을 실제로** 한다.
+
+    주지 않으면 플래너가 "검증하지 않았습니다" 를 적는다 — 이 저장소가
+    이미 그렇게 구분한다. 어댑터는 그 구분을 바꾸지 않고 전달한다.
+    """
+    import deck.builder
+    import deck.planner
+
+    _SpyPlanner.seen = []
+    _SpyPlanner.plan_factory = None
+    monkeypatch.setattr(deck.planner, "ComboPlanner", _SpyPlanner)
+
+    sentinel = _draft()
+
+    class _Builder:
+        def __init__(self, repository, search_engine=None):
+            pass
+
+        def build(self, request):
+            return sentinel
+
+    monkeypatch.setattr(deck.builder, "DeckBuilder", _Builder)
+
+    agent = _ComboAgent({1: _ComboCard(1, "카드하나")})
+    text = "\n".join(bot.combo_messages(agent, "1", "", "오르페골 덱"))
+
+    _kind, _hand, _board, draft = _SpyPlanner.seen[1]
+    #: 🔴 덱 초안이 플래너에 **실제로** 전달됐다
+    assert draft is sentinel
+    assert "덱 초안과 비교: `오르페골 덱`" in text
+
+    #: 덱 요청을 해석하지 못하면 확인하지 않았다고 적고 초안을 넘기지 않는다
+    _SpyPlanner.seen = []
+    text = "\n".join(bot.combo_messages(agent, "1", "", "덱"))
+    _kind, _hand, _board, draft = _SpyPlanner.seen[1]
+    assert draft is None
+    assert "덱과 맞는지는 확인하지 않았습니다" in text
+
+
+@requires_official_db
+def test_57_a_real_combo_request_shows_only_measured_information():
+    r"""🟢 §8 — **실제 카드·실제 엔진 목록**으로 돌려 확인한다.
+
+    가짜 계획으로는 "우리가 적은 틀" 만 알 수 있다. 실제 엔진에 실행
+    구현이 등록된 카드가 13장이라는 사실이 출력에 어떻게 드러나는지는
+    여기서만 확인된다.
+    """
+    service = bot.SearchService()
+    assert service.prepare() is True
+
+    #: 엔진에 실행 구현이 있는 카드 (욕망의 항아리)
+    texts = service.combo_texts("55144522")
+    joined = "\n".join(texts)
+    assert 1 <= len(texts) <= bot.DECK_MESSAGE_LIMIT
+    for text in texts:
+        assert len(text) <= bot.DISCORD_MESSAGE_LIMIT, len(text)
+    assert "엔진에 효과 실행 구현 있음" in joined
+    #: 🔴 그래도 실행 검증은 아니라고 적는다
+    assert "실행 검증 안 됨" in joined
+    assert "실제로 돌려 본 것이 아닙니다" in joined
+    #: 엔진이 지원하지 않는 절차를 그대로 적는다
+    assert "특수 소환" in joined
+    assert "융합 소환" in joined
+
+    #: 엑스트라 덱 카드만 있는 패 → 미지원
+    extra = "\n".join(service.combo_texts("오르페골 갈라테아"))
+    assert "엔진 미지원 (계획 불가)" in extra
+
+    #: 저장소에 없는 ID → 검증되지 않음, 그리고 그 사실을 적는다
+    unknown = "\n".join(service.combo_texts("999999999"))
+    assert "검증되지 않음" in unknown
+    assert "저장소에 없는 ID" in unknown
+
+    #: 🔴 실제 데이터에서도 정정이 걸린다 (펜리르 = 특수 소환 절차만)
+    fenrir = "\n".join(service.combo_texts("펜리르"))
+    assert "🔴 **정정**" in fenrir
+    assert "발동 가능한 효과가 없습니다" in fenrir
+
+    #: 명령을 여러 번 돌려도 카드 데이터는 한 번만 만들었다
+    assert service.build_count == 1
+
+
+def test_58_the_combo_handler_defers_first_and_sends_every_message():
+    r"""🔴 §6 — ``defer()`` 가 먼저, 동기 작업은 스레드, 메시지는 **전부** 전송.
+
+    🔴 **이 테스트가 처음에는 없었다.** `/deck` 에는 같은 테스트(``test_41``)
+    가 있었는데 `/combo` 에는 빼먹었고, 돌연변이 검사에서 ``defer()`` 를
+    지우고 ``to_thread`` 를 직접 호출로 바꿨을 때 **60개가 모두 통과**해서
+    그 사실이 드러났다. 그래서 추가했다.
+    """
+    import asyncio
+    import threading
+
+    pytest.importorskip("discord", reason="봇 전용 의존성 (requirements-bot.txt)")
+
+    order: list[str] = []
+    sent: list[str] = []
+    worker: list[int] = []
+    received: list[tuple] = []
+
+    class _Service:
+        def combo_texts(self, hand_text, board_text="", deck_text=""):
+            order.append("combo")
+            worker.append(threading.get_ident())
+            received.append((hand_text, board_text, deck_text))
+            return ["첫 번째", "두 번째", "세 번째"]
+
+        def prepare(self):  # pragma: no cover - on_ready 전용
+            return True
+
+    class _Response:
+        async def defer(self, **kwargs):
+            order.append("defer")
+
+        async def send_message(self, content, **kwargs):  # pragma: no cover
+            raise AssertionError("defer 한 뒤에는 followup 으로 보낸다")
+
+    class _Followup:
+        async def send(self, content, **kwargs):
+            order.append("send")
+            sent.append(content)
+
+    class _Interaction:
+        def __init__(self):
+            self.response = _Response()
+            self.followup = _Followup()
+
+    _client, tree = bot.build_client(dev_guild_id=None, service=_Service())
+    combo = {c.name: c for c in tree.get_commands()}["combo"]
+
+    async def run():
+        loop_thread = threading.get_ident()
+        await combo.callback(_Interaction(), "오르페골 디베르",
+                             "오르페골 코어", "오르페골 덱")
+        return loop_thread
+
+    loop_thread = asyncio.run(run())
+
+    assert order == ["defer", "combo", "send", "send", "send"]
+    #: 🔴 세 메시지를 다 보냈다
+    assert sent == ["첫 번째", "두 번째", "세 번째"]
+    #: 🔴 세 인자가 그대로 전달됐다
+    assert received == [("오르페골 디베르", "오르페골 코어", "오르페골 덱")]
+    #: 🔴 동기 작업이 이벤트 루프 밖에서 돌았다
+    assert worker and worker[0] != loop_thread
