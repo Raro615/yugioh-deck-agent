@@ -370,7 +370,34 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
         "_resolver",
         "_placement",
         "pending_spells",
+        #: 🔴 **Phase 6-B 가 칸 하나를 더했다** — ``journal`` 이다. 그래서
+        #: 이 테스트의 단정이 사실과 어긋났고, 핀이 그것을 잡았다.
+        #:
+        #: ``journal`` 은 역사를 들고 있으므로 "이미 처리했다" 를 기억하는
+        #: 자리처럼 보인다. 🔴 **그런데 적법성이 그것을 읽지 않는다** —
+        #: 발동한 카드가 다시 후보가 되지 않는 이유는 여전히 **카드가 그
+        #: 자리를 떠났기 때문**이고, 기록을 조회해서가 아니다.
+        #:
+        #: 그 사실을 아래에서 **따로 고정한다** — 칸 목록만 갱신하면 이
+        #: 테스트가 지키려던 것이 사라진다.
+        "journal",
     }
+
+    #: 🔴 ``journal`` 이 적법성 판정에 쓰이지 않는다 (Phase 6-B).
+    #: 쓰기 시작하면 "역사가 후보를 지운다" 가 되고, 그것은 이 테스트가
+    #: 아니라고 말하는 바로 그 구조다.
+    duel_source = pathlib.Path(
+        pathlib.Path(__file__).resolve().parents[1] / "engine/duel.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(duel_source)
+    reads = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and node.attr == "journal"
+        and isinstance(node.ctx, ast.Load)
+    ]
+    assert reads == [], f"duel.py 가 journal 을 읽는다: {len(reads)}곳"
 
 
 def test_09_the_board_deliberately_refuses_to_store_history():

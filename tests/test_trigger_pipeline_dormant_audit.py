@@ -158,11 +158,19 @@ def test_01_the_three_part_modules_exist_and_are_large():
     """
     sizes = {rel: len(source_of(rel).splitlines()) for rel in TRIGGER_PARTS}
     assert sizes == {
-        "engine/trigger.py": 1661,
+        #: 1,661 → **1,681** (Phase 6-B). ``TimingEvent.from_journal_event`` 에
+        #: ``ActionEvent`` 분기가 생겼다 — 새 ``EventKind.ACTION`` 이 그 함수에
+        #: 닿으면 ``TriggerError`` 로 **통째로 실패**하기 때문에 막은 것이다.
+        #: 🔴 **활성화가 아니다.** 돌려주는 값이
+        #: :meth:`TimingEvent.unimplemented` 이고, 그것은 "옮길 이름이 없다" 를
+        #: 적는 자리다 (지어낸 시점 이름이 아니다). production 호출자는
+        #: 여전히 0개다 — ``test_02`` 가 그것을 따로 센다.
+        "engine/trigger.py": 1681,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
     }
-    assert sum(sizes.values()) == 2698
+    #: 2,698 → **2,718** (Phase 6-B 의 ``ActionEvent`` 가드 +20).
+    assert sum(sizes.values()) == 2718
 
 
 def test_02_the_two_assembly_modules_exist():
@@ -802,7 +810,9 @@ def test_25_this_phase_changed_no_production_file():
         for rel in TRIGGER_PARTS + TRIGGER_ASSEMBLY + (LIVE_TIMING,)
     }
     assert sizes == {
-        "engine/trigger.py": 1661,
+        #: 1,661 → **1,681** (Phase 6-B). 위 ``executable`` 핀의 설명 참고 —
+        #: 늘어난 것은 ``ActionEvent`` 가드이고 활성화가 아니다.
+        "engine/trigger.py": 1681,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
@@ -826,7 +836,17 @@ def test_25_this_phase_changed_no_production_file():
         for rel in TRIGGER_PARTS + TRIGGER_ASSEMBLY + (LIVE_TIMING,)
     }
     assert executable == {
-        "engine/trigger.py": 735,
+        #: 735 → **737** (Phase 6-B). 🔴 **이번에는 docstring 이 아니라 실행
+        #: 코드가 2줄 늘었다** — ``isinstance(event, ActionEvent)`` 한 줄과
+        #: ``return cls.unimplemented(...)`` 한 줄이다. 이 핀이 그 사실을
+        #: 정확히 잡았고, 그것이 이 핀을 둔 이유다 (3-F-26 이 "줄 수는 주석과
+        #: 코드를 구분하지 못한다" 고 적으며 더한 핀).
+        #:
+        #: 늘어난 2줄이 **dormant 를 깨지 않는 이유**: 그 분기는 새 사건
+        #: 종류가 이 함수에 닿았을 때 **예외를 던지지 않게** 막는 가드이고,
+        #: 돌려주는 것은 ``UNIMPLEMENTED`` 시점이다. 후보를 모으지도, 체인에
+        #: 넣지도, 부르는 자리를 늘리지도 않았다.
+        "engine/trigger.py": 737,
         "engine/trigger_chain.py": 257,
         "engine/trigger_order.py": 194,
         "engine/timing.py": 194,
