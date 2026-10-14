@@ -811,7 +811,15 @@ def test_i_the_whole_corpus_splits_into_three_measured_groups(repository):
             cards[result.status.value].add(card.id)
             if result.is_registered:
                 points[result.spec.point.value] += 1
-                if result.spec.activates_from is not None:
+                #: 🔴 Phase 6-G 가 ``SetRange`` 를 **두 칸으로 가른다** —
+                #: 등록 범위가 이동 **전** 자리인 경우는 ``from_zones`` 로
+                #: 간다. 여기서 세는 것은 "``SetRange`` 를 읽은 등록" 이므로
+                #: **둘을 합쳐** 센다. 그래야 6-E 가 재던 수와 같은 것을
+                #: 계속 재게 된다.
+                if (
+                    result.spec.activates_from is not None
+                    or result.spec.from_zones is not None
+                ):
                     zones += 1
 
     assert counts["not_a_trigger"] == 18484
@@ -824,6 +832,10 @@ def test_i_the_whole_corpus_splits_into_three_measured_groups(repository):
         "card_moved": 1257,
         "card_drawn": 27,
     }
+    #: ``SetRange`` 를 읽은 등록 수는 **816 그대로다** (6-G 가 하나를
+    #: ``activates_from`` → ``from_zones`` 로 옮겼을 뿐 잃지 않았다 —
+    #: 그 분리는 ``test_trigger_activation_location`` 의 ``test_07`` 이
+    #: 815 + 1 = 816 으로 따로 잠근다).
     assert zones == 816
 
 
