@@ -70,7 +70,12 @@ from engine.effect.delta import (
     StateDelta,
     ZoneMoved,
 )
-from engine.effect.journal import CostPaymentEvent, EffectEvent, JournalEvent
+from engine.effect.journal import (
+    ActionEvent,
+    CostPaymentEvent,
+    EffectEvent,
+    JournalEvent,
+)
 from engine.effect.operation import OperationKind
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
@@ -300,6 +305,21 @@ class TimingEvent:
             return cls(
                 TimingPoint.COST_PAID,
                 effect_ref=event.effect_ref,
+                actor=event.actor,
+            )
+        if isinstance(event, ActionEvent):
+            # 🔴 **행위 기록 자체는 공식 시점이 아니다** (Phase 6-B).
+            #
+            # 일반 소환이 만드는 시점은 그 안의 ``MonsterSummoned`` 변화가
+            # 들고 있고, :func:`timing_events` 가 변화를 **먼저** 옮긴다.
+            # 사건 자체에 이름을 붙이면 같은 소환이 두 시점이 된다.
+            #
+            # 그래도 빠뜨리지 않는다 — 옮길 이름이 없다는 사실을 적는다.
+            # 여기서 ``TriggerError`` 를 던지면 ``timing_events`` 가 행위
+            # 기록 하나 때문에 통째로 실패한다.
+            return cls.unimplemented(
+                f"{event.action_kind} 라는 행위 자체에 대응하는 공식 시점이 "
+                "없습니다. 그 행위가 만든 변화는 따로 옮겨집니다.",
                 actor=event.actor,
             )
         raise TriggerError(

@@ -51,6 +51,7 @@ from typing import Protocol, runtime_checkable
 from engine.action import PlayerAction, PlayerActionKind
 from engine.action_validation import ActionValidator
 from engine.effect.delta import StateDelta
+from engine.effect.journal import EventJournal
 from engine.game_state_view import GameStateView
 from engine.state.game_state import GameState
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
@@ -223,12 +224,34 @@ class ActionExecutor:
     구현을 등록하지 않으면 아무것도 실행하지 않는다 — 그것이 기본 상태다.
     """
 
-    __slots__ = ("_handlers",)
+    __slots__ = ("_handlers", "_journal")
 
-    def __init__(self, handlers: "dict[PlayerActionKind, ActionHandler] | None" = None):
+    def __init__(
+        self,
+        handlers: "dict[PlayerActionKind, ActionHandler] | None" = None,
+        journal: "EventJournal | None" = None,
+    ):
+        """
+        ``journal`` 을 주면 **실제로 적용된** 행위를 적는다 (Phase 6-B).
+
+        🔴 **기본값은 ``None`` 이고 그때는 아무것도 적지 않는다.** 기록이
+        켜지는 것으로 행동이 달라지면 기록이 아니다 — 기존 호출은 한 글자도
+        고치지 않고 예전과 같이 돈다.
+
+        :class:`~engine.effect.executor.EffectExecutor` 와
+        :class:`~engine.payment.CostPayer` 가 같은 모양으로 journal 을 받는다.
+        세 자리가 **판을 바꾸는 세 원인**이고, 기록도 그 세 자리에서 한다 —
+        한 곳에 모아 두면 "무엇이 이 변화를 일으켰는가" 가 사라진다.
+        """
         self._handlers: dict[PlayerActionKind, ActionHandler] = {}
+        self._journal = journal
         for kind, handler in (handlers or {}).items():
             self.register(kind, handler)
+
+    @property
+    def journal(self) -> "EventJournal | None":
+        """적고 있는 기록. 없으면 ``None`` — 그 사실이 곧 "적지 않는다" 다."""
+        return self._journal
 
     # ------------------------------------------------------------------
     def register(
@@ -321,7 +344,7 @@ class ActionExecutor:
                 authorization=verdict,
             )
 
-        return ActionExecution(
+        executed = ActionExecution(
             ActionStatus.EXECUTED,
             action,
             ValidationCode.OK,
@@ -329,6 +352,24 @@ class ActionExecutor:
             authorization=verdict,
             deltas=deltas,
         )
+        if self._journal is not None and executed.deltas:
+            # 🔴 **여기가 기록 시점이다** — 판이 이미 바뀐 뒤, 그리고 그
+            # 변화가 ``EXECUTED`` 라는 사실과 함께 묶인 뒤다.
+            #
+            # ``ActionExecution.__post_init__`` 이 "EXECUTED 가 아니면
+            # deltas 가 없다" 를 **생성 시점에 거부**하므로, 이 줄에 닿은
+            # deltas 는 정의상 적용이 끝난 변화다. 계획을 완료로 오인할
+            # 자리가 구조적으로 없다 (§5-B).
+            #
+            # 예외 경로(``EXECUTION_ERROR``)는 위에서 이미 돌아갔고 변화를
+            # 돌려주지 않는다 — 반쪽짜리 기록을 남기지 않는다.
+            self._journal.record_action(
+                action_kind=action.kind.value,
+                actor=action.actor,
+                deltas=executed.deltas,
+                source=action.source,
+            )
+        return executed
 
     # ------------------------------------------------------------------
     def authorize(self, state: GameState, action: PlayerAction) -> ValidationResult:

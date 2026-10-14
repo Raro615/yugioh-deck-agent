@@ -70,6 +70,20 @@ class EventKind(str, Enum):
 
     EFFECT = "effect"
     COST_PAYMENT = "cost_payment"
+    ACTION = "action"
+    """
+    **고르는 주체가 선언한 행위**가 판을 바꿨다 (Phase 6-B).
+
+    🔴 앞의 둘과 **같은 이유로** 따로 둔다. 일반 소환은 효과 해결이 아니고
+    (``effect_ref`` 가 없다) 비용 지불도 아니다 — 턴 플레이어가 선언한
+    행위다. :class:`EffectEvent` 에 밀어 넣으면 ``effect_ref`` 가 거짓이
+    되고, 유발 효과가 "효과에 의해" 와 "소환에 의해" 를 가릴 수 없게 된다.
+
+    기록하는 쪽은 :class:`~engine.action_execution.ActionExecutor` 다 —
+    ``PlayerAction`` 이 판을 바꾸는 **공식 진입점**이고, 그 결과 모델
+    (:class:`~engine.action_execution.ActionExecution`) 이 "실행됐을 때만
+    변화가 있다" 를 **생성 시점에 이미 강제한다**.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,6 +261,67 @@ class CostPaymentEvent(JournalEvent):
         return f"#{self.sequence} 비용 P{self.actor}: {paid}"
 
 
+@dataclass(frozen=True, slots=True)
+class ActionEvent(JournalEvent):
+    """
+    선언된 행위 하나가 판을 바꾼 **사건 하나** (Phase 6-B). 불변이다.
+
+    :attr:`action_kind` 는 :class:`~engine.action.PlayerActionKind` 의
+    ``value`` 문자열이다. 🔴 열거형을 그대로 들지 않는 이유: 이 모듈은
+    ``engine.action`` 을 import 하지 않는다 — 기록 계층이 행위 어휘에
+    의존하면 방향이 뒤집힌다 (기록은 아래, 행위는 위).
+
+    ``effect_ref`` 칸이 **없다.** 없는 것을 빈 값으로 채우지 않는다 — 이
+    사건에는 효과가 없다.
+    """
+
+    sequence: int
+    action_kind: str
+    actor: int
+    """행위를 선언한 플레이어."""
+    deltas: tuple[StateDelta, ...] = ()
+    """그 실행으로 판이 **어떻게 달라졌는가.** 순서가 곧 사실이다."""
+    source: InstanceId | None = None
+    """행위의 출발 카드. 페이즈 넘기기처럼 카드가 없는 행위도 있다."""
+
+    def __post_init__(self) -> None:
+        _check_event(self.sequence, self.actor, ("deltas", self.deltas))
+        if not isinstance(self.action_kind, str) or not self.action_kind:
+            raise ValueError(
+                f"action_kind 는 비어 있지 않은 문자열입니다: {self.action_kind!r}"
+            )
+
+    @property
+    def kind(self) -> EventKind:
+        return EventKind.ACTION
+
+    def canonical_state(self) -> tuple:
+        return (
+            EventKind.ACTION.value,
+            self.sequence,
+            self.action_kind,
+            self.actor,
+            self.source.value if self.source is not None else None,
+            canonical_deltas(self.deltas),
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {
+            "kind": EventKind.ACTION.value,
+            "sequence": self.sequence,
+            "action_kind": self.action_kind,
+            "actor": self.actor,
+            "deltas": [d.to_dict() for d in self.deltas],
+        }
+        if self.source is not None:
+            data["source"] = self.source.value
+        return data
+
+    def describe_ko(self) -> str:
+        changes = ", ".join(delta.describe_ko() for delta in self.deltas) or "변화 없음"
+        return f"#{self.sequence} {self.action_kind} P{self.actor}: {changes}"
+
+
 def _check_event(sequence: int, actor: int, *tuples) -> None:
     """사건이 갖춰야 할 최소 모양. 두 사건 타입이 함께 쓴다."""
     if sequence < 0:
@@ -334,6 +409,27 @@ class EventJournal:
             )
         )
 
+    def record_action(
+        self,
+        action_kind: str,
+        actor: int,
+        deltas: "tuple[StateDelta, ...]" = (),
+        source: InstanceId | None = None,
+    ) -> ActionEvent:
+        """
+        선언된 행위 사건을 적는다.
+        :class:`~engine.action_execution.ActionExecutor` 가 쓴다 (Phase 6-B).
+        """
+        return self.append(
+            ActionEvent(
+                sequence=len(self._events),
+                action_kind=action_kind,
+                actor=actor,
+                deltas=deltas,
+                source=source,
+            )
+        )
+
     # ------------------------------------------------------------------
     # 읽기
     # ------------------------------------------------------------------
@@ -401,6 +497,7 @@ __all__ = [
     "JournalEvent",
     "EffectEvent",
     "CostPaymentEvent",
+    "ActionEvent",
     "EventJournal",
     "JournalError",
 ]

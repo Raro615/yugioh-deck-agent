@@ -51,6 +51,7 @@ from enum import Enum
 
 from engine.action import PlayerAction, PlayerActionKind
 from engine.duel import Duel, DuelStep, LegalActions
+from engine.spell_activation import duel_components
 from engine.game_state_view import GameStateView
 from engine.validation import ValidationCode, unknown_codes
 
@@ -187,15 +188,27 @@ class Simulator:
     # ------------------------------------------------------------------
     def _fork(self) -> Duel:
         """
-        **판만 복제하고 나머지는 그대로 쓴다.**
+        **판만 복제하고 나머지는 그대로 쓴다. 단 기록은 떼어 낸다.**
 
-        ``priority`` 는 frozen 이라 공유해도 바뀌지 않는다. ``_executor``
-        는 수행기 등록부일 뿐 듀얼마다 달라지는 상태를 들지 않으므로
-        공유하는 것이 오히려 옳다 — 그래야 사본이 **진짜와 같은 규칙**으로
-        돈다 (§15).
+        ``priority`` 는 frozen 이라 공유해도 바뀌지 않는다. 수행기 등록부는
+        듀얼마다 달라지는 상태를 들지 않으므로 공유하는 것이 오히려 옳다 —
+        그래야 사본이 **진짜와 같은 규칙**으로 돈다 (§15).
+
+        🔴 **기록만은 공유하면 안 된다** (Phase 6-B). ``_executor`` ·
+        ``_activator`` · ``_resolver`` 가 journal 을 들게 된 뒤로는, 그대로
+        공유하면 **사본에서 돌린 전개가 진짜 듀얼의 기록에 남는다.** 사본은
+        버려지는데 기록은 남으므로, 그 기록은 실제 판과 **모순된다** —
+        "기록된 상태 변경은 실제 적용된 상태와 모순되지 않는다" 가 깨진다.
+
+        그래서 사본은 **기록하지 않는 한 벌**로 바꿔 끼운다. 미래를 재는
+        일에 역사가 필요하지 않고, 사본의 역사를 따로 모아 둘 쓸모도 없다.
         """
         self._forks += 1
-        return dataclasses.replace(self.duel, state=self.duel.state.clone())
+        return dataclasses.replace(
+            self.duel,
+            state=self.duel.state.clone(),
+            **duel_components(journal=False),
+        )
 
     @staticmethod
     def _settle_forced_passes(fork: Duel) -> "DuelStep | None":

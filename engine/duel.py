@@ -74,6 +74,7 @@ from engine.spell_activation import (
     SpellActivationError,
     activatable_effects,
     duel_activator,
+    duel_components,
     duel_resolver,
 )
 from engine.summon import duel_executor
@@ -209,6 +210,25 @@ class Duel:
     _activator: object = field(default_factory=duel_activator)
     _resolver: object = field(default_factory=duel_resolver)
     _placement: NormalSpellPlacement = field(default_factory=NormalSpellPlacement)
+    journal: object | None = None
+    """
+    이 듀얼의 **사건 기록** (Phase 6-B). ``EventJournal`` 또는 ``None``.
+
+    🔴 **주석이 ``object | None`` 인 것은 의도다.** :mod:`engine.duel` 은
+    ``engine.effect`` 를 import 하지 않고
+    (``test_e_the_duel_makes_no_rules_of_its_own`` 이 AST 로 고정한다),
+    ``EventJournal`` 은 ``engine/effect/journal.py`` 에 산다. 그래서 타입을
+    이름으로 적지 않고 **값으로만** 들고 있는다 — 만드는 일은
+    :func:`engine.spell_activation.duel_components` 가 한다.
+
+    🔴 **기록은 관찰 계층이고, 진실의 원천은 여전히 :attr:`state` 다.**
+    이 칸은 ``state_hash()`` 에 들어가지 않는다 (``chain`` · ``priority``
+    와 같은 이유 — 역사는 판의 모양이 아니다).
+
+    기본값이 ``None`` 인 이유: ``Duel(state=…, priority=…)`` 로 직접 만드는
+    기존 호출이 **한 글자도 바뀌지 않아야** 한다. 그때는 기록되지 않고,
+    동작은 예전과 같다. :meth:`start` 로 만들면 기록이 켜진다.
+    """
     pending_spells: tuple = ()
     """
     **해결을 기다리는 동안 필드에 놓여 있는 마법** (Phase 3-E-11).
@@ -248,6 +268,7 @@ class Duel:
         seed: int,
         first_player: int = 0,
         life_points: int = DEFAULT_LIFE_POINTS,
+        journal: object | None = None,
     ) -> "Duel":
         """
         듀얼을 시작한다 — 섞고, **5장씩** 뽑고, 선공의 드로우 페이즈에 선다.
@@ -258,6 +279,16 @@ class Duel:
         첫 드로우 페이즈는 :attr:`TurnStep.OPEN` 으로 시작한다 — 룰북이
         "The player who goes first cannot draw during the Draw Phase of
         their first turn" 이라고 말하므로 뽑을 것이 없다.
+
+        ``journal`` (Phase 6-B):
+
+        * 생략하면 **새 기록을 만들어 켠다.** 판을 바꾼 행위가 적힌다.
+        * 기존 기록을 주면 그것에 이어 적는다.
+        * 🔴 ``False`` 를 주면 **적지 않는다.** 탐색 사본처럼 역사가 필요
+          없는 쪽이 쓴다. ``None`` ("안 줬다") 과 ``False`` ("끄겠다") 는
+          다른 뜻이므로 가른다.
+
+        어느 쪽이든 **행동은 같다.** 기록이 행동을 바꾸면 기록이 아니다.
         """
         state = GameState.create(
             repository,
@@ -277,6 +308,11 @@ class Duel:
             ),
             step=TurnStep.OPEN,  # 선공 첫 턴은 뽑지 않는다
             first_player=first_player,
+            #: 🔴 **듀얼 하나에 기록 하나.** 판을 바꾸는 세 자리(행위 실행 ·
+            #: 비용 지불 · 효과 해결)가 **같은** journal 을 공유해야 순서가
+            #: 사실이 된다. 한 벌로 묶어 만드는 것이 그 공유를 보장하는
+            #: 유일한 방법이다 (Phase 6-B).
+            **duel_components(journal=journal),
         )
 
     # ------------------------------------------------------------------

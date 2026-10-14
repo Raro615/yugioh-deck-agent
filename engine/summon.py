@@ -315,9 +315,12 @@ class SummonProcedure:
         return self.describe_ko()
 
 
-def summon_executor() -> "ActionExecutor":
+def summon_executor(journal=None) -> "ActionExecutor":
     """
     일반 소환과 특수 소환을 **둘 다** 아는 실행기.
+
+    ``journal`` 을 주면 실행기가 **적용된** 소환을 적는다 (Phase 6-B).
+    주지 않으면 예전과 똑같다.
 
     기본 :class:`~engine.action_execution.ActionExecutor` 는 여전히 빈 채로
     둔다 (ADR-006: 등록하지 않은 것은 실행되지 않는다). 한쪽만 필요하면
@@ -331,15 +334,18 @@ def summon_executor() -> "ActionExecutor":
     from engine.special_summon import SpecialSummonHandler
 
     return (
-        ActionExecutor()
+        ActionExecutor(journal=journal)
         .register(PlayerActionKind.NORMAL_SUMMON, NormalSummonHandler())
         .register(PlayerActionKind.SPECIAL_SUMMON, SpecialSummonHandler())
     )
 
 
-def duel_executor() -> "ActionExecutor":
+def duel_executor(journal=None) -> "ActionExecutor":
     """
     소환 둘 · **전투** · **세트 둘**을 아는 실행기.
+
+    ``journal`` 을 주면 실행기가 **적용된** 행위를 적는다 (Phase 6-B).
+    기본값 ``None`` 은 "적지 않는다" 이고, 그때 동작은 예전과 같다.
 
     :func:`summon_executor` 를 그대로 두고 따로 둔 이유는 하나다 — 그 이름이
     말하는 것은 소환이고, 거기에 전투나 세트를 넣으면 이름이 거짓이 된다.
@@ -353,7 +359,7 @@ def duel_executor() -> "ActionExecutor":
     from engine.set_card import SetMonsterHandler, SetSpellTrapHandler
 
     return (
-        summon_executor()
+        summon_executor(journal=journal)
         .register(PlayerActionKind.ATTACK, AttackHandler())
         .register(PlayerActionKind.SET_MONSTER, SetMonsterHandler())
         .register(PlayerActionKind.SET_SPELL_TRAP, SetSpellTrapHandler())

@@ -266,9 +266,40 @@ class NormalSpellPlacement:
 
     배치는 전부 :meth:`~engine.state.game_state.GameState.move` 하나로
     한다 — 여기서 새 이동 경로를 만들지 않는다.
+
+    ``journal`` 을 주면 **옮긴 사실을 적는다** (Phase 6-B). 발동한 마법이
+    패 → 필드 → 묘지로 가는 것은 실제 상태 변경이고, 적지 않으면 기록이
+    "드로우가 어디선가 일어났다" 로 보인다.
+
+    🔴 **``EventKind.ACTION`` 으로 적는다.** 이 이동은 효과 해결이 아니고
+    (해결은 ``ChainResolver`` 가 따로 적는다) 비용도 아니다 — 플레이어가
+    선언한 **발동 행위**에 딸린 이동이다. ``retire`` 는 룰북이 시키는
+    뒷정리(RULE-SPELLTRAP-002)이고, 그것도 같은 행위의 끝이므로 같은
+    종류로 적는다.
+
+    🔴 **상태를 갖는 것은 journal 하나뿐이다.** ``__slots__`` 에 그것만
+    늘었고, 배치 규칙은 여전히 상태가 없다.
     """
 
-    __slots__ = ()
+    __slots__ = ("_journal",)
+
+    def __init__(self, journal: "EventJournal | None" = None):
+        self._journal = journal
+
+    @property
+    def journal(self) -> "EventJournal | None":
+        return self._journal
+
+    def _record(self, action_kind: str, player: int, delta) -> None:
+        """옮긴 사실 하나를 적는다. journal 이 없으면 **아무것도 하지 않는다.**"""
+        if self._journal is None:
+            return
+        self._journal.record_action(
+            action_kind=action_kind,
+            actor=player,
+            deltas=(delta,),
+            source=delta.instance,
+        )
 
     # ------------------------------------------------------------------
     def place(
@@ -296,7 +327,7 @@ class NormalSpellPlacement:
             to_player=player,
             position=ACTIVATION_POSITION,
         )
-        return SpellPlaced(
+        placed = SpellPlaced(
             card=card,
             player=player,
             owner=owner,
@@ -305,6 +336,10 @@ class NormalSpellPlacement:
             destination_zone=ACTIVATION_ZONE,
             position=ACTIVATION_POSITION,
         )
+        #: 🔴 ``state.move`` 가 **이미 끝난 뒤**다. 옮기기 전에 적으면
+        #: 계획을 완료로 적는 것이 된다.
+        self._record("activate_effect", player, placed)
+        return placed
 
     # ------------------------------------------------------------------
     def reveal(
@@ -338,7 +373,7 @@ class NormalSpellPlacement:
         source_player = instance.controller
         # **이동이 아니다.** 표시 형식만 바꾼다 (칸 번호가 그대로여야 한다).
         instance.set_position(ACTIVATION_POSITION)
-        return SpellRevealed(
+        revealed = SpellRevealed(
             card=card,
             player=player,
             owner=owner,
@@ -347,6 +382,8 @@ class NormalSpellPlacement:
             destination_zone=REVEAL_FROM_ZONE,
             position=ACTIVATION_POSITION,
         )
+        self._record("activate_effect", player, revealed)
+        return revealed
 
     # ------------------------------------------------------------------
     def retire(self, state: GameState, placed: _SpellMovement) -> SpellRetired:
@@ -373,7 +410,7 @@ class NormalSpellPlacement:
         state.move(
             instance, zone, to_player=placed.source_player, position=position
         )
-        return delta_type(
+        moved = delta_type(
             card=placed.card,
             player=placed.source_player,
             owner=placed.owner,
@@ -382,9 +419,15 @@ class NormalSpellPlacement:
             destination_zone=zone,
             position=position,
         )
+        #: ``retire`` (해결 뒤 묘지) 와 ``restore`` (발동 불성립 되돌리기)가
+        #: 함께 쓴다. 🔴 ``restore`` 도 **실제로 일어난 이동**이므로 적는다 —
+        #: "되돌렸다" 는 사실을 지우면 기록이 판과 어긋난다.
+        self._record("activate_effect", placed.source_player, moved)
+        return moved
 
     def __repr__(self) -> str:  # pragma: no cover - 표시용
-        return "<NormalSpellPlacement>"
+        journal = "없음" if self._journal is None else f"{len(self._journal)}건"
+        return f"<NormalSpellPlacement journal={journal}>"
 
 
 # ======================================================================
@@ -397,9 +440,13 @@ class NormalSpellPlacement:
 # ``test_e_the_duel_makes_no_rules_of_its_own`` 이 지키는 불변식이 깨진다.
 
 
-def duel_activator():
+def duel_activator(journal=None):
     """
     듀얼이 쓰는 **발동기**. ``EFFECT_LIBRARY`` 의 구현 목록을 그대로 쓴다.
+
+    ``journal`` 을 주면 발동기가 쓰는 :class:`~engine.payment.CostPayer` 가
+    **치른 비용**을 적는다 (Phase 6-B). 비용과 효과는 다른 사건이므로
+    (``EventKind``) 같은 journal 에 **다른 종류**로 들어간다.
 
     ``duel_executor`` 와 같은 모양이고 이유도 같다 — 등록은 **손으로** 한다
     (ADR-006). 목록에 없는 효과는 발동되지 않고, 그것이 기본 상태다.
@@ -410,16 +457,68 @@ def duel_activator():
     """
     from engine.activation import EffectActivator
     from engine.effect.library import definition_registry, implementation_registry
+    from engine.payment import CostPayer
 
-    return EffectActivator(definition_registry(), implementation_registry())
+    return EffectActivator(
+        definition_registry(),
+        implementation_registry(),
+        payer=CostPayer(journal=journal),
+    )
 
 
-def duel_resolver():
-    """듀얼이 쓰는 **해결기**. 기존 ``ChainResolver`` 를 그대로 쓴다."""
+def duel_resolver(journal=None):
+    """
+    듀얼이 쓰는 **해결기**. 기존 ``ChainResolver`` 를 그대로 쓴다.
+
+    ``journal`` 을 주면 해결기 안의
+    :class:`~engine.effect.executor.EffectExecutor` 가 **적용된** 효과를
+    적는다 (Phase 6-B). ``build_executor`` 는 처음부터 ``journal`` 인자를
+    받았고 (Phase 2-D-3), 이 자리에서 **넘기지 않았던 것**이 연결이 끊긴
+    원인이었다.
+    """
     from engine.chain import ChainResolver
     from engine.effect.library import build_executor, definition_registry
 
-    return ChainResolver(build_executor(), definition_registry())
+    return ChainResolver(build_executor(journal=journal), definition_registry())
+
+
+def duel_components(journal=None) -> dict:
+    """
+    journal **하나를 공유하는** 실행기·발동기·해결기 한 벌 (Phase 6-B).
+
+    왜 이 함수가 필요한가 — 판을 바꾸는 자리가 셋이고
+    (:class:`~engine.action_execution.ActionExecutor` ·
+    :class:`~engine.payment.CostPayer` ·
+    :class:`~engine.effect.executor.EffectExecutor`), 세 기록이 **한 줄로
+    섞여야** 순서가 사실이 된다. 셋을 따로 만들면 journal 이 셋이 되고,
+    그러면 "무엇이 먼저 일어났는가" 를 알 수 없다.
+
+    🔴 그리고 :mod:`engine.duel` 은 ``engine.effect`` 를 import 하지
+    않는다 (``test_e_the_duel_makes_no_rules_of_its_own`` 이 AST 로 고정).
+    그래서 **journal 객체를 만드는 일도 여기서** 한다 — 듀얼은 그것을
+    값으로 받아 들고만 있는다.
+
+    ``journal`` 을 주지 않으면 새로 만든다. 🔴 명시적으로 ``False`` 를
+    주면 **기록하지 않는 한 벌**이 나온다 — 탐색 사본이 쓰는 쪽이다
+    (:meth:`agent.simulation.DuelSimulator._fork`). ``None`` 과 ``False``
+    를 가른 이유: "안 줬다" 와 "끄겠다" 는 다른 뜻이다.
+    """
+    from engine.effect.journal import EventJournal
+    from engine.summon import duel_executor
+
+    if journal is False:
+        shared = None
+    elif journal is None:
+        shared = EventJournal()
+    else:
+        shared = journal
+    return {
+        "journal": shared,
+        "_executor": duel_executor(journal=shared),
+        "_activator": duel_activator(journal=shared),
+        "_resolver": duel_resolver(journal=shared),
+        "_placement": NormalSpellPlacement(journal=shared),
+    }
 
 
 def activatable_effects(card_id: int):
@@ -442,6 +541,7 @@ def activatable_effects(card_id: int):
 __all__ = [
     "duel_activator",
     "duel_resolver",
+    "duel_components",
     "activatable_effects",
     "SpellActivationError",
     "SpellPlaced",
