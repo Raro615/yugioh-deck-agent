@@ -174,16 +174,25 @@ def activate_only(corpus) -> tuple[int, ...]:
 
 
 def blockers_of(row) -> frozenset[str]:
-    found = {
+    """
+    이 카드를 막는 것들. **Phase 6-C 에서 하나가 빠졌다.**
+
+    ``Card.IsSetCard`` 는 2-AN 측정 당시 단독 병목 1위(148장)였고, 그때는
+    엔진에 카드군을 묻는 계층이 **아예 없었다**. Phase 6-C 가
+    :class:`~engine.condition.IsSetCard` 를 더해서 그 계층이 생겼으므로,
+    :data:`SUPPORTED` 의 기준("엔진에 계층이 있다")대로 병목에서 뺀다.
+
+    🔴 **"실행된다" 는 뜻이 아니다.** 이 파일의 머리말이 이미 적어 둔 구분
+    그대로다 — 담을 수 있다는 것과 ``EFFECT_LIBRARY`` 에 적어 두었다는 것은
+    다른 말이고, 등재는 여전히 16장이다.
+    """
+    return frozenset(
         f"Duel.{name}"
         for name in row["duel"]
         if name not in NOT_A_RULE
         and name not in SUPPORTED
         and name not in PROVED_BY_EXECUTION
-    }
-    if "IsSetCard" in row["card"]:
-        found.add("Card.IsSetCard")
-    return frozenset(found)
+    )
 
 
 # ======================================================================
@@ -238,19 +247,26 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
     assert PROVED_BY_EXECUTION <= used
 
 
-def test_a_three_hundred_sixty_eight_cards_have_nothing_blocking_them(
+def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     corpus, activate_only
 ):
     """
-    **막는 것이 하나도 없는 카드가 368장**이다. 등재된 것은 13장이다.
+    **막는 것이 하나도 없는 카드가 516장**이다. 등재된 것은 13장이다.
 
     그 차이는 **구조가 아니라 손**이다 — 정의를 손으로 적지 않았을 뿐이다
     (ADR-006 · EFFECT_LIBRARY). 이 수를 "커버리지" 로 읽지 않는다: 적을 수
     있다는 것과 적어 두었다는 것은 다른 말이다.
+
+    🔴 **이 시험의 이름과 수가 Phase 6-C 에서 368 → 516 으로 바뀌었다.**
+    368 은 **쓰여진 시점에 맞는 수**였다 — 그때 엔진에는 카드군을 묻는
+    조건이 없었다. 늘어난 148 은 ``Card.IsSetCard`` 하나만 걸려 있던 카드
+    수와 **정확히 같고** (아래 시험이 그 148 을 세고 있었다), 그 하나가
+    :class:`~engine.condition.IsSetCard` 로 생겼기 때문이다. 새 계층을
+    두 개 만든 것이 아니라 하나를 만들었고, 수가 그만큼만 움직였다.
     """
     clean = [cid for cid in activate_only if not blockers_of(corpus[cid])]
 
-    assert len(clean) == 368
+    assert len(clean) == 516
 
     from engine.effect.library import EFFECT_LIBRARY
 
@@ -267,15 +283,23 @@ def test_a_the_repeated_blockers_are_ranked_and_already_filed(corpus, activate_o
 
     ::
 
-        148  Card.IsSetCard              STRUCTURAL-77 (아키타입 조건)
-         22  Duel.SetTargetCard          대상 파라미터
-         19  Duel.ShuffleHand            STRUCTURAL-75
-         19  Duel.ChangePosition         표시 형식 (STRUCTURAL-61)
-         16  Duel.SelectYesNo            "해도 되는가" 를 묻는 선택
+         28  Duel.SelectYesNo            "해도 되는가" 를 묻는 선택
+         27  Duel.SetTargetCard          대상 파라미터
+         27  Duel.ShuffleHand            STRUCTURAL-75
+         23  Duel.ChangePosition         표시 형식 (STRUCTURAL-61)
+         22  Duel.GetMatchingGroupCount  후보 수 세기
 
-    **1위가 2위의 일곱 배다.** 병목이 하나라는 뜻이고, 그것은 이미 기록된
-    STRUCTURAL-77 이다. 이번 단계가 새로 만들 것이 아니라, 다음 단계의
-    목표가 무엇인지 **수로 확정된다.**
+    🔴 **Phase 6-C 에서 이 시험의 결론이 뒤집혔다.** 2-AN 이 적은 순위는
+    ``Card.IsSetCard`` 148장이 1위, 2위가 22장 — 일곱 배였고, 그래서 그때의
+    결론은 **"병목은 하나다"** 였다. 그 진술은 쓰여진 시점에 맞았다.
+    STRUCTURAL-77 이 풀리자 1위가 **28장**이 되고 2위가 27장이다. 즉
+    **지배적인 단독 병목이 더는 없다.**
+
+    그 차이가 다음 단계의 판단을 바꾼다. 하나를 고르면 148장이 열리는
+    상황에서는 "무엇을 먼저 할지" 가 수로 정해졌지만, 이제는 1위를 풀어도
+    28장이다. 상위 다섯을 **다 풀어도 127장**이고, 그것은 이미 막는 것이
+    없는 516장보다 적다. 🔴 **다음 병목은 API 하나가 아니라 등재(손으로 적는
+    정의)** 라는 뜻이고, 그 판단의 근거가 이 수다.
     """
     solo: collections.Counter = collections.Counter()
     for cid in activate_only:
@@ -284,16 +308,22 @@ def test_a_the_repeated_blockers_are_ranked_and_already_filed(corpus, activate_o
             solo[next(iter(found))] += 1
 
     top = solo.most_common(5)
-    assert top[0] == ("Card.IsSetCard", 148)
+    assert top[0] == ("Duel.SelectYesNo", 28)
     assert dict(top) == {
-        "Card.IsSetCard": 148,
-        "Duel.SetTargetCard": 22,
-        "Duel.ShuffleHand": 19,
-        "Duel.ChangePosition": 19,
-        "Duel.SelectYesNo": 16,
+        "Duel.SelectYesNo": 28,
+        "Duel.SetTargetCard": 27,
+        "Duel.ShuffleHand": 27,
+        "Duel.ChangePosition": 23,
+        "Duel.GetMatchingGroupCount": 22,
     }
-    # 1위가 2위보다 압도적이다 — 병목이 여럿이 아니라 하나다.
-    assert top[0][1] > top[1][1] * 6
+    # 🔴 1위가 2위를 압도하지 **않는다.** 하나를 풀어도 다음이 바로 붙는다.
+    assert top[0][1] < top[1][1] * 2
+    # 상위 다섯을 다 풀어도, 이미 막는 것이 없는 카드 수에 못 미친다.
+    assert sum(count for _, count in top) == 127
+    assert sum(count for _, count in top) < 516
+
+    # ``Card.IsSetCard`` 는 이제 어느 카드도 막지 않는다 — 계층이 생겼다.
+    assert "Card.IsSetCard" not in solo
 
 
 # ======================================================================

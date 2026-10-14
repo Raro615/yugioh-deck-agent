@@ -272,8 +272,14 @@ def test_06_the_duel_closure_excludes_the_assembly_and_two_part_modules():
     """
     closure = duel_closure()
     #: ``engine`` 만 센다 — ``core`` · ``analysis`` · ``sources`` 를 함께 세면
-    #: 66 이다. 이 감사의 질문은 **engine 안의** 도달성이므로 57 이 기준이다.
-    assert len(closure) == 57
+    #: 67 이다. 이 감사의 질문은 **engine 안의** 도달성이므로 58 이 기준이다.
+    #:
+    #: Phase 6-C 에서 57 → 58. 늘어난 하나는 ``engine.archetype`` 이고,
+    #: ``engine.condition.model`` 이 그것을 import 하기 때문이다 — 조건
+    #: 계층은 원래 폐쇄 안이었다. 🔴 **휴면 모듈 넷은 그대로 폐쇄 밖이다**
+    #: (아래 루프가 그것을 고정한다). 즉 이 수가 는 것이 트리거 계층이
+    #: 켜졌다는 뜻이 아니다.
+    assert len(closure) == 58
     for module in (
         "engine.trigger_chain",
         "engine.trigger_order",

@@ -518,24 +518,91 @@ def test_14_a_failed_read_must_not_be_recorded_as_a_successful_one():
         assert code is None or code.replace("_", "").isalnum(), code
 
 
-def test_15_no_archetype_judgment_is_made_from_an_unknown_setcode():
+@pytest.mark.real_card
+def test_15_an_unknown_setcode_still_yields_no_archetype_judgment(repository):
     """
     **§18-C — SetCode 를 모르는 채로 카드군 판정을 하지 않는다.**
 
-    엔진에 ``IsSetCard`` 류의 판정이 **아예 없다.** 그래서 "모르는데 판정한다"
-    는 상태가 생길 수 없다. 생기는 날 이 시험이 깨지고, 그때 ``UNKNOWN`` 을
-    돌려주는지 다시 봐야 한다.
+    🔴 **이 시험의 몸이 Phase 6-C 에서 바뀌었다. 그렇게 하라고 스스로 적어
+    두었다.** 원래 단정은 "엔진에 ``IsSetCard`` 류의 판정이 **아예 없다**"
+    였고, 그 docstring 이 이어서 말했다 — *"생기는 날 이 시험이 깨지고,
+    그때 ``UNKNOWN`` 을 돌려주는지 다시 봐야 한다."*
+
+    E-18 시점에 그 단정은 **맞았다.** 판정이 없었으므로 "모르는데 판정한다"
+    가 생길 수 없었다. Phase 6-C 가 STRUCTURAL-77 을 풀면서
+    :class:`~engine.condition.IsSetCard` 를 만들었으니, 이제 시험의 일은
+    이름의 부재를 확인하는 것이 아니라 **세 답이 갈리는지**를 확인하는
+    것이다.
+
+    ``FALSE`` 와 ``UNKNOWN`` 이 서로 다른 사실이다
+    ---------------------------------------------
+    - **코드를 안 가진 카드는 ``FALSE``** 다. 카드 14,127장 중 6,221장
+      (44.0%)이 그렇고, ``cards.cdb`` 가 "어느 카드군에도 속하지 않는다"
+      고 적어 둔 것이다. 그것까지 ``UNKNOWN`` 으로 만들면 조건이 거의
+      언제나 ``UNKNOWN`` 이 되어 쓸모가 없다.
+    - **정체를 모르는 카드가 ``UNKNOWN``** 이다 — 뒷면 · 가려진 존 ·
+      문맥에 ``source`` 가 없는 경우. 그때는 setcodes 를 **읽지 못한다.**
     """
-    for root in ("engine", "agent"):
-        for module in pathlib.Path(root).rglob("*.py"):
-            tree = ast.parse(module.read_text(encoding="utf-8"))
-            names = {
-                node.name
-                for node in ast.walk(tree)
-                if isinstance(node, (ast.FunctionDef, ast.ClassDef))
-            }
-            for forbidden in ("is_set_card", "IsSetCard", "matches_archetype"):
-                assert forbidden not in names, (module.as_posix(), forbidden)
+    from engine.condition import ConditionContext, ConditionResult, IsSetCard
+    from engine.duel import Duel
+    from engine.game_state_view import GameStateView
+    from engine.priority import PriorityState
+    from engine.state.game_state import GameState
+    from engine.vocabulary import Phase, Position, Zone
+
+    hero = 0x3008  # SET_ELEMENTAL_HERO
+    featherman = 21844576  # 엘리멘틀 히어로 페더맨 — 그 카드군이다
+    assert hero in repository.get(featherman).setcodes
+
+    state = GameState.create(
+        repository, decks=([featherman] * 20, [featherman] * 20), turn_player=0, seed=1
+    )
+    state.draw(0, 1)
+    state.create_instance(
+        UNNAMEABLE_CARD, owner=1, zone=Zone.SZONE, position=Position.FACEDOWN
+    )
+    state.turn.set_phase(Phase.MAIN1)
+    duel = Duel(
+        state=state, priority=PriorityState.idle(turn_player=0, phase=Phase.MAIN1)
+    )
+    view = duel.view(0)
+    condition = IsSetCard((hero,))
+
+    # ① 내 패의 카드는 정체가 보이므로 판정된다.
+    mine = state.player(0).hand[0].instance_id
+    assert (
+        condition.evaluate(view, ConditionContext(player=0, source=mine))
+        is ConditionResult.TRUE
+    )
+
+    # ② 상대의 뒷면 카드는 정체를 모르므로 **판정하지 않는다.**
+    [hidden] = [c for c in view.opponent.zone(Zone.SZONE).cards if c is not None]
+    assert hidden.definition is None
+    blind = IsSetCard((hero,), instance=hidden.instance_id)
+    context = ConditionContext(player=0)
+    assert blind.evaluate(view, context) is ConditionResult.UNKNOWN
+    assert blind.unknown_reasons(view, context), "왜 모르는지 적지 않았다"
+
+    # ③ 코드가 **없는** 카드는 거짓이다 — 모르는 것이 아니다.
+    lava_golem = 102380  # 용암 마신 라바 골렘 — setcodes 가 비어 있다
+    assert repository.get(lava_golem).setcodes == []
+    golem_state = GameState.create(
+        repository,
+        decks=([lava_golem] * 20, [lava_golem] * 20),
+        turn_player=0,
+        seed=1,
+    )
+    golem_state.draw(0, 1)
+    empty = GameStateView.from_state(golem_state, viewer=0)
+    golem = golem_state.player(0).hand[0].instance_id
+    assert (
+        condition.evaluate(empty, ConditionContext(player=0, source=golem))
+        is ConditionResult.FALSE
+    )
+    assert (
+        condition.unknown_reasons(empty, ConditionContext(player=0, source=golem))
+        == ()
+    )
 
 
 def test_16_this_phase_touched_no_behaviour():

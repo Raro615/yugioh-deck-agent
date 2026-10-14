@@ -123,7 +123,11 @@ CONDITION_REQUIRED_FIELDS = {
 }
 
 #: ``engine/`` 의 ``*.py`` 파일 수. 전수 주사의 분모다.
-ENGINE_FILE_COUNT = 65
+#:
+#: Phase 6-C 에서 65 → 66. 늘어난 하나는 ``engine/archetype.py`` 이고,
+#: 그 파일에는 ``Condition`` 을 받는 칸이 **없다** (순수 함수 둘과 마스크
+#: 셋뿐이다). 그래서 아래 두 집합은 그대로다 — 분모만 움직였다.
+ENGINE_FILE_COUNT = 66
 
 #: 조건·요구·발동 이름에 대한 ``None`` 검사 수. ``engine/`` **패키지만** 센다
 #: (``tests/engine/`` 까지 세면 분모가 오염된다 — 한 번 틀렸던 자리다).

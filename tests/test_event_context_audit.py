@@ -7,7 +7,8 @@ Phase 3-E-23 — 사건(Event)이 ``TriggerCandidate`` 판정까지 가려면 �
 -------
 **사건 문맥을 전달할 곳이 끊긴 것이 아니라, 사건을 묻는 술어가 아직 없다.**
 ``ConditionContext`` 에 ``event`` 를 더해도 **읽을 코드가 0개**다 — 엔진의 조건
-어휘 16개는 전부 "지금 판" 만 묻는다.
+어휘 16개는 전부 "지금 판" 만 묻는다 (Phase 6-C 에서 측정하니 **15개**였고,
+카드군 조건이 들어와 16개가 되었다 — test_01 참고).
 
 측정 (기존 분석기 ``PredicateAnalyzer`` 로 전 corpus 를 센다)
 -------------------------------------------------------------
@@ -146,8 +147,18 @@ def test_01_the_engine_condition_vocabulary_only_asks_about_the_board():
     **§7 — 사건을 묻는 술어가 하나도 없다.**
 
     ``engine/condition/model.py`` 의 ``Condition`` 서브클래스는 조합자와
-    자리표시자를 빼면 16개이고, 전부 "지금 판" 을 묻는다. 그래서
+    자리표시자를 빼면 **16개**이고, 전부 "지금 판" 을 묻는다. 그래서
     ``ConditionContext`` 에 ``event`` 를 더해도 **읽을 술어가 없다.**
+
+    🔴 **Phase 6-C 에서 ``IsSetCard`` 가 들어왔다.** 그러면서 이 감사가 적어
+    둔 수가 실제로는 **15개**였다는 것도 드러났다 (아래 집합을 세면 15다 —
+    docstring 의 "16" 이 한 개 앞서 있었다). 카드군 조건이 들어와 이제
+    진짜로 16개다.
+
+    🔴 **그래도 이 감사의 결론은 그대로다.** ``IsSetCard`` 가 묻는 것은
+    "지금 판에 보이는 그 카드가 어느 카드군인가" 이고, **사건을 묻지
+    않는다** — ``ConditionContext.event`` 가 생겨도 읽을 술어는 여전히
+    0개다.
     """
     #: 엔진 전체를 import 한 뒤에 세어야 한다 — 규칙 관문 8개가
     #: ``engine/action_validation.py`` 에 따로 있다.
@@ -161,7 +172,7 @@ def test_01_the_engine_condition_vocabulary_only_asks_about_the_board():
 
     vocabulary = by_module["engine.condition.model"]
     combinators = {"And", "Or", "Not", "Always", "UnimplementedRule"}
-    assert vocabulary == combinators | {
+    board_predicates = {
         "AttackAtLeast",
         "AttributeIs",
         "CardIsFaceUp",
@@ -169,6 +180,7 @@ def test_01_the_engine_condition_vocabulary_only_asks_about_the_board():
         "ControllerIs",
         "InAnyZone",
         "IsMonster",
+        "IsSetCard",
         "IsSpellTrap",
         "IsTurnPlayer",
         "LevelAtLeast",
@@ -177,7 +189,9 @@ def test_01_the_engine_condition_vocabulary_only_asks_about_the_board():
         "PhaseIs",
         "ZoneCountAtLeast",
         "ZoneHasFreeSlot",
-    }, sorted(vocabulary)
+    }
+    assert len(board_predicates) == 16
+    assert vocabulary == combinators | board_predicates, sorted(vocabulary)
     gates = by_module["engine.action_validation"]
     assert len(gates) == 8, sorted(gates)
 
