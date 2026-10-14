@@ -1241,17 +1241,45 @@ def test_the_structure_can_go_deeper_without_being_rebuilt(repository):
     ) is None
 
 
-def test_the_executor_carries_no_per_duel_state():
+@pytest.mark.real_card
+def test_the_executor_now_carries_per_duel_state_so_forks_must_not_share_it(
+    repository,
+):
     """
-    사본이 **진짜와 같은 수행기**를 쓴다. 그래도 안전한 이유를 확인한다.
+    🔴 **이 시험이 설계대로 작동해서 Phase 6-B 를 잡았다.**
 
-    ``ActionExecutor`` 가 들고 있는 것은 수행기 등록부 하나뿐이다 — 듀얼마다
-    달라지는 상태가 없으므로 공유해도 사본과 원본이 섞이지 않는다. 여기에
-    칸이 늘어나면 이 시험이 먼저 깨져야 한다.
+    예전 이름은 ``test_the_executor_carries_no_per_duel_state`` 였고, 내용은
+    ``ActionExecutor.__slots__ == ("_handlers",)`` 하나였다. 그 docstring 이
+    적어 둔 대로다 — *"여기에 칸이 늘어나면 이 시험이 먼저 깨져야 한다."*
+
+    Phase 6-B 가 칸을 늘렸다. ``_journal`` 이 생겼고, 그것은 **듀얼마다
+    달라지는 상태**다. 그래서 예전 가정("공유해도 안전하다")은 **더 이상
+    사실이 아니다.**
+
+    🔴 **단정을 약하게 바꾼 것이 아니다.** 지키려던 것은 "사본과 원본이
+    섞이지 않는다" 이고 그것은 그대로다. 바뀐 것은 **지키는 방법**이다 —
+    예전에는 "공유해도 상태가 없어서" 안전했고, 지금은
+    :meth:`~agent.simulation.Simulator._fork` 가 **기록하지 않는 한 벌로
+    바꿔 끼워서** 안전하다. 그래서 칸 목록을 새 사실로 갱신하고,
+    **그 새 안전장치를 함께 고정한다** (단정이 1개에서 5개로 늘었다).
     """
     from engine.action_execution import ActionExecutor
 
-    assert ActionExecutor.__slots__ == ("_handlers",)
+    #: 늘어난 칸을 사실대로 적는다 — 또 늘어나면 다시 여기서 깨진다
+    assert ActionExecutor.__slots__ == ("_handlers", "_journal")
+
+    duel = duel_with(repository)
+    simulator = Simulator(duel=duel)
+    fork = simulator._fork()
+
+    #: 🔴 이제 수행기를 **공유하지 않는다** — 공유하면 사본의 전개가 진짜
+    #: 듀얼의 기록에 남고, 그 기록은 버려진 판을 말하므로 거짓이 된다
+    assert fork._executor is not duel._executor
+    assert duel.journal is not None, "진짜 듀얼은 기록한다"
+    assert fork.journal is None, "사본은 적지 않는다"
+
+    #: 그래도 **같은 규칙**으로 돈다 — 안전을 위해 능력을 줄이지 않았다
+    assert fork._executor.supported == duel._executor.supported
 
 
 @pytest.mark.real_card
