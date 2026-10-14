@@ -595,14 +595,22 @@ def test_13_the_seven_results_split_into_three_classes():
     **A. NO_ACTOR_BY_SEMANTICS**            ``ProgressionResult``
     **B. ACTOR_EXISTS_BUT_NOT_CARRIED**     ``EffectResult`` · ``CostPaymentResult``
     (actor 를 들고 있다)                     ``EffectEvent`` · ``CostPaymentEvent``
+                                            · ``ActionEvent`` (Phase 6-B)
     (action 으로 닿는다)                     ``ActionExecution`` · ``ActivationResult``
     **C. ACTOR_NOT_DETERMINABLE**           **없다**
     =====================================  ==========================================
 
-    🔴 **C 가 비어 있다는 것이 이 Phase 의 결론 하나다.** 일곱 중 어느 것도
-    "현재 데이터로 결정할 수 없는" 것이 없다 — 상류가 전부 알고 있다. 3-F-14 가
+    🔴 **C 가 비어 있다는 것이 이 Phase 의 결론 하나다.** 어느 것도 "현재
+    데이터로 결정할 수 없는" 것이 없다 — 상류가 전부 알고 있다. 3-F-14 가
     ``CostPaymentResult`` 를 UNKNOWN 으로 남긴 것은 **상류를 보지 않았기**
     때문이다.
+
+    🔴 **Phase 6-B 가 여덟 번째를 더했고, C 는 여전히 비어 있다.**
+    ``ActionEvent.actor`` 는 ``ActionExecutor`` 가 ``action.actor`` 를
+    그대로 옮겨 적은 값이므로 결정 불가가 아니다. "actor 를 들고 있다" 쪽에
+    서지만, ``.action`` 칸은 **없다** — 기록 계층이 ``engine.action`` 을
+    import 하지 않기 때문이다. 그래서 "action 으로 닿는다" 는 **그대로
+    둘**이다.
     """
     rows = every_delta_bearing_result()
     assert set(rows) == {
@@ -610,6 +618,8 @@ def test_13_the_seven_results_split_into_three_classes():
         "ActivationResult",
         "EffectEvent",
         "CostPaymentEvent",
+        #: Phase 6-B — 위 설명의 표 참고
+        "ActionEvent",
         "EffectResult",
         "CostPaymentResult",
         "ProgressionResult",
@@ -617,7 +627,8 @@ def test_13_the_seven_results_split_into_three_classes():
 
     carries_actor = {name for name, (_, has_actor) in rows.items() if has_actor}
     reaches_via_action = {name for name, (has_action, _) in rows.items() if has_action}
-    assert carries_actor == {"EffectEvent", "CostPaymentEvent"}
+    assert carries_actor == {"EffectEvent", "CostPaymentEvent", "ActionEvent"}
+    #: 🔴 이쪽은 **늘지 않았다** — 그것이 위 설명의 요점이다
     assert reaches_via_action == {"ActionExecution", "ActivationResult"}
 
     #: 남은 셋 중 둘은 상류가 알고(B), 하나는 개념이 없다(A).
