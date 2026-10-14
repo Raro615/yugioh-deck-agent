@@ -20,6 +20,7 @@ from engine.condition.evaluator import ConditionEvaluator, ConditionVerdict
 from engine.condition.model import (
     Always,
     And,
+    ArchetypeUnresolved,
     AttackAtLeast,
     AttributeIs,
     CardIsFaceUp,
@@ -49,6 +50,7 @@ __all__ = [
     "PlayerRef",
     "Condition",
     "Always",
+    "ArchetypeUnresolved",
     "UnimplementedRule",
     "And",
     "Or",

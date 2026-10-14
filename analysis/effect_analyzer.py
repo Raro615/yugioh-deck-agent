@@ -230,6 +230,20 @@ _RE_PRED_COMMA = re.compile(
 )
 
 
+def _record_unread(constraint: CardConstraint, args: str) -> None:
+    """
+    ``IsSetCard`` 를 봤지만 이름을 **하나도** 읽지 못한 사실을 남긴다.
+
+    ``CardConstraint.raw_predicates`` 의 설명이 원래 *"읽어내지 못한 조건은
+    raw_predicates 에 원문 그대로 남는다"* 라고 적어 두었는데, Phase 6-D
+    전까지 **그 칸에 쓰는 자리가 하나도 없었다.** 카드군 조건에 한해 그
+    계약을 지킨다 — 다른 술어까지 한꺼번에 채우는 것은 이번 범위가 아니다.
+    """
+    entry = f"IsSetCard({args.strip()})"
+    if entry not in constraint.raw_predicates:
+        constraint.raw_predicates.append(entry)
+
+
 #: 카드 한 장의 ``handler_binding`` 요약을 고를 때의 심각도 (Phase 3-F-37).
 #: 블록이 하나라도 ``MATCHED`` 가 아니면 **가장 큰 값**이 카드의 값이 된다.
 _BINDING_SEVERITY: dict[HandlerBinding, int] = {
@@ -909,9 +923,19 @@ class EffectAnalyzer:
                 if name not in constraint.card_types:
                     constraint.card_types.append(name)
         for args in _RE_IS_SETCARD.findall(body):
-            for name in _RE_SET_CONST.findall(args):
+            names = _RE_SET_CONST.findall(args)
+            for name in names:
                 if name not in constraint.setcodes:
                     constraint.setcodes.append(name)
+            if not names:
+                # 🔴 **읽지 못한 것을 흔적 없이 버리지 않는다** (Phase 6-D).
+                #
+                # ``IsSetCard(setcode)`` 처럼 인자가 런타임 변수면 이름을
+                # 하나도 못 읽는다 (실측 12회 · 9장). 그때 아무것도 적지
+                # 않으면 ``setcodes == []`` 이 되어 **"카드군 요구가
+                # 없다"** 와 구별되지 않고, 그 필터를 쓰는 쪽이 모든 카드를
+                # 통과시킨다. ``raw_predicates`` 가 그것을 위한 칸이다.
+                _record_unread(constraint, args)
         for value in _RE_IS_LEVEL.findall(body):
             level = int(value)
             if level not in constraint.levels:
@@ -925,9 +949,12 @@ class EffectAnalyzer:
         # aux.FaceupFilter(Card.IsSetCard,SET_X) 처럼 술어와 인자가 쉼표로 이어지는 형태
         for predicate, args in _RE_PRED_COMMA.findall(body):
             if predicate == "SetCard":
-                for name in _RE_SET_CONST.findall(args):
+                names = _RE_SET_CONST.findall(args)
+                for name in names:
                     if name not in constraint.setcodes:
                         constraint.setcodes.append(name)
+                if not names:
+                    _record_unread(constraint, args)
             elif predicate == "Race":
                 for name in _RE_RACE_CONST.findall(args):
                     bit = getattr(C, f"RACE_{name}", None)

@@ -960,6 +960,83 @@ class IsSetCard(Condition):
         return f"{which} 가 카드군 {codes} 에 속함"
 
 
+@dataclass(frozen=True, slots=True)
+class ArchetypeUnresolved(Condition):
+    """
+    **카드군 이름을 숫자 코드로 바꿀 수 없었다.** 언제나 ``UNKNOWN`` 이다.
+
+    스크립트가 ``IsSetCard(SET_CENTURION)`` 이라고 적었는데 이 저장소의
+    ``data/constants/archetype_setcode_constants.lua`` 에 그 상수가 없는
+    경우다 (실측 3개 이름 · 50회). 그럴 때 할 수 있는 정직한 답은 하나뿐이다
+    — **모른다.** 이름이 비슷한 다른 상수로 바꿔 끼우거나, 그 카드들이
+    공통으로 들고 있는 코드를 역산해서 채우는 것은 **추측**이다.
+
+    🔴 왜 :class:`UnimplementedRule` 이 아닌가 — **모르는 이유가 세 번째
+    종류다**
+    ----------------------------------------------------------------------
+    이 계층은 원래 "모른다" 를 둘로 갈라 두었다.
+
+    =========================  ===========================================
+    ``unknown_reasons`` 만      **정보가 없어서** 모른다 — 판이 바뀌면 풀린다
+                               (뒷면 카드가 뒤집히면 알 수 있다)
+    ``missing_rules`` 도        **규칙 계층이 없어서** 모른다 — 코드가
+                               생겨야 풀린다
+    =========================  ===========================================
+
+    카드군 이름이 상수 표에 없는 것은 **둘 다 아니다.** 판이 바뀌어도
+    풀리지 않고, 코드를 더 써도 풀리지 않는다. **데이터를 갱신해야** 풀린다.
+    그래서 :meth:`missing_rules` 는 **빈 튜플**이다 — 없는 규칙 계층을
+    찾아 헤매게 만들지 않는다.
+
+    어떻게 쓰이는가
+    ---------------
+    :func:`~engine.archetype_bridge.compile_archetype_condition` 이 목록
+    일부만 해결했을 때 ``Or`` 의 한쪽에 이것을 둔다. 3치 논리가 나머지를
+    맡는다.
+
+        Or(IsSetCard((0x11b,)), ArchetypeUnresolved("CENTURION"))
+
+        오르페골 카드      → TRUE   (해결된 쪽이 맞췄으므로 확정이다)
+        그 밖의 카드       → UNKNOWN (센츄리온일 수도 있고, 알 수 없다)
+
+    **거짓이 되지 않는다는 점이 핵심이다.** 해결하지 못한 이름을 조용히
+    버리면 센츄리온 카드가 ``FALSE`` 로 판정되고, 그것은 모르는 것을
+    거짓으로 접는 일이다.
+    """
+
+    name: str
+    """읽은 그대로의 카드군 이름 (``SET_`` 접두사 **없이**). 출처 보존용."""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError(
+                "해결하지 못한 카드군 이름을 적어야 합니다. 비워 두면 "
+                "'무엇을 모르는지' 가 사라집니다."
+            )
+
+    def evaluate(self, view, context) -> ConditionResult:
+        return ConditionResult.UNKNOWN
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        return (
+            f"카드군 이름 SET_{self.name} 에 대응하는 숫자 코드를 "
+            "상수 표에서 찾을 수 없음",
+        )
+
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        """**빈 튜플이다.** 없는 것은 규칙이 아니라 데이터다 (위 설명)."""
+        return ()
+
+    def canonical_state(self) -> tuple:
+        return ("archetype_unresolved", self.name)
+
+    def to_dict(self) -> dict:
+        return {"kind": "archetype_unresolved", "name": self.name}
+
+    def describe_ko(self) -> str:
+        return f"카드군 SET_{self.name} 을 숫자 코드로 바꿀 수 없음"
+
+
 # ======================================================================
 # 자리 · 컨트롤러 술어
 # ======================================================================

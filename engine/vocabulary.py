@@ -279,6 +279,7 @@ class EngineVocabulary:
         "reasons",
         "statuses",
         "summon_types",
+        "archetypes",
     )
 
     def __init__(self, constants: ScriptConstants):
@@ -331,6 +332,20 @@ class EngineVocabulary:
                 name[len("SUMMON_TYPE_"):]: value
                 for name, value in others.items()
                 if name.startswith("SUMMON_TYPE_")
+            },
+        )
+        #: 카드군(아키타입) 이름 → 숫자 코드 (Phase 6-D).
+        #:
+        #: 🔴 **``others`` 가 아니라 ``constants.setcodes`` 에서 온다.**
+        #: ``ScriptConstants`` 가 ``SET_*`` 를 처음부터 따로 모아 두기
+        #: 때문이고, 그래서 Phase 6-C 까지 이 묶음만 비어 있었다.
+        #: 값을 **만들지 않는다** — 다른 묶음들과 똑같이 감싸기만 한다.
+        self.archetypes = ConstantGroup(
+            "SET_",
+            {
+                name[len("SET_"):]: value
+                for name, value in constants.setcodes.items()
+                if name.startswith("SET_")
             },
         )
 
@@ -396,7 +411,8 @@ class EngineVocabulary:
         return (
             f"<EngineVocabulary locations={len(self.locations)} "
             f"positions={len(self.positions)} phases={len(self.phases)} "
-            f"reasons={len(self.reasons)} statuses={len(self.statuses)}>"
+            f"reasons={len(self.reasons)} statuses={len(self.statuses)} "
+            f"archetypes={len(self.archetypes)}>"
         )
 
 
