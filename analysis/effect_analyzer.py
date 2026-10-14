@@ -39,6 +39,7 @@ from analysis.effect_model import (
     EffectAnalysis,
     EffectCost,
     EffectSelection,
+    EventSubjectClaim,
     HandlerBinding,
 )
 from core import constants as C
@@ -56,6 +57,33 @@ from sources.lua_loader import (
 
 # --- Lua 패턴 -------------------------------------------------------------
 _RE_FUNCTION_DEF = re.compile(r"function\s+s\.(\w+)\s*\(")
+#: 🔴 **사건 그룹이 효과 소유자를 품는가** (Phase 6-H). 사건 주체와 이 카드
+#: 를 **직접 맞춰 보는** 호출이고, 여기서 읽는 것은 이 하나뿐이다.
+#:
+#: 실측 (조건 본문을 읽을 수 있는 FIELD 등록 695건): 이 호출 **84건**.
+#: ``eg`` 를 쓰는 다른 모양들은 주체 관계를 말하지 않는다 —
+#: ``eg:IsExists(필터,1,e:GetHandler(),tp)`` 는 소유자를 **예외 인자**로
+#: 넘기고 (379건), ``eg:GetFirst()`` 는 그룹의 첫 장을 꺼낸다 (28건). 그
+#: 둘은 "주체가 누구인가" 가 아니라 **"그룹에 무엇이 있는가"** 이므로 이
+#: 축에서 읽지 않는다.
+#:
+#: 🔴 **호출 전체를 적는 것이 안전장치다.** 탐사용으로 ``eg`` 만 찾았을 때는
+#: 함수 **선언부**의 매개변수 목록 ``(e,tp,eg,ep,ev,re,r,rp)`` 이 걸려
+#: 449건이 거짓으로 일치했다. 선언부를 떼는 전처리로 막을 수도 있지만,
+#: 이름이 전부 붙은 이 패턴은 **선언부에 나타날 수 없으므로** 전처리가
+#: 필요하지 않다 — 전처리를 지워도 전수 측정이 그대로임을 확인했고, 패턴이
+#: 느슨해지는 것은 ``test_07`` 이 정적으로 막는다.
+_RE_EVENT_GROUP_HAS_HANDLER = re.compile(
+    r"eg:IsContains\s*\(\s*e:GetHandler\(\)\s*\)"
+)
+#: 조건 인자가 **이름 하나**인가 (``s.condition`` · ``aux.foo``).
+_RE_CONDITION_NAME = re.compile(r"^\s*([A-Za-z_][\w.]*)\s*$")
+#: 호출 **바로 앞**이 ``not`` 인가 (부정).
+_RE_NEGATED_TAIL = re.compile(r"\bnot\s+$")
+#: 호출 **바로 앞**이 ``if`` 인가 (조기 반환 모양의 앞쪽).
+_RE_IF_TAIL = re.compile(r"\bif\s+$")
+#: 호출 **바로 뒤**가 ``then return false`` 인가 (조기 반환 모양의 뒤쪽).
+_RE_RETURN_FALSE = re.compile(r"\s*then\s+return\s+false\b")
 #: 🔴 변수명 범위는 :mod:`sources.lua_loader` 와 **같아야 한다** (Phase 3-F-28).
 #: 좁히면 그쪽이 세는 블록의 설정자를 여기서 놓치고, 그만큼 핸들러가 밀린다.
 #: 설정자 **종류**만 좁다 — 이 모듈이 쓰는 네 개뿐이다.
@@ -566,6 +594,13 @@ class EffectAnalyzer:
         if condition:
             effect.has_condition = True
             effect.condition_raw = condition
+            #: 🔴 **조건의 내용 중 사건 주체 관계만** 여기서 읽는다
+            #: (Phase 6-H). 조건 전체를 해석하는 것은
+            #: :meth:`_analyze_activation` 의 일이고, 이 축은 판 위의
+            #: 사실이 아니라 **사건과 이 카드의 관계**라서 따로 간다.
+            effect.event_subject_claim = self._event_subject_claim(
+                condition, functions
+            )
 
         cost = handlers.get("Cost")
         if cost:
@@ -831,6 +866,72 @@ class EffectAnalyzer:
         return found
 
     # ------------------------------------------------------------------
+    @classmethod
+    def _condition_body(
+        cls, argument: str, functions: "dict[str, str]"
+    ) -> str | None:
+        """
+        조건 인자에서 **본문 텍스트**를 얻는다. 없으면 ``None``.
+
+        이름이면 (``s.condition``) 같은 파일에서 찾아보고, 인라인
+        (``function(e,tp,eg,...) ... end``) 이면 인자 자체가 본문이다.
+        ``aux.*`` 처럼 **다른 파일의 함수**는 본문을 얻을 수 없고, 그때는
+        읽지 못했다고 두는 것이 맞다 — 이름만으로 뜻을 추측하지 않는다.
+        """
+        raw = (argument or "").strip()
+        if not raw:
+            return None
+        name = _RE_CONDITION_NAME.match(raw)
+        if name:
+            return functions.get(name.group(1).split(".")[-1])
+        if raw.startswith("function"):
+            return raw
+        return None
+
+    @classmethod
+    def _event_subject_claim(
+        cls, argument: str, functions: "dict[str, str]"
+    ) -> EventSubjectClaim | None:
+        """
+        조건 본문이 **사건 주체와 이 카드의 관계**를 확정적으로 말하는가.
+
+        🔴 **구문 자리로 판정한다. 호출이 있다는 사실만으로는 부족하다.**
+        같은 호출이 뜻을 **뒤집어** 쓰이기 때문이다. 실측으로 잡은 오류 —
+        부정 여부만 보던 분류기는 ``if eg:IsContains(e:GetHandler()) then
+        return false end`` 두 건을 "긍정" 으로 읽었는데, 그 모양은 조기
+        반환으로 뜻이 부정이고 공식 원문도 「이 카드 **이외의** …」 였다.
+
+        세 가지를 모두 요구한다.
+
+        1. 그 호출이 본문에 **정확히 한 번** 나온다. 두 번 이상이면 어느
+           쪽이 답을 정하는지 구문만으로 알 수 없다.
+        2. 본문에 ``or`` 가 **없다**. ``or`` 안에 있으면 그 호출은
+           필요조건이 아니라 **선택지 하나**이고, 거짓이어도 조건 전체가
+           참일 수 있다.
+        3. 뜻이 부정이다 — ``not`` 이 바로 앞에 붙거나, ``if … then return
+           false`` 로 조기 반환한다.
+
+        긍정 자리는 **주장하지 않는다.** 실측 4건이 전부 ``#eg==N`` 같은
+        **그룹 크기 단정**과 함께 나타나고 (``#eg==1`` 3건 · ``#eg==5``
+        1건), 엔진의 사건 모델은 그룹 크기를 들고 있지 않다. 참이라고 적을
+        근거가 없으므로 ``None`` 으로 둔다 (:class:`EventSubjectClaim` 의
+        설명).
+        """
+        body = cls._condition_body(argument, functions)
+        if body is None:
+            return None
+        flat = " ".join(body.split())
+        hits = _RE_EVENT_GROUP_HAS_HANDLER.findall(flat)
+        if len(hits) != 1 or " or " in flat:
+            return None
+        match = _RE_EVENT_GROUP_HAS_HANDLER.search(flat)
+        before, after = flat[: match.start()], flat[match.end() :]
+        if _RE_NEGATED_TAIL.search(before):
+            return EventSubjectClaim.NOT_HANDLER
+        if _RE_IF_TAIL.search(before) and _RE_RETURN_FALSE.match(after):
+            return EventSubjectClaim.NOT_HANDLER
+        return None
+
     @staticmethod
     def _handler_name(argument: str) -> str | None:
         """``s.sptg`` 같은 인자에서 함수 이름만 뽑는다."""

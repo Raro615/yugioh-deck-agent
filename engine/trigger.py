@@ -475,11 +475,12 @@ class TriggerSubject(str, Enum):
     """
     **그 사건이 누구의 사건이어야 하는가** (Phase 6-F).
 
-    🔴 **값이 둘인데 상태는 셋이다.** ``None`` 이 세 번째이고, 그것이 이
+    🔴 **값이 셋인데 상태는 넷이다.** ``None`` 이 네 번째이고, 그것이 이
     축의 핵심이다.
 
     =============  =========================================================
      ``SELF``       사건의 주체가 **이 카드 인스턴스**여야 한다
+     ``OTHER``      사건의 주체가 **이 카드가 아니어야** 한다 (Phase 6-H)
      ``ANY``        **어느 카드의 사건이든** 반응한다 — 등록한 쪽이 단정한다
      ``None``       **적지 않았다** → :func:`subject_relation` 이 ``UNKNOWN``
     =============  =========================================================
@@ -497,6 +498,22 @@ class TriggerSubject(str, Enum):
 
     SELF = "self"
     """사건의 주체가 **이 선언을 가진 그 카드 인스턴스**여야 한다."""
+    OTHER = "other"
+    """
+    사건의 주체가 **이 카드가 아니어야** 한다 (Phase 6-H).
+
+    🔴 **이 값은 거부만 할 수 있고 통과시키지 못한다.** 근거가 Lua 의
+    ``not eg:IsContains(e:GetHandler())`` 이고 그것이 묻는 것은 "사건
+    그룹에 이 카드가 들어 있는가" 인데, 엔진의 사건은 주체 **한 장**만
+    들고 있다 (:attr:`TimingEvent.instance`). 주체가 이 카드면 그룹에
+    들어 있는 것이 확정되므로 **거짓이 확정**되고, 주체가 다른 카드면
+    그룹의 나머지에 이 카드가 있는지를 알 길이 없어 **모름**이다. 그
+    비대칭이 :func:`subject_relation` 에 그대로 적혀 있다.
+
+    값의 출처는 :data:`~engine.trigger_compiler.NOT_HANDLER_CLAIM` 이고,
+    ``analysis`` 가 조건 함수의 구문 자리를 보고 적어 둔 것을 컴파일러가
+    원시 문자열로 받는다 (ADR-007).
+    """
     ANY = "any"
     """
     어느 카드의 사건이든 반응한다.
@@ -716,6 +733,21 @@ _CONDITION_OF_VALIDITY: dict[ActionValidity, ConditionResult] = {
 #: 쓴다 — 같은 사실에 이름을 두 개 붙이면 로드맵 추적이 갈라진다.
 SUBJECT_MISSING_RULE = "trigger-event-subject (이 사건이 이 카드의 사건인가)"
 
+#: 🔴 **사건 그룹에 이 카드가 들어 있는가** (Phase 6-H).
+#:
+#: :attr:`TriggerSubject.OTHER` 가 거부하지 못했을 때 남는 모름이고,
+#: :data:`SUBJECT_MISSING_RULE` 과 **다른 사실**이다 — 저쪽은 "선언이 주체를
+#: 적지 않았다", 이쪽은 "선언은 적혀 있는데 **사건이 그룹을 들고 있지
+#: 않다**". 엔진의 사건은 주체 한 장만 들고 있어서 (``TimingEvent.instance``)
+#: "주체가 아닌 카드도 그 사건에 함께 포함되었는가" 를 물을 데가 없다.
+#: 그래서 코드가 생겨야 풀리는 모름이고 (``RULE_NOT_IMPLEMENTED``), 판이
+#: 바뀌어서 풀리는 모름이 아니다.
+#:
+#: 이것이 복수 카드 사건 문제의 이 축에서의 얼굴이다 (STRUCTURAL-35).
+GROUP_MEMBERSHIP_RULE = (
+    "trigger-event-group-membership (사건 그룹에 이 카드가 들어 있는가)"
+)
+
 
 def subject_relation(
     spec: TriggerSpec, event: TimingEvent, source: InstanceId | None
@@ -728,15 +760,22 @@ def subject_relation(
 
     ``VALID`` / ``OK``
         선언이 ``SELF`` 를 적었고 사건의 주체가 **바로 그 인스턴스**이거나,
-        선언이 ``ANY`` 를 적었다.
+        선언이 ``ANY`` 를 적었다. **``OTHER`` 는 이 답을 내지 않는다.**
     ``INVALID`` / ``CANDIDATE_NOT_ELIGIBLE``
         선언이 ``SELF`` 를 적었고 주체가 **다른 인스턴스**다. 확실한 거부이고
         미구현이 아니다 — 양쪽이 ``InstanceId`` 를 들고 있으므로 **데이터
-        비교**로 답이 확정된다 (``matches`` 와 같은 성질이다).
+        비교**로 답이 확정된다 (``matches`` 와 같은 성질이다). 선언이
+        ``OTHER`` 인데 주체가 **바로 이 카드**인 경우도 같은 성질이다 —
+        사건의 주체는 그 사건에 포함된 카드이므로 「이 카드 이외」 가 거짓인
+        것이 확정된다 (Phase 6-H).
     ``UNKNOWN`` / ``RULE_NOT_IMPLEMENTED``
         **선언이 주체를 적지 않았다.** ``FIELD`` 범위 등록이 그렇다 — 어느
         카드의 사건에 반응하는지 Lua 등록만으로는 읽을 수 없다
         (:data:`~engine.trigger_compiler.SUBJECT_SCOPES` 의 측정 참고).
+        또는 **선언이 ``OTHER`` 인데 주체가 다른 카드다** — 그때 남는 질문은
+        "주체가 아닌 이 카드도 그 사건에 함께 포함되었는가" 이고, 엔진의
+        사건은 주체 한 장만 들고 있어 물을 데가 없다
+        (:data:`GROUP_MEMBERSHIP_RULE`).
     ``UNKNOWN`` / ``INFORMATION_UNAVAILABLE``
         **비교할 값이 없다.** 사건이 카드 한 장을 가리키지 않거나 (라이프 ·
         페이즈) 후보의 인스턴스를 모른다. 규칙이 없는 것이 아니라 정보가
@@ -771,7 +810,28 @@ def subject_relation(
             notes=(f"{missing} 인스턴스 없음",),
         )
     if subject == source:
+        if spec.subject is TriggerSubject.OTHER:
+            #: **확정된 거부다.** 사건의 주체는 그 사건에 포함된 카드이고,
+            #: 그 주체가 바로 이 카드다 — 「이 카드 이외」 가 거짓인 것이
+            #: 그룹의 나머지를 몰라도 확정된다.
+            return ValidationResult.invalid(
+                ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                f"사건의 주체가 이 카드입니다 ({source}) — 이 등록은 이 카드 "
+                "이외의 사건에만 반응합니다.",
+            )
         return ValidationResult.valid(f"사건의 주체가 이 카드입니다 ({source}).")
+    if spec.subject is TriggerSubject.OTHER:
+        #: 🔴 **여기서 통과시키지 않는다.** 주체가 다른 카드라는 것은 "이
+        #: 카드가 그 사건에 **들어 있지 않다**" 를 뜻하지 않는다 — 사건에
+        #: 여러 장이 함께 포함될 수 있고 엔진의 사건은 주체 한 장만 들고
+        #: 있다. 모르는 것을 참으로 적으면 그것이 거짓 양성이다.
+        return ValidationResult.unknown(
+            ValidationCode.RULE_NOT_IMPLEMENTED,
+            f"사건의 주체는 {subject} 이지만 이 카드({source})가 그 사건에 "
+            "함께 포함되었는지는 확인할 수 없습니다.",
+            missing_rule=GROUP_MEMBERSHIP_RULE,
+            notes=(GROUP_MEMBERSHIP_RULE,),
+        )
     return ValidationResult.invalid(
         ValidationCode.CANDIDATE_NOT_ELIGIBLE,
         f"사건의 주체는 {subject} 이고 이 카드는 {source} 입니다 — "

@@ -22,6 +22,32 @@ from enum import Enum
 from core.card_model import EffectSpec
 
 
+class EventSubjectClaim(str, Enum):
+    """
+    조건 함수가 **사건의 주체와 이 카드의 관계**에 대해 말하는 것 (Phase 6-H).
+
+    Lua 의 조건 함수는 사건 그룹 ``eg`` 와 효과 소유자 ``e:GetHandler()`` 를
+    둘 다 손에 들고 있다. 그 둘의 관계를 **구문으로 확정할 수 있는 모양**만
+    여기에 적는다. 확정할 수 없으면 ``None`` 이고, ``None`` 은 "관계 없음"
+    이 아니라 **"읽지 못했다"** 다.
+
+    🔴 **방향이 하나뿐인 것이 의도다.** "주체가 이 카드다" 를 주장하는 값은
+    두지 않았다 — 실측(Phase 6-H)에서 그 모양은 ``#eg==1`` 같은 **그룹 크기
+    단정**과 함께만 나타나고, 엔진의 사건 모델은 그룹 크기를 들고 있지
+    않으므로 참이라고 적을 근거가 없다. 거짓 양성을 만들지 않는 쪽으로만
+    간다.
+    """
+
+    NOT_HANDLER = "not_handler"
+    """
+    **사건 그룹에 이 카드가 들어 있으면 조건이 거짓이다.**
+
+    ``not eg:IsContains(e:GetHandler())`` 가 조건식의 **필요조건 자리**에
+    있거나, ``if eg:IsContains(e:GetHandler()) then return false end`` 로
+    조기 반환한다. 공식 원문에서는 「이 카드 **이외의** …」 로 나타난다.
+    """
+
+
 class ActionKind(str, Enum):
     """효과가 실제로 하는 일. Lua 의 ``Duel.*`` 호출에서 유도한다."""
 
@@ -595,6 +621,11 @@ class EffectAnalysis:
     has_condition: bool = False
     """SetCondition 이 걸려 있는가 (내용은 별도)."""
     condition_raw: str | None = None
+    event_subject_claim: EventSubjectClaim | None = None
+    """
+    조건 함수가 **사건 주체와 이 카드의 관계**에 대해 확정적으로 말하는 것
+    (Phase 6-H). 읽지 못했으면 ``None`` 이고, 그것은 "관계 없음" 이 아니다.
+    """
 
     costs: list[EffectCost] = field(default_factory=list)
     selection: EffectSelection | None = None

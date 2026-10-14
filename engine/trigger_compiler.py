@@ -30,6 +30,7 @@
         declared_types=spec.effect_types,   # ["SINGLE", "TRIGGER_O"]
         event_code=spec.code,               # "EVENT_SUMMON_SUCCESS"
         ranges=spec.ranges,                 # ["MZONE"]
+        event_subject_claim=effect.event_subject_claim,   # "not_handler" | None
     )
 
 🔴 **칸 이름까지 빌리지 않는다.** 처음에는 인자 이름을 ``effect_types`` 로
@@ -404,6 +405,23 @@ def _zones_from(ranges: Sequence[str]) -> frozenset[Zone] | None:
 #: 모름" 하나뿐이고 (``activates_from`` 을 비우므로 자리 관문이 ``UNKNOWN``),
 #: 동시에 ``from_zones`` 라는 **새 필터를 더하므로** 반응하는 사건이 오히려
 #: 줄어든다. 실측: 이 모양은 전 corpus 에서 **1건**이다.
+#: 🔴 **조건 함수가 말하는 주체 관계** (Phase 6-H).
+#:
+#: ``analysis`` 가 조건 함수의 구문 자리를 보고 적어 둔 주장이고, 이 모듈은
+#: 그것을 **원시 문자열로** 받는다 — ``EffectSpec`` 을 받지 않는 것과 같은
+#: 이유다 (ADR-007, 이 모듈 머리말). 값이 갈라지지 않도록
+#: ``test_6h_...::test_02`` 가 :class:`analysis.effect_model.EventSubjectClaim`
+#: 의 값과 이 상수를 맞춰 고정한다.
+#:
+#: 왜 ``FIELD`` 등록만 이 주장을 쓰는가 — ``SINGLE`` 등록은 이미
+#: :attr:`~engine.trigger.TriggerSubject.SELF` 이고, 실측에서 **그 둘이
+#: 겹치는 등록은 0건**이다. 겹치면 선언을 덮지 않고 선언을 남긴다 (아래
+#: :func:`compile_trigger_spec`).
+#:
+#: 실측 (전체 등록 4,173건): 이 주장이 붙는 ``FIELD`` 등록 **80건** ·
+#: 카드 **64장** · 사건은 ``monster_summoned`` 58 · ``card_moved`` 22.
+NOT_HANDLER_CLAIM = "not_handler"
+
 PREVIOUS_ZONE_RULE = "trigger-activation-location (등록 범위가 이동 전 자리다)"
 
 
@@ -442,6 +460,7 @@ def compile_trigger_spec(
     declared_types: Sequence[str],
     event_code: str | None,
     ranges: Sequence[str] = (),
+    event_subject_claim: str | None = None,
 ) -> TriggerCompilation | None:
     """
     효과 블록 하나의 등록 정보를 :class:`~engine.trigger.TriggerSpec` 으로.
@@ -502,6 +521,16 @@ def compile_trigger_spec(
     subject = (
         TriggerSubject.SELF if SELF_SCOPE_DECLARATION in kinds else None
     )
+    if subject is None and event_subject_claim == NOT_HANDLER_CLAIM:
+        # 🔴 **조건 함수가 적어 둔 것만 읽는다** (Phase 6-H 의
+        # :data:`NOT_HANDLER_CLAIM` 주석이 근거와 실측을 적는다).
+        #
+        # 등록 범위가 ``FIELD`` 라서 주체를 모르던 자리에 조건 함수가
+        # 「이 카드 이외」 를 적어 두었다. 선언이 이미 주체를 말한 자리
+        # (``SELF``) 는 **덮지 않는다** — 둘이 어긋나면 그것은 분류기가
+        # 틀렸다는 신호이고, 그때 조건이 선언을 이기게 만들면 틀린 쪽이
+        # 조용히 이긴다. 실측으로 그 겹침은 0건이다.
+        subject = TriggerSubject.OTHER
     # 🔴 **등록 범위를 발동 위치로 오인하지 않는다** (Phase 6-G 의
     # :data:`PREVIOUS_ZONE_RULE` 주석이 근거와 조건을 적는다).
     declared = _zones_from(ranges)
@@ -529,6 +558,7 @@ def compile_trigger_spec(
 __all__ = [
     "ANY_SCOPE_DECLARATION",
     "EVENT_SUBJECT_RULE",
+    "NOT_HANDLER_CLAIM",
     "SELF_SCOPE_DECLARATION",
     "FLIP_DECLARATION_TYPE",
     "TRIGGER_DECLARATION_TYPES",
