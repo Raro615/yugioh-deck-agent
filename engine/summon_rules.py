@@ -51,7 +51,28 @@ ONE_TRIBUTE_MAX_LEVEL = 6
 #:
 #: 엑스트라 덱 몬스터는 :attr:`~engine.game_state_view.CardDefinitionView.
 #: is_extra_deck` 로 따로 본다 — 종류 이름이 아니라 파생값이 이미 있다.
-NEVER_NORMAL_SUMMONABLE: frozenset[str] = frozenset({"RITUAL", "TOKEN"})
+#:
+#: ``SPSUMMON`` 은 Phase 6-C 에서 더했다 (``TYPE_SPSUMMON`` = ``0x2000000``).
+#: 그 전까지 **메인덱 몬스터 344장**이 여기 걸리지 않고 ``NEEDS_TRIBUTE``
+#: 262장 · ``UNDETERMINED`` 82장으로 나갔다 — 규칙상 일반 소환이 **확실히
+#: 불가능한** 카드를 "제물만 치르면 될지도 모른다" 고 말한 셈이다.
+#:
+#: 근거는 **공식 카드 텍스트**다. 344장 중 338장의 공식 한국어 원문이
+#: 「(이 카드는) 일반(통상) 소환할 수 없다」 를 직접 말한다. 남은 6장은
+#: 한국어 텍스트가 아직 없거나(4장, 영문에 "Cannot be Normal Summoned/Set")
+#: 옛 표기를 쓴다(그레이트 모스 "특수 소환해야 한다" · 월 섀도우 "효과로
+#: 밖에 특수 소환할 수 없다"). 즉 **타입 비트가 텍스트보다 넓게 맞는다.**
+#:
+#: 🔴 **그래서 텍스트를 읽어 판정하지 않는다.** 반대 방향을 재 보면 같은
+#: 문구를 가진 메인덱 몬스터 11장이 ``TYPE_SPSUMMON`` 이 **아니고**, 그
+#: 11장은 전부 다른 규칙이다 — 그 턴 플레이어에게 걸리는 제약(붉은 눈의
+#: 비룡) · 판에 따라 달라지는 제약(체츠커 "자신 필드에 몬스터가 존재할
+#: 경우") · 제물 요구(염옥마인 헬 버너) · 양쪽에 걸리는 지속 효과(레프티레스
+#: 서번트) · **다른 카드**의 성질을 가리키는 문장(프린시퍼그). 문구로 세면
+#: 이 11장을 틀리게 접는다.
+NEVER_NORMAL_SUMMONABLE: frozenset[str] = frozenset(
+    {"RITUAL", "TOKEN", "SPSUMMON"}
+)
 
 #: 절차가 확실한 종류. 룰북이 "All Normal Monsters" 라고 못박은 것뿐이다.
 ORDINARY_TYPE_NAME = "NORMAL"
@@ -169,6 +190,9 @@ def assess_normal_summon(
             SummonEligibility.FORBIDDEN,
             "엑스트라 덱 몬스터는 일반 소환으로 필드에 나오지 않습니다.",
         )
+    # 🔴 레벨을 보기 **전에** 본다. 특수 소환 몬스터는 제물을 치러도 일반
+    # 소환되지 않으므로, 순서가 뒤바뀌면 레벨 5 이상인 262장이
+    # ``NEEDS_TRIBUTE`` 로 나가 "제물만 있으면 된다" 가 된다.
     forbidden = NEVER_NORMAL_SUMMONABLE & set(definition.type_names)
     if forbidden:
         return SummonAssessment(

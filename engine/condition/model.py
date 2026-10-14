@@ -35,6 +35,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from engine.archetype import matches_setcode, validate_setcode
 from engine.condition.context import ConditionContext, PlayerRef
 from engine.condition.result import ConditionResult
 from engine.ids import InstanceId
@@ -864,6 +865,99 @@ class AttributeIs(Condition):
     def describe_ko(self) -> str:
         which = str(self.instance) if self.instance is not None else "자신"
         return f"{which} 속성이 {self.attribute}"
+
+
+@dataclass(frozen=True, slots=True)
+class IsSetCard(Condition):
+    """
+    그 카드가 이 **카드군(아키타입)** 중 하나에 속하는가 (STRUCTURAL-77).
+
+    스크립트의 ``c:IsSetCard({SET_ORCUST, SET_WORLD_LEGACY})`` 를 그대로
+    옮긴 것이다 — **목록 중 하나라도** 맞으면 참이다. 기르수(69811710)의
+    ``s.tgfilter`` 가 바로 그 모양이고, 그래서 코드 하나가 아니라 묶음을
+    받는다.
+
+    판정 규칙은 :func:`~engine.archetype.matches_setcode` 한 곳에 있다.
+    하위 12비트는 같아야 하고 질의한 상위 4비트는 카드 쪽에 **포함**되어야
+    한다 — 「엘리멘틀 히어로」 카드는 「히어로」 카드지만 그 역은 아니다.
+    근거 측정은 그 모듈의 설명에 있다.
+
+    세 답이 **서로 다른 사실**이다
+    ------------------------------
+    - ``TRUE`` — 카드가 그 코드를 갖고 있다.
+    - ``FALSE`` — 갖고 있지 않다. 코드를 하나도 안 가진 카드도 여기다.
+      카드 14,127장 중 **6,221장(44.0%)** 이 어느 카드군에도 속하지 않고,
+      그것은 ``cards.cdb`` 가 적어 둔 **사실**이므로 ``UNKNOWN`` 이 아니다.
+    - ``UNKNOWN`` — **카드 정의를 못 읽었다.** 상대의 뒷면 카드 ·
+      가려진 존 · 문맥에 ``source`` 가 없는 경우뿐이다
+      (:func:`_resolve_definition` 의 세 갈래).
+
+    🔴 **효과로 더해진 카드군은 보지 않는다.** 카드 자신의 텍스트가
+    「룰상 "X" 카드로도 취급한다」 라고 말하는 경우는 ``cards.cdb`` 가 이미
+    코드로 갖고 있다 (미라클 엑스클루더 30875635 → ``0x3008``). 그러나
+    **다른 카드의 지속 효과**가 카드군을 더하는 경우는 지속 효과 계층이
+    없어서 (STRUCTURAL-76) 판 어디에도 적히지 않는다. 적히는 자리가 생길
+    때까지 이 조건이 보는 것은 정의뿐이고, 그때 ``UNKNOWN`` 을 더 돌려줄
+    것이 아니라 **더해진 코드를 함께 넘겨야** 한다.
+    """
+
+    setcodes: tuple[int, ...]
+    """
+    물어볼 카드군 코드들. **적힌 순서를 그대로 둔다** — 스크립트가
+    ``{SET_ORCUST, SET_WORLD_LEGACY}`` 라고 적은 순서가 설명
+    (:meth:`describe_ko`)과 표현(:meth:`canonical_state`)에 그대로 남는다.
+    정렬하면 「"오르페골" 또는 "성유물"」 이라는 원문의 순서를 잃는다.
+    """
+    instance: InstanceId | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.setcodes, tuple):
+            raise TypeError(
+                "setcodes 는 tuple 이어야 합니다 — 조건은 불변입니다."
+            )
+        if not self.setcodes:
+            raise ValueError(
+                "카드군 코드가 최소 하나 필요합니다. 빈 목록은 '아무 카드군도'"
+                " 가 되어 언제나 거짓인 조건이 됩니다."
+            )
+        for code in self.setcodes:
+            validate_setcode(code)
+
+    def evaluate(self, view, context) -> ConditionResult:
+        definition, _ = _resolve_definition(view, context, self.instance)
+        if definition is None:
+            return ConditionResult.UNKNOWN
+        return ConditionResult.from_bool(
+            any(
+                matches_setcode(definition.setcodes, code)
+                for code in self.setcodes
+            )
+        )
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        _, reason = _resolve_definition(view, context, self.instance)
+        return (reason,) if reason else ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "is_set_card",
+            self.setcodes,
+            self.instance.value if self.instance else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {
+            "kind": "is_set_card",
+            "setcodes": [f"0x{code:x}" for code in self.setcodes],
+        }
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        codes = " / ".join(f"0x{code:x}" for code in self.setcodes)
+        return f"{which} 가 카드군 {codes} 에 속함"
 
 
 # ======================================================================
