@@ -471,6 +471,61 @@ def timing_events(event: JournalEvent) -> tuple[TimingEvent, ...]:
 # ======================================================================
 
 
+class TriggerSubject(str, Enum):
+    """
+    **그 사건이 누구의 사건이어야 하는가** (Phase 6-F).
+
+    🔴 **값이 둘인데 상태는 셋이다.** ``None`` 이 세 번째이고, 그것이 이
+    축의 핵심이다.
+
+    =============  =========================================================
+     ``SELF``       사건의 주체가 **이 카드 인스턴스**여야 한다
+     ``ANY``        **어느 카드의 사건이든** 반응한다 — 등록한 쪽이 단정한다
+     ``None``       **적지 않았다** → :func:`subject_relation` 이 ``UNKNOWN``
+    =============  =========================================================
+
+    ``None`` 을 ``ANY`` 로 읽지 않는다. 그렇게 읽는 것이 Phase 6-E 가
+    재현해서 잡은 거짓 양성이고 (기르수가 페더맨의 소환에 후보가 되었다),
+    이 저장소가 :attr:`TriggerSpec.activates_from` 에서 이미 내린 결론과도
+    같다 — *"적지 않은 것을 '어디서든 발동 가능' 으로 읽지 않는다."*
+
+    ``summons`` · ``operations`` · ``from_zones`` 는 반대로 ``None`` 을
+    "전부" 로 읽는다. 그 셋은 **사건의 모양**을 거르는 필터이고 거르지
+    않는 것이 뜻이 되지만, 주체는 **관계**이므로 "모르는 관계" 와 "제약
+    없는 관계" 가 다른 사실이다.
+    """
+
+    SELF = "self"
+    """사건의 주체가 **이 선언을 가진 그 카드 인스턴스**여야 한다."""
+    ANY = "any"
+    """
+    어느 카드의 사건이든 반응한다.
+
+    🔴 **컴파일러는 이 값을 쓰지 않는다.** Lua 등록만으로는 ``FIELD`` 범위가
+    "어느 카드든" 인지 "이 카드" 인지 가려낼 수 없기 때문이다 (측정:
+    :data:`~engine.trigger_compiler.EVENT_SUBJECT_RULE` 의 주석). 손으로
+    등록하는 쪽(ADR-006) 이 단정할 때만 쓰는 값이다.
+    """
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.value
+
+
+#: 🔴 **사건이 카드 한 장을 가리키는 시점들.**
+#:
+#: :attr:`TimingEvent.instance` 가 값을 돌려줄 수 있는 시점만이다. 라이프 ·
+#: 페이즈 · 효과 해결은 카드 한 장의 사건이 아니므로 주체를 걸 수 없고,
+#: 걸면 영원히 ``UNKNOWN`` 인 선언이 되어 "모른다" 가 쌓인다. ``summons`` 를
+#: ``MONSTER_SUMMONED`` 에만 허용한 것과 같은 이유다.
+SUBJECT_AWARE_POINTS: frozenset[TimingPoint] = frozenset(
+    {
+        TimingPoint.MONSTER_SUMMONED,
+        TimingPoint.CARD_MOVED,
+        TimingPoint.CARD_DRAWN,
+    }
+)
+
+
 @dataclass(frozen=True, slots=True)
 class TriggerSpec:
     """
@@ -506,6 +561,21 @@ class TriggerSpec:
 
     ``operations`` 와 **같은 자리에 넣지 않았다.** 그쪽은 효과가 하는 일의
     어휘이고 소환은 거기 들어가지 않는다 (``MonsterSummoned`` 의 설명).
+    """
+    subject: "TriggerSubject | None" = None
+    """
+    **이 사건이 누구의 사건이어야 하는가** (Phase 6-F).
+
+    ``None`` 이면 **적지 않았다**는 뜻이고, 그때
+    :func:`subject_relation` 은 ``UNKNOWN`` 을 돌려준다 — 적지 않은 것을
+    "누구의 사건이든 좋다" 로 읽지 않는다. 그렇게 읽으면 다른 몬스터가
+    소환돼도 후보가 되고, 그것이 Phase 6-E 가 재현해서 잡은 거짓 양성이다.
+
+    🔴 **이 칸이 없으면 같은 카드 2장을 구분할 수 없다.**
+    :class:`TriggerCollector` 는 그 카드의 **보이는 사본마다** 후보를 만들기
+    때문에, 사본 A 만 소환되어도 B 까지 같은 사건의 후보가 된다. 사건은
+    인스턴스를 들고 있고 (:attr:`TimingEvent.instance`) 후보도 들고 있으므로
+    (:attr:`TriggerCandidate.source`), 비교할 **근거**만 없었다.
     """
     activates_from: frozenset[Zone] | None = None
     """
@@ -550,6 +620,17 @@ class TriggerSpec:
                 f"{self.point.value} 시점에는 summons 를 걸 수 없습니다. "
                 "소환 사건이 아닙니다."
             )
+        if self.subject is not None:
+            if not isinstance(self.subject, TriggerSubject):
+                raise TypeError(
+                    "subject 는 TriggerSubject 이어야 합니다 — 선언은 불변입니다."
+                )
+            if self.point not in SUBJECT_AWARE_POINTS:
+                raise TriggerError(
+                    f"{self.point.value} 시점에는 subject 를 걸 수 없습니다. "
+                    "카드 한 장을 가리키는 사건이 아닙니다 "
+                    "(SUBJECT_AWARE_POINTS 참고)."
+                )
 
     @property
     def card_id(self) -> int:
@@ -582,6 +663,7 @@ class TriggerSpec:
             _sorted_values(self.from_zones),
             _sorted_values(self.to_zones),
             _sorted_values(self.summons),
+            self.subject.value if self.subject is not None else None,
             _sorted_values(self.activates_from),
             self.condition.canonical_state() if self.condition is not None else None,
         )
@@ -606,6 +688,8 @@ class TriggerSpec:
             value = getattr(self, name)
             if value is not None:
                 data[name] = list(_sorted_values(value))
+        if self.subject is not None:
+            data["subject"] = self.subject.value
         if self.condition is not None:
             data["condition"] = self.condition.to_dict()
         return data
@@ -615,6 +699,84 @@ class TriggerSpec:
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
         return self.describe_ko()
+
+
+#: **판정 어휘를 조건 어휘로 옮기는 표.**
+#:
+#: 함수로 갈라 쓰지 않고 표로 둔다 — Phase 3-E-38 이 같은 이유로
+#: :data:`~engine.validation.CODE_VALIDITY` 를 표로 만들었다. 분기로 쓰면
+#: 한 갈래를 빠뜨려도 조용히 통과한다.
+_CONDITION_OF_VALIDITY: dict[ActionValidity, ConditionResult] = {
+    ActionValidity.VALID: ConditionResult.TRUE,
+    ActionValidity.INVALID: ConditionResult.FALSE,
+    ActionValidity.UNKNOWN: ConditionResult.UNKNOWN,
+}
+
+#: 🔴 **무엇이 없어서 주체를 모르는가.** Phase 6-E 가 지은 이름을 그대로
+#: 쓴다 — 같은 사실에 이름을 두 개 붙이면 로드맵 추적이 갈라진다.
+SUBJECT_MISSING_RULE = "trigger-event-subject (이 사건이 이 카드의 사건인가)"
+
+
+def subject_relation(
+    spec: TriggerSpec, event: TimingEvent, source: InstanceId | None
+) -> ValidationResult:
+    """
+    **이 사건이 이 카드의 사건인가** (Phase 6-F).
+
+    답이 셋이고 뭉개지 않는다 — :meth:`TriggerEligibilityJudge._event_relation`
+    이 ``matches`` 에 대해 쓰는 것과 **같은 세 갈래**다.
+
+    ``VALID`` / ``OK``
+        선언이 ``SELF`` 를 적었고 사건의 주체가 **바로 그 인스턴스**이거나,
+        선언이 ``ANY`` 를 적었다.
+    ``INVALID`` / ``CANDIDATE_NOT_ELIGIBLE``
+        선언이 ``SELF`` 를 적었고 주체가 **다른 인스턴스**다. 확실한 거부이고
+        미구현이 아니다 — 양쪽이 ``InstanceId`` 를 들고 있으므로 **데이터
+        비교**로 답이 확정된다 (``matches`` 와 같은 성질이다).
+    ``UNKNOWN`` / ``RULE_NOT_IMPLEMENTED``
+        **선언이 주체를 적지 않았다.** ``FIELD`` 범위 등록이 그렇다 — 어느
+        카드의 사건에 반응하는지 Lua 등록만으로는 읽을 수 없다
+        (:data:`~engine.trigger_compiler.SUBJECT_SCOPES` 의 측정 참고).
+    ``UNKNOWN`` / ``INFORMATION_UNAVAILABLE``
+        **비교할 값이 없다.** 사건이 카드 한 장을 가리키지 않거나 (라이프 ·
+        페이즈) 후보의 인스턴스를 모른다. 규칙이 없는 것이 아니라 정보가
+        없는 것이므로 코드를 가른다.
+
+    🔴 **왜 이것이 조건(:class:`~engine.condition.Condition`) 이 아닌가.**
+    조건은 **판 위의 사실**을 묻고 (``ConditionEvaluator`` 가
+    ``GameStateView`` 를 들고 평가한다) 사건을 보지 않는다 —
+    ``ConditionContext`` 에는 사건을 담을 칸이 아예 없다. 그래서 Phase 6-E 가
+    이 불확실성을 ``UnimplementedRule`` 조건으로 실어 보낸 것은 **자리를
+    빌린 것**이었고, 조건 계층을 사건까지 알게 만드는 대신 사건 관계 쪽에
+    축을 두는 것이 이 저장소의 계층 구분에 맞는다.
+    """
+    if spec.subject is None:
+        return ValidationResult.unknown(
+            ValidationCode.RULE_NOT_IMPLEMENTED,
+            "이 등록이 누구의 사건에 반응하는지 적혀 있지 않습니다.",
+            missing_rule=SUBJECT_MISSING_RULE,
+            notes=(SUBJECT_MISSING_RULE,),
+        )
+    if spec.subject is TriggerSubject.ANY:
+        return ValidationResult.valid(
+            "이 등록은 어느 카드의 사건에든 반응합니다."
+        )
+    subject = event.instance
+    if subject is None or source is None:
+        missing = "사건" if subject is None else "후보"
+        return ValidationResult.unknown(
+            ValidationCode.INFORMATION_UNAVAILABLE,
+            f"{missing} 쪽이 카드 인스턴스를 들고 있지 않아 주체를 맞춰 볼 수 "
+            "없습니다.",
+            notes=(f"{missing} 인스턴스 없음",),
+        )
+    if subject == source:
+        return ValidationResult.valid(f"사건의 주체가 이 카드입니다 ({source}).")
+    return ValidationResult.invalid(
+        ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+        f"사건의 주체는 {subject} 이고 이 카드는 {source} 입니다 — "
+        "이 등록은 자기 자신의 사건에만 반응합니다.",
+    )
 
 
 class TriggerRegistry:
@@ -976,6 +1138,39 @@ class TriggerCollector:
                         )
         return tuple(sorted(missing))
 
+    @staticmethod
+    def _from_relation(
+        base: dict, relation: ValidationResult, result: ConditionResult
+    ) -> TriggerCandidate:
+        """
+        조건이 하나도 없을 때, **주체 관계만으로** 후보를 적는다 (Phase 6-F).
+
+        세 갈래를 그대로 옮긴다 — 판정을 다시 짜지 않고
+        :func:`subject_relation` 이 이미 고른 코드를 싣는다.
+        """
+        if result is ConditionResult.TRUE:
+            return TriggerCandidate(
+                **base,
+                status=TriggerStatus.ELIGIBLE,
+                code=ValidationCode.OK,
+                reason=f"{relation.reason} 걸린 조건이 없습니다. 발동 "
+                "합법성은 따로 판정해야 합니다.",
+            )
+        if result is ConditionResult.FALSE:
+            return TriggerCandidate(
+                **base,
+                status=TriggerStatus.INELIGIBLE,
+                code=relation.code,
+                reason=relation.reason,
+            )
+        return TriggerCandidate(
+            **base,
+            status=TriggerStatus.UNKNOWN,
+            code=relation.code,
+            reason=relation.reason,
+            notes=tuple(relation.notes),
+        )
+
     def _judge(
         self,
         spec: TriggerSpec,
@@ -1007,6 +1202,24 @@ class TriggerCollector:
                 reason="공식 텍스트에서 유추한 효과는 실행하지 않습니다 (ADR-004).",
             )
 
+        # 🔴 **주체를 조건보다 먼저 묻는다** (Phase 6-F).
+        #
+        # "이 사건이 이 카드의 사건인가" 는 판 위의 사실이 아니라 **사건
+        # 관계**이고, 그래서 조건 평가기에 넣지 않고 따로 묻는다
+        # (:func:`subject_relation` 의 설명). 그러나 **결합은 조건과 같은
+        # 의미론으로** 한다 — ``ConditionResult.all_of`` 가 FALSE 를 FALSE
+        # 로, UNKNOWN 을 UNKNOWN 으로 접으므로 모름이 통과로 새지 않는다.
+        relation = subject_relation(spec, event, card.instance_id)
+        relation_result = _CONDITION_OF_VALIDITY[relation.validity]
+
+        # 🔴 **확정된 거부는 모름보다 앞이다.** 순서는 지어낸 것이 아니라
+        # :meth:`TriggerEligibility.fold` 가 이미 쓰는 그 순서다 (금지 →
+        # 거부 → 모름 → 통과). 아래의 "정의 미등록" 가지보다 **뒤**에 두면,
+        # 주체가 다르다는 **확정된 사실**이 "조건을 모른다" 는 모름에 덮여
+        # 수집기와 판정기의 답이 어긋난다 — 실제로 그렇게 어긋났다.
+        if relation_result is ConditionResult.FALSE:
+            return self._from_relation(base, relation, relation_result)
+
         conditions = [
             condition
             for condition in (
@@ -1026,13 +1239,10 @@ class TriggerCollector:
                     "조건을 확인할 수 없습니다.",
                     notes=("정의 미등록",),
                 )
-            return TriggerCandidate(
-                **base,
-                status=TriggerStatus.ELIGIBLE,
-                code=ValidationCode.OK,
-                reason="타이밍이 맞고 걸린 조건이 없습니다. 발동 합법성은 "
-                "따로 판정해야 합니다.",
-            )
+            # 🔴 조건이 없어도 **주체는 답을 갖는다.** 여기서 무조건
+            # ``ELIGIBLE`` 을 돌려주던 것이 Phase 6-E 가 재현한 거짓 양성의
+            # 자리다 (다른 카드가 소환돼도 후보가 되었다).
+            return self._from_relation(base, relation, relation_result)
 
         context = ConditionContext(
             player=card.controller,
@@ -1042,11 +1252,15 @@ class TriggerCollector:
         verdicts = [
             self._evaluator.evaluate(condition, context) for condition in conditions
         ]
-        combined = ConditionResult.all_of(verdict.result for verdict in verdicts)
-        notes = tuple(
+        combined = ConditionResult.all_of(
+            [relation_result, *(verdict.result for verdict in verdicts)]
+        )
+        notes = tuple(relation.notes) + tuple(
             reason for verdict in verdicts for reason in verdict.unknown_reasons
         )
-        described = " 그리고 ".join(verdict.description for verdict in verdicts)
+        described = " 그리고 ".join(
+            [relation.reason, *(verdict.description for verdict in verdicts)]
+        )
 
         if combined is ConditionResult.TRUE:
             return TriggerCandidate(
@@ -1077,6 +1291,12 @@ class TriggerCollector:
             for condition in conditions
             for rule in condition.missing_rules(self._view, context)
         )
+        # 🔴 주체가 "규칙이 없어서" 모르는 경우도 **같은 자리에서** 센다.
+        # 빠뜨리면 ``INFORMATION_UNAVAILABLE`` 로 적히고, 그러면 "판이
+        # 바뀌면 풀린다" 는 거짓이 된다 — 등록에 주체가 없는 것은 판으로
+        # 풀리지 않는다.
+        if relation.missing_rule is not None:
+            unimplemented = (relation.missing_rule, *unimplemented)
         return TriggerCandidate(
             **base,
             status=TriggerStatus.UNKNOWN,
@@ -1358,7 +1578,11 @@ class TriggerEligibilityJudge:
             else None
         )
         gates = (
-            self._event_relation(spec, event),
+            # 🔴 **설계 C** (Phase 3-F-8 §5) — 후보 전체가 아니라 **필요한
+            # 최소**를 넘긴다. 3-F-8 은 그 최소가 ``controller`` 라고 적었는데,
+            # 그때는 주체 질문이 올라와 있지 않았다. 주체를 맞춰 보려면
+            # 필요한 것은 ``source`` (인스턴스) 하나다.
+            self._event_relation(spec, event, candidate.source),
             self._activation_zone(candidate, spec),
             self._trigger_condition(candidate, spec, definition),
             self._execution_authority(spec, definition),
@@ -1388,9 +1612,18 @@ class TriggerEligibilityJudge:
     # ------------------------------------------------------------------
     # 관문들
     # ------------------------------------------------------------------
-    def _event_relation(self, spec: TriggerSpec, event: TimingEvent) -> GateVerdict:
+    def _event_relation(
+        self, spec: TriggerSpec, event: TimingEvent, source: InstanceId | None = None
+    ) -> GateVerdict:
         """
         이 사건에 반응하는가. 선언이 적어 둔 것만 본다.
+
+        🔴 **주체도 이 관문이 본다** (Phase 6-F). 이 관문의 뜻이 "이
+        트리거가 그 사건에 반응하는가" 이고 (:class:`EligibilityGate`), "누구
+        의 사건인가" 는 바로 그 질문의 일부다. ``source`` 를 받지 않으면
+        ``TriggerCollector`` 가 거부한 후보를 이 관문이 다시 통과시킨다 —
+        :meth:`TriggerEligibility.fold` 는 관문만 보고 후보의 ``status`` 를
+        보지 않으므로, 한쪽만 고치면 **잘못된 TRUE 승격**이 그대로 남는다.
 
         **답이 셋이고, 그 셋을 하나로 뭉개지 않는다** (Phase 3-E-45).
 
@@ -1466,11 +1699,48 @@ class TriggerEligibilityJudge:
                 notes=unreadable,
             )
         if spec.matches(event):
+            # 🔴 시점 · 필터가 맞았어도 **주체가 남아 있다** (Phase 6-F).
+            #
+            # :func:`subject_relation` 이 판정을 **결정**하고, 여기서는 그
+            # 세 답을 네 갈래로 **옮겨 적는다.** 돌려받은 ``validity`` ·
+            # ``code`` 를 그대로 ``_gate`` 에 넘기면 한 줄로 끝나지만, 그러면
+            # 이 관문이 낼 수 있는 짝을 **구문으로 읽을 수 없게 된다** —
+            # Phase 3-E-44 의 R-3 이 세운 규율이고
+            # ``test_13_every_pair_the_gate_can_emit_agrees_with_the_unknown_policy``
+            # 가 실제로 그것을 잡았다. 그래서 짝은 리터럴로 적는다.
+            relation = subject_relation(spec, event, source)
+            if relation.validity is ActionValidity.VALID:
+                return _gate(
+                    EligibilityGate.EVENT_RELATION,
+                    ActionValidity.VALID,
+                    ValidationCode.OK,
+                    f"{event.point.value} 사건에 반응하는 선언입니다. "
+                    f"{relation.reason}",
+                )
+            if relation.validity is ActionValidity.INVALID:
+                return _gate(
+                    EligibilityGate.EVENT_RELATION,
+                    ActionValidity.INVALID,
+                    ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                    relation.reason,
+                )
+            # **모름의 두 까닭을 가른다** — 선언이 주체를 적지 않은 것은
+            # 코드가 생겨야 풀리고, 비교할 값이 없는 것은 판이 바뀌면 풀린다.
+            if relation.missing_rule is not None:
+                return _gate(
+                    EligibilityGate.EVENT_RELATION,
+                    ActionValidity.UNKNOWN,
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    relation.reason,
+                    notes=tuple(relation.notes),
+                    missing_rule=relation.missing_rule,
+                )
             return _gate(
                 EligibilityGate.EVENT_RELATION,
-                ActionValidity.VALID,
-                ValidationCode.OK,
-                f"{event.point.value} 사건에 반응하는 선언입니다.",
+                ActionValidity.UNKNOWN,
+                ValidationCode.INFORMATION_UNAVAILABLE,
+                relation.reason,
+                notes=tuple(relation.notes),
             )
         # **확실한 거부이고 미구현이 아니다.** 같은 사실에 같은 코드를 쓴다 —
         # ``_trigger_condition`` 과 ``TriggerCollector._judge`` 가 "조건이

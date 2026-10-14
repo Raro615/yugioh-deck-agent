@@ -91,10 +91,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Sequence
 
-from engine.condition import UnimplementedRule
 from engine.effect.delta import SummonKind
 from engine.ids import EffectRef
-from engine.trigger import TimingPoint, TriggerSpec
+from engine.trigger import TimingPoint, TriggerSpec, TriggerSubject
 from engine.vocabulary import Zone
 
 #: ``EffectSpec.declared_types`` 에서 **트리거 등록**을 뜻하는 이름들.
@@ -147,13 +146,46 @@ class _Timing:
 #: ``FIELD`` 는 **동전 던지기**다. Phase 3-F-26 이 ``_O``/``_F`` 접미사를
 #: 같은 이유로 "근거 없음" 으로 기록했으므로 여기서도 메우지 않는다.
 #:
-#: 🔴 대신 **그 사실을 조건으로 적어서** 내보낸다. 그러면 판정이
-#: ``UNKNOWN`` 으로 멈추고 (``TriggerStatus.UNKNOWN`` ·
-#: ``RULE_NOT_IMPLEMENTED``) ``missing_rules`` 가 무엇이 없는지 말해 준다.
-#: 적지 않으면 ``TriggerCollector`` 가 조건 없는 선언을 **``ELIGIBLE``** 로
-#: 돌려주고 (정의 출처를 안 넘긴 경우), 그것이 거짓 양성이다 — 실제로
-#: 재현해서 확인했다.
+#: 🔴 **Phase 6-F 가 이 수치를 다시 쟀고, 위의 97.0% 는 범위가 틀렸다.**
+#: 그 측정은 트리거 블록 **전부**(8,052)를 셌는데, 주체가 문제가 되는 것은
+#: **옮길 수 있는 사건 코드를 가진 블록**뿐이다 (:data:`EVENT_TIMING` 의
+#: 일곱 줄). 그 4,201개로 다시 세면::
+#:
+#:     SINGLE   "이 카드" 표기 있음 3,402 · 없음   8   (99.8%)
+#:     FIELD                    있음   710 · 없음  81   (89.8%)
+#:
+#: 그리고 **그 8건을 한 장씩 읽었다 — 진짜 반례는 0건이다.** 넷은 한국어
+#: 원문이 없어 영문만 있는 카드이고 ("When **this card** has been sent to
+#: the Graveyard" — Cockroach Knight 33413638), 하나는 「**이 몬스터가**
+#: 일반 소환…」 (다크 제로이드 90980792), 하나는 「**이 방법으로** 특수
+#: 소환에 성공했을 경우」 (심판자－볼테니스 20951752), 둘은 주체를 생략한다
+#: (질풍조인 죠 81896370). 전부 **자기 자신**이고, 표기 문자열이 달랐을
+#: 뿐이다.
+#:
+#: 🔴 **텍스트와 독립적인 구조 근거도 같은 방향이다.** ``FIELD`` 트리거는
+#: 사건 묶음 ``eg`` 에서 "어느 카드의 사건인가" 를 스크립트가 직접 골라야
+#: 한다. 트리거 범위가 한 종류뿐인 카드로 재면::
+#:
+#:     SINGLE  2,570장 중  72장 (2.8%) 이 eg 로 사건 카드를 고른다
+#:     FIELD     528장 중 205장 (38.8%) — 14배
+#:
+#: 근거 두 줄이 모두 "``SINGLE`` 은 핸들러가 곧 주체" 를 가리키므로, 6-F 는
+#: ``SINGLE`` 만 :attr:`~engine.trigger.TriggerSubject.SELF` 로 적는다.
+#: ``FIELD`` 는 그대로 **적지 않는다** (``subject=None`` → ``UNKNOWN``).
+#:
+#: 🔴 그리고 **틀렸을 때의 방향이 안전하다.** ``SINGLE`` 의 뜻이 어디선가
+#: 다르면 멀쩡한 후보가 ``INELIGIBLE`` 로 빠진다 — 거짓 음성이고, 지시서
+#: §11 이 둘 중 받아들이기로 한 쪽이다 ("발동 후보가 많이 생성되는 것보다
+#: 잘못된 후보가 생성되지 않는 것이 우선"). 반대 방향(거짓 양성)은 이 축이
+#: 만들어 낼 수 없다 — ``None`` 을 통과로 읽지 않기 때문이다.
 EVENT_SUBJECT_RULE = "trigger-event-subject (이 사건이 이 카드의 사건인가)"
+
+#: 🔴 **``declared_types`` 중 적용 범위를 뜻하는 이름.**
+#:
+#: 접미사의 뜻을 쓰지 않는 것과 **다른 종류의 판단**이다. 강제/임의는 이름
+#: 말고는 근거가 없었지만 (3-F-26), 범위는 위의 두 측정이 받쳐 준다.
+SELF_SCOPE_DECLARATION = "SINGLE"
+ANY_SCOPE_DECLARATION = "FIELD"
 
 #: 🔴 **옮길 수 있는 사건 코드 전부.** 일곱 줄이고, 늘리려면 "엔진이 그
 #: 변화를 실제로 만들어 낸다" 를 먼저 측정해야 한다.
@@ -374,16 +406,24 @@ def compile_trigger_spec(
             event_code=event_code,
         )
 
+    # 🔴 **주체를 축으로 적는다** (Phase 6-F).
+    #
+    # Phase 6-E 는 같은 불확실성을 ``condition=UnimplementedRule(...)`` 으로
+    # 실어 보냈다. 그것은 **자리를 빌린 것**이었다 — 조건은 판 위의 사실을
+    # 묻는 것이고 (``ConditionEvaluator`` 가 ``GameStateView`` 를 들고
+    # 평가한다) "누구의 사건인가" 는 판이 아니라 **사건**의 성질이다. 6-F 가
+    # :func:`~engine.trigger.subject_relation` 로 자리를 옮겼으므로 여기서
+    # 조건을 만들지 않는다. 모름이 사라진 것이 아니라 **제자리로 갔다.**
+    subject = (
+        TriggerSubject.SELF if SELF_SCOPE_DECLARATION in kinds else None
+    )
     spec = TriggerSpec(
         effect_ref=effect_ref,
         point=timing.point,
         to_zones=timing.to_zones,
         summons=timing.summons,
+        subject=subject,
         activates_from=_zones_from(ranges),
-        # 🔴 **"누구의 사건인가" 를 모른다는 사실을 함께 싣는다**
-        # (:data:`EVENT_SUBJECT_RULE`). 비우면 조건 없는 선언이 되고,
-        # 그러면 다른 카드의 사건에도 ``ELIGIBLE`` 이 나온다.
-        condition=UnimplementedRule(EVENT_SUBJECT_RULE),
     )
     return TriggerCompilation(
         status=TriggerCompilationStatus.COMPILED,
@@ -395,7 +435,9 @@ def compile_trigger_spec(
 
 
 __all__ = [
+    "ANY_SCOPE_DECLARATION",
     "EVENT_SUBJECT_RULE",
+    "SELF_SCOPE_DECLARATION",
     "FLIP_DECLARATION_TYPE",
     "TRIGGER_DECLARATION_TYPES",
     "EVENT_TIMING",
