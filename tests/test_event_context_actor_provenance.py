@@ -444,15 +444,26 @@ def test_05_seven_production_results_carry_deltas_and_only_two_carry_an_action()
     ``ActivationResult``         ○          ✗
     ``EffectEvent``              ✗          **○**
     ``CostPaymentEvent``         ✗          **○**
+    ``ActionEvent``              ✗          **○**
     ``EffectResult``             ✗          ✗
     ``CostPaymentResult``        ✗          ✗
     ``ProgressionResult``        ✗          ✗
     =========================  =========  ========
+
+    🔴 **Phase 6-B 가 여덟 번째 줄을 더했다** — ``ActionEvent`` 다. 이름이
+    ``ActionExecution`` 과 비슷한데 **칸은 반대쪽**이다.
+
+    ``.action`` 칸이 **없는 것이 요점이다.** 그 사건은 행위의 종류를
+    ``action_kind`` **문자열**로 들고 다닌다 — 기록 계층이
+    ``engine.action`` 을 import 하면 방향이 뒤집히기 때문이다 (기록은
+    아래, 행위 어휘는 위). 그래서 ``.actor`` 를 가진 journal 사건 쪽에
+    선다. 아래의 "두 집합이 겹치지 않는다" 는 그대로 유지된다.
     """
     rows = every_delta_bearing_result()
     assert rows == {
         "engine.action_execution.ActionExecution": (True, False),
         "engine.activation.ActivationResult": (True, False),
+        "engine.effect.journal.ActionEvent": (False, True),
         "engine.effect.journal.CostPaymentEvent": (False, True),
         "engine.effect.journal.EffectEvent": (False, True),
         "engine.effect.resolution.EffectResult": (False, False),
@@ -463,7 +474,9 @@ def test_05_seven_production_results_carry_deltas_and_only_two_carry_an_action()
     with_action = {name for name, (has_action, _) in rows.items() if has_action}
     assert len(with_action) == 2
     with_actor = {name for name, (_, has_actor) in rows.items() if has_actor}
-    assert len(with_actor) == 2
+    #: 2 → **3** (Phase 6-B 의 ``ActionEvent``). ``.action`` 쪽은 **그대로
+    #: 둘**이고, 그것이 위 설명의 요점이다.
+    assert len(with_actor) == 3
     #: 두 집합이 **겹치지 않는다** — 한 result 가 둘을 다 갖는 일은 없다.
     assert with_action & with_actor == set()
 
@@ -580,7 +593,24 @@ def test_08_the_read_docstring_names_three_of_the_seven_result_types():
         "EffectEvent",
         "CostPaymentEvent",
     }, named
-    assert len(every_delta_bearing_result()) == 7 == len(named)
+
+    #: 🔴 **Phase 6-B 가 여덟 번째 result 를 더했다** (``ActionEvent``).
+    #: 그래서 "설명이 전수를 다 적었다" 가 **다시 깨졌고**, 이 테스트가
+    #: 설계대로 그것을 잡았다.
+    #:
+    #: ``EventReader.read`` 의 설명은 **고치지 않았다.** 그 설명이 적는 것은
+    #: "이 함수가 읽는 입력" 이고, ``ActionEvent`` 는 그 함수에 전달되지
+    #: 않는다 — 트리거 파이프라인은 여전히 dormant 다. 읽지 않는 것을
+    #: 설명에 적어 넣으면 그 설명이 거짓이 된다.
+    #:
+    #: 그래서 단정을 **둘로 나눈다**: 설명이 적은 것은 그대로 일곱이고,
+    #: 전수는 여덟이며, 그 차이가 ``ActionEvent`` 하나라는 것까지 고정한다.
+    #: 아홉 번째가 생기면 여기서 다시 깨진다.
+    census = every_delta_bearing_result()
+    unnamed = {name.rsplit(".", 1)[-1] for name in census} - named
+    assert unnamed == {"ActionEvent"}, unnamed
+    assert len(named) == 7
+    assert len(census) == 8
 
 
 # ======================================================================

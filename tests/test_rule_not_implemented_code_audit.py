@@ -116,11 +116,16 @@ PROSE_OCCURRENCES = {
     ("engine/activation.py", 672),      # M1: 확실한 거부이고 미구현이 아니다
     ("engine/effect/executor.py", 922), # M2: 이 근거로는 절대 실행하지 않는다
     ("engine/special_summon.py", 77),
-    ("engine/trigger.py", 995),
+    # 🔴 Phase 6-B 가 ``from_journal_event`` 에 ``ActionEvent`` 가드(+20줄)를
+    # 넣어서 **그 아래 줄 번호가 전부 +20 밀렸다.** 문장도 자리도 그대로이고,
+    # 바뀐 것은 번호뿐이다 (995 → 1015, 1335 → 1355, 1341 → 1361,
+    # 1364 → 1384). 🔴 이 핀이 줄 번호를 세는 이상 그런 이동은 **반드시
+    # 여기서 드러나야 한다** — 그것이 번호를 적어 둔 이유다.
+    ("engine/trigger.py", 1015),
     # 3-E-45: ``_event_relation`` 이 왜 세 갈래인가를 적은 docstring 셋.
-    ("engine/trigger.py", 1335),
-    ("engine/trigger.py", 1341),
-    ("engine/trigger.py", 1364),
+    ("engine/trigger.py", 1355),
+    ("engine/trigger.py", 1361),
+    ("engine/trigger.py", 1384),
     ("engine/trigger_chain.py", 553),
     ("engine/trigger_chain.py", 569),
     ("engine/validation.py", 129),
@@ -184,7 +189,10 @@ FIELD_DEFAULT_OWNERS = {
 #:    그대로다. 문자열 리터럴을 지운 AST 가 전후 동일함이 그 증거다
 #:    (:mod:`tests.test_result_actor_provenance_contract` 의 ``test_20``).
 CONTRACT_VIOLATIONS = {
-    ("engine/action_execution.py", 316, "ActionStatus.EXECUTION_ERROR"),
+    # 🔴 Phase 6-B 가 ``ActionExecutor.__init__`` 에 ``journal`` 인자와
+    # 설명(+23줄)을 더해 **그 아래가 밀렸다** (316 → 339). 거부 자리와
+    # 짝지은 상태는 그대로다.
+    ("engine/action_execution.py", 339, "ActionStatus.EXECUTION_ERROR"),
     ("engine/activation.py", 554, "ActivationStatus.INVALID_ACTION"),
     ("engine/activation.py", 586, "ActivationStatus.CHAIN_REFUSED"),
     ("engine/effect/executor.py", 488, "ResolutionStatus.EXECUTION_ERROR"),

@@ -298,7 +298,14 @@ def test_01_the_effect_result_has_exactly_one_production_producer():
     assert builders == {"engine/effect/library.py": 1}, builders
 
     #: 그 공장을 부르는 production 자리도 하나다 — 듀얼의 해결기다.
-    assert "build_executor()" in source_of("engine/spell_activation.py")
+    #:
+    #: 🔴 **Phase 6-B 가 인자를 넘기기 시작했다.** 예전에는
+    #: ``build_executor()`` 였고 지금은 ``build_executor(journal=journal)``
+    #: 이다 — 끊어져 있던 journal 연결이 그 한 자리였다. 부르는 자리의
+    #: **수는 그대로 하나**이고, 그것이 이 테스트가 지키는 사실이다.
+    activation_source = source_of("engine/spell_activation.py")
+    assert activation_source.count("build_executor(") == 1
+    assert "build_executor(journal=journal)" in activation_source
 
 
 def test_02_the_cost_payment_result_has_exactly_one_production_producer():
@@ -315,7 +322,22 @@ def test_02_the_cost_payment_result_has_exactly_one_production_producer():
         for path, count in callers_of("CostPayer").items()
         if not path.endswith("payment.py")
     }
-    assert payers == {"engine/activation.py": 1}, payers
+    #: 🔴 **Phase 6-B 가 두 번째 자리를 더했다.**
+    #:
+    #: ``engine/activation.py`` 의 것은 ``EffectActivator`` 가 **주입받지
+    #: 못했을 때의 기본값**이고 (``payer if payer is not None else
+    #: CostPayer()``), 그대로다. 새로 생긴 ``engine/spell_activation.py``
+    #: 의 것은 ``duel_activator`` 가 **journal 을 들린 지불기를 주입**하는
+    #: 자리다.
+    #:
+    #: 🔴 그래서 "``CostPaymentResult`` 를 만드는 곳은 ``CostPayer.pay``
+    #: 하나" 라는 이 테스트의 결론은 **그대로다** — 늘어난 것은 지불기를
+    #: *만드는* 자리이고 결과를 *만드는* 자리가 아니다. 셋이 되면 다시
+    #: 여기서 깨진다.
+    assert payers == {
+        "engine/activation.py": 1,
+        "engine/spell_activation.py": 1,
+    }, payers
 
 
 def test_03_the_chain_link_carries_the_actor_from_the_action():
@@ -484,41 +506,74 @@ def test_08_a_standalone_result_really_cannot_name_its_actor(repository):
 
 
 # ======================================================================
-# C. §2 · §8 — journal 은 production 에서 비어 있다
+# C. §2 · §8 — journal 이 production 에서 비어 있었다 (Phase 6-B 가 바꿨다)
 # ======================================================================
 
 
-def test_09_production_never_records_the_journal_events():
+def test_09_production_now_records_the_journal_events_through_the_duel():
     """
-    🔴 §8 — **production 은 journal 을 넘기지 않는다.**
+    🔴 **이 테스트의 전제를 Phase 6-B 가 의도적으로 뒤집었다.**
 
-    ``EffectEvent.actor`` 와 ``CostPaymentEvent.actor`` 는 actor 를 제대로 들고
-    있지만, 그 두 사건은 **production 에서 한 번도 기록되지 않는다.**
+    예전 이름은 ``test_09_production_never_records_the_journal_events`` 였고,
+    주장은 이것이었다 — *"production 은 journal 을 넘기지 않는다 … 그래서
+    'journal 이 provenance 를 들고 있다' 는 production 에서 **거짓**이고 …
+    B 안을 고를 때 journal 을 근거로 삼을 수 없다."*
 
-    그래서 "journal 이 provenance 를 들고 있다" 는 production 에서 **거짓**이고,
-    actor 의 유일한 production 집은 **운반자**다. 이것이 B 안(기존 provenance 를
-    쓴다)을 고를 때 **journal 을 근거로 삼을 수 없는** 까닭이다.
+    **그 주장은 그때 사실이었다.** Phase 6-B 가 ``Duel`` 에 journal 칸을
+    만들고 네 writer 에게 같은 객체를 나눠 주면서 사실이 바뀌었다. 그러니
+    이 테스트가 재던 **설계 판단의 전제도 함께 바뀐다** — journal 은 이제
+    production provenance 의 **후보**다.
+
+    🔴 **그래도 "공짜" 는 아니다.** 세 가지를 갈라 적는다:
+
+    1. **효과 해결** — 실제로 기록된다. ``EffectEvent.actor`` 가
+       production 에서 값을 갖는다.
+    2. **행위** — Phase 6-B 가 더한 ``ActionEvent`` 로 기록된다. 다만 그
+       사건에는 ``.action`` 칸이 **없다** (``action_kind`` 문자열뿐) —
+       ``test_event_reader_actor_input_boundary::test_15`` 가 그래서
+       "설계 A 로는 닿지 않는다" 고 적는다.
+    3. 🔴 **비용 지불** — **배선만 되고 한 번도 발화되지 않는다.** 등재된
+       16개 효과 중 비용을 선언한 것이 **0개**이기 때문이다. 그러므로
+       ``CostPaymentEvent.actor`` 를 production 근거로 쓰는 것은 여전히
+       **검증되지 않았다.**
+
+    기본값은 여전히 "적지 않는다" 다 — 기록이 켜지는 것으로 행동이
+    달라지지 않게 하려는 것이고, 그 사실도 함께 고정한다.
     """
-    resolver = duel_resolver()
-    assert isinstance(resolver, ChainResolver)
-    #: 듀얼의 해결기가 든 실행기에 journal 이 없다.
-    assert getattr(resolver.executor, "_journal", "없음") is None
-
-    #: 공장도 기본값이 ``None`` 이다.
+    #: ① 공장의 **기본값은 그대로 ``None``** 이다 — 바뀐 것은 부르는 쪽이다.
     assert inspect.signature(build_executor).parameters["journal"].default is None
-    #: 그리고 ``duel_resolver`` 는 journal 을 주지 않는다.
-    assert "build_executor()" in source_of("engine/spell_activation.py")
 
-    #: 비용 쪽도 같다 — ``CostPayer()`` 를 그냥 만든다.
+    #: ② 그런데 듀얼의 해결기는 이제 journal 을 **받는다.**
+    recorded = duel_resolver(journal=EventJournal())
+    assert isinstance(recorded, ChainResolver)
+    assert isinstance(getattr(recorded.executor, "_journal", None), EventJournal)
+
+    #: ③ 주지 않으면 예전과 같다 — 적지 않는다.
+    silent = duel_resolver()
+    assert isinstance(silent, ChainResolver)
+    assert getattr(silent.executor, "_journal", "없음") is None
+
+    #: ④ ``duel_resolver`` 가 journal 을 **그대로 넘긴다** (그 한 자리가
+    #: 끊겨 있던 연결이다).
+    activation_source = source_of("engine/spell_activation.py")
+    assert "build_executor(journal=journal)" in activation_source
+    assert "build_executor()" not in activation_source
+
+    #: ⑤ 비용 쪽도 journal 을 들린 지불기를 주입한다.
+    assert "CostPayer(journal=journal)" in activation_source
+    #: 🔴 ``activation.py`` 의 ``CostPayer()`` 는 **주입받지 못했을 때의
+    #: 기본값**이고 그대로다 — 그쪽은 여전히 적지 않는다.
     assert "CostPayer()" in source_of("engine/activation.py")
 
-    #: production 어디에도 ``EventJournal`` 을 만드는 자리가 없다.
+    #: ⑥ 이제 production 에 ``EventJournal`` 을 **만드는 자리가 있다.**
+    #: 🔴 **하나뿐**이어야 한다 — 여럿이면 듀얼 하나에 기록이 여럿 생기고
+    #: "무엇이 먼저 일어났는가" 가 사라진다.
     journal_builders = {
         path: count
         for path, count in callers_of("EventJournal").items()
         if not path.endswith("journal.py")
     }
-    assert journal_builders == {}, journal_builders
+    assert journal_builders == {"engine/spell_activation.py": 1}, journal_builders
 
 
 def test_10_the_journal_events_do_carry_the_actor_when_asked(repository):

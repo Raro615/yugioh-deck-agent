@@ -864,10 +864,22 @@ def test_15_the_seven_results_split_into_three_responsibility_groups():
     ``ActivationResult``           ``action.actor``  파생 가능 — **정의상 안전**
     ``EffectEvent``                ``actor``         🟡 **개념이 다르다** (지배자)
     ``CostPaymentEvent``           ``actor``         🟡 **개념이 다르다** (지불자)
+    ``ActionEvent``                ``actor``         **선언한 사람** (Phase 6-B)
     ``EffectResult``               모른다             **호출자뿐**
     ``CostPaymentResult``          모른다             **호출자뿐**
     ``ProgressionResult``          없다               **아무도** (의도된 없음)
     ============================  ================  ==========================
+
+    🔴 **Phase 6-B 가 여덟 번째를 더했다.** 셋째 묶음("자기 actor 를 들고
+    있다")이 둘에서 **셋**이 되었고, 책임 묶음의 **수는 그대로 셋**이다 —
+    이 테스트가 가르는 것은 묶음이지 줄 수가 아니다.
+
+    ``ActionEvent`` 의 ``actor`` 는 앞의 두 journal 사건과 달리 **개념이
+    어긋나지 않는다** (🟡 가 없다). 지배자도 지불자도 아니라 **그 행위를
+    선언한 사람**이고, ``ActionExecutor`` 가 ``action.actor`` 를 그대로
+    옮겨 적기 때문이다. 그런데 ``.action`` 칸은 **갖지 않는다** — 기록
+    계층이 ``engine.action`` 을 import 하지 않기 때문이고, 그래서 첫
+    묶음("action 에서 파생 가능")이 아니라 셋째에 선다.
     """
     rows = every_delta_bearing_result()
     assert rows == {
@@ -875,6 +887,7 @@ def test_15_the_seven_results_split_into_three_responsibility_groups():
         "ActivationResult": (True, False),
         "EffectEvent": (False, True),
         "CostPaymentEvent": (False, True),
+        "ActionEvent": (False, True),
         "EffectResult": (False, False),
         "CostPaymentResult": (False, False),
         "ProgressionResult": (False, False),
@@ -886,15 +899,24 @@ def test_15_the_seven_results_split_into_three_responsibility_groups():
         name for name, (a, b) in rows.items() if not a and not b
     }
     assert len(derivable_from_action) == 2
-    assert len(carries_own_actor) == 2
+    #: 2 → **3** (Phase 6-B). 첫 묶음은 **그대로 둘**이다
+    assert len(carries_own_actor) == 3
     assert knows_nothing == {
         "EffectResult",
         "CostPaymentResult",
         "ProgressionResult",
     }
 
-    #: 설계 A 가 덮을 수 있는 최대치는 **4/7** 이고, 안전한 것은 **2/7** 이다.
-    assert len(derivable_from_action | carries_own_actor) == 4
+    #: 설계 A 가 덮을 수 있는 최대치는 **5/8** 이고, 안전한 것은 **2/8**
+    #: 이다 (Phase 6-B 전에는 4/7 과 2/7 이었다).
+    #:
+    #: 🔴 **분모가 늘었는데 "안전한 것" 은 늘지 않았다.** ``ActionEvent`` 의
+    #: ``actor`` 는 뜻이 어긋나지 않지만 (``action.actor`` 를 그대로 옮겨
+    #: 적는다) 그래도 **``.action`` 칸이 없으므로** 설계 A 의 "action 에서
+    #: 파생한다" 로는 닿지 않는다. ``test_16`` 이 말하는 "공짜가 아니다" 와
+    #: 같은 자리이고, 이 줄이 그것을 수로 지킨다.
+    assert len(derivable_from_action | carries_own_actor) == 5
+    assert len(derivable_from_action) == 2
 
 
 def test_16_the_journal_actor_is_a_different_concept_not_a_free_win():
