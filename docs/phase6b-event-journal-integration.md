@@ -164,6 +164,13 @@ state=clone)` 로 판만 복제하고 **나머지를 공유**했다. journal 이
 | `agent/simulation.py` | `_fork` 의 기록 격리 | +22 / −6 |
 | `tests/engine/test_event_journal_integration.py` | 신규 회귀 테스트 14개 | +526 |
 | `tests/agent/test_search_ai.py` | 🔴 **지뢰선 하나를 새 사실로 갱신** (아래) | +42 / −12 |
+| `tests/test_trigger_lifetime_audit.py` | `Duel` 필드 집합 + `duel.py` 가 `journal` 을 **읽지 않는다**는 AST 단정 추가 | +27 / −0 |
+| `tests/test_trigger_pipeline_dormant_audit.py` | `trigger.py` 줄수 1,661 → 1,681 | +24 / −4 |
+| `tests/test_event_context_actor_provenance.py` | 결과 인구조사 7 → 8, `with_actor` 2 → 3 | +32 / −2 |
+| `tests/test_event_reader_actor_input_boundary.py` | `carries_own_actor` 2 → 3, 합집합 4 → 5 | +25 / −3 |
+| `tests/test_result_actor_provenance_design_audit.py` | 🔴 **`test_09` 판정을 다시 씀** (§9) | +78 / −23 |
+| `tests/test_rule_not_implemented_code_audit.py` | 줄번호 고정값 갱신 | +13 / −5 |
+| `tests/test_actor_declaration_scope_audit.py` | 인구조사 8, `carries_actor` 에 `ActionEvent` 추가 | +14 / −3 |
 
 모든 프로덕션 변경이 **가산적**이고, 기본값이 "적지 않는다" 이므로 기존
 호출의 동작이 바뀌지 않는다.
@@ -324,7 +331,7 @@ $ python3 -m pytest tests/engine/test_event_journal_integration.py -p no:randoml
 
 ```
 $ python3 -m pytest tests/engine -p no:randomly -q
-2842 passed in 82.81s (0:01:22)
+2842 passed in 78.24s (0:01:18)
 ```
 
 Phase 6-A 기록은 **2,828 passed** 였다. 차이 **+14**는 전부 이번에 추가한
@@ -352,22 +359,69 @@ $ python3 -m pytest tests/agent/test_search_ai.py -p no:randomly -q
 "엔진 테스트 전체" 를 요구했는데, 그것만으로는 충분하지 않았다는 사실을
 적어 둔다.
 
-### 🔴 아직 끝나지 않은 확인 — 사실대로 적는다
+### 전체 스위트 — 묶음으로 끝까지 돌렸다 (최종)
 
-`tests/engine` 밖 **전체** 스위트(`--ignore=tests/engine`, `-x` 없이)를
-돌리고 있고 **이 문서를 쓰는 시점에 아직 끝나지 않았다.** 이 저장소에는 한
-파일에 6~7분이 걸리는 감사 테스트가 여럿 있어서 그 묶음이 30분을 넘긴다.
+🔴 **처음 시도는 아무것도 증명하지 못했다.** `tests/ --ignore=tests/engine`
+한 번에 돌린 백그라운드 작업이 30분 상한에서 죽어 **출력 0바이트**로
+끝났다. 이 저장소에는 한 파일에 6~7분 걸리는 감사 테스트가 여럿 있어
+단일 실행으로는 끝나지 않는다. 그래서 파일 목록을 4묶음으로 나누고
+상한을 올려 다시 돌렸다.
 
-지금까지 **실제로 확인한 것**은 이것뿐이다:
+| 범위 | 1차 실행 | 고친 뒤 |
+|---|---|---|
+| `tests/engine` (2,842개) | ✅ 2,842 passed (1:18~1:22) | — |
+| `tests/agent` + `tests/rules` + `tests/rulings` | ✅ 529 passed, 4 skipped (4:43) | — |
+| 묶음 0 (25파일) | 706 passed + **1 failed** (22:27) | ✅ 해당 파일 28 passed |
+| 묶음 1 (22파일) | 551 passed + **3 failed** (11:57) | ↓ |
+| 묶음 2 (22파일) | 545 passed + **5 failed** (12:15) | ↓ |
+| 묶음 1+2 재검증 (44파일) | — | ✅ **1,104 passed** (22:00) |
+| 묶음 3 (22파일) | 463 passed + **3 failed** (7:46) | ✅ **466 passed** (6:50) |
 
-| 범위 | 결과 |
-|---|---|
-| `tests/engine` (2,842개) | ✅ 통과 |
-| `tests/agent/test_search_ai.py` (42개) | ✅ 통과 (갱신 뒤) |
-| `tests/` − `tests/engine`, `-x` 로 첫 실패까지 | 271 passed + **1 failed** → 그 1건을 고친 것이 위 §4 |
+**최종 실패 0건.** 묶음 0 은 고친 파일만 다시 돌렸고(28 passed) 나머지
+24개 파일은 1차에서 이미 통과했다 — 전체를 다시 22분 돌리지 않았다는
+사실을 그대로 적는다.
 
-🔴 **통과하지 않은 것을 통과했다고 적지 않는다.** 전체 스위트가 끝나면 그
-결과를 이 절에 덧붙여야 하고, 추가 실패가 나오면 그것도 그대로 적는다.
+### 🔴 밖에서 난 12건은 전부 "고정된 수치가 움직인 것"이고, 프로덕션 결함은 0건이다
+
+| 파일 | 테스트 | 움직인 고정값 |
+|---|---|---|
+| `test_actor_declaration_scope_audit.py` | `test_13` | 결과 타입 인구조사 7 → 8 |
+| `test_event_context_actor_provenance.py` | `test_05` · `test_08` | 인구조사 7 → 8, `with_actor` 2 → 3 |
+| `test_event_reader_actor_input_boundary.py` | `test_15` | `carries_own_actor` 2 → 3, 합집합 4 → 5 |
+| `test_result_actor_provenance_design_audit.py` | `test_01` · `test_02` | 생산자 서명이 `journal=` 을 받게 됨 |
+| `test_result_actor_provenance_design_audit.py` | `test_09` | 🔴 **이 Phase 가 일부러 뒤집은 사실** |
+| `test_rule_not_implemented_code_audit.py` | `test_02` · `test_05` | `trigger.py` 줄번호 +20, `action_execution.py` +23 |
+| `test_trigger_lifetime_audit.py` | `test_08` | `Duel` 필드 집합에 `journal` 추가 |
+| `test_trigger_pipeline_dormant_audit.py` | `test_01` · `test_25` | `trigger.py` 1,661 → 1,681 줄 |
+
+네 종류로 나뉜다 — **인구조사 5건 · 줄수 2건 · 줄번호 2건 · 구조 3건.**
+
+🔴 **인구조사 5건은 모두 같은 하나의 사실을 가리켰다.** `ActionEvent` 은
+`actor` 를 직접 들고 있지만 **`.action` 칸이 없다** (journal 이
+`engine.action` 을 import 하면 안 되므로 행위 종류가 문자열로 건너온다).
+그래서 "actor 를 스스로 들고 있는 결과" 는 2 → 3 으로 늘었는데
+"action 에서 끌어낼 수 있는 결과" 는 2에서 **그대로**다. 다섯 군데가
+같은 구분을 각자 고정해 둔 덕분에, 내가 그 구분을 뭉개지 않았다는 것이
+다섯 번 확인됐다.
+
+#### `test_09` 를 다시 썼다 — 이름이 가리키던 사실이 사라졌다
+
+옛 이름은 `test_09_production_never_records_the_journal_events` 였고 그
+단정은 **쓰여진 시점에 참이었다** (§1: 기록 계층에 production 호출자가
+없었다). Phase 6-B 가 바로 그것을 뒤집었으므로 이름과 함께 판정을
+`test_09_production_now_records_the_journal_events_through_the_duel` 로
+바꾸고, 셋으로 쪼개 각각을 측정값으로 고정했다:
+
+1. **효과 해결은 기록된다** — `EffectEvent` 가 실제 이동과 함께 남는다.
+2. **행위도 기록되지만 `.action` 없이** 기록된다 — 위의 구분 그대로.
+3. 🔴 **비용 경로는 배선만 됐고 이벤트는 0건이다** — 등재된 효과 16개 중
+   비용을 선언한 것이 하나도 없어 `CostPayer` 가 발화할 기회가 없다.
+   `journal_builders == {"engine/spell_activation.py": 1}` 로 "만드는
+   자리는 한 곳" 이라는 사실만 고정했다.
+
+🔴 **지시서의 "엔진 테스트 전체" 는 충분하지 않았다.** `tests/engine` 이
+2,842개 통과하는 동안 그 밖에서 12개가 깨져 있었다. 다음 Phase 는
+처음부터 **전체를 묶음으로** 쓸어야 한다.
 
 ---
 
@@ -428,7 +482,19 @@ Phase 6-A 로드맵의 6-C(아키타입 술어)는 **이번 단계와 독립**�
 
 ## 12. Git 커밋 및 푸시 결과
 
-아래 커밋 절에 적는다.
+브랜치 `claude/pensive-goodall-te1egy` 에만 올렸다. 기존 커밋을 amend ·
+rewrite · force push 하지 않았다.
+
+| 커밋 | 내용 |
+|---|---|
+| `f66b638` | 프로덕션 배선 — `EventKind.ACTION` · `ActionEvent` · `duel_components()` · 포크 격리 |
+| `6aebfcd` | 회귀 테스트 14개 + 발화한 지뢰선 1개 갱신 |
+| `f4f6eb3` | 이 보고서 |
+| `4897a6f` | `journal` 칸·가드가 움직인 고정값 3건 |
+| `451a01c` | 인구조사·줄수 고정값 8건 |
+| `2dc3f84` | 묶음 0 에서 난 마지막 인구조사 고정값 1건 |
+
+이 절의 §9 최종 수치 확정이 마지막 커밋이다.
 
 ---
 
