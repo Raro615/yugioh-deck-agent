@@ -98,7 +98,11 @@ MINE = 0
 #:
 #: 75 → **76** (Phase 3-E-38 이 M1·M2 네 자리를 고치면서 코드 2 감소 ·
 #: 까닭을 적은 주석 3 증가).
-STRING_OCCURRENCES = 79
+#: 🔴 79 → **80** (Phase 6-E). 늘어난 하나는
+#: ``engine/trigger_compiler.py`` 의 **설명 안**이다 — "조건을 적지 않으면
+#: 거짓 양성이 된다" 를 적으면서 그 코드 이름을 인용했다. **코드 자리는
+#: 그대로 67개**이고, 이 파일의 ``CODE_OCCURRENCES`` 가 그것을 따로 센다.
+STRING_OCCURRENCES = 80
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -121,11 +125,20 @@ PROSE_OCCURRENCES = {
     # 바뀐 것은 번호뿐이다 (995 → 1015, 1335 → 1355, 1341 → 1361,
     # 1364 → 1384). 🔴 이 핀이 줄 번호를 세는 이상 그런 이동은 **반드시
     # 여기서 드러나야 한다** — 그것이 번호를 적어 둔 이유다.
-    ("engine/trigger.py", 1015),
+    # 🔴 Phase 6-E 가 ``TimingEvent.summon`` 과 ``TriggerSpec.summons``
+    # (+48줄)를 넣어서 **그 아래 줄 번호가 다시 밀렸다** (1015 → 1063,
+    # 1355 → 1403, 1361 → 1409, 1384 → 1432). 문장도 자리도 그대로다.
+    ("engine/trigger.py", 1063),
     # 3-E-45: ``_event_relation`` 이 왜 세 갈래인가를 적은 docstring 셋.
-    ("engine/trigger.py", 1355),
-    ("engine/trigger.py", 1361),
-    ("engine/trigger.py", 1384),
+    ("engine/trigger.py", 1403),
+    ("engine/trigger.py", 1409),
+    ("engine/trigger.py", 1432),
+    # 🔴 Phase 6-E 신규 — 트리거 컴파일러가 **왜 조건을 적어야 하는지**를
+    # 적으면서 그 코드 이름을 인용한 자리다. 코드가 아니라 설명이고,
+    # 그래서 산문 자리가 12 → **13** 이 되었다. (처음 143 으로 적었는데, 그
+    # 뒤 FLIP 을 ``EVENT_UNSUPPORTED`` 로 재분류하면서 **위쪽 설명이 9줄
+    # 늘어 152 로 밀렸다** — 이 핀이 그 이동을 잡아 주었다.)
+    ("engine/trigger_compiler.py", 152),
     ("engine/trigger_chain.py", 553),
     ("engine/trigger_chain.py", 569),
     ("engine/validation.py", 129),
@@ -452,7 +465,7 @@ def test_02_the_string_count_is_79_but_the_code_count_is_67():
 
     sites = code_sites()
     assert len(sites) == CODE_OCCURRENCES
-    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 12
+    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 13
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()

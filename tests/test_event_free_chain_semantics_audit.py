@@ -424,7 +424,17 @@ def test_11_the_definition_does_not_need_a_trigger_spec_for_these_five():
     assert "point" in required
     assert "effect_ref" in required
 
-    #: 그리고 production 에 `TriggerSpec` 이 하나도 없다 (3-E-31 재확인).
+    #: 그리고 production 에서 `TriggerSpec` 을 만드는 자리는 **컴파일러 한 곳뿐**
+    #: 이다.
+    #:
+    #: .. note::
+    #:    3-E-31 부터 6-D 까지 이 자리는 ``made == []`` 였다 — production 이
+    #:    ``TriggerSpec`` 을 **하나도** 만들지 않았다는 뜻이다. 6-E 가
+    #:    ``engine/trigger_compiler.py`` 를 추가해 그 수를 1 로 옮겼다.
+    #:    **기존 단정이 틀렸던 것이 아니라 사실이 움직였다**: 이 감사가 고정하려는
+    #:    것은 "``EVENT_FREE_CHAIN`` 다섯 장에 선언이 생기지 않았다" 이므로,
+    #:    목록을 비우라고 요구하는 대신 **어느 파일이 만드는지**를 고정하고 그
+    #:    다섯 장이 그 안에 들어오지 않는 것은 아래에서 따로 확인한다.
     made = []
     for path in sorted(PROJECT_ROOT.rglob("*.py")):
         if "__pycache__" in str(path) or str(path.relative_to(PROJECT_ROOT)).startswith(
@@ -440,18 +450,32 @@ def test_11_the_definition_does_not_need_a_trigger_spec_for_these_five():
             for n in ast.walk(tree)
         ):
             made.append(str(path.relative_to(PROJECT_ROOT)))
-    assert made == [], made
+    assert made == ["engine/trigger_compiler.py"], made
+
+    #: 그 한 곳도 **사건 코드가 있을 때만** 만든다 — ``EVENT_FREE_CHAIN`` 은
+    #: ``EVENT_TIMING`` 표에 없으므로 어떤 시점으로도 번역되지 않는다.
+    from engine.trigger_compiler import EVENT_TIMING
+
+    assert "EVENT_FREE_CHAIN" not in EVENT_TIMING
+    assert not any("FREE_CHAIN" in name for name in EVENT_TIMING)
 
 
 def test_12_this_audit_added_no_production_structure():
     """
     §13 — 감사가 production 구조를 늘리지 않았다.
 
-    정의 10칸 · 선언 9칸 그대로이고, ``EVENT_FREE_CHAIN`` 을 복제한 새 enum 도
-    없다.
+    정의 10칸 그대로이고, ``EVENT_FREE_CHAIN`` 을 복제한 새 enum 도 없다.
+
+    .. note::
+       선언 칸 수는 이 감사가 돌던 시점에 9 였고 지금은 10 이다. 6-E 가
+       ``TriggerSpec.summons`` 를 더했다 — ``EVENT_SUMMON_SUCCESS`` 와
+       ``EVENT_SPSUMMON_SUCCESS`` 가 같은 ``MONSTER_SUMMONED`` 시점으로
+       번역되기 때문에, 칸이 없으면 통상소환 사건이 특수소환 전용 효과를
+       후보로 만든다 (거짓 양성). **이 감사가 production 을 늘리지 않았다는
+       사실은 그대로다** — 늘린 것은 6-E 이고, 이 줄은 그 사실을 따라간다.
     """
     assert len(dataclasses.fields(EffectDefinition)) == 10
-    assert len(dataclasses.fields(TriggerSpec)) == 9
+    assert len(dataclasses.fields(TriggerSpec)) == 10
 
     #: 새 enum 이 생기지 않았다.
     #:

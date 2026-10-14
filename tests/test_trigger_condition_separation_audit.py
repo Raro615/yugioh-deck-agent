@@ -191,6 +191,9 @@ def test_02_the_trigger_spec_is_the_one_that_carries_a_point():
     """
     names = [field.name for field in dataclasses.fields(TriggerSpec)]
     assert "point" in names
+    #: 🔴 Phase 6-E 가 ``summons`` 를 더했다 (아홉 → 열) — 일반 소환과
+    #: 특수 소환을 가르지 못하면 트리거 컴파일러가 거짓 양성을 만든다.
+    #: **이 시험의 요지는 그대로다** — 시점을 들고 있는 것은 선언 쪽이다.
     assert names == [
         "effect_ref",
         "point",
@@ -199,6 +202,7 @@ def test_02_the_trigger_spec_is_the_one_that_carries_a_point():
         "operations",
         "from_zones",
         "to_zones",
+        "summons",
         "activates_from",
         "condition",
     ]

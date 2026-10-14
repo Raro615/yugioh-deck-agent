@@ -14,11 +14,27 @@ Phase 3-F-6 — **TriggerSpec 선언 스키마 감사.**
 
 측정으로 확정한 것
 ------------------
-* ``TriggerSpec`` 은 필드 **아홉 개**이고, production 에서 그 이름을 아는
-  모듈은 **``engine/trigger.py`` 하나뿐**이다 (``test_11``).
-* 사건을 좁히는 축은 **넷**이다 — ``point`` · ``operations`` ·
-  ``from_zones`` · ``to_zones``. 뒤의 셋은 ``__post_init__`` 이
-  ``CARD_MOVED`` 에만 허용한다.
+.. note::
+   🔴 **Phase 6-E 가 이 감사의 결론 일부를 뒤집었다.** 이 파일이 §4 E 로
+   적어 둔 *"SUMMON KIND: NOT REPRESENTABLE"* 이 그것인데, 트리거 컴파일러를
+   만들면서 **그 칸이 없으면 거짓 양성이 난다**는 것이 드러났다 — Lua 는
+   일반 소환(``EVENT_SUMMON_SUCCESS`` 1,093블록)과 특수 소환
+   (``EVENT_SPSUMMON_SUCCESS`` 1,796블록)을 **다른 사건으로** 등록한다.
+   그래서 ``summons`` 칸이 생겼고 필드가 **열 개**가 되었다.
+
+   **뒤집히지 않은 것**: ``actor`` 축(§4 F)과 "어느 카드의 사건인가" 는
+   여전히 선언할 수 없다. 6-E 는 그 사실을 조건으로 적어서
+   (``UnimplementedRule``) 판정이 ``UNKNOWN`` 에서 멈추게 했다. 즉 이
+   파일이 지적한 "빠져나갈 길 셋이 전부 막혀 있다" 는 **그대로 유효하고**,
+   달라진 것은 소환 종류 하나다.
+
+* ``TriggerSpec`` 은 필드 **열 개**이고 (6-E 전에는 아홉), production 에서
+  그 이름을 아는 모듈은 **둘**이다 — ``engine/trigger.py`` 와
+  ``engine/trigger_compiler.py`` (``test_11``).
+* 사건을 좁히는 축은 **다섯**이다 — ``point`` · ``operations`` ·
+  ``from_zones`` · ``to_zones`` · ``summons``. 가운데 셋은
+  ``__post_init__`` 이 ``CARD_MOVED`` 에만, 마지막은
+  ``MONSTER_SUMMONED`` 에만 허용한다.
 * 그래서 **같은 선언 구조가 사건군에 따라 다르게 동작한다** (``test_10``):
   "카드가 패로 들어왔다" 는 좁힐 수 있고 "몬스터가 특수 소환되었다" 는
   좁힐 수 없다.
@@ -154,14 +170,15 @@ def execute_summon(duel: Duel, builder, actor: int):
 # ======================================================================
 
 
-def test_01_the_declaration_has_exactly_nine_fields_and_four_event_axes():
+def test_01_the_declaration_has_exactly_ten_fields_and_five_event_axes():
     """
     §3 — 필드 목록과 타입을 **코드에서** 센다.
 
-    아홉 개 중 사건을 좁히는 축은 **넷**뿐이고, 나머지 다섯은 사건과 상관이
-    없다 — 어느 효과인가(`effect_ref`) · 강제/임의(`requirement`) ·
-    어법(`wording`) · 어느 자리에서 발동하는가(`activates_from`) ·
-    그때 무엇이 참이어야 하는가(`condition`).
+    🔴 아홉 → **열** (Phase 6-E 의 ``summons``). 사건을 좁히는 축은 넷 →
+    **다섯**이고, 나머지 다섯은 사건과 상관이 없다 — 어느 효과인가
+    (`effect_ref`) · 강제/임의(`requirement`) · 어법(`wording`) · 어느
+    자리에서 발동하는가(`activates_from`) · 그때 무엇이 참이어야 하는가
+    (`condition`).
     """
     fields = TriggerSpec.__dataclass_fields__
     assert list(fields) == [
@@ -172,6 +189,7 @@ def test_01_the_declaration_has_exactly_nine_fields_and_four_event_axes():
         "operations",
         "from_zones",
         "to_zones",
+        "summons",
         "activates_from",
         "condition",
     ]
@@ -179,7 +197,13 @@ def test_01_the_declaration_has_exactly_nine_fields_and_four_event_axes():
     #: **사건을 좁히는 축** — `matches` 가 실제로 비교하는 것만 센다.
     body = _function_body("engine/trigger.py", "TriggerSpec", "matches")
     compared = {name for name in fields if f"self.{name}" in body}
-    assert compared == {"point", "operations", "from_zones", "to_zones"}
+    assert compared == {
+        "point",
+        "operations",
+        "from_zones",
+        "to_zones",
+        "summons",
+    }
 
     #: 나머지 다섯은 `matches` 가 보지 않는다 — 사건 선별의 축이 아니다.
     assert compared.isdisjoint(
@@ -191,6 +215,7 @@ def test_01_the_declaration_has_exactly_nine_fields_and_four_event_axes():
     assert spec.requirement is TriggerRequirement.UNKNOWN
     assert spec.wording is TriggerWording.UNKNOWN
     assert (spec.operations, spec.from_zones, spec.to_zones) == (None, None, None)
+    assert spec.summons is None
     assert spec.activates_from is None and spec.condition is None
 
 
@@ -229,18 +254,23 @@ def test_02_the_only_event_axis_that_reaches_a_summon_is_the_point():
 # ======================================================================
 
 
-def test_03_summon_kind_is_not_declarable_anywhere_in_the_spec():
+def test_03_summon_kind_became_declarable_in_its_own_axis():
     """
-    §4 E — **SUMMON KIND: NOT REPRESENTABLE.**
+    §4 E — **"SUMMON KIND: NOT REPRESENTABLE" 이 Phase 6-E 에서 뒤집혔다.**
 
-    셋이 모두 막혀 있다. 칸이 없고, 기존 필터는 금지되며, 사건에서 꺼내는
-    접근자도 없다.
+    이 감사가 쓰여진 시점에 그 진술은 맞았다. 그리고 그것이 **단순한 빈
+    칸이 아니라 결함**이라는 것이 트리거 컴파일러를 만들면서 드러났다 —
+    Lua 는 일반 소환과 특수 소환을 다른 사건으로 등록하는데 엔진의
+    ``MONSTER_SUMMONED`` 는 둘을 합친 하나이므로, 구분을 적을 수 없으면
+    "일반 소환했을 때" 카드가 **특수 소환에도 후보가 된다.**
+
+    셋 중 ①과 ③이 뒤집히고 ②는 그대로다.
     """
-    #: ① 칸이 없다.
-    assert "summon" not in TriggerSpec.__dataclass_fields__
-    assert not any(
-        "summon" in name for name in TriggerSpec.__dataclass_fields__
-    )
+    #: ① 🔴 칸이 생겼다 — 그리고 **기존 셋과 다른 이름**이다.
+    assert "summons" in TriggerSpec.__dataclass_fields__
+    assert [
+        name for name in TriggerSpec.__dataclass_fields__ if "summon" in name
+    ] == ["summons"]
 
     #: ② `MONSTER_SUMMONED` 에는 기존 필터 셋이 전부 금지된다.
     for name, keyword in (
@@ -254,13 +284,22 @@ def test_03_summon_kind_is_not_declarable_anywhere_in_the_spec():
             )
         assert name in str(refusal.value)
 
-    #: ③ 사건에서 소환 종류를 꺼내는 접근자가 없다 (3-F-5 가 측정한 것과
-    #:    같은 사실이고, 여기서는 **선언 쪽 결론**으로 쓴다).
+    #: ③ 🔴 사건에서 소환 종류를 꺼내는 접근자도 생겼다. ``operation`` 은
+    #:    여전히 ``None`` 이다 — 소환은 효과의 어휘를 쓰지 않으므로 창구가
+    #:    **그 셋과 다른 이름**으로 따로 났다.
     event = four_summon_events()["mine_special"]
-    assert not hasattr(event, "summon")
+    assert event.summon is SummonKind.SPECIAL
     assert event.operation is None
-    #: 그런데 사실은 delta 에 분명히 있다.
     assert event.delta.summon is SummonKind.SPECIAL
+
+    #: 그래서 이제 선언이 둘을 **가른다.**
+    special_only = TriggerSpec(
+        EffectRef(LUSTER_DRAGON, 0),
+        TimingPoint.MONSTER_SUMMONED,
+        summons=frozenset({SummonKind.SPECIAL}),
+    )
+    assert special_only.matches(event) is True
+    assert special_only.matches(four_summon_events()["mine_normal"]) is False
 
 
 def test_04_the_actor_is_on_the_event_but_not_in_the_declaration():
@@ -625,7 +664,10 @@ def test_11_the_declaration_type_has_exactly_one_production_module():
         for path in (PROJECT_ROOT / root).rglob("*.py")
         if "TriggerSpec" in path.read_text(encoding="utf-8")
     )
-    assert mentioning == ["engine/trigger.py"]
+    #: 🔴 하나 → **둘** (Phase 6-E). ``trigger_compiler.py`` 가 카드
+    #: 데이터에서 선언을 만든다 — STRUCTURAL-7 이 그것을 기다리고 있었다.
+    #: **아래 두 단정은 그대로다** — live 경로는 여전히 아무것도 모른다.
+    assert mentioning == ["engine/trigger.py", "engine/trigger_compiler.py"]
 
     #: live 경로는 선언 · 등록소 · 수집기를 **하나도** 모른다.
     duel_source = source_of("engine/duel.py")
@@ -643,12 +685,14 @@ def test_11_the_declaration_type_has_exactly_one_production_module():
     assert not any("registry" in name for name in Duel.__dataclass_fields__)
 
 
-def test_12_the_declaration_has_a_canonical_state_over_all_nine_fields():
+def test_12_the_declaration_has_a_canonical_state_over_all_ten_fields():
     """
-    §11 — 정규 표현은 아홉 필드를 **다** 담고, 서로 다른 선언을 가른다.
+    §11 — 정규 표현은 **열** 필드를 다 담고, 서로 다른 선언을 가른다.
 
-    새 필드가 들어오면 이 길이와 내용이 바뀐다 — 그것이 직렬화 · replay 에
-    미치는 영향이고, 이 Phase 는 **바꾸지 않았다.**
+    *"새 필드가 들어오면 이 길이와 내용이 바뀐다 — 그것이 직렬화 · replay
+    에 미치는 영향이다."* 🔴 Phase 6-E 가 그 필드를 더했고, 이 핀이 정확히
+    그것을 잡았다. 길이 9 → **10** 이고, 소환 종류가 다른 두 선언이 서로
+    다른 정규 표현을 갖는다.
     """
     bare = TriggerSpec(EffectRef(LUSTER_DRAGON, 0), TimingPoint.MONSTER_SUMMONED)
     zoned = TriggerSpec(
@@ -656,8 +700,26 @@ def test_12_the_declaration_has_a_canonical_state_over_all_nine_fields():
         TimingPoint.MONSTER_SUMMONED,
         activates_from=frozenset({Zone.MZONE}),
     )
-    assert len(bare.canonical_state()) == 9
+    assert len(bare.canonical_state()) == 10
     assert bare.canonical_state() != zoned.canonical_state()
+
+    #: 🔴 소환 종류가 정규 표현에 **실제로 실린다** — 안 실리면 일반 소환
+    #: 선언과 특수 소환 선언이 같은 것으로 직렬화된다.
+    normal = TriggerSpec(
+        EffectRef(LUSTER_DRAGON, 0),
+        TimingPoint.MONSTER_SUMMONED,
+        summons=frozenset({SummonKind.NORMAL}),
+    )
+    special = TriggerSpec(
+        EffectRef(LUSTER_DRAGON, 0),
+        TimingPoint.MONSTER_SUMMONED,
+        summons=frozenset({SummonKind.SPECIAL}),
+    )
+    assert normal.canonical_state() != special.canonical_state()
+    assert bare.canonical_state() not in (
+        normal.canonical_state(),
+        special.canonical_state(),
+    )
 
     #: 정규 표현은 정수 · 문자열 · 튜플 · `None` 만으로 되어 있다
     #: (객체 주소가 들어가면 replay 가 깨진다).
@@ -939,13 +1001,26 @@ def test_18_the_search_ranking_is_unchanged(repository):
     )
 
 
-def test_19_this_phase_added_no_production_field_and_no_card_name():
+def test_19_that_phase_added_no_field_but_phase_6e_added_exactly_one():
     """
-    §10 · §19 — 선언에 필드를 **더하지 않았고**, 카드 이름 · 패스코드를
-    production 에 **넣지 않았다.**
+    §10 · §19 — **3-F-6 은** 선언에 필드를 더하지 않았고, 카드 이름 ·
+    패스코드를 production 에 넣지 않았다.
+
+    🔴 **Phase 6-E 가 정확히 하나를 더했다** (``summons``). 이 핀이 그것을
+    잡았고, 그것이 이 핀을 둔 이유다 — 3-F-6 은 "필드 하나를 더해서
+    해결되지 않는다" 고 적으면서 **아무도 몰래 더하지 못하게** 수를 박아
+    두었다.
+
+    🔴 **3-F-6 의 그 문장은 여전히 맞다.** 더한 하나로 해결된 것은 소환
+    **종류**뿐이고, 같은 절이 지적한 ``actor`` 축과 "어느 카드의 사건인가"
+    는 그대로 선언할 수 없다 (``test_04`` 가 계속 고정한다).
+
+    카드 이름 · 패스코드 쪽 단정은 **그대로**다 — 6-E 가 production 에
+    카드를 넣지 않았다.
     """
-    #: 아홉 필드 그대로다.
-    assert len(TriggerSpec.__dataclass_fields__) == 9
+    #: 아홉 → **열**. 더한 하나가 무엇인지까지 못박는다.
+    assert len(TriggerSpec.__dataclass_fields__) == 10
+    assert "summons" in TriggerSpec.__dataclass_fields__
 
     #: 세 예시 카드의 패스코드가 **이 Phase 때문에** production 에 들어온
     #: 자리가 없다.

@@ -36,6 +36,7 @@ Phase 3-E-43 — Trigger pipeline dormant 구조 감사.
 """
 
 import ast
+import collections
 import pathlib
 
 import pytest
@@ -165,12 +166,18 @@ def test_01_the_three_part_modules_exist_and_are_large():
         #: :meth:`TimingEvent.unimplemented` 이고, 그것은 "옮길 이름이 없다" 를
         #: 적는 자리다 (지어낸 시점 이름이 아니다). production 호출자는
         #: 여전히 0개다 — ``test_02`` 가 그것을 따로 센다.
-        "engine/trigger.py": 1681,
+        "engine/trigger.py": 1729,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
     }
-    #: 2,698 → **2,718** (Phase 6-B 의 ``ActionEvent`` 가드 +20).
-    assert sum(sizes.values()) == 2718
+    #: 2,698 → **2,718** (Phase 6-B 의 ``ActionEvent`` 가드 +20)
+    #: → **2,766** (Phase 6-E 의 ``TimingEvent.summon`` · ``TriggerSpec.summons``
+    #: +48). 🔴 그 48줄은 **거짓 양성을 막기 위한 칸 하나와 설명**이다 —
+    #: Lua 는 일반 소환(``EVENT_SUMMON_SUCCESS``)과 특수 소환
+    #: (``EVENT_SPSUMMON_SUCCESS``)을 다른 사건으로 등록하는데 엔진에는
+    #: ``MONSTER_SUMMONED`` 하나뿐이어서, 구분을 적지 않으면 "일반 소환했을
+    #: 때" 카드가 특수 소환에도 후보가 된다.
+    assert sum(sizes.values()) == 2766
 
 
 def test_02_the_two_assembly_modules_exist():
@@ -249,11 +256,17 @@ def test_05_the_part_modules_are_reachable_only_through_the_assembly():
         "engine/trigger_chain.py",
     ]
     #: ``trigger.py`` 는 예외다 — live 쪽에서도 하나를 가져간다 (``test_07``).
+    #: 🔴 Phase 6-E 에서 ``engine/trigger_compiler.py`` 가 늘었다 —
+    #: STRUCTURAL-7(카드 데이터에서 트리거를 뽑는 컴파일러)이 생겼기
+    #: 때문이다. **휴면 모듈 넷은 그대로 휴면이다** (아래 test_06 이
+    #: 고정한다) — ``trigger.py`` 를 읽는 자리가 늘었다는 것이 파이프라인이
+    #: 돌기 시작했다는 뜻이 아니다.
     assert importers_of("engine.trigger") == [
         "engine/activation_timing.py",
         "engine/event_pipeline.py",
         "engine/timing.py",
         "engine/trigger_chain.py",
+        "engine/trigger_compiler.py",
         "engine/trigger_order.py",
     ]
 
@@ -459,13 +472,27 @@ def test_12_the_duel_module_never_mentions_the_pipeline():
     assert "Trigger" not in duel
 
 
-def test_13_the_two_entry_structures_are_never_constructed_in_production():
+def test_13_only_the_compiler_builds_a_declaration_and_nobody_builds_a_registry():
     """
-    **§4: ``TriggerSpec`` · ``TriggerRegistry`` production 생성이 0곳이다.**
+    🔴 **이 테스트의 계약이 Phase 6-E 에서 반쯤 뒤집혔다.**
 
-    3-E-33 이후 여러 Phase 가 같은 사실을 쟀다. 여기서 다시 고정한다.
+    원래 단정은 ``TriggerSpec`` · ``TriggerRegistry`` 의 production 생성이
+    **0곳**이라는 것이었고, 3-E-33 이후 여러 Phase 가 같은 사실을 쟀다.
+    그 진술은 **쓰여진 시점에 맞았다** — 카드 데이터에서 트리거를 뽑는
+    컴파일러가 없었기 때문이고, ``TriggerRegistry`` 의 설명이 그것을
+    STRUCTURAL-7 로 적어 두었다.
+
+    Phase 6-E 가 그 컴파일러를 만들었다. 그래서 둘을 **갈라서** 센다.
+
+    - ``TriggerSpec`` 생성 — **1곳** (``trigger_compiler.py``). 카드
+      데이터에서 선언을 만드는 자리이고, 그것이 이 Phase 의 산출물이다.
+    - ``TriggerRegistry`` 생성 — **여전히 0곳.** 🔴 **누가 어떤 선언을
+      등록할지는 production 이 정하지 않는다.** 레지스트리를 채우는 것은
+      부르는 쪽(지금은 시험)의 일이고, 그래서 실제 듀얼은 후보를 하나도
+      모으지 않는다 — ``test_12`` 가 ``duel.py`` 에 "trigger" 라는 말이
+      없음을 그대로 고정한다.
     """
-    built = []
+    built = collections.defaultdict(list)
     for rel, path in production_engine_files():
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if (
@@ -473,8 +500,12 @@ def test_13_the_two_entry_structures_are_never_constructed_in_production():
                 and isinstance(node.func, ast.Name)
                 and node.func.id in ("TriggerSpec", "TriggerRegistry")
             ):
-                built.append(f"{rel}:{node.lineno}")
-    assert built == []
+                built[node.func.id].append(f"{rel}:{node.lineno}")
+
+    assert [site.split(":")[0] for site in built["TriggerSpec"]] == [
+        "engine/trigger_compiler.py"
+    ], dict(built)
+    assert built["TriggerRegistry"] == [], dict(built)
 
 
 # ======================================================================
@@ -818,7 +849,7 @@ def test_25_this_phase_changed_no_production_file():
     assert sizes == {
         #: 1,661 → **1,681** (Phase 6-B). 위 ``executable`` 핀의 설명 참고 —
         #: 늘어난 것은 ``ActionEvent`` 가드이고 활성화가 아니다.
-        "engine/trigger.py": 1681,
+        "engine/trigger.py": 1729,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
@@ -852,7 +883,18 @@ def test_25_this_phase_changed_no_production_file():
         #: 종류가 이 함수에 닿았을 때 **예외를 던지지 않게** 막는 가드이고,
         #: 돌려주는 것은 ``UNIMPLEMENTED`` 시점이다. 후보를 모으지도, 체인에
         #: 넣지도, 부르는 자리를 늘리지도 않았다.
-        "engine/trigger.py": 737,
+        #:
+        #: 737 → **748** (Phase 6-E). 🔴 **또 실행 코드다** — 11줄이고
+        #: 전부 "거짓 양성을 막는 칸" 이다: ``TimingEvent.summon`` 프로퍼티,
+        #: ``TriggerSpec.summons`` 칸과 그 타입·시점 검사,
+        #: ``matches`` 의 한 줄, 직렬화 두 줄.
+        #:
+        #: 이것이 **dormant 를 깨지 않는 이유**: 늘어난 코드는 전부
+        #: *선언을 더 좁게* 만드는 것이고, 후보를 모으는 자리를 늘리지
+        #: 않았다. ``duel.py`` 는 여전히 "trigger" 라는 말을 쓰지 않고
+        #: (``test_12``) ``TriggerRegistry`` 를 만드는 production 자리도
+        #: 여전히 0곳이다 (``test_13``).
+        "engine/trigger.py": 748,
         "engine/trigger_chain.py": 257,
         "engine/trigger_order.py": 194,
         "engine/timing.py": 194,

@@ -132,8 +132,9 @@ MINE, THEIRS = 0, 1
 PRODUCTION_CONSTRUCTIONS = {
     ("engine/action_validation.py", "_special_summon"),
     ("engine/archetype_compiler.py", "compile_archetype_condition"),
+    ("engine/trigger_compiler.py", "compile_trigger_spec"),
 }
-PRODUCTION_CONSTRUCTION_COUNT = 3
+PRODUCTION_CONSTRUCTION_COUNT = 4
 
 #: ``RULE_NOT_IMPLEMENTED`` 가 production (``engine/`` + ``agent/``) 에
 #: 등장하는 총 횟수. 생성 2곳과 대비하는 수다.
@@ -148,7 +149,12 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #:    docstring 이고, **코드 자리 수는 그대로다** (하나를 빼고 하나를 더했다 —
 #:    ``tests/test_rule_not_implemented_code_audit.py`` 의
 #:    ``CODE_OCCURRENCES`` 가 67 로 고정되어 있다).
-RULE_NOT_IMPLEMENTED_MENTIONS = 79
+#:
+#: 🔴 79 → **80** (Phase 6-E). 늘어난 하나는 ``engine/trigger_compiler.py``
+#: 의 **설명 안**이다 — "조건을 적지 않으면 거짓 양성이 된다" 를 적으면서
+#: 그 코드 이름을 인용했다. **코드 자리는 그대로**이고, 아래 루프가 두
+#: 컴파일러 어느 쪽도 그 코드를 *만들지* 않음을 구문으로 확인한다.
+RULE_NOT_IMPLEMENTED_MENTIONS = 80
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
@@ -381,8 +387,15 @@ def test_03_rule_not_implemented_is_almost_never_produced_by_unimplemented_rule(
     **Test 2 (§20): ``RULE_NOT_IMPLEMENTED`` mapping.**
 
     둘은 같은 개념이 **아니다.** 코드는 production 에 79곳 등장하는데
-    ``UnimplementedRule`` 생성은 2곳뿐이다. 즉 **그 코드의 거의 전부가
-    ``UnimplementedRule`` 과 무관하게 만들어진다.**
+    ``UnimplementedRule`` 생성은 **4곳**뿐이다 (6-D 에서 2 → 3,
+    6-E 에서 3 → 4). 즉 **그 코드의 거의 전부가 ``UnimplementedRule`` 과
+    무관하게 만들어진다.**
+
+    🔴 6-E 의 넷째 자리는 트리거 컴파일러이고, 거기서 적는 규칙은
+    **"이 사건이 이 카드의 사건인가"** 다. 그것을 적지 않으면
+    ``TriggerCollector`` 가 조건 없는 선언을 ``ELIGIBLE`` 로 돌려주고,
+    다른 카드의 소환에 후보가 **발동 가능**으로 나온다 (실제로 재현해서
+    확인했다).
 
     .. note::
        숫자가 75 → 76 → **79** 로 움직였다 (3-E-38 · 3-E-45). 이 테스트가
@@ -421,12 +434,23 @@ def test_03_rule_not_implemented_is_almost_never_produced_by_unimplemented_rule(
     compiler_sites = [
         site for site in sites["production"] if site not in requirement_sites
     ]
-    assert len(compiler_sites) == 1
-    [(path, _, _)] = compiler_sites
-    assert path == "engine/archetype_compiler.py"
-    assert "RULE_NOT_IMPLEMENTED" not in (
-        (PROJECT_ROOT / path).read_text(encoding="utf-8")
-    )
+    assert len(compiler_sites) == 2
+    assert {path for path, _, _ in compiler_sites} == {
+        "engine/archetype_compiler.py",
+        "engine/trigger_compiler.py",
+    }
+    #: 🔴 두 컴파일러 **어느 쪽도** 그 검증 코드를 만들지 않는다 — 조건을
+    #: 돌려줄 뿐이고, 코드를 붙이는 것은 그 조건을 평가하는 쪽이다.
+    #:
+    #: 문자열로 세지 않는다. ``trigger_compiler.py`` 의 **설명**에 그 이름이
+    #: 인용되어 있고 (왜 조건을 적어야 하는지를 적은 자리), 문자열로 세면
+    #: 그 문장이 "코드를 만든다" 로 읽힌다. 구문으로 센다.
+    for path, _, _ in compiler_sites:
+        tree = ast.parse((PROJECT_ROOT / path).read_text(encoding="utf-8"))
+        attributes = {
+            node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+        }
+        assert "RULE_NOT_IMPLEMENTED" not in attributes, path
 
 
 def test_04_four_different_things_share_a_similar_name():

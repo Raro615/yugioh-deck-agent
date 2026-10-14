@@ -992,8 +992,9 @@ def test_19_this_phase_changed_nothing_in_production(repository):
     ):
         assert absent not in duel_source, absent
 
-    #: 선언에 칸을 더하지 않았다.
-    assert len(TriggerSpec.__dataclass_fields__) == 9
+    #: 선언에 칸을 더하지 않았다 — **이 Phase 는** 더하지 않았다. 숫자는 3-F
+    #: 의 9 에서 6-E 의 10 으로 움직였다 (``summons``; 6-E §5 참조).
+    assert len(TriggerSpec.__dataclass_fields__) == 10
     assert "actor" not in TriggerSpec.__dataclass_fields__
     #: 관문의 서명을 바꾸지 않았다.
     assert params_of(TriggerEligibilityJudge._event_relation) == ["spec", "event"]

@@ -343,8 +343,21 @@ def test_09_one_definition_maps_to_zero_or_many_trigger_specs():
 
 def test_10_the_registered_definitions_have_no_trigger_specs_today():
     """
-    지금의 사실 — 등재된 정의 16개에 대응하는 ``TriggerSpec`` 이 **하나도
-    없다** (1 : 0). 그것이 "트리거 계층이 잠들어 있다" 의 데이터 쪽 모습이다.
+    지금의 사실 — **등재된 정의 16개**에 대응하는 ``TriggerSpec`` 이 하나도
+    없다 (1 : 0).
+
+    .. note::
+       3-E-39 당시에는 production 전체에 ``TriggerSpec`` 생성 자리가 **0** 이었고
+       이 테스트가 그것으로 1 : 0 을 증명했다. 6-E 가
+       ``engine/trigger_compiler.py`` 를 만들어 그 수를 1 로 옮겼다.
+
+       **그러나 이 테스트가 말하려던 1 : 0 은 그대로다.** 컴파일러는 카드
+       데이터(분석 계층) 에서 선언을 만들고, ``EFFECT_LIBRARY`` 의 16개 정의는
+       거기에 끼지 않는다 — ``EffectDefinition`` 에는 사건을 적는 칸이 아직
+       없기 때문이다 (``test_16``). 그래서 단정을 "0 개" 에서 **"정의 쪽과
+       이어진 자리가 0 개"** 로 옮긴다. 기존 단정이 틀린 가정을 가졌던 것이
+       아니라, 그때의 0 이 지금 1 이 된 것이고 그 1 이 **다른 입력**에서
+       온다는 사실을 여기 적는다.
     """
     registry = EffectDefinitionRegistry(
         tuple(entry.definition for entry in EFFECT_LIBRARY)
@@ -352,10 +365,25 @@ def test_10_the_registered_definitions_have_no_trigger_specs_today():
     assert len(EFFECT_LIBRARY) == 16
     assert registry is not None
 
-    #: production 에 ``TriggerSpec`` 을 만드는 자리가 없다.
+    #: production 에서 ``TriggerSpec`` 을 만드는 자리는 컴파일러 하나다.
     production, tests = call_sites("TriggerSpec")
-    assert production == [], f"production 이 TriggerSpec 을 만든다: {production}"
+    assert production == ["engine/trigger_compiler.py"], production
     assert tests, "테스트에서도 안 만들면 측정이 잘못된 것이다"
+
+    #: 그리고 그 컴파일러는 ``EffectDefinition`` · ``EFFECT_LIBRARY`` 를
+    #: **읽지 않는다** — 두 계층은 아직 이어져 있지 않다.
+    #: (``engine.effect.delta`` 의 ``SummonKind`` 는 **사건 쪽** primitive 라
+    #: 예외다 — 정의 계층이 아니다. 처음에 ``engine.effect`` 를 통째로 금지로
+    #: 적었다가 그 import 에 발화했고, 금지 대상을 정의 계층 이름으로 좁혔다.)
+    compiler = source_of("engine/trigger_compiler.py")
+    for absent in (
+        "EffectDefinition",
+        "EFFECT_LIBRARY",
+        "EffectDefinitionRegistry",
+        "engine.effect.definition",
+        "engine.effect.library",
+    ):
+        assert absent not in compiler, absent
 
 
 # ======================================================================
@@ -519,8 +547,12 @@ def test_16_this_audit_changed_no_production_file():
     """
     #: ``EffectDefinition`` 의 칸이 그대로다 (측정값 10개).
     assert len(dataclasses.fields(EffectDefinition)) == 10
-    #: ``TriggerSpec`` 의 칸도 그대로다 (9개).
-    assert len(dataclasses.fields(TriggerSpec)) == 9
+    #: ``TriggerSpec`` 의 칸은 3-E-39 의 9 에서 6-E 의 10 으로 움직였다
+    #: (``summons``: 통상소환과 특수소환이 같은 ``MONSTER_SUMMONED`` 시점으로
+    #: 번역되므로, 칸이 없으면 통상소환 사건이 특수소환 전용 효과를 후보로
+    #: 만든다). **이 감사가 production 을 바꾸지 않았다는 사실은 그대로이고**,
+    #: 바꾼 주체는 6-E 다.
+    assert len(dataclasses.fields(TriggerSpec)) == 10
     #: 사건을 적는 칸이 정의 쪽에 생기지 않았다.
     definition = {f.name for f in dataclasses.fields(EffectDefinition)}
     assert definition & {"code", "point", "event", "trigger", "timing"} == set()

@@ -425,16 +425,95 @@ def production_sources() -> list[tuple[pathlib.Path, str]]:
     return out
 
 
+#: 6-E 가 설명 안에서 이 이름을 **인용**하는 유일한 파일.
+#:
+#: .. note::
+#:    3-E-19 당시에는 ``engine/`` · ``agent/`` 어디에도 이 이름이 **글자로도**
+#:    없었고, 그 사실을 그대로 단정했다. 6-E 가 사건 코드 → 시점 컴파일러를
+#:    만들면서 ``EVENT_PHASE`` 를 **의도적으로 번역하지 않는다**는 결정을
+#:    내렸고, 그 까닭(한정자가 파서에서 사라지므로 어느 페이즈인지 알 수 없다)
+#:    을 그 파일 docstring 에 적었다.
+#:
+#:    즉 이 감사가 금지하려던 것("그 값을 읽는 코드" · "나중에 쓰려고 적어 둔
+#:    자리") 은 여전히 0 이고, 늘어난 것은 **거부 이유를 적은 산문**뿐이다.
+#:    ``declared_types`` 때(6-E §5) 와 달리 **이름을 바꿀 수 없다** — 공식 상수
+#:    자신의 이름이기 때문이다. 그래서 설명을 지우는 대신 이 감사가 산문과
+#:    코드를 구분하게 고쳤다 (3-E-44 가 세운 규칙: 글자가 아니라 AST 를 센다).
+#:    구분이 없으면 "거부했다고 적은 것" 과 "읽는다" 가 같은 위반으로 보인다.
+PROSE_ONLY_MENTION = "engine/trigger_compiler.py"
+
+
+def code_mentions(path: pathlib.Path, text: str, token: str) -> list[int]:
+    """
+    `token` 이 **코드로** 등장하는 줄 번호. 주석과 docstring 은 세지 않는다.
+
+    식별자(NAME) 와 **docstring 이 아닌** 문자열 리터럴만 코드로 본다 —
+    ``EVENT_TIMING["EVENT_PHASE"]`` 같은 조회도 잡힌다.
+    """
+    import ast
+    import io
+    import tokenize
+
+    tree = ast.parse(text)
+    docstrings: set[tuple[int, int]] = set()
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            continue
+        body = getattr(node, "body", None)
+        if not body:
+            continue
+        first = body[0]
+        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+            if isinstance(first.value.value, str):
+                docstrings.add((first.value.lineno, first.value.col_offset))
+
+    hits: list[int] = []
+    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+        if tok.type == tokenize.COMMENT:
+            continue
+        if tok.type == tokenize.STRING and tok.start in docstrings:
+            continue
+        if tok.type not in (tokenize.NAME, tokenize.STRING):
+            continue
+        if token in tok.string:
+            hits.append(tok.start[0])
+    return hits
+
+
 def test_10_no_production_module_mentions_event_phase_or_its_modifiers():
     """
-    **§8 — ``engine/`` · ``agent/`` 어디에도 그 이름이 없다.**
+    **§8 — ``engine/`` · ``agent/`` 어디에도 그 이름을 읽는 코드가 없다.**
 
-    주석까지 포함해 **문자열 자체가 없다** — 읽는 코드가 없을 뿐 아니라
-    "나중에 쓰려고 적어 둔 자리" 도 없다.
+    읽는 코드가 없을 뿐 아니라 "나중에 쓰려고 적어 둔 자리" 도 없다. 단
+    ``engine/trigger_compiler.py`` 의 **거부 이유 산문**은 예외다
+    (``PROSE_ONLY_MENTION`` 주석 참조) — 그 파일에서도 **코드 자리는 0** 임을
+    아래에서 따로 확인한다.
     """
+    tokens = ("EVENT_PHASE", "PHASE_END", "PHASE_START", "trigger_events")
+    prose_only_seen = False
     for path, text in production_sources():
-        for token in ("EVENT_PHASE", "PHASE_END", "PHASE_START", "trigger_events"):
-            assert token not in text, (path.as_posix(), token)
+        relative = path.relative_to(PROJECT_ROOT).as_posix()
+        for token in tokens:
+            if token not in text:
+                continue
+            assert relative == PROSE_ONLY_MENTION, (relative, token)
+            prose_only_seen = True
+            #: 산문일 뿐 코드가 아니다 — 읽지도, 자리를 비워 두지도 않았다.
+            assert code_mentions(path, text, token) == [], (relative, token)
+
+    #: 예외가 **실재**하는지도 단정한다. 산문이 사라졌다면 이 핀의 설명이
+    #: 낡은 것이므로 그때도 발화해야 한다.
+    assert prose_only_seen
+
+    #: 세는 쪽이 멀쩡한지 확인한다 — 코드 자리를 실제로 집어낼 수 있어야
+    #: "코드 0" 이 의미를 갖는다 (고의 위반).
+    probe = pathlib.Path("probe.py")
+    assert code_mentions(probe, 'x = EVENT_PHASE\n', "EVENT_PHASE") == [1]
+    assert code_mentions(probe, 'x = T["EVENT_PHASE"]\n', "EVENT_PHASE") == [1]
+    assert code_mentions(probe, '# EVENT_PHASE\n', "EVENT_PHASE") == []
+    assert code_mentions(probe, '"""EVENT_PHASE"""\n', "EVENT_PHASE") == []
 
 
 def test_11_trigger_spec_cannot_express_which_phase():
@@ -486,15 +565,43 @@ def test_12_no_trigger_spec_is_registered_in_production():
     **§8 — 등록된 선언이 production 에 하나도 없다** (ADR-006: 손으로 등록).
 
     그러므로 ``PHASE_CHANGED`` 후보가 지금 만들어질 수 있는 경로가 없다.
-    ``TriggerSpec(`` 을 생성하는 코드는 정의 모듈과 테스트뿐이다.
+
+    .. note::
+       3-E-19 당시 production 에는 ``TriggerSpec(`` 생성 자리가 **하나도**
+       없었다 (ADR-006: 손으로 등록). 6-E 가 ``engine/trigger_compiler.py``
+       하나를 만들었다. **그래도 이 감사의 결론은 바뀌지 않는다** — 그
+       컴파일러가 선언을 만드는 것은 ``EVENT_TIMING`` 표에 있는 사건 코드
+       뿐이고, ``EVENT_PHASE`` 는 그 표에 없다. 그러므로
+       ``PHASE_CHANGED`` 선언이 만들어지는 경로는 여전히 **없다** — 아래에서
+       표와 실제 호출 양쪽으로 확인한다.
     """
     constructors = [
-        path.as_posix()
+        path.relative_to(PROJECT_ROOT).as_posix()
         for path, text in production_sources()
         if re.search(r"\bTriggerSpec\s*\(", text)
         and path.name != "trigger.py"  # 정의 자신
     ]
-    assert constructors == [], constructors
+    assert constructors == ["engine/trigger_compiler.py"], constructors
+
+    from engine.trigger_compiler import (
+        EVENT_TIMING,
+        TriggerCompilationStatus,
+        compile_trigger_spec,
+    )
+
+    #: 표에 페이즈 사건이 없다.
+    assert not [name for name in EVENT_TIMING if "PHASE" in name]
+    #: 그래서 어떤 시점도 ``PHASE_CHANGED`` 가 아니다.
+    assert TimingPoint.PHASE_CHANGED not in {t.point for t in EVENT_TIMING.values()}
+
+    #: 실제로 넣어 봐도 선언이 나오지 않는다.
+    result = compile_trigger_spec(
+        EffectRef(1, 0), declared_types=("TRIGGER_O",), event_code="EVENT_PHASE"
+    )
+    assert result is not None
+    assert result.status is TriggerCompilationStatus.EVENT_UNSUPPORTED
+    assert result.spec is None
+    assert result.is_registered is False
 
 
 def test_13_the_duel_loop_does_not_collect_triggers_at_all():
@@ -601,9 +708,32 @@ def test_17_missing_modifier_must_not_be_read_as_every_phase():
 
     (``EVENT_PHASE`` → ``Phase.END`` 같은 매핑, 또는 ``TURN_PHASE_ORDER`` 전체를
     돌려주는 변환.)
+
+    .. note::
+       이 단정도 3-E-19 에서는 글자 검사였다. 6-E 가 **거부 이유를 산문으로**
+       적었으므로 (``PROSE_ONLY_MENTION``) 코드 자리를 센다. 금지 대상은
+       "페이즈를 되찾는 변환" 이고, "되찾지 않는다고 적은 설명" 은 그 반대다.
     """
     for path, text in production_sources():
-        assert "EVENT_PHASE" not in text, path.as_posix()
+        assert code_mentions(path, text, "EVENT_PHASE") == [], path.as_posix()
+
+    #: ``TURN_PHASE_ORDER`` 자체는 금지 대상이 아니다 — 턴 진행이 쓰는 정당한
+    #: 상수다 (``engine/state/turn.py`` 5자리). 처음에 그 이름도 금지로 적었다가
+    #: 발화했다: 금지해야 하는 것은 **그 목록을 사건 코드에서 되돌려 주는 변환**
+    #: 이고, 사건 코드 자체가 코드 자리에 0회 등장하므로 (바로 위) 그런 변환은
+    #: 존재할 수 없다.
+
+    #: 변환을 **실행해서도** 확인한다 — 페이즈가 섞여 나오지 않는다.
+    from engine.trigger_compiler import TriggerCompilationStatus, compile_trigger_spec
+
+    for code in ("EVENT_PHASE", "EVENT_PHASE_START"):
+        result = compile_trigger_spec(
+            EffectRef(1, 0), declared_types=("TRIGGER_O",), event_code=code
+        )
+        assert result is not None
+        assert result.status is TriggerCompilationStatus.EVENT_UNSUPPORTED
+        assert result.spec is None
+        assert "Phase" not in (result.reason or "")
 
     #: 모델 쪽에도 그런 매핑이 없다.
     for name in ("core/card_model.py", "analysis/effect_model.py", "analysis/effect_analyzer.py"):

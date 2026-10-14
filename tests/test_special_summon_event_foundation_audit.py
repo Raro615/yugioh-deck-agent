@@ -315,13 +315,24 @@ def test_07_the_event_keeps_the_summon_kind_but_exposes_no_way_to_read_it(
     assert timing.delta.from_zone is Zone.HAND
     assert timing.delta.to_zone is Zone.MZONE
 
-    #: 소환 종류를 꺼내는 **속성이 없다** — delta 를 직접 들여다봐야 한다.
-    assert not hasattr(timing, "summon")
-    assert "summon" not in {
+    #: 🔴 **이 단정이 Phase 6-E 에서 뒤집혔다.** 3-F-5 는 "정보가 없는 것이
+    #: 아니라 **창구가 없다**" 고 적었고, 6-E 가 그 창구를 만들었다 —
+    #: ``EVENT_SUMMON_SUCCESS`` 와 ``EVENT_SPSUMMON_SUCCESS`` 를 서로 다른
+    #: 선언으로 옮기려면 사건 쪽에서 소환 종류를 읽을 수 있어야 하고,
+    #: 못 읽으면 "일반 소환했을 때" 카드가 특수 소환에도 후보가 된다.
+    #:
+    #: 위 셋(``operation`` · ``from_zone`` · ``to_zone``)이 여전히 ``None``
+    #: 인 것은 그대로다 — 소환은 ``CardMovement`` 가 아니고, 그래서 창구도
+    #: **그 셋과 다른 이름**(``summon``)으로 따로 났다.
+    assert timing.summon is SummonKind.SPECIAL
+    assert "summon" in {
         name
         for name in dir(TimingEvent)
         if not name.startswith("_") and name != "from_delta"
     }
+    #: 🔴 그래도 **창구가 생겼다고 판정이 생긴 것은 아니다** — 소환 사건이
+    #: 아닌 사건에서는 여전히 ``None`` 이다.
+    assert TimingEvent.unimplemented("아무것도").summon is None
     #: 사건의 카드는 읽을 수 있다 (소환은 ``CardMovement`` 가 아니어도
     #: 분명히 카드 한 장의 사건이고, ``instance`` 가 그 예외를 처리한다).
     assert timing.instance is not None
@@ -559,23 +570,38 @@ def test_12_no_registered_effect_performs_a_special_summon():
     assert sum(1 for entry in EFFECT_LIBRARY if not entry.executable) == 3
 
 
-def test_13_a_declaration_cannot_say_special_nor_whose(repository):
+def test_13_a_declaration_can_now_say_special_but_still_not_whose(repository):
     """
-    **이 Phase 의 중심 발견.** 선언 계층은 특수 소환을 **가리킬 수 없다.**
+    **이것이 3-F-5 의 중심 발견이었고, Phase 6-E 가 그 절반을 답했다.**
 
-    셋이 겹쳐 있다.
+    원래 단정은 셋이 겹쳐 있다는 것이었다.
 
     1. ``TriggerSpec`` 에 소환 종류를 적을 칸이 **없다.**
-    2. ``MONSTER_SUMMONED`` 시점에는 기존 세 필터조차 **금지**된다 —
-       ``__post_init__`` 가 거절한다.
+    2. ``MONSTER_SUMMONED`` 시점에는 기존 세 필터조차 **금지**된다.
     3. 그래서 ``matches`` 는 **내 일반 소환 · 내 특수 소환 · 상대의 특수
        소환을 전부 같은 것으로 본다.** ``actor`` 도 보지 않는다.
 
-    결과가 ``UNKNOWN`` 이 아니라는 점이 핵심이다. 3-E-45 가 ``CARD_MOVED``
-    에서 "적었는데 읽을 수 없으면 ``UNKNOWN``" 을 만들어 두었는데, 여기서는
-    **적을 수가 없으므로** 그 정직한 길에 닿지 못하고 ``VALID/OK`` 가 난다.
+    그리고 그 결론 — *"적을 수가 없으므로 그 정직한 길에 닿지 못하고
+    ``VALID/OK`` 가 난다"*.
+
+    🔴 **6-E 가 ①을 고쳤다.** Lua 가 두 소환을 다른 사건으로 등록하므로
+    (``EVENT_SUMMON_SUCCESS`` 1,093 · ``EVENT_SPSUMMON_SUCCESS`` 1,796
+    블록) 선언이 그것을 적지 못하면 트리거 컴파일러가 **거짓 양성을
+    만든다.** ``TriggerSpec.summons`` 가 그 칸이다.
+
+    🔴 **②는 그대로다** — 세 필터는 카드 이동의 어휘이고 소환은 거기
+    들어가지 않는다 (``MonsterSummoned`` 의 docstring). 새 칸은 **그 셋과
+    다른 이름**으로 따로 났고, 거꾸로 ``summons`` 는 소환이 아닌 시점에
+    걸 수 없다.
+
+    🔴 **③의 ``actor`` 축은 그대로 못 본다.** "누구의 소환인가" 와 "어느
+    카드의 소환인가" 는 아직 선언할 수 없고, 6-E 는 그 사실을
+    ``UnimplementedRule("trigger-event-subject …")`` 로 **적어서** 판정이
+    ``UNKNOWN`` 에서 멈추게 했다. 즉 3-F-5 가 지적한 "``VALID/OK`` 가 난다"
+    는 **더 이상 일어나지 않지만**, 그것은 판정이 생겨서가 아니라 **모른다고
+    말하게 되어서**다.
     """
-    assert "summon" not in TriggerSpec.__dataclass_fields__
+    assert "summons" in TriggerSpec.__dataclass_fields__
     assert set(TriggerSpec.__dataclass_fields__) == {
         "effect_ref",
         "point",
@@ -584,10 +610,12 @@ def test_13_a_declaration_cannot_say_special_nor_whose(repository):
         "operations",
         "from_zones",
         "to_zones",
+        "summons",
         "activates_from",
         "condition",
     }
 
+    #: ② 카드 이동의 세 필터는 여전히 소환 시점에서 금지된다.
     for name, keyword in (
         ("operations", {"operations": frozenset({OperationKind.SPECIAL_SUMMON})}),
         ("from_zones", {"from_zones": frozenset({Zone.GRAVE})}),
@@ -598,30 +626,46 @@ def test_13_a_declaration_cannot_say_special_nor_whose(repository):
                 EffectRef(LUSTER_DRAGON, 0), TimingPoint.MONSTER_SUMMONED, **keyword
             )
         assert name in str(refusal.value)
+    #: 거꾸로도 막힌다 — 소환 필터를 카드 이동에 걸 수 없다.
+    with pytest.raises(TriggerError):
+        TriggerSpec(
+            EffectRef(LUSTER_DRAGON, 0),
+            TimingPoint.CARD_MOVED,
+            summons=frozenset({SummonKind.SPECIAL}),
+        )
 
-    spec = TriggerSpec(EffectRef(LUSTER_DRAGON, 0), TimingPoint.MONSTER_SUMMONED)
     mine_normal = TimingEvent.from_delta(monster_summoned(SummonKind.NORMAL))
     mine_special = TimingEvent.from_delta(monster_summoned(SummonKind.SPECIAL))
     their_special = TimingEvent.from_delta(
         monster_summoned(SummonKind.SPECIAL, player=THEIRS)
     )
 
-    #: 셋 다 같은 시점이고, 하나의 선언이 셋 다 잡는다.
-    assert mine_normal.point is mine_special.point is their_special.point
-    assert spec.matches(mine_normal)
-    assert spec.matches(mine_special)
-    assert spec.matches(their_special)
-    #: ``actor`` 는 사건에 분명히 실려 있는데도 비교에 쓰이지 않는다.
-    assert (mine_special.actor, their_special.actor) == (MINE, THEIRS)
-    registry = TriggerRegistry((spec,))
-    assert (
-        len(registry.watching(mine_normal))
-        == len(registry.watching(mine_special))
-        == len(registry.watching(their_special))
-        == 1
+    #: ① **적지 않으면** 여전히 셋 다 잡는다 — ``None`` 은 "전부" 다.
+    blind = TriggerSpec(EffectRef(LUSTER_DRAGON, 0), TimingPoint.MONSTER_SUMMONED)
+    assert blind.matches(mine_normal)
+    assert blind.matches(mine_special)
+    assert blind.matches(their_special)
+
+    #: ① **적으면** 갈린다. 이것이 6-E 가 더한 것이다.
+    special_only = TriggerSpec(
+        EffectRef(LUSTER_DRAGON, 0),
+        TimingPoint.MONSTER_SUMMONED,
+        summons=frozenset({SummonKind.SPECIAL}),
     )
-    #: ``matches`` 의 본문이 ``actor`` 를 읽지 않는다는 것을 구문으로 확인한다
-    #: (문자열 창이 아니라 그 함수의 본문만 본다).
+    assert special_only.matches(mine_normal) is False
+    assert special_only.matches(mine_special) is True
+    #: 🔴 ③ 그런데 **상대의** 특수 소환도 여전히 잡는다 — ``actor`` 축은
+    #: 선언할 수 없다.
+    assert special_only.matches(their_special) is True
+    assert (mine_special.actor, their_special.actor) == (MINE, THEIRS)
+
+    registry = TriggerRegistry((special_only,))
+    assert len(registry.watching(mine_normal)) == 0
+    assert len(registry.watching(mine_special)) == 1
+    assert len(registry.watching(their_special)) == 1
+
+    #: ``matches`` 의 본문이 ``summon`` 은 읽고 ``actor`` 는 **여전히 읽지
+    #: 않는다**는 것을 구문으로 확인한다.
     body = ast.get_source_segment(
         source_of("engine/trigger.py"),
         next(
@@ -633,7 +677,7 @@ def test_13_a_declaration_cannot_say_special_nor_whose(repository):
         ),
     )
     assert "actor" not in body
-    assert "summon" not in body
+    assert "summon" in body
 
 
 def test_14_the_dormant_gate_answers_valid_for_all_three(repository):

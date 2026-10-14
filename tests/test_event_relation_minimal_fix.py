@@ -529,10 +529,20 @@ def test_14_no_validation_code_was_added_or_redefined():
     assert CODE_VALIDITY[ValidationCode.CHAIN_DEFINITION_UNAVAILABLE] is None
 
 
-def test_15_matches_itself_was_not_touched():
+def test_15_matches_compares_one_more_axis_but_still_only_compares():
     """
-    **데이터 비교를 바꾸지 않았다.** ``TriggerSpec.matches`` 는 그대로이고,
-    이 Phase 는 그 ``bool`` 을 **어떤 판정으로 옮기는가**만 고쳤다.
+    **데이터 비교를 바꾸지 않았다** — 3-E-45 는 그 ``bool`` 을 **어떤
+    판정으로 옮기는가**만 고쳤다.
+
+    🔴 **Phase 6-E 가 비교 축을 하나 더했다** (``summons``). 그래서
+    조기 반환이 넷 → **다섯**이 되었다. 바뀐 것은 **비교하는 칸의 수**이고,
+    이 함수가 하는 일(데이터 비교뿐 · 규칙 판단 없음)은 그대로다 — 더해진
+    줄도 ``self.summons`` 와 ``event.summon`` 을 견주는 비교 한 줄이다.
+
+    왜 더했는가: Lua 는 일반 소환(``EVENT_SUMMON_SUCCESS``)과 특수 소환
+    (``EVENT_SPSUMMON_SUCCESS``)을 다른 사건으로 등록하는데 엔진의
+    ``MONSTER_SUMMONED`` 는 둘을 합친 하나다. 구분을 비교하지 않으면
+    "일반 소환했을 때" 카드가 특수 소환에도 후보가 된다.
     """
     matches = next(
         node
@@ -552,7 +562,7 @@ def test_15_matches_itself_was_not_touched():
             key=lambda node: node.lineno,
         )
     ]
-    assert returns == [False, False, False, False, True]
+    assert returns == [False, False, False, False, False, True]
     #: 판정 어휘를 끌어들이지 않았다 — 여전히 ``bool`` 하나다.
     assert "ValidationCode" not in ast.unparse(matches)
     assert "ActionValidity" not in ast.unparse(matches)

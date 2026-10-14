@@ -138,7 +138,11 @@ CONDITION_REQUIRED_FIELDS = {
 #: :data:`CONDITION_REQUIRED_FIELDS` 가 4 → 5곳이 된다. 이 감사가 §7 에서
 #: "부재를 ``None`` 없이 적는 설계가 이미 두 개 있다" 고 적어 둔 그
 #: 선례를 따른 결과다.
-ENGINE_FILE_COUNT = 67
+#:
+#: Phase 6-E 에서 67 → 68 (``engine/trigger_compiler.py``). 그 파일의
+#: ``TriggerCompilation.spec`` 은 ``TriggerSpec | None`` 이고 **``Condition``
+#: 이 아니므로** 아래 두 집합은 둘 다 그대로다.
+ENGINE_FILE_COUNT = 68
 
 #: 조건·요구·발동 이름에 대한 ``None`` 검사 수. ``engine/`` **패키지만** 센다
 #: (``tests/engine/`` 까지 세면 분모가 오염된다 — 한 번 틀렸던 자리다).

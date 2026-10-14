@@ -639,7 +639,19 @@ def test_28_the_trigger_pipeline_is_still_dormant():
                 and node.func.id in ("TriggerSpec", "TriggerRegistry")
             ):
                 constructed.append(f"{rel}:{node.lineno}")
-    assert constructed == []
+    #: 🔴 Phase 6-E 에서 **한 자리**가 늘었다 —
+    #: ``engine/trigger_compiler.py`` 가 카드 데이터에서 ``TriggerSpec`` 을
+    #: 만든다 (STRUCTURAL-7 이 그것을 기다리고 있었다).
+    #:
+    #: **그래도 파이프라인은 휴면이다.** 선언을 *만드는* 것과 그것을
+    #: *레지스트리에 넣어 돌리는* 것은 다른 일이고, 후자의 production 자리는
+    #: 여전히 0곳이다 — ``TriggerRegistry`` 를 만드는 production 코드가 없고
+    #: ``duel.py`` 에는 "trigger" 라는 말이 없다
+    #: (``tests/test_trigger_pipeline_dormant_audit.py`` 의 ``test_12`` ·
+    #: ``test_13`` 이 둘을 갈라서 고정한다).
+    assert [site.split(":")[0] for site in constructed] == [
+        "engine/trigger_compiler.py"
+    ], constructed
     assert "trigger" not in source_of("engine/duel.py")
 
 

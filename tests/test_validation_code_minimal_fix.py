@@ -297,7 +297,15 @@ def test_09_the_trigger_pipeline_is_dormant_so_m3_was_left_alone():
             ):
                 production[node.func.id].append(f"{rel}:{node.lineno}")
     for name, sites in production.items():
-        assert sites == [], f"{name} 이 production 에서 생성되기 시작했다: {sites}"
+        #: 🔴 Phase 6-E: ``TriggerSpec`` 은 이제
+        #: ``engine/trigger_compiler.py`` 가 만든다 (STRUCTURAL-7).
+        #: **그래도 M3 는 그대로 둔다** — 선언을 만드는 것과 그것을 돌리는
+        #: 것은 다른 일이고, 레지스트리를 만드는 production 자리는 여전히
+        #: 0곳이다 (바로 아래가 ``Duel`` 쪽을 다시 확인한다).
+        expected = ["engine/trigger_compiler.py"] if name == "TriggerSpec" else []
+        assert [site.split(":")[0] for site in sites] == expected, (
+            f"{name} 의 production 생성 자리가 달라졌다: {sites}"
+        )
 
     #: 그리고 ``Duel`` 은 트리거를 **한 번도 언급하지 않는다.**
     duel = source_of("engine/duel.py")

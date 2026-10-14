@@ -553,22 +553,75 @@ def test_17_the_m2_path_never_becomes_a_candidate_so_it_has_nothing_to_lose(repo
 
 
 def test_18_m3_is_still_dormant_and_cannot_reach_either_boundary():
-    """**§10 · Q9: M3 는 여전히 dormant 다.** 3-E-38/39 의 측정을 다시 고정한다."""
-    built = []
+    """
+    **§10 · Q9: M3 는 여전히 dormant 다.** 3-E-38/39 의 측정을 다시 고정한다.
+
+    .. note::
+       3-E-38/39 당시 ``TriggerSpec`` 과 ``TriggerRegistry`` 는 production 에서
+       **둘 다** 0회 생성이었고, 이 테스트가 두 이름을 한 목록에 담아 그것을
+       증명했다. 6-E 가 ``engine/trigger_compiler.py`` 에서 ``TriggerSpec`` 을
+       만든다.
+
+       **그래도 M3 는 dormant 다** — dormancy 를 결정하는 것은 선언을 **만드는
+       일**이 아니라 그것을 **등록해서 듀얼 루프에 잇는 일**이고, 그쪽은
+       ``TriggerRegistry`` 생성 **0회** · ``engine/duel.py`` 에 "trigger" 글자
+       **0회**로 그대로다. 그래서 한 목록을 **두 목록으로 나눈다**: 등록 쪽은
+       0 을 유지하고, 선언 쪽은 컴파일러 한 자리임을 적는다. 단정을 약하게
+       만든 것이 아니라 **섞여 있던 두 사실을 분리**한 것이다.
+    """
+    specs = []
+    registries = []
     for rel, path in production_files():
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:  # pragma: no cover - 방어
             continue
         for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id in ("TriggerSpec", "TriggerRegistry")
-            ):
-                built.append(f"{rel}:{node.lineno}")
-    assert built == []
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+                continue
+            if node.func.id == "TriggerSpec":
+                specs.append(rel)
+            elif node.func.id == "TriggerRegistry":
+                registries.append(f"{rel}:{node.lineno}")
+
+    #: 🔴 등록은 여전히 **아무도 하지 않는다** — M3 dormancy 의 본체다.
+    assert registries == []
+    #: 선언을 만드는 자리는 컴파일러 하나뿐이다.
+    assert sorted(set(specs)) == ["engine/trigger_compiler.py"], specs
     assert "trigger" not in source_of("engine/duel.py")
+
+    #: 그리고 컴파일러는 수집기 · 판정기 · 레지스트리를 **부르지 않는다** —
+    #: 선언을 돌려줄 뿐 누구에게도 싣지 않는다.
+    #:
+    #: .. note::
+    #:    처음에 글자 검사로 적었다가 발화했다 — 그 파일의 머리말이 **계층
+    #:    그림**을 그리면서 이 이름들을 적어 두었기 때문이다. 산문은 호출이
+    #:    아니다. 그래서 **AST 의 이름 노드**만 센다 (3-E-44 규칙).
+    compiler_tree = ast.parse(
+        (PROJECT_ROOT / "engine" / "trigger_compiler.py").read_text(encoding="utf-8")
+    )
+    used = set()
+    for node in ast.walk(compiler_tree):
+        if isinstance(node, ast.Name):
+            used.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            used.add(node.attr)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            module = getattr(node, "module", None) or ""
+            used.add(module)
+            for alias in node.names:
+                used.add(alias.name)
+                used.add((alias.asname or alias.name).split(".")[0])
+    for absent in (
+        "TriggerRegistry",
+        "TriggerCollector",
+        "TriggerEligibilityJudge",
+        "EventPipeline",
+        "engine.duel",
+    ):
+        assert absent not in used, absent
+    #: 세는 쪽이 멀쩡하다 — 실제로 쓰는 이름은 잡힌다 (고의 위반).
+    assert "TriggerSpec" in used
 
 
 def test_19_priority_state_stale_is_produced_by_a_method_nobody_calls():

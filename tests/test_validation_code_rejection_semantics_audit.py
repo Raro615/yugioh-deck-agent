@@ -1199,7 +1199,12 @@ def test_26_m1_and_m2_reach_the_duel_boundary_but_m3_is_dormant(repository):
                 and node.func.id == "TriggerSpec"
             ):
                 production.append(f"{rel}:{node.lineno}")
-    assert production == []
+    #: 🔴 Phase 6-E: ``TriggerSpec`` 을 만드는 자리가 하나 생겼다
+    #: (``trigger_compiler.py``, STRUCTURAL-7). **M3 가 휴면인 까닭은
+    #: 그대로다** — 레지스트리를 채워 돌리는 자리가 없다.
+    assert [site.split(":")[0] for site in production] == [
+        "engine/trigger_compiler.py"
+    ], production
 
     #: M1·M2 는 발동기의 코드가 그대로 전달된다.
     assert "DuelStep(action, False, activated.code, activated.reason)" in source_of(

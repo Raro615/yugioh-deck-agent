@@ -849,14 +849,26 @@ def test_19_designs_b_and_c_cost_the_same(repository):
         if "TriggerSpec(" in path.read_text(encoding="utf-8")
     ]
     assert len(builders) >= 25
-    assert len(TriggerSpec(EffectRef(1, 0), TimingPoint.CARD_DRAWN).canonical_state()) == 9
+    #: .. note::
+    #:    이 길이는 3-F 당시 9 였고 지금은 10 이다 — 6-E 가
+    #:    ``TriggerSpec.summons`` 를 더했다. **기존 단정이 틀린 가정을 갖고
+    #:    있었던 것이 아니라**, 바로 위 주석이 예고한 비용("`canonical_state`
+    #:    길이를 단정하는 자리는 깨진다") 이 실제로 발생한 것이다. 그래서 이
+    #:    감사의 논지(= 칸을 더하는 쪽이 비싸다) 는 약해지지 않고 오히려
+    #:    확인되었다. 숫자만 측정값으로 옮긴다.
+    assert (
+        len(TriggerSpec(EffectRef(1, 0), TimingPoint.CARD_DRAWN).canonical_state()) == 10
+    )
 
 
 def test_20_this_phase_changed_nothing(repository):
     """§15 · §16 · §17 — freeze · 불변 · 순위 digest."""
     #: 관문 서명 · 선언 필드 · 후보 필드 · 사건 필드 · 판정 어휘 전부 그대로.
     assert params_of(TriggerEligibilityJudge._event_relation) == ["spec", "event"]
-    assert len(TriggerSpec.__dataclass_fields__) == 9
+    #: 선언 칸은 3-F 의 9 에서 6-E 의 10 으로 움직였다 (``summons``; test_19 주석
+    #: 참조). 이 단계가 아무것도 바꾸지 않았다는 사실은 그대로이고, 변경 주체는
+    #: 6-E 다.
+    assert len(TriggerSpec.__dataclass_fields__) == 10
     assert len(TriggerCandidate.__dataclass_fields__) == 10
     assert list(TimingEvent.__dataclass_fields__) == [
         "point",

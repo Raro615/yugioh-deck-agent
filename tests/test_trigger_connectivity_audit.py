@@ -157,12 +157,15 @@ def test_02_engine_trigger_reaches_production_only_as_a_type():
     (``ActivationTiming.point`` 는 ``canonical_state``/``to_dict`` 에만 나온다).
     """
     importers = import_graph()
+    #: 🔴 Phase 6-E 에서 ``engine.trigger_compiler`` 가 늘었다 — 카드
+    #: 데이터에서 선언을 만드는 자리다 (STRUCTURAL-7).
     assert importers["engine.trigger"] == {
         "engine.activation_timing",
         "engine.event_pipeline",
         "engine.timing",
         "engine.trigger_chain",
         "engine.trigger_order",
+        "engine.trigger_compiler",
     }
 
     source = (PROJECT_ROOT / "engine/activation_timing.py").read_text(encoding="utf-8")
@@ -220,7 +223,14 @@ def test_04_no_production_module_constructs_the_trigger_structures():
 
     #: **생성자를 부르는 production 모듈은 딱 하나다** — 그리고 그 모듈 자신을
     #: import 하는 곳이 없다. 즉 "부르는 코드가 있다" 와 "불린다" 는 다르다.
-    assert sorted(callers) == ["engine/event_pipeline.py"], callers
+    #: 🔴 하나 → **둘** (Phase 6-E). ``event_pipeline.py`` 는 수집기를
+    #: 만들고, ``trigger_compiler.py`` 는 **선언**을 만든다. 둘 다
+    #: "돌린다" 가 아니다 — 레지스트리를 만드는 자리는 여전히 0곳이다.
+    assert sorted(callers) == [
+        "engine/event_pipeline.py",
+        "engine/trigger_compiler.py",
+    ], callers
+    assert callers["engine/trigger_compiler.py"] == ["TriggerSpec("], callers
     assert callers["engine/event_pipeline.py"] == ["TriggerCollector("]
     assert import_graph().get("engine.event_pipeline", set()) == set()
 
