@@ -335,10 +335,20 @@ def _zones_from(ranges: Sequence[str]) -> frozenset[Zone] | None:
     """
     ``SetRange(LOCATION_MZONE)`` 의 이름들을 :class:`Zone` 으로.
 
-    **하나라도 옮길 수 없으면 ``None``** 이다 — 일부만 옮기면
-    ``activates_from`` 이 실제보다 **좁아지고**, 좁은 자리 선언은 그 밖에
-    있는 카드를 조용히 후보에서 뺀다. 적지 않으면 관문이 ``UNKNOWN`` 이
-    되므로 (``TriggerSpec.activates_from`` 의 설명) 그쪽이 안전하다.
+    **하나라도 옮길 수 없으면 ``None``** 이다 — 일부만 옮기면 범위가
+    실제보다 **좁아지고**, 좁은 범위는 그 밖에 있는 카드를 조용히 후보에서
+    뺀다. 적지 않으면 관문이 ``UNKNOWN`` 이 되므로 (``activates_from`` 의
+    설명) 그쪽이 안전하다.
+
+    .. note::
+       🔴 Phase 6-G 가 전수로 확인했다 — 컴파일되는 트리거 등록 4,173건의
+       ``ranges`` 에 나타나는 ``LOCATION_*`` 이름은 **여덟 가지뿐**이고
+       (``MZONE`` 298 · ``SZONE`` 166 · ``HAND`` 155 · ``GRAVE`` 123 ·
+       ``FZONE`` 72 · ``PZONE`` 20 · ``REMOVED`` 6 · ``EXTRA`` 2) 전부
+       :class:`Zone` 멤버다. 즉 **못 옮겨서 ``None`` 이 되는 경우는 0건**
+       이고, ``LOCATION_ONFIELD`` 같은 **합성 상수는 한 번도 쓰이지 않는다**
+       (corpus 전체에 그런 ``SetRange`` 는 4개 파일뿐이고 그중 트리거 등록은
+       없다). 복수 영역은 26건이고 전부 2개다.
     """
     if not ranges:
         return None
@@ -349,6 +359,81 @@ def _zones_from(ranges: Sequence[str]) -> frozenset[Zone] | None:
         except ValueError:
             return None
     return frozenset(found)
+
+
+#: 🔴 **``SetRange`` 는 "등록 범위" 이고 "발동 위치" 가 아니다** (Phase 6-G).
+#:
+#: 두 사실이 **대부분 같지만 항상 같지는 않다.** 효과가 등록되어 있는 범위는
+#: "이 효과가 살아 있으려면 카드가 어디 있어야 하는가" 이고, 발동 위치는
+#: "효과가 발동하는 순간 카드가 어디 있는가" 다. 카드 **자신**이 그 사건으로
+#: 움직이면 둘이 갈라진다.
+#:
+#: 실측 증거가 corpus 안에 있다 — 드로우 개구리(56840658) 의 Lua::
+#:
+#:     e2:SetType(EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O)
+#:     e2:SetRange(LOCATION_MZONE)
+#:     e2:SetCode(EVENT_TO_GRAVE)
+#:     e2:SetCondition(s.condition)
+#:     -- s.condition: c:IsPreviousLocation(LOCATION_ONFIELD)
+#:
+#: 🔴 **스크립트 자신이 ``IsPreviousLocation`` 을 쓴다.** 발동하는 순간 그
+#: 카드는 **묘지**에 있고 ``LOCATION_MZONE`` 은 등록 범위다. 공식 원문도
+#: 「**필드의 앞면 표시의** 이 카드가 **묘지로 보내졌을 때**」 다.
+#:
+#: 그래서 그 범위를 ``activates_from`` (= 지금 어디 있어야 하는가) 에 넣으면
+#: 자리 관문이 **확정 거부**를 낸다 — 실제로 재현했다 ("GRAVE 는 발동할 수
+#: 있는 자리가 아닙니다 (MZONE)"). 거짓 음성이고, ``UNKNOWN`` 이 아니라
+#: **잘못된 확신**이라서 더 나쁘다.
+#:
+#: 🔴 **새 칸을 만들지 않았다.** 그 뜻을 가진 칸이 이미 있다 —
+#: :attr:`~engine.trigger.TriggerSpec.from_zones` ("어떤 이동에만 반응하는가")
+#: 를 ``matches`` 가 ``event.from_zone`` 과 비교한다. 즉 이동 **전** 자리는
+#: 사건 쪽이 들고 있고, 그것이 Lua 의 ``IsPreviousLocation`` 과 같은 질문이다.
+#:
+#: 적용 조건은 **데이터만 본다** (카드별 분기 없음):
+#:
+#: * 주체가 ``SELF`` 다 — 그때만 "이 카드" 가 곧 사건의 주체이므로 사건의
+#:   도착지가 곧 발동 시점의 이 카드 위치다. ``FIELD`` 등록에서는 도착지가
+#:   **다른 카드**의 것이므로 이 추론이 성립하지 않는다 (실측: 그렇게
+#:   어긋나 보이는 ``FIELD`` 사례가 174건이고 전부 정상이다).
+#: * 시점이 ``CARD_MOVED`` 다 — ``from_zones`` 를 걸 수 있는 유일한 시점이고,
+#:   소환 시점에는 영역 축이 금지되어 있다 (3-F-5 ②).
+#: * 사건의 도착지가 범위 **밖**이다 — 안이면 범위가 곧 발동 위치다.
+#:
+#: 🔴 **이 변환은 거짓 양성을 만들 수 없다.** 바꾸는 방향이 "확정 거부 →
+#: 모름" 하나뿐이고 (``activates_from`` 을 비우므로 자리 관문이 ``UNKNOWN``),
+#: 동시에 ``from_zones`` 라는 **새 필터를 더하므로** 반응하는 사건이 오히려
+#: 줄어든다. 실측: 이 모양은 전 corpus 에서 **1건**이다.
+PREVIOUS_ZONE_RULE = "trigger-activation-location (등록 범위가 이동 전 자리다)"
+
+
+def _split_range(
+    declared: frozenset[Zone] | None,
+    *,
+    subject: TriggerSubject | None,
+    point: TimingPoint,
+    to_zones: frozenset[Zone] | None,
+) -> tuple[frozenset[Zone] | None, frozenset[Zone] | None]:
+    """
+    ``SetRange`` 하나를 **(이동 전 필터, 발동 위치)** 로 가른다.
+
+    조건과 근거는 :data:`PREVIOUS_ZONE_RULE` 의 주석에 있다. 범위가 없으면
+    둘 다 ``None`` 이고, 가를 근거가 없으면 **지금까지와 같이** 발동 위치로
+    둔다 — 근거 없이 뜻을 바꾸지 않는다.
+    """
+    if declared is None:
+        return None, None
+    if (
+        subject is TriggerSubject.SELF
+        and point is TimingPoint.CARD_MOVED
+        and to_zones is not None
+        and not (to_zones & declared)
+    ):
+        #: 도착지가 범위 밖이다 → 그 범위는 **이동 전** 자리다. 발동 위치는
+        #: 적지 않는다 (모른다) — 카드가 간 곳이 곧 발동 위치라고 적으면
+        #: 자리 관문이 **항상 통과하는 동어반복**이 되어 검사한 척하게 된다.
+        return declared, None
+    return None, declared
 
 
 def compile_trigger_spec(
@@ -417,13 +502,20 @@ def compile_trigger_spec(
     subject = (
         TriggerSubject.SELF if SELF_SCOPE_DECLARATION in kinds else None
     )
+    # 🔴 **등록 범위를 발동 위치로 오인하지 않는다** (Phase 6-G 의
+    # :data:`PREVIOUS_ZONE_RULE` 주석이 근거와 조건을 적는다).
+    declared = _zones_from(ranges)
+    from_zones, activates_from = _split_range(
+        declared, subject=subject, point=timing.point, to_zones=timing.to_zones
+    )
     spec = TriggerSpec(
         effect_ref=effect_ref,
         point=timing.point,
+        from_zones=from_zones,
         to_zones=timing.to_zones,
         summons=timing.summons,
         subject=subject,
-        activates_from=_zones_from(ranges),
+        activates_from=activates_from,
     )
     return TriggerCompilation(
         status=TriggerCompilationStatus.COMPILED,
