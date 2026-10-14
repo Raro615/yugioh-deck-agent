@@ -117,7 +117,9 @@ CODE_MEMBER_COUNT = 48
 #: (🔴 그 뒤 같은 Phase 안에서 다시 +1 — 관문의 짝을 리터럴로
 #: 되돌리면서 ``RULE_NOT_IMPLEMENTED`` 자리가 하나 더 생겼다. 두 감사가
 #: 계산된 값 전달을 잡아서 고친 것이고, 그 까닭은 6-F 보고서 §12 에 적었다.)
-CODE_OCCURRENCES = 69
+#: 🔴 69 → **70** (Phase 6-H 의 ``OTHER`` 모름 자리 하나). 생성 자리도 함께
+#: 하나 늘었으므로 아래 ``test_03`` 의 차이 **13 은 그대로다.**
+CODE_OCCURRENCES = 70
 
 #: 그중 **거부를 만드는** 자리.
 #:
@@ -145,7 +147,15 @@ CODE_OCCURRENCES = 69
 #: (🔴 그 뒤 같은 Phase 안에서 다시 +1 — 관문의 짝을 리터럴로
 #: 되돌리면서 ``RULE_NOT_IMPLEMENTED`` 자리가 하나 더 생겼다. 두 감사가
 #: 계산된 값 전달을 잡아서 고친 것이고, 그 까닭은 6-F 보고서 §12 에 적었다.)
-REJECTION_PRODUCTIONS = 56
+#: 🔴 56 → **57** (Phase 6-H). ``subject_relation`` 의 ``OTHER`` 분기 중
+#: **모름** 쪽 하나다 (``engine/trigger.py`` 829).
+#:
+#: 🔴 같은 분기의 **거부** 쪽은 여기 세지 않는다 — 그쪽은
+#: ``CANDIDATE_NOT_ELIGIBLE`` 이고, 사건의 주체가 바로 이 카드라는 것은
+#: ``InstanceId`` 비교로 답이 확정되므로 "이 엔진이 못 한다" 가 아니다.
+#: 6-F 가 같은 구분을 같은 함수에서 지켰고, 6-H 가 그 함수에 더한 두 답도
+#: 그 구분을 따른다.
+REJECTION_PRODUCTIONS = 57
 
 #: enum 이 **섹션 주석으로 선언한** 묶음 → 멤버 수.
 DECLARED_SECTIONS = {

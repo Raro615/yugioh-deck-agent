@@ -174,7 +174,12 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: (🔴 그 뒤 같은 Phase 안에서 다시 +1 — 관문의 짝을 리터럴로
 #: 되돌리면서 ``RULE_NOT_IMPLEMENTED`` 자리가 하나 더 생겼다. 두 감사가
 #: 계산된 값 전달을 잡아서 고친 것이고, 그 까닭은 6-F 보고서 §12 에 적었다.)
-RULE_NOT_IMPLEMENTED_MENTIONS = 82
+#: 🔴 82 → **84** (Phase 6-H). ``subject_relation`` 의 ``OTHER`` 분기
+#: (코드) 와 :data:`~engine.trigger.GROUP_MEMBERSHIP_RULE` 의 주석 (산문)
+#: 이다. 이 테스트가 지키는 사실 — *"그 코드와 ``UnimplementedRule`` 은 같은
+#: 개념이 아니다"* — 은 그대로이고, 6-H 도 ``UnimplementedRule`` 을 **하나도
+#: 만들지 않았다.**
+RULE_NOT_IMPLEMENTED_MENTIONS = 84
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.

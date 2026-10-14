@@ -215,8 +215,15 @@ def test_01_the_axis_has_three_states_not_two():
     ``SELF`` · ``ANY`` · ``None``. 🔴 ``None`` 은 ``ANY`` 가 **아니다.**
 
     그렇게 읽는 것이 Phase 6-E 가 재현해서 잡은 거짓 양성이다.
+
+    🔴 **Phase 6-H 에서 축이 한 값 늘었다** (``OTHER`` — "이 카드 이외의
+    사건에만"). 이 테스트가 틀린 전제를 갖고 있었던 것이 아니라, 6-F 시점에
+    실제로 값이 둘이었다. 아래 목록만 고치고 나머지 단정은 **하나도 약화하지
+    않았다** — 이 테스트가 지키는 것은 값의 개수가 아니라 *"적지 않은 것을
+    통과로 읽지 않는다"* 이고 그것은 그대로다. ``OTHER`` 의 비대칭은
+    ``test_trigger_event_subject_condition.py`` 가 전수로 고정한다.
     """
-    assert [m.value for m in TriggerSubject] == ["self", "any"]
+    assert [m.value for m in TriggerSubject] == ["self", "other", "any"]
 
     base = dict(point=TimingPoint.MONSTER_SUMMONED)
     event = summon_event(InstanceId(7))

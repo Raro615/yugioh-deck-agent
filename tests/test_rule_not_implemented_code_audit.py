@@ -110,7 +110,12 @@ MINE = 0
 #: (🔴 그 뒤 같은 Phase 안에서 다시 +1 — 관문의 짝을 리터럴로
 #: 되돌리면서 ``RULE_NOT_IMPLEMENTED`` 자리가 하나 더 생겼다. 두 감사가
 #: 계산된 값 전달을 잡아서 고친 것이고, 그 까닭은 6-F 보고서 §12 에 적었다.)
-STRING_OCCURRENCES = 82
+#: 🔴 82 → **84** (Phase 6-H). 코드 하나 + 산문 하나다 —
+#: :func:`~engine.trigger.subject_relation` 의 ``OTHER`` 분기가
+#: :data:`~engine.trigger.GROUP_MEMBERSHIP_RULE` 로 모름을 돌려주는 자리와,
+#: 그 상수 위에 **왜 이 코드인지** 적은 주석이다 ("코드가 생겨야 풀리는
+#: 모름이고 판이 바뀌어서 풀리는 모름이 아니다").
+STRING_OCCURRENCES = 84
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -139,13 +144,24 @@ PROSE_OCCURRENCES = {
     # 한다** — 그것이 번호를 적어 둔 이유다. 산문 자리는 13 그대로다:
     # 6-F 가 ``trigger_compiler.py`` 의 인용 하나를 지우고
     # ``trigger.py`` 에 하나를 더했다.
-    ("engine/trigger.py", 736),
-    ("engine/trigger.py", 1277),
+    # 🔴 **Phase 6-H 에서 다시 다섯 자리가 움직이고 하나가 생겼다.**
+    #
+    # ``TriggerSubject.OTHER`` (+20줄) 과 ``GROUP_MEMBERSHIP_RULE`` (+13줄) 이
+    # ``subject_relation`` **위**에 들어가서 736 → 771 로 밀렸고, 그 아래
+    # 네 자리는 ``subject_relation`` 의 두 분기(+27줄) 까지 더해 +60 씩
+    # 밀렸다 (1277 → 1337 · 1636 → 1696 · 1642 → 1702 · 1665 → 1725).
+    #
+    # 새로 생긴 자리는 **743** — ``GROUP_MEMBERSHIP_RULE`` 의 주석이 왜 이
+    # 코드를 쓰는지(코드가 생겨야 풀리는 모름) 적는다. 그래서 산문은
+    # 13 → **14** 다.
+    ("engine/trigger.py", 743),
+    ("engine/trigger.py", 771),
+    ("engine/trigger.py", 1337),
     # 3-E-45: ``_event_relation`` 이 왜 세 갈래인가를 적은 docstring 셋
     # (6-F 가 네 갈래로 늘렸고, 그 설명도 같은 자리에 있다).
-    ("engine/trigger.py", 1636),
-    ("engine/trigger.py", 1642),
-    ("engine/trigger.py", 1665),
+    ("engine/trigger.py", 1696),
+    ("engine/trigger.py", 1702),
+    ("engine/trigger.py", 1725),
     ("engine/trigger_chain.py", 553),
     ("engine/trigger_chain.py", 569),
     ("engine/validation.py", 129),
@@ -168,7 +184,11 @@ PROSE_OCCURRENCES = {
 #: (🔴 그 뒤 같은 Phase 안에서 다시 +1 — 관문의 짝을 리터럴로
 #: 되돌리면서 ``RULE_NOT_IMPLEMENTED`` 자리가 하나 더 생겼다. 두 감사가
 #: 계산된 값 전달을 잡아서 고친 것이고, 그 까닭은 6-F 보고서 §12 에 적었다.)
-CODE_OCCURRENCES = 69
+#: 🔴 69 → **70** (Phase 6-H). ``OTHER`` 선언인데 사건의 주체가 **다른**
+#: 카드인 자리다 — 그때 남는 질문("이 카드도 그 사건에 함께 포함되었는가")
+#: 은 엔진의 사건이 주체 한 장만 들고 있어서 물을 데가 없다. 판이 바뀌어도
+#: 풀리지 않고 **코드가 생겨야** 풀리므로 이 코드가 맞다.
+CODE_OCCURRENCES = 70
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {
@@ -478,7 +498,7 @@ def test_02_the_string_count_is_79_but_the_code_count_is_67():
 
     sites = code_sites()
     assert len(sites) == CODE_OCCURRENCES
-    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 13
+    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 14
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()

@@ -169,7 +169,15 @@ def test_01_the_three_part_modules_exist_and_are_large():
         # 🔴 1,729 → 1999 (Phase 6-F 의 주체 축: TriggerSubject ·
         # SUBJECT_AWARE_POINTS · subject_relation · _from_relation ·
         # 네 갈래 관문). **"크다" 는 요지는 그대로다.**
-        "engine/trigger.py": 1999,
+        #
+        # 🔴 1999 → **2059** (Phase 6-H 의 ``TriggerSubject.OTHER`` ·
+        # ``GROUP_MEMBERSHIP_RULE`` · ``subject_relation`` 의 두 분기).
+        # **dormant 를 깨지 않는다** — 늘어난 코드는 선언을 더 좁게 만들고
+        # 거부를 하나 더 낼 뿐, 후보를 모으는 자리를 늘리지 않았다.
+        # ``compile_trigger_spec`` 의 production 호출자는 여전히 0곳이고
+        # (6-H 보고서 §16), ``TriggerRegistry`` 를 만드는 production 자리도
+        # 여전히 0곳이다 (``test_13``).
+        "engine/trigger.py": 2059,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
     }
@@ -180,7 +188,10 @@ def test_01_the_three_part_modules_exist_and_are_large():
     #: (``EVENT_SPSUMMON_SUCCESS``)을 다른 사건으로 등록하는데 엔진에는
     #: ``MONSTER_SUMMONED`` 하나뿐이어서, 구분을 적지 않으면 "일반 소환했을
     #: 때" 카드가 특수 소환에도 후보가 된다.
-    assert sum(sizes.values()) == 3036  # 🔴 2,766 → 3,036 (Phase 6-F 의 주체 축)
+    #: 🔴 3,036 → **3,096** (Phase 6-H). ``engine/trigger.py`` 만 +60 이고
+    #: 나머지 두 모듈은 **한 줄도 바뀌지 않았다** — 그것이 이번 변경이
+    #: 축 하나에만 닿았다는 증거다.
+    assert sum(sizes.values()) == 3096
 
 
 def test_02_the_two_assembly_modules_exist():
@@ -855,7 +866,15 @@ def test_25_this_phase_changed_no_production_file():
         # 🔴 1,729 → 1999 (Phase 6-F 의 주체 축: TriggerSubject ·
         # SUBJECT_AWARE_POINTS · subject_relation · _from_relation ·
         # 네 갈래 관문). **"크다" 는 요지는 그대로다.**
-        "engine/trigger.py": 1999,
+        #
+        # 🔴 1999 → **2059** (Phase 6-H 의 ``TriggerSubject.OTHER`` ·
+        # ``GROUP_MEMBERSHIP_RULE`` · ``subject_relation`` 의 두 분기).
+        # **dormant 를 깨지 않는다** — 늘어난 코드는 선언을 더 좁게 만들고
+        # 거부를 하나 더 낼 뿐, 후보를 모으는 자리를 늘리지 않았다.
+        # ``compile_trigger_spec`` 의 production 호출자는 여전히 0곳이고
+        # (6-H 보고서 §16), ``TriggerRegistry`` 를 만드는 production 자리도
+        # 여전히 0곳이다 (``test_13``).
+        "engine/trigger.py": 2059,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
@@ -901,7 +920,17 @@ def test_25_this_phase_changed_no_production_file():
         #: (``test_12``) ``TriggerRegistry`` 를 만드는 production 자리도
         #: 여전히 0곳이다 (``test_13``).
         # 🔴 748 → 806 (Phase 6-F). "크다" 는 요지는 그대로다.
-        "engine/trigger.py": 806,
+        #
+        # 🔴 806 → **813** (Phase 6-H). **실행 코드 7줄이다** —
+        # ``TriggerSubject.OTHER`` 멤버 한 줄, ``GROUP_MEMBERSHIP_RULE``
+        # 한 줄, ``subject_relation`` 의 두 분기 다섯 줄. 이 핀이 "주석이
+        # 아니라 코드가 늘었다" 를 정확히 잡는 것이 핀을 둔 이유다.
+        #
+        # 늘어난 7줄이 **dormant 를 깨지 않는 이유**: 하나는 축의 값이고
+        # 나머지는 **거부 하나와 모름 하나**를 내는 분기다. 통과를 내는
+        # 자리는 하나도 늘지 않았고 (``test_15`` 가 ``OTHER`` 가 ``VALID``
+        # 를 낼 수 없음을 격자로 고정한다), 후보를 모으는 자리도 그대로다.
+        "engine/trigger.py": 813,
         "engine/trigger_chain.py": 257,
         "engine/trigger_order.py": 194,
         "engine/timing.py": 194,
