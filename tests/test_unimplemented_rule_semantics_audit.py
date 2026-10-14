@@ -117,12 +117,23 @@ MINE, THEIRS = 0, 1
 # 측정값 — 전부 저장소에서 센 수다. 바뀌면 그것이 신호다.
 # ======================================================================
 
-#: ``UnimplementedRule(...)`` 를 **production 에서** 만드는 자리. 두 곳뿐이고
-#: 둘 다 ``_special_summon`` 요구 목록이다.
+#: ``UnimplementedRule(...)`` 를 **production 에서** 만드는 자리.
+#:
+#: 2 → **3** (Phase 6-D). 앞의 둘은 ``_special_summon`` 요구 목록이고, 셋째는
+#: 카드군 조건 컴파일러다 — ``IsSetCard`` 의 인자가 런타임 변수여서 **이름을
+#: 아예 읽지 못한** 호출(실측 12회 · 카드 9장)에 붙인다. 그쪽은 Lua 분석이
+#: 변수를 따라가야 풀리므로 **코드가 없는 것**이고, 그래서
+#: ``UnimplementedRule`` 이 맞다.
+#:
+#: 🔴 같은 컴파일러가 **다른 실패에는 이것을 쓰지 않는다.** 이름은 읽었는데
+#: 상수 표에 코드가 없는 경우(이름 3개)는 ``ArchetypeUnresolved`` 이고, 그쪽은
+#: **데이터를 갱신해야** 풀린다. 둘을 한 클래스로 묶으면 "없는 규칙을 찾아
+#: 헤매게" 된다.
 PRODUCTION_CONSTRUCTIONS = {
     ("engine/action_validation.py", "_special_summon"),
+    ("engine/archetype_compiler.py", "compile_archetype_condition"),
 }
-PRODUCTION_CONSTRUCTION_COUNT = 2
+PRODUCTION_CONSTRUCTION_COUNT = 3
 
 #: ``RULE_NOT_IMPLEMENTED`` 가 production (``engine/`` + ``agent/``) 에
 #: 등장하는 총 횟수. 생성 2곳과 대비하는 수다.
@@ -139,11 +150,19 @@ PRODUCTION_CONSTRUCTION_COUNT = 2
 #:    ``CODE_OCCURRENCES`` 가 67 로 고정되어 있다).
 RULE_NOT_IMPLEMENTED_MENTIONS = 79
 
-#: ``missing_rules`` 를 override 하는 production 클래스 — 7개.
-#: ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
+#: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
+#: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
+#:
+#: 🔴 여덟째 ``ArchetypeUnresolved`` 는 **override 의 새로운 쓰임**이다.
+#: 앞의 일곱은 규칙 이름을 **내기 위해** override 하는데, 이쪽은 **내지
+#: 않기 위해** override 한다 — 기본 구현(``Condition.missing_rules``)도 빈
+#: 튜플을 주지만, 그 빈 값이 "아직 안 적었다" 가 아니라 **"없는 것이 규칙이
+#: 아니라 데이터다"** 라는 뜻임을 docstring 과 함께 못박는다. 이 테스트가
+#: 말하는 "protocol 이지 privilege 가 아니다" 가 양방향으로 성립한다.
 MISSING_RULES_OVERRIDES = {
     ("engine/condition/model.py", "Condition"),
     ("engine/condition/model.py", "UnimplementedRule"),
+    ("engine/condition/model.py", "ArchetypeUnresolved"),
     ("engine/condition/model.py", "And"),
     ("engine/condition/model.py", "Or"),
     ("engine/condition/model.py", "Not"),
@@ -383,7 +402,31 @@ def test_03_rule_not_implemented_is_almost_never_produced_by_unimplemented_rule(
         for path in sorted((PROJECT_ROOT / pkg).rglob("*.py")):
             mentions += path.read_text(encoding="utf-8").count("RULE_NOT_IMPLEMENTED")
     assert mentions == RULE_NOT_IMPLEMENTED_MENTIONS
-    assert mentions > 30 * PRODUCTION_CONSTRUCTION_COUNT
+
+    # 🔴 **배수(30)를 낮추지 않았다.** 이 비율이 재던 것은 "검증 코드를 내는
+    # 자리" 대비 "그 코드의 등장" 이고, 그 모집단은 여전히
+    # ``action_validation.py`` 의 **두 곳**이다.
+    #
+    # Phase 6-D 가 더한 셋째 자리는 **다른 종류**다 — 후보를 거르는 조건에
+    # 들어가고, ``Requirement`` 가 되지 않으므로 ``RULE_NOT_IMPLEMENTED``
+    # 라는 **검증 코드를 만들지 않는다** (그 파일에 그 이름이 없다). 그래서
+    # 비율은 원래 모집단에 그대로 걸고, 셋째는 따로 센다.
+    requirement_sites = [
+        site for site in sites["production"]
+        if site[0] == "engine/action_validation.py"
+    ]
+    assert len(requirement_sites) == 2
+    assert mentions > 30 * len(requirement_sites)
+
+    compiler_sites = [
+        site for site in sites["production"] if site not in requirement_sites
+    ]
+    assert len(compiler_sites) == 1
+    [(path, _, _)] = compiler_sites
+    assert path == "engine/archetype_compiler.py"
+    assert "RULE_NOT_IMPLEMENTED" not in (
+        (PROJECT_ROOT / path).read_text(encoding="utf-8")
+    )
 
 
 def test_04_four_different_things_share_a_similar_name():
@@ -432,11 +475,15 @@ def test_04_four_different_things_share_a_similar_name():
 
 def test_05_missing_rules_is_a_protocol_not_a_privilege_of_unimplemented_rule():
     """
-    **``missing_rules()`` 를 구현하는 production 클래스는 7개다.**
+    **``missing_rules()`` 를 구현하는 production 클래스는 8개다** (6-D 에서 +1).
 
     그중 둘(``_NormalSummonProcedure`` · ``_NormalSpellActivation``)은
     ``UnimplementedRule`` 이 **아니면서** 규칙 이름을 낸다. 그리고
     ``UnimplementedRule`` 이 못 하는 일을 한다 — **조건부**로 낸다.
+
+    🔴 Phase 6-D 가 여덟째를 더했고, 그것은 반대 방향이다 —
+    ``ArchetypeUnresolved`` 는 규칙 이름을 **내지 않기 위해** override 한다
+    (위 상수의 주석).
     """
     assert missing_rules_overrides() == MISSING_RULES_OVERRIDES
 

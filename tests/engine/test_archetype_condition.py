@@ -284,28 +284,22 @@ def test_c_analysis_already_reads_the_archetype_filter_as_names(repository):
     assert to_grave.selection.constraint.setcodes == ["ORCUST", "WORLD_LEGACY"]
 
 
-def test_c_nothing_turns_an_archetype_name_into_a_condition():
+def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     """
-    🔴 **이름 → 숫자 → 조건 을 잇는 자리가 없다.** 이 시험을 쓰면서 내가
-    틀린 것을 잡았다: 처음에는 "엔진은 ``sources`` 를 import 하지 않는다"
-    고 단정했는데, ``engine/vocabulary.py:28`` 이 ``ScriptConstants`` 를
-    **런타임에 import 한다.** 즉 표는 엔진 손에 닿는 거리에 있다.
+    🔴 **이 시험의 몸이 Phase 6-D 에서 바뀌었다.** 원래 이름은
+    ``test_c_nothing_turns_an_archetype_name_into_a_condition`` 이었고,
+    세 가지를 고정했다 — 표에는 이름이 있다 · ``EngineVocabulary`` 가
+    ``SET_`` 묶음을 내보내지 **않는다** · production 에 ``IsSetCard`` 를
+    만드는 자리가 **없다**.
 
-    없는 것은 표가 아니라 **옮기는 코드**다. 세 가지를 재서 고정한다.
+    셋 다 **쓰여진 시점에 맞았다.** Phase 6-C 는 조건만 만들고 그것을
+    채우는 코드를 일부러 두지 않았다 (쓰는 자리가 없었으므로). Phase 6-D
+    가 그 자리를 만들었으니 두 번째와 세 번째가 뒤집힌다. 첫 번째는
+    그대로다.
 
-    1. 표에는 두 이름이 다 들어 있다 (``ORCUST`` · ``SET_ELEMENTAL_HERO``).
-    2. :class:`~engine.vocabulary.EngineVocabulary` 는 ``LOCATION_`` ·
-       ``POS_`` · ``PHASE_`` 등을 묶음으로 내보내면서 **``SET_`` 묶음은
-       내보내지 않는다** — ``ScriptConstants`` 가 ``setcodes`` 를
-       ``others`` 와 따로 두기 때문이다.
-    3. production 어디에도 ``IsSetCard`` 를 **만드는** 자리가 없다.
-       :data:`~engine.effect.library.EFFECT_LIBRARY` 가 그것을 쓰는 정의를
-       아직 하나도 들고 있지 않다.
-
-    그래서 ``analysis`` 가 읽어 둔 ``["ORCUST", "WORLD_LEGACY"]`` 를
-    조건으로 바꾸는 일은 **아직 사람 손이다.** 다음 단계가 만들 것이
-    무엇인지가 여기서 정해진다.
+    바뀐 사실을 그대로 고정한다.
     """
+    from engine.archetype_compiler import compile_archetype_condition
     from engine.vocabulary import default_vocabulary
     from sources.script_constants import ScriptConstants
 
@@ -313,13 +307,15 @@ def test_c_nothing_turns_an_archetype_name_into_a_condition():
     assert constants.setcode("ORCUST") == SET_ORCUST
     assert constants.setcode("SET_ELEMENTAL_HERO") == SET_ELEMENTAL_HERO
 
+    # ① 이제 ``EngineVocabulary`` 가 카드군 묶음을 내보낸다.
     vocabulary = default_vocabulary()
-    assert not [
-        name for name in vocabulary.__slots__ if "set" in name or "archetype" in name
-    ]
+    assert "archetypes" in vocabulary.__slots__
+    assert len(vocabulary.archetypes) == 615
+    assert vocabulary.archetypes.value("ORCUST") == SET_ORCUST
+    # 🔴 그 묶음은 여전히 ``others`` 에서 오지 않는다 — 출처가 다르다.
     assert "ORCUST" not in vocabulary.constants.others
 
-    # production 에서 조건을 만드는 자리가 없다 (시험과 이 파일은 센다).
+    # ② 이제 production 에 조건을 만드는 자리가 **딱 한 곳** 있다.
     builders = []
     for root in ("engine", "agent", "deck", "app"):
         for module in pathlib.Path(root).rglob("*.py"):
@@ -331,7 +327,19 @@ def test_c_nothing_turns_an_archetype_name_into_a_condition():
                     and node.func.id == "IsSetCard"
                 ):
                     builders.append(module.as_posix())
-    assert builders == [], builders
+    assert builders == ["engine/archetype_compiler.py"], builders
+
+    # ③ 그 자리가 실제로 이름을 조건으로 바꾼다.
+    compiled = compile_archetype_condition(["ORCUST"])
+    assert compiled is not None
+    assert compiled.condition == IsSetCard((SET_ORCUST,))
+    assert compiled.is_complete is True
+
+    # ④ 🔴 **그래도 등재는 늘지 않았다.** 옮길 수 있다는 것과 적어 두었다는
+    #    것은 다른 말이고, ``EFFECT_LIBRARY`` 는 아직 이것을 쓰지 않는다.
+    from engine.effect.library import EFFECT_LIBRARY
+
+    assert len(EFFECT_LIBRARY) == 16
 
 
 # ======================================================================

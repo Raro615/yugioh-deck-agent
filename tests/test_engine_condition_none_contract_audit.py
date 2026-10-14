@@ -120,6 +120,9 @@ CONDITION_REQUIRED_FIELDS = {
     ("engine/condition/model.py", "And", "children"),
     ("engine/condition/model.py", "Or", "children"),
     ("engine/condition/model.py", "Not", "child"),
+    # Phase 6-D. 카드군 요구가 없으면 결과 객체를 **만들지 않는다** —
+    # ``Requirement`` 와 같은 선택이고, 그래서 Optional 칸이 늘지 않았다.
+    ("engine/archetype_compiler.py", "ArchetypeCompilation", "condition"),
 }
 
 #: ``engine/`` 의 ``*.py`` 파일 수. 전수 주사의 분모다.
@@ -127,7 +130,15 @@ CONDITION_REQUIRED_FIELDS = {
 #: Phase 6-C 에서 65 → 66. 늘어난 하나는 ``engine/archetype.py`` 이고,
 #: 그 파일에는 ``Condition`` 을 받는 칸이 **없다** (순수 함수 둘과 마스크
 #: 셋뿐이다). 그래서 아래 두 집합은 그대로다 — 분모만 움직였다.
-ENGINE_FILE_COUNT = 66
+#:
+#: Phase 6-D 에서 66 → 67 (``engine/archetype_compiler.py``). 🔴 이번에는
+#: **집합 하나가 함께 움직였다** — 그 파일의 ``ArchetypeCompilation.
+#: condition`` 이 ``Condition`` 이고 ``Optional 이 아니다``. 즉 아래
+#: :data:`CONDITION_OPTIONAL_FIELDS` 는 그대로 **5곳**이고,
+#: :data:`CONDITION_REQUIRED_FIELDS` 가 4 → 5곳이 된다. 이 감사가 §7 에서
+#: "부재를 ``None`` 없이 적는 설계가 이미 두 개 있다" 고 적어 둔 그
+#: 선례를 따른 결과다.
+ENGINE_FILE_COUNT = 67
 
 #: 조건·요구·발동 이름에 대한 ``None`` 검사 수. ``engine/`` **패키지만** 센다
 #: (``tests/engine/`` 까지 세면 분모가 오염된다 — 한 번 틀렸던 자리다).

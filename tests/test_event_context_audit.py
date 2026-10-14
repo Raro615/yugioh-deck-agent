@@ -158,7 +158,8 @@ def test_01_the_engine_condition_vocabulary_only_asks_about_the_board():
     🔴 **그래도 이 감사의 결론은 그대로다.** ``IsSetCard`` 가 묻는 것은
     "지금 판에 보이는 그 카드가 어느 카드군인가" 이고, **사건을 묻지
     않는다** — ``ConditionContext.event`` 가 생겨도 읽을 술어는 여전히
-    0개다.
+    0개다. Phase 6-D 가 더한 ``ArchetypeUnresolved`` 는 관측을 아예
+    읽지 않으므로 자리표시자 쪽에 센다 (아래 주석).
     """
     #: 엔진 전체를 import 한 뒤에 세어야 한다 — 규칙 관문 8개가
     #: ``engine/action_validation.py`` 에 따로 있다.
@@ -171,7 +172,19 @@ def test_01_the_engine_condition_vocabulary_only_asks_about_the_board():
         by_module.setdefault(cls.__module__, set()).add(cls.__name__)
 
     vocabulary = by_module["engine.condition.model"]
-    combinators = {"And", "Or", "Not", "Always", "UnimplementedRule"}
+    #: 🔴 Phase 6-D 에서 ``ArchetypeUnresolved`` 가 여기 들어왔다 —
+    #: **술어가 아니라 자리표시자**다. ``Always`` · ``UnimplementedRule``
+    #: 처럼 관측을 **읽지 않고** 언제나 ``UNKNOWN`` 을 돌려준다 (카드군
+    #: 이름을 숫자로 바꿀 수 없었다는 사실만 들고 있다). 그래서 아래
+    #: "판을 묻는 술어" 집합이 아니라 이쪽에 센다.
+    combinators = {
+        "And",
+        "Or",
+        "Not",
+        "Always",
+        "UnimplementedRule",
+        "ArchetypeUnresolved",
+    }
     board_predicates = {
         "AttackAtLeast",
         "AttributeIs",
