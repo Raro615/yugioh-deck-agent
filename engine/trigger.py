@@ -68,6 +68,7 @@ from engine.effect.delta import (
     MonsterSummoned,
     PhaseChanged,
     StateDelta,
+    SummonKind,
     ZoneMoved,
 )
 from engine.effect.journal import (
@@ -371,6 +372,18 @@ class TimingEvent:
         movement = self.movement
         return movement.to_zone if movement is not None else None
 
+    @property
+    def summon(self) -> "SummonKind | None":
+        """
+        **어떤 소환이었는가** (Phase 6-E). 소환 사건이 아니면 ``None``.
+
+        :attr:`operation` 과 **같은 표를 쓰지 않는다** —
+        :class:`~engine.effect.delta.MonsterSummoned` 의 설명이 그 이유를
+        적어 두었다. 소환은 효과가 하는 일이 아니라 규칙에 따른 행위이므로
+        어휘가 다르고, 그래서 이 칸이 따로 필요하다.
+        """
+        return self.delta.summon if isinstance(self.delta, MonsterSummoned) else None
+
     def canonical_state(self) -> tuple:
         return (
             self.point.value,
@@ -479,6 +492,21 @@ class TriggerSpec:
     """``CARD_MOVED`` 에서 어떤 의미의 이동에만 반응하는가. ``None`` 이면 전부."""
     from_zones: frozenset[Zone] | None = None
     to_zones: frozenset[Zone] | None = None
+    summons: frozenset[SummonKind] | None = None
+    """
+    ``MONSTER_SUMMONED`` 에서 **어떤 소환에만** 반응하는가 (Phase 6-E).
+    ``None`` 이면 전부다.
+
+    🔴 **이 칸이 없으면 거짓 양성이 생긴다.** Lua 는 "일반 소환했을 때"
+    (``EVENT_SUMMON_SUCCESS``, 실측 1,093블록) 와 "특수 소환했을 때"
+    (``EVENT_SPSUMMON_SUCCESS``, 1,796블록) 를 **다른 사건으로** 등록하는데,
+    엔진에는 둘을 합친 :attr:`TimingPoint.MONSTER_SUMMONED` 하나뿐이다
+    (어떤 소환인지는 ``MonsterSummoned.summon`` 이 말한다). 구분을 적지
+    않으면 "일반 소환했을 때" 카드가 특수 소환에도 후보가 된다.
+
+    ``operations`` 와 **같은 자리에 넣지 않았다.** 그쪽은 효과가 하는 일의
+    어휘이고 소환은 거기 들어가지 않는다 (``MonsterSummoned`` 의 설명).
+    """
     activates_from: frozenset[Zone] | None = None
     """
     **어느 자리에서 발동할 수 있는가.**
@@ -498,7 +526,13 @@ class TriggerSpec:
     """
 
     def __post_init__(self) -> None:
-        for name in ("operations", "from_zones", "to_zones", "activates_from"):
+        for name in (
+            "operations",
+            "from_zones",
+            "to_zones",
+            "summons",
+            "activates_from",
+        ):
             value = getattr(self, name)
             if value is not None and not isinstance(value, frozenset):
                 raise TypeError(
@@ -511,6 +545,11 @@ class TriggerSpec:
                         f"{self.point.value} 시점에는 {name} 를 걸 수 없습니다. "
                         "카드 이동이 아닌 사건입니다."
                     )
+        if self.point is not TimingPoint.MONSTER_SUMMONED and self.summons is not None:
+            raise TriggerError(
+                f"{self.point.value} 시점에는 summons 를 걸 수 없습니다. "
+                "소환 사건이 아닙니다."
+            )
 
     @property
     def card_id(self) -> int:
@@ -529,6 +568,8 @@ class TriggerSpec:
             return False
         if self.to_zones is not None and event.to_zone not in self.to_zones:
             return False
+        if self.summons is not None and event.summon not in self.summons:
+            return False
         return True
 
     def canonical_state(self) -> tuple:
@@ -540,6 +581,7 @@ class TriggerSpec:
             _sorted_values(self.operations),
             _sorted_values(self.from_zones),
             _sorted_values(self.to_zones),
+            _sorted_values(self.summons),
             _sorted_values(self.activates_from),
             self.condition.canonical_state() if self.condition is not None else None,
         )
@@ -554,7 +596,13 @@ class TriggerSpec:
             "requirement": self.requirement.value,
             "wording": self.wording.value,
         }
-        for name in ("operations", "from_zones", "to_zones", "activates_from"):
+        for name in (
+            "operations",
+            "from_zones",
+            "to_zones",
+            "summons",
+            "activates_from",
+        ):
             value = getattr(self, name)
             if value is not None:
                 data[name] = list(_sorted_values(value))
