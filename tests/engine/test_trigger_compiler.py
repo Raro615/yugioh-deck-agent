@@ -527,24 +527,40 @@ def test_f_the_special_summon_declaration_does_not_fire_on_a_normal_summon(
 @requires_official_db
 def test_f_no_candidate_is_ever_promoted_to_activatable(repository, summoned):
     """
-    🔴 **이 Phase 의 가장 중요한 단정.**
+    🔴 **이 Phase 의 가장 중요한 단정 — 그리고 Phase 6-F 가 더 강하게 만든 것.**
 
-    후보가 나왔다고 발동 가능한 것이 아니다. "이 사건이 **이 카드의**
-    사건인가" 를 아직 판정할 수 없으므로 (``EVENT_SUBJECT_RULE``) 어떤
-    후보도 ``ELIGIBLE`` 이 되지 않는다.
+    후보가 나왔다고 발동 가능한 것이 아니다. 실제로 이 판의 소환은
+    **페더맨**의 소환이고 후보는 **기르수**의 것이다.
 
-    실제로 이 판의 소환은 **페더맨**의 소환이고 후보는 **기르수**의 것이다.
-    그 둘이 다르다는 사실을 아직 아무도 확인하지 않았다.
+    .. note::
+       6-E 에서 이 시험은 ``UNKNOWN`` · ``RULE_NOT_IMPLEMENTED`` 를 단정했다.
+       그것이 **그때 알 수 있는 전부**였다 — "이 사건이 이 카드의 사건인가"
+       를 묻는 계층이 없었으므로 모른다고 답하는 것이 정직했다.
+
+       6-F 가 그 질문에 답한다 (``TriggerSubject.SELF``). 그래서 같은 판에서
+       답이 ``INELIGIBLE`` · ``CANDIDATE_NOT_ELIGIBLE`` 로 **강해졌다** —
+       "모른다" 가 아니라 **"주체가 다르다"** 다. 🔴 기존 단정이 틀린 가정을
+       갖고 있던 것이 아니라, 모름이 **확정된 거부로 승격**되었다. 이 시험이
+       지키려는 불변(``is_candidate is False``) 은 아래에서 그대로 지킨다.
     """
     registry, _ = registry_from(repository, [GIRSU])
     pipeline = EventPipeline(summoned.view(MINE), registry, definition_registry())
 
+    seen = 0
     for event in summoned.journal.events:
         for observation in pipeline.collect(event, actor=event.actor):
             for candidate in observation.candidates:
-                assert candidate.status is TriggerStatus.UNKNOWN
+                seen += 1
+                #: 🔴 이 불변은 6-E 와 **한 글자도 다르지 않다.**
                 assert candidate.status.is_candidate is False
-                assert candidate.code is ValidationCode.RULE_NOT_IMPLEMENTED
+                #: 그리고 까닭이 정확해졌다.
+                assert candidate.status is TriggerStatus.INELIGIBLE
+                assert candidate.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+                #: 사건의 주체(페더맨) 와 후보의 카드(기르수) 가 **둘 다**
+                #: 이유에 적힌다 — 어느 쪽이 달랐는지 읽을 수 있어야 한다.
+                assert str(observation.event.instance) in candidate.reason
+                assert str(candidate.source) in candidate.reason
+    assert seen == 1
 
 
 @requires_official_db
@@ -553,23 +569,41 @@ def test_f_the_same_holds_without_a_definition_source(repository, summoned):
     🔴 **이 시험이 실제 거짓 양성을 잡았다.**
 
     정의 출처를 넘기지 않으면 ``TriggerCollector`` 는 "걸린 조건이 없다" 며
-    ``ELIGIBLE`` 을 돌려준다. 처음 구현이 그랬고, 페더맨의 소환에
+    ``ELIGIBLE`` 을 돌려준다. 6-E 의 처음 구현이 그랬고, 페더맨의 소환에
     기르수가 **발동 가능**으로 나왔다.
 
-    그래서 컴파일러가 ``EVENT_SUBJECT_RULE`` 을 조건으로 **함께 싣는다.**
-    정의 출처가 있든 없든 판정이 ``UNKNOWN`` 에서 멈춘다.
+    .. note::
+       6-E 는 그것을 ``EVENT_SUBJECT_RULE`` **조건**으로 막았고 판정이
+       ``UNKNOWN`` 에서 멈췄다. 6-F 는 같은 사실을 **축**으로 옮겼으므로
+       (:func:`~engine.trigger.subject_relation`) 조건이 없어도 막히고,
+       막히는 이유가 ``INELIGIBLE`` 로 정확해졌다. 🔴 **정의 출처가 있든
+       없든 같은 답이라는 이 시험의 요지는 그대로다** — 아래에서 두 경로를
+       직접 비교해 그것을 단정한다.
     """
     registry, _ = registry_from(repository, [GIRSU])
     bare = EventPipeline(summoned.view(MINE), registry)  # definitions=None
+    held = EventPipeline(summoned.view(MINE), registry, definition_registry())
 
-    seen = 0
-    for event in summoned.journal.events:
-        for observation in bare.collect(event, actor=event.actor):
-            for candidate in observation.candidates:
-                seen += 1
-                assert candidate.status is TriggerStatus.UNKNOWN
-                assert EVENT_SUBJECT_RULE in candidate.reason
-    assert seen == 1
+    def verdicts(pipeline):
+        out = []
+        for event in summoned.journal.events:
+            for observation in pipeline.collect(event, actor=event.actor):
+                for candidate in observation.candidates:
+                    out.append((candidate.status, candidate.code, candidate.reason))
+        return out
+
+    without, with_definitions = verdicts(bare), verdicts(held)
+    assert len(without) == 1
+    #: 🔴 **두 경로가 글자 하나까지 같다.** 6-E 가 이 자리에서 갈라졌고
+    #: 그것이 거짓 양성이었으므로, 같다는 것을 직접 단정한다.
+    assert without == with_definitions
+    [(status, code, reason)] = without
+    assert status is TriggerStatus.INELIGIBLE
+    assert code is ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    #: ``EVENT_SUBJECT_RULE`` 은 이제 이유에 나오지 않는다 — 모르는 것이
+    #: 아니라 **알아서 거부**하기 때문이다. 그 이름이 쓰이는 자리는
+    #: 주체를 적지 않은 선언뿐이다 (``test_f_an_unscoped_declaration_...``).
+    assert EVENT_SUBJECT_RULE not in reason
 
 
 @requires_official_db

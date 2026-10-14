@@ -112,7 +112,12 @@ CODE_MEMBER_COUNT = 48
 
 #: ``engine/`` + ``agent/`` 에서 코드가 **등장하는** 줄.
 #: 69 → **67** (Phase 3-E-38 이 M1 ×2 · M2 ×2 를 고치면서 2 감소).
-CODE_OCCURRENCES = 67
+#: 🔴 67 → **68** (Phase 6-F 의 주체 미선언 자리 하나). 생성 자리도 함께
+#: 하나 늘었으므로 아래 ``test_03`` 의 차이 **13 은 그대로다.**
+#: (🔴 그 뒤 같은 Phase 안에서 다시 +1 — 관문의 짝을 리터럴로
+#: 되돌리면서 ``RULE_NOT_IMPLEMENTED`` 자리가 하나 더 생겼다. 두 감사가
+#: 계산된 값 전달을 잡아서 고친 것이고, 그 까닭은 6-F 보고서 §12 에 적었다.)
+CODE_OCCURRENCES = 69
 
 #: 그중 **거부를 만드는** 자리.
 #:
@@ -124,7 +129,23 @@ CODE_OCCURRENCES = 67
 #:
 #: 나머지는 enum 정의 1 · 필드 기본값 8 · 멤버십 3 · 비교 1 = 13.
 #: 54 + 13 = 67 로 맞는다.
-REJECTION_PRODUCTIONS = 54
+#:
+#: 🔴 54 → **55** (Phase 6-F). 늘어난 하나는
+#: :func:`~engine.trigger.subject_relation` 의 **"선언이 주체를 적지 않았다"**
+#: 자리다 — ``FIELD`` 범위 등록이 어느 카드의 사건에 반응하는지 Lua 만으로는
+#: 읽을 수 없으므로 ``RULE_NOT_IMPLEMENTED`` 가 맞다 (판이 바뀌어도 풀리지
+#: 않고 **코드가 생겨야** 풀린다).
+#:
+#: 🔴 같은 함수의 **거부** 자리는 여기 세지 않는다 — 그쪽은
+#: ``CANDIDATE_NOT_ELIGIBLE`` 이다. 양쪽이 ``InstanceId`` 를 들고 있어 데이터
+#: 비교로 답이 확정되므로 "이 엔진이 못 한다" 가 아니기 때문이고, 그 구분이
+#: 이 파일이 3-E-26 부터 지켜 온 것이다. (처음에 이 주석을 거꾸로 적었다 —
+#: 늘어난 자리를 ``CANDIDATE_NOT_ELIGIBLE`` 이라고 썼는데,
+#: ``rejection_productions()`` 는 ``RULE_NOT_IMPLEMENTED`` 만 센다.)
+#: (🔴 그 뒤 같은 Phase 안에서 다시 +1 — 관문의 짝을 리터럴로
+#: 되돌리면서 ``RULE_NOT_IMPLEMENTED`` 자리가 하나 더 생겼다. 두 감사가
+#: 계산된 값 전달을 잡아서 고친 것이고, 그 까닭은 6-F 보고서 §12 에 적었다.)
+REJECTION_PRODUCTIONS = 56
 
 #: enum 이 **섹션 주석으로 선언한** 묶음 → 멤버 수.
 DECLARED_SECTIONS = {

@@ -47,6 +47,7 @@ from engine.trigger import (
     TriggerError,
     TriggerRegistry,
     TriggerSpec,
+    TriggerSubject,
     TriggerStatus,
 )
 from engine.trigger_chain import TriggerChainIntegrator
@@ -93,11 +94,16 @@ def view(state) -> GameStateView:
 
 
 def spec(condition=None) -> TriggerSpec:
+    #: 🔴 ``subject=ANY`` — **Phase 6-F 가 드러낸 숨은 전제.** 이 선언은
+    #: "어느 카드의 사건이든 반응한다" 를 암묵적으로 가정하고 있었고,
+    #: 6-F 가 그 축을 더하면서 적지 않은 것을 ``UNKNOWN`` 으로 읽게
+    #: 되었다. **단정은 하나도 바꾸지 않았다** — 입력에 전제를 적었다.
     return TriggerSpec(
         WATCHED,
         TimingPoint.CARD_DRAWN,
         condition=condition,
         activates_from=frozenset({Zone.MZONE}),
+        subject=TriggerSubject.ANY,
     )
 
 

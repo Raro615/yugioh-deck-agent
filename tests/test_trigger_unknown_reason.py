@@ -48,6 +48,7 @@ from engine.trigger import (
     TriggerEligibilityJudge,
     TriggerRegistry,
     TriggerSpec,
+    TriggerSubject,
     TriggerStatus,
 )
 from engine.trigger_chain import ChainInsertion, TriggerChainIntegrator
@@ -101,8 +102,17 @@ def seen_by(state: GameState, viewer: int = MINE) -> GameStateView:
 
 
 def spec(condition=None, *, zones=frozenset({Zone.MZONE})) -> TriggerSpec:
+    #: 🔴 ``subject=ANY`` — **Phase 6-F 가 드러낸 숨은 전제.** 이 파일은
+    #: 두 ``UNKNOWN`` ("정보가 없어서" vs "규칙이 없어서") 을 가르는 것이
+    #: 목적이므로, 주체를 적지 않으면 주체의 ``RULE_NOT_IMPLEMENTED`` 가
+    #: 섞여 들어와 **그 구분 자체를 볼 수 없게 된다.** 전제를 적어서
+    #: 보려던 것만 남긴다. 단정은 하나도 바꾸지 않았다.
     return TriggerSpec(
-        WATCHED, TimingPoint.CARD_DRAWN, condition=condition, activates_from=zones
+        WATCHED,
+        TimingPoint.CARD_DRAWN,
+        condition=condition,
+        activates_from=zones,
+        subject=TriggerSubject.ANY,
     )
 
 
@@ -384,7 +394,14 @@ def test_10b_an_earlier_unknown_gate_does_not_name_the_refusal(board):
     """
     state, _ = board
     view = seen_by(state)
-    undeclared = TriggerSpec(WATCHED, TimingPoint.CARD_DRAWN, activates_from=None)
+    #: ``activates_from`` 만 미선언으로 두고 주체는 적는다 — 이 시험이 보려는
+    #: 것은 **자리** 관문이므로 (6-F 주석 참조).
+    undeclared = TriggerSpec(
+        WATCHED,
+        TimingPoint.CARD_DRAWN,
+        activates_from=None,
+        subject=TriggerSubject.ANY,
+    )
     integrator = TriggerChainIntegrator(
         view,
         TriggerRegistry((undeclared,)),

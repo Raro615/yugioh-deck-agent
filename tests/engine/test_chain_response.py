@@ -62,6 +62,7 @@ from engine.trigger import (
     TriggerRegistry,
     TriggerRequirement,
     TriggerSpec,
+    TriggerSubject,
 )
 from engine.trigger_chain import TriggerChainIntegrator
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
@@ -650,11 +651,13 @@ def test_f_test_a_one_event_makes_two_trigger_candidates():
         view,
         TriggerRegistry(
             (
+                # 🔴 ``subject=ANY`` — Phase 6-F 가 드러낸 숨은 전제 (단정 불변).
                 TriggerSpec(
                     EffectRef(ALPHA, 0),
                     TimingPoint.CARD_DRAWN,
                     requirement=TriggerRequirement.OPTIONAL,
                     activates_from=frozenset({Zone.MZONE}),
+                    subject=TriggerSubject.ANY,
                 ),
             )
         ),

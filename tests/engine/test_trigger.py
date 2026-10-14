@@ -56,6 +56,7 @@ from engine.trigger import (
     TriggerRegistry,
     TriggerRequirement,
     TriggerSpec,
+    TriggerSubject,
     TriggerStatus,
     TriggerWording,
     timing_events,
@@ -326,8 +327,15 @@ def test_a_candidate_is_immutable_and_refuses_a_bad_seat():
 
 
 def test_a_true_condition_makes_the_candidate_eligible(view):
+    #: 🔴 ``subject=ANY`` 는 **Phase 6-F 가 드러낸 숨은 전제**다. 이 시험은
+    #: "어느 카드의 사건이든 반응하는 선언" 을 가정하고 있었고, 6-F 가 그
+    #: 축을 더하면서 적지 않은 것을 ``UNKNOWN`` 으로 읽게 되었다. 단정은
+    #: 하나도 바꾸지 않았다 — 입력에 전제를 적었을 뿐이다.
     spec = TriggerSpec(
-        EffectRef(WATCHER, 0), TimingPoint.CARD_DRAWN, condition=Always()
+        EffectRef(WATCHER, 0),
+        TimingPoint.CARD_DRAWN,
+        condition=Always(),
+        subject=TriggerSubject.ANY,
     )
 
     collection = collector(view, spec).collect(drawn_event())
@@ -343,7 +351,13 @@ def test_eligible_does_not_claim_the_effect_can_be_activated(view):
     타이밍 윈도우 · 놓친 타이밍 · 턴 1회 · 비용 · 발동 합법성은 하나도 보지
     않았다.
     """
-    spec = TriggerSpec(EffectRef(WATCHER, 0), TimingPoint.CARD_DRAWN)
+    #: 🔴 ``subject=ANY`` 는 **Phase 6-F 가 드러낸 숨은 전제**다. 이 시험은
+    #: "어느 카드의 사건이든 반응하는 선언" 을 가정하고 있었고, 6-F 가 그
+    #: 축을 더하면서 적지 않은 것을 ``UNKNOWN`` 으로 읽게 되었다. 단정은
+    #: 하나도 바꾸지 않았다 — 입력에 전제를 적었을 뿐이다.
+    spec = TriggerSpec(
+        EffectRef(WATCHER, 0), TimingPoint.CARD_DRAWN, subject=TriggerSubject.ANY
+    )
     candidate = collector(view, spec).collect(drawn_event()).candidates[0]
 
     assert candidate.status is TriggerStatus.ELIGIBLE
@@ -378,10 +392,15 @@ def test_an_unjudgeable_condition_is_unknown_not_ineligible(view):
     이므로 모르는 까닭은 **규칙이 없어서**이고 정보가 없어서가 아니다. 판정
     (``UNKNOWN``)은 그대로고 이유만 정확해졌다.
     """
+    #: 🔴 ``subject=ANY`` 가 **이 시험의 요지를 지킨다.** 이 시험이 가르는
+    #: 것은 "규칙이 없어서 모른다" 와 "정보가 없어서 모른다" 이고, 주체까지
+    #: 모르는 상태로 두면 주체의 ``RULE_NOT_IMPLEMENTED`` 가 섞여 들어와
+    #: 그 구분을 볼 수 없게 된다. 전제를 적어서 **보려던 것만 남긴다.**
     spec = TriggerSpec(
         EffectRef(WATCHER, 0),
         TimingPoint.CARD_DRAWN,
         condition=UnimplementedRule("체인 위의 카드 수"),
+        subject=TriggerSubject.ANY,
     )
 
     collection = collector(view, spec).collect(drawn_event())
@@ -408,10 +427,15 @@ def test_a_hidden_fact_makes_the_candidate_unknown_for_a_different_reason(view, 
         state.player(THEIRS).hand[0], Zone.SZONE, position=Position.FACEDOWN
     )
     fresh = GameStateView.from_state(state, viewer=MINE)
+    #: 🔴 ``subject=ANY`` 가 **이 시험의 요지를 지킨다.** 가르려는 것은
+    #: "정보가 없어서 모른다"(뒷면 카드) 와 "규칙이 없어서 모른다" 이고,
+    #: 주체를 적지 않으면 주체의 ``RULE_NOT_IMPLEMENTED`` 가 섞여 그 구분이
+    #: 보이지 않는다 (Phase 6-F). 단정은 그대로 두고 전제만 적었다.
     spec = TriggerSpec(
         EffectRef(WATCHER, 0),
         TimingPoint.CARD_DRAWN,
         condition=IsMonster(facedown.instance_id),
+        subject=TriggerSubject.ANY,
     )
 
     collection = collector(fresh, spec).collect(drawn_event())
@@ -806,7 +830,13 @@ def test_a_lua_verified_effect_is_not_forbidden(view):
             ),
         )
     )
-    spec = TriggerSpec(EffectRef(WATCHER, 0), TimingPoint.CARD_DRAWN)
+    #: 🔴 ``subject=ANY`` 는 **Phase 6-F 가 드러낸 숨은 전제**다. 이 시험은
+    #: "어느 카드의 사건이든 반응하는 선언" 을 가정하고 있었고, 6-F 가 그
+    #: 축을 더하면서 적지 않은 것을 ``UNKNOWN`` 으로 읽게 되었다. 단정은
+    #: 하나도 바꾸지 않았다 — 입력에 전제를 적었을 뿐이다.
+    spec = TriggerSpec(
+        EffectRef(WATCHER, 0), TimingPoint.CARD_DRAWN, subject=TriggerSubject.ANY
+    )
 
     collection = collector(view, spec, definitions=definitions).collect(drawn_event())
 

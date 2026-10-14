@@ -67,6 +67,7 @@ from engine.trigger import (
     TriggerRegistry,
     TriggerRequirement,
     TriggerSpec,
+    TriggerSubject,
     TriggerStatus,
     timing_for,
 )
@@ -92,11 +93,18 @@ LUSTER_DRAGON = 11091375
 AUDIT_GRANT = ValidationResult.valid("감사가 관문을 우회해 직접 허가했다")
 
 #: 세 fixture 가 공유하는 선언. **행위자를 적는 칸이 없다** (3-F-6).
+#: 🔴 **Phase 6-F 가 ``subject`` 축을 더했고 기본값이 "모름" 이다.**
+#:
+#: 이 선언은 "어느 카드의 사건이든 반응한다" 를 **암묵적 전제**로 갖고
+#: 있었다. 이 감사는 ``actor`` 관계를 보는 것이 목적이므로 그 전제가
+#: 참이어야 한다 — 주체가 ``SELF`` 라면 관문이 주체에서 먼저 막혀
+#: ``actor`` 를 볼 자리에 닿지 못한다. 단정은 하나도 바꾸지 않았다.
 WATCHING_SUMMONS = TriggerSpec(
     EffectRef(LUSTER_DRAGON, 0),
     TimingPoint.MONSTER_SUMMONED,
     requirement=TriggerRequirement.OPTIONAL,
     activates_from=frozenset({Zone.MZONE}),
+    subject=TriggerSubject.ANY,
 )
 
 
@@ -346,7 +354,18 @@ def test_03_the_event_relation_gate_reads_the_event_but_never_the_actor():
     for node in ast.walk(ast.parse(body)):
         if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "_gate":
             gate_calls += 1
-    assert gate_calls == 4
+    #: 🔴 4 → **7** (Phase 6-F). 시점과 필터가 맞은 뒤의 **주체** 관계가
+    #: 네 갈래를 더한다 (통과 · 거부 · 모름 둘).
+    #:
+    #: 처음에는 ``subject_relation`` 의 ``validity``/``code`` 를 한 줄로
+    #: **전달**해서 5 였다. 그런데 두 감사가 그것을 잡았다 — 이 관문이 낼
+    #: 수 있는 짝을 **구문으로 읽어** ``CODE_VALIDITY`` 와 맞추는 것이
+    #: 3-E-44 의 R-3 규율이고, 계산된 값을 넘기면 그 검사가 불가능해진다.
+    #: 그래서 짝을 리터럴로 되돌렸고 자리가 7 이 되었다.
+    #:
+    #: 이 감사가 고정한 "네 갈래 어디에도 행위자가 없다" 는 그대로이고,
+    #: 늘어난 갈래에도 행위자가 없다 (위의 ``absent`` 단정).
+    assert gate_calls == 7
     for code in (
         "RULE_NOT_IMPLEMENTED",
         "INFORMATION_UNAVAILABLE",
@@ -366,6 +385,10 @@ def test_04_the_event_relation_gate_does_not_receive_the_candidate():
 
     아니다. **candidate 를 받지 않는다.** 받는 관문 셋은 사건을 받지 않는다.
     """
+    #: 🔴 **답은 여전히 NO 다.** 6-F 가 ``source`` 를 더했지만 그것은
+    #: 후보에서 꺼낸 **값 하나**이고 후보 자체가 아니다 (3-F-8 의 설계 C).
+    #: 그래서 아래 표는 **한 칸도 바뀌지 않는다** — 이 감사의 결론은
+    #: 그대로다: 사건과 후보를 **둘 다** 받는 관문은 없다.
     gates = {
         name: (
             "event" in params_of(getattr(TriggerEligibilityJudge, name)),
@@ -389,7 +412,14 @@ def test_04_the_event_relation_gate_does_not_receive_the_candidate():
     #: 사건을 보는 관문은 하나, 둘 다 보는 관문은 **없다.**
     assert sum(1 for sees_event, _ in gates.values() if sees_event) == 1
     assert not [name for name, (ev, cand) in gates.items() if ev and cand]
-    assert params_of(TriggerEligibilityJudge._event_relation) == ["spec", "event"]
+    #: 🔴 6-F 가 설계 C 로 옮겼다 (``source`` 하나를 더 받는다). 후보 전체를
+    #: 받지 않으므로 이 감사의 결론(사건과 후보를 둘 다 받는 관문은 없다) 은
+    #: 그대로다.
+    assert params_of(TriggerEligibilityJudge._event_relation) == [
+        "spec",
+        "event",
+        "source",
+    ]
 
 
 # ======================================================================
@@ -992,12 +1022,19 @@ def test_19_this_phase_changed_nothing_in_production(repository):
     ):
         assert absent not in duel_source, absent
 
-    #: 선언에 칸을 더하지 않았다 — **이 Phase 는** 더하지 않았다. 숫자는 3-F
-    #: 의 9 에서 6-E 의 10 으로 움직였다 (``summons``; 6-E §5 참조).
-    assert len(TriggerSpec.__dataclass_fields__) == 10
+    #: 선언에 칸을 더하지 않았다 — **이 Phase 는** 더하지 않았다. 숫자는
+    #: 3-F 9 → 6-E 10 (``summons``) → **6-F 11** (``subject``) 로 움직였다.
+    assert len(TriggerSpec.__dataclass_fields__) == 11
     assert "actor" not in TriggerSpec.__dataclass_fields__
     #: 관문의 서명을 바꾸지 않았다.
-    assert params_of(TriggerEligibilityJudge._event_relation) == ["spec", "event"]
+    #: 🔴 6-F 가 설계 C 로 옮겼다 (``source`` 하나를 더 받는다). 후보 전체를
+    #: 받지 않으므로 이 감사의 결론(사건과 후보를 둘 다 받는 관문은 없다) 은
+    #: 그대로다.
+    assert params_of(TriggerEligibilityJudge._event_relation) == [
+        "spec",
+        "event",
+        "source",
+    ]
     #: 판정 어휘를 늘리지 않았다.
     assert len(CODE_VALIDITY) == 48
 

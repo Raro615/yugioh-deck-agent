@@ -56,6 +56,7 @@ from engine.trigger import (
     TriggerError,
     TriggerRegistry,
     TriggerSpec,
+    TriggerSubject,
     TriggerStatus,
 )
 from engine.validation import ActionValidity, ValidationCode
@@ -117,9 +118,18 @@ def spec(
     *,
     point: TimingPoint = TimingPoint.CARD_DRAWN,
     activates_from=frozenset({Zone.MZONE}),
+    subject=TriggerSubject.ANY,
 ) -> TriggerSpec:
+    #: 🔴 **Phase 6-F 가 ``subject`` 축을 더했고 기본값이 "모름" 이다.**
+    #:
+    #: 이 도움 함수의 선언들은 "어느 카드의 사건이든 반응한다" 를 **암묵적
+    #: 전제**로 갖고 있었다. 6-F 가 그 전제를 ``TriggerSubject.ANY`` 로 적게
+    #: 만든다 — 아래 시험들의 단정은 하나도 바뀌지 않는다.
     return TriggerSpec(
-        EffectRef(card_id, ordinal), point, activates_from=activates_from
+        EffectRef(card_id, ordinal),
+        point,
+        activates_from=activates_from,
+        subject=subject,
     )
 
 

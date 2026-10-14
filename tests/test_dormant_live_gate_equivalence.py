@@ -78,6 +78,7 @@ from engine.trigger import (
     TriggerCandidate,
     TriggerEligibilityJudge,
     TriggerSpec,
+    TriggerSubject,
 )
 from engine.validation import (
     CODE_VALIDITY,
@@ -174,6 +175,10 @@ def definition_of(card_id=POT_OF_GREED, *, activation=None, provenance=None, cos
 
 def hand_spec(ref, **kwargs):
     kwargs.setdefault("activates_from", frozenset({Zone.HAND}))
+    #: 🔴 ``subject=ANY`` — **Phase 6-F 가 드러낸 숨은 전제.** 이 파일은
+    #: 휴면 판정과 실제 판정이 **같은 답을 내는가**를 보므로, 주체를 적지
+    #: 않으면 양쪽이 똑같이 ``UNKNOWN`` 이 되어 비교가 무의미해진다.
+    kwargs.setdefault("subject", TriggerSubject.ANY)
     return TriggerSpec(ref, TimingPoint.CARD_DRAWN, **kwargs)
 
 
@@ -908,6 +913,7 @@ def test_23_event_relation_reads_zone_and_operation_filters(
         to_zones=frozenset({Zone.GRAVE}),
         operations=operations,
         activates_from=frozenset({Zone.HAND}),
+        subject=TriggerSubject.ANY,  # 6-F 가 드러낸 숨은 전제
     )
     event = TimingEvent.from_delta(
         ZoneMoved(
@@ -1214,7 +1220,17 @@ def test_30_r3_is_fixed_and_no_gate_production_contradicts_the_unknown_policy():
             }
         )
 
-    assert len(literal) + len(conditional) == 19
+    #: 🔴 19 → **22** (Phase 6-F). ``_event_relation`` 의 주체 갈래가
+    #: ``_gate`` 세 자리를 더했다 (통과 · 거부 · 모름 둘).
+    #:
+    #: 처음에는 ``subject_relation`` 이 돌려준 ``validity``/``code`` 를 한
+    #: 줄로 **전달**했다 — 그러면 자리는 하나만 늘지만 **이 시험이 짝을
+    #: 구문으로 읽을 수 없게 된다.** 이 감사(와
+    #: ``test_event_relation_minimal_fix`` 의 ``test_13``) 가 그것을 잡았고,
+    #: 그래서 production 을 고쳐 짝을 리터럴로 되돌렸다. 🔴 **감사를
+    #: 약하게 만들지 않고 코드를 고쳤다** — 그 증거가 아래 ``event_gate``
+    #: 집합이 **한 짝도 늘지 않았다**는 것이다.
+    assert len(literal) + len(conditional) == 22
     assert len(conditional) == 1  # _trigger_condition 의 UNKNOWN 분기
 
     disagreements = [row for row in literal if row["policy"] is not row["declared"]]

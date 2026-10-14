@@ -59,6 +59,7 @@ from engine.trigger import (
     TriggerCandidate,
     TriggerEligibilityJudge,
     TriggerSpec,
+    TriggerSubject,
     TriggerStatus,
     timing_for,
 )
@@ -155,13 +156,20 @@ def moved_event(destination=Zone.GRAVE, movement=OperationKind.SEND_TO_GRAVE):
 
 
 def drawn_spec() -> TriggerSpec:
+    #: 🔴 ``subject=ANY`` — **Phase 6-F 가 드러낸 숨은 전제.** 이 파일은
+    #: ``matches`` 의 세 갈래를 가르는 것이 목적이고, 주체를 적지 않으면
+    #: 통과 자리가 전부 주체의 ``UNKNOWN`` 으로 덮인다. 단정은 그대로다.
     return TriggerSpec(
-        WATCHED, TimingPoint.CARD_DRAWN, activates_from=HAND_OR_FIELD
+        WATCHED,
+        TimingPoint.CARD_DRAWN,
+        activates_from=HAND_OR_FIELD,
+        subject=TriggerSubject.ANY,
     )
 
 
 def filtered_spec(**filters) -> TriggerSpec:
     filters.setdefault("operations", frozenset({OperationKind.SEND_TO_GRAVE}))
+    filters.setdefault("subject", TriggerSubject.ANY)
     return TriggerSpec(
         WATCHED, TimingPoint.CARD_MOVED, activates_from=HAND_OR_FIELD, **filters
     )
@@ -205,7 +213,7 @@ def test_02_a_matching_filtered_declaration_still_passes(state):
             "R3 시점이 다르다 (LIFE_CHANGED 선언 ← CARD_DRAWN 사건)",
             lambda: TriggerSpec(
                 WATCHED, TimingPoint.LIFE_CHANGED, activates_from=HAND_OR_FIELD
-            ),
+            ),  # LIFE_CHANGED 에는 subject 를 걸 수 없다 (SUBJECT_AWARE_POINTS)
             drawn_event,
         ),
         (
@@ -336,6 +344,7 @@ def test_07_an_unreadable_filter_is_unknown(state, label, filters, expected_note
     그것은 "다르다" 가 아니라 **"비교하지 못했다"** 다. 무엇을 읽지 못했는지
     ``notes`` 로 남긴다.
     """
+    filters.setdefault("subject", TriggerSubject.ANY)
     spec = TriggerSpec(
         WATCHED,
         TimingPoint.CARD_MOVED,
@@ -365,7 +374,10 @@ def test_08_an_unfiltered_spec_still_matches_a_deltaless_event(state):
     **필요 없는 곳까지 번지지 않는다.**
     """
     spec = TriggerSpec(
-        WATCHED, TimingPoint.CARD_MOVED, activates_from=HAND_OR_FIELD
+        WATCHED,
+        TimingPoint.CARD_MOVED,
+        activates_from=HAND_OR_FIELD,
+        subject=TriggerSubject.ANY,  # 6-F 가 드러낸 숨은 전제
     )
     verdict = relation(judge(state, spec, TimingEvent(TimingPoint.CARD_MOVED)))
     assert (verdict.validity, verdict.code) == (

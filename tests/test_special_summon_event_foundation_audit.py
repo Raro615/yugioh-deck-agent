@@ -76,6 +76,7 @@ from engine.trigger import (
     TriggerRegistry,
     TriggerRequirement,
     TriggerSpec,
+    TriggerSubject,
 )
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
 from engine.vocabulary import Position, Zone
@@ -352,11 +353,13 @@ def test_08_the_event_does_reach_a_trigger_candidate(repository):
 
     registry = TriggerRegistry(
         (
+            # 🔴 ``subject=ANY`` — Phase 6-F 가 드러낸 숨은 전제 (단정 불변).
             TriggerSpec(
                 EffectRef(LUSTER_DRAGON, 0),
                 TimingPoint.MONSTER_SUMMONED,
                 requirement=TriggerRequirement.OPTIONAL,
                 activates_from=frozenset({Zone.MZONE}),
+                subject=TriggerSubject.ANY,
             ),
         )
     )
@@ -570,7 +573,9 @@ def test_12_no_registered_effect_performs_a_special_summon():
     assert sum(1 for entry in EFFECT_LIBRARY if not entry.executable) == 3
 
 
-def test_13_a_declaration_can_now_say_special_but_still_not_whose(repository):
+def test_13_a_declaration_can_now_say_special_and_which_card_but_not_which_player(
+    repository,
+):
     """
     **이것이 3-F-5 의 중심 발견이었고, Phase 6-E 가 그 절반을 답했다.**
 
@@ -594,12 +599,20 @@ def test_13_a_declaration_can_now_say_special_but_still_not_whose(repository):
     다른 이름**으로 따로 났고, 거꾸로 ``summons`` 는 소환이 아닌 시점에
     걸 수 없다.
 
-    🔴 **③의 ``actor`` 축은 그대로 못 본다.** "누구의 소환인가" 와 "어느
-    카드의 소환인가" 는 아직 선언할 수 없고, 6-E 는 그 사실을
-    ``UnimplementedRule("trigger-event-subject …")`` 로 **적어서** 판정이
-    ``UNKNOWN`` 에서 멈추게 했다. 즉 3-F-5 가 지적한 "``VALID/OK`` 가 난다"
-    는 **더 이상 일어나지 않지만**, 그것은 판정이 생겨서가 아니라 **모른다고
-    말하게 되어서**다.
+    🔴 **③은 두 축이었고 Phase 6-F 가 그중 하나를 답했다.** "어느 카드의
+    소환인가" 와 "누구의 소환인가" 는 **다른 질문**이다.
+
+    * **어느 카드** → ``TriggerSpec.subject`` (6-F). 사건은 인스턴스를 들고
+      있고 (``TimingEvent.instance``) 후보도 들고 있으므로
+      (``TriggerCandidate.source``) 비교할 근거가 생겼다. 6-E 가
+      ``UnimplementedRule`` 로 적어 두었던 그 모름이 **판정으로 바뀌었다.**
+    * **누구의 소환** (``actor``) → **여전히 못 본다.** 3-F-8 이 측정한 대로
+      ``actor`` 는 사건군마다 다른 것을 가리키므로 그 어긋남을 먼저 정리해야
+      한다. 아래에서 상대의 특수 소환이 **여전히 걸리는** 것을 단정한다.
+
+    즉 3-F-5 가 지적한 "``VALID/OK`` 가 난다" 는 더 이상 일어나지 않고,
+    6-E 에서는 **모른다고 말하게 되어서**였지만 6-F 에서는 **어느 카드인지
+    판정해서**다 — 두 단계의 차이가 그것이다.
     """
     assert "summons" in TriggerSpec.__dataclass_fields__
     assert set(TriggerSpec.__dataclass_fields__) == {
@@ -611,6 +624,7 @@ def test_13_a_declaration_can_now_say_special_but_still_not_whose(repository):
         "from_zones",
         "to_zones",
         "summons",
+        "subject",
         "activates_from",
         "condition",
     }
@@ -678,16 +692,63 @@ def test_13_a_declaration_can_now_say_special_but_still_not_whose(repository):
     )
     assert "actor" not in body
     assert "summon" in body
+    #: 🔴 **``subject`` 도 ``matches`` 가 읽지 않는다** — 사건의 축인데도
+    #: 비교 상대(후보의 인스턴스) 가 ``matches(event)`` 의 서명에 없기
+    #: 때문이다. 그래서 6-F 는 ``matches`` 를 넓히는 대신
+    #: ``subject_relation`` 을 따로 두었다.
+    assert "subject" not in body
+
+    #: 🔴 ③-전반: **어느 카드인가**는 이제 갈린다.
+    from engine.ids import InstanceId
+    from engine.trigger import TriggerSubject, subject_relation
+
+    mine_only = TriggerSpec(
+        EffectRef(LUSTER_DRAGON, 0),
+        TimingPoint.MONSTER_SUMMONED,
+        summons=frozenset({SummonKind.SPECIAL}),
+        subject=TriggerSubject.SELF,
+    )
+    here = mine_special.instance
+    assert here is not None
+    assert subject_relation(mine_only, mine_special, here).permits_execution is True
+    elsewhere = InstanceId(here.value + 1000)
+    refused = subject_relation(mine_only, mine_special, elsewhere)
+    assert refused.permits_execution is False
+    assert refused.validity is ActionValidity.INVALID
+
+    #: 🔴 ③-후반: **누구의 소환인가**는 여전히 못 본다. 상대가 특수 소환한
+    #: 그 카드가 내 선언의 카드와 같은 인스턴스라면 통과한다 — ``actor`` 를
+    #: 보는 축이 없기 때문이다.
+    their_instance = their_special.instance
+    assert their_instance is not None
+    assert (
+        subject_relation(mine_only, their_special, their_instance).permits_execution
+        is True
+    )
+    assert (mine_special.actor, their_special.actor) == (MINE, THEIRS)
 
 
-def test_14_the_dormant_gate_answers_valid_for_all_three(repository):
+def test_14_the_dormant_gate_now_answers_honestly_instead_of_valid(repository):
     """
     ``test_13`` 의 **결과를 판정기에서 확인한다.**
 
-    dormant 다섯 관문 중 ``EVENT_RELATION`` 은 세 경우 모두 ``VALID/OK`` 를
-    낸다 — 내 일반 소환에도 **확신 있는 승인**이 난다. 이것이
-    "구조가 일부만 있다" 보다 나쁜 상태인 이유다: 틀린 답이 ``UNKNOWN`` 으로
-    표시되지 않는다.
+    .. note::
+       🔴 **3-F-5 가 지적한 바로 그 문제가 해소되었다.**
+
+       원래 단정은 이것이었다 — *"``EVENT_RELATION`` 은 세 경우 모두
+       ``VALID/OK`` 를 낸다. 내 일반 소환에도 **확신 있는 승인**이 난다.
+       이것이 '구조가 일부만 있다' 보다 나쁜 상태인 이유다: **틀린 답이
+       ``UNKNOWN`` 으로 표시되지 않는다.**"*
+
+       Phase 6-F 뒤에는 **표시된다.** 주체를 적지 않은 선언은 세 경우 모두
+       ``UNKNOWN``/``RULE_NOT_IMPLEMENTED`` 이고, 그 ``missing_rule`` 이
+       무엇이 없는지 말해 준다. 🔴 기존 단정이 틀린 가정을 갖고 있던 것이
+       아니라 — **그 단정이 요구한 수정이 일어났다.**
+
+       답이 셋 다 같다는 **구조는 그대로다** (``actor`` 축은 여전히 아무
+       관문도 보지 않는다). 바뀐 것은 그 하나의 답이 "확신 있는 승인" 에서
+       "정직한 모름" 으로 옮긴 것이고, 아래에서 주체를 **적으면** 갈리는
+       것까지 확인한다.
     """
     duel = live_duel(repository)
     spec = TriggerSpec(
@@ -728,10 +789,47 @@ def test_14_the_dormant_gate_answers_valid_for_all_three(repository):
     assert verdicts["mine_normal"][0] is SummonKind.NORMAL
     assert verdicts["mine_special"][0] is SummonKind.SPECIAL
     assert verdicts["their_special"][1] == THEIRS
-    #: 그런데 관문의 답은 **셋 다 똑같다.**
+    #: 🔴 관문의 답은 **셋 다 똑같지만, 이제 "모름" 이다.**
     answers = {(validity, code) for _, _, validity, code in verdicts.values()}
-    assert answers == {(ActionValidity.VALID, ValidationCode.OK)}
-    assert ActionValidity.UNKNOWN not in {validity for _, _, validity, _ in verdicts.values()}
+    assert answers == {
+        (ActionValidity.UNKNOWN, ValidationCode.RULE_NOT_IMPLEMENTED)
+    }
+    #: 🔴 **승인이 하나도 없다** — 3-F-5 가 문제라고 적은 것이 그 승인이었다.
+    assert ActionValidity.VALID not in {
+        validity for _, _, validity, _ in verdicts.values()
+    }
+
+    #: 그리고 주체를 **적으면** 그 자리가 갈린다 — 같은 세 사건에서 **내
+    #: 카드의 사건 하나만** 통과한다. 그것이 6-F 가 더한 것이다.
+    from engine.trigger import TriggerSubject
+
+    scoped = TriggerSpec(
+        EffectRef(LUSTER_DRAGON, 0),
+        TimingPoint.MONSTER_SUMMONED,
+        requirement=TriggerRequirement.OPTIONAL,
+        activates_from=frozenset({Zone.MZONE}),
+        subject=TriggerSubject.SELF,
+    )
+    scoped_registry = TriggerRegistry((scoped,))
+    scoped_answers = set()
+    for label, actor, builder in (
+        ("mine_normal", MINE, PlayerAction.normal_summon),
+        ("mine_special", MINE, PlayerAction.special_summon),
+        ("their_special", THEIRS, PlayerAction.special_summon),
+    ):
+        state, execution = execute_summon(duel, builder, actor)
+        view = GameStateView.from_state(state, viewer=MINE)
+        timing = observed(state, execution, viewer=MINE, actor=actor)[0].timing
+        for candidate in TriggerCollector(view, scoped_registry).collect(timing):
+            judged = TriggerEligibilityJudge(view).judge(candidate, scoped, timing)
+            gate = judged.gate(EligibilityGate.EVENT_RELATION)
+            scoped_answers.add((candidate.source == timing.instance, gate.validity))
+
+    #: 🔴 **인스턴스가 같은 자리만 통과한다** — 모름도 승인도 섞이지 않는다.
+    assert scoped_answers == {
+        (True, ActionValidity.VALID),
+        (False, ActionValidity.INVALID),
+    }, scoped_answers
 
 
 # ======================================================================

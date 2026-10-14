@@ -85,6 +85,7 @@ from engine.trigger import (
     TriggerRegistry,
     TriggerRequirement,
     TriggerSpec,
+    TriggerSubject,
     TriggerWording,
 )
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
@@ -190,11 +191,19 @@ def test_01_the_declaration_has_exactly_ten_fields_and_five_event_axes():
         "from_zones",
         "to_zones",
         "summons",
+        "subject",
         "activates_from",
         "condition",
     ]
 
     #: **사건을 좁히는 축** — `matches` 가 실제로 비교하는 것만 센다.
+    #:
+    #: 🔴 **``subject`` 는 여기 들어가지 않는다** (Phase 6-F). 사건의 축이
+    #: 맞는데도 ``matches`` 가 비교할 수 없다 — ``matches(event)`` 는 사건
+    #: 하나만 받고 **비교 상대(후보의 인스턴스) 가 서명에 없기** 때문이다.
+    #: 그래서 6-F 는 ``matches`` 를 넓히는 대신
+    #: :func:`~engine.trigger.subject_relation` 을 따로 두고 **두 계층이 같은
+    #: 함수를 부르게** 했다. 이 테스트가 세어 온 "다섯" 은 그대로다.
     body = _function_body("engine/trigger.py", "TriggerSpec", "matches")
     compared = {name for name in fields if f"self.{name}" in body}
     assert compared == {
@@ -205,10 +214,20 @@ def test_01_the_declaration_has_exactly_ten_fields_and_five_event_axes():
         "summons",
     }
 
-    #: 나머지 다섯은 `matches` 가 보지 않는다 — 사건 선별의 축이 아니다.
+    #: 나머지 **여섯**은 `matches` 가 보지 않는다. 그중 다섯은 사건 선별의
+    #: 축이 아니고, ``subject`` 는 **축이지만 ``matches`` 로는 비교할 수
+    #: 없는 것**이다 (위 주석).
     assert compared.isdisjoint(
-        {"effect_ref", "requirement", "wording", "activates_from", "condition"}
+        {
+            "effect_ref",
+            "requirement",
+            "wording",
+            "subject",
+            "activates_from",
+            "condition",
+        }
     )
+    assert len(fields) - len(compared) == 6
 
     #: 기본값이 있는 필드는 `point` 를 빼고 전부 "선언하지 않았다" 를 표현한다.
     spec = TriggerSpec(EffectRef(LUSTER_DRAGON, 0), TimingPoint.MONSTER_SUMMONED)
@@ -216,6 +235,9 @@ def test_01_the_declaration_has_exactly_ten_fields_and_five_event_axes():
     assert spec.wording is TriggerWording.UNKNOWN
     assert (spec.operations, spec.from_zones, spec.to_zones) == (None, None, None)
     assert spec.summons is None
+    #: 🔴 ``subject`` 도 ``None`` 으로 "선언하지 않았다" 를 표현한다 — 그리고
+    #: 그 ``None`` 은 **"어느 카드든" 이 아니다** (6-F 의 핵심 구분).
+    assert spec.subject is None
     assert spec.activates_from is None and spec.condition is None
 
 
@@ -399,6 +421,22 @@ def test_07_the_condition_field_works_but_cannot_see_the_event(repository):
     `EVENT_RELATION` 이 조건과 **무관하게** 그대로다.
 
     그리고 조건 계층은 **구조적으로** 사건을 볼 수 없다.
+
+    .. note::
+       🔴 **Phase 6-F 가 "사건 절반" 을 표현 가능하게 만들었다 — 그런데 이
+       감사의 구조적 발견은 그대로다.**
+
+       이 감사는 "조건이 사건을 볼 구멍이 없다" 를 찾아냈고, 그래서 사건
+       절반이 ``NOT REPRESENTABLE`` 이라고 적었다. 6-F 는 그 구멍을 뚫는
+       대신 (``ConditionContext`` 는 **한 칸도** 바뀌지 않았다 — 아래에서
+       그대로 단정한다) **사건 관계 쪽에 축을 두었다**
+       (``TriggerSpec.subject``).
+
+       그래서 아래의 단정 하나가 움직인다: 선언이 주체를 적지 않으면
+       ``EVENT_RELATION`` 이 이제 ``UNKNOWN`` 이다. **조건을 바꿔도 사건
+       판정이 그대로라는 이 테스트의 요지는 그대로이고** (두 판정이 여전히
+       서로 같다), 값만 "보지 않은 통과" 에서 **"적지 않아서 모름"** 으로
+       정확해졌다.
     """
     duel = live_duel(repository)
     state, execution = execute_summon(duel, PlayerAction.special_summon, MINE)
@@ -435,10 +473,30 @@ def test_07_the_condition_field_works_but_cannot_see_the_event(repository):
         ValidationCode.CANDIDATE_NOT_ELIGIBLE,
     )
     #: 사건 절반은 **둘 다 똑같다** — 조건을 바꿔도 사건 판정은 그대로다.
+    #: 🔴 값은 6-F 에서 "보지 않은 통과" → **"적지 않아서 모름"** 으로
+    #: 바뀌었다 (위 note). 두 판정이 서로 같다는 이 테스트의 요지는 그대로다.
     assert (
         verdicts["true"][EligibilityGate.EVENT_RELATION]
         == verdicts["false"][EligibilityGate.EVENT_RELATION]
-        == (ActionValidity.VALID, ValidationCode.OK)
+        == (ActionValidity.UNKNOWN, ValidationCode.RULE_NOT_IMPLEMENTED)
+    )
+    #: 그리고 주체를 **적으면** 그 자리가 통과로 바뀐다 — 표현 가능해졌다는
+    #: 뜻이고, 이것이 6-F 가 더한 것이다.
+    scoped = TriggerSpec(
+        EffectRef(LUSTER_DRAGON, 0),
+        TimingPoint.MONSTER_SUMMONED,
+        requirement=TriggerRequirement.OPTIONAL,
+        activates_from=frozenset({Zone.MZONE}),
+        subject=TriggerSubject.ANY,
+    )
+    scoped_collection = TriggerCollector(view, TriggerRegistry((scoped,))).collect(event)
+    scoped_eligibility = TriggerEligibilityJudge(view).judge(
+        scoped_collection.candidates[0], scoped, event
+    )
+    scoped_gate = scoped_eligibility.gate(EligibilityGate.EVENT_RELATION)
+    assert (scoped_gate.validity, scoped_gate.code) == (
+        ActionValidity.VALID,
+        ValidationCode.OK,
     )
 
     #: 그리고 조건이 사건을 볼 **구멍이 없다.**
@@ -700,7 +758,8 @@ def test_12_the_declaration_has_a_canonical_state_over_all_ten_fields():
         TimingPoint.MONSTER_SUMMONED,
         activates_from=frozenset({Zone.MZONE}),
     )
-    assert len(bare.canonical_state()) == 10
+    #: 6-E 10 → **6-F 11** (``subject``).
+    assert len(bare.canonical_state()) == 11
     assert bare.canonical_state() != zoned.canonical_state()
 
     #: 🔴 소환 종류가 정규 표현에 **실제로 실린다** — 안 실리면 일반 소환
@@ -1019,7 +1078,11 @@ def test_19_that_phase_added_no_field_but_phase_6e_added_exactly_one():
     카드를 넣지 않았다.
     """
     #: 아홉 → **열**. 더한 하나가 무엇인지까지 못박는다.
-    assert len(TriggerSpec.__dataclass_fields__) == 10
+    #: 🔴 3-F-6 은 "필드 하나를 더해서 해결되지 않는다" 며 9 로 박았고,
+    #: 6-E 가 정확히 하나(``summons``) 를, 6-F 가 또 하나(``subject``) 를
+    #: 더했다. **3-F-6 의 그 문장은 여전히 맞다** — 두 축이 가른 것은
+    #: 소환 종류와 주체뿐이고, ``actor`` 관계는 아직 아무 관문도 보지 않는다.
+    assert len(TriggerSpec.__dataclass_fields__) == 11
     assert "summons" in TriggerSpec.__dataclass_fields__
 
     #: 세 예시 카드의 패스코드가 **이 Phase 때문에** production 에 들어온

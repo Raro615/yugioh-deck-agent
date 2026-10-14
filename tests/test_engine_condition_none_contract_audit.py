@@ -697,11 +697,18 @@ def test_10_a_condition_object_keeps_its_meaning_across_the_boundary():
     assert definition.activation is condition
     assert definition.canonical_state()[3] == expected
 
+    #: 🔴 ``subject=ANY`` — **Phase 6-F 가 드러낸 숨은 전제.** 이 선언은
+    #: "어느 카드의 사건이든 반응한다" 를 암묵적으로 가정하고 있었고,
+    #: 6-F 가 그 축을 더하면서 적지 않은 것을 ``UNKNOWN`` 으로 읽게
+    #: 되었다. **단정은 하나도 바꾸지 않았다** — 입력에 전제를 적었다.
     spec = TriggerSpec(
         definition.effect_ref,
         __import__("engine.trigger", fromlist=["TimingPoint"]).TimingPoint.CARD_DRAWN,
         condition=condition,
         activates_from=frozenset({Zone.HAND}),
+        subject=__import__(
+            "engine.trigger", fromlist=["TriggerSubject"]
+        ).TriggerSubject.ANY,
     )
     assert spec.condition is condition
     assert spec.canonical_state()[-1] == expected

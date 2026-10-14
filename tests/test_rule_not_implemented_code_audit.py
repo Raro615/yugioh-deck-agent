@@ -102,7 +102,15 @@ MINE = 0
 #: ``engine/trigger_compiler.py`` 의 **설명 안**이다 — "조건을 적지 않으면
 #: 거짓 양성이 된다" 를 적으면서 그 코드 이름을 인용했다. **코드 자리는
 #: 그대로 67개**이고, 이 파일의 ``CODE_OCCURRENCES`` 가 그것을 따로 센다.
-STRING_OCCURRENCES = 80
+#: 🔴 80 → **81** (Phase 6-F). 늘어난 하나는
+#: :func:`~engine.trigger.subject_relation` 의 "선언이 주체를 적지 않았다"
+#: 자리다. 같은 Phase 가 ``engine/trigger_compiler.py`` 에서 ``docstring``
+#: 인용 하나를 **지웠고** (조건 자리를 돌려주면서) 새 자리 둘을 더했으므로
+#: 합이 +1 이다.
+#: (🔴 그 뒤 같은 Phase 안에서 다시 +1 — 관문의 짝을 리터럴로
+#: 되돌리면서 ``RULE_NOT_IMPLEMENTED`` 자리가 하나 더 생겼다. 두 감사가
+#: 계산된 값 전달을 잡아서 고친 것이고, 그 까닭은 6-F 보고서 §12 에 적었다.)
+STRING_OCCURRENCES = 82
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -120,25 +128,24 @@ PROSE_OCCURRENCES = {
     ("engine/activation.py", 672),      # M1: 확실한 거부이고 미구현이 아니다
     ("engine/effect/executor.py", 922), # M2: 이 근거로는 절대 실행하지 않는다
     ("engine/special_summon.py", 77),
-    # 🔴 Phase 6-B 가 ``from_journal_event`` 에 ``ActionEvent`` 가드(+20줄)를
-    # 넣어서 **그 아래 줄 번호가 전부 +20 밀렸다.** 문장도 자리도 그대로이고,
-    # 바뀐 것은 번호뿐이다 (995 → 1015, 1335 → 1355, 1341 → 1361,
-    # 1364 → 1384). 🔴 이 핀이 줄 번호를 세는 이상 그런 이동은 **반드시
-    # 여기서 드러나야 한다** — 그것이 번호를 적어 둔 이유다.
-    # 🔴 Phase 6-E 가 ``TimingEvent.summon`` 과 ``TriggerSpec.summons``
-    # (+48줄)를 넣어서 **그 아래 줄 번호가 다시 밀렸다** (1015 → 1063,
-    # 1355 → 1403, 1361 → 1409, 1384 → 1432). 문장도 자리도 그대로다.
-    ("engine/trigger.py", 1063),
-    # 3-E-45: ``_event_relation`` 이 왜 세 갈래인가를 적은 docstring 셋.
-    ("engine/trigger.py", 1403),
-    ("engine/trigger.py", 1409),
-    ("engine/trigger.py", 1432),
-    # 🔴 Phase 6-E 신규 — 트리거 컴파일러가 **왜 조건을 적어야 하는지**를
-    # 적으면서 그 코드 이름을 인용한 자리다. 코드가 아니라 설명이고,
-    # 그래서 산문 자리가 12 → **13** 이 되었다. (처음 143 으로 적었는데, 그
-    # 뒤 FLIP 을 ``EVENT_UNSUPPORTED`` 로 재분류하면서 **위쪽 설명이 9줄
-    # 늘어 152 로 밀렸다** — 이 핀이 그 이동을 잡아 주었다.)
-    ("engine/trigger_compiler.py", 152),
+    # 🔴 **``engine/trigger.py`` 의 다섯 자리가 Phase 6-F 에서 전부
+    # 움직였다.** 그 Phase 가 ``TriggerSubject`` · ``subject_relation`` ·
+    # ``_from_relation`` (+260줄) 을 넣었고, 자리 네 개가 그 아래로 밀렸으며
+    # (1063 → 1277 · 1403 → 1636 · 1409 → 1642 · 1432 → 1665) **새 자리
+    # 하나가 생겼다** (736 — ``subject_relation`` 의 docstring 이 왜 이
+    # 코드를 쓰는지 적는다).
+    #
+    # 🔴 이 핀이 줄 번호를 세는 이상 그런 이동은 **반드시 여기서 드러나야
+    # 한다** — 그것이 번호를 적어 둔 이유다. 산문 자리는 13 그대로다:
+    # 6-F 가 ``trigger_compiler.py`` 의 인용 하나를 지우고
+    # ``trigger.py`` 에 하나를 더했다.
+    ("engine/trigger.py", 736),
+    ("engine/trigger.py", 1277),
+    # 3-E-45: ``_event_relation`` 이 왜 세 갈래인가를 적은 docstring 셋
+    # (6-F 가 네 갈래로 늘렸고, 그 설명도 같은 자리에 있다).
+    ("engine/trigger.py", 1636),
+    ("engine/trigger.py", 1642),
+    ("engine/trigger.py", 1665),
     ("engine/trigger_chain.py", 553),
     ("engine/trigger_chain.py", 569),
     ("engine/validation.py", 129),
@@ -155,7 +162,13 @@ PROSE_OCCURRENCES = {
 #:    ``UNIMPLEMENTED`` 사건을 모름으로 돌려주는 분기에서 하나를 **더했다.**
 #:    차감이 정확히 맞는다. 늘어난 3은 전부 그 까닭을 적은 **산문**이다
 #:    (76 → 79).
-CODE_OCCURRENCES = 67
+#: 🔴 67 → **68** (Phase 6-F). 늘어난 하나는
+#: :func:`~engine.trigger.subject_relation` 의 "선언이 주체를 적지 않았다"
+#: 자리다 — 판이 바뀌어도 풀리지 않고 코드가 생겨야 풀리므로 이 코드가 맞다.
+#: (🔴 그 뒤 같은 Phase 안에서 다시 +1 — 관문의 짝을 리터럴로
+#: 되돌리면서 ``RULE_NOT_IMPLEMENTED`` 자리가 하나 더 생겼다. 두 감사가
+#: 계산된 값 전달을 잡아서 고친 것이고, 그 까닭은 6-F 보고서 §12 에 적었다.)
+CODE_OCCURRENCES = 69
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {

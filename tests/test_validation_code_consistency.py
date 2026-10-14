@@ -120,12 +120,29 @@ def view(state) -> GameStateView:
 # ======================================================================
 
 
-def watching(condition=None) -> TriggerSpec:
+def watching(condition=None, *, subject=None) -> TriggerSpec:
+    """
+    감시 중인 선언 하나.
+
+    🔴 **Phase 6-F 가 ``subject`` 축을 더했고 기본값이 "모름" 이다.**
+
+    이 도움 함수를 쓰는 시험들은 "어느 카드의 사건이든 반응한다" 를
+    **암묵적 전제**로 갖고 있었다 — 그 전제가 참이어야 "조건 칸이 ``None``
+    인데 적격이다" 같은 단정이 뜻을 갖는다. 6-F 가 그 전제를
+    ``TriggerSubject.ANY`` 로 **적게** 만든다. 단정은 하나도 바꾸지 않았다.
+
+    기본값을 ``ANY`` 로 두는 것은 **이 하네스의 선택**이고 production 의
+    기본값이 아니다 — ``TriggerSpec.subject`` 는 여전히 ``None`` 이 기본이고,
+    ``None`` 은 ``ANY`` 가 아니다.
+    """
+    from engine.trigger import TriggerSubject
+
     return TriggerSpec(
         WATCHED,
         TimingPoint.CARD_DRAWN,
         condition=condition,
         activates_from=frozenset({Zone.HAND, Zone.MZONE}),
+        subject=TriggerSubject.ANY if subject is None else subject,
     )
 
 

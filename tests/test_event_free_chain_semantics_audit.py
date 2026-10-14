@@ -475,7 +475,10 @@ def test_12_this_audit_added_no_production_structure():
        사실은 그대로다** — 늘린 것은 6-E 이고, 이 줄은 그 사실을 따라간다.
     """
     assert len(dataclasses.fields(EffectDefinition)) == 10
-    assert len(dataclasses.fields(TriggerSpec)) == 10
+    #: 🔴 칸 수는 3-E-19 9 → 6-E 10 (``summons``) → **6-F 11**
+    #: (``subject``) 로 움직였다. 이 감사가 production 을 늘리지
+    #: 않았다는 사실은 그대로이고, 늘린 주체는 6-E · 6-F 다.
+    assert len(dataclasses.fields(TriggerSpec)) == 11
 
     #: 새 enum 이 생기지 않았다.
     #:

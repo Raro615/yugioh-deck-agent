@@ -65,6 +65,7 @@ from engine.trigger import (
     TriggerRegistry,
     TriggerRequirement,
     TriggerSpec,
+    TriggerSubject,
     timing_for,
 )
 from engine.validation import (
@@ -96,11 +97,19 @@ MINE, THEIRS = 0, 1
 LUSTER_DRAGON = 11091375
 AUDIT_GRANT = ValidationResult.valid("감사가 관문을 우회해 직접 허가했다")
 
+#: 🔴 **Phase 6-F 가 ``subject`` 축을 더했고 기본값이 "모름" 이다.**
+#:
+#: 이 선언은 "어느 카드의 사건이든 반응한다" 를 **암묵적 전제**로 갖고
+#: 있었다 — 그 전제가 참이어야 아래의 ``actor`` 관계 시험들이 뜻을 갖는다
+#: (주체가 ``SELF`` 라면 관문이 주체에서 먼저 막혀 ``actor`` 를 볼 자리에
+#: 닿지 못한다). 6-F 가 그 전제를 ``TriggerSubject.ANY`` 로 **적게** 만든다.
+#: 단정은 하나도 바꾸지 않았다.
 WATCHING_SUMMONS = TriggerSpec(
     EffectRef(LUSTER_DRAGON, 0),
     TimingPoint.MONSTER_SUMMONED,
     requirement=TriggerRequirement.OPTIONAL,
     activates_from=frozenset({Zone.MZONE}),
+    subject=TriggerSubject.ANY,
 )
 
 #: §1 — 관계 판단에 **실제로** 필요한 최소 입력. 측정으로 채운다
@@ -221,7 +230,22 @@ def test_01_the_current_signature_and_its_single_caller():
     production 에서 이 관문이 나오는 자리는 **정의 하나와 호출 하나**뿐이고,
     둘 다 같은 파일이다.
     """
-    assert params_of(TriggerEligibilityJudge._event_relation) == ["spec", "event"]
+    #: 🔴 **Phase 6-F 가 이 감사의 권고를 실행했다.**
+    #:
+    #: 이 파일(3-F-8) 은 세 설계를 비교해 **설계 C** ``(spec, event, 필요한
+    #: 최소)`` 를 권했다. 6-F 가 그대로 했고, 그 "최소" 는 ``source``
+    #: (인스턴스) 였다 — 3-F-8 은 ``controller`` 라고 적었는데, 그때는
+    #: **주체 질문이 올라와 있지 않았다.** 사건의 주체를 맞춰 보려면 필요한
+    #: 것은 플레이어가 아니라 **그 카드 한 장**이다.
+    #:
+    #: 그러므로 이 단정이 틀린 가정을 갖고 있던 것이 아니다 — 이 감사가
+    #: 예고한 변경이 일어났고, 숫자만 그것을 따라간다. **설계 B(후보 전체)
+    #: 가 아니라 C 를 골랐다는 사실은 아래에서 그대로 지킨다.**
+    assert params_of(TriggerEligibilityJudge._event_relation) == [
+        "spec",
+        "event",
+        "source",
+    ]
 
     sites = [
         (str(path.relative_to(PROJECT_ROOT)), index, line.strip())
@@ -236,8 +260,10 @@ def test_01_the_current_signature_and_its_single_caller():
     definition = [line for _, _, line in sites if line.startswith("def ")]
     call = [line for _, _, line in sites if not line.startswith("def ")]
     assert len(definition) == 1 and len(call) == 1
-    #: caller 가 넘기는 것은 선언과 사건 **둘뿐**이다.
-    assert call[0] == "self._event_relation(spec, event),"
+    #: 🔴 caller 가 넘기는 것은 **후보 전체가 아니다** (설계 B 를 고르지
+    #: 않았다는 증거다). 후보에서 꺼낸 값 하나만 넘긴다.
+    assert call[0] == "self._event_relation(spec, event, candidate.source),"
+    assert "candidate," not in call[0]
 
     #: 그 호출 자리는 `judge` 안이고, **그 자리에 후보가 이미 있다.**
     assert params_of(TriggerEligibilityJudge.judge) == ["candidate", "spec", "event"]
@@ -245,7 +271,7 @@ def test_01_the_current_signature_and_its_single_caller():
         "engine/trigger.py", "TriggerEligibilityJudge", "judge"
     )
     judge_source = ast.get_source_segment(text, judge_node)
-    assert "self._event_relation(spec, event)" in judge_source
+    assert "self._event_relation(spec, event, candidate.source)" in judge_source
     assert "candidate" in judge_source
 
 
@@ -499,7 +525,21 @@ def test_10_design_a_cannot_express_the_relation_at_all(repository):
     assert (event.actor == MINE, event.actor == THEIRS) == (False, True)
     #: 즉 사건 자체는 관계를 **결정하지 않는다.**
     assert "actor" not in TriggerSpec.__dataclass_fields__
-    assert params_of(TriggerEligibilityJudge._event_relation) == ["spec", "event"]
+    #: 🔴 그리고 설계 A 는 **더 이상 production 의 모양이 아니다** — 6-F 가
+    #: 설계 C 로 옮겼다 (``test_01`` 의 주석). 이 시험의 논지(사건만으로는
+    #: 관계를 결정할 수 없다) 는 그대로이고, 오히려 **그래서** 기준 하나를
+    #: 서명에 받게 되었다.
+    assert params_of(TriggerEligibilityJudge._event_relation) == [
+        "spec",
+        "event",
+        "source",
+    ]
+    #: 받은 기준은 ``actor`` 가 아니라 ``source`` 다 — ``actor`` 관계는
+    #: 여전히 **아무 관문도 보지 않는다** (§7 · 3-F-8 의 상류 문제).
+    read = attributes_read(
+        "engine/trigger.py", "TriggerEligibilityJudge", "_event_relation"
+    )
+    assert not any(name.endswith(".actor") for name in read), sorted(read)
 
 
 def test_11_the_minimal_input_set_is_eleven_values():
@@ -856,19 +896,30 @@ def test_19_designs_b_and_c_cost_the_same(repository):
     #:    길이를 단정하는 자리는 깨진다") 이 실제로 발생한 것이다. 그래서 이
     #:    감사의 논지(= 칸을 더하는 쪽이 비싸다) 는 약해지지 않고 오히려
     #:    확인되었다. 숫자만 측정값으로 옮긴다.
+    #: 6-F 가 ``subject`` 를 더해 10 → **11** 이 되었다. 이 주석이 예고한
+    #: 비용("`canonical_state` 길이를 단정하는 자리는 깨진다") 이 **두 번째**
+    #: 로 발생한 것이고, 그래서 이 감사의 논지는 다시 확인되었다.
     assert (
-        len(TriggerSpec(EffectRef(1, 0), TimingPoint.CARD_DRAWN).canonical_state()) == 10
+        len(TriggerSpec(EffectRef(1, 0), TimingPoint.CARD_DRAWN).canonical_state()) == 11
     )
 
 
 def test_20_this_phase_changed_nothing(repository):
     """§15 · §16 · §17 — freeze · 불변 · 순위 digest."""
-    #: 관문 서명 · 선언 필드 · 후보 필드 · 사건 필드 · 판정 어휘 전부 그대로.
-    assert params_of(TriggerEligibilityJudge._event_relation) == ["spec", "event"]
-    #: 선언 칸은 3-F 의 9 에서 6-E 의 10 으로 움직였다 (``summons``; test_19 주석
-    #: 참조). 이 단계가 아무것도 바꾸지 않았다는 사실은 그대로이고, 변경 주체는
-    #: 6-E 다.
-    assert len(TriggerSpec.__dataclass_fields__) == 10
+    #: 🔴 관문 서명이 **6-F 에서 설계 C 로 옮겼다** (``test_01`` 의 주석 —
+    #: 이 감사가 권한 그 설계다). 선언 칸은 3-F 9 → 6-E 10 → 6-F 11.
+    #: 이 Phase(3-F-8) 가 아무것도 바꾸지 않았다는 사실은 그대로이고,
+    #: 바꾼 주체는 6-E 와 6-F 다.
+    assert params_of(TriggerEligibilityJudge._event_relation) == [
+        "spec",
+        "event",
+        "source",
+    ]
+    #: 선언 칸: 3-F 9 → 6-E 10 → **6-F 11** (``subject``). 이 Phase 가
+    #: 아무것도 바꾸지 않았다는 사실은 그대로이고, 변경 주체는 6-F 다.
+    assert len(TriggerSpec.__dataclass_fields__) == 11
+    #: 🔴 **후보 쪽은 10 그대로다** — 6-F 는 후보에 칸을 더하지 않았다.
+    #: 주체 비교에 필요한 ``source`` 가 이미 있었기 때문이다.
     assert len(TriggerCandidate.__dataclass_fields__) == 10
     assert list(TimingEvent.__dataclass_fields__) == [
         "point",

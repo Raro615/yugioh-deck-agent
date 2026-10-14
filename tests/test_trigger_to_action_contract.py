@@ -61,6 +61,7 @@ from engine.trigger import (
     TriggerRegistry,
     TriggerRequirement,
     TriggerSpec,
+    TriggerSubject,
 )
 from engine.trigger_chain import ChainInsertion, TriggerChainIntegrator
 from engine.validation import ValidationCode
@@ -132,7 +133,13 @@ def board():
 
 
 def spec(*, zones=frozenset({Zone.MZONE})) -> TriggerSpec:
-    return TriggerSpec(WATCHED, TimingPoint.CARD_DRAWN, activates_from=zones)
+    #: 🔴 ``subject=ANY`` — **Phase 6-F 가 드러낸 숨은 전제** (단정 불변).
+    return TriggerSpec(
+        WATCHED,
+        TimingPoint.CARD_DRAWN,
+        activates_from=zones,
+        subject=TriggerSubject.ANY,
+    )
 
 
 def drawn() -> TimingEvent:
@@ -521,6 +528,7 @@ def test_11_mandatory_and_optional_already_live_on_the_candidate(board):
         TimingPoint.CARD_DRAWN,
         requirement=TriggerRequirement.MANDATORY,
         activates_from=frozenset({Zone.MZONE}),
+        subject=TriggerSubject.ANY,
     )
     candidate = TriggerCollector(view, TriggerRegistry((mandatory,))).collect(
         drawn()
@@ -595,6 +603,7 @@ def test_13_a_candidate_carries_nothing_the_viewer_may_not_see(board):
     wide = TriggerSpec(
         WATCHED,
         TimingPoint.CARD_DRAWN,
+        subject=TriggerSubject.ANY,
         activates_from=frozenset({Zone.MZONE, Zone.SZONE, Zone.HAND}),
     )
     collection = TriggerCollector(view, TriggerRegistry((wide,))).collect(drawn())

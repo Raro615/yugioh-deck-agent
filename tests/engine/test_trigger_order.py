@@ -48,6 +48,7 @@ from engine.trigger import (
     TriggerRegistry,
     TriggerRequirement,
     TriggerSpec,
+    TriggerSubject,
     TriggerStatus,
 )
 from engine.trigger_order import (
@@ -710,22 +711,26 @@ def test_the_real_collection_and_judgment_feed_the_ordering(state):
     )
     registry = TriggerRegistry(
         (
+            # 🔴 ``subject=ANY`` — Phase 6-F 가 드러낸 숨은 전제 (단정 불변).
             TriggerSpec(
                 EffectRef(ALPHA, 0),
                 TimingPoint.CARD_DRAWN,
                 requirement=TriggerRequirement.MANDATORY,
                 activates_from=frozenset({Zone.MZONE}),
+                subject=TriggerSubject.ANY,
             ),
             TriggerSpec(
                 EffectRef(BETA, 0),
                 TimingPoint.CARD_DRAWN,
                 requirement=TriggerRequirement.OPTIONAL,
                 activates_from=frozenset({Zone.MZONE, Zone.HAND}),
+                subject=TriggerSubject.ANY,
             ),
             TriggerSpec(
                 EffectRef(ALPHA, 1),
                 TimingPoint.CARD_DRAWN,
                 activates_from=frozenset({Zone.MZONE}),
+                subject=TriggerSubject.ANY,
             ),
         )
     )

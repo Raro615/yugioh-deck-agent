@@ -166,7 +166,10 @@ def test_01_the_three_part_modules_exist_and_are_large():
         #: :meth:`TimingEvent.unimplemented` 이고, 그것은 "옮길 이름이 없다" 를
         #: 적는 자리다 (지어낸 시점 이름이 아니다). production 호출자는
         #: 여전히 0개다 — ``test_02`` 가 그것을 따로 센다.
-        "engine/trigger.py": 1729,
+        # 🔴 1,729 → 1999 (Phase 6-F 의 주체 축: TriggerSubject ·
+        # SUBJECT_AWARE_POINTS · subject_relation · _from_relation ·
+        # 네 갈래 관문). **"크다" 는 요지는 그대로다.**
+        "engine/trigger.py": 1999,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
     }
@@ -177,7 +180,7 @@ def test_01_the_three_part_modules_exist_and_are_large():
     #: (``EVENT_SPSUMMON_SUCCESS``)을 다른 사건으로 등록하는데 엔진에는
     #: ``MONSTER_SUMMONED`` 하나뿐이어서, 구분을 적지 않으면 "일반 소환했을
     #: 때" 카드가 특수 소환에도 후보가 된다.
-    assert sum(sizes.values()) == 2766
+    assert sum(sizes.values()) == 3036  # 🔴 2,766 → 3,036 (Phase 6-F 의 주체 축)
 
 
 def test_02_the_two_assembly_modules_exist():
@@ -849,7 +852,10 @@ def test_25_this_phase_changed_no_production_file():
     assert sizes == {
         #: 1,661 → **1,681** (Phase 6-B). 위 ``executable`` 핀의 설명 참고 —
         #: 늘어난 것은 ``ActionEvent`` 가드이고 활성화가 아니다.
-        "engine/trigger.py": 1729,
+        # 🔴 1,729 → 1999 (Phase 6-F 의 주체 축: TriggerSubject ·
+        # SUBJECT_AWARE_POINTS · subject_relation · _from_relation ·
+        # 네 갈래 관문). **"크다" 는 요지는 그대로다.**
+        "engine/trigger.py": 1999,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
@@ -894,7 +900,8 @@ def test_25_this_phase_changed_no_production_file():
         #: 않았다. ``duel.py`` 는 여전히 "trigger" 라는 말을 쓰지 않고
         #: (``test_12``) ``TriggerRegistry`` 를 만드는 production 자리도
         #: 여전히 0곳이다 (``test_13``).
-        "engine/trigger.py": 748,
+        # 🔴 748 → 806 (Phase 6-F). "크다" 는 요지는 그대로다.
+        "engine/trigger.py": 806,
         "engine/trigger_chain.py": 257,
         "engine/trigger_order.py": 194,
         "engine/timing.py": 194,

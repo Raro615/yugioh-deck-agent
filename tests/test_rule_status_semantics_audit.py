@@ -72,6 +72,7 @@ from engine.trigger import (
     TriggerEligibility,
     TriggerRegistry,
     TriggerSpec,
+    TriggerSubject,
     TriggerStatus,
 )
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
@@ -385,8 +386,14 @@ def test_09_the_same_declaration_is_eligible_or_unknown_by_a_constructor_argumen
     hand = duel.state.player(seat).hand
 
     #: 등록된 적 없는 효과 자리를 가리키는 선언 (조건도 적지 않았다).
+    #: 🔴 ``subject=ANY`` — **Phase 6-F 가 드러낸 숨은 전제.** 이 선언은
+    #: "어느 카드의 사건이든 반응한다" 를 암묵적으로 가정하고 있었고,
+    #: 6-F 가 그 축을 더하면서 적지 않은 것을 ``UNKNOWN`` 으로 읽게
+    #: 되었다. **단정은 하나도 바꾸지 않았다** — 입력에 전제를 적었다.
     spec = TriggerSpec(
-        effect_ref=EffectRef(hand[0].card_id, 3), point=TimingPoint.CARD_MOVED
+        effect_ref=EffectRef(hand[0].card_id, 3),
+        point=TimingPoint.CARD_MOVED,
+        subject=TriggerSubject.ANY,
     )
     registry = TriggerRegistry().register(spec)
     event = destroyed(hand[1].instance_id, seat=seat)

@@ -552,7 +552,10 @@ def test_16_this_audit_changed_no_production_file():
     #: 번역되므로, 칸이 없으면 통상소환 사건이 특수소환 전용 효과를 후보로
     #: 만든다). **이 감사가 production 을 바꾸지 않았다는 사실은 그대로이고**,
     #: 바꾼 주체는 6-E 다.
-    assert len(dataclasses.fields(TriggerSpec)) == 10
+    #: 🔴 칸 수는 3-E-39 9 → 6-E 10 (``summons``) → **6-F 11**
+    #: (``subject``) 로 움직였다. 이 감사가 production 을 늘리지
+    #: 않았다는 사실은 그대로이고, 늘린 주체는 6-E · 6-F 다.
+    assert len(dataclasses.fields(TriggerSpec)) == 11
     #: 사건을 적는 칸이 정의 쪽에 생기지 않았다.
     definition = {f.name for f in dataclasses.fields(EffectDefinition)}
     assert definition & {"code", "point", "event", "trigger", "timing"} == set()

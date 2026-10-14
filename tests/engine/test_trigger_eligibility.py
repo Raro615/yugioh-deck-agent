@@ -58,6 +58,7 @@ from engine.trigger import (
     TriggerRegistry,
     TriggerRequirement,
     TriggerSpec,
+    TriggerSubject,
     TriggerStatus,
     TriggerWording,
 )
@@ -121,7 +122,15 @@ def spec_of(
     requirement: TriggerRequirement = TriggerRequirement.UNKNOWN,
     wording: TriggerWording = TriggerWording.UNKNOWN,
     ordinal: int = 0,
+    subject=TriggerSubject.ANY,
 ) -> TriggerSpec:
+    #: 🔴 **Phase 6-F 가 ``subject`` 축을 더했고 기본값이 "모름" 이다.**
+    #:
+    #: 이 도움 함수가 만드는 선언은 지금까지 "어느 카드의 사건이든 반응한다"
+    #: 를 **암묵적으로** 가정하고 있었다 — 그 가정이 참이어야 아래 시험들이
+    #: 뜻을 갖는다. 6-F 가 그 가정을 ``TriggerSubject.ANY`` 로 **적게** 만든다.
+    #: 단정을 바꾼 것이 아니라 **입력에 숨어 있던 전제를 드러낸 것**이고,
+    #: 그래서 아래 시험들의 기대값은 하나도 바뀌지 않는다.
     return TriggerSpec(
         EffectRef(WATCHER, ordinal),
         point,
@@ -129,6 +138,7 @@ def spec_of(
         wording=wording,
         activates_from=activates_from,
         condition=condition,
+        subject=subject,
     )
 
 
