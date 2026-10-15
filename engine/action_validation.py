@@ -76,7 +76,7 @@ from engine.game_state_view import CardDefinitionView, CardView, GameStateView
 from engine.summon_rules import SummonAssessment, assess_normal_summon
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
 from engine.ids import InstanceId
-from engine.vocabulary import Phase, Position, Zone
+from engine.vocabulary import ActivationKind, Phase, Position, Zone
 
 #: 몬스터가 놓이는 존. 공격 · 표시 형식 변경의 출발점이다.
 MONSTER_ZONES: frozenset[Zone] = frozenset({Zone.MZONE, Zone.EMZONE})
@@ -135,9 +135,11 @@ _COMPLETE_RULES: frozenset[PlayerActionKind] = frozenset(
         PlayerActionKind.ATTACK,
         PlayerActionKind.SET_MONSTER,
         PlayerActionKind.SET_SPELL_TRAP,
-        # Phase 3-E-3 — **통상 마법의 발동 하나**다. 넓게 푼 것이 아니라,
-        # ``_NormalSpellActivation`` 이 그 밖의 모든 카드를 UNKNOWN 으로
-        # 남기므로 여기 올려도 아무것도 새로 허가되지 않는다.
+        # Phase 3-E-3 — 발동이 끝까지 판정되는 종류. 범위는
+        # ``_NormalSpellActivation`` 이 정하고 그 밖의 모든 발동을 UNKNOWN
+        # 으로 남기므로, 여기 올려도 범위가 넓어지지 않는다. Phase 6-K 에서
+        # 범위에 **몬스터의 기동 효과**가 더해졌고, 그 역시 ``VALID`` 가
+        # "구현이 있다" 를 뜻하지는 않는다 (ADR-006).
         PlayerActionKind.ACTIVATE_EFFECT,
     }
 )
@@ -158,21 +160,51 @@ class ActionValidator:
     - :meth:`requirements` — 종류별 요구 목록 (설명 · 디버깅용).
     """
 
-    __slots__ = ("_view", "_evaluator")
+    __slots__ = ("_view", "_evaluator", "_definitions")
 
-    def __init__(self, view: GameStateView):
+    def __init__(self, view: GameStateView, *, definitions=None):
         if not isinstance(view, GameStateView):
             raise TypeError(
                 "ActionValidator 는 GameStateView 만 받습니다. GameState 를 "
                 "직접 넘기면 상대의 패와 덱이 보이고, 판정이 정보를 흘립니다 "
                 "(GameStateView.from_state 로 감싸세요)."
             )
+        if definitions is not None and not hasattr(definitions, "definition_for"):
+            raise TypeError(
+                "definitions 는 definition_for(EffectRef) 를 가진 등록소여야 "
+                f"합니다: {type(definitions).__name__}"
+            )
         self._view = view
         self._evaluator = ConditionEvaluator(view)
+        self._definitions = definitions
 
     @property
     def view(self) -> GameStateView:
         return self._view
+
+    @property
+    def definitions(self):
+        """
+        효과 정의 등록소. **없으면 ``None``** (Phase 6-K).
+
+        왜 선택인가 — 이 검증기는 관측만 읽는다는 약속을 지키고 있고
+        (ADR-007), 효과 **단위**의 사실인 발동 분류
+        (:class:`~engine.vocabulary.ActivationKind`) 는 관측에 없다. 카드
+        정의(:class:`~engine.game_state_view.CardDefinitionView`) 는 카드
+        하나를 싣고, 분류는 효과 하나에 붙기 때문이다 (``engine/
+        activation_timing.py`` 가 측정해 둔 입도 불일치).
+
+        그래서 ``ActivationTiming.set_this_turn`` 과 **같은 방식**으로
+        받는다 — 관측에 없는 사실은 그것을 들고 있는 쪽이 넘긴다. 다만
+        이쪽은 값 하나가 아니라 ``EffectRef`` 로 찾아야 하므로 등록소를
+        받는다. 등록소는 불변 정의만 들고 있고 판을 읽지도 바꾸지도
+        않는다.
+
+        **주지 않으면 판정이 넓어지지 않는다.** ``None`` 일 때 몬스터
+        효과는 "분류를 적지 않았다" 로 범위 밖이고, 그것이 Phase 6-K 이전의
+        동작 그대로다.
+        """
+        return self._definitions
 
     # ==================================================================
     # 1층 — 모양
@@ -833,11 +865,20 @@ def _activate_effect(
     EffectActivator`)은 ``ACTIVATE_EFFECT`` **만** 받으므로, 허가를 낼 수 있는
     쪽도 그쪽 하나다.
 
-    요구가 **두 갈래**인 것이 이 함수의 핵심이다
-    -------------------------------------------
+    요구가 **갈래로 나뉘는 것**이 이 함수의 핵심이다
+    -----------------------------------------------
     언제나 묻는 것은 둘뿐이다 — 자기가 쥔 카드인가, 그리고 **이번 Phase 가
-    판정할 수 있는 발동인가**. 범위 안(패의 통상 마법)일 때만 좁은 요구를
-    더한다.
+    판정할 수 있는 발동인가**. 범위 안일 때만 좁은 요구를 더하고, 그 좁은
+    요구가 **범위 안의 종류마다 다르다**.
+
+    ========================  ==========================================
+    패의 통상 마법             턴 플레이어 · 메인 페이즈 · 마법 & 함정 존의 빈 칸
+    패의 속공 마법             턴 플레이어 (페이즈는 묻지 않는다)
+    세트된 통상 마법           턴 플레이어 · 메인 페이즈 (빈 칸은 묻지 않는다)
+    세트된 속공 마법           아무것도 더하지 않는다 (상대 턴에도 쓴다)
+    **몬스터의 기동 효과**     턴 플레이어 · 메인 페이즈 (**빈 칸은 묻지
+                              않는다** — 놓는 것이 없다). Phase 6-K
+    ========================  ==========================================
 
     범위 밖에 좁은 요구를 **더하지 않는 이유**가 중요하다. 예를 들어 함정은
     상대 턴에 발동하는 것이 정상이므로 (RULE-SPELLTRAP-008), 거기에
@@ -861,7 +902,11 @@ def _activate_effect(
     검증기는 관측만 읽는다 (ADR-007). 그 요구는 체인을 들고 있는
     :class:`~engine.duel.Duel` 이 본다 (RULE-CHAIN-004).
     """
-    scope = _NormalSpellActivation(action.source)
+    # **어느 효과인가를 먼저 읽는다** (Phase 6-K). ``ACTIVATE_EFFECT`` 는
+    # 처음부터 ``effect_ref`` 로 효과를 지목하고 있었고 (``_NEEDS_EFFECT_REF``),
+    # 이 함수만 그것을 보지 않고 있었다. PlayerAction 계약은 바뀌지 않는다.
+    activation_kind = _declared_activation_kind(validator, action)
+    scope = _NormalSpellActivation(action.source, activation_kind)
     always = (
         Requirement(
             ControllerIs(PlayerRef.CONTROLLER, action.source),
@@ -878,8 +923,44 @@ def _activate_effect(
         ),
     )
     context = validator.context_for(action)
-    if _activation_out_of_scope(validator.view, context, action.source):
+    if _activation_out_of_scope(
+        validator.view, context, action.source, activation_kind
+    ):
         return always
+
+    # **몬스터의 기동 효과는 요구가 둘뿐이다** (Phase 6-K).
+    #
+    #   RULE-EFFECT-002 — "Ignition Effect … activation_timing: **your Main
+    #   Phase**. You use this type of effect just by declaring its activation
+    #   during your Main Phase."
+    #   RULE-CHAIN-009 — "The turn player always starts with Priority"
+    #
+    # 마법에 걸던 **빈 칸 요구를 걸지 않는다.** 기동 효과의 발동은 카드를
+    # 어디에도 놓지 않는다 — RULE-SPELLTRAP-002 의 "placing it face-up on
+    # the field" 는 마법 · 함정의 발동 절차이고, 몬스터는 이미 필드에 앞면
+    # 으로 있다. 걸어 두면 마법 & 함정 존이 꽉 찬 판에서 몬스터 효과를 쓸 수
+    # 없게 되고, 그것은 규칙이 금지하지 않는 것을 금지한다는 거짓이다.
+    #
+    # 자리와 표시 형식은 **여기서 다시 보지 않는다.** 범위 조건이 이미
+    # 보았고 (``_monster_activation_out_of_scope``), 두 곳이 각자 보면 둘이
+    # 갈라진다.
+    if activation_is_monster_ignition(
+        validator.view, context, action.source, activation_kind
+    ):
+        return always + (
+            Requirement(
+                IsTurnPlayer(PlayerRef.CONTROLLER),
+                ValidationCode.NOT_TURN_PLAYER,
+                "자신의 턴이 아닙니다 (기동 효과는 자신 메인 페이즈에 "
+                "발동합니다 — RULE-EFFECT-002).",
+            ),
+            Requirement(
+                PhaseIs(MAIN_PHASES),
+                ValidationCode.WRONG_PHASE,
+                "메인 페이즈가 아닙니다 (기동 효과는 자신 메인 페이즈에 "
+                "발동합니다 — RULE-EFFECT-002).",
+            ),
+        )
 
     quick_play = activation_is_quick_play(validator.view, context, action.source)
 
@@ -1224,6 +1305,81 @@ MONSTER_ACTIVATION_MISSING = (
     "monster-activation-timing (기동 · 유발 · 플립 · 유발즉시 분류가 없다)"
 )
 
+#: **분류를 알게 된 뒤에도** 남는 이유들 (Phase 6-K).
+#:
+#: ``MONSTER_ACTIVATION_MISSING`` 은 "분류 자체가 없다" 였다. 분류를
+#: 적게 되면 그 문장은 더 이상 참이 아니므로, 분류마다 **무엇이 아직
+#: 없는지**를 따로 적는다. 한 문장으로 묶으면 어느 쪽을 고쳐야 하는지
+#: 알 수 없다 (``TRAP_TRIGGER_MISSING`` 을 함정과 몬스터로 가른 것과 같은
+#: 자리다).
+#:
+#: 근거는 공식 룰북의 효과 분류표다
+#: (``data/rules/structured/sd-rulebook-en-v10.json`` 의 ``effect_types``).
+#: ``engine`` 은 ``rules`` 를 import 하지 않고, **테스트가 둘을 대조한다.**
+MONSTER_ACTIVATION_MISSING_BY_KIND: dict[ActivationKind, str] = {
+    #: 룰북이 발동 시점을 "specific times" 로만 적고 (RULE-EFFECT-004), 그
+    #: 시점을 고르는 것은 플레이어가 아니라 **사건**이다. 그래서 이 발동은
+    #: ``ACTIVATE_EFFECT`` 후보가 아니라 트리거 계층의 일이고, 그 계층은
+    #: 아직 효과를 실행하지 않는다 (Phase 6-J).
+    ActivationKind.TRIGGER: (
+        "trigger-effect-activation (유발 효과는 사건이 시점을 정한다 — "
+        "RULE-EFFECT-004, 트리거 계층의 일)"
+    ),
+    #: 플립은 **발동 선언이 아니라 뒤집히는 사건**이 시점이다
+    #: (RULE-EFFECT-005). 뒤집는 절차 자체가 이 엔진에 없다.
+    ActivationKind.FLIP: (
+        "flip-effect-activation (앞면으로 뒤집히는 사건이 시점이다 — "
+        "RULE-EFFECT-005)"
+    ),
+    #: 🔴 룰북이 유발 즉시 효과의 발동 시점을 **적지 않는다** — 구조화
+    #: 데이터가 그 사실을 ``not_stated: ["activation_timing"]`` 으로 기록하고
+    #: 있다. 확인되지 않은 시점을 "언제든 된다" 로 읽으면 스펠 스피드 2 가
+    #: 아무 때나 끼어든다.
+    ActivationKind.QUICK: (
+        "quick-effect-activation (룰북이 발동 시점을 적지 않는다 — "
+        "RULE-EFFECT-003 의 not_stated)"
+    ),
+}
+
+#: 이번 단계가 발동까지 판정하는 분류. **기동 효과 하나다** (Phase 6-K).
+#:
+#: 기동 효과만 고른 이유는 룰북이 그 시점을 **문장으로 확정해 두었기**
+#: 때문이다 — ``activation_timing: "your Main Phase"`` ·
+#: ``notes: "You use this type of effect just by declaring its activation
+#: during your Main Phase."`` (RULE-EFFECT-002). 나머지 셋은 시점이
+#: 사건이거나 (유발 · 플립) 룰북이 적지 않았다 (유발 즉시).
+ACTIVATION_KINDS_IN_SCOPE: frozenset[ActivationKind] = frozenset(
+    {ActivationKind.IGNITION}
+)
+
+assert not (ACTIVATION_KINDS_IN_SCOPE & set(MONSTER_ACTIVATION_MISSING_BY_KIND)), (
+    "한 분류가 '발동을 판정한다' 와 '규칙이 없다' 를 동시에 말할 수 없습니다."
+)
+assert ACTIVATION_KINDS_IN_SCOPE | set(MONSTER_ACTIVATION_MISSING_BY_KIND) == set(
+    ActivationKind
+), "분류 중 어느 쪽에도 적히지 않은 것이 있으면 조용히 범위 밖이 됩니다."
+
+#: 기동 효과의 발동을 판정할 수 있는 자리. **메인 몬스터 존 하나다.**
+#:
+#: 🔴 엑스트라 몬스터 존을 넣지 않았다. 공식 스크립트는 기동 효과의 발동
+#: 위치를 ``SetRange(LOCATION_MZONE)`` 로 적고 그 상수가 EMZ 를 포함하는지는
+#: 이 저장소에서 확인되지 않았다 (``Zone`` 은 둘을 **다른 존**으로 가른다 —
+#: ``engine/vocabulary.py`` 의 ``EMZONE`` 설명). 확인되지 않은 대응을 여기서
+#: 선언하면 그것이 규칙처럼 굳는다.
+IGNITION_ACTIVATION_ZONES: frozenset[Zone] = frozenset({Zone.MZONE})
+
+#: 기동 효과인데 자리가 :data:`IGNITION_ACTIVATION_ZONES` 가 아닐 때.
+IGNITION_LOCATION_MISSING = (
+    "ignition-effect-location (효과마다 발동 위치가 EffectDefinition 에 "
+    "없다 — 공식 스크립트의 SetRange(LOCATION_*))"
+)
+
+#: 뒷면인 몬스터의 효과가 유효한지 판정하는 계층이 없다.
+FACEDOWN_EFFECT_MISSING = (
+    "facedown-monster-effect (뒷면 몬스터의 효과가 유효한지 판정하는 "
+    "계층이 없다)"
+)
+
 _OUT_OF_SCOPE_TYPES: tuple[tuple[str, str], ...] = (
     ("CONTINUOUS", "continuous-card-lifecycle (발동 뒤 필드에 남는다 — RULE-SPELLTRAP-004 · 010)"),
     ("EQUIP", "equip-lifecycle (장착 대상과 함께 필드에 남는다 — RULE-SPELLTRAP-005)"),
@@ -1277,14 +1433,108 @@ def activation_is_set_card(view, context, instance) -> bool:
     return _is_set_spell(card, definition, set(definition.type_names))
 
 
-def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], ...]:
+def _declared_activation_kind(validator, action) -> "ActivationKind | None":
+    """
+    이 발동이 가리키는 효과의 **발동 분류** (Phase 6-K). 모르면 ``None``.
+
+    ``None`` 이 되는 길이 셋이고 **전부 "모른다"** 다 — 등록소를 받지
+    못했거나, 그 효과의 정의가 없거나, 정의가 분류를 적지 않았다. 셋을
+    구분해서 다르게 쓰는 자리가 아직 없으므로 하나로 접는다. 접은 결과가
+    더 넓어지지 않는다는 것이 중요하다: ``None`` 은 범위 밖이다.
+    """
+    source = getattr(validator, "definitions", None)
+    if source is None or action.effect_ref is None:
+        return None
+    definition = source.definition_for(action.effect_ref)
+    if definition is None:
+        return None
+    return getattr(definition, "activation_kind", None)
+
+
+def activation_is_monster_ignition(
+    view, context, instance, activation_kind=None
+) -> bool:
+    """
+    이 발동이 **몬스터의 기동 효과**인가 (Phase 6-K).
+
+    :func:`activation_is_quick_play` · :func:`activation_is_set_card` 와
+    같은 자리의 술어다 — 범위 안의 발동들이 **서로 다른 요구**를 지므로,
+    어느 쪽인지 묻는 함수를 요구를 만드는 곳과 범위를 정하는 곳이 **같이**
+    쓴다. 두 곳이 각자 판단하면 범위와 요구가 갈라진다.
+
+    카드 종류와 효과 종류를 **둘 다** 본다. 분류만 보면 마법 정의에 잘못
+    적힌 ``IGNITION`` 이 몬스터 경로로 들어오고, 카드 종류만 보면
+    "몬스터라서 허가" 가 된다 — 어느 쪽도 해서는 안 된다.
+    """
+    if activation_kind is not ActivationKind.IGNITION:
+        return False
+    definition, _ = _resolve_definition(view, context, instance)
+    return definition is not None and definition.is_monster
+
+
+def _monster_activation_out_of_scope(
+    view, context, instance, definition, activation_kind
+) -> tuple[tuple[str, str], ...]:
+    """
+    **몬스터 효과**의 발동을 범위 밖으로 만드는 것들 (Phase 6-K).
+
+    비어 있으면 범위 안이다 — 앞면으로 메인 몬스터 존에 있는 **기동 효과**
+    하나다.
+
+    네 갈래로 갈라 적는다. 한 문장으로 묶으면 어느 쪽을 고쳐야 하는지 알
+    수 없고, 그것이 ``MONSTER_ACTIVATION_MISSING`` 한 줄이 안고 있던
+    문제였다.
+
+    1. 분류를 **적지 않았다** → 그대로 ``MONSTER_ACTIVATION_MISSING``.
+       Phase 6-K 이전의 모든 몬스터가 여기였고, 지금도 분류를 적지 않은
+       정의는 여기다. **적지 않은 것을 기동 효과로 읽지 않는다.**
+    2. 분류가 기동이 **아니다** → 분류별 이유
+       (:data:`MONSTER_ACTIVATION_MISSING_BY_KIND`).
+    3. 기동인데 **자리가 아니다** → 효과마다 발동 위치를
+       ``EffectDefinition`` 이 적지 않는다 (:data:`IGNITION_LOCATION_MISSING`).
+    4. 기동이고 자리도 맞는데 **뒷면**이다 → 뒷면 몬스터의 효과가 유효한지
+       판정하는 계층이 없다 (:data:`FACEDOWN_EFFECT_MISSING`).
+
+    셋 · 넷이 ``FALSE`` 가 아니라 ``UNKNOWN`` 인 이유: 실제 규칙에서는
+    묘지나 패에서 발동하는 기동 효과도 있고, 뒷면 카드의 효과가 왜 유효하지
+    않은지를 적은 계층이 이 엔진에 없다. 없는 것을 "규칙이 금지한다" 로
+    적으면 거짓이 된다.
+    """
+    if activation_kind is None:
+        return (("효과의 발동 분류가 적혀 있지 않다", MONSTER_ACTIVATION_MISSING),)
+    if activation_kind not in ACTIVATION_KINDS_IN_SCOPE:
+        return (
+            (
+                f"{activation_kind.value} 효과다",
+                MONSTER_ACTIVATION_MISSING_BY_KIND[activation_kind],
+            ),
+        )
+    target = instance if instance is not None else context.source
+    card = view.find(target) if target is not None else None
+    if card is None or card.zone not in IGNITION_ACTIVATION_ZONES:
+        where = card.zone.value if card is not None else "?"
+        return ((f"{where} 에서의 기동 효과 발동이다", IGNITION_LOCATION_MISSING),)
+    if not card.face_up:
+        return (("뒷면 몬스터의 효과 발동이다", FACEDOWN_EFFECT_MISSING),)
+    return ()
+
+
+def _activation_out_of_scope(
+    view, context, instance, activation_kind=None
+) -> tuple[tuple[str, str], ...]:
     """
     이 발동을 **이번 Phase 의 범위 밖으로** 만드는 (사실, 없는 규칙) 들.
 
-    비어 있으면 범위 안이다 — 패에 있는 통상 마법 하나.
+    비어 있으면 범위 안이다 — 패 또는 세트된 통상 · 속공 마법 하나, 그리고
+    **앞면 몬스터 존의 기동 효과** 하나 (Phase 6-K).
 
-    왜 "패에 있는가" 까지 여기서 보는가: 필드에서의 발동(몬스터의 기동 효과 ·
-    세트한 마법 · 함정)은 **실제 규칙에서 적법하다.** 그것을
+    🔴 ``activation_kind`` 를 받는다. 이 함수는 Phase 6-K 전까지 **카드
+    종류만** 보고 몬스터 전체를 범위 밖으로 돌렸고, 그 이유가
+    ``MONSTER_ACTIVATION_MISSING`` ("분류가 없다") 였다. 분류를 받게 된
+    지금, 그 문장은 **분류를 적지 않은 효과에만** 참이다.
+
+    왜 자리까지 여기서 보는가: 필드에서의 발동(몬스터의 기동 효과 · 세트한
+    마법 · 함정)은 **실제 규칙에서 적법하다.** 그것을
     ``SOURCE_WRONG_ZONE`` 같은 ``INVALID`` 로 적으면 "규칙이 금지한다" 는
     거짓을 말하게 된다. 모르는 것은 ``UNKNOWN`` 이어야 하고, 그래서 자리도
     범위 조건 안에 둔다.
@@ -1309,6 +1559,14 @@ def _activation_out_of_scope(view, context, instance) -> tuple[tuple[str, str], 
         # ``names`` 는 아래에서 묶이므로 여기서는 정의에서 바로 읽는다.
         if "TRAP" in set(definition.type_names):
             return (("함정이다", TRAP_TRIGGER_MISSING),)
+        if definition.is_monster:
+            # **몬스터는 효과 단위로 갈린다** (Phase 6-K). 카드 종류로는
+            # 더 이상 답하지 않는다 — 한 카드가 기동 효과와 유발 즉시
+            # 효과를 함께 가지는 것이 실측 856장(10.4%)이다.
+            return _monster_activation_out_of_scope(
+                view, context, instance, definition, activation_kind
+            )
+        # 마법도 함정도 몬스터도 아니다 (토큰 등). 종류 축 자체가 비어 있다.
         return (("통상 마법이 아니다", MONSTER_ACTIVATION_MISSING),)
     names = set(definition.type_names)
     out = tuple(
@@ -1407,11 +1665,12 @@ class _NormalSpellActivation(Condition):
     """
     이 카드가 **이번 Phase 가 판정할 수 있는 발동**인가 (Phase 3-E-3).
 
-    ``TRUE`` 는 **통상 마법 하나**다. 그 밖의 모든 카드는 ``UNKNOWN`` 이고,
-    ``FALSE`` 는 **하나도 없다** — 실제 규칙에서는 전부 발동할 수 있고, 없는
-    것은 그 타이밍을 볼 규칙 계층뿐이다 (``UNRESOLVED_TIMING_RULES``).
+    ``TRUE`` 는 **마법 둘과 몬스터의 기동 효과 하나**다 (Phase 3-E-14 · 15 ·
+    6-K). 그 밖의 모든 발동은 ``UNKNOWN`` 이고, ``FALSE`` 는 **하나도 없다**
+    — 실제 규칙에서는 전부 발동할 수 있고, 없는 것은 그 타이밍을 볼 규칙
+    계층뿐이다 (``UNRESOLVED_TIMING_RULES``).
 
-    왜 통상 마법만인가 — 공식 조항이 나머지를 **다른 타이밍**으로 적는다.
+    왜 이 셋만인가 — 공식 조항이 나머지를 **다른 타이밍**으로 적는다.
 
     ==========================  =============================================
     통상 마법                    RULE-SPELLTRAP-001 · 002 — 자기 메인 페이즈,
@@ -1423,46 +1682,63 @@ class _NormalSpellActivation(Condition):
     지속 · 장착 · 필드 마법       RULE-SPELLTRAP-004 · 005 · 006 — 발동 뒤
                                  필드에 **남는다.** 해결 뒤 묘지로 가지 않는다
     의식 마법                    RULE-SPELLTRAP-003 — 의식 소환 절차가 앞선다
-    몬스터 효과                  기동/유발/플립/유발즉시 분류가 이 엔진의 카드
-                                 정의에 없다 (``activation_timing`` 모듈 설명)
+    몬스터의 **기동 효과**        RULE-EFFECT-002 — 자신 메인 페이즈에 선언으로
+                                 발동한다. **이번 범위** (Phase 6-K)
+    그 밖의 몬스터 효과           유발 · 플립은 사건이 시점을 정하고, 유발 즉시는
+                                 룰북이 시점을 적지 않았다 (RULE-EFFECT-003 ·
+                                 004 · 005). 분류를 적지 않은 효과도 모른다
     ==========================  =============================================
 
     **``FALSE`` 로 적지 않는 것이 이 조건의 핵심이다.** ``FALSE`` 는 "규칙이
-    금지한다" 이고, 위 다섯 줄은 전부 "규칙은 허락하는데 우리가 모른다" 다.
+    금지한다" 이고, 위 줄들은 전부 "규칙은 허락하는데 우리가 모른다" 다.
     """
 
     instance: InstanceId | None = None
+    activation_kind: ActivationKind | None = None
+    """
+    가리킨 효과의 **발동 분류** (Phase 6-K). ``None`` 은 "모른다" 다.
+
+    왜 조건이 값으로 들고 있는가 — 이 사실은 관측에 없고 (효과 단위이고,
+    ``CardDefinitionView`` 는 카드 단위다) 조건은 관측만 읽는다. 그래서
+    요구를 **만드는 쪽**이 등록소에서 읽어 값으로 넘긴다
+    (``ActivationTiming.set_this_turn`` 과 같은 자리다).
+
+    🔴 판정을 바꾸는 값이므로 :meth:`canonical_state` 에 **들어간다.**
+    빠뜨리면 같은 카드의 서로 다른 효과가 같은 조건으로 캐시된다.
+    """
 
     def evaluate(self, view, context) -> ConditionResult:
-        out = _activation_out_of_scope(view, context, self.instance)
+        out = self._out_of_scope(view, context)
         return ConditionResult.TRUE if not out else ConditionResult.UNKNOWN
 
     def unknown_reasons(self, view, context) -> tuple[str, ...]:
-        return tuple(
-            why for why, _ in _activation_out_of_scope(view, context, self.instance)
-        )
+        return tuple(why for why, _ in self._out_of_scope(view, context))
 
     def missing_rules(self, view, context) -> tuple[str, ...]:
-        return tuple(
-            rule
-            for _, rule in _activation_out_of_scope(view, context, self.instance)
-            if rule
+        return tuple(rule for _, rule in self._out_of_scope(view, context) if rule)
+
+    def _out_of_scope(self, view, context) -> tuple[tuple[str, str], ...]:
+        return _activation_out_of_scope(
+            view, context, self.instance, self.activation_kind
         )
 
     def canonical_state(self) -> tuple:
         return (
             "normal_spell_activation",
             self.instance.value if self.instance is not None else None,
+            self.activation_kind.value if self.activation_kind is not None else None,
         )
 
     def to_dict(self) -> dict:
         data: dict = {"kind": "normal_spell_activation"}
         if self.instance is not None:
             data["instance"] = self.instance.value
+        if self.activation_kind is not None:
+            data["activation_kind"] = self.activation_kind.value
         return data
 
     def describe_ko(self) -> str:
-        return "통상 마법의 발동이다 (이번 Phase 가 판정할 수 있는 범위)"
+        return "이번 Phase 가 판정할 수 있는 발동이다 (통상 · 속공 마법 또는 기동 효과)"
 
 
 @dataclass(frozen=True, slots=True)

@@ -86,6 +86,20 @@ AFTER_RESOLUTION_ZONE: Zone = Zone.GRAVE
 #:     Main Phase."
 REVEAL_FROM_ZONE: Zone = Zone.SZONE
 
+#: 발동이 **배치를 동반하는** 출발지 (Phase 6-K).
+#:
+#: 발동 배치는 **마법 · 함정의 발동 절차**다 — RULE-SPELLTRAP-002 가
+#: "placing it face-up on the field" 라고 적고, RULE-SPELLTRAP-012 가 세트된
+#: 카드를 그 자리에서 앞면으로 돌리게 한다. 두 자리가 여기 적힌 둘이다.
+#:
+#: 🔴 **몬스터 존은 여기 없다.** 몬스터의 기동 효과를 발동해도 카드는
+#: 움직이지 않는다 — 이미 필드에 앞면으로 있고, 해결 뒤 묘지로 가지도
+#: 않는다. 그 발동에 :meth:`NormalSpellPlacement.place` 를 부르면 "패에
+#: 없다" 는 :class:`SpellActivationError` 가 나는데, 그때는 **비용과 체인
+#: 링크가 이미 지나간 뒤**이므로 되돌릴 수 없다 (ADR-008). 그래서 부르는
+#: 쪽이 **부르기 전에** 이 집합으로 묻는다.
+PLACEMENT_SOURCE_ZONES: frozenset[Zone] = frozenset({Zone.HAND, Zone.SZONE})
+
 
 @dataclass(frozen=True, slots=True)
 class _SpellMovement(CardMovement):
@@ -539,6 +553,7 @@ def activatable_effects(card_id: int):
 
 
 __all__ = [
+    "PLACEMENT_SOURCE_ZONES",
     "duel_activator",
     "duel_resolver",
     "duel_components",

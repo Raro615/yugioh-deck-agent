@@ -610,7 +610,12 @@ class EffectActivator:
                 )
             return authorization
         view = GameStateView.from_state(state, viewer=action.actor)
-        return ActionValidator(view).validate(action)
+        # **정의 등록소를 함께 넘긴다** (Phase 6-K). 효과의 발동 분류
+        # (``ActivationKind``) 는 관측에 없고 정의에 있으므로, 그것을 들고
+        # 있는 이쪽이 넘긴다. 넘기지 않으면 검증기는 몬스터 효과를 "분류를
+        # 적지 않았다" 로 범위 밖에 두고, 그러면 같은 판에서 이 모듈과
+        # 검증기가 **다른 답**을 내게 된다.
+        return ActionValidator(view, definitions=self._definitions).validate(action)
 
     def _check_authority(
         self,

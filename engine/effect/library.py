@@ -83,7 +83,7 @@ from engine.effect.ruling import (
 )
 from engine.execution import ResultField, ResultRef
 from engine.ids import EffectRef
-from engine.vocabulary import Zone
+from engine.vocabulary import ActivationKind, Zone
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +211,8 @@ RUTHLESS_DENIAL = 73148972
 INTRODUCTION_TO_GALLANTRY = 69091732
 # Phase 2-AI
 RELOAD = 22589918
+# Phase 6-K — **목록의 첫 몬스터**다. 실행하지 않는다.
+HONEST = 37742478
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -1022,6 +1024,81 @@ _RELOAD_ENTRY = LibraryEntry(
 )
 
 
+#: 어니스트 ① — "자신 메인 페이즈에 발동할 수 있다. 필드의 앞면 표시의 이
+#: 카드를 패로 되돌린다." (Phase 6-K)
+#:
+#: **목록에 실린 첫 몬스터 효과이고, 일부러 실행하지 않는다.**
+#:
+#: 왜 이 카드인가 — 측정해서 골랐다. 몬스터의 기동 효과 중
+#: ``SetRange(LOCATION_MZONE)`` · 비용 없음 · 발동 조건 없음 · 턴 제한 없음 ·
+#: 선택 없음 · 해결 동작이 번역 가능한 것은 코퍼스 전체에서 **7건**이고, 그중
+#: 넷은 "이 카드를" 가리키고 (어니스트 · 젬 코끼리 · 다크 어니스트 · 사신
+#: 이레이저), 둘은 **카운터 비용**을 쓰며 (왕립 마법도서관의 마력 카운터 3개,
+#: 매직 크로니클), 하나는 발동 조건이 있다 (시치미 떼는 주머니쥐). 카운터
+#: 계층이 이 엔진에 없으므로 그 둘을 실으면 **비용을 치르지 않고** 효과가
+#: 나간다. 남은 넷 중 "1턴에 1번" 이 없고 (다크 어니스트 탈락) 발동하지 못한
+#: 유발 효과가 딸려 오지 않는 것은 (사신 이레이저 ③ 탈락) 어니스트와 젬
+#: 코끼리이고, 공식 텍스트가 ①②로 갈려 블록 경계가 분명한 쪽을 골랐다.
+#:
+#: ``operations`` 를 **적지 않았다.** 적을 수 없기 때문이고, 그 이유 하나가
+#: 이 Phase 가 "실제 효과 해결" 에 닿지 못한 이유다.
+#:
+#:     ``Duel.SendtoHand(c,nil,REASON_EFFECT)``  —  ``c = e:GetHandler()``
+#:
+#: 돌려보낼 카드가 **발동한 그 카드 자신**이다. 그런데 :class:`
+#: ~engine.effect.operation.CardOperation` 은 대상을 ``TargetRef`` 이름으로
+#: 가리키고, 그 이름에 "이 효과의 카드" 를 넣는 길이 없다 —
+#: :class:`~engine.effect.target.TargetRequirement` 넷은 전부 **고르거나 ·
+#: 무작위이거나 · 전부**이고, :attr:`~engine.cost.CandidateSource.
+#: exclude_source` 는 자신을 **빼는** 쪽만 있다. 후보 조건(``require``)으로
+#: 쓸 수도 없다: :class:`~engine.cost.resolver.CandidateResolver` 가 후보마다
+#: 문맥의 ``source`` 를 **그 후보로 바꿔** 판정하므로, 원래 발동한 카드가
+#: 거기서 사라진다 (``engine/cost/resolver.py``).
+#:
+#: :attr:`~engine.effect.resolution.ResolutionContext.source` 에는 그 카드가
+#: **이미 있다.** 모자란 것은 정의가 그것을 가리키는 **이름**이고, 그 이름을
+#: 더하는 것은 대상 축에 다섯 번째 모양을 더하는 일이다. 측정 없이 축을
+#: 늘리지 않는다 (§14) — 그래서 여기서 멈추고 사실만 적는다.
+#:
+#: 🔴 그래도 **싣는다.** 빼 버리면 "몬스터 효과의 발동 분류를 적을 수 있게
+#: 되었다" 는 사실이 아무 데도 남지 않고, ``activation_kind`` 가 실제 데이터
+#: 에서 한 번도 쓰이지 않는 칸이 된다. 발동 경로는 이 항목으로 실측된다 —
+#: 검증기가 ``VALID`` 를 내고, 막는 것이 **규칙이 아니라 구현**으로
+#: 바뀐다 (ADR-006).
+#:
+#: ②(``EFFECT_TYPE_QUICK_O``, 패에서의 유발 즉시 효과)는 **등록하지
+#: 않았다.** 정의는 ``EffectRef`` 단위이고 ``e[1]`` 은 여기 없다 — 룰북이
+#: 유발 즉시 효과의 발동 시점을 적지 않으므로 (RULE-EFFECT-003 의
+#: ``not_stated``) 적을 근거가 없다.
+_HONEST_IGNITION_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(HONEST, 0),
+        source_card_id=HONEST,
+        operations=(),
+        activation_kind=ActivationKind.IGNITION,
+        provenance=EffectProvenance.official_lua(
+            "c37742478.lua 의 e1:SetType(EFFECT_TYPE_IGNITION) 과 "
+            "e1:SetRange(LOCATION_MZONE) 에서 발동 분류를 옮겼다. "
+            "s.operation1 의 Duel.SendtoHand(c,...) 는 c 가 e:GetHandler() "
+            "여서 옮기지 못했다 — 정의가 '이 효과의 카드' 를 가리키는 이름을 "
+            "갖고 있지 않다. s.target1 의 IsAbleToHand 와 "
+            "IsRelateToEffect 도 따라서 옮기지 않았다."
+        ),
+    ),
+    lua_file="c37742478.lua",
+    lua_excerpt=(
+        "e1:SetType(EFFECT_TYPE_IGNITION); e1:SetRange(LOCATION_MZONE); "
+        "local c=e:GetHandler(); Duel.SendtoHand(c,nil,REASON_EFFECT)"
+    ),
+    executable=False,
+    note=(
+        "하는 일이 '이 효과의 카드' 를 가리키는데, 정의가 그것을 가리키는 "
+        "대상 이름을 갖고 있지 않다 (TargetRequirement 넷이 전부 고르기 · "
+        "무작위 · 전부이고, exclude_source 는 빼는 쪽뿐이다)"
+    ),
+)
+
+
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
     _POT_OF_GREED_ENTRY,
@@ -1045,6 +1122,8 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _INTRODUCTION_TO_GALLANTRY_ENTRY,
     # Phase 2-AI
     _RELOAD_ENTRY,
+    # Phase 6-K — 첫 몬스터 효과. 실행하지 않는다.
+    _HONEST_IGNITION_ENTRY,
 )
 
 
@@ -1067,6 +1146,13 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
 #:    다른 카드의 조작을 막는 문장이 없음을 확인했다. 확인한 것은 그것
 #:    하나이므로 :attr:`~engine.effect.ruling.CardRuleFacts.answers` 는
 #:    비어 있다 — "이 카드 자신을 패로 되돌릴 수 있는가" 는 묻지 않았다.
+#: 3. **목록의 효과 몬스터** — 어니스트 하나다 (Phase 6-K). 2번과 **같은
+#:    것 하나만** 읽었다: 공식 텍스트 전문에 다른 카드의 조작을 막는 문장이
+#:    없다. 통상 몬스터가 아니므로 :func:`
+#:    ~engine.effect.ruling.normal_monster_facts` 를 쓸 수 없다 — 그 함수의
+#:    근거는 "효과가 없다" 는 룰북 한 줄이고, 어니스트에는 효과가 있다.
+#:    그래서 ``answers`` 는 비어 있다: 이 카드를 패로 되돌릴 수 있는지는
+#:    **묻지 않았고**, 묻지 않은 것을 참으로 채우지 않는다.
 #:
 #: 2번이 왜 필요한가: 판정은 카드 한 장만 보고 끝나지 않는다. 판에 깔린
 #: 것 중 **모르는 카드가 하나라도 있으면** 답은 ``UNKNOWN`` 이다
@@ -1082,6 +1168,15 @@ FEATHERMAN = 21844576
 OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
     (
         normal_monster_facts(FEATHERMAN, "엘리멘틀 히어로 페더맨"),
+        # Phase 6-K — 어니스트. **통상 몬스터 묶음에 넣지 않았다.**
+        # ``normal_monster_facts`` 의 근거는 "효과가 없다" 이고 이 카드에는
+        # 효과가 둘 있다. 읽어서 확인한 것은 아래 한 줄뿐이다.
+        CardRuleFacts(
+            card_id=HONEST,
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=f"어니스트: {_SPELL_TRAP_READ}",
+        ),
     )
     + tuple(
         CardRuleFacts(
@@ -1214,6 +1309,7 @@ def availability(
 __all__ = [
     "LibraryEntry",
     "EFFECT_LIBRARY",
+    "HONEST",
     "POT_OF_GREED",
     "RAIN_OF_MERCY",
     "DARK_HOLE",

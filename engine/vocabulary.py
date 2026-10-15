@@ -9,7 +9,8 @@
 따라서 이 모듈이 하는 일은 셋뿐이다.
 
 1. 접두사별로 묶어서 이름 <-> 값 조회를 제공한다 (:class:`ConstantGroup`).
-2. 엔진이 반드시 구분해야 하는 축(존 / 표시 형식 / 페이즈)만 Enum 으로 고정한다.
+2. 엔진이 반드시 구분해야 하는 축(존 / 표시 형식 / 페이즈 / **효과 분류**)만
+   Enum 으로 고정한다.
    Enum 멤버의 **값은 이름 문자열**이고, 게임 수치는 언제나 ``ScriptConstants``
    에서 읽는다. 수치를 이 파일에 적어두면 그 순간 두 번째 상수 체계가 된다.
 3. 적재된 상수가 엔진이 기대하는 이름을 전부 갖고 있는지 검증한다
@@ -194,6 +195,69 @@ class Phase(str, Enum):
     BATTLE = "BATTLE"
     MAIN2 = "MAIN2"
     END = "END"
+
+    def __str__(self) -> str:  # pragma: no cover - 표시용
+        return self.value
+
+
+class ActivationKind(str, Enum):
+    """
+    **효과가 어떻게 발동하는가.** 카드 종류가 아니다 (ADR-001 과 같은 구분).
+
+    네 멤버가 공식 룰북의 효과 분류 **그대로**다
+    (``data/rules/structured/sd-rulebook-en-v10.json`` 의 ``effect_types``).
+
+    ==============  ==================  =============  ==================
+    이 열거형        룰북의 분류          스펠 스피드     근거
+    ==============  ==================  =============  ==================
+    ``IGNITION``    Ignition Effect     1              RULE-EFFECT-002
+    ``TRIGGER``     Trigger Effect      1              RULE-EFFECT-004
+    ``FLIP``        Flip Effect         1              RULE-EFFECT-005
+    ``QUICK``       Quick Effect        2              RULE-EFFECT-003
+    ==============  ==================  =============  ==================
+
+    ``engine`` 은 ``rules`` 를 import 하지 않고 **테스트가 대조한다** —
+    ``engine/activation_timing.py`` 의 스펠 스피드 표와 같은 약속이다.
+
+    **왜 이 축이 필요한가.** 몬스터 효과의 발동을 막아 온 이유가
+    ``engine/action_validation.py`` 의 ``MONSTER_ACTIVATION_MISSING`` ·
+    ``engine/activation_timing.py`` 의 ``MONSTER_CLASSIFICATION_MISSING`` 두
+    문장이고, 둘 다 **"기동 · 유발 · 플립 · 유발즉시 분류가 없다"** 고 적는다.
+    이 열거형이 그 빠진 분류다 — 새 어휘를 지어낸 것이 아니라, 빠졌다고
+    적혀 있던 자리에 **룰북의 이름**을 넣은 것이다.
+
+    🔴 **EDOPro 의 ``_O`` / ``_F`` 접미사를 축에 넣지 않았다.** 공식
+    스크립트는 유발과 유발 즉시를 각각 둘로 더 가르지만, 그 접미사의 뜻은
+    **이 저장소의 공식 자료에 근거가 없다** (Phase 3-E-31 이 *(임의)* ·
+    *(강제)* 로 적었고 3-F-31 이 그 뜻풀이에 근거가 없음을 측정했다 —
+    ``tests/test_effect_type_quick_audit.py`` 의 ``test_29`` · ``test_32``).
+    근거 없는 구분을 축에 넣으면 그 뜻풀이가 **엔진의 규칙처럼** 굳는다.
+    그래서 ``SetType(EFFECT_TYPE_TRIGGER_O)`` 도 ``TRIGGER_F`` 도 손으로
+    옮길 때 :attr:`TRIGGER` 하나가 되고, **엔진은 어느 쪽이었는지 모른다.**
+    강제 · 임의 축은 ``engine/trigger.py`` 의 ``TriggerRequirement`` 에
+    **따로** 있고 그쪽은 ``TriggerSpec`` 이 근거를 들고 온다.
+
+    🔴 **지속 효과(Continuous Effect)는 여기 없다.** 룰북이 그 분류에
+    ``has_activation: false`` 라고 적는다 (RULE-EFFECT-001) — 발동하지 않는
+    것에 "어떻게 발동하는가" 를 붙이면 그 자체가 거짓이 된다.
+
+    🔴 **마법 · 함정의 발동(``EFFECT_TYPE_ACTIVATE``)도 여기 없다.** 그
+    발동은 카드 종류로 이미 판정되고 있고 (RULE-SPELLTRAP-001 계열), 같은
+    질문에 답하는 자리를 둘로 만들면 둘이 갈라진다.
+
+    🔴 ``None`` 은 **"분류가 없는 효과" 가 아니라 "적지 않았다"** 다
+    (``EffectDefinition.activation`` 과 같은 태도). 적지 않은 것을 어느
+    분류로도 읽지 않는다.
+    """
+
+    IGNITION = "IGNITION"
+    """기동 효과. 자신 메인 페이즈에 **선언만으로** 발동한다 (RULE-EFFECT-002)."""
+    TRIGGER = "TRIGGER"
+    """유발 효과. 정해진 시점이 오면 발동한다 (RULE-EFFECT-004)."""
+    FLIP = "FLIP"
+    """플립 효과. 뒷면이 앞면이 될 때다 (RULE-EFFECT-005)."""
+    QUICK = "QUICK"
+    """유발 즉시 효과. 룰북이 발동 시점을 **적지 않는다** (RULE-EFFECT-003)."""
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
         return self.value

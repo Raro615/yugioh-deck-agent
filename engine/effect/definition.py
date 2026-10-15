@@ -66,6 +66,7 @@ from engine.execution import (
     ValueRef,
 )
 from engine.ids import EffectRef
+from engine.vocabulary import ActivationKind
 
 
 class EffectSource(str, Enum):
@@ -275,9 +276,36 @@ class EffectDefinition:
     ``requirements`` 와 나란히 있고 하는 일이 다르다 — 저쪽은 못 하면
     거절이고 이쪽은 안 하면 건너뜀이다.
     """
+    activation_kind: ActivationKind | None = None
+    """
+    이 효과가 **어떻게 발동하는가** — 기동 · 유발 · 플립 · 유발즉시
+    (Phase 6-K, :class:`~engine.vocabulary.ActivationKind`).
+
+    ``activation`` 과 **다른 질문이다.** 저쪽은 "발동 조건이 참인가" 이고
+    이쪽은 "이 효과가 어느 절차로 발동하는가" 다. 하나로 합치면 "자신
+    메인 페이즈에 선언한다" 와 "덱이 2장 이상이다" 가 같은 칸에 들어간다.
+
+    ``None`` 은 **"분류가 없다" 가 아니라 "적지 않았다"** 다 —
+    ``activation`` 과 같은 태도이고, 적지 않은 것을 어느 분류로도 읽지
+    않는다. 등재된 마법 · 함정 16개가 ``None`` 인 이유는 그 발동이 카드
+    종류로 이미 판정되기 때문이다 (``EFFECT_TYPE_ACTIVATE`` 를 이 축에
+    넣지 않은 이유와 같다).
+
+    **손으로 적는다** (ADR-006). ``EffectSpec.effect_types`` 에서 자동으로
+    옮기지 않는다 — 그 변환은 12,702장을 한꺼번에 분류로 바꾸는 일이고,
+    적는 것과 **실행을 허가하는 것**은 다른 결정이다.
+    """
     provenance: EffectProvenance = field(default_factory=EffectProvenance)
 
     def __post_init__(self) -> None:
+        if self.activation_kind is not None and not isinstance(
+            self.activation_kind, ActivationKind
+        ):
+            raise EffectDefinitionError(
+                "activation_kind 는 ActivationKind 이거나 None 입니다: "
+                f"{self.activation_kind!r}. 문자열을 그대로 넣으면 오타가 "
+                "조용히 '분류를 적지 않았다' 로 읽힙니다."
+            )
         if self.effect_ref.card_id != self.source_card_id:
             raise EffectDefinitionError(
                 f"effect_ref 의 카드({self.effect_ref.card_id})가 "
@@ -547,6 +575,7 @@ class EffectDefinition:
             tuple(b.canonical_state() for b in self.declarations),
             tuple(r.canonical_state() for r in self.requirements),
             tuple(g.canonical_state() for g in self.guards),
+            self.activation_kind.value if self.activation_kind is not None else None,
             self.provenance.canonical_state(),
         )
 
@@ -564,6 +593,8 @@ class EffectDefinition:
         }
         if self.activation is not None:
             data["activation"] = self.activation.to_dict()
+        if self.activation_kind is not None:
+            data["activation_kind"] = self.activation_kind.value
         return data
 
     def describe_ko(self) -> str:

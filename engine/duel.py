@@ -70,6 +70,7 @@ from engine.target_bridge import (
     target_combinations,
 )
 from engine.spell_activation import (
+    PLACEMENT_SOURCE_ZONES,
     NormalSpellPlacement,
     SpellActivationError,
     activatable_effects,
@@ -85,6 +86,17 @@ from engine.vocabulary import Phase, Zone
 
 #: 전투가 일어나는 존들. 공격자와 대상 모두 여기 있는 카드다.
 BATTLE_TARGET_ZONES: tuple[Zone, ...] = (Zone.MZONE, Zone.EMZONE)
+
+#: 패 **밖에서** 발동이 출발할 수 있는 자리들 (Phase 3-E-14 · 6-K).
+#:
+#: 패는 :meth:`Duel._activation_sources` 가 따로 읽는다 (``player.hand`` 는
+#: 존 컨테이너가 아니다). **여기서 거르지 않는다** — 뒷면인지 · 어느 종류인지 ·
+#: 그 자리에서 발동할 수 있는지는 전부 규칙이고, 관문이 판정한다.
+ACTIVATION_SOURCE_ZONES: tuple[Zone, ...] = (
+    Zone.SZONE,
+    Zone.MZONE,
+    Zone.EMZONE,
+)
 
 
 class DuelError(RuntimeError):
@@ -367,7 +379,11 @@ class Duel:
             # :meth:`advance` 가 수행한다.
             return LegalActions(seat, (), ())
 
-        validator = ActionValidator(self.view(seat))
+        # 정의 등록소를 함께 넘긴다 (Phase 6-K) — 효과의 발동 분류는
+        # 관측에 없고 정의에 있다. 발동기가 쓰는 것과 **같은 등록소**다.
+        validator = ActionValidator(
+            self.view(seat), definitions=self._activator.definitions
+        )
 
         # **응답 창이 열려 있으면 판을 바꾸는 후보를 내지 않는다**
         # (Phase 3-E-11). 체인은 효과 발동의 사슬이고, 소환 · 세트 · 공격은
@@ -578,10 +594,27 @@ class Duel:
         ``SET_ACTIVATION_MISSING``), 그리고 ``UNKNOWN`` 은 허가가 아니므로
         후보가 되지 않는다. **막는 이유가 기록으로 남는 것**이 "보지도 않는
         것" 과의 차이다.
+
+        🔴 **몬스터 존이 셋째 · 넷째로 들어왔다** (Phase 6-K). 몬스터의 기동
+        효과는 필드에서 발동하고 (``SetRange(LOCATION_MZONE)``), 그 자리를
+        보지 않으면 **어떤 관문도 판정할 기회를 얻지 못한다** — 위 문단과
+        정확히 같은 이유다. 엑스트라 몬스터 존도 함께 본다: 거르지 않고
+        내보내고, 범위 밖이면 관문이 이유를 적는다
+        (``IGNITION_LOCATION_MISSING``).
+
+        **여기서 넓어지는 것은 없다.** 다음 줄에서 ``activatable_effects`` 가
+        실행 구현이 등록된 효과만 돌려주고, 등재된 몬스터 효과는 하나뿐이며
+        그것은 ``executable=False`` 다 (ADR-006).
         """
         player = self.state.player(seat)
-        return tuple(player.hand) + tuple(
-            card for card in player.zone(Zone.SZONE) if card is not None
+        return (
+            tuple(player.hand)
+            + tuple(
+                card
+                for zone in ACTIVATION_SOURCE_ZONES
+                for card in player.zone(zone)
+                if card is not None
+            )
         )
 
     def _activation_gate(
@@ -805,6 +838,17 @@ class Duel:
         ``SpellActivationError`` 로 말하게 둔다.
         """
         instance = self.state.find_instance(action.source)
+        if instance is not None and instance.zone not in PLACEMENT_SOURCE_ZONES:
+            # **배치가 없는 발동이다** (Phase 6-K). 몬스터의 기동 효과는
+            # 카드를 움직이지 않는다 — RULE-SPELLTRAP-002 의 "placing it
+            # face-up on the field" 는 마법 · 함정의 절차이고, 이 카드는
+            # 이미 필드에 앞면으로 있다.
+            #
+            # 묻는 자리가 **여기**인 이유: 비용과 체인 링크는 이미 지나갔고
+            # (``activate``), 거기서 ``place`` 가 "패에 없다" 로 실패하면
+            # 되돌릴 방법이 없다 (ADR-008). 카드 종류를 보지 않고 **자리**를
+            # 본다 — 어느 자리에 배치가 있는가는 배치 계층이 적어 둔다.
+            return None
         if instance is not None and instance.zone is Zone.SZONE:
             return self._placement.reveal(self.state, action.source, action.actor)
         return self._placement.place(self.state, action.source, action.actor)
@@ -926,7 +970,9 @@ class Duel:
         # 입구이고, 아무 ``PlayerAction`` 이나 들어올 수 있다.
         gate = self._activation_gate(
             action,
-            validator=ActionValidator(self.view(action.actor)),
+            validator=ActionValidator(
+                self.view(action.actor), definitions=self._activator.definitions
+            ),
             selections=selections,
         )
         if gate.validity is not ActionValidity.VALID:
@@ -983,7 +1029,10 @@ class Duel:
         # 놓인 카드는 아직 묘지로 가지 않는다. 해결이 끝나는 자리가
         # ``_resolve_chain`` 으로 밀려났으므로 ``pending_spells`` 가 그때까지
         # 들고 있는다.
-        self.pending_spells = self.pending_spells + (placed,)
+        # **놓인 것이 없으면 치울 것도 없다** (Phase 6-K). ``None`` 은
+        # 배치가 없는 발동이고, 그 카드는 해결 뒤 묘지로 가지 않는다.
+        if placed is not None:
+            self.pending_spells = self.pending_spells + (placed,)
         self.priority = ResponseLoop.opened(
             self.chain,
             1 - action.actor,
