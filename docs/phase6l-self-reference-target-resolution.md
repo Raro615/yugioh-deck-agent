@@ -506,7 +506,7 @@ delta: ZoneMoved #40 P0/MZONE → P0/HAND (return_to_hand)
 적었다. 핀을 고친 뒤 2 · 3단계를 **처음부터 다시** 돌렸다 — 바뀐 파일을
 포함한 회귀를 중간부터 이어 붙이지 않는다.
 
-### 움직인 기존 핀 — 열아홉
+### 움직인 기존 핀 — 스물넷
 
 **기존 테스트를 지우지도 skip 을 더하지도 않았다.** threshold 를 완화한
 자리도 없다. 움직인 것은 전부 "그 시점에 참이었던 사실" 이고, 각 자리에
@@ -528,6 +528,28 @@ delta: ZoneMoved #40 P0/MZONE → P0/HAND (return_to_hand)
 | `test_05_every_executable_effect_is_a_spell_or_a_trap` | 실행되는 것은 전부 마법·함정 | 몬스터 1 + **그 발동 분류가 기동이어야 한다**를 새로 센다 |
 | `test_13_sixteen_registered_definitions_are_tabulated` | 실행 13 | 14 |
 | `test_16_monster_effects_are_blocked_for_a_different_reason` | 몬스터 하나, `executable=False` | `True` (막는 이유가 함정과 다르다는 단언은 그대로) |
+| `test_04_there_is_no_monster_effect_activation_to_map` | 대응시킬 것이 없다 | **이름을 바꿨다** (아래) + 후보가 같은 종류로 나온다 |
+| `test_01_the_effect_result_has_exactly_one_production_producer` | `build_executor(journal=journal)` | `+ rulings=OPERATION_RULINGS` (자리의 수는 하나 그대로) |
+| `test_09_production_now_records_the_journal_events_through_the_duel` | 같음 | 같음 |
+| `test_05_thirteen_result_sites_…` | `executor.py` 1336 | **1390** (순수 줄밀림, 13곳 그대로) |
+| `test_12_no_registered_effect_performs_a_special_summon` | 실행 불가 넷 | **셋** |
+
+#### 🔴 테스트 하나는 **이름을 바꿨다** (지우지 않았다)
+
+`tests/test_official_activation_player_action_contract.py` 의
+`test_04_there_is_no_monster_effect_activation_to_map` → 지금의 이름
+`test_04_the_monster_effect_activation_maps_to_the_same_action_kind`.
+
+**이름이 말하던 사실이 거짓이 되었다** — 대응시킬 몬스터 효과 발동이
+생겼다. 그런데 이 시험이 지키려던 **계약**은 움직이지 않았다: 공식 용어
+"activate a monster effect" 가 `ACTIVATE_EFFECT` 하나로 대응되고
+`_NEEDS_EFFECT_REF` 가 그 하나뿐이다 — `effect_ref` 가 처음부터 효과를
+지목하고 있었으므로 **새 `PlayerActionKind` 가 필요하지 않았다.** 그래서
+단언을 지우지 않고 그 계약을 **더** 세게 적었다 (후보가 같은 종류로 나온다).
+
+이름을 거짓인 채로 두면, 다음에 이 파일을 읽는 사람이 이름만 보고 "몬스터
+효과 발동은 아직 없다" 고 읽는다. 6-K 가 `test_k02` 에서 한 것과 같은
+처리다.
 
 #### 🔴 사실이 바뀐 자리 두 곳은 **단언을 갈라서 더 적었다**
 
@@ -679,7 +701,13 @@ delta: ZoneMoved #40 P0/MZONE → P0/HAND (return_to_hand)
 |---|---|
 | `ca78eee` | production 5파일 (+230 −43) |
 | `5ef071b` | 테스트 — 새 파일 1 (42개) + 움직인 핀 8파일 |
-| (이 커밋) | 보고서 |
+| `57051e6` | 보고서 (§18 의 루트 회귀는 그때 진행 중이었다) |
+| `c48b94d` | 테스트 — 루트 회귀에서 움직인 핀 4파일 (다섯) |
+| (이 커밋) | 보고서 §15 · §18 — 최종 회귀 결과 |
+
+푸시: `5de992c..57051e6` → `57051e6..c48b94d` → 이 커밋. **`git push -u
+origin claude/pensive-goodall-te1egy`** 로만 올렸고 재시도가 필요한 네트워크
+오류는 없었다.
 
 ### 실행한 테스트 — 명령 · 시간 · 종료 코드
 
@@ -691,12 +719,15 @@ delta: ZoneMoved #40 P0/MZONE → P0/HAND (return_to_hand)
 | 1 타깃 | `pytest tests/engine/test_self_reference_target.py -q -p no:randomly` | 42 | 0 | 0 | 5.3s | `0` |
 | 2+3 엔진 (1차) | `pytest tests/engine -q -p no:randomly` | 3,171 | 0 | 0 | 8:21 | `0` |
 | 3 루트 (1차) | `pytest <57 files> -q -p no:randomly` | — | **4** | — | 중단 | — |
-| 2+3 엔진 (최종) | `pytest tests/engine -q -p no:randomly` | **3,172** | 0 | 0 | 6:41 | `0` |
-| 3 루트 (최종) | `pytest <57 files> -q -p no:randomly` | **진행 중** | | | | |
+| 2+3 엔진 (2차) | `pytest tests/engine -q -p no:randomly` | **3,172** | 0 | 0 | 6:41 | `0` |
+| 3 루트 (2차) | `pytest <57 files> -q -p no:randomly` | 1,568 | **5** | 0 | 48:32 | `1` |
+| 핀 재확인 | `pytest <움직인 4파일> -q -p no:randomly` | **96** | 0 | 0 | 49s | `0` |
+| 3 루트 (최종) | `pytest <57 files> -q -p no:randomly` | **1,573** | **0** | **0** | 50:04 | **`0`** |
 
-🔴 **루트 회귀(57파일)는 이 커밋 시점에 아직 돌고 있다.** 약 1,800개
-규모이고 앞서 같은 집합이 13%에서 16분이었다. 끝나는 대로 결과를 이 절에
-적고 **별도 커밋**으로 올린다 — 숫자를 예측해서 적지 않는다.
+1차 · 2차 루트 회귀에서 실패한 넷과 다섯은 **전부 감사 핀**이었고 (아래),
+고친 뒤 57파일 전체를 **처음부터** 다시 돌렸다 — 바뀐 파일을 포함한 회귀를
+중간부터 이어 붙이지 않는다. 최종 회귀는 **1,573 passed · 0 failed ·
+0 skipped**, pytest 종료 코드 **`0`** 이다.
 
 1차 루트 회귀에서 실패한 넷은 전부 §15 에 적은 감사 핀이고, 고친 뒤 2 · 3
 단계를 **처음부터** 다시 돌렸다.
