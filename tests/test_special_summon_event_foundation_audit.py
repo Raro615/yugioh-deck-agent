@@ -569,8 +569,14 @@ def test_12_no_registered_effect_performs_a_special_summon():
     #: 거절의 **이유가 둘 다 적혀 있다.**
     assert "IsCanBeSpecialSummoned" in reborn.note
     assert "STRUCTURAL-61" in reborn.note
-    #: 실행 불가 항목은 셋이고, 그 중 하나가 이것이다.
-    assert sum(1 for entry in EFFECT_LIBRARY if not entry.executable) == 3
+    #: 실행 불가 항목은 **넷**이고, 그 중 하나가 이것이다.
+    #:
+    #: 🔴 Phase 6-K 에서 셋에서 넷이 되었다 (어니스트 ①). 이유의 종류가
+    #: 다르다 — 앞의 셋은 의미 계층이 없어서이고, 어니스트는 정의가 "이
+    #: 효과의 카드" 를 가리킬 이름이 없어서다. 어느 쪽도
+    #: ``special_summon`` 이 아니므로 이 테스트가 지키는 사실(등재 효과 중
+    #: 특수 소환을 하는 것이 없다)은 그대로다.
+    assert sum(1 for entry in EFFECT_LIBRARY if not entry.executable) == 4
 
 
 def test_13_a_declaration_can_now_say_special_and_which_card_but_not_which_player(

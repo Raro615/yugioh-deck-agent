@@ -1111,12 +1111,30 @@ def test_28_on_the_registered_set_the_value_is_a_constant(repository):
             )
         )
 
-    assert len(rows) == 16
-    assert all(codes == (FREE_CHAIN,) for *_, codes in rows), rows
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(rows) == 17
+    #: 🔴 Phase 6-K — 몬스터 한 줄만 모양이 다르다. ①(기동)은 ``SetCode`` 가
+    #: 없어 ``None`` 이고, ②(유발 즉시)가 ``EVENT_FREE_CHAIN`` 이다. **등재된
+    #: 것은 ① 이므로** 이 줄은 "그 상수를 쓰지 않는 등재" 의 첫 사례다.
+    spell_trap = [row for row in rows if row[2] != "몬스터"]
+    assert len(spell_trap) == 16, spell_trap
+    assert all(codes == (FREE_CHAIN,) for *_, codes in spell_trap), spell_trap
+    monsters = [row for row in rows if row[2] == "몬스터"]
+    assert len(monsters) == 1, monsters
+    assert monsters[0][3][0] is None, monsters
     assert all(ordinal == 0 for _, ordinal, *_ in rows)
 
     #: 그런데 **공식 스펠 스피드는 둘로 갈린다** — 같은 상수, 다른 속도.
-    speeds = {OFFICIAL_SPELL_SPEED[cat] for _, _, cat, _ in rows}
+    #:
+    #: 🔴 몬스터 줄은 이 표에 **들어가지 않는다.** ``OFFICIAL_SPELL_SPEED``
+    #: 는 카드 종류에서 속도를 읽는 표이고, 몬스터 효과의 속도는 카드
+    #: 종류로 정해지지 않는다 (``engine/activation_timing.py`` 의 측정).
+    #: 없는 칸을 채워 넣지 않고 그 사실을 적는다.
+    assert "몬스터" not in OFFICIAL_SPELL_SPEED
+    speeds = {OFFICIAL_SPELL_SPEED[cat] for *_, cat, _ in spell_trap}
     assert speeds == {1, 2}
 
     #: ``EffectDefinition`` 에는 이 값을 담는 칸이 아예 없다.

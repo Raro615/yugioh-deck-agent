@@ -836,7 +836,10 @@ def test_15_no_library_effect_has_a_cost_so_the_cost_path_is_untravelled():
         if e.definition.cost.costs
     ]
     assert with_cost == [], with_cost
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 16 → 17 (Phase 6-K, 어니스트 ①). 늘어난 한 건도 비용이 없으므로
+    # 위의 ``with_cost == []`` 는 그대로 참이다 — 이 테스트가 지키는 것은
+    # 수가 아니라 그 사실이다.
+    assert len(EFFECT_LIBRARY) == 17
 
 
 # ======================================================================

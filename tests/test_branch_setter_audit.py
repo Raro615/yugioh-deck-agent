@@ -1149,11 +1149,31 @@ def test_31_effect_ref_ordinal_and_the_sixteen_definitions_are_unchanged(
     assert len(scripts) == SCRIPTS
     assert sum(len(info.effects) for info in scripts.values()) == BLOCKS
 
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 17
     for entry in EFFECT_LIBRARY:
         ref = entry.definition.effect_ref
         card = repository.get(ref.card_id)
         assert card is not None and card.script is not None, ref
+        if entry.definition.activation_kind is not None:
+            # 🔴 **Phase 6-K — 등재된 유일한 몬스터 효과** (어니스트 ①).
+            #
+            # 아래 단언들은 "블록 하나짜리 EVENT_FREE_CHAIN 마법" 의 성질이고
+            # 몬스터 효과에는 해당하지 않는다. 억지로 맞추지 않고 **이 효과의
+            # 실제 사실**을 적는다 — 블록이 둘이고 (①기동 · ②유발 즉시)
+            # ``code`` 가 없다. 기동 효과는 사건이 아니라 **선언**으로
+            # 발동하므로 ``SetCode`` 를 적지 않는다.
+            assert ref.ordinal == 0, ref
+            #: 블록이 **셋**이다 — ①기동 · ②유발 즉시, 그리고 ② 의 해결이
+            #: 함수 안에서 만드는 ``EFFECT_UPDATE_ATTACK`` 까지 로더가 센다.
+            #: 등재된 것은 **0번(기동)** 이다.
+            assert len(card.script.effects) == 3, ref
+            assert ref.resolve(card) is not None, ref
+            assert ref.resolve(card).code is None, ref
+            continue
         assert ref.ordinal == 0 and len(card.script.effects) == 1, ref
         resolved = ref.resolve(card)
         assert resolved is not None and resolved.code == "EVENT_FREE_CHAIN", ref

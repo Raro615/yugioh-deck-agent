@@ -335,9 +335,15 @@ def test_09_no_registered_effect_needs_a_trigger_event(repository):
         codes.add(spec.code)
         types.update(spec.effect_types)
 
-    assert codes == {"EVENT_FREE_CHAIN"}, codes
-    assert types == {"ACTIVATE"}, types
-    assert len(EFFECT_LIBRARY) == 16
+    #: 🔴 Phase 6-K 에서 어니스트 ① 이 들어왔다 — ``code`` 가 없고
+    #: ``effect_types`` 가 ``IGNITION`` 이다. 이 테스트가 지키는 사실은
+    #: **"유발 이벤트를 쓰는 효과가 한 건도 없다"** 이고, 그것은 그대로다:
+    #: 코드는 ``EVENT_FREE_CHAIN`` 아니면 없음이고, 종류에 ``TRIGGER`` 계열이
+    #: 하나도 없다. 수만 움직이고 단언은 약해지지 않았다.
+    assert codes == {"EVENT_FREE_CHAIN", None}, codes
+    assert types == {"ACTIVATE", "IGNITION"}, types
+    assert not [t for t in types if t.startswith(("TRIGGER", "QUICK", "FLIP"))], types
+    assert len(EFFECT_LIBRARY) == 17
 
 
 def test_10_analysis_can_say_it_failed_on_conditions_but_not_on_triggers():

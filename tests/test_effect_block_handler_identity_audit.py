@@ -1204,7 +1204,11 @@ def test_46_engine_v1_library_is_untouched():
     r"""🟢 Engine V1 freeze — 16개 정의가 모두 ``ordinal 0`` 이다."""
     from engine.effect.library import EFFECT_LIBRARY
 
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 17
     assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0}
 
 

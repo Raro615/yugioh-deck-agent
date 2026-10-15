@@ -202,19 +202,41 @@ def blockers_of(row) -> frozenset[str]:
 
 def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
     """
-    엔진이 지금 담는 모양은 ``EFFECT_TYPE_ACTIVATE`` 하나뿐인 카드다.
-    유발 · 지속 · 기동 계층이 없으므로 나머지는 **아직 측정 대상이 아니다.**
+    엔진이 **실행하는** 모양은 ``EFFECT_TYPE_ACTIVATE`` 하나뿐인 카드다.
+
+    🔴 **이 테스트의 문장이 Phase 6-K 에서 한 번 좁아졌다.** 전에는 "엔진이
+    담는 모양" 이었고 등재된 16장 전부가 ``ACTIVATE`` 였다. 그것이 6-D
+    시점에 실제로 참이었고, 틀린 가정이 아니었다.
+
+    바뀐 것: 어니스트(37742478) 가 ``EFFECT_TYPE_IGNITION`` 으로 등재되었다.
+    그러므로 "등재된 전부" 는 더 이상 ``ACTIVATE`` 가 아니다. **단언을
+    약하게 지우지 않고 둘로 가른다** — 실행하는 쪽(``executable``)은 여전히
+    전부 ``ACTIVATE`` 이고, 실행하지 않는 쪽에 기동 효과 하나가 있다. 그
+    구분이 ADR-006 이 지키는 바로 그 구분이다.
     """
     assert len(corpus) == 12702
     assert len(activate_only) == 1385
 
-    # 등재된 16장이 전부 이 모양이다 — 우연이 아니라 그것만 담을 수 있다.
-    from engine.effect.library import EFFECT_LIBRARY
+    from engine.effect.library import EFFECT_LIBRARY, HONEST
 
+    # ① **실행하는** 것은 전부 ``ACTIVATE`` 하나뿐인 모양이다.
     for entry in EFFECT_LIBRARY:
         row = corpus.get(entry.card_id)
         assert row is not None, entry.card_id
-        assert "EFFECT_TYPE_ACTIVATE" in row["types"], entry.card_id
+        if entry.executable:
+            assert "EFFECT_TYPE_ACTIVATE" in row["types"], entry.card_id
+
+    # ② 그 모양이 아닌 등재는 **어니스트 하나**이고, 실행하지 않는다.
+    others = [
+        entry.card_id
+        for entry in EFFECT_LIBRARY
+        if "EFFECT_TYPE_ACTIVATE" not in corpus[entry.card_id]["types"]
+    ]
+    assert others == [HONEST], others
+    assert corpus[HONEST]["types"] >= {
+        "EFFECT_TYPE_IGNITION", "EFFECT_TYPE_QUICK_O"
+    }
+    assert [e.executable for e in EFFECT_LIBRARY if e.card_id == HONEST] == [False]
 
 
 def test_a_the_executing_cards_calibrate_the_classifier(corpus):

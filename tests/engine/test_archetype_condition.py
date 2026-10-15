@@ -335,11 +335,29 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     assert compiled.condition == IsSetCard((SET_ORCUST,))
     assert compiled.is_complete is True
 
-    # ④ 🔴 **그래도 등재는 늘지 않았다.** 옮길 수 있다는 것과 적어 두었다는
-    #    것은 다른 말이고, ``EFFECT_LIBRARY`` 는 아직 이것을 쓰지 않는다.
-    from engine.effect.library import EFFECT_LIBRARY
+    # ④ 🔴 **그래도 이 Phase 가 등재를 늘리지는 않았다.** 옮길 수 있다는
+    #    것과 적어 두었다는 것은 다른 말이고, ``EFFECT_LIBRARY`` 는 아직
+    #    카드군 조건을 쓰지 않는다.
+    #
+    #    🔴 수가 16 에서 17 로 **움직였다** (Phase 6-K). 이 테스트가 틀린
+    #    가정을 갖고 있었던 것이 아니라, 6-D 시점에 실제로 16건이었다. 늘린
+    #    것은 카드군 조건이 아니라 어니스트 ① 이고, 그것도
+    #    ``executable=False`` 다 — 아래 단언이 지키는 "카드군 조건이 등재를
+    #    늘리지 않았다" 는 여전히 참이다.
+    from engine.effect.library import EFFECT_LIBRARY, HONEST
 
-    assert len(EFFECT_LIBRARY) == 16
+    assert len(EFFECT_LIBRARY) == 17
+    assert [
+        entry.card_id for entry in EFFECT_LIBRARY
+        if entry.definition.targets
+        and any(
+            "IsSetCard" in binding.describe_ko() for binding in entry.definition.targets
+        )
+    ] == []
+    #: 늘어난 한 건이 어디서 왔는지 이름으로 못박는다.
+    assert {entry.card_id for entry in EFFECT_LIBRARY if not entry.executable} == {
+        53129443, 83764718, 24623598, HONEST
+    }
 
 
 # ======================================================================
@@ -819,5 +837,8 @@ def test_j_this_phase_turned_on_no_new_execution():
     """
     from engine.effect.library import EFFECT_LIBRARY
 
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 16 → 17 (Phase 6-K, 어니스트 ①). **실행 수는 13 그대로다** —
+    # 늘어난 한 건이 ``executable=False`` 이기 때문이고, 이 테스트가 지키는
+    # 것이 바로 그 수다.
+    assert len(EFFECT_LIBRARY) == 17
     assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 13

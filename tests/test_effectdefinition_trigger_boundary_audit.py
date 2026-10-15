@@ -362,7 +362,11 @@ def test_10_the_registered_definitions_have_no_trigger_specs_today():
     registry = EffectDefinitionRegistry(
         tuple(entry.definition for entry in EFFECT_LIBRARY)
     )
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 17
     assert registry is not None
 
     #: production 에서 ``TriggerSpec`` 을 만드는 자리는 컴파일러 하나다.
@@ -546,7 +550,12 @@ def test_16_this_audit_changed_no_production_file():
     이 Phase 가 손댈 수 있었던 곳에 트리거 관련 새 칸이 생기지 않았다.
     """
     #: ``EffectDefinition`` 의 칸이 그대로다 (측정값 10개).
-    assert len(dataclasses.fields(EffectDefinition)) == 10
+    # 🔴 Phase 6-K 에서 10 → 11 칸 (``activation_kind``). 더해진 칸은
+    # **사건 칸이 아니다** — 발동 **분류**(기동 · 유발 · 플립 · 유발즉시)
+    # 이고, 그 분류는 "무엇이 일어났는가" 를 담지 않는다. 이 테스트가
+    # 지키는 사실(사건 칸이 없다 · effect_types 가 없다 · code 가 없다)은
+    # 그대로이고, 아래 단언들이 그것을 그대로 센다.
+    assert len(dataclasses.fields(EffectDefinition)) == 11
     #: ``TriggerSpec`` 의 칸은 3-E-39 의 9 에서 6-E 의 10 으로 움직였다
     #: (``summons``: 통상소환과 특수소환이 같은 ``MONSTER_SUMMONED`` 시점으로
     #: 번역되므로, 칸이 없으면 통상소환 사건이 특수소환 전용 효과를 후보로

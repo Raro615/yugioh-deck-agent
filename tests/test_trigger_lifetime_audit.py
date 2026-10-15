@@ -498,5 +498,8 @@ def test_12_trigger_metadata_is_the_largest_category_the_engine_cannot_run(repos
         card = repository.get(ref.card_id)
         spec = ref.resolve(card) if card is not None else None
         codes.append(spec.code if spec is not None else None)
-    assert set(codes) == {"EVENT_FREE_CHAIN"}
+    #: 🔴 Phase 6-K 에서 ``None`` 이 하나 들어왔다 (어니스트 ①, 기동 효과는
+    #: ``SetCode`` 를 적지 않는다). 이 테스트가 지키는 사실은 아래 줄 —
+    #: **유발 사건 코드를 가진 등재가 0개**다 — 이고, 그것은 그대로다.
+    assert set(codes) == {"EVENT_FREE_CHAIN", None}
     assert not [c for c in codes if c and c != "EVENT_FREE_CHAIN"]

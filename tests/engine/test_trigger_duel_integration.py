@@ -250,15 +250,20 @@ def test_03_no_compiled_trigger_has_a_definition_today(repository):
     """
     **§5 · §9 의 측정값** — 연결 성공 **0건**, 모호 **0건**.
 
-    ``EFFECT_LIBRARY`` 16건은 전부 마법의 ``ACTIVATE`` 효과이고 (``ordinal``
-    이 모두 0 인 **블록 하나짜리** 카드다), 트리거 등록이 하나도 없다. 그래서
-    실패 이유가 "식별이 모호하다" 가 아니라 **"정의가 없다"** 다. 그 둘을
-    섞으면 다음 단계가 엉뚱한 곳을 고치게 된다.
+    ``EFFECT_LIBRARY`` 의 등재에 **유발 효과가 하나도 없다.** 그래서 실패
+    이유가 "식별이 모호하다" 가 아니라 **"정의가 없다"** 다. 그 둘을 섞으면
+    다음 단계가 엉뚱한 곳을 고치게 된다.
+
+    🔴 **16 → 17 로 움직였고, 측정값 0 은 그대로다** (Phase 6-K). 6-I 시점에
+    등재가 전부 마법의 ``ACTIVATE`` 였고 그것은 참이었다. 늘어난 한 건은
+    어니스트 ① 인데 ``EFFECT_TYPE_IGNITION`` 이고, 기동 효과는
+    ``TriggerSpec`` 으로 컴파일되지 않는다 — 아래 순회가 그것을 실제로
+    확인한다 (등록된 트리거 **0건** 이 여전히 참이다).
     """
     from engine.effect.library import EFFECT_LIBRARY
 
     definitions = definition_registry()
-    assert len(definitions) == len(EFFECT_LIBRARY) == 16
+    assert len(definitions) == len(EFFECT_LIBRARY) == 17
     assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0}
 
     for entry in EFFECT_LIBRARY:

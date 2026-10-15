@@ -1054,11 +1054,17 @@ def test_34_search_is_structurally_independent_of_the_analyzer(repo):
 # 불변 조건 · 수정 제한
 # ===========================================================================
 def test_35_engine_v1_definitions_are_untouched():
-    """🟢 Engine V1 의 16개 정의가 전부 ``ordinal 0`` 이고 그대로다."""
+    """🟢 Engine V1 의 정의가 전부 ``ordinal 0`` 이고 그대로다.
+
+    🔴 Phase 6-K 에서 16 → 17 (어니스트 ①). 이 테스트가 틀린 가정을 갖고
+    있었던 것이 아니라, 3-F-34 시점에 실제로 16건이었다. **지키는 사실은
+    수가 아니라 아래 두 줄**이고 (전부 ``ordinal 0`` · 정의가 바뀌지 않았다),
+    둘 다 그대로다.
+    """
     from engine.effect.library import EFFECT_LIBRARY
     refs = {(e.definition.effect_ref.card_id, e.definition.effect_ref.ordinal)
             for e in EFFECT_LIBRARY}
-    assert len(EFFECT_LIBRARY) == 16
+    assert len(EFFECT_LIBRARY) == 17
     assert {ordinal for _c, ordinal in refs} == {0}
     assert {c for c, _o in refs} & set(PHASE32_CARDS) == set()
 

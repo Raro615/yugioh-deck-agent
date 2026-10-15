@@ -494,30 +494,52 @@ def test_11_five_real_cards_classified_end_to_end(repository):
 
 def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     """
-    🔴 §3 · §7 — **등록된 16개 효과는 전부 마법·함정이다. 몬스터는 0장.**
+    🔴 §3 · §7 — 등록된 효과의 카드 종류를 센다.
 
-    그래서 §3 이 구분하라고 한 "Monster Effect activation" 은 **현재 도달할 수
-    없다.** 없는 것을 있다고 적지 않는다.
+    3-F-22 시점에는 **16개 전부 마법 · 함정이고 몬스터는 0장**이었다. 그래서
+    §3 이 구분하라고 한 "Monster Effect activation" 이 도달할 수 없었다.
+
+    🔴 **Phase 6-K 에서 몬스터 한 장이 들어왔다** (어니스트 ①). 이 테스트가
+    틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로 0장이었다. 바뀐
+    사실을 그대로 적는다 — 그리고 **실행되는 쪽은 여전히 전부 마법 ·
+    함정**이므로, 수를 지우지 않고 그 구분을 더해서 센다 (ADR-006).
     """
     from engine.effect.library import EFFECT_LIBRARY
 
     card_ids = sorted({entry.definition.effect_ref.card_id for entry in EFFECT_LIBRARY})
-    assert len(EFFECT_LIBRARY) == 16
-    assert len(card_ids) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 17
+    assert len(card_ids) == 17
 
     kinds = collections.Counter()
+    executable_kinds = collections.Counter()
+    by_card = {
+        entry.definition.effect_ref.card_id: entry for entry in EFFECT_LIBRARY
+    }
     for card_id in card_ids:
         card = repository.get(card_id)
         assert card is not None, card_id
         if card.is_monster:
-            kinds["monster"] += 1
+            kind = "monster"
         elif card.is_spell:
-            kinds["spell"] += 1
+            kind = "spell"
         elif card.is_trap:
-            kinds["trap"] += 1
-    #: 🔴 몬스터가 **없다.**
-    assert kinds["monster"] == 0, dict(kinds)
+            kind = "trap"
+        else:  # pragma: no cover - 토큰 등은 등재되어 있지 않다
+            kind = "other"
+        kinds[kind] += 1
+        if by_card[card_id].executable:
+            executable_kinds[kind] += 1
+    #: 🔴 몬스터가 **하나** 있다 (Phase 6-K).
+    assert kinds["monster"] == 1, dict(kinds)
     assert kinds["spell"] + kinds["trap"] == 16, dict(kinds)
+    #: 🔴 그런데 **실행되는 것**은 여전히 전부 마법 · 함정이다 (ADR-006) —
+    #: "Monster Effect activation" 의 발동 경로는 열렸고 해결은 아직이다.
+    assert executable_kinds["monster"] == 0, dict(executable_kinds)
+    assert sum(executable_kinds.values()) == 13, dict(executable_kinds)
 
 
 def test_13_the_engine_splits_on_effect_ref_not_on_card_versus_effect(repository):

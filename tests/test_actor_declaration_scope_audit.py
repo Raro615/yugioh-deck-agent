@@ -867,7 +867,7 @@ def test_20_the_reader_never_looks_at_the_result_type(repository):
 
 def test_21_every_real_card_in_the_library_declares_an_empty_cost():
     """
-    🔴 §5 8 — **실제 카드 16장 전부 ``CostGroup(costs=())`` 다.**
+    🔴 §5 8 — **실제 카드 전부 ``CostGroup(costs=())`` 다.**
 
     그래서 ``CostPaymentResult`` 가 delta 를 들고 나오는 경로는 production 에
     **없다.** 이 Phase 가 synthetic 비용을 쓴 까닭이고, 동시에 "지금 틀린 값이
@@ -879,7 +879,9 @@ def test_21_every_real_card_in_the_library_declares_an_empty_cost():
     import engine.effect.library as library
 
     entries = [value for name, value in vars(library).items() if name.endswith("_ENTRY")]
-    assert len(entries) == 16, len(entries)
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①). 늘어난 한 건도 비용이 없으므로
+    # 아래 단언(전부 빈 비용)은 **약해지지 않았다** — 수만 움직였다.
+    assert len(entries) == 17, len(entries)
     for entry in entries:
         assert entry.definition.cost.costs == (), entry.definition.source_card_id
 

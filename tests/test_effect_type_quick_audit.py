@@ -621,12 +621,18 @@ def test_10_effect_definition_has_no_effect_types_field():
     definition = {f.name for f in dataclasses.fields(EffectDefinition)}
     assert "effect_types" not in definition
     assert "code" not in definition
-    assert len(definition) == 10
+    # 🔴 Phase 6-K 에서 10 → 11 칸 (``activation_kind``). 더해진 칸은
+    # **사건 칸이 아니다** — 발동 **분류**(기동 · 유발 · 플립 · 유발즉시)
+    # 이고, 그 분류는 "무엇이 일어났는가" 를 담지 않는다. 이 테스트가
+    # 지키는 사실(사건 칸이 없다 · effect_types 가 없다 · code 가 없다)은
+    # 그대로이고, 아래 단언들이 그것을 그대로 센다.
+    assert len(definition) == 11
     assert definition == {
         "effect_ref",
         "source_card_id",
         "operations",
         "activation",
+        "activation_kind",  # Phase 6-K — 발동 **분류**. effect_types 가 아니다
         "cost",
         "targets",
         "declarations",

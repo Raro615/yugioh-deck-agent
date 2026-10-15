@@ -49,6 +49,7 @@ from engine.effect.library import (
     DISAPPEAR,
     EFFECT_LIBRARY,
     FINE,
+    HONEST,
     MONSTER_REBORN,
     MYSTICAL_SPACE_TYPHOON,
     POT_OF_GREED,
@@ -294,7 +295,7 @@ def resolve_directly(
 # ======================================================================
 
 
-def test_a_the_library_is_exactly_sixteen_real_cards():
+def test_a_the_library_is_exactly_seventeen_real_cards():
     """
     **이것이 전부라는 것이 사실이다.** 14,127장 중 여기 있는 것만
     실행되고, 늘어나면 이 단언이 깨진다 — 그것이 이 테스트의 일이다.
@@ -306,8 +307,13 @@ def test_a_the_library_is_exactly_sixteen_real_cards():
     열다섯 장" 이라는 **사실**을 들고 있었고, 열여섯 번째가 등록되어
     사실이 바뀌었다. 그래서 단언을 늘리는 것이 맞는 고침이다 —
     카드를 빼서 통과시키는 것이 아니라.
+
+    🔴 Phase 6-K 에서 **어니스트(37742478)** 가 열일곱 번째로 더해졌다.
+    같은 성질의 고침이고, 다른 점이 하나 있다 — 이것은 **몬스터**이고
+    ``executable=False`` 다. 그래서 "실행되는 카드" 의 수는 13 그대로다
+    (``test_a_every_declined_card_says_what_is_missing`` 이 센다).
     """
-    assert len(EFFECT_LIBRARY) == 16
+    assert len(EFFECT_LIBRARY) == 17
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -318,6 +324,7 @@ def test_a_the_library_is_exactly_sixteen_real_cards():
         RUTHLESS_DENIAL,  # Phase 2-AB — 플레이어 선택과 무작위 선택을 함께 쓴다
         INTRODUCTION_TO_GALLANTRY,  # Phase 2-AC — 발동 조건이 상대 패의 장수
         RELOAD,  # Phase 2-AI — 패 전부를 되돌리고 되돌린 만큼 드로우한다
+        HONEST,  # Phase 6-K — 첫 **몬스터** 효과 (기동). 실행하지 않는다
     }
 
 
@@ -362,7 +369,7 @@ def test_a_thirteen_real_effect_refs_are_executable():
 def test_a_every_declined_card_says_what_is_missing():
     """
     실행하지 않는 실제 카드를 **빼 버리지 않는다.** 빼면 "왜 못 하는가" 가
-    사라진다. 셋이 남아 있고 셋 다 이유를 들고 있다.
+    사라진다. 넷이 남아 있고 넷 다 이유를 들고 있다.
 
     Phase 2-AK 에서 넷에서 셋이 되었다. 강제 탈출 장치가 빠진 것은 카드를
     지워서가 아니라 **이유가 없어져서**다 — ``IsAbleToHand`` 에 답할 수
@@ -372,6 +379,12 @@ def test_a_every_declined_card_says_what_is_missing():
     판정할 계층이 없다")는 더 이상 참이 아니고, 다시 읽어 보니 두 가지가
     남아 있었다 — ``aux.SpElimFilter`` 미확인, 그리고 공식 텍스트(상대
     묘지)와 스크립트(상대 묘지 또는 몬스터 존)의 불일치.
+
+    🔴 Phase 6-K 에서 셋에서 **넷**이 되었다. 어니스트 ① 이 더해졌고, 그
+    이유는 앞의 셋과 **다른 종류**다 — 앞의 셋은 의미 계층(파괴 · 소생
+    제한 · 보조 함수)이 없어서 못 하는 것이고, 이쪽은 **정의가 "이 효과의
+    카드" 를 가리킬 이름이 없어서** 못 한다. 실행 경로의 끝이 아니라
+    대상 축의 모양 문제다.
     """
     declined = {
         entry.card_id: entry.note
@@ -383,6 +396,7 @@ def test_a_every_declined_card_says_what_is_missing():
         DARK_HOLE,  # 파괴 의미 + 존 전체 일괄 처리
         MONSTER_REBORN,  # IsCanBeSpecialSummoned + 표시 형식
         DISAPPEAR,  # aux.SpElimFilter + 텍스트/스크립트 불일치 (2-AK 에서 갱신)
+        HONEST,  # Phase 6-K — 하는 일이 '이 효과의 카드' 를 가리킨다
     }
     # 더 이상 이유가 없는 것은 목록에 없다.
     assert COMPULSORY_EVACUATION_DEVICE not in declined
@@ -398,6 +412,9 @@ def test_a_every_declined_card_says_what_is_missing():
     assert "IsCanBeSpecialSummoned" in declined[MONSTER_REBORN]
     assert "IsAbleToRemove" in declined[DISAPPEAR]
     assert "IsCanBeSpecialSummoned" in declined[MONSTER_REBORN]
+    #: Phase 6-K — 막는 것이 **대상 축의 모양**이라고 이름으로 말한다.
+    assert "TargetRequirement" in declined[HONEST]
+    assert "exclude_source" in declined[HONEST]
 
 
 def test_a_operation_coverage_by_real_cards():

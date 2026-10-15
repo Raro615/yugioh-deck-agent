@@ -922,7 +922,12 @@ def test_25_this_phase_defined_no_new_semantics():
     assert len(dataclasses.fields(EffectSpec)) == 9
     #: ``EffectDefinition`` 도 그대로다 (10칸, effect_types 없음).
     definition = {f.name for f in dataclasses.fields(EffectDefinition)}
-    assert len(definition) == 10
+    # 🔴 Phase 6-K 에서 10 → 11 칸 (``activation_kind``). 더해진 칸은
+    # **사건 칸이 아니다** — 발동 **분류**(기동 · 유발 · 플립 · 유발즉시)
+    # 이고, 그 분류는 "무엇이 일어났는가" 를 담지 않는다. 이 테스트가
+    # 지키는 사실(사건 칸이 없다 · effect_types 가 없다 · code 가 없다)은
+    # 그대로이고, 아래 단언들이 그것을 그대로 센다.
+    assert len(definition) == 11
     assert "effect_types" not in definition
 
 

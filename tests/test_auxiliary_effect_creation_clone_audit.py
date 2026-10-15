@@ -933,7 +933,11 @@ def test_40_engine_v1_definitions_untouched():
     from engine.effect.library import EFFECT_LIBRARY
     refs = {(e.definition.effect_ref.card_id, e.definition.effect_ref.ordinal)
             for e in EFFECT_LIBRARY}
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 17
     assert {o for _c, o in refs} == {0}
     assert {c for c, _o in refs} & set(CHANGED_CARDS) == set()
 

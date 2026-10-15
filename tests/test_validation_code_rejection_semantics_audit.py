@@ -661,7 +661,11 @@ def test_10_source_forbidden_is_a_different_code_from_structural_source_forbidde
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
         if isinstance(node, ast.Attribute) and node.attr == "SOURCE_FORBIDDEN"
     ]
-    assert hits == [("engine/action_validation.py", 201)]
+    #: 🔴 줄이 201 → 233 으로 **밀렸다** (Phase 6-K). ``ActionValidator`` 가
+    #: 정의 등록소를 받게 되면서 ``__init__`` 과 ``definitions`` 프로퍼티가
+    #: 이 자리보다 **위**에서 32줄 늘었다. 자리가 **하나뿐**이라는 사실은
+    #: 그대로이고, 그것이 이 단언이 지키는 것이다.
+    assert hits == [("engine/action_validation.py", 233)]
 
 
 # ======================================================================

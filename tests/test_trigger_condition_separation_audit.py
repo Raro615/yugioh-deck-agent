@@ -158,11 +158,17 @@ def judge(repository, card_id: int, **kwargs):
 
 def test_01_the_effect_definition_has_no_event_field():
     """
-    **``EffectDefinition`` 에 사건 칸이 없다.** 열 칸 어디에도 없다.
+    **``EffectDefinition`` 에 사건 칸이 없다.** 열한 칸 어디에도 없다.
 
     있는 것은 ``activation: Condition | None`` 하나이고, ``Condition`` 은
     **상태**에 대해 평가된다 — "무엇이 일어났는가" 가 아니라 "무엇이 참인가" 다.
     그 차이가 이 Phase 전체의 출발점이다.
+
+    🔴 **Phase 6-K 가 칸을 하나 더했다** (``activation_kind``). 열 칸이었던
+    것이 이 테스트의 틀린 가정이 아니라 그 시점의 사실이었다. 더해진 칸도
+    **사건 칸이 아니다** — "어떤 절차로 발동하는가" (기동 · 유발 · 플립 ·
+    유발즉시) 이고, "무엇이 일어났는가" 를 담지 않는다. 사건을 담는 칸은
+    여전히 없고, 그것이 이 테스트가 지키는 사실이다.
     """
     names = [field.name for field in dataclasses.fields(EffectDefinition)]
     assert names == [
@@ -175,6 +181,7 @@ def test_01_the_effect_definition_has_no_event_field():
         "declarations",
         "requirements",
         "guards",
+        "activation_kind",
         "provenance",
     ]
     for absent in ("code", "event", "point", "trigger", "setcode", "timing"):
@@ -278,9 +285,18 @@ def test_04_every_registered_effect_is_free_chain(repository):
                 codes.append(getattr(spec, "code", None))
                 break
 
-    assert len(EFFECT_LIBRARY) == 16
-    assert len(codes) == 16
-    assert set(codes) == {"EVENT_FREE_CHAIN"}
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 17
+    #: 🔴 Phase 6-K — 열일곱 번째(어니스트 ①)는 ``code`` 가 **없다.** 기동
+    #: 효과는 사건이 아니라 선언으로 발동하므로 ``SetCode`` 를 적지 않는다.
+    #: 이 테스트가 지키는 사실("등재된 효과가 유발 사건을 쓰지 않는다")은
+    #: 그대로이고, 아래 두 줄이 그것을 갈라서 센다.
+    assert len(codes) == 17
+    assert set(codes) == {"EVENT_FREE_CHAIN", None}
+    assert len([c for c in codes if c == "EVENT_FREE_CHAIN"]) == 16
 
 
 @pytest.mark.real_card

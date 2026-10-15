@@ -128,9 +128,15 @@ STRING_OCCURRENCES = 84
 #:    네 자리보다 **위**에 있어서 아래가 전부 같은 만큼 밀렸다. 자리가 밀린
 #:    것뿐이고 **산문 12 · 코드 67 · 문자열 79 는 하나도 바뀌지 않았다** —
 #:    바뀐 것이 줄 번호뿐이라는 것이 그 증거다.
+#: 🔴 **``engine/activation.py`` 두 자리가 +5 줄 밀렸다** (Phase 6-K).
+#:
+#: 634 → 639 · 672 → 677. ``EffectActivator._verdict`` 가 검증기에 정의
+#: 등록소를 넘기게 되면서 그 자리에 설명 다섯 줄이 붙었고, 그 칸이 이 두
+#: 자리보다 **위**에 있어서 아래가 같은 만큼 밀렸다. 자리가 밀린 것뿐이고
+#: **산문 14 · 코드 70 · 문자열 84 는 하나도 바뀌지 않았다.**
 PROSE_OCCURRENCES = {
-    ("engine/activation.py", 634),      # M2: 코드도 표에서 가져온다
-    ("engine/activation.py", 672),      # M1: 확실한 거부이고 미구현이 아니다
+    ("engine/activation.py", 639),      # M2: 코드도 표에서 가져온다
+    ("engine/activation.py", 677),      # M1: 확실한 거부이고 미구현이 아니다
     ("engine/effect/executor.py", 922), # M2: 이 근거로는 절대 실행하지 않는다
     ("engine/special_summon.py", 77),
     # 🔴 **``engine/trigger.py`` 의 다섯 자리가 Phase 6-F 에서 전부

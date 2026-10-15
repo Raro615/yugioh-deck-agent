@@ -55,7 +55,7 @@ from engine.summon_rules import SummonEligibility, assess_normal_summon
 from engine.trigger import TriggerSubject
 from engine.trigger_observation import ObservationStage, TriggerObserver
 from engine.validation import ActionValidity, ValidationCode
-from engine.vocabulary import Phase, Position, Zone
+from engine.vocabulary import ActivationKind, Phase, Position, Zone
 from integration.execution_readiness import (
     RESOLUTION_OPERATIONS,
     UNMAPPED_ACTIONS,
@@ -625,17 +625,26 @@ def test_15_the_existing_activate_effects_still_resolve(repository):
 
 def test_16_the_library_is_unchanged_and_still_has_no_trigger(repository=None):
     """
-    ``EFFECT_LIBRARY`` 를 **건드리지 않았다** — 16건 그대로이고 전부
-    ``ordinal == 0`` 인 마법이다.
+    ``EFFECT_LIBRARY`` 에 **유발 효과가 없다.**
 
     🔴 6-J 는 정의를 **하나도 추가하지 않았다.** 추가할 수 있었던 유일한
     모양(점쟁이 마녀 ①)은 ``special_summon`` 이고, 그 관문을 통과시킬
     production 경로가 없어서 추가하면 **실행할 수 없는 정의**가 목록에
     남는다 — ADR-006 이 ``executable`` 을 따로 둔 이유가 그것이다.
+
+    🔴 **Phase 6-K 가 한 건을 더했다 (16 → 17).** 이 테스트가 틀린 가정을
+    갖고 있었던 것이 아니라, 6-J 시점에 실제로 16건이었다. 더해진 것은
+    어니스트 ① 이고 ``ActivationKind.IGNITION`` 이다 — **유발 효과가 아니고**
+    (이 테스트의 이름이 지키는 사실), 실행하지도 않는다 (실행 수 13 그대로).
+    세 단언 중 수 하나만 움직이고 나머지 둘은 그대로다.
     """
-    assert len(EFFECT_LIBRARY) == 16
+    assert len(EFFECT_LIBRARY) == 17
     assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0}
     assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 13
+    #: 🔴 등재된 발동 분류에 **유발 · 유발 즉시 · 플립이 하나도 없다.**
+    assert {
+        entry.definition.activation_kind for entry in EFFECT_LIBRARY
+    } == {None, ActivationKind.IGNITION}
 
 
 # ======================================================================

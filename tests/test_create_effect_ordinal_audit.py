@@ -624,11 +624,31 @@ def test_17_all_sixteen_effect_definitions_are_untouched(repository):
     ``EffectDefinition → TriggerSpec → ChainLink → EffectRef`` 경로에
     **닿지 않는다.**
     """
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 17
     for entry in EFFECT_LIBRARY:
         ref = entry.definition.effect_ref
         card = repository.get(ref.card_id)
         assert card is not None and card.script is not None, ref
+        if entry.definition.activation_kind is not None:
+            # 🔴 **Phase 6-K — 등재된 유일한 몬스터 효과** (어니스트 ①).
+            #
+            # 아래 단언들은 "블록 하나짜리 EVENT_FREE_CHAIN 마법" 의 성질이고
+            # 몬스터 효과에는 해당하지 않는다. 억지로 맞추지 않고 **이 효과의
+            # 실제 사실**을 적는다 — 블록이 둘이고 (①기동 · ②유발 즉시)
+            # ``code`` 가 없다. 기동 효과는 사건이 아니라 **선언**으로
+            # 발동하므로 ``SetCode`` 를 적지 않는다.
+            assert ref.ordinal == 0, ref
+            #: 블록이 **셋**이다 — ①기동 · ②유발 즉시, 그리고 ② 의 해결이
+            #: 함수 안에서 만드는 ``EFFECT_UPDATE_ATTACK`` 까지 로더가 센다.
+            #: 등재된 것은 **0번(기동)** 이다.
+            assert len(card.script.effects) == 3, ref
+            assert ref.resolve(card) is not None, ref
+            assert ref.resolve(card).code is None, ref
+            continue
         assert ref.ordinal == 0, ref
         assert len(card.script.effects) == 1, (ref, len(card.script.effects))
         resolved = ref.resolve(card)
@@ -1256,7 +1276,12 @@ def test_36_the_production_change_is_confined_to_the_parser_and_the_analyzer():
         "index", "effect_types", "code", "ranges", "target_ranges",
         "categories", "properties", "count_limit", "cloned_from",
     ]
-    assert len(dataclasses.fields(EffectDefinition)) == 10
+    # 🔴 Phase 6-K 에서 10 → 11 칸 (``activation_kind``). 더해진 칸은
+    # **사건 칸이 아니다** — 발동 **분류**(기동 · 유발 · 플립 · 유발즉시)
+    # 이고, 그 분류는 "무엇이 일어났는가" 를 담지 않는다. 이 테스트가
+    # 지키는 사실(사건 칸이 없다 · effect_types 가 없다 · code 가 없다)은
+    # 그대로이고, 아래 단언들이 그것을 그대로 센다.
+    assert len(dataclasses.fields(EffectDefinition)) == 11
     assert "code" not in {f.name for f in dataclasses.fields(EffectDefinition)}
 
     #: ``LuaScriptInfo`` 의 칸도 그대로다.

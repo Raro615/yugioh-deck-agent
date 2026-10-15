@@ -827,7 +827,11 @@ def test_21_no_registered_effect_has_a_cost_so_the_live_filter_removes_nothing()
         for entry in EFFECT_LIBRARY
         if entry.definition.cost.costs
     ]
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 17
     assert costed_entries == []
     assert "if definition.cost.costs:" in source_of("engine/duel.py")
 
@@ -1317,6 +1321,10 @@ def test_33_this_phase_changed_no_production_file():
         ("engine/trigger.py", "EligibilityGate.EVENT_RELATION"),
         ("engine/duel.py", "if definition.cost.costs:"),
         ("engine/activation.py", "_AVAILABILITY_REFUSAL[availability]"),
-        ("engine/action_validation.py", "_NormalSpellActivation(action.source)"),
+        # 🔴 Phase 6-K 가 이 호출에 두 번째 인자를 더했다 (발동 분류). 이
+        # 지문이 지키는 것은 "관문이 그대로 있다" 이므로 호출 이름까지만
+        # 집는다 — 인자를 포함해 집으면 지문이 **관문의 존재**가 아니라
+        # 호출의 모양을 고정하게 된다.
+        ("engine/action_validation.py", "_NormalSpellActivation(action.source"),
     ):
         assert needle in source_of(path), f"{path} 에 {needle} 이 없습니다"

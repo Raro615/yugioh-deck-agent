@@ -286,7 +286,12 @@ def test_07_no_field_in_the_definition_can_hold_the_timing_code():
     ``test_05`` 가 둘이 독립임을 보였다.
     """
     fields = {f.name for f in dataclasses.fields(EffectDefinition)}
-    assert len(fields) == 10
+    # 🔴 Phase 6-K 에서 10 → 11 칸 (``activation_kind``). 더해진 칸은
+    # **사건 칸이 아니다** — 발동 **분류**(기동 · 유발 · 플립 · 유발즉시)
+    # 이고, 그 분류는 "무엇이 일어났는가" 를 담지 않는다. 이 테스트가
+    # 지키는 사실(사건 칸이 없다 · effect_types 가 없다 · code 가 없다)은
+    # 그대로이고, 아래 단언들이 그것을 그대로 센다.
+    assert len(fields) == 11
     assert fields & {"code", "trigger_event", "timing", "point", "event"} == set()
 
     #: ``TriggerSpec`` 에도 없다 — 3-E-31 이 측정한 그대로다.
@@ -299,11 +304,16 @@ def test_07_no_field_in_the_definition_can_hold_the_timing_code():
 @pytest.mark.real_card
 def test_08_the_code_carries_no_discriminating_information_here(repository):
     """
-    **등재된 16개 효과가 전부 ``EVENT_FREE_CHAIN`` 이다.**
+    **등재된 마법 · 함정 16개 효과가 전부 ``EVENT_FREE_CHAIN`` 이다.**
 
     그래서 그 값을 정의로 옮겨도 등재 코퍼스 안에서는 **아무것도 구분하지
     못한다.** "옮기면 함정을 풀 수 있다" 는 기대가 성립하지 않는 까닭이다 —
     함정을 가르는 것은 이 값이 아니라 ``effect_types`` 다 (``test_09``).
+
+    🔴 **Phase 6-K 의 어니스트 ① 은 코드가 ``None`` 이다.** 기동 효과는
+    사건이 아니라 선언으로 발동하므로 ``SetCode`` 를 적지 않는다. 그래서
+    "구분하지 못한다" 는 사실이 **더 강해졌다** — 등재 집합에서 이 값이
+    가질 수 있는 것은 하나의 상수 아니면 없음이다.
     """
     codes = set()
     for entry in EFFECT_LIBRARY:
@@ -311,8 +321,9 @@ def test_08_the_code_carries_no_discriminating_information_here(repository):
         card = repository.get(ref.card_id)
         codes.add(card.script.effects[ref.ordinal].code)
 
-    assert codes == {"EVENT_FREE_CHAIN"}, codes
-    assert len(EFFECT_LIBRARY) == 16
+    assert codes == {"EVENT_FREE_CHAIN", None}, codes
+    assert len([c for c in codes if c]) == 1, codes
+    assert len(EFFECT_LIBRARY) == 17
 
 
 # ======================================================================
@@ -474,7 +485,12 @@ def test_12_this_audit_added_no_production_structure():
        후보로 만든다 (거짓 양성). **이 감사가 production 을 늘리지 않았다는
        사실은 그대로다** — 늘린 것은 6-E 이고, 이 줄은 그 사실을 따라간다.
     """
-    assert len(dataclasses.fields(EffectDefinition)) == 10
+    # 🔴 Phase 6-K 에서 10 → 11 칸 (``activation_kind``). 더해진 칸은
+    # **사건 칸이 아니다** — 발동 **분류**(기동 · 유발 · 플립 · 유발즉시)
+    # 이고, 그 분류는 "무엇이 일어났는가" 를 담지 않는다. 이 테스트가
+    # 지키는 사실(사건 칸이 없다 · effect_types 가 없다 · code 가 없다)은
+    # 그대로이고, 아래 단언들이 그것을 그대로 센다.
+    assert len(dataclasses.fields(EffectDefinition)) == 11
     #: 🔴 칸 수는 3-E-19 9 → 6-E 10 (``summons``) → **6-F 11**
     #: (``subject``) 로 움직였다. 이 감사가 production 을 늘리지
     #: 않았다는 사실은 그대로이고, 늘린 주체는 6-E · 6-F 다.

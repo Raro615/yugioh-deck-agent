@@ -462,12 +462,23 @@ def test_12_the_enumerator_reads_the_board_the_gate_reads_the_view():
     """
     sources = names_in(function_body("engine/duel.py", "_activation_sources"))
     assert "state" in sources and "player" in sources
-    #: 자기 좌석의 패와 마법/함정 존만 본다.
+    #: 자기 좌석의 패와 선언된 존들만 본다.
+    #:
+    #: 🔴 ``Zone.SZONE`` 이 본문에서 **모듈 상수로 옮겨졌다** (Phase 6-K) —
+    #: 몬스터 존이 출발지에 더해지면서 자리 목록이 ``ACTIVATION_SOURCE_ZONES``
+    #: 가 되었다. 이 테스트가 지키는 사실은 "자기 자리만 본다" 이고, 그것은
+    #: ``1 - seat`` 가 없다는 아래 단언과 상수의 내용이 함께 센다.
     body = source_of("engine/duel.py").split("def _activation_sources")[1].split(
         "\n    def "
     )[0]
-    assert "player.hand" in body and "Zone.SZONE" in body
+    assert "player.hand" in body and "ACTIVATION_SOURCE_ZONES" in body
     assert "1 - seat" not in body, "상대 자리를 훑으면 안 된다"
+
+    from engine.duel import ACTIVATION_SOURCE_ZONES
+    from engine.vocabulary import Zone
+
+    assert Zone.SZONE in ACTIVATION_SOURCE_ZONES
+    assert set(ACTIVATION_SOURCE_ZONES) == {Zone.SZONE, Zone.MZONE, Zone.EMZONE}
 
 
 # ======================================================================

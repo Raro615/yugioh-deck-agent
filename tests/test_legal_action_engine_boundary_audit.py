@@ -796,7 +796,13 @@ def test_22_hidden_information_is_unchanged_by_candidate_generation(repository):
         assert hidden.concealed is True and hidden.cards == ()
 
     #: 후보 생성은 **관측**으로 검증한다 — 판을 직접 읽어 후보를 만들지 않는다.
-    assert "ActionValidator(self.view(seat))" in code_only("engine/duel.py")
+    #:
+    #: 🔴 Phase 6-K 가 그 호출에 ``definitions=`` 를 더했다. 넘기는 것은
+    #: **불변 정의 등록소**이고 판이 아니므로 이 경계는 그대로다 — 지문을
+    #: 둘로 갈라 "관측을 넘긴다" 와 "판을 넘기지 않는다" 를 따로 센다.
+    duel_source = code_only("engine/duel.py")
+    assert "ActionValidator(self.view(seat), definitions=" in duel_source
+    assert "ActionValidator(self.state" not in duel_source
 
 
 def test_23_candidate_generation_touches_neither_the_board_nor_the_rng(repository):

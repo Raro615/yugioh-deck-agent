@@ -284,6 +284,11 @@ def test_01_the_three_layers_hold_different_fields():
         "source_card_id",
         "operations",
         "activation",
+        #: 🔴 Phase 6-K — 발동 **분류** (기동 · 유발 · 플립 · 유발즉시).
+        #: ``code`` 와 **다른 칸이다** — ``code`` 는 "무엇이 일어났을 때"
+        #: 이고 이것은 "어떤 절차로 발동하는가" 다. 위의 세 단언
+        #: (``code`` 가 ``EffectSpec`` 에만 있다) 은 그대로 참이다.
+        "activation_kind",
         "cost",
         "targets",
         "declarations",
@@ -332,7 +337,11 @@ def test_03_each_precondition_item_is_classified(repository):
     =============================  ==========================================
     """
     rows = registered_rows(repository)
-    assert len(rows) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(rows) == 17
 
     #: 발동 조건 — 실제로 들어 있다 (D).
     assert sum(1 for r in rows if r["activation"] is not None) == 8, [
@@ -342,8 +351,13 @@ def test_03_each_precondition_item_is_classified(repository):
     assert all(not r["has_cost"] for r in rows)
     #: effect_ref/ordinal — 있다. 전부 0 이다.
     assert {r["ordinal"] for r in rows} == {0}
-    #: 카드 종류 — 등재된 것은 마법 11 · 함정 5 · 몬스터 0.
-    assert collections.Counter(r["kind"] for r in rows) == {"spell": 11, "trap": 5}
+    #: 카드 종류 — 등재된 것은 마법 11 · 함정 5 · **몬스터 1** (Phase 6-K).
+    #:
+    #: 🔴 3-E-32 시점에 몬스터가 0 이었고 그것은 참이었다. 어니스트 ① 이
+    #: 들어오면서 사실이 바뀌었다 — 수를 지우지 않고 그대로 센다.
+    assert collections.Counter(r["kind"] for r in rows) == {
+        "spell": 11, "trap": 5, "monster": 1
+    }
 
 
 # ======================================================================
@@ -492,8 +506,16 @@ def test_09_but_every_registered_trap_is_free_chain(repository):
     assert len(rows) == 5, rows
     for row in rows:
         assert row["codes"] == ("EVENT_FREE_CHAIN",), row
-    #: 등재 전체로 넓혀도 마찬가지다.
-    everything = registered_rows(repository)
+    #: 등재된 **마법 · 함정** 전체로 넓혀도 마찬가지다.
+    #:
+    #: 🔴 Phase 6-K 의 어니스트 ① 은 몬스터이고 ``code`` 가 **없다** (기동
+    #: 효과는 사건이 아니라 선언으로 발동하므로 ``SetCode`` 를 적지 않는다).
+    #: 그래서 "등재 전체" 가 아니라 "마법 · 함정 전체" 로 좁혀 적는다 — 이
+    #: 테스트가 지키는 사실은 **함정의 유발 조건**에 대한 것이다.
+    everything = [
+        r for r in registered_rows(repository) if r["kind"] in {"spell", "trap"}
+    ]
+    assert len(everything) == 16, len(everything)
     assert {r["codes"] for r in everything} == {("EVENT_FREE_CHAIN",)}
 
 
@@ -555,13 +577,29 @@ def test_12_the_timing_lives_in_its_own_module_and_comes_from_card_type():
 def test_13_sixteen_registered_definitions_are_tabulated(repository):
     """§5 — 표본 **16개** 전수. 데이터가 불완전한 칸을 억지로 채우지 않는다."""
     rows = registered_rows(repository)
-    assert len(rows) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(rows) == 17
 
     #: 모든 줄이 같은 모양으로 채워진다.
+    #:
+    #: 🔴 ``kind`` 와 ``codes`` 두 칸이 Phase 6-K 에서 넓어졌다 — 몬스터
+    #: 하나가 들어오고 (어니스트 ①) 그 효과에는 사건 코드가 **없다.**
+    #: 나머지 세 칸(``executable`` · ``ordinal`` · ``has_cost``)의 단언은
+    #: 그대로이고, 그것이 이 표가 지키는 "모든 줄이 같은 모양" 이다.
     for row in rows:
-        assert row["kind"] in {"spell", "trap"}
+        assert row["kind"] in {"spell", "trap", "monster"}
         assert isinstance(row["executable"], bool)
-        assert row["codes"] == ("EVENT_FREE_CHAIN",)
+        if row["kind"] == "monster":
+            #: ①(기동)은 ``SetCode`` 가 없어 ``codes`` 에 들어오지 않고,
+            #: ②(유발 즉시)의 ``EVENT_FREE_CHAIN`` 과 그 해결이 만드는
+            #: ``EFFECT_UPDATE_ATTACK`` 만 남는다. 🔴 **등재된 효과는 ① 이고**
+            #: 이 둘 중 어느 것도 아니다 — 그것이 "사건 코드가 없는 발동" 이다.
+            assert row["codes"] == ("EVENT_FREE_CHAIN", "EFFECT_UPDATE_ATTACK")
+        else:
+            assert row["codes"] == ("EVENT_FREE_CHAIN",)
         assert row["ordinal"] == 0
         assert row["has_cost"] is False
 
@@ -603,16 +641,23 @@ def test_16_monster_effects_are_blocked_for_a_different_reason(repository):
     """
     §11 10 — 몬스터 쪽은 **함정과 다른 이유**로 막힌다.
 
-    등재된 몬스터 효과가 **0장**이라 발동 경로로는 표본이 없다. 그래서 이유
-    문자열이 **따로 있다**는 사실과, 통상 몬스터가 후보를 내지 않는다는 사실을
-    잰다 — 없는 것을 있다고 적지 않는다.
+    3-E-32 시점에는 등재된 몬스터 효과가 **0장**이어서 발동 경로의 표본이
+    없었다. 그래서 이유 문자열이 따로 있다는 사실과, 통상 몬스터가 후보를
+    내지 않는다는 사실만 잴 수 있었다.
+
+    🔴 **Phase 6-K 에서 표본이 하나 생겼다** (어니스트 ①). 이 테스트가
+    틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로 0장이었다. 그래서
+    "0장" 을 "하나이고 실행되지 않는다" 로 바꿔 적고, **막는 이유가 함정과
+    다르다**는 원래의 사실은 그대로 센다.
     """
     assert MONSTER_ACTIVATION_MISSING != TRAP_TRIGGER_MISSING
     assert "기동" in MONSTER_ACTIVATION_MISSING or "분류" in MONSTER_ACTIVATION_MISSING
 
-    #: 등재된 몬스터 효과가 없다.
+    #: 등재된 몬스터 효과가 **하나**이고 실행되지 않는다 (ADR-006).
     rows = registered_rows(repository)
-    assert not [r for r in rows if r["kind"] == "monster"]
+    monsters = [r for r in rows if r["kind"] == "monster"]
+    assert len(monsters) == 1, monsters
+    assert monsters[0]["executable"] is False
     #: 통상 몬스터는 후보를 내지 않는다.
     assert activatable_effects(LUSTER_DRAGON) == ()
     card = repository.get(LUSTER_DRAGON)
@@ -830,7 +875,12 @@ def test_24_engine_v1_was_not_widened():
             assert forbidden not in code_only(relative), (forbidden, relative)
 
     #: ``EffectDefinition`` 에 새 칸이 생기지 않았다.
-    assert len(dataclasses.fields(EffectDefinition)) == 10
+    # 🔴 Phase 6-K 에서 10 → 11 칸 (``activation_kind``). 더해진 칸은
+    # **사건 칸이 아니다** — 발동 **분류**(기동 · 유발 · 플립 · 유발즉시)
+    # 이고, 그 분류는 "무엇이 일어났는가" 를 담지 않는다. 이 테스트가
+    # 지키는 사실(사건 칸이 없다 · effect_types 가 없다 · code 가 없다)은
+    # 그대로이고, 아래 단언들이 그것을 그대로 센다.
+    assert len(dataclasses.fields(EffectDefinition)) == 11
     #: ``TimingPoint`` 도 8개 그대로다.
     assert len(list(TimingPoint)) == 8
 

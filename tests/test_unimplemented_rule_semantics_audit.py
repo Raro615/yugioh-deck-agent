@@ -872,7 +872,10 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
         for entry in EFFECT_LIBRARY
         if entry.definition.activation is not None
     ]
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 16 → 17 (Phase 6-K, 어니스트 ①). 늘어난 한 건도 ``activation`` 이
+    # ``None`` 이므로 "UnimplementedRule 이 하나도 없다" 는 이 테스트의
+    # 사실은 그대로다 — 수만 움직이고 단언은 약해지지 않았다.
+    assert len(EFFECT_LIBRARY) == 17
     assert len(activations) == 8
     assert not any(isinstance(a, UnimplementedRule) for a in activations)
 

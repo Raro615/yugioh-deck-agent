@@ -403,9 +403,16 @@ def test_10_every_registered_effect_is_free_chain_not_a_trigger(repository):
     """
     **§12 — 실행 목록에 유발 효과가 하나도 없다.**
 
-    ``EFFECT_LIBRARY`` 의 항목 전부가 ``EVENT_FREE_CHAIN``(통상 마법 · 함정의
-    "발동한다") 이다. 그러므로 지금 **막혀 있는 실행 가능한 유발 사례가 없다**
-    (§12 의 분류 E 가 0건, 전부 A).
+    ``EFFECT_LIBRARY`` 의 **마법 · 함정 16건**이 전부
+    ``EVENT_FREE_CHAIN``(통상 마법 · 함정의 "발동한다") 이다. 그러므로 지금
+    **막혀 있는 실행 가능한 유발 사례가 없다** (§12 의 분류 E 가 0건, 전부 A).
+
+    🔴 **Phase 6-K 가 한 건을 더했고 그것은 ``code`` 가 ``None`` 이다.**
+    어니스트 ① 은 ``EFFECT_TYPE_IGNITION`` 이고 ``SetCode`` 를 **적지
+    않는다** — 기동 효과는 사건이 아니라 선언으로 발동하므로 사건 코드가
+    없다. 이 테스트가 지키는 사실("유발 효과가 하나도 없다")은 그래서 더
+    강해졌다: ``EVENT_FREE_CHAIN`` 아니면 코드 없음이고, ``EVENT_*`` 유발
+    코드는 여전히 **0건**이다. 아래에서 그것을 이름으로 못박는다.
     """
     codes = []
     for entry in EFFECT_LIBRARY:
@@ -415,7 +422,22 @@ def test_10_every_registered_effect_is_free_chain_not_a_trigger(repository):
         codes.append(spec.code if spec is not None else None)
 
     assert len(EFFECT_LIBRARY) >= 16
-    assert set(codes) == {"EVENT_FREE_CHAIN"}, collections.Counter(codes)
+    assert set(codes) == {"EVENT_FREE_CHAIN", None}, collections.Counter(codes)
+    #: 🔴 코드가 없는 쪽이 **정확히 한 건**이고, 그것이 기동 효과다.
+    from engine.effect.library import HONEST
+    from engine.vocabulary import ActivationKind
+
+    without_code = [
+        entry.definition.effect_ref.card_id
+        for entry, code in zip(EFFECT_LIBRARY, codes)
+        if code is None
+    ]
+    assert without_code == [HONEST], without_code
+    assert [
+        entry.definition.activation_kind
+        for entry in EFFECT_LIBRARY
+        if entry.definition.effect_ref.card_id == HONEST
+    ] == [ActivationKind.IGNITION]
 
 
 # ======================================================================

@@ -119,7 +119,11 @@ def test_01_exactly_one_registered_effect_gives_the_opponent_cards():
             if getattr(who, "value", str(who)) == "opponent":
                 giving.append(entry.definition.effect_ref.card_id)
 
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 17
     assert giving == [GIFT_OF_GREED]
 
 

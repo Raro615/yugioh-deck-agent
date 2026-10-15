@@ -674,7 +674,11 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     문제는 **그 사실이 데이터에 없다**는 것이다.
     """
     with_activation = [e for e in EFFECT_LIBRARY if e.definition.activation is not None]
-    assert len(EFFECT_LIBRARY) == 16
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
+    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
+    # 않았다** — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 17
     assert len(with_activation) == 8
 
     from_target = [
