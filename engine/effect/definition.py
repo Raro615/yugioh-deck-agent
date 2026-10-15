@@ -57,7 +57,7 @@ from typing import Protocol, runtime_checkable
 from engine.condition import Condition
 from engine.cost import CostGroup
 from engine.effect.operation import COUNTING_KINDS, Operation
-from engine.effect.target import CountKind, TargetBinding, TargetRef
+from engine.effect.target import SELF_TARGET, CountKind, TargetBinding, TargetRef
 from engine.effect.target import SelectionCount
 from engine.execution import (
     DeclarationBinding,
@@ -340,6 +340,13 @@ class EffectDefinition:
         3. 선언한 대상을 **아무 일도 쓰지 않는다** — 고르게 해 놓고 쓰지
            않는 정의다. 단, 하는 일을 아직 적지 않았으면(``operations`` 가
            비었으면) 넘어간다. 그것은 "미완성" 이지 "모순" 이 아니다.
+
+        🔴 :data:`~engine.effect.target.SELF_TARGET` 은 **선언 없이도
+        이어진다** (Phase 6-L). 그 이름이 가리키는 카드는 정의가 아니라
+        문맥이 말하고 (``ResolutionContext.source``), 고를 것이 없으므로
+        선언할 규칙도 없다. ``TargetBinding`` 이 그 이름을 거부하므로
+        ``declared`` 에 들어올 길도 없다 — 즉 2번 검사에서만 예외이고,
+        1번 · 3번은 애초에 닿지 않는다.
         """
         declared: set[TargetRef] = set()
         for binding in self.targets:
@@ -352,6 +359,11 @@ class EffectDefinition:
         used: set[TargetRef] = set()
         for operation in self.operations:
             for ref in operation.target_refs:
+                if ref == SELF_TARGET:
+                    # **자기 참조는 선언하지 않는다** (Phase 6-L). 가리키는
+                    # 카드를 정의가 모르기 때문이다 — 같은 정의가 여러 판에서
+                    # 쓰이고, 그때마다 다른 인스턴스가 발동한다.
+                    continue
                 if ref not in declared:
                     raise EffectDefinitionError(
                         f"{operation.kind.value} 가 선언되지 않은 대상 {ref} 를 "
@@ -535,8 +547,28 @@ class EffectDefinition:
 
     @property
     def requires_target(self) -> bool:
-        """대상을 하나라도 선언했는가."""
+        """
+        대상을 하나라도 선언했는가.
+
+        🔴 **자기 참조는 여기 세지 않는다** (Phase 6-L). 자기 자신을 패로
+        되돌리는 효과는 대상을 지정하지 않으므로 (「대상으로 하고」 가 공식
+        텍스트에 없다) 이 값이 거짓이어야 하고, 그래서 ``target_bridge`` 도
+        ``PlayerAction.targets`` 에 아무것도 요구하지 않는다.
+        """
         return bool(self.targets)
+
+    @property
+    def references_self(self) -> bool:
+        """
+        하는 일 중 하나라도 **이 효과의 카드 자신**을 가리키는가 (Phase 6-L).
+
+        :attr:`requires_target` 과 **다른 질문이다.** 저쪽은 "고를 것이
+        있는가" 이고 이쪽은 "발동한 카드를 가리키는가" 다. 둘 다 참인
+        효과도, 둘 다 거짓인 효과도 있다.
+        """
+        return any(
+            SELF_TARGET in operation.target_refs for operation in self.operations
+        )
 
     @property
     def target_refs(self) -> tuple[TargetRef, ...]:
@@ -549,6 +581,11 @@ class EffectDefinition:
 
         조용히 ``None`` 을 돌려주지 않는다 — 없는 이름을 묻는 것은 정의와
         해결이 어긋났다는 뜻이고, 그것은 감춰야 할 일이 아니다.
+
+        🔴 :data:`~engine.effect.target.SELF_TARGET` 도 :class:`KeyError`
+        다 (Phase 6-L), 그리고 **그것이 맞다** — 자기 참조에는 고르는
+        규칙이 없다. 부르는 쪽이 그 이름을 먼저 갈라 본다
+        (``EffectExecutor._target_spec_of``).
         """
         for binding in self.targets:
             if binding.ref == ref:

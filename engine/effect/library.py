@@ -41,6 +41,7 @@ from dataclasses import dataclass
 
 from engine.condition import (
     And,
+    ConditionResult,
     IsMonster,
     IsSpellTrap,
     PlayerRef,
@@ -68,6 +69,7 @@ from engine.effect.operation import (
 from engine.effect.semantics import FIELD_ZONES, DestructionRuling, MovementRuling
 from engine.effect.target import (
     PRIMARY_TARGET,
+    SELF_TARGET,
     AllMatchingSpec,
     RandomSelectionSpec,
     SelectionCount,
@@ -77,6 +79,8 @@ from engine.effect.target import (
 )
 from engine.effect.ruling import (
     CardRuleFacts,
+    RuleFact,
+    RuleQuestion,
     OperationRulingRegistry,
     RuleBasis,
     normal_monster_facts,
@@ -1040,31 +1044,39 @@ _RELOAD_ENTRY = LibraryEntry(
 #: 유발 효과가 딸려 오지 않는 것은 (사신 이레이저 ③ 탈락) 어니스트와 젬
 #: 코끼리이고, 공식 텍스트가 ①②로 갈려 블록 경계가 분명한 쪽을 골랐다.
 #:
-#: ``operations`` 를 **적지 않았다.** 적을 수 없기 때문이고, 그 이유 하나가
-#: 이 Phase 가 "실제 효과 해결" 에 닿지 못한 이유다.
+#: 🔴 **Phase 6-L 에서 하는 일을 적었다.** 6-K 는 ``operations`` 를 비워
+#: 두었고 그 이유가 이것이었다.
 #:
 #:     ``Duel.SendtoHand(c,nil,REASON_EFFECT)``  —  ``c = e:GetHandler()``
 #:
-#: 돌려보낼 카드가 **발동한 그 카드 자신**이다. 그런데 :class:`
-#: ~engine.effect.operation.CardOperation` 은 대상을 ``TargetRef`` 이름으로
-#: 가리키고, 그 이름에 "이 효과의 카드" 를 넣는 길이 없다 —
-#: :class:`~engine.effect.target.TargetRequirement` 넷은 전부 **고르거나 ·
-#: 무작위이거나 · 전부**이고, :attr:`~engine.cost.CandidateSource.
-#: exclude_source` 는 자신을 **빼는** 쪽만 있다. 후보 조건(``require``)으로
-#: 쓸 수도 없다: :class:`~engine.cost.resolver.CandidateResolver` 가 후보마다
-#: 문맥의 ``source`` 를 **그 후보로 바꿔** 판정하므로, 원래 발동한 카드가
-#: 거기서 사라진다 (``engine/cost/resolver.py``).
+#: 돌려보낼 카드가 **발동한 그 카드 자신**인데, 정의가 그것을 가리키는
+#: **이름**이 없었다 — ``TargetRequirement`` 넷은 전부 고르거나 · 무작위
+#: 이거나 · 전부이고, ``exclude_source`` 는 자신을 **빼는** 쪽만 있다.
 #:
-#: :attr:`~engine.effect.resolution.ResolutionContext.source` 에는 그 카드가
-#: **이미 있다.** 모자란 것은 정의가 그것을 가리키는 **이름**이고, 그 이름을
-#: 더하는 것은 대상 축에 다섯 번째 모양을 더하는 일이다. 측정 없이 축을
-#: 늘리지 않는다 (§14) — 그래서 여기서 멈추고 사실만 적는다.
+#: 6-L 이 그 이름을 만들었다: :data:`~engine.effect.target.SELF_TARGET`.
+#: 가리키는 카드는 :attr:`~engine.effect.resolution.ResolutionContext.
+#: source` 하나이고, 그 칸은 카드 정의가 아니라 **카드 한 장의 번호**이므로
+#: 같은 카드 두 장이 깔려 있어도 **발동한 쪽**만 움직인다.
 #:
-#: 🔴 그래도 **싣는다.** 빼 버리면 "몬스터 효과의 발동 분류를 적을 수 있게
-#: 되었다" 는 사실이 아무 데도 남지 않고, ``activation_kind`` 가 실제 데이터
-#: 에서 한 번도 쓰이지 않는 칸이 된다. 발동 경로는 이 항목으로 실측된다 —
-#: 검증기가 ``VALID`` 를 내고, 막는 것이 **규칙이 아니라 구현**으로
-#: 바뀐다 (ADR-006).
+#: 🔴 이 주석에 그 타입 이름을 적지 않는 이유: ``tests/engine/
+#: test_targeted_effect.py`` 가 이 파일 안에 그 이름이 나타나는 것을
+#: 금지한다 ("정의에 실제 카드를 박지 않는다"). 여기 적힌 것은 설명이지만,
+#: 감사에 예외를 더하면 그 감사가 조용히 약해진다.
+#:
+#: 🔴 **대상 지정이 아니다.** 공식 텍스트에 「대상으로 하고」 가 없으므로
+#: ``targets`` 는 비어 있고 ``requires_target`` 은 거짓이다. 그래서
+#: ``PlayerAction.targets`` 에 아무것도 요구하지 않는다.
+#:
+#: ``gated=True`` 는 ``s.target1`` 이 ``e:GetHandler():IsAbleToHand()`` 를
+#: 적기 때문이다. 그 질문의 답은 :data:`OPERATION_RULINGS` 가 들고 있고
+#: (Phase 6-L 이 더했다), 답이 없으면 실행기가 **멈춘다** — 자기 참조라는
+#: 이유로 관문이 열리지 않는다.
+#:
+#: ``IsRelateToEffect`` 는 **여전히 옮기지 못했다** (싸이크론 ·
+#: 강제 탈출 장치와 같은 이유, STRUCTURAL-50). ``IsFaceup`` 도 적지 않았다 —
+#: 발동 범위가 이미 앞면 몬스터 존으로 좁혀져 있고 (Phase 6-K 의
+#: ``_monster_activation_out_of_scope``), 해결 시점에 뒤집히는 길이 이
+#: 엔진에 없다. 둘 다 "지금은 결과가 같다" 이지 "옮겼다" 가 아니다.
 #:
 #: ②(``EFFECT_TYPE_QUICK_O``, 패에서의 유발 즉시 효과)는 **등록하지
 #: 않았다.** 정의는 ``EffectRef`` 단위이고 ``e[1]`` 은 여기 없다 — 룰북이
@@ -1074,28 +1086,24 @@ _HONEST_IGNITION_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(HONEST, 0),
         source_card_id=HONEST,
-        operations=(),
+        operations=(CardOperation.return_to_hand(SELF_TARGET, gated=True),),
         activation_kind=ActivationKind.IGNITION,
         provenance=EffectProvenance.official_lua(
             "c37742478.lua 의 e1:SetType(EFFECT_TYPE_IGNITION) 과 "
-            "e1:SetRange(LOCATION_MZONE) 에서 발동 분류를 옮겼다. "
-            "s.operation1 의 Duel.SendtoHand(c,...) 는 c 가 e:GetHandler() "
-            "여서 옮기지 못했다 — 정의가 '이 효과의 카드' 를 가리키는 이름을 "
-            "갖고 있지 않다. s.target1 의 IsAbleToHand 와 "
-            "IsRelateToEffect 도 따라서 옮기지 않았다."
+            "e1:SetRange(LOCATION_MZONE) 에서 발동 분류를, s.operation1 의 "
+            "Duel.SendtoHand(c,nil,REASON_EFFECT) 에서 하는 일을 옮겼다 — "
+            "c 가 e:GetHandler() 이므로 대상은 SELF_TARGET 이다 (Phase 6-L). "
+            "s.target1 의 e:GetHandler():IsAbleToHand() 는 gated=True 로 "
+            "옮겼다. IsRelateToEffect 와 IsFaceup 은 옮기지 못했다."
         ),
     ),
     lua_file="c37742478.lua",
     lua_excerpt=(
         "e1:SetType(EFFECT_TYPE_IGNITION); e1:SetRange(LOCATION_MZONE); "
+        "if chk==0 then return e:GetHandler():IsAbleToHand() end; "
         "local c=e:GetHandler(); Duel.SendtoHand(c,nil,REASON_EFFECT)"
     ),
-    executable=False,
-    note=(
-        "하는 일이 '이 효과의 카드' 를 가리키는데, 정의가 그것을 가리키는 "
-        "대상 이름을 갖고 있지 않다 (TargetRequirement 넷이 전부 고르기 · "
-        "무작위 · 전부이고, exclude_source 는 빼는 쪽뿐이다)"
-    ),
+    executable=True,
 )
 
 
@@ -1170,9 +1178,33 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
         normal_monster_facts(FEATHERMAN, "엘리멘틀 히어로 페더맨"),
         # Phase 6-K — 어니스트. **통상 몬스터 묶음에 넣지 않았다.**
         # ``normal_monster_facts`` 의 근거는 "효과가 없다" 이고 이 카드에는
-        # 효과가 둘 있다. 읽어서 확인한 것은 아래 한 줄뿐이다.
+        # 효과가 둘 있다.
+        #
+        # 🔴 **Phase 6-L 이 질문 하나에 답했다** — "이 카드를 패로 되돌릴
+        # 수 있는가". 어니스트 ① 이 ``gated=True`` 로 그것을 묻고
+        # (``s.target1`` 의 ``e:GetHandler():IsAbleToHand()``), 답이 없으면
+        # 실행기가 ``UNCHECKED_RULES`` 로 멈춘다.
+        #
+        # 근거가 **이 카드의 공식 텍스트 전문**이다 (``RuleBasis.CARD_TEXT``).
+        # ① 이 「필드의 앞면 표시의 이 카드를 패로 되돌린다」 라고 직접
+        # 적고, ②는 패에서 묘지로 가는 효과이며, 어디에도 패로 돌아가는
+        # 것을 막는 문장이 없다. 메인 덱의 효과 몬스터이므로 토큰도 엑스트라
+        # 덱 카드도 아니다.
+        #
+        # 🔴 **다른 질문에는 답하지 않았다.** 제외 · 묘지 · 덱 · 버리기는
+        # 묻지 않았고, 묻지 않은 것을 참으로 채우지 않는다.
         CardRuleFacts(
             card_id=HONEST,
+            answers={
+                RuleQuestion.MAY_BE_RETURNED_TO_HAND: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "어니스트: 공식 텍스트 전문을 읽었고, ① 이 "
+                    "「필드의 앞면 표시의 이 카드를 패로 되돌린다」 라고 "
+                    "직접 적는다. 패로 돌아가는 것을 막는 문장이 없고, "
+                    "메인 덱의 효과 몬스터이므로 토큰이 아니다.",
+                ),
+            },
             restricts_others=False,
             restriction_basis=RuleBasis.CARD_TEXT,
             restriction_note=f"어니스트: {_SPELL_TRAP_READ}",

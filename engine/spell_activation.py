@@ -491,9 +491,29 @@ def duel_resolver(journal=None):
     원인이었다.
     """
     from engine.chain import ChainResolver
-    from engine.effect.library import build_executor, definition_registry
+    from engine.effect.library import (
+        OPERATION_RULINGS,
+        build_executor,
+        definition_registry,
+    )
 
-    return ChainResolver(build_executor(journal=journal), definition_registry())
+    # 🔴 **조작 판정 지식을 넘긴다** (Phase 6-L). ``build_executor`` 는 이것을
+    # 기본값으로 **넣지 않는다** — "목록에 실렸다는 사실이 판정을 대신하게"
+    # 되기 때문이고 (ADR-006), 그래서 **부르는 쪽이 고른다.** 여기가 그
+    # 부르는 쪽이다.
+    #
+    # 넘기지 않으면 ``gated=True`` 로 관문을 **선언한** 이동은 하나도
+    # 일어나지 않는다 (``UnknownMovementRuling``). 선언하지 않은 이동은
+    # 영향을 받지 않으므로, 등재된 마법 열여섯 중 **하나도 동작이 바뀌지
+    # 않는다** — 그 둘(어리석은 매장 · 강제 탈출 장치)은 애초에 듀얼 경로의
+    # 후보가 되지 않는다 (덱의 대상 · 함정의 발동 타이밍).
+    #
+    # 지식은 판과 무관하고, 판을 보고 답을 합성하는 일은 실행기가 계획
+    # 시점의 투영된 판으로 그때그때 한다 (Phase 2-AL).
+    return ChainResolver(
+        build_executor(journal=journal, rulings=OPERATION_RULINGS),
+        definition_registry(),
+    )
 
 
 def duel_components(journal=None) -> dict:

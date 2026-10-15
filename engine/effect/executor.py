@@ -97,7 +97,7 @@ from engine.effect.operation import (
     SpecialSummonOperation,
 )
 from engine.effect.journal import EventJournal
-from engine.effect.target import SelectionCount, Shortfall
+from engine.effect.target import SELF_TARGET, SelectionCount, Shortfall
 from engine.execution import (
     NO_EXECUTION_VALUES,
     BoardQuantity,
@@ -1135,7 +1135,7 @@ class EffectExecutor:
         """
         ref = operation.target_ref
         try:
-            spec = definition.target_spec(ref)
+            spec = self._target_spec_of(definition, ref)
         except KeyError:
             return _fail(
                 ResolutionStatus.INVALID_CONTEXT,
@@ -1151,7 +1151,17 @@ class EffectExecutor:
             return resolved
         _, selection = resolved
 
-        if spec is not None and (spec.is_random or spec.is_bulk):
+        if ref == SELF_TARGET:
+            # **고른 것이 적법한지 묻지 않는다** (Phase 6-L). 고른 것이
+            # 없기 때문이다 — 자리도 주인도 후보 조건도 이 이름에는 적혀
+            # 있지 않고, ``TargetResolver.validate`` 는 규칙(``spec``)을
+            # 받아야 답할 수 있다.
+            #
+            # 🔴 **건너뛰는 것은 이 한 검사뿐이다.** 아래의 자리 규칙 ·
+            # 관문 · "판에 있는가" 는 그대로 지난다. 자기 참조라는 이유로
+            # 상태 변경이 공짜가 되지 않는다 (§8).
+            pass
+        elif spec is not None and (spec.is_random or spec.is_bulk):
             # **다시 판정하지 않는다** (Phase 2-AB · 2-AI). 무작위 선택과
             # 일괄 처리는 바로 앞
             # 단계에서 후보를 **권위 있게** 세면서 자리 · 주인 · 조건을 이미
@@ -1312,6 +1322,47 @@ class EffectExecutor:
             placements=tuple(placements),
         )
 
+    @staticmethod
+    def _target_spec_of(definition: EffectDefinition, ref):
+        """
+        그 이름의 대상 규칙. **자기 참조는 규칙이 없다** (Phase 6-L).
+
+        ``None`` 이 둘을 뜻하게 되지 않도록 갈라 둔다 — 자기 참조는 "고를
+        규칙이 없다" 이고, 없는 이름은 여전히 :class:`KeyError` 다.
+        """
+        if ref == SELF_TARGET:
+            return None
+        return definition.target_spec(ref)
+
+    def _resolve_self_reference(self, context: ResolutionContext, operation):
+        """
+        **이 효과를 발동한 카드**를 선택 하나로 만든다 (Phase 6-L).
+
+        후보를 세지 않는다. 고르는 사람도 없고 고를 것도 없다 — 가리키는
+        카드가 문맥에 **하나** 적혀 있고, 그것이 발동 시점에 정해진
+        ``InstanceId`` 다.
+
+        🔴 **없으면 지어내지 않는다.** ``source`` 가 ``None`` 인 것은
+        "필드를 떠난 뒤에도 해결되는 효과" 를 위해 열어 둔 칸이고
+        (``ResolutionContext.source`` 의 설명), 같은 카드 ID 의 다른
+        인스턴스로 대신하지 않는다 — 그러면 **발동하지 않은 카드**가
+        움직인다.
+
+        🔴 **판에 있는지는 여기서 보지 않는다.** 그것은 뒤에서
+        ``state.find_instance`` 가 보고, 없으면
+        ``CANDIDATE_NOT_FOUND`` 로 멈춘다 — 자기 참조라는 이유로 건너뛰는
+        검사가 하나도 없어야 하기 때문이다.
+        """
+        if context.source is None:
+            return _fail(
+                ResolutionStatus.INVALID_CONTEXT,
+                ValidationCode.INFORMATION_UNAVAILABLE,
+                f"{operation.kind.value} 가 이 효과를 발동한 카드를 "
+                f"가리키는데 ({SELF_TARGET}) 문맥에 그 카드가 없습니다. "
+                "같은 카드의 다른 인스턴스로 대신하지 않습니다.",
+            )
+        return SELF_TARGET, Selection(chosen=(context.source,))
+
     def _resolve_selection(
         self,
         state: GameState,
@@ -1329,6 +1380,9 @@ class EffectExecutor:
         없으므로 받을 곳이 없고, 난수원이 정한다.
         """
         ref = operation.target_refs[0]
+        if ref == SELF_TARGET:
+            # **문맥이 가리키는 그 한 장**이다 (Phase 6-L).
+            return self._resolve_self_reference(context, operation)
         try:
             spec = definition.target_spec(ref)
         except KeyError:

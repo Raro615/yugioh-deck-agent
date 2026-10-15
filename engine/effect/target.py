@@ -754,15 +754,58 @@ class TargetRef:
 #: 대상이 하나뿐인 흔한 경우의 이름.
 PRIMARY_TARGET = TargetRef("primary")
 
+#: **이 효과를 발동한 카드 자신**을 가리키는 예약된 이름 (Phase 6-L).
+#:
+#: 공식 스크립트의 ``e:GetHandler()`` 가 이것이다. 실제 카드가 그렇게 적는다::
+#:
+#:     local c=e:GetHandler()
+#:     if c:IsFaceup() and c:IsRelateToEffect(e) then
+#:         Duel.SendtoHand(c,nil,REASON_EFFECT)   -- 어니스트 ①
+#:     end
+#:
+#: 🔴 **이것은 "대상으로 지정" 이 아니다.** 어니스트 ① 의 공식 텍스트는
+#: 「필드의 앞면 표시의 이 카드를 패로 되돌린다」 이고 「대상으로 하고」 가
+#: 없다. 그래서 이 이름에는 :class:`TargetBinding` 을 **걸 수 없다** —
+#: 선언하면 그 효과가 대상 지정 효과가 되고, 무효화 · 회피의 대상이 되며,
+#: 발동 시점에 확정되어야 한다. 셋 다 이 카드가 말하지 않은 것이다.
+#:
+#: 🔴 **후보가 아니다.** 고를 것이 없으므로 :class:`
+#: ~engine.cost.resolver.CandidateResolver` 를 거치지 않는다. 후보 선택으로
+#: 흉내 내면 같은 카드 ID 두 장이 깔린 판에서 **발동하지 않은 쪽**도 후보가
+#: 된다 (실측: MZONE/컨트롤러 후보 3장 중 발동한 것은 1장).
+#:
+#: 가리키는 카드는 :attr:`~engine.effect.resolution.ResolutionContext.source`
+#: 하나다. 그 칸은 ``InstanceId`` 이므로 **카드 정의가 아니라 카드 한
+#: 장**이고, 같은 카드명 세 장을 서로 구분한다 (``engine/ids.py``).
+#:
+#: ``exclude_source`` 와 **정확히 반대 축**이다. 저쪽은 "이 카드 이외의" 를
+#: 적기 위해 발동한 카드를 후보에서 **빼고**, 이쪽은 그 카드 **하나만**
+#: 가리킨다. 둘을 함께 쓰면 후보가 비는 것이 당연하므로 섞지 않는다.
+SELF_TARGET = TargetRef("self")
+
 
 @dataclass(frozen=True, slots=True)
 class TargetBinding:
-    """정의 안에서 이름 하나와 대상 규칙 하나를 잇는다."""
+    """
+    정의 안에서 이름 하나와 대상 규칙 하나를 잇는다.
+
+    🔴 :data:`SELF_TARGET` 은 여기 올 수 없다 (Phase 6-L). 자기 참조는
+    **고르는 일이 아니고 대상 지정도 아니다** — 선언하면 그 효과가 대상
+    지정 효과가 된다.
+    """
 
     ref: TargetRef
     spec: TargetSpec
 
     def __post_init__(self) -> None:
+        if self.ref == SELF_TARGET:
+            raise ValueError(
+                f"{SELF_TARGET} 은 **고르는 대상이 아닙니다** — 이 효과를 "
+                "발동한 카드 자신을 가리키는 예약된 이름이고, 그 카드는 "
+                "ResolutionContext.source 가 말합니다. 선언하면 이 효과가 "
+                "대상 지정 효과가 되고, 그것은 공식 텍스트가 말하지 않은 "
+                "것입니다."
+            )
         if not self.spec.requires_selection:
             raise ValueError(
                 f"{self.ref} 에 대상을 요구하지 않는 규칙이 묶였습니다. "
@@ -825,6 +868,7 @@ __all__ = [
     "Shortfall",
     "TargetRef",
     "PRIMARY_TARGET",
+    "SELF_TARGET",
     "TargetBinding",
     "TargetSelection",
 ]
