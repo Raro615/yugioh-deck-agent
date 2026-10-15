@@ -235,7 +235,8 @@ class ActivationKind(str, Enum):
     그래서 ``SetType(EFFECT_TYPE_TRIGGER_O)`` 도 ``TRIGGER_F`` 도 손으로
     옮길 때 :attr:`TRIGGER` 하나가 되고, **엔진은 어느 쪽이었는지 모른다.**
     강제 · 임의 축은 ``engine/trigger.py`` 의 ``TriggerRequirement`` 에
-    **따로** 있고 그쪽은 ``TriggerSpec`` 이 근거를 들고 온다.
+    **따로** 있고, 그쪽은 카드 데이터에서 근거를 들고 온다 — 두 축을
+    섞지 않는다.
 
     🔴 **지속 효과(Continuous Effect)는 여기 없다.** 룰북이 그 분류에
     ``has_activation: false`` 라고 적는다 (RULE-EFFECT-001) — 발동하지 않는
