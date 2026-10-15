@@ -43,6 +43,7 @@ from engine.action_validation import (
     ValidationCode,
     activation_is_monster_ignition,
 )
+from engine.activation import ActivationStatus
 from engine.activation_timing import (
     ActivationTiming,
     ActivationTimingChecker,
@@ -876,6 +877,16 @@ def test_l02_the_chain_stays_empty_and_nothing_resolves(repository):
     result = duel._activator.activate(duel.state, Chain(), action, selections=())
     assert not result.activated
     assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    #: 🔴 **상태까지 본다.** ``UNAUTHORIZED`` 와 ``NOT_IMPLEMENTED`` 는 같은
+    #: ``ValidationCode`` 를 쓰므로 코드만 보면 둘을 구분할 수 없다. 이
+    #: Phase 가 한 일이 바로 그 둘을 가른 것이므로, 여기서 **허가는 났고
+    #: 구현이 없다**는 것을 상태로 확인한다. ``activate`` 에
+    #: ``authorization`` 을 주지 않았으므로 허가는 발동기가 스스로 검증기에
+    #: 물어서 받았다 — 그 경로에 등록소가 실제로 넘어간다는 뜻이다.
+    assert result.status is ActivationStatus.NOT_IMPLEMENTED
+    assert result.status is not ActivationStatus.UNAUTHORIZED
+    assert result.missing == "registered effect implementation"
+    assert result.authorization.validity is ActionValidity.VALID
     assert len(result.chain) == 0
     assert result.link is None
 
@@ -1112,6 +1123,53 @@ def test_n03_the_definition_source_is_optional_everywhere():
     parameter = signature.parameters["definitions"]
     assert parameter.default is None
     assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_n05_both_production_call_sites_pass_the_definition_source():
+    """
+    🔴 **배선이 끊기면 조용히 좁아진다** — 그래서 두 자리를 못박는다.
+
+    등록소를 넘기지 않으면 검증기는 몬스터 효과를 "분류를 적지 않았다" 로
+    범위 밖에 둔다. 그것은 **오류가 아니라 더 좁은 답**이므로 어떤 거부도
+    일어나지 않고, 후보가 0건인 지금은 **동작으로도 보이지 않는다.**
+
+    세 자리가 검증기를 만든다.
+
+    ===========================================  ========================
+    ``Duel.legal_actions``                        후보 생성
+    ``Duel._apply_activation``                    적용 직전 재검증
+    ``EffectActivator._verdict``                  허가를 받지 못했을 때
+    ===========================================  ========================
+
+    셋 다 등록소를 넘겨야 **같은 판에서 같은 답**이 나온다 (STRUCTURAL-134
+    가 고친 것이 바로 그 어긋남이다).
+    """
+    duel_source = (PROJECT_ROOT / "engine" / "duel.py").read_text(encoding="utf-8")
+    tree = ast.parse(duel_source)
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "ActionValidator"
+    ]
+    assert len(calls) == 2, len(calls)
+    for call in calls:
+        assert [kw.arg for kw in call.keywords] == ["definitions"], ast.unparse(call)
+
+    activation_source = (PROJECT_ROOT / "engine" / "activation.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(activation_source)
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "ActionValidator"
+    ]
+    assert len(calls) == 1, len(calls)
+    assert [kw.arg for kw in calls[0].keywords] == ["definitions"]
 
 
 def test_n04_the_validator_refuses_a_source_that_cannot_look_definitions_up():
