@@ -56,7 +56,12 @@ from engine.effect.library import (
 from engine.effect.operation import CardOperation, OperationKind
 from engine.effect.resolution import ResolutionContext, ResolutionStatus
 from engine.effect.ruling import RuleBasis, RuleQuestion
-from engine.effect.semantics import ORIGIN_RULES, origin_rule
+from engine.effect.semantics import (
+    FIELD_ZONES,
+    MISSING_SAME_ZONE_MOVEMENT,
+    ORIGIN_RULES,
+    origin_rule,
+)
 from engine.effect.target import (
     PRIMARY_TARGET,
     SELF_TARGET,
@@ -550,48 +555,102 @@ def test_e03_return_to_hand_has_no_origin_rule_today(repository, zone):
     🔴 **남은 공백을 숨기지 않고 센다** (§16).
 
     어니스트 ① 의 공식 텍스트는 「**필드의 앞면 표시의** 이 카드를 패로
-    되돌린다」 인데, 엔진은 그 제약을 **아직 옮기지 못했다.**
+    되돌린다」 인데, 6-L 은 그 제약을 **하나도 옮기지 못했다.**
 
     - ``Card.IsRelateToEffect`` — 발동 뒤 그 카드가 떠났는지 (STRUCTURAL-50)
     - ``Card.IsFaceup`` — 해결 시점의 표시 형식
     - ``ORIGIN_RULES`` 에 ``RETURN_TO_HAND`` 항목이 **없다** (출발 자리 무제약)
 
-    그래서 다른 자리에 있는 카드도 패로 돌아간다. **지금은 닿지 않는다** —
-    발동 범위가 앞면 몬스터 존으로 좁혀져 있고 (Phase 6-K), 발동과 해결
-    사이에 그 카드를 옮길 수 있는 효과가 이 엔진에 하나도 없다. 그 길이
-    생기는 날 이 테스트가 그 자리를 가리킨다.
+    🔴 **Phase 6-M 이 셋 중 하나를 옮겼다.** 「필드의」 가
+    :attr:`~engine.effect.operation.CardOperation.origin_zones` 로 들어갔다
+    — 그런데 그것은 **이 효과 하나**의 제약이고, ``ORIGIN_RULES`` 는
+    여전히 비어 있다. 그것이 틀린 것이 아니다: 그 표는 일의 종류마다
+    **전역**이고, 묘지 · 덱 · 제외 구역에서 패로 되돌리는 실제 카드가
+    많으므로 전역으로 막으면 그 카드들이 틀린다.
 
-    ``ORIGIN_RULES`` 를 여기서 고치지 않은 이유: 그 표는 **조작 종류마다
-    전역**이고, 묘지 · 덱 · 제외 구역에서 패로 돌아가는 효과가 실제로
-    많다. 전역으로 막으면 그 카드들이 틀린다.
+    그래서 이 시험은 **두 축을 갈라서** 센다.
+
+    1. 전역 표는 그대로 비어 있고, **자리를 적지 않은** 조작은 어느
+       자리에서든 지난다 (단, 아래 3번).
+    2. 등재된 어니스트 ① 은 자리를 적었으므로 필드 밖에서 **거절된다.**
+    3. 🔴 ``HAND`` 는 둘 다 거절한다 — 이미 그 자리에 있어서 **옮길 것이
+       없기** 때문이고, 그것은 자리 규칙이 아니라 "일어나지 않은 이동을
+       성공으로 적지 않는다" 는 불변 조건이다 (Phase 6-M).
     """
+    #: 1. 전역 표는 **비어 있다.** 6-M 도 여기에 줄을 더하지 않았다.
     assert OperationKind.RETURN_TO_HAND not in ORIGIN_RULES
     assert origin_rule(OperationKind.RETURN_TO_HAND) is None
 
-    definition = self_definition(
-        CardOperation.return_to_hand(SELF_TARGET, gated=True)
-    )
+    bare = self_definition(CardOperation.return_to_hand(SELF_TARGET, gated=True))
+    assert bare.operations[0].origin_zones is None
+
     deck = [FEATHERMAN] * 20
-    state = GameState.create(repository, decks=(list(deck), list(deck)), seed=1)
-    placed = state.create_instance(
-        HONEST, owner=MINE, zone=zone, position=Position.FACEUP
-    )
-    executor = EffectExecutor(
-        lookup=EffectImplementationRegistry((definition.effect_ref,)),
-        rulings=OPERATION_RULINGS,
-    )
-    result = executor.execute(
-        state,
-        definition,
-        ResolutionContext(
-            effect_ref=definition.effect_ref,
-            controller=MINE,
-            source=placed.instance_id,
-        ),
-    )
-    #: 현재 동작을 **사실로** 적는다 — 바람직하다는 뜻이 아니다.
-    assert result.status is ResolutionStatus.RESOLVED, result.reason
-    assert state.find_instance(placed.instance_id).zone is Zone.HAND
+
+    def run(definition):
+        state = GameState.create(repository, decks=(list(deck), list(deck)), seed=1)
+        placed = state.create_instance(
+            HONEST, owner=MINE, zone=zone, position=Position.FACEUP
+        )
+        executor = EffectExecutor(
+            lookup=EffectImplementationRegistry((definition.effect_ref,)),
+            rulings=OPERATION_RULINGS,
+        )
+        result = executor.execute(
+            state,
+            definition,
+            ResolutionContext(
+                effect_ref=definition.effect_ref,
+                controller=MINE,
+                source=placed.instance_id,
+            ),
+        )
+        return result, state.find_instance(placed.instance_id).zone
+
+    bare_result, bare_zone = run(bare)
+    registered = definition_registry().definition_for(HONEST_REF)
+    assert registered is not None
+    #: 2. 등재된 쪽은 **자리를 적었다** (Phase 6-M).
+    assert registered.operations[0].origin_zones == FIELD_ZONES
+    real_result, real_zone = run(registered)
+
+    if zone is Zone.HAND:
+        #: 3. 🔴 둘 다 거절하고 판은 그대로인데, **이유가 다르다.**
+        #:
+        #: 자리를 적지 않은 쪽은 "옮길 것이 없다" 로 멈춘다 — 모르는 것
+        #: (그 효과가 불발되는지)이므로 ``UNSUPPORTED_OPERATION`` 이다.
+        assert bare_result.status is ResolutionStatus.UNSUPPORTED_OPERATION, (
+            bare_result.reason
+        )
+        assert bare_result.code is ValidationCode.RULE_NOT_IMPLEMENTED
+        assert MISSING_SAME_ZONE_MOVEMENT in bare_result.missing
+        #: 등재된 쪽은 **그보다 먼저** 자리에서 걸린다 — 공식 텍스트가
+        #: 「필드의」 라고 적었으므로 **아는 규칙**이고 확실한 거절이다.
+        #: 순서가 이렇게 되는 것이 맞다: 더 강한 말을 먼저 한다.
+        assert real_result.status is ResolutionStatus.INVALID_TARGET, (
+            real_result.reason
+        )
+        assert real_result.code is ValidationCode.SOURCE_WRONG_ZONE
+        assert real_result.missing is None
+        for result, after in ((bare_result, bare_zone), (real_result, real_zone)):
+            assert result.deltas == ()
+            assert after is Zone.HAND
+    elif zone in FIELD_ZONES:
+        #: 필드 안이므로 둘 다 지난다.
+        assert bare_result.status is ResolutionStatus.RESOLVED, bare_result.reason
+        assert bare_zone is Zone.HAND
+        assert real_result.status is ResolutionStatus.RESOLVED, real_result.reason
+        assert real_zone is Zone.HAND
+    else:
+        #: 자리를 적지 않은 쪽은 **여전히 지난다** — 전역 공백이 그대로다.
+        assert bare_result.status is ResolutionStatus.RESOLVED, bare_result.reason
+        assert bare_zone is Zone.HAND
+        #: 🔴 등재된 쪽은 **거절된다** (Phase 6-M 이 옮긴 「필드의」).
+        assert real_result.status is ResolutionStatus.INVALID_TARGET, (
+            real_result.reason
+        )
+        assert real_result.code is ValidationCode.SOURCE_WRONG_ZONE
+        assert real_result.deltas == ()
+        assert real_zone is zone
 
 
 # ======================================================================

@@ -186,35 +186,84 @@ def grave_ids(game, owner):
 # ======================================================================
 
 
+#: 🔴 마지막 칸은 **그 자리에서 고른 카드를 어디로 보내는가**다 (Phase 6-M).
+#:
+#: 전에는 여섯 경우 모두 ``send_to_grave`` 였다. 그런데 묘지에서 고른
+#: 카드를 묘지로 보내는 것은 **아무 일도 일어나지 않는 이동**이고, 6-M 이
+#: 그것을 거절하게 되었다 (일어나지 않은 이동을 성공으로 적지 않는다).
+#:
+#: 이 시험이 재는 것은 **후보를 셀 수 있는 자리**이고 목적지가 아니다.
+#: 그래서 묘지 두 경우만 실제로 일어나는 이동(제외)으로 바꾸고, 묘지 →
+#: 묘지가 거절된다는 사실은 ``test_a_a_move_that_changes_nothing_is_refused``
+#: 에서 따로 센다. 단언은 하나도 약해지지 않았다 — 고른 카드가 그 자리에
+#: 있었는지를 여전히 확인한다.
 ZONE_CASES = [
-    ("자기 패", (Zone.HAND,), PlayerRef.CONTROLLER, P1),
-    ("상대 패", (Zone.HAND,), PlayerRef.OPPONENT, P2),
-    ("자기 필드", (Zone.MZONE,), PlayerRef.CONTROLLER, P1),
-    ("상대 필드", (Zone.MZONE,), PlayerRef.OPPONENT, P2),
-    ("자기 묘지", (Zone.GRAVE,), PlayerRef.CONTROLLER, P1),
-    ("상대 묘지", (Zone.GRAVE,), PlayerRef.OPPONENT, P2),
+    ("자기 패", (Zone.HAND,), PlayerRef.CONTROLLER, P1, Zone.GRAVE),
+    ("상대 패", (Zone.HAND,), PlayerRef.OPPONENT, P2, Zone.GRAVE),
+    ("자기 필드", (Zone.MZONE,), PlayerRef.CONTROLLER, P1, Zone.GRAVE),
+    ("상대 필드", (Zone.MZONE,), PlayerRef.OPPONENT, P2, Zone.GRAVE),
+    ("자기 묘지", (Zone.GRAVE,), PlayerRef.CONTROLLER, P1, Zone.REMOVED),
+    ("상대 묘지", (Zone.GRAVE,), PlayerRef.OPPONENT, P2, Zone.REMOVED),
 ]
 
 
-@pytest.mark.parametrize("label,zones,owner,side", ZONE_CASES)
-def test_a_every_zone_can_be_a_candidate_source(state, label, zones, owner, side):
+@pytest.mark.parametrize("label,zones,owner,side,destination", ZONE_CASES)
+def test_a_every_zone_can_be_a_candidate_source(
+    state, label, zones, owner, side, destination
+):
     """
     §5 — 여섯 자리 전부에서 후보를 셀 수 있다.
 
     **상대 패도 된다.** 고르는 사람이 없으므로 볼 필요가 없고, 후보를
     세는 것은 엔진이다.
     """
-    expected = len(state.player(side).zone(zones[0]))
+    source_zone = zones[0]
+    expected = len(state.player(side).zone(source_zone))
     assert expected > 0, label
 
-    result = run(state, synthetic(random_spec(zones, owner)))
+    operation = (
+        CardOperation.send_to_grave(PRIMARY_TARGET)
+        if destination is Zone.GRAVE
+        else CardOperation.banish(PRIMARY_TARGET)
+    )
+    result = run(state, synthetic(random_spec(zones, owner), operation=operation))
 
     assert result.status is ResolutionStatus.RESOLVED, label
     (applied,) = result.applied
     assert len(applied.instances) == 1, label
     picked = applied.instances[0]
-    # 고른 것이 **그 자리에 있던 카드**다.
-    assert state.locate(picked).zone is Zone.GRAVE, label
+    # 고른 것이 **그 자리에 있던 카드**다 — 출발 자리로 센다.
+    assert result.deltas[0].source_zone is source_zone, label
+    assert state.locate(picked).zone is destination, label
+
+
+def test_a_a_move_that_changes_nothing_is_refused(state):
+    """
+    🔴 **Phase 6-M** — 묘지에서 고른 카드를 묘지로 보내는 것은 **일어나지
+    않는 이동**이다.
+
+    위의 여섯 경우가 전부 ``send_to_grave`` 였을 때 이 자리는 조용히
+    ``RESOLVED`` 였고, journal 에 ``GRAVE → GRAVE`` 가 성공한 이동으로
+    적혔다. 그 테스트가 틀린 가정을 갖고 있었던 것이다 — 재던 것은 후보
+    자리였고 목적지는 보지 않았다.
+    """
+    from engine.effect.semantics import MISSING_SAME_ZONE_MOVEMENT
+
+    journal = EventJournal()
+    before = state.state_hash()
+    result = run(
+        state,
+        synthetic(random_spec((Zone.GRAVE,), PlayerRef.CONTROLLER)),
+        journal=journal,
+    )
+
+    assert result.status is ResolutionStatus.UNSUPPORTED_OPERATION, result.reason
+    assert result.missing == MISSING_SAME_ZONE_MOVEMENT
+    assert result.applied == ()
+    assert result.deltas == ()
+    #: 판이 비트 단위로 그대로다.
+    assert state.state_hash() == before
+    assert journal.events == ()
 
 
 def test_a_counting_candidates_is_not_choosing_them():
@@ -510,15 +559,27 @@ def test_h_an_unregistered_implementation_never_reaches_the_draw(state):
 # ======================================================================
 
 
+#: 🔴 마지막 칸은 **어느 자리에서 고르는가**다 (Phase 6-M).
+#:
+#: 전에는 셋 다 상대의 **패**에서 골랐다. 그런데 패에서 고른 카드를
+#: 패로 되돌리는 것은 **아무 일도 일어나지 않는 이동**이고 (주인도
+#: 자리도 같다), 6-M 이 그것을 거절하게 되었다. 이 시험이 재는 것은
+#: "어느 일이든 같은 선택 결과를 받는가" 이고 출발 자리가 아니므로,
+#: 패 되돌림만 **실제로 일어나는** 자리(상대 필드)에서 고른다.
+#:
+#: 상대의 가려진 자리에서 고른다는 사실은 그대로다 — 두 경우는 여전히
+#: 상대 패이고, 단언은 하나도 약해지지 않았다.
 @pytest.mark.parametrize(
-    "factory,kind",
+    "factory,kind,source_zone",
     [
-        (CardOperation.send_to_grave, OperationKind.SEND_TO_GRAVE),
-        (CardOperation.banish, OperationKind.BANISH),
-        (CardOperation.return_to_hand, OperationKind.RETURN_TO_HAND),
+        (CardOperation.send_to_grave, OperationKind.SEND_TO_GRAVE, Zone.HAND),
+        (CardOperation.banish, OperationKind.BANISH, Zone.HAND),
+        (CardOperation.return_to_hand, OperationKind.RETURN_TO_HAND, Zone.MZONE),
     ],
 )
-def test_i_the_selected_card_flows_into_an_existing_operation(state, factory, kind):
+def test_i_the_selected_card_flows_into_an_existing_operation(
+    state, factory, kind, source_zone
+):
     """
     §7 — 무작위 선택은 **고르기만** 한다. 카드를 옮기는 것은 기존
     Operation 이고, 어느 일이든 같은 선택 결과를 받는다.
@@ -528,19 +589,19 @@ def test_i_the_selected_card_flows_into_an_existing_operation(state, factory, ki
     result = run(
         state,
         synthetic(
-            random_spec((Zone.HAND,), PlayerRef.OPPONENT),
+            random_spec((source_zone,), PlayerRef.OPPONENT),
             operation=factory(PRIMARY_TARGET),
         ),
         journal,
     )
 
-    assert result.status is ResolutionStatus.RESOLVED
+    assert result.status is ResolutionStatus.RESOLVED, result.reason
     (applied,) = result.applied
     assert applied.kind is kind
     (delta,) = result.deltas
     assert isinstance(delta, ZoneMoved)
     assert delta.movement is kind
-    assert delta.source_zone is Zone.HAND
+    assert delta.source_zone is source_zone
     assert len(journal) == 1
 
 
