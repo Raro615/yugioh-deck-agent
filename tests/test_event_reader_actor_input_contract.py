@@ -807,7 +807,15 @@ def test_19_only_one_production_file_changed():
             or "import engine.event_pipeline" in path.read_text(encoding="utf-8")
         )
     }
-    assert importers == set(), importers
+    #: 🔴 **Phase 6-I 에서 0 이 1 이 되었다** —
+    #: ``engine/trigger_observation.py`` 가 조립 층을 펴고 실제 ``Duel``
+    #: 기록에서 후보를 모은다. 6-H 까지 0곳이었던 것은 측정값이었고, 그
+    #: 사실이 6-I 의 산출물로 바뀌었다 (보고서 §13.1 이 같은 수를 움직인
+    #: 감사 전부를 적는다).
+    #:
+    #: 이 감사가 지키려던 **actor 어휘**는 그대로다 — 같은 테스트의 나머지
+    #: 단정이 여전히 참이고, 늘어난 모듈은 ``context.actor`` 를 읽지 않는다.
+    assert importers == {"engine/trigger_observation.py"}, importers
 
     assert "EVENT_RELATION" not in source_of("engine/duel.py")
     assert "EventReader" not in source_of("engine/duel.py")

@@ -694,7 +694,13 @@ def test_13_a_copy_or_lingering_effect_has_no_production_path():
     }
     assert not link_fields & {"copied_from", "original_actor", "lingering"}
 
-    #: 트리거 계층은 여전히 production 에서 쓰이지 않는다.
+    #: 트리거 계층의 production importer.
+    #:
+    #: 🔴 **Phase 6-I 에서 0 이 1 이 되었다** —
+    #: ``engine/trigger_observation.py`` 가 조립 층을 펴고 실제 ``Duel``
+    #: 기록에서 후보를 모은다. 이 테스트가 지키는 사실("사본 · 잔존 효과에
+    #: production 경로가 없다") 은 그대로다 — 늘어난 모듈은 사본도 잔존
+    #: 효과도 만들지 않고, 위의 ``link_fields`` 단정이 여전히 참이다.
     importers = {
         str(path.relative_to(PROJECT_ROOT))
         for path in production_files()
@@ -704,7 +710,7 @@ def test_13_a_copy_or_lingering_effect_has_no_production_path():
             or "import engine.event_pipeline" in path.read_text(encoding="utf-8")
         )
     }
-    assert importers == set(), importers
+    assert importers == {"engine/trigger_observation.py"}, importers
 
 
 # ======================================================================

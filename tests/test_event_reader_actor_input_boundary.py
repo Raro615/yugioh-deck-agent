@@ -429,8 +429,15 @@ def test_03_no_production_code_outside_the_module_calls_read():
     #: 줄 번호는 고정하지 않는다 — 3-F-11 에서 줄 번호 snapshot 이 줄줄이
     #: 깨졌고, 이 파일을 쓰면서 또 한 번 당했다. 고정하는 것은 **어느 파일의
     #: 어느 호출이 무엇을 넘기는가**다.
+    #: 🔴 **Phase 6-I 에서 외부 호출자가 하나 생겼다.**
+    #: ``engine/trigger_observation.py`` 가 실제 ``Duel`` 기록을
+    #: ``EventPipeline.collect`` 에 넘긴다. 이 감사가 지키려던 계약은
+    #: "**actor 를 생략하는 호출이 없다**" 이고 (3-F-14), 그 계약은 그대로다 —
+    #: 새 호출도 ``actor=`` 를 명시해서 넘기고, 넘길 값이 없으면 지어내지 않고
+    #: ``TriggerError`` 를 낸다. ``test_04`` 가 생략 없음을 따로 고정한다.
     assert [(row[0], row[2], row[3]) for row in production] == [
-        ("engine/event_pipeline.py", "self._reader.read", "actor")
+        ("engine/event_pipeline.py", "self._reader.read", "actor"),
+        ("engine/trigger_observation.py", "self._pipeline.collect", "actor"),
     ], production
 
 
@@ -1132,7 +1139,15 @@ def test_21_the_three_f_eleven_contracts_are_untouched():
             or "import engine.event_pipeline" in path.read_text(encoding="utf-8")
         )
     }
-    assert importers == set(), importers
+    #: 🔴 **Phase 6-I 에서 0 이 1 이 되었다** —
+    #: ``engine/trigger_observation.py`` 가 조립 층을 펴고 실제 ``Duel``
+    #: 기록에서 후보를 모은다. 6-H 까지 0곳이었던 것은 측정값이었고, 그
+    #: 사실이 6-I 의 산출물로 바뀌었다 (보고서 §13.1 이 같은 수를 움직인
+    #: 감사 전부를 적는다).
+    #:
+    #: 이 감사가 지키려던 **actor 어휘**는 그대로다 — 같은 테스트의 나머지
+    #: 단정이 여전히 참이고, 늘어난 모듈은 ``context.actor`` 를 읽지 않는다.
+    assert importers == {"engine/trigger_observation.py"}, importers
 
 
 def test_22_this_phase_changed_no_production_file():

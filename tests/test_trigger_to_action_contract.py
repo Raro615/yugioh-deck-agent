@@ -82,6 +82,16 @@ TRIGGER_MODULES = (
     "engine/trigger_order.py",
     "engine/timing.py",
     "engine/event_pipeline.py",
+    #: 🔴 Phase 6-I 가 더한 관찰 모듈. **트리거 계층 안이다** — 후보와
+    #: 적격성을 소비하는 자리이고, 이 감사의 질문("후보를 소비하는 자리가
+    #: 트리거 계층 밖에 있는가")에 대한 답은 여전히 "없다" 다.
+    #:
+    #: 🔴 이 감사의 **본 단정**은 그대로 참이다: 그 모듈의 어느 함수도
+    #: ``PlayerAction`` 을 돌려주지 않는다 (``observe`` 는
+    #: ``tuple[TriggerObservation, ...]``, ``_stage_of`` 는
+    #: ``ObservationStage``). 후보를 행동으로 바꾸는 변환기는 여전히 0곳이고,
+    #: 그것이 6-I §15 의 "자동 발동 금지" 가 코드로 참인 방식이다.
+    "engine/trigger_observation.py",
 )
 
 #: 트리거 계층의 이름들. ``TimingPoint`` 는 **일부러 뺀다** —

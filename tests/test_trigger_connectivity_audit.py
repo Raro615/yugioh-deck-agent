@@ -74,7 +74,12 @@ TRIGGER_MODULES = (
 )
 
 #: 듀얼 한 판이 실제로 쓰는 모듈 (``engine/duel.py`` 의 import 목록).
-PRODUCTION_ROOTS = ("engine", "agent", "app")
+#:
+#: 🔴 Phase 6-I 에서 ``integration`` 을 더했다 — 거기가 등록소를 만드는
+#: 자리이므로, 범위에 없으면 이 감사가 **조용히 참이 된다.** 감사의 질문은
+#: "트리거 계층을 production 이 쓰는가" 이고, 그 답이 ``engine`` 밖으로
+#: 옮겨졌다고 해서 달라지지 않는다.
+PRODUCTION_ROOTS = ("engine", "agent", "app", "integration")
 
 FEATHERMAN = 21844576
 POT_OF_GREED = 55144522
@@ -134,12 +139,22 @@ def activation_actions(duel: Duel, seat: int) -> list[PlayerAction]:
 
 def test_01_the_integration_layer_has_no_production_importer():
     """
-    **§4 — ``engine.timing`` 과 ``engine.event_pipeline`` 은 아무도 import 하지
-    않는다.** 둘이 트리거 계층의 입구인데, 입구로 들어오는 사람이 없다.
+    **§4 — 트리거 계층의 두 입구로 누가 들어오는가.**
+
+    6-H 까지 둘 다 **0곳**이었다 — 입구가 있는데 들어오는 사람이 없었다.
+
+    🔴 **Phase 6-I 가 한쪽 문을 열었다.** ``engine.event_pipeline`` 로
+    ``engine.trigger_observation`` 이 들어온다. ``engine.timing`` 은
+    **여전히 0곳**이다 — 그 모듈은 수집·정렬·체인 삽입을 한 줄로 잇는 더
+    윗층이고, 6-I 는 체인을 만들지 않는다 (6-I §15).
+
+    둘을 갈라서 세는 것이 "어디까지 켜졌는가" 를 정확히 말한다.
     """
     importers = import_graph()
     assert importers.get("engine.timing", set()) == set()
-    assert importers.get("engine.event_pipeline", set()) == set()
+    assert importers.get("engine.event_pipeline", set()) == {
+        "engine.trigger_observation"
+    }
 
     #: 그 아래 두 모듈은 ``engine.timing`` 을 통해서만 닿는다.
     assert importers.get("engine.trigger_chain", set()) == {"engine.timing"}
@@ -159,6 +174,10 @@ def test_02_engine_trigger_reaches_production_only_as_a_type():
     importers = import_graph()
     #: 🔴 Phase 6-E 에서 ``engine.trigger_compiler`` 가 늘었다 — 카드
     #: 데이터에서 선언을 만드는 자리다 (STRUCTURAL-7).
+    #: 🔴 Phase 6-I 에서 둘이 늘었다 — ``engine.trigger_observation`` (실제
+    #: 사건을 기존 계층에 넘긴다) 과 ``integration.trigger_registry``
+    #: (등록소를 만든다). 아래 ``activation_timing`` 단정은 그대로다:
+    #: **살아 있는 경로가 가져가는 이름은 여전히 ``TimingPoint`` 하나**다.
     assert importers["engine.trigger"] == {
         "engine.activation_timing",
         "engine.event_pipeline",
@@ -166,6 +185,8 @@ def test_02_engine_trigger_reaches_production_only_as_a_type():
         "engine.trigger_chain",
         "engine.trigger_order",
         "engine.trigger_compiler",
+        "engine.trigger_observation",
+        "integration.trigger_registry",
     }
 
     source = (PROJECT_ROOT / "engine/activation_timing.py").read_text(encoding="utf-8")
@@ -221,18 +242,29 @@ def test_04_no_production_module_constructs_the_trigger_structures():
             if target in text:
                 callers.setdefault(rel, []).append(target)
 
-    #: **생성자를 부르는 production 모듈은 딱 하나다** — 그리고 그 모듈 자신을
-    #: import 하는 곳이 없다. 즉 "부르는 코드가 있다" 와 "불린다" 는 다르다.
-    #: 🔴 하나 → **둘** (Phase 6-E). ``event_pipeline.py`` 는 수집기를
-    #: 만들고, ``trigger_compiler.py`` 는 **선언**을 만든다. 둘 다
-    #: "돌린다" 가 아니다 — 레지스트리를 만드는 자리는 여전히 0곳이다.
+    #: 🔴 하나 → **둘** (Phase 6-E) → **셋** (Phase 6-I).
+    #:
+    #: ``event_pipeline.py`` 는 수집기를 만들고, ``trigger_compiler.py`` 는
+    #: **선언**을 만들고, ``integration/trigger_registry.py`` 는 **등록소**를
+    #: 만든다. 6-H 까지 "레지스트리를 만드는 자리는 0곳" 이었고, 그 사실이
+    #: 6-I 의 산출물로 바뀌었다 (6-I 보고서 §2 · §13.1).
+    #:
+    #: 🔴 여전히 가르는 것: **"부르는 코드가 있다" 와 "돌린다" 는 다르다**
+    #: (§3). 등록소를 만드는 자리가 생긴 것이고, 듀얼이 스스로 후보를
+    #: 모으기 시작한 것이 아니다 — ``engine/duel.py`` 에는 여전히
+    #: ``trigger`` 라는 말이 없다
+    #: (``test_trigger_pipeline_dormant_audit::test_12``).
     assert sorted(callers) == [
         "engine/event_pipeline.py",
         "engine/trigger_compiler.py",
+        "integration/trigger_registry.py",
     ], callers
     assert callers["engine/trigger_compiler.py"] == ["TriggerSpec("], callers
     assert callers["engine/event_pipeline.py"] == ["TriggerCollector("]
-    assert import_graph().get("engine.event_pipeline", set()) == set()
+    assert callers["integration/trigger_registry.py"] == ["TriggerRegistry("]
+    assert import_graph().get("engine.event_pipeline", set()) == {
+        "engine.trigger_observation"
+    }
 
     #: 반대로 테스트에서는 실제로 쓰인다 — 계층이 죽은 코드가 아니라 **잠든**
     #: 코드라는 뜻이다.

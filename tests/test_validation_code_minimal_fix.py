@@ -302,7 +302,15 @@ def test_09_the_trigger_pipeline_is_dormant_so_m3_was_left_alone():
         #: **그래도 M3 는 그대로 둔다** — 선언을 만드는 것과 그것을 돌리는
         #: 것은 다른 일이고, 레지스트리를 만드는 production 자리는 여전히
         #: 0곳이다 (바로 아래가 ``Duel`` 쪽을 다시 확인한다).
-        expected = ["engine/trigger_compiler.py"] if name == "TriggerSpec" else []
+        #: 🔴 Phase 6-I: ``TriggerRegistry`` 는 이제
+        #: ``integration/trigger_registry.py`` 가 만든다. **그래도 M3 는
+        #: 그대로 둔다** — M3 가 걸려 있는 자리는 ``_event_relation`` 의
+        #: 관문 코드이고 (3-E-45 가 고쳤다), 등록소를 만드는 자리가 생긴
+        #: 것이 그 코드를 바꾸지 않는다. 아래 ``Duel`` 단정도 그대로다.
+        expected = {
+            "TriggerSpec": ["engine/trigger_compiler.py"],
+            "TriggerRegistry": ["integration/trigger_registry.py"],
+        }.get(name, [])
         assert [site.split(":")[0] for site in sites] == expected, (
             f"{name} 의 production 생성 자리가 달라졌다: {sites}"
         )

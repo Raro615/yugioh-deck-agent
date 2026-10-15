@@ -108,6 +108,23 @@ def duel_closure() -> set[str]:
     return seen
 
 
+#: production 패키지 전부. 🔴 ``engine`` 만 뒤지면 ``engine`` 밖으로 옮긴
+#: 코드가 감사를 피한다 (Phase 6-I 가 ``integration`` 을 더하면서 생긴
+#: 구멍이고, 그 구멍을 열어 두지 않는다).
+PRODUCTION_PACKAGES = (
+    "engine",
+    "integration",
+    "analysis",
+    "agent",
+    "core",
+    "sources",
+    "deck",
+    "app",
+    "rules",
+    "rulings",
+)
+
+
 def production_engine_files():
     for path in sorted((PROJECT_ROOT / "engine").rglob("*.py")):
         yield str(path.relative_to(PROJECT_ROOT)), path
@@ -253,13 +270,25 @@ def test_03_the_part_modules_declare_thirty_two_top_level_names():
 
 def test_04_the_assembly_modules_have_no_production_importer():
     """
-    **§3 · §4: 조립 층을 import 하는 production 파일이 0곳이다.**
+    **§3 · §4: 조립 층을 import 하는 production 파일.**
 
-    이것이 dormant 의 **구조적 까닭**이다 — 부품이 있고 조립도가 있는데,
-    조립도를 펴는 사람이 없다.
+    이것이 dormant 의 **구조적 까닭**이었다 — 부품이 있고 조립도가 있는데,
+    조립도를 펴는 사람이 없었다.
+
+    🔴 **Phase 6-I 에서 그 사람이 생겼다.** ``engine/trigger_observation.py``
+    가 ``engine.event_pipeline`` 을 펴고, 실제 ``Duel`` 기록에서 후보를 모아
+    기존 판정기에 넘긴다. 이 테스트가 틀린 전제를 갖고 있었던 것이 아니라 —
+    6-H 까지는 실제로 0곳이었고 그것이 측정값이었다 — **그 사실이 이번
+    Phase 의 산출물로 바뀌었다.**
+
+    ``engine.timing`` 은 **여전히 0곳**이다. 그 모듈은 수집·정렬·체인 삽입을
+    한 줄로 잇는 더 윗층이고, 이번 단계는 체인을 만들지 않는다 (6-I §15).
+    둘을 갈라서 세는 것이 "어디까지 켜졌는가" 를 정확히 말한다.
     """
-    for module in ("engine.timing", "engine.event_pipeline"):
-        assert importers_of(module) == [], module
+    assert importers_of("engine.timing") == []
+    assert importers_of("engine.event_pipeline") == [
+        "engine/trigger_observation.py"
+    ]
 
 
 def test_05_the_part_modules_are_reachable_only_through_the_assembly():
@@ -275,12 +304,18 @@ def test_05_the_part_modules_are_reachable_only_through_the_assembly():
     #: 때문이다. **휴면 모듈 넷은 그대로 휴면이다** (아래 test_06 이
     #: 고정한다) — ``trigger.py`` 를 읽는 자리가 늘었다는 것이 파이프라인이
     #: 돌기 시작했다는 뜻이 아니다.
+    #: 🔴 Phase 6-I 에서 ``engine/trigger_observation.py`` 가 늘었다 — 실제
+    #: 사건을 기존 수집기·판정기에 넘기는 자리다. **휴면 모듈 넷은 그대로
+    #: 휴면이다** (``test_06`` 이 고정한다): 이 모듈은 ``Duel`` 의 import
+    #: 폐쇄 **밖**에 있고, 듀얼이 그것을 부르지 않는다. 관찰은 듀얼이 아니라
+    #: 부르는 쪽이 한다.
     assert importers_of("engine.trigger") == [
         "engine/activation_timing.py",
         "engine/event_pipeline.py",
         "engine/timing.py",
         "engine/trigger_chain.py",
         "engine/trigger_compiler.py",
+        "engine/trigger_observation.py",
         "engine/trigger_order.py",
     ]
 
@@ -499,27 +534,39 @@ def test_13_only_the_compiler_builds_a_declaration_and_nobody_builds_a_registry(
     Phase 6-E 가 그 컴파일러를 만들었다. 그래서 둘을 **갈라서** 센다.
 
     - ``TriggerSpec`` 생성 — **1곳** (``trigger_compiler.py``). 카드
-      데이터에서 선언을 만드는 자리이고, 그것이 이 Phase 의 산출물이다.
-    - ``TriggerRegistry`` 생성 — **여전히 0곳.** 🔴 **누가 어떤 선언을
-      등록할지는 production 이 정하지 않는다.** 레지스트리를 채우는 것은
-      부르는 쪽(지금은 시험)의 일이고, 그래서 실제 듀얼은 후보를 하나도
-      모으지 않는다 — ``test_12`` 가 ``duel.py`` 에 "trigger" 라는 말이
-      없음을 그대로 고정한다.
+      데이터에서 선언을 만드는 자리이고, 그것이 6-E 의 산출물이다.
+    - ``TriggerRegistry`` 생성 — 6-H 까지 **0곳**이었다. 🔴 **Phase 6-I 가
+      그 자리를 만들었다** (``integration/trigger_registry.py``). 누가 어떤
+      선언을 등록할지를 이제 production 이 정한다 — 관측에 **보이는 카드**가
+      정한다.
+
+    🔴 **이 테스트의 탐색 범위도 함께 넓혔다.** 원래 ``engine/`` 만 뒤졌고,
+    그래서 등록소를 ``engine`` 밖에서 만들면 이 감사가 **조용히 참이 된다.**
+    그것은 감사가 아니라 눈가림이므로 production 패키지 전체를 뒤진다.
+
+    ``duel.py`` 는 **그대로다** — ``test_12`` 가 "trigger" 라는 말이 없음을
+    여전히 고정한다. 등록소를 듀얼이 들고 있지 않고, 관찰은 부르는 쪽이
+    한다 (``engine/trigger_observation.py`` 의 머리말이 그 선택과 대안을
+    적는다).
     """
     built = collections.defaultdict(list)
-    for rel, path in production_engine_files():
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id in ("TriggerSpec", "TriggerRegistry")
-            ):
-                built[node.func.id].append(f"{rel}:{node.lineno}")
+    for package in PRODUCTION_PACKAGES:
+        for path in sorted((PROJECT_ROOT / package).rglob("*.py")):
+            rel = str(path.relative_to(PROJECT_ROOT))
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id in ("TriggerSpec", "TriggerRegistry")
+                ):
+                    built[node.func.id].append(f"{rel}:{node.lineno}")
 
     assert [site.split(":")[0] for site in built["TriggerSpec"]] == [
         "engine/trigger_compiler.py"
     ], dict(built)
-    assert built["TriggerRegistry"] == [], dict(built)
+    assert [site.split(":")[0] for site in built["TriggerRegistry"]] == [
+        "integration/trigger_registry.py"
+    ], dict(built)
 
 
 # ======================================================================

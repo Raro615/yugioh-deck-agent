@@ -1111,7 +1111,10 @@ def test_38_the_cache_signature_was_not_bumped():
 def test_39_no_lua_interpreter_or_graph_engine_was_added():
     """🟢 §7 금지 — Lua 인터프리터 · dataflow · graph 라이브러리 없음."""
     forbidden = ("luaparser", "lupa", "slpp", "networkx", "antlr", "lark")
-    for package in ("sources", "analysis", "engine", "core", "agent"):
+    #: 🔴 ``integration`` 을 더했다 (Phase 6-I). 새 패키지가 이 금지선 밖에
+    #: 있으면 감사가 조용히 참이 된다 — 그 패키지가 바로 Lua 를 다루는 층과
+    #: 엔진을 잇는 자리이므로 특히 여기 있어야 한다.
+    for package in ("sources", "analysis", "engine", "core", "agent", "integration"):
         for path in sorted((PROJECT_ROOT / package).rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             modules: set[str] = set()

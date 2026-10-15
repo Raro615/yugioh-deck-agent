@@ -142,7 +142,11 @@ CONDITION_REQUIRED_FIELDS = {
 #: Phase 6-E 에서 67 → 68 (``engine/trigger_compiler.py``). 그 파일의
 #: ``TriggerCompilation.spec`` 은 ``TriggerSpec | None`` 이고 **``Condition``
 #: 이 아니므로** 아래 두 집합은 둘 다 그대로다.
-ENGINE_FILE_COUNT = 68
+#: Phase 6-I 에서 68 → **69** (``engine/trigger_observation.py``). 그 파일의
+#: ``Optional`` 칸들은 ``EffectDefinitionSource | None`` · ``int | None`` 이고
+#: **``Condition`` 이 아니므로** 아래 두 집합은 둘 다 그대로다 — 늘어난 것은
+#: 파일 수뿐이다.
+ENGINE_FILE_COUNT = 69
 
 #: 조건·요구·발동 이름에 대한 ``None`` 검사 수. ``engine/`` **패키지만** 센다
 #: (``tests/engine/`` 까지 세면 분모가 오염된다 — 한 번 틀렸던 자리다).

@@ -1012,7 +1012,15 @@ def test_17_engine_v1_stayed_frozen():
                     found.add(str(path.relative_to(PROJECT_ROOT)))
         return found
 
-    assert importers("event_pipeline") == set()
+    #: 🔴 **Phase 6-I 에서 ``event_pipeline`` 의 importer 가 0 → 1 이 되었다.**
+    #: 그것이 이 Phase 의 산출물이다 — 실제 ``Duel`` 기록을 기존 수집기에
+    #: 넘기는 자리다. ``timing`` 은 **여전히 0곳**이고, 그쪽이 체인 삽입까지
+    #: 잇는 윗층이다 (6-I 는 체인을 만들지 않는다).
+    #:
+    #: 이 테스트가 지키는 Engine V1 경계는 그대로다 — 아래
+    #: ``activation_timing`` 단정이 여전히 참이고, ``engine/duel.py`` 는
+    #: 손대지 않았다.
+    assert importers("event_pipeline") == {"engine/trigger_observation.py"}
     assert importers("timing") == set()
     #: `trigger` 는 어휘만 새어 나간다 — `activation_timing` 이 `TimingPoint`
     #: 하나를 읽는다 (3-F-5 §6 이 그 소켓을 측정했다).

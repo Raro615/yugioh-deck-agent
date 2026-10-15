@@ -949,6 +949,16 @@ def test_23_this_phase_changed_no_production_file():
 
     #: EventRelation · Trigger pipeline 은 연결되지 않았다.
     assert "EVENT_RELATION" not in source_of("engine/duel.py")
+    #: 🔴 **Phase 6-I 에서 0 이 1 이 되었다.** ``engine/trigger_observation.py``
+    #: 가 ``engine.event_pipeline`` 을 펴고, 실제 ``Duel`` 기록에서 후보를
+    #: 모아 기존 판정기에 넘긴다. 이 단정이 틀린 전제를 갖고 있었던 것이
+    #: 아니라 — 6-H 까지는 실제로 0곳이었다 — **그 사실이 6-I 의 산출물로
+    #: 바뀌었다** (``tests/test_trigger_pipeline_dormant_audit.py::test_04``
+    #: 가 같은 수를 같은 이유로 갱신했고, 6-I 보고서 §13.1 이 적는다).
+    #:
+    #: 이 감사가 지키려던 것은 **actor 어휘**이고 그것은 그대로다 — 아래
+    #: 루프와 위의 금지 문자열 검사가 여전히 참이다. 늘어난 importer 는
+    #: ``event.actor`` · ``timing.actor`` 를 읽지 않는다.
     importers = {
         str(path.relative_to(PROJECT_ROOT))
         for path in production_files()
@@ -958,7 +968,7 @@ def test_23_this_phase_changed_no_production_file():
             or "import engine.event_pipeline" in path.read_text(encoding="utf-8")
         )
     }
-    assert importers == set(), importers
+    assert importers == {"engine/trigger_observation.py"}, importers
 
 
 def test_24_reading_events_changes_nothing(repository):
