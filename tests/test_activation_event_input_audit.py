@@ -22,6 +22,12 @@ Phase 3-E-30 — 발동 열거의 **사건 입력 계약** 감사.
    유발 효과(trigger effect)는 하나도 없다. 그래서 "사건이 없으면 못 세는
    효과" 가 열거 대상에 애초에 들어 있지 않다.
 
+   🔴 **Phase 6-L 에서 14번째가 들어왔다** — 몬스터 하나(어니스트 ①)다.
+   그래도 위의 결론은 그대로다: 그 효과의 발동 종류는 **기동**
+   (``ActivationKind.IGNITION``)이어서 사건을 묻지 않는다. 즉 열거 대상에
+   들어온 것은 "상태 기반 발동" 한 건이고, 유발 효과는 여전히 0건이다.
+   ``test_05`` 가 그 둘을 갈라서 센다.
+
 4. 함정은 **후보가 되지 않고**, 그 까닭이 이름 붙은 "없는 규칙" 으로 남는다 —
    ``trap-activation-timing (함정의 유발 조건을 효과마다 구분할 수 없다 —
    공식 스크립트의 SetCode(EVENT_*) 가 EffectDefinition 에 없다)``.
@@ -50,7 +56,7 @@ from engine.ids import EffectRef
 from engine.priority import PriorityState
 from engine.state.game_state import GameState
 from engine.validation import ActionValidity, ValidationCode
-from engine.vocabulary import Phase, Position, Zone
+from engine.vocabulary import ActivationKind, Phase, Position, Zone
 
 from tests.conftest import requires_official_db
 
@@ -59,7 +65,12 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 MINE, THEIRS = 0, 1
 
 #: 공식 DB 의 ``type_mask`` 비트. ``core.constants`` 에서 읽는다.
-from core.constants import TYPE_QUICKPLAY, TYPE_SPELL, TYPE_TRAP  # noqa: E402
+from core.constants import (  # noqa: E402
+    TYPE_MONSTER,
+    TYPE_QUICKPLAY,
+    TYPE_SPELL,
+    TYPE_TRAP,
+)
 
 #: 범주마다 한 장. **이 카드들의 규칙을 추측하지 않는다** — 종류는 공식 DB 의
 #: ``type_mask`` 로 확인하고(``test_05``), 이름은 공식 DB 의 것을 쓴다.
@@ -285,6 +296,14 @@ def test_05_every_executable_effect_is_a_spell_or_a_trap(repository):
 
     통상 마법 · 속공 마법 · 함정뿐이고 **유발 효과(몬스터의 트리거)는 하나도
     없다.** 그래서 "사건이 있어야 세는 효과" 가 열거 대상에 들어 있지 않다.
+
+    🔴 **Phase 6-L 에서 몬스터 하나가 실행 가능해졌다** (어니스트 ①). 이
+    테스트가 틀린 가정을 갖고 있었던 것이 아니라 3-E-30 시점에 실제로
+    몬스터가 0장이었다. 그래서 ``mask & (TYPE_SPELL | TYPE_TRAP)`` 단언을
+    **약화시키지 않고 갈라 적는다**: 마법 · 함정이 아니면 몬스터여야 하고,
+    그때는 **발동 종류가 기동이어야 한다.** 유발 효과가 조용히 섞여 들어오면
+    이 단언이 깨진다 — 그것이 이 Phase 의 결론(사건 의존 효과가 열거 대상에
+    없다)을 지키는 자리다.
     """
     seen: dict[str, int] = {}
     for entry in EFFECT_LIBRARY:
@@ -293,18 +312,27 @@ def test_05_every_executable_effect_is_a_spell_or_a_trap(repository):
         card = repository.get(entry.definition.effect_ref.card_id)
         assert card is not None, "등록된 효과의 카드가 공식 DB 에 있어야 한다"
         mask = card.type_mask
-        #: 마법 또는 함정이다 — 몬스터 효과가 아니다.
-        assert mask & (TYPE_SPELL | TYPE_TRAP), f"{card.name} mask=0x{mask:x}"
         if mask & TYPE_TRAP:
             label = "TRAP"
         elif mask & TYPE_QUICKPLAY:
             label = "QUICKPLAY"
-        else:
+        elif mask & TYPE_SPELL:
             label = "SPELL"
+        else:
+            #: 🔴 마법 · 함정이 아니면 몬스터다 — 다른 범주는 들어올 수 없다.
+            assert mask & TYPE_MONSTER, f"{card.name} mask=0x{mask:x}"
+            #: 🔴 그리고 **유발 효과가 아니다.** 사건을 묻지 않는 기동 효과만
+            #: 열거 대상이 될 수 있다는 이 Phase 의 결론을 여기서 센다.
+            assert (
+                entry.definition.activation_kind is ActivationKind.IGNITION
+            ), (card.name, entry.definition.activation_kind)
+            label = "MONSTER"
         seen[label] = seen.get(label, 0) + 1
 
-    #: 측정값 (3-E-30). 숫자가 바뀌면 이 Phase 의 결론을 다시 봐야 한다.
-    assert seen == {"SPELL": 6, "QUICKPLAY": 3, "TRAP": 4}, seen
+    #: 측정값 (3-E-30 → Phase 6-L). 숫자가 바뀌면 이 Phase 의 결론을 다시
+    #: 봐야 한다. 🔴 마법 · 함정 세 열은 **하나도 움직이지 않았다** — 몬스터
+    #: 열 하나가 더해졌을 뿐이다.
+    assert seen == {"SPELL": 6, "QUICKPLAY": 3, "TRAP": 4, "MONSTER": 1}, seen
 
 
 @requires_official_db

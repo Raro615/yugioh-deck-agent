@@ -158,6 +158,10 @@ def corpus() -> dict:
             "types": frozenset(types),
             "duel": frozenset(_DUEL.findall(text)),
             "card": frozenset(_CARD.findall(text)),
+            #: 🔴 ``SetType`` 호출 수 = 선언된 효과 블록 수 (Phase 6-L).
+            #: 이 행은 **카드 단위**이므로, 블록이 여럿이면 행의 API 집합을
+            #: "그 효과가 쓰는 것" 으로 읽을 수 없다.
+            "blocks": len(_SET_TYPE.findall(text)),
         }
     return found
 
@@ -209,34 +213,41 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
     시점에 실제로 참이었고, 틀린 가정이 아니었다.
 
     바뀐 것: 어니스트(37742478) 가 ``EFFECT_TYPE_IGNITION`` 으로 등재되었다.
-    그러므로 "등재된 전부" 는 더 이상 ``ACTIVATE`` 가 아니다. **단언을
-    약하게 지우지 않고 둘로 가른다** — 실행하는 쪽(``executable``)은 여전히
-    전부 ``ACTIVATE`` 이고, 실행하지 않는 쪽에 기동 효과 하나가 있다. 그
-    구분이 ADR-006 이 지키는 바로 그 구분이다.
+    그러므로 "등재된 전부" 는 더 이상 ``ACTIVATE`` 가 아니다.
+
+    🔴 **Phase 6-L 에서 그 한 장이 실행까지 된다.** 6-K 에서는 "실행하는
+    쪽은 여전히 전부 ACTIVATE" 라고 가를 수 있었고 그것이 참이었다. 이제는
+    참이 아니므로, 단언을 **약하게 지우지 않고 수를 적는다** — ``ACTIVATE``
+    가 아닌 등재가 정확히 하나이고 그것이 어니스트다.
+
+    이 시험의 이름("엔진이 담는 모양")이 가리키던 범위가 실제로 넓어졌다.
+    넓어진 폭이 **한 장**이라는 것이 여기서 고정되는 사실이다.
     """
     assert len(corpus) == 12702
     assert len(activate_only) == 1385
 
     from engine.effect.library import EFFECT_LIBRARY, HONEST
 
-    # ① **실행하는** 것은 전부 ``ACTIVATE`` 하나뿐인 모양이다.
+    # ① ``ACTIVATE`` 모양이 아닌 등재는 **정확히 하나**다.
+    not_activate = []
     for entry in EFFECT_LIBRARY:
         row = corpus.get(entry.card_id)
         assert row is not None, entry.card_id
-        if entry.executable:
-            assert "EFFECT_TYPE_ACTIVATE" in row["types"], entry.card_id
+        if "EFFECT_TYPE_ACTIVATE" not in row["types"]:
+            not_activate.append(entry.card_id)
+    assert not_activate == [HONEST], not_activate
 
-    # ② 그 모양이 아닌 등재는 **어니스트 하나**이고, 실행하지 않는다.
-    others = [
-        entry.card_id
-        for entry in EFFECT_LIBRARY
-        if "EFFECT_TYPE_ACTIVATE" not in corpus[entry.card_id]["types"]
-    ]
-    assert others == [HONEST], others
+    # ② 그 하나가 기동 효과이고, **실행된다** (Phase 6-L).
     assert corpus[HONEST]["types"] >= {
         "EFFECT_TYPE_IGNITION", "EFFECT_TYPE_QUICK_O"
     }
-    assert [e.executable for e in EFFECT_LIBRARY if e.card_id == HONEST] == [False]
+    assert [e.executable for e in EFFECT_LIBRARY if e.card_id == HONEST] == [True]
+    #: 🔴 그래도 **등재된 것은 ① 하나**다 — ``QUICK_O`` 인 ② 는 없다.
+    assert [
+        e.definition.effect_ref.ordinal
+        for e in EFFECT_LIBRARY
+        if e.card_id == HONEST
+    ] == [0]
 
 
 def test_a_the_executing_cards_calibrate_the_classifier(corpus):
@@ -253,20 +264,37 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
 
     이 시험은 라이브러리에서 직접 끌어내므로, 나중에 카드가 더 등재되면
     :data:`PROVED_BY_EXECUTION` 이 좁아졌다는 것을 바로 알려 준다.
+
+    🔴 **블록이 여럿인 카드는 빼고 센다** (Phase 6-L). ``corpus`` 의 행은
+    **카드 단위**이고 실행되는 것은 **효과 단위**다. 어니스트가 등재되면서
+    둘이 처음으로 갈렸다 — ① 만 실행되는데 ② (유발 즉시)가 쓰는
+    ``GetAttacker`` · ``GetAttackTarget`` · ``IsDamageCalculated`` 까지
+    "실행으로 증명됐다" 로 세게 된다. 그것은 **거짓**이므로, 카드 단위 행을
+    효과 단위 사실로 쓸 수 있는 카드(블록이 하나인 카드)만 쓴다.
     """
     from engine.effect.library import EFFECT_LIBRARY
 
     used = set()
+    skipped = []
     for entry in EFFECT_LIBRARY:
         if not entry.executable:
             continue
         row = corpus.get(entry.card_id)
-        if row is not None:
-            used |= set(row["duel"])
+        if row is None:
+            continue
+        if row["blocks"] != 1:
+            skipped.append(entry.card_id)
+            continue
+        used |= set(row["duel"])
 
     unexplained = used - NOT_A_RULE - SUPPORTED - PROVED_BY_EXECUTION
     assert unexplained == set(), unexplained
     assert PROVED_BY_EXECUTION <= used
+    #: 🔴 빼고 센 카드가 **어니스트 하나**다 — 블록이 셋인 첫 등재 카드.
+    from engine.effect.library import HONEST
+
+    assert skipped == [HONEST], skipped
+    assert corpus[HONEST]["blocks"] == 3
 
 
 def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
@@ -292,10 +320,19 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
 
     from engine.effect.library import EFFECT_LIBRARY
 
+    from engine.effect.library import HONEST
+
     executable = {e.card_id for e in EFFECT_LIBRARY if e.executable}
-    assert len(executable) == 13
+    assert len(executable) == 14
     # 실행되는 카드는 **하나도 빠짐없이** 막는 것이 없어야 한다.
-    assert executable <= set(clean) | {53129443, 83764718}
+    #
+    # 🔴 어니스트는 예외 집합에 있다 (Phase 6-L). ``clean`` 은
+    # ``activate_only`` 슬라이스에서 나오고 어니스트는 ``IGNITION`` 이므로
+    # **애초에 그 슬라이스에 없다** — 막는 것이 있어서가 아니라 세는 범위가
+    # 다르기 때문이다. 이 파일이 재는 516 은 "ACTIVATE 하나뿐인 카드 중" 의
+    # 수이고, 그 수는 **바뀌지 않았다.**
+    assert HONEST not in set(activate_only)
+    assert executable <= set(clean) | {53129443, 83764718, HONEST}
 
 
 def test_a_the_repeated_blockers_are_ranked_and_already_filed(corpus, activate_only):

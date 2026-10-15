@@ -603,8 +603,11 @@ def test_13_sixteen_registered_definitions_are_tabulated(repository):
         assert row["ordinal"] == 0
         assert row["has_cost"] is False
 
-    #: executable 은 13개다 (나머지 셋은 ADR-006 으로 후보가 되지 않는다).
-    assert sum(1 for r in rows if r["executable"]) == 13
+    #: 🔴 executable 은 **14개**다 (나머지 셋은 ADR-006 으로 후보가 되지
+    #: 않는다). Phase 6-L 에서 13 → 14 — 어니스트 ① 의 자기 참조 해석이
+    #: 연결되어 ``executable=True`` 가 되었다. 이 테스트가 틀린 가정을 갖고
+    #: 있었던 것이 아니라 그 시점에 실제로 13건이었다.
+    assert sum(1 for r in rows if r["executable"]) == 14
 
 
 def test_14_three_real_traps_are_withheld_with_the_trap_reason(repository):
@@ -647,17 +650,24 @@ def test_16_monster_effects_are_blocked_for_a_different_reason(repository):
 
     🔴 **Phase 6-K 에서 표본이 하나 생겼다** (어니스트 ①). 이 테스트가
     틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로 0장이었다. 그래서
-    "0장" 을 "하나이고 실행되지 않는다" 로 바꿔 적고, **막는 이유가 함정과
-    다르다**는 원래의 사실은 그대로 센다.
+    "0장" 을 "하나" 로 바꿔 적고, **막는 이유가 함정과 다르다**는 원래의
+    사실은 그대로 센다.
+
+    🔴 **Phase 6-L 에서 그 하나가 실행 가능해졌다.** 6-K 의 "실행되지
+    않는다" 는 그 시점의 사실이었다. 그런데 이 테스트가 재는 것은
+    ``executable`` 이 아니라 **막는 이유가 함정과 다르다**는 것이고, 그
+    사실은 움직이지 않았다: 이유 문자열은 여전히 따로이고, 통상 몬스터
+    (취옥의 비룡)는 여전히 후보를 하나도 내지 않는다. 그래서 그 두 단언은
+    그대로 두고 플래그만 사실대로 적는다.
     """
     assert MONSTER_ACTIVATION_MISSING != TRAP_TRIGGER_MISSING
     assert "기동" in MONSTER_ACTIVATION_MISSING or "분류" in MONSTER_ACTIVATION_MISSING
 
-    #: 등재된 몬스터 효과가 **하나**이고 실행되지 않는다 (ADR-006).
+    #: 등재된 몬스터 효과가 **하나**이고, Phase 6-L 에서 실행 가능해졌다.
     rows = registered_rows(repository)
     monsters = [r for r in rows if r["kind"] == "monster"]
     assert len(monsters) == 1, monsters
-    assert monsters[0]["executable"] is False
+    assert monsters[0]["executable"] is True
     #: 통상 몬스터는 후보를 내지 않는다.
     assert activatable_effects(LUSTER_DRAGON) == ()
     card = repository.get(LUSTER_DRAGON)

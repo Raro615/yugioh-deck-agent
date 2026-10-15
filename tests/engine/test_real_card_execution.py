@@ -344,6 +344,12 @@ def test_a_thirteen_real_effect_refs_are_executable():
     2-AK 가 더한 것은 강제 탈출 장치다. 2-W 부터 네 단계 동안 "패로
     되돌릴 수 있는가를 판정할 계층이 없다" 로 실려 있었고, 그 계층이
     생겼다 (:class:`~engine.effect.ruling.BoardRuling`).
+
+    🔴 **Phase 6-L 이 열넷째를 더했다 — 어니스트 ①, 첫 몬스터 효과.**
+    6-K 가 그것을 ``executable=False`` 로 실은 이유는 "정의가 '이 효과의
+    카드' 를 가리킬 이름이 없다" 였고, 6-L 이 그 이름을 만들었다
+    (:data:`~engine.effect.target.SELF_TARGET`). 같은 성질의 고침이다 —
+    카드를 빼서 통과시키는 것이 아니라 단언을 늘린다.
     """
     executable = {
         entry.effect_ref
@@ -361,15 +367,16 @@ def test_a_thirteen_real_effect_refs_are_executable():
             INTRODUCTION_TO_GALLANTRY,
             RELOAD,
             COMPULSORY_EVACUATION_DEVICE,  # Phase 2-AK
+            HONEST,  # Phase 6-L — 첫 **몬스터** 효과 (자기 참조)
         )
     }
-    assert len(executable) == 13
+    assert len(executable) == 14
 
 
 def test_a_every_declined_card_says_what_is_missing():
     """
     실행하지 않는 실제 카드를 **빼 버리지 않는다.** 빼면 "왜 못 하는가" 가
-    사라진다. 넷이 남아 있고 넷 다 이유를 들고 있다.
+    사라진다. 셋이 남아 있고 셋 다 이유를 들고 있다.
 
     Phase 2-AK 에서 넷에서 셋이 되었다. 강제 탈출 장치가 빠진 것은 카드를
     지워서가 아니라 **이유가 없어져서**다 — ``IsAbleToHand`` 에 답할 수
@@ -380,11 +387,14 @@ def test_a_every_declined_card_says_what_is_missing():
     남아 있었다 — ``aux.SpElimFilter`` 미확인, 그리고 공식 텍스트(상대
     묘지)와 스크립트(상대 묘지 또는 몬스터 존)의 불일치.
 
-    🔴 Phase 6-K 에서 셋에서 **넷**이 되었다. 어니스트 ① 이 더해졌고, 그
-    이유는 앞의 셋과 **다른 종류**다 — 앞의 셋은 의미 계층(파괴 · 소생
-    제한 · 보조 함수)이 없어서 못 하는 것이고, 이쪽은 **정의가 "이 효과의
-    카드" 를 가리킬 이름이 없어서** 못 한다. 실행 경로의 끝이 아니라
-    대상 축의 모양 문제다.
+    🔴 Phase 6-K 에서 셋에서 넷이 되었고, **Phase 6-L 에서 다시 셋이
+    되었다.** 6-K 가 더한 어니스트 ① 의 이유는 앞의 셋과 다른 종류였다 —
+    앞의 셋은 의미 계층(파괴 · 소생 제한 · 보조 함수)이 없어서 못 하는
+    것이고, 그쪽은 **정의가 "이 효과의 카드" 를 가리킬 이름이 없어서**
+    못 했다. 대상 축의 모양 문제였고, 6-L 이 그 이름을 만들었다.
+
+    남은 셋은 그대로다 — 그 셋의 이유는 모양이 아니라 **없는 의미 계층**
+    이고, 자기 참조가 그것을 열지 않는다.
     """
     declined = {
         entry.card_id: entry.note
@@ -396,8 +406,9 @@ def test_a_every_declined_card_says_what_is_missing():
         DARK_HOLE,  # 파괴 의미 + 존 전체 일괄 처리
         MONSTER_REBORN,  # IsCanBeSpecialSummoned + 표시 형식
         DISAPPEAR,  # aux.SpElimFilter + 텍스트/스크립트 불일치 (2-AK 에서 갱신)
-        HONEST,  # Phase 6-K — 하는 일이 '이 효과의 카드' 를 가리킨다
     }
+    #: 🔴 Phase 6-L — 어니스트는 **더 이상 거절되지 않는다.**
+    assert HONEST not in declined
     # 더 이상 이유가 없는 것은 목록에 없다.
     assert COMPULSORY_EVACUATION_DEVICE not in declined
     for card_id, note in declined.items():
@@ -412,9 +423,13 @@ def test_a_every_declined_card_says_what_is_missing():
     assert "IsCanBeSpecialSummoned" in declined[MONSTER_REBORN]
     assert "IsAbleToRemove" in declined[DISAPPEAR]
     assert "IsCanBeSpecialSummoned" in declined[MONSTER_REBORN]
-    #: Phase 6-K — 막는 것이 **대상 축의 모양**이라고 이름으로 말한다.
-    assert "TargetRequirement" in declined[HONEST]
-    assert "exclude_source" in declined[HONEST]
+    #: 🔴 Phase 6-L — 막던 것이 없어졌으므로 그 문장도 없어졌다.
+    #: ``SELF_TARGET`` 이 그 자리를 채웠다.
+    from engine.effect.target import SELF_TARGET
+
+    honest = next(e for e in EFFECT_LIBRARY if e.card_id == HONEST)
+    assert honest.executable is True
+    assert honest.definition.operations[0].target_ref == SELF_TARGET
 
 
 def test_a_operation_coverage_by_real_cards():

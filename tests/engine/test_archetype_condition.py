@@ -354,10 +354,15 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
             "IsSetCard" in binding.describe_ko() for binding in entry.definition.targets
         )
     ] == []
-    #: 늘어난 한 건이 어디서 왔는지 이름으로 못박는다.
+    #: 🔴 Phase 6-L — 어니스트가 **실행 가능**이 되어 이 집합에서 빠졌다.
+    #: 6-K 가 그것을 실행 불가로 실은 이유는 "정의가 '이 효과의 카드' 를
+    #: 가리킬 이름이 없다" 였고, 6-L 이 그 이름을 만들었다 (``SELF_TARGET``).
+    #: 남은 셋은 그대로이고, 이 테스트가 지키는 사실(카드군 조건이 등재를
+    #: 늘리지 않았다)도 그대로다.
     assert {entry.card_id for entry in EFFECT_LIBRARY if not entry.executable} == {
-        53129443, 83764718, 24623598, HONEST
+        53129443, 83764718, 24623598
     }
+    assert HONEST in {entry.card_id for entry in EFFECT_LIBRARY if entry.executable}
 
 
 # ======================================================================
@@ -837,8 +842,16 @@ def test_j_this_phase_turned_on_no_new_execution():
     """
     from engine.effect.library import EFFECT_LIBRARY
 
-    # 🔴 16 → 17 (Phase 6-K, 어니스트 ①). **실행 수는 13 그대로다** —
-    # 늘어난 한 건이 ``executable=False`` 이기 때문이고, 이 테스트가 지키는
-    # 것이 바로 그 수다.
+    # 🔴 16 → 17 (Phase 6-K, 어니스트 ①) → 실행 수 13 → **14** (Phase 6-L).
+    # 이 테스트가 지키는 것은 "**카드군 조건**이 실행을 켜지 않았다" 이고,
+    # 늘어난 하나는 카드군 조건이 아니라 자기 참조(``SELF_TARGET``)에서
+    # 왔다. 아래 두 줄이 그것을 이름으로 못박는다.
     assert len(EFFECT_LIBRARY) == 17
-    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 13
+    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 14
+    #: 🔴 실행되는 효과 중 **카드군 조건을 쓰는 것이 하나도 없다.**
+    assert [
+        entry.card_id
+        for entry in EFFECT_LIBRARY
+        if entry.executable
+        and any("카드군" in b.describe_ko() for b in entry.definition.targets)
+    ] == []

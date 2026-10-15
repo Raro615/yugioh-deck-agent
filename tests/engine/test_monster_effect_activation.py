@@ -377,9 +377,15 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
     }
     assert declared == {HONEST_REF: ActivationKind.IGNITION}
     entry = next(e for e in EFFECT_LIBRARY if e.definition.effect_ref == HONEST_REF)
-    #: 🔴 **실행하지 않는다.** 등록은 실행 허가가 아니다.
-    assert entry.executable is False
-    assert entry.definition.operations == ()
+    #: 🔴 **Phase 6-L 에서 실행된다.** 6-K 시점에는 ``executable=False`` ·
+    #: ``operations=()`` 였고 그것이 참이었다 — 막던 것은 "정의가 '이 효과의
+    #: 카드' 를 가리킬 이름이 없다" 였고, 6-L 이 ``SELF_TARGET`` 으로 그
+    #: 이름을 만들었다.
+    #:
+    #: 이 테스트가 지키는 사실은 **분류를 손으로 하나만 적었다**는 것이고
+    #: (위 ``declared``), 그것은 그대로다.
+    assert entry.executable is True
+    assert len(entry.definition.operations) == 1
     assert entry.lua_file == "c37742478.lua"
     assert "EFFECT_TYPE_IGNITION" in entry.lua_excerpt
 
@@ -816,36 +822,49 @@ def test_k01_the_monster_zone_is_now_an_activation_source(repository):
 
 
 @pytest.mark.real_card
-def test_k02_no_legal_action_appears_because_there_is_no_implementation(repository):
+def test_k02_the_candidate_appears_once_the_implementation_exists(repository):
     """
-    🔴 **후보는 생기지 않는다.** ``activatable_effects`` 가 ``executable``
-    만 돌려주고, 어니스트 ① 은 거짓이다 (ADR-006).
+    🔴 **Phase 6-L 에서 후보가 생긴다.**
 
-    "규칙이 허락한다" 와 "우리가 할 수 있다" 를 섞지 않는다.
+    6-K 시점에는 ``activatable_effects`` 가 ``executable`` 만 돌려주고
+    어니스트 ① 이 거짓이어서 후보가 **0건**이었다. 그것이 ADR-006 의
+    구분("규칙이 허락한다" ≠ "우리가 할 수 있다")이 실제로 걸린 자리였고,
+    6-L 이 구현 쪽을 채웠다.
+
+    🔴 **그 구분이 없어진 것이 아니다** — 등재되지 않은 몬스터 효과는
+    여전히 후보가 아니다 (``test_m02`` 의 기르수).
     """
     duel, instance = board(repository)
     allowed = duel.legal_actions(MINE).allowed
-    assert [a for a in allowed if a.kind is PlayerActionKind.ACTIVATE_EFFECT] == []
-    #: 그런데 **적법성은 이미 통과한다** — 막는 것이 규칙이 아니다.
+    candidates = [a for a in allowed if a.kind is PlayerActionKind.ACTIVATE_EFFECT]
+    assert len(candidates) == 1
+    assert candidates[0].source == instance.instance_id
+    assert candidates[0].effect_ref == HONEST_REF
+    #: **대상이 없다** — 자기 참조는 대상 지정이 아니다 (Phase 6-L).
+    assert candidates[0].targets == ()
+    #: 적법성은 6-K 가 열었고, 그대로다.
     assert judged(
         duel, ignition_action(instance), definitions=definition_registry()
     ).validity is ActionValidity.VALID
 
 
 # ======================================================================
-# L. 막는 것이 **구현**으로 바뀌었다 — 그리고 해결은 못 한다
+# L. 막는 것이 구현으로 옮겨졌고 (6-K), 그 구현이 생겼다 (6-L)
 # ======================================================================
 
 
 @pytest.mark.real_card
-def test_l01_the_blocker_moved_from_the_rules_to_the_implementation(repository):
+def test_l01_all_three_gates_now_open(repository):
     """
-    **§12 수준 1 의 측정값.** 세 관문 중 앞의 둘이 열리고 셋째가 막는다.
+    🔴 **6-K 의 측정값이 6-L 에서 다시 움직였다.**
 
-    이유가 ``monster-activation-timing`` 에서
-    ``registered effect implementation`` 으로 바뀌었다. 전자는 "규칙이
-    없다" 이고 후자는 "구현이 없다" 다 (ADR-006) — **다른 사실**이고,
-    바뀐 것이 전자뿐이라는 것이 이 Phase 가 한 일의 전부다.
+    6-K 에서는 세 관문 중 앞의 둘이 열리고 셋째(``can_activate``)가
+    ``registered effect implementation`` 으로 막았다. 그것이 그 Phase 의
+    측정값이었고 참이었다.
+
+    6-L 이 그 구현을 채웠으므로 (``SELF_TARGET`` — 정의가 "이 효과의 카드"
+    를 가리킬 이름) **셋이 전부 열린다.** 두 사실을 한 자리에서 적는다:
+    막던 이유가 규칙이 아니었고 (6-K), 구현도 아니게 되었다 (6-L).
     """
     duel, instance = board(repository)
     action = ignition_action(instance)
@@ -856,123 +875,152 @@ def test_l01_the_blocker_moved_from_the_rules_to_the_implementation(repository):
         ),
         selections=(),
     )
-    assert gate.validity is ActionValidity.UNKNOWN
-    assert gate.missing_rule == "registered effect implementation"
-    assert gate.missing_rule != MONSTER_ACTIVATION_MISSING
-    assert "ADR-006" in gate.reason
+    assert gate.validity is ActionValidity.VALID, gate.reason
+    #: 🔴 그래도 ``MONSTER_ACTIVATION_MISSING`` 은 **여전히 쓰인다** —
+    #: 분류를 적지 않은 몬스터 효과에. 6-K 가 만든 구분이 살아 있다.
+    assert MONSTER_ACTIVATION_MISSING
+    other_duel, other = board(repository, VOLCANIC_SHELL)
+    unregistered = judged(
+        other_duel,
+        ignition_action(other, card_id=VOLCANIC_SHELL),
+        definitions=definition_registry(),
+    )
+    assert unregistered.missing_rule == MONSTER_ACTIVATION_MISSING
 
 
 @pytest.mark.real_card
-def test_l02_the_chain_stays_empty_and_nothing_resolves(repository):
+def test_l02_activation_puts_a_link_on_the_chain_and_changes_nothing_else(
+    repository,
+):
     """
-    🔴 **실제 효과 해결은 달성하지 못했다.** 숨기지 않고 센다.
+    🔴 **발동과 해결은 다른 일이다** (6-K 가 ``UNAUTHORIZED`` 로 멈췄던 자리).
 
-    ``activate`` 가 ``NOT_IMPLEMENTED`` 로 멈추고 체인은 비어 있다. 어니스트는
-    필드에 그대로 있고 패로 돌아가지 않는다.
+    ``activate`` 가 성공하면 체인 링크가 하나 생기고, **판은 그대로다** —
+    카드가 패로 돌아가는 것은 해결의 일이다 (RULE-CHAIN-001 이 그 사이에
+    상대의 응답 기회를 둔다).
     """
     duel, instance = board(repository)
     action = ignition_action(instance)
     before_hand = len(duel.state.player(MINE).hand)
 
     result = duel._activator.activate(duel.state, Chain(), action, selections=())
-    assert not result.activated
-    assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    #: 🔴 **상태까지 본다.** ``UNAUTHORIZED`` 와 ``NOT_IMPLEMENTED`` 는 같은
-    #: ``ValidationCode`` 를 쓰므로 코드만 보면 둘을 구분할 수 없다. 이
-    #: Phase 가 한 일이 바로 그 둘을 가른 것이므로, 여기서 **허가는 났고
-    #: 구현이 없다**는 것을 상태로 확인한다. ``activate`` 에
-    #: ``authorization`` 을 주지 않았으므로 허가는 발동기가 스스로 검증기에
-    #: 물어서 받았다 — 그 경로에 등록소가 실제로 넘어간다는 뜻이다.
-    assert result.status is ActivationStatus.NOT_IMPLEMENTED
-    assert result.status is not ActivationStatus.UNAUTHORIZED
-    assert result.missing == "registered effect implementation"
+    assert result.activated, result.reason
+    assert result.status is ActivationStatus.ACTIVATED
+    assert result.code is ValidationCode.OK
+    assert len(result.chain) == 1
+    assert result.link is not None
+    assert result.link.effect_ref == HONEST_REF
+    #: 허가는 발동기가 스스로 검증기에 물어서 받았다 (등록소가 넘어간다).
     assert result.authorization.validity is ActionValidity.VALID
-    assert len(result.chain) == 0
-    assert result.link is None
 
-    #: 판이 **한 번도** 바뀌지 않았다.
+    #: 🔴 **발동만으로는 판이 바뀌지 않는다.**
     assert duel.state.find_instance(instance.instance_id).zone is Zone.MZONE
     assert len(duel.state.player(MINE).hand) == before_hand
-    assert duel.chain.is_empty
+    #: 비용이 없으므로 지불 델타도 없다.
+    assert result.deltas == ()
 
 
 @pytest.mark.real_card
-def test_l03_apply_refuses_it_too(repository):
+def test_l03_apply_accepts_and_opens_the_response_window(repository):
     """
-    ``Duel.apply`` 도 거절한다 — 공개 입구를 믿지 않는다.
+    ``Duel.apply`` 가 받는다 — 그리고 **거기서 끝나지 않는다.**
 
-    ``legal_actions`` 를 지나왔다고 가정하지 않으므로, 손으로 만든 행위를
-    넣어도 같은 자리에서 멈춘다.
+    6-K 에서는 같은 호출이 거절되었다. 지금은 체인 1 이 쌓이고 상대의
+    응답 창이 열린다 (RULE-CHAIN-001). 해결은 ``settle_chain`` 이 한다.
     """
     duel, instance = board(repository)
     step = duel.apply(ignition_action(instance))
-    assert not step.accepted
-    assert duel.chain.is_empty
-    assert duel.pending_spells == ()
+    assert step.accepted, step.reason
+    assert len(duel.chain) == 1
+    assert duel.priority.is_open
+    assert duel.state.find_instance(instance.instance_id).zone is Zone.MZONE
 
 
 @pytest.mark.real_card
-def test_l04_with_a_synthetic_permission_the_link_forms_and_nothing_is_placed(
-    repository,
-):
+def test_l04_the_activation_places_nothing_with_real_data(repository):
     """
-    🔴 **배치 없는 발동이 끝까지 간다** — 시험용 권한을 **테스트 안에서만**
-    만들어 확인한다.
+    🔴 **배치 없는 발동이 실제 데이터로 끝까지 간다.**
 
-    왜 이 테스트가 필요한가: ``_apply_activation`` 의 ``if placed is not
-    None`` 관문은 **실제 데이터로는 닿지 않는다.** 등재된 몬스터 효과가
-    ``executable=False`` 여서 그 앞에서 멈추기 때문이다. 닿지 않는 관문은
-    고쳐도 아무 테스트가 깨지지 않으므로, 여기서 **일부러** 닿게 만든다
-    (6-I · 6-J 의 mutation 교훈).
+    6-K 는 이 자리를 확인하려고 테스트 안에서만 사는 구현 등록소를 만들어야
+    했다 — ``_apply_activation`` 의 ``if placed is not None`` 관문이 실제
+    데이터로는 닿지 않았기 때문이다 (``executable=False``). 6-L 에서 그
+    관문이 **진짜로 닿는다.** 시험용 권한은 더 이상 필요하지 않고, 그래서
+    쓰지 않는다.
+    """
+    duel, instance = board(repository)
+    action = next(
+        a
+        for a in duel.legal_actions(MINE).allowed
+        if a.kind is PlayerActionKind.ACTIVATE_EFFECT
+    )
+    step = duel.apply(action)
+    assert step.accepted, step.reason
 
-    🔴 **production 에는 아무 권한도 더하지 않았다.** 아래의 ``lookup`` 은 이
-    함수 안에서 만든 객체이고 ``EFFECT_LIBRARY`` 도 ``implementation_registry``
-    도 건드리지 않는다. 그리고 이 효과의 ``operations`` 는 비어 있으므로 —
-    **어니스트의 효과가 실제로 해결되는 것이 아니다.** 확인하는 것은 배치
-    경로 하나다.
+    #: ② 체인 링크가 **하나** 생겼다.
+    assert len(duel.chain) == 1
+    assert duel.chain.links[0].effect_ref == HONEST_REF
+    #: ③ **아무것도 놓이지 않았다** — 치울 것도 없다.
+    assert duel.pending_spells == ()
+    assert duel.state.find_instance(instance.instance_id).zone is Zone.MZONE
+    #: 마법 & 함정 존에 아무것도 들어가지 않았다.
+    assert [
+        card for card in duel.state.player(MINE).zone(Zone.SZONE) if card is not None
+    ] == []
+    #: ⑤ 상대의 응답 창이 열렸다.
+    assert duel.priority.is_open
+
+    #: ④ 해결 뒤에도 **묘지로 가지 않는다** — 마법이 아니다. 패로 간다.
+    settle_chain(duel)
+    assert duel.state.find_instance(instance.instance_id).zone is Zone.HAND
+
+
+@pytest.mark.real_card
+def test_l05_the_candidate_list_and_the_activator_read_the_same_list(repository):
+    """
+    🔴 6-K 가 적어 둔 사실을 **정정한다.**
+
+    6-K 의 ``test_l04`` 주석은 "``legal_actions`` 가 주입된 발동기의
+    ``lookup`` 을 보지 않는다" 고 적었다. **절반만 맞다.**
+
+    ========================================  ==========================
+    ``activatable_effects`` (모듈 수준 목록)    후보를 **좁힌다**
+    주입된 발동기의 ``lookup``                 ``_activation_gate`` 의 셋째
+                                              관문에서 다시 **좁힌다**
+    ========================================  ==========================
+
+    그래서 둘 중 어느 쪽도 후보를 **넓히지 못한다** — 모듈 목록에 없는
+    효과는 주입으로 켤 수 없고, 주입한 발동기에 구현이 없으면 모듈 목록에
+    있어도 후보가 되지 않는다. 아래가 그 뒤쪽을 실측한다.
+
+    6-K 가 그 사실을 반만 적은 탓에 ``test_l04`` 가 ``_apply_activation``
+    을 직접 불러야 했다. 6-L 에서는 실제 데이터로 ``apply`` 가 지나므로
+    그 우회가 없어졌다.
     """
     from engine.activation import EffectActivator
     from engine.effect.executor import EffectImplementationRegistry
     from engine.effect.library import definition_registry as library_definitions
 
     duel, instance = board(repository)
-    lookup = EffectImplementationRegistry()
-    lookup.register(HONEST_REF)
-    duel._activator = EffectActivator(library_definitions(), lookup)
+    before = [
+        a
+        for a in duel.legal_actions(MINE).allowed
+        if a.kind is PlayerActionKind.ACTIVATE_EFFECT
+    ]
+    assert len(before) == 1
 
-    action = ignition_action(instance)
-    before_zone = duel.state.find_instance(instance.instance_id).zone
-
-    #: 🔴 ``apply`` 가 아니라 ``_apply_activation`` 을 부른다. 측정해 보니
-    #: ``legal_actions`` 는 ``engine.spell_activation.activatable_effects`` 를
-    #: **모듈 수준에서** 읽고 (``EFFECT_LIBRARY`` 직접), 주입된 발동기의
-    #: ``lookup`` 을 보지 않는다. 그래서 ``apply`` 는 후보 목록에 없다고
-    #: 거절한다 — 이것은 Phase 6-K 가 만든 것이 아니라 **원래 그런
-    #: 것**이고, 후보 생성과 발동 허가가 서로 다른 목록을 읽는다는 사실이다.
-    #: 이 Phase 의 범위(B3)가 아니므로 고치지 않고 **적어 둔다.**
-    refused = duel.apply(action)
-    assert not refused.accepted
-    assert "허가된 행위가 아닙니다" in refused.reason
-
-    step = duel._apply_activation(action)
-    assert step.accepted, (step.code, step.reason)
-    #: ② 체인 링크가 **하나** 생겼다.
-    assert len(duel.chain) == 1
-    assert duel.chain.links[0].effect_ref == HONEST_REF
-    #: ③ **아무것도 놓이지 않았다** — 치울 것도 없다.
-    assert duel.pending_spells == ()
-    assert duel.state.find_instance(instance.instance_id).zone is before_zone
-    assert before_zone is Zone.MZONE
-    #: 마법 & 함정 존에 아무것도 들어가지 않았다.
-    assert [
-        card for card in duel.state.player(MINE).zone(Zone.SZONE) if card is not None
-    ] == []
-    #: ⑤ 상대의 응답 창이 열렸다 (RULE-CHAIN-001).
-    assert duel.priority.is_open
-
-    #: 체인을 풀어도 카드가 묘지로 가지 않는다 — 마법이 아니다.
-    settle_chain(duel)
-    assert duel.state.find_instance(instance.instance_id).zone is Zone.MZONE
+    #: 구현을 **하나도** 등록하지 않은 발동기를 주입한다.
+    duel._activator = EffectActivator(
+        library_definitions(), EffectImplementationRegistry()
+    )
+    after = [
+        a
+        for a in duel.legal_actions(MINE).allowed
+        if a.kind is PlayerActionKind.ACTIVATE_EFFECT
+    ]
+    #: 🔴 후보가 **사라진다** — 셋째 관문이 주입된 목록을 읽는다.
+    assert after == []
+    #: 손으로 만들어 넣어도 거절된다.
+    assert not duel.apply(before[0]).accepted
 
 
 # ======================================================================

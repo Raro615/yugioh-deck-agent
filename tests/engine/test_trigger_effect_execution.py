@@ -635,12 +635,15 @@ def test_16_the_library_is_unchanged_and_still_has_no_trigger(repository=None):
     🔴 **Phase 6-K 가 한 건을 더했다 (16 → 17).** 이 테스트가 틀린 가정을
     갖고 있었던 것이 아니라, 6-J 시점에 실제로 16건이었다. 더해진 것은
     어니스트 ① 이고 ``ActivationKind.IGNITION`` 이다 — **유발 효과가 아니고**
-    (이 테스트의 이름이 지키는 사실), 실행하지도 않는다 (실행 수 13 그대로).
-    세 단언 중 수 하나만 움직이고 나머지 둘은 그대로다.
+    (이 테스트의 이름이 지키는 사실) 그것이 이 테스트의 전부다.
+
+    🔴 **Phase 6-L 에서 그 한 건이 실행까지 된다** (13 → 14). 유발 효과가
+    하나도 없다는 사실은 그대로이고, 아래 마지막 단언이 그것을 분류로
+    직접 센다 — 수가 아니라 분류가 이 테스트가 지키는 것이다.
     """
     assert len(EFFECT_LIBRARY) == 17
     assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0}
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 13
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 14
     #: 🔴 등재된 발동 분류에 **유발 · 유발 즉시 · 플립이 하나도 없다.**
     assert {
         entry.definition.activation_kind for entry in EFFECT_LIBRARY

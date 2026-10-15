@@ -501,8 +501,13 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
 
     🔴 **Phase 6-K 에서 몬스터 한 장이 들어왔다** (어니스트 ①). 이 테스트가
     틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로 0장이었다. 바뀐
-    사실을 그대로 적는다 — 그리고 **실행되는 쪽은 여전히 전부 마법 ·
-    함정**이므로, 수를 지우지 않고 그 구분을 더해서 센다 (ADR-006).
+    사실을 그대로 적는다 — 수를 지우지 않고 그 구분을 더해서 센다 (ADR-006).
+
+    🔴 **Phase 6-L 에서 그 몬스터가 실행되기 시작했다** (어니스트 ① ·
+    ``executable=True``). 6-K 가 "실행되는 쪽은 여전히 전부 마법 · 함정"
+    이라고 적은 것은 그 시점의 측정이었고, 6-L 이 자기 참조 해석
+    (``SELF_TARGET``)을 연결해서 실제 해결까지 갔다. 그래서 몬스터 열의
+    수만 0 → 1 로 움직이고, **마법 · 함정 열 13 은 그대로 센다.**
     """
     from engine.effect.library import EFFECT_LIBRARY
 
@@ -536,10 +541,15 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 🔴 몬스터가 **하나** 있다 (Phase 6-K).
     assert kinds["monster"] == 1, dict(kinds)
     assert kinds["spell"] + kinds["trap"] == 16, dict(kinds)
-    #: 🔴 그런데 **실행되는 것**은 여전히 전부 마법 · 함정이다 (ADR-006) —
-    #: "Monster Effect activation" 의 발동 경로는 열렸고 해결은 아직이다.
-    assert executable_kinds["monster"] == 0, dict(executable_kinds)
-    assert sum(executable_kinds.values()) == 13, dict(executable_kinds)
+    #: 🔴 **실행되는 몬스터가 하나 있다** (Phase 6-L · 어니스트 ①). 6-K
+    #: 시점에는 0이었고 그것이 그때의 사실이었다. 단언을 지우지 않는다 —
+    #: 마법 · 함정 쪽 13 을 따로 못박아서, 늘어난 하나가 **몬스터 쪽이고
+    #: 거기뿐**임을 센다.
+    assert executable_kinds["monster"] == 1, dict(executable_kinds)
+    assert executable_kinds["spell"] + executable_kinds["trap"] == 13, dict(
+        executable_kinds
+    )
+    assert sum(executable_kinds.values()) == 14, dict(executable_kinds)
 
 
 def test_13_the_engine_splits_on_effect_ref_not_on_card_versus_effect(repository):
