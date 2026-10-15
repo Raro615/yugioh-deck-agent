@@ -62,6 +62,38 @@ FIELD_ZONES: frozenset[Zone] = frozenset(
     {Zone.MZONE, Zone.EMZONE, Zone.SZONE, Zone.FZONE, Zone.PZONE}
 )
 
+#: **메인 덱 카드만 있을 수 있는 자리** (Phase 6-M).
+#:
+#: 근거는 구조화 룰북 ``sd-rulebook-en-v10.json`` 의 ``zones`` 다. 엑스트라
+#: 덱 몬스터가 어디 있고 어디서 나오는지를 **엑스트라 덱** 칸이 말한다::
+#:
+#:     "Extra Deck Monsters may be Summoned to the field from here
+#:      using special methods"
+#:
+#: 그리고 ``Hand`` · ``Deck`` 두 칸의 ``movement`` 목록에는 엑스트라 덱
+#: 몬스터가 **들어오는 길이 하나도 없다** (패는 "draw 5 cards…", 덱은
+#: "draw cards from here…" 뿐이다).
+#:
+#: 🔴 **그래서 "엑스트라 덱으로 간다" 고 적지 않았다.** 룰북은 그런
+#: 되돌림을 **말하지 않는다** — 같은 종류의 우회를 말할 때는 명시한다
+#: ("Pendulum Monster Cards that would be sent from the field to the
+#: Graveyard are placed face-up here"). 패 · 덱으로 가는 경우에 대해서는
+#: 그런 문장이 없으므로, 목적지를 지어내지 않고 **모른다로 멈춘다**
+#: (:data:`MISSING_EXTRA_DECK_DESTINATION`).
+MAIN_DECK_ONLY_ZONES: frozenset[Zone] = frozenset({Zone.HAND, Zone.DECK})
+
+#: 엑스트라 덱 몬스터가 패 · 덱으로 보내질 때 **없는 규칙의 이름.**
+MISSING_EXTRA_DECK_DESTINATION = (
+    "extra-deck-return-destination (엑스트라 덱 몬스터가 패 · 메인 덱으로 "
+    "보내질 때의 실제 도착 자리 규칙)"
+)
+
+#: 카드가 **이미 그 자리에 있을 때** 없는 규칙의 이름 (Phase 6-M).
+MISSING_SAME_ZONE_MOVEMENT = (
+    "same-zone-movement (이미 목적지에 있는 카드를 그 목적지로 보내는 "
+    "규칙 — 그 효과가 불발되는지 아무 일도 없이 지나가는지)"
+)
+
 #: **의미를 주장하는** 일들. 이번 단계가 다루는 셋이다.
 #:
 #: ``RELEASE`` · ``BANISH`` · ``RETURN_*`` 도 의미를 주장하지만 이번 단계의
@@ -673,6 +705,9 @@ __all__ = [
     "UnknownSummonRuling",
     "DeclaredSummonRuling",
     "OriginRule",
+    "MAIN_DECK_ONLY_ZONES",
+    "MISSING_EXTRA_DECK_DESTINATION",
+    "MISSING_SAME_ZONE_MOVEMENT",
     "ORIGIN_RULES",
     "RuleQuestion",
     "LUA_GATE_PREDICATES",

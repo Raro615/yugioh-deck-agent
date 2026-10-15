@@ -366,8 +366,46 @@ class CardOperation(Operation):
     여럿 중 일부만 할 수 있을 때 (Phase 2-AF). **카드가 적어 둔 경우만**
     바꾼다.
     """
+    origin_zones: "frozenset[Zone] | None" = None
+    """
+    이 일이 **어느 자리에 있는 카드**에 일어나는가 (Phase 6-M).
+
+    ``None`` 이 기본값이고 **"적지 않았다"** 를 뜻한다 — 자리를 따지지
+    않는다는 뜻이 아니라, 이 효과가 자리를 말하지 않았다는 뜻이다. 그래서
+    기본값에서는 오늘까지의 동작이 그대로다.
+
+    :data:`~engine.effect.semantics.ORIGIN_RULES` 와 **다른 축이다.**
+    저쪽은 **일의 종류마다 전역**이고 (버리기는 패에서만 일어난다),
+    이쪽은 **이 효과 하나**가 적은 것이다. 둘을 합칠 수 없는 이유는
+    측정으로 분명하다 — ``RETURN_TO_HAND`` 를 전역으로 필드에 묶으면
+    묘지 · 덱 · 제외 구역에서 패로 되돌리는 실제 카드들이 전부 틀린다.
+
+    값은 공식 카드 텍스트에서 온다. 어니스트 ① 의 「**필드의** 앞면 표시의
+    이 카드를 패로 되돌린다」 가 :data:`
+    ~engine.effect.semantics.FIELD_ZONES` 다.
+
+    🔴 **표시 형식은 여기 들어오지 않는다.** 「앞면 표시의」 는 자리가 아닌
+    다른 축이고, 그것은 아직 옮기지 않았다 (Phase 6-M §16).
+    """
 
     def __post_init__(self) -> None:
+        if self.origin_zones is not None:
+            if not isinstance(self.origin_zones, frozenset):
+                raise TypeError(
+                    "origin_zones 는 frozenset[Zone] 이어야 합니다. 들어온 "
+                    f"것: {self.origin_zones!r}"
+                )
+            if not self.origin_zones:
+                raise ValueError(
+                    "빈 출발 자리를 적을 수 없습니다. 어디서도 일어나지 "
+                    "않는 일이라면 그 일을 적지 않는 것이 맞고, 자리를 "
+                    "모르는 것이라면 None 이 그 뜻입니다."
+                )
+            wrong = [z for z in self.origin_zones if not isinstance(z, Zone)]
+            if wrong:
+                raise TypeError(
+                    f"출발 자리는 Zone 이어야 합니다: {wrong!r}"
+                )
         if self.operation not in CARD_OPERATION_KINDS:
             raise ValueError(
                 f"{self.operation.value} 는 카드를 다루는 일이 아닙니다."
@@ -439,10 +477,27 @@ class CardOperation(Operation):
 
     @classmethod
     def return_to_hand(
-        cls, target_ref: TargetRef, *, gated: bool = False
+        cls,
+        target_ref: TargetRef,
+        *,
+        gated: bool = False,
+        origin_zones: "frozenset[Zone] | None" = None,
     ) -> "CardOperation":
-        """패로 되돌린다. ``gated`` 는 원본의 ``Card.IsAbleToHand`` 다."""
-        return cls(OperationKind.RETURN_TO_HAND, target_ref, gated=gated)
+        """
+        패로 되돌린다. ``gated`` 는 원본의 ``Card.IsAbleToHand`` 다.
+
+        ``origin_zones`` 는 **공식 텍스트가 출발 자리를 말한 경우**만 적는다
+        (Phase 6-M). 적지 않으면 오늘까지와 같다. 다른 조작에도 같은 칸이
+        있지만 (:attr:`origin_zones`) 생성자로 넘긴다 — 지금 그것을 적는
+        카드가 등재된 쪽에 하나뿐이어서, 쓰이지 않는 인자를 여섯 군데에
+        더하지 않는다.
+        """
+        return cls(
+            OperationKind.RETURN_TO_HAND,
+            target_ref,
+            gated=gated,
+            origin_zones=origin_zones,
+        )
 
     @classmethod
     def return_to_deck(
@@ -459,6 +514,12 @@ class CardOperation(Operation):
             self.target_ref.name,
             self.gated,
             self.partial.value,
+            # 🔴 Phase 6-M. ``None`` 과 빈 튜플이 **다른 값**이어야 한다 —
+            # "적지 않았다" 와 "아무 자리도 아니다" 는 다른 사실이고, 뒤의
+            # 것은 ``__post_init__`` 이 애초에 막는다.
+            None
+            if self.origin_zones is None
+            else tuple(sorted(z.value for z in self.origin_zones)),
         )
 
     def to_dict(self) -> dict:
@@ -472,6 +533,8 @@ class CardOperation(Operation):
             data["gated"] = True
         if self.partial is not Partial.ALL_OR_NOTHING:
             data["partial"] = self.partial.value
+        if self.origin_zones is not None:
+            data["origin_zones"] = sorted(z.value for z in self.origin_zones)
         return data
 
     def describe_ko(self) -> str:

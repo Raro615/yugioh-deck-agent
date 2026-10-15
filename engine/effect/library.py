@@ -1072,11 +1072,18 @@ _RELOAD_ENTRY = LibraryEntry(
 #: (Phase 6-L 이 더했다), 답이 없으면 실행기가 **멈춘다** — 자기 참조라는
 #: 이유로 관문이 열리지 않는다.
 #:
+#: 🔴 **Phase 6-M 이 「필드의」 를 옮겼다** — ``origin_zones=FIELD_ZONES``.
+#: 6-L 에서는 출발 자리 제약이 **하나도 없어서** 묘지 · 덱 · 제외 구역에
+#: 있는 카드도 패로 돌아갔다 (실측: 열 자리 전부 ``RESOLVED``). 그 제약은
+#: 이 효과 하나의 것이므로 조작에 적었다 — ``ORIGIN_RULES`` 에 넣으면
+#: 묘지에서 패로 되돌리는 실제 카드들이 전부 틀린다.
+#:
 #: ``IsRelateToEffect`` 는 **여전히 옮기지 못했다** (싸이크론 ·
 #: 강제 탈출 장치와 같은 이유, STRUCTURAL-50). ``IsFaceup`` 도 적지 않았다 —
-#: 발동 범위가 이미 앞면 몬스터 존으로 좁혀져 있고 (Phase 6-K 의
-#: ``_monster_activation_out_of_scope``), 해결 시점에 뒤집히는 길이 이
-#: 엔진에 없다. 둘 다 "지금은 결과가 같다" 이지 "옮겼다" 가 아니다.
+#: 표시 형식은 자리가 아닌 다른 축이고, 발동 범위가 이미 앞면 몬스터 존으로
+#: 좁혀져 있어 (Phase 6-K 의 ``_monster_activation_out_of_scope``) 해결
+#: 시점에 뒤집히는 길이 이 엔진에 없다. "지금은 결과가 같다" 이지
+#: "옮겼다" 가 아니다.
 #:
 #: ②(``EFFECT_TYPE_QUICK_O``, 패에서의 유발 즉시 효과)는 **등록하지
 #: 않았다.** 정의는 ``EffectRef`` 단위이고 ``e[1]`` 은 여기 없다 — 룰북이
@@ -1086,7 +1093,20 @@ _HONEST_IGNITION_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(HONEST, 0),
         source_card_id=HONEST,
-        operations=(CardOperation.return_to_hand(SELF_TARGET, gated=True),),
+        operations=(
+            CardOperation.return_to_hand(
+                SELF_TARGET,
+                gated=True,
+                # 🔴 「**필드의** 앞면 표시의 이 카드를 패로 되돌린다」 —
+                # 공식 텍스트가 출발 자리를 **직접 말한다** (Phase 6-M).
+                # Lua 도 ``if c:IsFaceup() and c:IsRelateToEffect(e)`` 로
+                # 그것을 적고, 발동 범위가 ``LOCATION_MZONE`` 이다.
+                #
+                # 「앞면 표시의」 는 자리가 아닌 다른 축이어서 **여전히
+                # 옮기지 못했다** (표시 형식). 「필드의」 만 옮겼다.
+                origin_zones=FIELD_ZONES,
+            ),
+        ),
         activation_kind=ActivationKind.IGNITION,
         provenance=EffectProvenance.official_lua(
             "c37742478.lua 의 e1:SetType(EFFECT_TYPE_IGNITION) 과 "
@@ -1094,7 +1114,8 @@ _HONEST_IGNITION_ENTRY = LibraryEntry(
             "Duel.SendtoHand(c,nil,REASON_EFFECT) 에서 하는 일을 옮겼다 — "
             "c 가 e:GetHandler() 이므로 대상은 SELF_TARGET 이다 (Phase 6-L). "
             "s.target1 의 e:GetHandler():IsAbleToHand() 는 gated=True 로 "
-            "옮겼다. IsRelateToEffect 와 IsFaceup 은 옮기지 못했다."
+            "옮겼다. 「필드의」 는 origin_zones=FIELD_ZONES 로 옮겼다 "
+            "(Phase 6-M). IsRelateToEffect 와 IsFaceup 은 옮기지 못했다."
         ),
     ),
     lua_file="c37742478.lua",

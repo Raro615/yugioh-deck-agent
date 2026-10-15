@@ -112,7 +112,10 @@ from engine.randomness import RandomError, RandomOutcome, RandomPurpose
 from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.effect.semantics import (
     DECLARED_GATE_RULINGS,
+    MAIN_DECK_ONLY_ZONES,
+    MISSING_EXTRA_DECK_DESTINATION,
     MISSING_GATE,
+    MISSING_SAME_ZONE_MOVEMENT,
     QUESTION_VERBS,
     DestructionRuling,
     MovementRuling,
@@ -194,6 +197,35 @@ DESTINATION_OWNER: dict[OperationKind, DestinationOwner] = {
     OperationKind.RETURN_TO_HAND: DestinationOwner.OWNER,
     OperationKind.RETURN_TO_DECK: DestinationOwner.OWNER,
 }
+
+
+def movement_destination(operation) -> Zone:
+    """
+    그 일이 카드를 **어느 자리로** 보내는가 (Phase 6-M).
+
+    규칙이 둘뿐이고, 그 둘을 **한 곳에서** 말한다. ``MOVE`` 는 목적지를
+    조작이 들고 있고 (의미가 없는 이동이므로 표를 볼 수 없다), 나머지는
+    의미가 목적지를 정한다 (파괴 → 묘지).
+
+    계획 단계와 적용 단계가 **같은 함수**를 부른다. 따로 적어 두면 한쪽만
+    고치는 날이 오고, 그러면 계획이 통과시킨 이동이 다른 자리로 간다.
+    """
+    if isinstance(operation, MoveOperation):
+        return operation.destination
+    return DESTINATION[operation.kind]
+
+
+def movement_player(operation, card) -> int:
+    """
+    그 일이 카드를 **누구의** 자리로 보내는가 (Phase 6-M).
+
+    :func:`movement_destination` 과 같은 이유로 한 곳에 둔다 — 계획 단계가
+    주인을 정하고 적용 단계가 그 값을 쓴다.
+    """
+    if isinstance(operation, MoveOperation):
+        # 의미가 없는 이동이므로 표를 볼 수 없다. 조작이 직접 말한다.
+        return card.owner if operation.to_owner else card.controller
+    return destination_player(operation.kind, card)
 
 
 def destination_player(kind: OperationKind, card) -> int:
@@ -1207,6 +1239,23 @@ class EffectExecutor:
                     f"{rule.detail}.",
                     missing=rule.missing,
                 )
+            declared = getattr(operation, "origin_zones", None)
+            if declared is not None and card.zone not in declared:
+                # **이 효과가 적어 둔 출발 자리**에 어긋났다 (Phase 6-M).
+                # ``ORIGIN_RULES`` 와 다른 축이다 — 저쪽은 일의 종류마다
+                # 전역이고 이쪽은 이 효과 하나가 공식 텍스트에서 옮긴
+                # 것이므로, **아는 규칙**이고 확실한 거절이다.
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.SOURCE_WRONG_ZONE,
+                    f"{instance} 가 {card.zone.value} 에 있어 이 효과의 "
+                    f"대상이 아닙니다. 이 효과는 "
+                    f"{', '.join(sorted(z.value for z in declared))} 에 "
+                    "있는 카드에만 일어납니다.",
+                )
+            moved = self._movement_refusal(operation, card, instance)
+            if moved is not None:
+                return moved
             gate, unseen = self._check_rule_gate(state, operation, instance)
             blind.extend(note for note in unseen if note not in blind)
             if gate is not None:
@@ -1222,12 +1271,10 @@ class EffectExecutor:
                 continue
 
             instances.append(instance)
-            # 주인 결정은 **바꾸기 전에** 끝낸다 (계획 단계).
-            if isinstance(operation, MoveOperation):
-                # 의미가 없는 이동이므로 표를 볼 수 없다. 조작이 직접 말한다.
-                owners.append(card.owner if operation.to_owner else card.controller)
-            else:
-                owners.append(destination_player(operation.kind, card))
+            # 주인 결정은 **바꾸기 전에** 끝낸다 (계획 단계). 목적지를 정하는
+            # 자리는 하나다 (Phase 6-M) — 위의 ``_movement_refusal`` 과 아래의
+            # ``_apply_card_movement`` 가 같은 함수를 본다.
+            owners.append(movement_player(operation, card))
 
         if refused and not instances:
             # 하려던 것을 **하나도** 못 했다. "가능한 만큼" 이라고 적혀
@@ -1321,6 +1368,80 @@ class EffectExecutor:
             owners=tuple(p.owner for p in placements),
             placements=tuple(placements),
         )
+
+    @staticmethod
+    def _is_extra_deck(card) -> "bool | None":
+        """
+        이 카드가 **엑스트라 덱 몬스터**인가. 읽을 수 없으면 ``None`` 이다.
+
+        카드 정의는 저장소가 들고 있고 (``CardInstance.definition``), 연결이
+        없거나 정의가 없으면 읽히지 않는다. 그때 ``None`` 이고, **거짓과
+        구분된다** — 세 값을 돌려주는 이유가 그것이다.
+
+        🔴 **``None`` 을 부르는 쪽이 막지 않는다** (Phase 6-M). 그것은
+        "모르는 것을 허가로 바꾼다" 이고, 이 Phase 가 닫지 **못한** 공백
+        이다. 이유를 숨기지 않고 적는다: 저장소가 연결되지 않은
+        ``GameState`` 는 **시험용 구성**이고 (``GameState.create`` 에
+        저장소를 넘기지 않는 길), production 의 듀얼 조립
+        (``engine/spell_activation.duel_components``)은 언제나 저장소를
+        건넨다. 그 공백을 여기서 막으면 실제 카드가 아닌 합성 ID 로 실행기
+        기계를 재는 기존 단위 시험 열한 개가 **옮길 수 없게** 되고, 그것은
+        이 Phase 의 범위를 크게 넘는다 (Phase 6-M §16-4 에 최소 수정안을
+        적었다).
+        """
+        try:
+            definition = card.definition
+        except (RuntimeError, KeyError):
+            return None
+        return bool(definition.is_extra_deck)
+
+    def _movement_refusal(self, operation, card, instance):
+        """
+        **옮기기 전에** 이 이동이 실제로 일어날 수 있는지 본다 (Phase 6-M).
+
+        여기서 거절하면 판은 **하나도 바뀌지 않고** journal 에도 적히지
+        않는다 — 계획 단계이기 때문이다 (ADR-008).
+
+        두 가지를 본다. 둘 다 **"안 된다" 가 아니라 "모른다"** 이므로
+        :attr:`~engine.effect.resolution.ResolutionStatus.
+        UNSUPPORTED_OPERATION` 과 ``missing`` 으로 나간다.
+
+        1. **엑스트라 덱 몬스터를 패 · 메인 덱으로** 보내려 한다. 룰북의
+           ``Hand`` · ``Deck`` 칸에 그 카드가 들어오는 길이 없고, 그러면
+           어디로 가는지는 룰북이 말하지 않는다 (:data:`
+           ~engine.effect.semantics.MAIN_DECK_ONLY_ZONES`).
+        2. **이미 그 자리에 있다.** 옮길 것이 없으므로 이동이 일어나지
+           않는데, 그대로 두면 ``P0/HAND → P0/HAND`` 가 성공한 이동으로
+           기록된다 (실측). 적용되지 않은 이동을 성공으로 적지 않는다.
+
+        카드 종류나 이름으로 분기하지 않는다 — 읽는 것은 ``is_extra_deck``
+        하나이고, 그것은 이미 있는 파생값이다 (``engine/summon_rules.py``
+        가 일반 소환 판정에서 같은 값을 읽는다).
+        """
+        destination = movement_destination(operation)
+        if destination in MAIN_DECK_ONLY_ZONES and self._is_extra_deck(card) is True:
+            return _fail(
+                ResolutionStatus.UNSUPPORTED_OPERATION,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{instance} 를 {destination.value} 로 보내려는데 엑스트라 "
+                "덱 몬스터입니다. 룰북은 엑스트라 덱 몬스터가 패 · 메인 "
+                "덱으로 들어오는 길을 말하지 않고, 그러면 어디로 가는지도 "
+                "말하지 않습니다. 목적지를 지어내지 않습니다.",
+                missing=MISSING_EXTRA_DECK_DESTINATION,
+            )
+        if (
+            card.zone is destination
+            and card.controller == movement_player(operation, card)
+        ):
+            return _fail(
+                ResolutionStatus.UNSUPPORTED_OPERATION,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{instance} 가 이미 P{card.controller} 의 "
+                f"{destination.value} 에 있어 옮길 것이 없습니다. "
+                "일어나지 않은 이동을 성공으로 적지 않습니다.",
+                missing=MISSING_SAME_ZONE_MOVEMENT,
+            )
+        return None
 
     @staticmethod
     def _target_spec_of(definition: EffectDefinition, ref):
@@ -1907,13 +2028,9 @@ class EffectExecutor:
         self, state: GameState, step: _Step
     ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
         operation = step.operation
-        # ``MOVE`` 는 목적지를 **조작이 들고 있다.** 나머지는 의미가 목적지를
-        # 정한다 (파괴 → 묘지). 그 차이가 이 한 줄이다.
-        destination = (
-            operation.destination
-            if isinstance(operation, MoveOperation)
-            else DESTINATION[operation.kind]
-        )
+        # 목적지를 정하는 자리는 **하나다** (Phase 6-M). 계획 단계의
+        # ``_movement_refusal`` 이 같은 함수를 보고 거절을 판정했다.
+        destination = movement_destination(operation)
         changes = []
         for instance, to_player in zip(step.instances, step.owners):
             card = state.find_instance(instance)
@@ -2085,6 +2202,8 @@ __all__ = [
     "EffectImplementationRegistry",
     "DestinationOwner",
     "DESTINATION",
+    "movement_destination",
+    "movement_player",
     "DESTINATION_OWNER",
     "destination_player",
     "OperationHandler",
