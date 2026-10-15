@@ -33,6 +33,12 @@
 않는다 — 측정: 0곳).
 """
 
+from integration.execution_readiness import (
+    RESOLUTION_OPERATIONS,
+    ExecutionBlocker,
+    ResolutionReadiness,
+    readiness_for,
+)
 from integration.trigger_registry import (
     CardTriggers,
     RegistryBuild,
@@ -41,8 +47,12 @@ from integration.trigger_registry import (
 )
 
 __all__ = [
+    "RESOLUTION_OPERATIONS",
     "CardTriggers",
+    "ExecutionBlocker",
+    "ResolutionReadiness",
     "RegistryBuild",
     "compiled_triggers",
+    "readiness_for",
     "registry_for_view",
 ]
