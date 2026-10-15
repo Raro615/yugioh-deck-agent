@@ -56,7 +56,7 @@ from engine.activation import ActivationStatus
 from engine.chain import Chain, ChainLink
 from engine.duel import Duel
 from engine.game_state_view import GameStateView
-from engine.ids import EffectRef
+from engine.ids import EffectRef, InstanceId
 from engine.response import RESPONDABLE
 from engine.spell_activation import activatable_effects, duel_activator
 from engine.state.game_state import GameState
@@ -318,22 +318,32 @@ def test_03_a_spell_card_activation_runs_as_activate_effect(repository):
     assert len(outcome.chain.links) == 1
 
 
-def test_04_there_is_no_monster_effect_activation_to_map(repository):
+def test_04_the_monster_effect_activation_maps_to_the_same_action_kind(repository):
     """
-    🔴 대응표 4줄 — "activate a monster effect" 의 대응이 **열렸지만 실행은
-    아직이다.**
+    🔴 대응표 4줄 — "activate a monster effect" 는 **새 행동 종류를 요구하지
+    않는다.**
 
     공식은 몬스터 효과(Ignition · Trigger · Flip · Quick)를 "효과" 로 묶는다.
     3-F-23 시점에는 등록된 효과 중 몬스터가 **0장**이었고 그래서 대응할 것이
     없었다.
 
     🔴 **Phase 6-K 에서 하나가 생겼다** (어니스트 ①, 기동 효과). 이 테스트가
-    틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로 0장이었다. 바뀐
-    사실을 그대로 적는다 — 그리고 그것은 ``executable=False`` 이므로
-    **실행되는 쪽은 여전히 0장**이다 (ADR-006). 공식 용어 "activate a
-    monster effect" 는 ``ACTIVATE_EFFECT`` 하나로 대응되고, 그 대응이
-    ``PlayerAction`` 계약을 **바꾸지 않았다** — ``effect_ref`` 가 처음부터
-    효과를 지목하고 있었다.
+    틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로 0장이었다.
+
+    🔴 **이름을 바꿨다** (Phase 6-L): ``test_04_there_is_no_monster_effect_
+    activation_to_map`` → 지금의 이름. 지우지 않았고 단언도 약해지지 않았다 —
+    이름이 말하던 사실이 거짓이 되었으므로 이름을 사실에 맞췄다.
+
+    🔴 **Phase 6-L 에서 그것이 실행 가능해졌고 후보도 낸다.** 6-K 의
+    "실행되는 쪽은 여전히 0장" 과 "등재된 몬스터도 후보를 내지 않는다" 는
+    그 시점의 측정이었다. 그러므로 이 시험의 **이름이 말하는 사실은 더 이상
+    참이 아니다** — 대응시킬 몬스터 효과 발동이 생겼다. 그런데 이 시험이
+    지키려던 **계약**은 그대로다. 공식 용어 "activate a monster effect" 가
+    ``ACTIVATE_EFFECT`` 하나로 대응되고 ``PlayerAction`` 계약은 **바뀌지
+    않았다** — ``effect_ref`` 가 처음부터 효과를 지목하고 있었으므로 새
+    ``PlayerActionKind`` 가 필요하지 않았다. 그래서 수를 지우지 않고,
+    **"대응시킬 것이 없다" 를 "대응시킬 것이 생겼는데 계약은 그대로다" 로
+    바꿔 적는다.**
     """
     book = rulebook()
     names = {entry["name"] for entry in book["effect_types"]}
@@ -349,7 +359,8 @@ def test_04_there_is_no_monster_effect_activation_to_map(repository):
         and repository.get(entry.definition.effect_ref.card_id).is_monster
     ]
     assert len(monsters) == 1, monsters
-    assert monsters[0].executable is False, monsters
+    #: 🔴 Phase 6-L — 실행된다. 6-K 에서는 ``False`` 였다.
+    assert monsters[0].executable is True, monsters
     #: 공식 용어와 엔진 종류의 대응이 **그대로**다 — 새 ActionKind 가 없다.
     from engine.action import PlayerActionKind, _NEEDS_EFFECT_REF
 
@@ -357,8 +368,20 @@ def test_04_there_is_no_monster_effect_activation_to_map(repository):
 
     #: 통상 몬스터는 발동 후보를 전혀 내지 않는다.
     assert activatable_effects(LUSTER_DRAGON) == ()
-    #: 등재된 몬스터도 후보를 내지 않는다 — 구현이 없다 (ADR-006).
-    assert activatable_effects(monsters[0].definition.effect_ref.card_id) == ()
+    #: 🔴 등재된 몬스터가 후보를 **낸다** (Phase 6-L). 6-K 에서는 구현이
+    #: 없어서 (ADR-006) 비어 있었다. 그리고 그 후보는 **같은 종류**다 —
+    #: 공식 개념이 새 ``PlayerActionKind`` 를 요구하지 않았다는 이 시험의
+    #: 결론을 여기서 센다.
+    monster_refs = activatable_effects(monsters[0].definition.effect_ref.card_id)
+    assert monster_refs == (monsters[0].definition.effect_ref,)
+    #: 그 효과를 발동하는 행동은 ``ACTIVATE_EFFECT`` 이고, 그것이
+    #: ``effect_ref`` 를 요구하는 **유일한** 종류다 (위의 ``_NEEDS_EFFECT_REF``).
+    assert (
+        PlayerAction.activate_effect(
+            MINE, InstanceId(1), effect_ref=monster_refs[0]
+        ).kind
+        is PlayerActionKind.ACTIVATE_EFFECT
+    )
 
 
 def test_05_activate_card_is_the_empty_seat_for_the_official_card_concept(repository):

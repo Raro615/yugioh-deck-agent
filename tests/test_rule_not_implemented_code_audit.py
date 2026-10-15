@@ -253,7 +253,16 @@ CONTRACT_VIOLATIONS = {
     ("engine/effect/executor.py", 766, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/executor.py", 865, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/executor.py", 1141, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1336, "ResolutionStatus.INVALID_CONTEXT"),
+    # 🔴 **한 자리가 밀렸다** (Phase 6-L). ``engine/effect/executor.py``
+    # 1336 → **1390**. 6-L 이 그 위에 ``_target_spec_of`` ·
+    # ``_resolve_self_reference`` (+45) 와 ``_plan_card_operation`` 의
+    # 자기 참조 분기 (+9) 를 넣어서 아래가 같은 만큼 밀렸다.
+    #
+    # **자리의 성격도, 개수도 바뀌지 않았다** — 13곳 그대로다. 6-L 이
+    # 더한 거절 자리(``_resolve_self_reference``)는 이 목록에 들어오지
+    # 않는다: 그쪽은 ``INFORMATION_UNAVAILABLE`` 을 쓴다 — "규칙을 아직
+    # 옮기지 않았다" 가 아니라 "이 문맥에 그 카드가 없다" 이기 때문이다.
+    ("engine/effect/executor.py", 1390, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/resolution.py", 520, "ResolutionStatus.FORBIDDEN"),
     ("engine/payment.py", 402, "PaymentStatus.EXECUTION_ERROR"),
     ("engine/response.py", 476, "ResponseOutcome.REFUSED"),

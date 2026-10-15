@@ -300,12 +300,20 @@ def test_01_the_effect_result_has_exactly_one_production_producer():
     #: 그 공장을 부르는 production 자리도 하나다 — 듀얼의 해결기다.
     #:
     #: 🔴 **Phase 6-B 가 인자를 넘기기 시작했다.** 예전에는
-    #: ``build_executor()`` 였고 지금은 ``build_executor(journal=journal)``
+    #: ``build_executor()`` 였고 6-B 부터 ``build_executor(journal=journal)``
     #: 이다 — 끊어져 있던 journal 연결이 그 한 자리였다. 부르는 자리의
     #: **수는 그대로 하나**이고, 그것이 이 테스트가 지키는 사실이다.
+    #:
+    #: 🔴 **Phase 6-L 이 같은 자리에 인자를 하나 더 넘긴다**
+    #: (``rulings=OPERATION_RULINGS``). 조작 판정 지식을 ``build_executor``
+    #: 가 기본값으로 넣지 않기 때문이고 (ADR-006), 그래서 **부르는 쪽이
+    #: 고른다.** 자리의 수는 여전히 하나다 — 그것이 이 테스트의 사실이다.
     activation_source = source_of("engine/spell_activation.py")
     assert activation_source.count("build_executor(") == 1
-    assert "build_executor(journal=journal)" in activation_source
+    assert (
+        "build_executor(journal=journal, rulings=OPERATION_RULINGS)"
+        in activation_source
+    )
 
 
 def test_02_the_cost_payment_result_has_exactly_one_production_producer():
@@ -556,7 +564,12 @@ def test_09_production_now_records_the_journal_events_through_the_duel():
     #: ④ ``duel_resolver`` 가 journal 을 **그대로 넘긴다** (그 한 자리가
     #: 끊겨 있던 연결이다).
     activation_source = source_of("engine/spell_activation.py")
-    assert "build_executor(journal=journal)" in activation_source
+    #: 🔴 Phase 6-L 이 같은 호출에 ``rulings`` 를 더했다 (``test_01`` 의
+    #: 설명과 같은 자리). journal 을 그대로 넘기는 사실은 그대로다.
+    assert (
+        "build_executor(journal=journal, rulings=OPERATION_RULINGS)"
+        in activation_source
+    )
     assert "build_executor()" not in activation_source
 
     #: ⑤ 비용 쪽도 journal 을 들린 지불기를 주입한다.
