@@ -479,6 +479,36 @@ def _movement_refusal(self, operation, card, instance):
 test_a_a_move_that_changes_nothing_is_refused`. 위에서 뺀 사실(묘지 → 묘지가
 거절된다)을 잃지 않으려고 따로 센다.
 
+### 14-4. 움직인 census 핀 — **다섯** (루트 회귀에서 드러났다)
+
+6-M 이 `ValidationCode.RULE_NOT_IMPLEMENTED` 자리 **둘**을 더했다 —
+`_movement_refusal` 의 거절 둘이다. 그 코드를 세는 감사들이 함께 움직였다.
+
+| 핀 | 전 → 후 |
+|---|---|
+| `CODE_OCCURRENCES` (두 파일) | 70 → **72** |
+| `STRING_OCCURRENCES` | 84 → **86** |
+| `RULE_NOT_IMPLEMENTED_MENTIONS` | 84 → **86** |
+| `REJECTION_PRODUCTIONS` | 57 → **59** |
+| `CONFORMING_SITES` | 17 → **19** |
+| `CONTRACT_VIOLATIONS` | **13곳 그대로**, 줄 번호만 일곱 밀렸다 |
+| `PROSE_OCCURRENCES` 한 자리 | 922 → **954** (산문 14 는 그대로) |
+
+🔴 **구분이 둘 있고, 둘 다 중요하다.**
+
+1. 6-M 이 더한 둘은 **위반이 아니라 적합** 쪽으로 들어갔다
+   (`CONFORMING_SITES` 17 → 19, `CONTRACT_VIOLATIONS` 는 13 그대로).
+   `UNSUPPORTED_OPERATION` 은 상태 enum 이 **"모른다" 쪽으로 묶어 둔**
+   값이고, 두 거절은 실제로 "어디로 가는지 모른다" · "그 효과가 불발되는지
+   모른다" 다.
+2. 같은 Phase 가 더한 **거부** 쪽 하나(출발 자리 어긋남)는
+   `REJECTION_PRODUCTIONS` 에 세지 **않았다** — 공식 텍스트가 적은 것을
+   옮긴 **아는 규칙**이므로 `SOURCE_WRONG_ZONE` 이다. 두 줄이 같은 Phase
+   안에서 서로 다른 쪽으로 간 것이 §7 의 순서 설계가 그대로 수치에 나타난
+   것이다.
+
+**움직인 테스트 누계: 아홉** (§14-2 의 넷 + 이 다섯).
+
 ### 14-3. Mutation 테스트 — 6-M 프로덕션 코드에 고의 결함 14개
 
 **내가 쓴 코드만** 대상으로 했다. `git checkout` 을 쓰지 않았고, 원본을
@@ -524,7 +554,9 @@ test_a_a_move_that_changes_nothing_is_refused`. 위에서 뺀 사실(묘지 → 
 | 3 엔진 (1차) | `pytest tests/engine -q -p no:randomly` | 3,223 | **11** | 0 | 6:05 | `1` |
 | 3 엔진 (2차) | 같음 | 3,234 | **1** | 0 | 6:40 | `1` |
 | 3 엔진 (최종) | 같음 | **3,236** | **0** | **0** | 6:46 | **`0`** |
-| 4 관련 루트 | `pytest <52 files> -q -p no:randomly` | §18 | | | | |
+| 4 관련 루트 (1차) | `pytest <52 files> -q -p no:randomly` | 1,363 | **5** | 0 | 42:15 | `1` |
+| 핀 재확인 | `pytest <움직인 3파일> -q -p no:randomly` | 74 | 0 | 0 | 26s | `0` |
+| 4 관련 루트 (최종) | `pytest <52 files> -q -p no:randomly` | **1,368** | **0** | **0** | 41:49 | **`0`** |
 
 ### 🔴 1차 · 2차의 실패를 숨기지 않는다
 
@@ -546,6 +578,11 @@ test_a_a_move_that_changes_nothing_is_refused`. 위에서 뺀 사실(묘지 → 
 
 **3차 3건** (그 사이에 따로 돌린 네 파일 회귀) — `test_random_selection.py`
 의 "아무 일도 없는 이동" 세 경우. §14-2 에 이유를 적었다.
+
+**루트 1차 5건** — 전부 `RULE_NOT_IMPLEMENTED` 를 세는 census 핀이다. 6-M 이
+그 코드 자리 **둘**을 더했고 (`_movement_refusal` 의 거절 둘), 네 상수와
+한 집합이 함께 움직였다. §14-4 에 전후 값을 적었다. 고친 뒤 52파일 전체를
+**처음부터** 다시 돌렸다 — 중간부터 이어 붙이지 않는다.
 
 ---
 
@@ -665,15 +702,18 @@ Duel Simulator · EDOPro 연동 — **하나도 건드리지 않았다.**
 |---|---|
 | `027d6b6` | production 4파일 (+259 −21) |
 | `4f13655` | 테스트 — 새 파일 1 (63개) + 움직인 기존 테스트 2파일 |
-| (이 커밋) | 보고서 |
+| `3528005` | 보고서 (§18 의 루트 회귀는 그때 진행 중이었다) |
+| `1245015` | 테스트 — 루트 회귀에서 움직인 census 핀 3파일 (다섯) |
+| (이 커밋) | 보고서 §14 · §15 · §18 — 최종 회귀 결과 |
 
-푸시: `42b5362..4f13655` (`git push -u origin claude/pensive-goodall-te1egy`).
-재시도가 필요한 네트워크 오류는 없었다.
+푸시: `42b5362..4f13655` → `4f13655..3528005` → `3528005..1245015` → 이 커밋.
+**`git push -u origin claude/pensive-goodall-te1egy`** 로만 올렸고 재시도가
+필요한 네트워크 오류는 없었다.
 
-### 🔴 관련 루트 회귀는 이 커밋 시점에 **아직 돌고 있다**
+### 최종 회귀
 
-52파일이고 1차 10% 지점이다. 끝나는 대로 결과를 §15 의 표와 이 절에 적고
-**별도 커밋**으로 올린다 — **숫자를 예측해서 적지 않는다.**
+**1,368 passed · 0 failed · 0 skipped**, pytest 종료 코드 **`0`**, 41:49.
+`tests/engine` 은 **3,236 passed · 종료 코드 `0`**.
 
 ### 저장소 전체 테스트를 돌리지 않은 이유
 
