@@ -115,7 +115,14 @@ MINE = 0
 #: :data:`~engine.trigger.GROUP_MEMBERSHIP_RULE` 로 모름을 돌려주는 자리와,
 #: 그 상수 위에 **왜 이 코드인지** 적은 주석이다 ("코드가 생겨야 풀리는
 #: 모름이고 판이 바뀌어서 풀리는 모름이 아니다").
-STRING_OCCURRENCES = 84
+#: 🔴 84 → **86** (Phase 6-M). 둘 다 **코드 자리**이고 둘 다 거절이다 —
+#: ``EffectExecutor._movement_refusal`` 이 (1) 엑스트라 덱 몬스터를 패 ·
+#: 메인 덱으로 보내려는 이동과 (2) 이미 목적지에 있어 **일어나지 않는**
+#: 이동을 멈춘다. 둘 다 ``UNSUPPORTED_OPERATION`` 과 짝지으므로
+#: ``test_05`` 의 **적합** 쪽에 들어간다 (위반 13곳은 그대로다).
+#: 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로
+#: 84개였다.
+STRING_OCCURRENCES = 86
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -134,10 +141,16 @@ STRING_OCCURRENCES = 84
 #: 등록소를 넘기게 되면서 그 자리에 설명 다섯 줄이 붙었고, 그 칸이 이 두
 #: 자리보다 **위**에 있어서 아래가 같은 만큼 밀렸다. 자리가 밀린 것뿐이고
 #: **산문 14 · 코드 70 · 문자열 84 는 하나도 바뀌지 않았다.**
+#: .. note::
+#:    🔴 **한 자리가 또 밀렸다** (Phase 6-M). ``engine/effect/executor.py``
+#:    922 → **954**. 6-M 이 그 위에 ``movement_destination`` ·
+#:    ``movement_player`` (+32줄) 를 넣어서 아래가 같은 만큼 밀렸다.
+#:    **산문 14 는 하나도 바뀌지 않았다** — 6-M 이 더한 둘은 코드 자리이고
+#:    (``CODE_OCCURRENCES`` 70 → 72), 그래서 문자열이 84 → 86 이다.
 PROSE_OCCURRENCES = {
     ("engine/activation.py", 639),      # M2: 코드도 표에서 가져온다
     ("engine/activation.py", 677),      # M1: 확실한 거부이고 미구현이 아니다
-    ("engine/effect/executor.py", 922), # M2: 이 근거로는 절대 실행하지 않는다
+    ("engine/effect/executor.py", 954), # M2: 이 근거로는 절대 실행하지 않는다
     ("engine/special_summon.py", 77),
     # 🔴 **``engine/trigger.py`` 의 다섯 자리가 Phase 6-F 에서 전부
     # 움직였다.** 그 Phase 가 ``TriggerSubject`` · ``subject_relation`` ·
@@ -194,7 +207,11 @@ PROSE_OCCURRENCES = {
 #: 카드인 자리다 — 그때 남는 질문("이 카드도 그 사건에 함께 포함되었는가")
 #: 은 엔진의 사건이 주체 한 장만 들고 있어서 물을 데가 없다. 판이 바뀌어도
 #: 풀리지 않고 **코드가 생겨야** 풀리므로 이 코드가 맞다.
-CODE_OCCURRENCES = 70
+#: 🔴 70 → **72** (Phase 6-M). ``EffectExecutor._movement_refusal`` 의
+#: 거절 둘이다 — 엑스트라 덱 몬스터를 패 · 메인 덱으로 보내려는 이동과
+#: 이미 목적지에 있어 **일어나지 않는** 이동. 둘 다 코드 자리이고 둘 다
+#: ``UNSUPPORTED_OPERATION`` 과 짝지으므로 "모른다" 쪽이다.
+CODE_OCCURRENCES = 72
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {
@@ -247,12 +264,12 @@ CONTRACT_VIOLATIONS = {
     ("engine/action_execution.py", 339, "ActionStatus.EXECUTION_ERROR"),
     ("engine/activation.py", 554, "ActivationStatus.INVALID_ACTION"),
     ("engine/activation.py", 586, "ActivationStatus.CHAIN_REFUSED"),
-    ("engine/effect/executor.py", 488, "ResolutionStatus.EXECUTION_ERROR"),
-    ("engine/effect/executor.py", 630, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 643, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 766, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 865, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1141, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 520, "ResolutionStatus.EXECUTION_ERROR"),
+    ("engine/effect/executor.py", 662, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 675, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 798, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 897, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1173, "ResolutionStatus.INVALID_CONTEXT"),
     # 🔴 **한 자리가 밀렸다** (Phase 6-L). ``engine/effect/executor.py``
     # 1336 → **1390**. 6-L 이 그 위에 ``_target_spec_of`` ·
     # ``_resolve_self_reference`` (+45) 와 ``_plan_card_operation`` 의
@@ -262,14 +279,19 @@ CONTRACT_VIOLATIONS = {
     # 더한 거절 자리(``_resolve_self_reference``)는 이 목록에 들어오지
     # 않는다: 그쪽은 ``INFORMATION_UNAVAILABLE`` 을 쓴다 — "규칙을 아직
     # 옮기지 않았다" 가 아니라 "이 문맥에 그 카드가 없다" 이기 때문이다.
-    ("engine/effect/executor.py", 1390, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1511, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/resolution.py", 520, "ResolutionStatus.FORBIDDEN"),
     ("engine/payment.py", 402, "PaymentStatus.EXECUTION_ERROR"),
     ("engine/response.py", 476, "ResponseOutcome.REFUSED"),
 }
 
 #: 같은 주사에서 **올바른** 자리 (모른다 쪽 상태와 짝지었다).
-CONFORMING_SITES = 17
+#: 🔴 17 → **19** (Phase 6-M). ``_movement_refusal`` 의 거절 둘이다.
+#: **위반 쪽이 아니라 적합 쪽으로** 들어간 것이 요점이다 —
+#: ``UNSUPPORTED_OPERATION`` 은 상태 enum 이 "모른다" 쪽으로 묶어 둔
+#: 값이고, 두 거절은 실제로 "어디로 가는지 모른다" · "그 효과가
+#: 불발되는지 모른다" 다.
+CONFORMING_SITES = 19
 
 #: 해결 계층의 "모른다" 쪽 상태 — `resolution.py` 의 docstring 을 읽어 모았다.
 RESOLUTION_UNKNOWN_NAMES = {

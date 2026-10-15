@@ -179,7 +179,12 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: 이다. 이 테스트가 지키는 사실 — *"그 코드와 ``UnimplementedRule`` 은 같은
 #: 개념이 아니다"* — 은 그대로이고, 6-H 도 ``UnimplementedRule`` 을 **하나도
 #: 만들지 않았다.**
-RULE_NOT_IMPLEMENTED_MENTIONS = 84
+#: 🔴 84 → **86** (Phase 6-M). ``EffectExecutor._movement_refusal`` 의
+#: 거절 둘이다 (엑스트라 덱 몬스터의 도착 자리 · 일어나지 않는 이동).
+#: 이 테스트가 지키는 사실 — *"그 코드와 ``UnimplementedRule`` 은 같은
+#: 개념이 아니다"* — 은 그대로이고, 6-M 도 ``UnimplementedRule`` 을
+#: **하나도 만들지 않았다.**
+RULE_NOT_IMPLEMENTED_MENTIONS = 86
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
