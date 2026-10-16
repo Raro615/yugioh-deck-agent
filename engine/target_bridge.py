@@ -46,14 +46,35 @@ target.TargetSelection`  정의에서 오고 (``@primary`` · ``@random``) 카�
 그래서 이 모듈은 그 둘을 짝짓기에서 아예 제외한다 — "무작위로 1장" 과
 "플레이어가 1장" 을 같은 자리에 놓지 않는다 (§18).
 
+정확히 N장 (Phase 6-P)
+----------------------
+:func:`target_combinations` 는 처음에 **한 장짜리 효과**만 열거했고, 그래서
+벌금(92595643, "자신은 패를 2장 버린다") 은 조합이 **0개**여서
+``legal_actions`` 에 오르지 못했다. 막고 있던 것은 대상 모델도 실행기도
+아니라 **이 다리의 열거 한 줄**이었다 — 손으로 2장을 지정하면 그때도
+``can_activate`` 는 ``VALID`` 였고 해결까지 갔다 (실측: 패 5 → 3, 묘지 0 → 3).
+
+그래서 넓힌 것은 **장수가 고정인 한 자리**까지다. 그 밖의 모양
+(자리가 둘 이상 · 최소≠최대 · 중복 허용 · 상한 초과)은
+:func:`unsupported_enumeration` 이 **이유의 이름을 대고** 빈 목록이 된다.
+
 여기서 하지 않는 것
 -------------------
 새 Target Engine · TargetGraph · TargetSearchEngine · 새 적법성 어휘 ·
 새 hidden-information 체계. 대상 지정 후 변경 · 체인 상의 대상 적법성 ·
 targeting 과 non-targeting 의 전체 규칙도 다루지 않는다.
+
+**해결 시 선택을 발동 시 지정과 가르는 일도 하지 않는다.** 모델은 둘을
+구분하고 있지만 (``TargetRequirement.TARGETING`` vs ``CHOOSING``,
+``TargetSpec.is_targeting``) 실행 경로는 아직 양쪽을 같은 자리에서 받는다.
+그것을 가르려면 체인 해결 절차가 새로 필요하고 (Phase 6-P §9 가 금지한다),
+벌금은 ``CHOOSING`` 이므로 이 Phase 가 넓힌 것은 **그 기존 계약 안**이다.
 """
 
 from __future__ import annotations
+
+import itertools
+import math
 
 from engine.action import PlayerAction
 from engine.action_target import ActionTarget, ActionTargetKind
@@ -64,6 +85,86 @@ from engine.effect.targeting import TargetResolver
 from engine.game_state_view import GameStateView
 from engine.ids import InstanceId
 from engine.state.game_state import GameState
+
+
+#: 열거할 대상 조합 수의 **상한** (Phase 6-P).
+#:
+#: 🔴 **유희왕 규칙이 아니라 선언한 공학적 상한이다.** 규칙에는 "조합이
+#: 몇 가지까지 적법한가" 라는 것이 없다. 이 수를 두는 이유는 열거 결과가
+#: 그대로 :class:`~engine.action.PlayerAction` 이 되어 정책에게 가기
+#: 때문이고, 조합 수는 후보 수에 대해 지수적으로 늘기 때문이다
+#: (덱에서 5장을 고르는 효과라면 ``C(40,5) = 658,008``).
+#:
+#: 넘으면 **자르지 않고 열거를 포기한다.** 잘라서 돌려주면 "legal_actions
+#: 에 오른 것이 전부다" 가 거짓이 되고, 정책은 자기가 못 본 수가 있다는
+#: 사실조차 모른다. 포기하면 지금과 똑같이 빈 목록이므로 (NOT_REACHED)
+#: **없던 허가가 생기지 않는다** — 안전한 쪽으로 틀린다.
+#:
+#: 값의 근거: 등재된 유일한 다중 선택(벌금, 패에서 정확히 2장)에서 실측
+#: ``C(5,2) = 10`` 이고, 룰북이 적은 패 상한 6장이면 ``C(6,2) = 15`` 다
+#: (``sd-rulebook-en-v10.json`` 의 ``zones``). 256 은 2장 선택을 패 23장까지
+#: 덮고, 폭발하는 모양은 거부한다.
+MAX_TARGET_COMBINATIONS: int = 256
+
+#: 고르는 자리가 둘 이상일 때 **없는 규칙의 이름** (Phase 6-P).
+UNSUPPORTED_MULTIPLE_BINDINGS = (
+    "multiple-chosen-bindings (서로 다른 조건의 대상을 각각 고르는 효과의 "
+    "조합 순서 규칙 — 어느 자리를 먼저 고르는가가 적법성을 바꾸는지)"
+)
+
+#: 장수가 **고정이 아닐 때** 없는 규칙의 이름 (Phase 6-P).
+UNSUPPORTED_VARIABLE_COUNT = (
+    "variable-selection-count (최소와 최대가 다른 효과에서 실제로 몇 장을 "
+    "고를 수 있는지 — 후보가 부족할 때 줄여도 되는지)"
+)
+
+#: 같은 카드를 두 번 고를 수 있다고 적힌 효과 (Phase 6-P).
+UNSUPPORTED_DUPLICATE_CHOICE = (
+    "duplicate-selection (같은 카드를 두 번 고르는 효과의 조합 열거 — "
+    "등재된 효과에 하나도 없다)"
+)
+
+#: 조합이 :data:`MAX_TARGET_COMBINATIONS` 를 넘었다 (Phase 6-P).
+UNSUPPORTED_COMBINATION_COUNT = (
+    "combination-ceiling (선언한 조합 상한을 넘는 효과 — 자르지 않고 "
+    "열거를 포기한다)"
+)
+
+
+def unsupported_enumeration(definition, pool_size: "int | None" = None) -> "str | None":
+    """
+    이 효과의 대상 조합을 **열거할 수 없다면 그 이유의 이름**, 열거할 수
+    있으면 ``None`` (Phase 6-P).
+
+    ``pool_size`` 를 주면 조합 수 상한까지 함께 본다. 주지 않으면 **모양만**
+    본다 — 후보를 세기 전에 모양으로 거를 수 있는지 먼저 묻기 위한 것이다.
+
+    🔴 **이것은 적법성 판정이 아니다.** "이 효과를 발동할 수 없다" 가 아니라
+    "이 다리가 후보를 열거할 줄 모른다" 다. 그래서 이름이 ``MISSING_*``
+    계열(:mod:`engine.effect.semantics`)과 같은 모양이다 — 없는 것은 규칙이
+    아니라 **열거 절차**이지만, 둘 다 "모른다" 를 허가로 바꾸지 않는다.
+    """
+    bindings = chosen_bindings(definition)
+    if len(bindings) > 1:
+        return UNSUPPORTED_MULTIPLE_BINDINGS
+    if not bindings:
+        return None
+    choice = bindings[0].spec.choice
+    if choice is None:  # pragma: no cover - TargetSpec 이 이미 막는다
+        return None
+    minimum = getattr(choice, "minimum", None)
+    maximum = getattr(choice, "maximum", None)
+    if minimum is None or maximum is None:  # pragma: no cover - 무작위 · 전부는 위에서 빠진다
+        return None
+    if minimum != maximum or minimum < 1:
+        #: ``minimum == maximum == 0`` 도 여기다 — 고를 것이 있다면서 0장을
+        #: 고르라는 명세는 모순이고, 추측해서 빈 선택을 만들지 않는다.
+        return UNSUPPORTED_VARIABLE_COUNT
+    if getattr(choice, "allow_duplicates", False):
+        return UNSUPPORTED_DUPLICATE_CHOICE
+    if pool_size is not None and math.comb(pool_size, minimum) > MAX_TARGET_COMBINATIONS:
+        return UNSUPPORTED_COMBINATION_COUNT
+    return None
 
 
 class TargetBridgeError(RuntimeError):
@@ -95,8 +196,18 @@ def required_target_count(definition) -> int:
     """
     이 효과를 발동하려면 ``PlayerAction.targets`` 에 몇 장이 있어야 하는가.
 
-    고르는 자리마다 ``ChoiceSpec.minimum`` 을 더한다. 지금 목록의 모든
-    효과가 ``minimum == maximum == 1`` 이지만, 그 사실에 기대지 않는다.
+    고르는 자리마다 ``ChoiceSpec.minimum`` 을 더한다.
+
+    🔴 **"모든 효과가 1장" 은 더 이상 참이 아니다** (Phase 6-P). 벌금
+    (92595643) 이 ``minimum == maximum == 2`` 이고, 공식 텍스트가 "자신은
+    패를 2장 버린다" 다. 그래서 이 함수는 2를 돌려준다 — 처음부터 합으로
+    적어 둔 덕분에 고칠 것이 없었다.
+
+    ``minimum`` 을 더하는 것이 옳은 것은 **장수가 고정일 때**다. 최소와
+    최대가 다른 효과에서는 이 수가 "몇 장을 건네야 하는가" 에 답하지
+    못하고, 그래서 :func:`selections_for` 가 그 모양을 거부한다
+    (:data:`UNSUPPORTED_VARIABLE_COUNT`). 등재된 효과에 그런 모양은
+    **0건**이다.
     """
     total = 0
     for binding in chosen_bindings(definition):
@@ -139,6 +250,20 @@ def selections_for(
         raise TargetBridgeError(
             f"{action.effect_ref} 는 대상 {wanted}장이 필요한데 "
             f"{len(action.targets)}개가 들어왔습니다."
+        )
+
+    #: 🔴 **가변 장수를 조용히 최소값으로 깎지 않는다** (Phase 6-P).
+    #:
+    #: 아래 ``take = choice.minimum`` 은 ``minimum == maximum`` 일 때만
+    #: 참이다. "최대 2장" 효과라면 이 환전은 1장만 집어 들고 나머지를
+    #: 버리는데, 그러면 플레이어가 2장을 골랐다는 사실이 **말없이**
+    #: 사라진다. 등재된 효과에 그런 모양이 하나도 없으므로(실측 0건)
+    #: 지금 고칠 규칙이 없고, 대신 **거부한다** — 미지원 절차를 자동
+    #: 성공으로 처리하지 않는다.
+    shape = unsupported_enumeration(definition)
+    if shape is not None and shape != UNSUPPORTED_MULTIPLE_BINDINGS:
+        raise TargetBridgeError(
+            f"{action.effect_ref} 의 선택 장수를 이 다리가 다루지 못합니다: {shape}"
         )
 
     selections: list[TargetSelection] = []
@@ -194,20 +319,38 @@ def target_combinations(
     순서는 **관측의 순서**다 (``CandidateResolver`` 가 존을 훑는 순서).
     ``set`` 으로 만들지 않으므로 같은 판이면 같은 순서가 나온다 (§9 · §17).
 
-    지금은 **고르는 자리가 하나이고 한 장을 고르는** 효과까지만 조합을
-    만든다. 둘 이상이거나 N장이면 조합 폭발과 순서 규칙을 함께 정해야 하고
-    (§8 · §9), 그 규칙이 아직 없으므로 추측하지 않는다 — 목록에 그런 효과도
-    없다. 빈 목록을 돌려주므로 **후보가 되지 않는다**(NOT_REACHED).
+    **고르는 자리가 하나이고 장수가 고정인** 효과까지 조합을 만든다
+    (Phase 6-P 에서 "한 장" 에서 "정확히 N장" 으로 넓혔다). 그 밖의 모양은
+    :func:`unsupported_enumeration` 이 이름을 대고 빈 목록이 되므로
+    **후보가 되지 않는다** (NOT_REACHED).
+
+    정확히 N장을 어떻게 세는가
+    --------------------------
+    후보를 거른 **뒤에** ``itertools.combinations`` 로 묶는다. 순서가
+    이것으로 결정된다 — ``eligible`` 은 관측 순서이고 ``combinations`` 는
+    그 순서의 사전식이므로, 같은 판이면 같은 목록이 나온다 (§9).
+
+    같은 카드가 한 조합에 두 번 들어가는 일은 **구조적으로** 없다 —
+    ``combinations`` 는 서로 다른 자리를 고르고, 후보 목록에 같은
+    ``InstanceId`` 가 두 번 들어 있지 않다. 그래서 중복 방지를 위한 검사를
+    따로 쓰지 않는다 (쓰면 두 곳이 같은 규칙을 갖게 된다). 그럼에도
+    ``TargetResolver._check_count`` 가 ``DUPLICATE_SELECTION`` 을 다시
+    보므로 관문은 둘이다.
+
+    **카드 ID 가 같아도 조합은 다르다.** 묶는 것은 ``InstanceId`` 이므로
+    같은 이름 카드 2장은 서로 다른 두 후보이고, 그 둘을 함께 고른 조합이
+    하나 나온다 (§8-1).
     """
     bindings = chosen_bindings(definition)
     if not bindings:
         return [()]
-    if len(bindings) > 1:  # pragma: no cover - 목록에 아직 없다
+    shape = unsupported_enumeration(definition)
+    if shape is not None:
         return []
     binding = bindings[0]
     choice = binding.spec.choice
-    if choice is None or choice.minimum != 1 or choice.maximum != 1:
-        return []
+    assert choice is not None  # unsupported_enumeration 이 보증한다
+    take = choice.minimum
 
     context = ConditionContext(
         player=seat, source=source, effect_ref=definition.effect_ref
@@ -234,15 +377,27 @@ def target_combinations(
     # (``_first_unseen``), 거기까지 흘려보내지 않는다 — 가려진 카드를 가리키는
     # Action 을 **만들지 않는 것**이 만들고 거절하는 것보다 낫다.
     ordinary = GameStateView.from_state(state, viewer=seat)
-    return [
-        targets_from((instance,))
+    pool = tuple(
+        instance
         for instance in found.eligible
         if ordinary.find(instance) is not None
-    ]
+    )
+
+    #: 상한은 **거른 뒤의** 후보 수로 본다 — 가려진 카드를 세어서 상한을
+    #: 넘겼다고 하면, 못 쓸 후보 때문에 쓸 수 있는 효과가 막힌다.
+    if unsupported_enumeration(definition, len(pool)) is not None:
+        return []
+    return [targets_from(combo) for combo in itertools.combinations(pool, take)]
 
 
 __all__ = [
+    "MAX_TARGET_COMBINATIONS",
+    "UNSUPPORTED_COMBINATION_COUNT",
+    "UNSUPPORTED_DUPLICATE_CHOICE",
+    "UNSUPPORTED_MULTIPLE_BINDINGS",
+    "UNSUPPORTED_VARIABLE_COUNT",
     "TargetBridgeError",
+    "unsupported_enumeration",
     "target_combinations",
     "chosen_bindings",
     "required_target_count",
