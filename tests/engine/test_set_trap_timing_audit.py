@@ -494,7 +494,7 @@ def test_07_two_traps_already_execute_end_to_end(repository):
 
 
 @pytest.mark.real_card
-def test_08_the_two_that_do_not_execute_fail_for_non_trap_reasons(repository):
+def test_08_the_two_that_did_not_execute_were_blocked_for_non_trap_reasons(repository):
     """
     **§19 · §29-17 — 남은 둘이 막히는 이유는 함정과 무관하다.**
 
@@ -526,6 +526,23 @@ def test_08_the_two_that_do_not_execute_fail_for_non_trap_reasons(repository):
     풀렸다. 그래서 수를 지우지 않고 **양쪽을 다 센다**: 통상 몬스터 대상은
     해결되고, 룰북이 덮지 않는 효과 몬스터 대상은 **여전히 같은 자리에서**
     멈춘다.
+
+    🔴 **Phase 6-P 에서 벌금의 공백도 닫혔다 — 그래서 이름을 바꿨다.**
+
+    원래 이름은 ``the_two_that_do_not_execute`` 였는데, 이제 **둘 다
+    실행된다.** 이름이 주장하는 사실이 거짓이 되었으므로 과거형으로
+    바꿨다 (``the_two_that_did_not_execute``). 재는 사실을 바꾼 것이 아니라
+    **이름이 가리키는 시점**을 바꾼 것이다.
+
+    벌금을 막고 있던 것은 ``target_combinations`` 가 **한 장짜리만** 열거한
+    것이었고, 6-P 가 그것을 **정확히 N장**으로 넓혔다. 실측: 조합
+    ``C(5,2) = 10`` 개, 해결 성공, 패 5 → 3, 고른 두 장 모두 ``GRAVE``.
+
+    🔴 **이 시험의 결론은 이제 두 번 증명되었다.** 둘 다 함정을 한 줄도
+    건드리지 않고 풀렸다 — 하나는 규칙 지식(6-O), 하나는 열거 절차(6-P)
+    였다. 그리고 **함정이라는 이유의 관문은 여전히 닫혀 있다**: 아래가
+    ``_force_execute`` 로 허가를 손으로 넣는 것이 그 증거이고,
+    ``test_05`` 가 ``legal_actions`` 에 오르지 않는다는 사실을 따로 센다.
     """
     #: 🔴 통상 몬스터 대상 — 6-O 이후 해결된다.
     duel = duel_at(
@@ -557,16 +574,22 @@ def test_08_the_two_that_do_not_execute_fail_for_non_trap_reasons(repository):
     assert "IsAbleToHand" in result["detail"], result["detail"]
     assert duel.state.find_instance(stubborn).zone is Zone.MZONE
 
+    #: 🔴 벌금 — 6-P 이후 **정확히 2장을 열거하고 해결한다.**
     duel = duel_at(repository, mine=(FINE,) + (LUSTER_DRAGON,) * 5)
     fine = set_down(duel, P0, FINE)
     next_own_turn(duel)
+    hand_before = len(duel.state.player(P0).zones[Zone.HAND])
     result = _force_execute(duel, fine, FINE)
-    assert result["stage"] == "target_bridge", result
-    assert result["combos"] == 0, "다리가 여러 장 고르기를 열거하지 못한다"
+    assert result["combos"] == 10, ("C(5,2) = 10 조합", result)
+    assert result["stage"] == "resolved", result
+    assert len(duel.state.player(P0).zones[Zone.HAND]) == hand_before - 2
+    assert result["zone"] is Zone.GRAVE, "벌금 자신도 묘지로 간다"
 
-    # 그리고 그 한계는 **카드 종류와 무관하다** — 다리가 단일 대상만 센다.
+    # 그리고 그 한계가 **카드 종류와 무관했다**는 사실은 그대로다 —
+    # 다리가 장수로만 거르고, 등재된 다중 선택은 여전히 이 한 장뿐이다.
     bridge = pathlib.Path("engine/target_bridge.py").read_text(encoding="utf-8")
-    assert "choice.minimum != 1 or choice.maximum != 1" in bridge
+    assert "UNSUPPORTED_VARIABLE_COUNT" in bridge
+    assert "itertools.combinations(pool, take)" in bridge
     multi = [
         entry.definition.source_card_id
         for entry in EFFECT_LIBRARY
