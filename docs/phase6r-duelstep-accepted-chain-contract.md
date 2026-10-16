@@ -926,3 +926,14 @@ METRIC 11 Runner_거부 = 1            METRIC 11 Runner_거부 = 0
 | `d2e8da9` | `engine/duel.py` — 끝난 체인을 비우고 적법한 패스를 수락으로 보고한다 |
 | `65dacc5` | 테스트 — 새 파일 45개 + 움직인 기존 핀 셋 |
 | (이 보고서) | `docs/phase6r-duelstep-accepted-chain-contract.md` |
+
+### 푸시
+
+```
+$ git push -u origin claude/pensive-goodall-te1egy
+To https://github.com/Raro615/yugioh-deck-agent
+   7cc351d..46610c0  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy
+branch 'claude/pensive-goodall-te1egy' set up to track 'origin/claude/pensive-goodall-te1egy'.
+```
+
+보고서 commit: `46610c0`
