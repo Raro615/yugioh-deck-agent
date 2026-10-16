@@ -789,15 +789,29 @@ ROOT_EXIT=0
 
 ### 19-3. 커밋
 
-작업 브랜치: `claude/pensive-goodall-te1egy`.
-기존 commit 을 rewrite · amend 하지 않았고 force push 하지 않았다.
-새 브랜치와 PR 을 만들지 않았다.
+작업 브랜치: `claude/pensive-goodall-te1egy`. base 는 Phase 6-O 의 마지막
+commit `ee50d4f` 다. 기존 commit 을 rewrite · amend 하지 않았고 force push
+하지 않았다. 새 브랜치와 PR 을 만들지 않았다.
 
-(실제 SHA 는 19-4 에 적는다.)
+| 순서 | commit | 내용 | 파일 |
+|---|---|---|---|
+| 1 | `f8dd1a3` | production — 다리가 정확히 N장을 열거한다 | `engine/target_bridge.py` |
+| 2 | `9cc5556` | 테스트 — 신규 58개와 이름이 거짓이 된 핀 하나 | 신규 1 + 수정 1 |
+| 3 | `f83893a` | 보고서 — 모델이 아니라 열거가 막고 있었다 | `docs/phase6p-…md` |
+| 4 | (이 commit) | 보고서 §19-3 · §19-4 에 실제 SHA 와 푸시 출력 | 같음 |
 
 ### 19-4. 푸시 결과
 
-(커밋 직후 실제 SHA 와 푸시 출력을 기록한다.)
+```
+$ git push -u origin claude/pensive-goodall-te1egy
+To https://github.com/Raro615/yugioh-deck-agent
+   ee50d4f..f83893a  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy
+branch 'claude/pensive-goodall-te1egy' set up to track 'origin/claude/pensive-goodall-te1egy'.
+```
+
+🟢 **fast-forward (`ee50d4f..f83893a`)** — force push 가 아니고 기존 commit 을
+하나도 다시 쓰지 않았다. 지정된 브랜치 `claude/pensive-goodall-te1egy` 외에
+푸시한 곳이 없고, PR 을 만들지 않았다.
 
 ---
 
