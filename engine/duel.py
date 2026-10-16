@@ -184,7 +184,39 @@ class DuelStep:
 
     action: PlayerAction
     accepted: bool
+    """
+    🔴 **이 행위를 수락했는가** — "원하는 결과가 나왔는가" 가 아니다
+    (Phase 6-R 이 이 칸의 뜻을 글로 적었다. 그때까지 설명이 없었고,
+    그 공백이 바로 아래의 혼동을 만들었다).
+
+    세 가지가 **서로 다른 사실**이고, 이 칸은 **첫째만** 말한다.
+
+    ====================  ==================================================
+    행위 수락              이 칸. ``False`` 는 "그 행위를 하지 않았다" 다 —
+                          판이 그 행위로 바뀌지 않았다는 뜻이다
+    체인 등록              :attr:`Duel.chain` 이 말한다 (링크가 쌓였는가)
+    효과 해결 · 상태 변경   ``EventJournal`` 과 ``GameState`` 가 말한다.
+                          적용된 것만 ``EffectEvent`` 로 남는다
+    ====================  ==================================================
+
+    그래서 **적법한 ``PASS`` 는 언제나 ``accepted=True``** 다. 그 패스가 푼
+    체인 안에서 어떤 링크가 불발되었더라도 — 불발은 **링크의 결과**이고
+    패스라는 행위는 분명히 일어났다. 그 경우 :attr:`code` 와 :attr:`reason`
+    이 불발 사유를 그대로 들고 온다 (Phase 6-R, :meth:`Duel._resolve_chain`).
+
+    🔴 **``accepted=True`` 가 "효과가 적용되었다" 를 뜻하지 않는다.** 무엇이
+    적용되었는지는 ``EventJournal`` 에만 있다 — 거기에 ``EffectEvent`` 가
+    없으면 아무것도 적용되지 않은 것이다.
+    """
     code: ValidationCode
+    """
+    이 걸음의 **이유 코드**.
+
+    ``accepted`` 가 거짓이면 "왜 거절했는가" 다. 참이면 보통
+    :attr:`~engine.validation.ValidationCode.OK` 이지만, 체인을 푼 패스에서
+    **링크가 불발되었으면 그 사유 코드**가 온다 — 행위는 수락되었고 링크가
+    적용되지 않았다는 두 사실을 함께 전하는 자리다 (Phase 6-R).
+    """
     reason: str
     result: "DuelResult | None" = None
     """이 걸음으로 듀얼이 끝났으면 그 결과."""
@@ -783,6 +815,14 @@ class Duel:
         참으로 평가되어 한 번의 패스로 기회가 닫혔다. 이 자리는 우선권이
         한 번도 열리지 않아 **도달 불가**였으므로 아무도 밟지 않았다
         (Phase 3-E-10 이 죽은 분기로 기록했다).
+
+        🔴 **적법한 패스는 언제나 수락이다** (Phase 6-R).
+
+        이 함수가 돌려주는 ``DuelStep`` 의 ``accepted`` 는 두 길 모두 참이다 —
+        기회를 넘기기만 했을 때도, 체인을 풀었을 때도. 그 체인 안에서 링크가
+        불발되었더라도 **패스는 일어났다.** 불발 사유는 ``code`` 와 ``reason``
+        이 들고 가고, 무엇이 실제로 적용되었는지는 ``EventJournal`` 이 말한다
+        (:attr:`DuelStep.accepted` 의 설명 참고).
         """
         self.priority = self.priority.passed()
 
@@ -805,24 +845,62 @@ class Duel:
         누구에게 가는지는 여전히 정하지 않는다 (STRUCTURAL-34 의 나머지).
         """
         resolution = loop.resolve(self.state, response, self._resolver)
-        self.chain = resolution.state.chain
         self.priority = resolution.state.priority
-        if self.chain.is_complete:
-            # 다음 발동이 체인 1 부터 시작하도록 비운다.
-            self.chain = Chain()
+
+        # 🔴 **이 체인은 끝났다** (Phase 6-R). 링크가 전부 적용되었든 하나가
+        # 불발되었든, ``ResponseLoop.resolve`` 가 기회를 닫았으므로
+        # (``AFTER_CHAIN_RULE``) **다시 풀릴 수 없다** — 체인을 푸는 자리는
+        # ``_apply_pass`` 하나이고 그것은 열린 기회를 요구한다.
+        #
+        # 예전에는 ``if self.chain.is_complete:`` 일 때만 비웠다. 그러면 링크
+        # 하나가 불발된 체인이 **영구히 남고**, 남은 체인이
+        # ``ActivationTiming.chain_is_open`` 을 참으로 고정한다. 그 뒤로
+        # :meth:`_activation_gate` 의 둘째 관문이 **모든 스펠 스피드 1 발동**
+        # 에 ``SPELL_SPEED_TOO_LOW`` 를 돌려준다 — "스펠 스피드 1 은 어떤
+        # 효과에도 응수할 수 없습니다". 실측 (seed 303 · DIGEST 덱):
+        #
+        #     불발 뒤 links=3 resolved=2 is_complete=False
+        #     chain_is_open=True → 관문2 = SPELL_SPEED_TOO_LOW
+        #     남은 네 턴(5→8) 동안 발동 후보 **0건**, 체인은 끝까지 남는다
+        #
+        # 그리고 그 거절은 **보류 목록에도 남지 않는다** — 후보 생성이
+        # 관문에서 걸린 것을 버리므로, 호출자가 ``apply`` 로 직접 넣으면
+        # ``RULE_NOT_IMPLEMENTED`` ("허가된 행위가 아닙니다") 를 받는다.
+        # 규칙이 금지하지 않는 것을 금지하고, 그 이유조차 말하지 않았다.
+        #
+        # 비우는 것이 "해결했다" 는 뜻이 **아니다.** 무엇이 적용되었는지는
+        # ``EventJournal`` 에만 있다 (적용된 링크만 ``EffectEvent`` 를 남긴다).
+        self.chain = Chain()
 
         # **해결됐든 아니든 놓인 마법은 필드를 떠난다** (RULE-SPELLTRAP-002).
         self._retire_pending()
 
         steps = resolution.steps
+        last = steps[-1]
         if not resolution.fully_resolved:
-            last = steps[-1]
-            return DuelStep(action, False, last.code, last.reason)
+            # 🔴 **패스는 수락이다** (Phase 6-R).
+            #
+            # 예전에는 여기서 ``accepted=False`` 를 돌려주었다. 그런데 돌아간
+            # 행위는 **패스**이고, 그 패스는 분명히 일어났다 — 우선권이
+            # 넘어갔고, 적용된 링크가 판을 바꾸었고, 놓인 카드가 묘지로 갔다.
+            # 불발은 **링크의 결과**이지 패스의 적법성이 아니다.
+            #
+            # 그 거짓 실패를 네 호출자가 그대로 믿었다 — ``DuelRunner.run`` 은
+            # **듀얼을 중단**하고, ``Simulator.simulate`` 는 적법한 수를
+            # ``REFUSED`` 로 분류하고, ``fork_after`` 는 ``None`` 을 돌려주고,
+            # ``_settle_forced_passes`` 는 정산을 멈춘다.
+            #
+            # 그래서 ``accepted`` 는 참이고, **불발 사유는 버리지 않는다** —
+            # ``code`` 와 ``reason`` 이 그대로 들고 간다. "해결했다" 고 적지
+            # 않는 규율은 그 둘이 지킨다 (``ValidationCode.OK`` 가 아니다).
+            return DuelStep(
+                action, True, last.code, last.reason, result=self._check_end()
+            )
         return DuelStep(
             action,
             True,
             ValidationCode.OK,
-            steps[-1].reason,
+            last.reason,
             result=self._check_end(),
         )
 
@@ -945,6 +1023,13 @@ class Duel:
         ④가 깨지면 **되돌리지 않는다.** 발동은 이미 성립했고, 해결되지 않은
         효과의 카드가 묘지로 가는 것은 규칙대로다 (불발). 다만 "해결했다" 고
         적지 않는다 — 이유를 그대로 전한다.
+
+        🔴 **④는 이 함수의 걸음이 아니다** (Phase 3-E-11 이 옮겼고 6-R 이
+        그 결과를 정리했다). 해결은 ``_resolve_chain`` 에서 일어나고, 그
+        함수가 돌려주는 ``DuelStep`` 의 행위는 **패스**다. 그래서 "해결했다고
+        적지 않는다" 를 ``accepted=False`` 로 적으면 **패스를 거절한 것**이
+        되어 버린다 — 6-R 이 그 자리를 ``code`` 와 ``reason`` 으로 옮겼다.
+        이 함수가 돌려주는 걸음은 여전히 **발동의 수락**만 말한다.
         """
         definition = self._activator.definitions.definition_for(action.effect_ref)
         if definition is None:
