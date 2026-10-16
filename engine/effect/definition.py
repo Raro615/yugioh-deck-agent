@@ -295,6 +295,52 @@ class EffectDefinition:
     옮기지 않는다 — 그 변환은 12,702장을 한꺼번에 분류로 바꾸는 일이고,
     적는 것과 **실행을 허가하는 것**은 다른 결정이다.
     """
+    activation_waits_for_event: "bool | None" = None
+    """
+    이 **카드 발동**이 특정 사건을 기다리는가 (Phase 6-Q).
+
+    ``activation_kind`` 와 **다른 축이다.** 저쪽은 몬스터 효과의 분류
+    (기동 · 유발 · 플립 · 유발즉시)이고, 이쪽은 마법 · 함정의 **카드
+    발동**(``EFFECT_TYPE_ACTIVATE``)이 사건을 기다리는지다. 한 축에 넣지
+    않은 이유는 :class:`~engine.vocabulary.ActivationKind` 가 스스로
+    적어 둔 그대로다 — *"마법 · 함정의 발동도 여기 없다"*.
+
+    세 값을 **구분해서 쓴다** (``ActivationTiming.set_this_turn`` 과 같은
+    모양이다 — 새 열거형을 만들지 않았다).
+
+    ==========  ==================================================
+    ``None``    **적지 않았다.** "사건을 기다리지 않는다" 가 아니다
+    ``True``    특정 사건이 와야 발동한다. 엔진은 그 사건을 만들어
+                내지 못하므로 **범위 밖**이다
+    ``False``   사건을 기다리지 않는다. 세트 · 세트한 턴 · 타이밍 ·
+                우선권 · 카드별 조건은 **그대로 다 본다**
+    ==========  ==================================================
+
+    🔴 ``False`` 는 **발동 허가가 아니다.** "이 카드의 발동 시점을 판정할
+    수 있다" 는 뜻이고, 판정 자체는 뒤의 관문들이 한다
+    (:func:`~engine.action_validation.validate` ·
+    :class:`~engine.activation_timing.ActivationTimingChecker` ·
+    :meth:`~engine.activation.EffectActivator.can_activate`).
+
+    왜 Lua 의 태그 이름을 그대로 싣지 않는가
+    ----------------------------------------
+    🔴 공식 스크립트가 "특정 사건을 요구하지 않는다" 를 적는 **내부 태그**는
+    공식 규칙의 개념이 **아니다** — 이 저장소의 공식 자료 전체에서 그 영어
+    표현은 **0회** 나오고, 공식 스펠 스피드와도 **끝에서 뒤집힌다** (필드
+    마법은 312/312 = 100%, 카운터 함정은 220블록 중 3건 = 1.4%). 측정과 경고는
+    ``core.card_model.EffectSpec.code`` 에 있다 (Phase 3-F-25).
+
+    🔴 **그래서 이 모듈은 그 태그의 이름을 아예 쓰지 않는다** — 쓰면 Lua 의
+    어휘가 정의 계층의 어휘가 되고, 그 경계를
+    ``tests/test_trigger_condition_separation_audit.py`` 가 지킨다. 옮긴 것은
+    **그 태그가 답하는 질문 하나**다 — "이 발동이 사건을 기다리는가".
+    스펠 스피드는 여전히 카드 종류에서 나온다
+    (``engine/activation_timing.py``).
+
+    **손으로 적는다** (ADR-006). ``EffectSpec.code`` 에서 자동으로 옮기지
+    않는다 — 그 변환은 카드 발동 블록 4,297개를 한꺼번에 판정으로 바꾸는
+    일이고, 적는 것과 **발동을 판정하는 것**은 다른 결정이다.
+    """
     provenance: EffectProvenance = field(default_factory=EffectProvenance)
 
     def __post_init__(self) -> None:

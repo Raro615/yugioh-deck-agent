@@ -436,6 +436,20 @@ _THE_GIFT_OF_GREED_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(THE_GIFT_OF_GREED, 0),
         source_card_id=THE_GIFT_OF_GREED,
+        #: 🔴 **사건을 기다리지 않는다** (Phase 6-Q). 손으로 적었다.
+        #: 근거: ``c5915629.lua`` 의 유일한 카드 발동 블록이 **어떤 사건도 적지
+        #: 않는다** — 공식 스크립트가 그 자리에 "특정 사건을 요구하지
+        #: 않는다" 를 적는 값을 넣어 두었다. 카드 발동 블록은 그 자리를
+        #: 반드시 채우므로 (읽지 못한 칸이 0건) 이 신호에 빠진 칸이 없다
+        #: (Phase 3-F-25 실측 · docs/phase6q-…md §3-3).
+        #:
+        #: 🔴 그 태그의 **이름을 여기 적지 않는다** — Lua 의 어휘가 효과
+        #: 라이브러리의 어휘가 되지 않게 지키는 경계이고,
+        #: ``tests/test_event_free_chain_semantic_audit.py`` 가 그것을 센다.
+        #:
+        #: ``False`` 는 **발동 허가가 아니다** — 세트한 턴 ·
+        #: 스펠 스피드 · 카드별 조건 · 비용 · 대상은 그대로 다 본다.
+        activation_waits_for_event=False,
         operations=(DrawOperation(count=2, who=PlayerRef.OPPONENT),),
         # ``Duel.IsPlayerCanDraw(1-tp,2)`` 중 **덱 장수 부분만** 옮겼다
         # (욕망의 항아리와 같은 이유 — 드로우를 막는 효과 계층이 없다).
@@ -559,6 +573,20 @@ _FINE_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(FINE, 0),
         source_card_id=FINE,
+        #: 🔴 **사건을 기다리지 않는다** (Phase 6-Q). 손으로 적었다.
+        #: 근거: ``c92595643.lua`` 의 유일한 카드 발동 블록이 **어떤 사건도 적지
+        #: 않는다** — 공식 스크립트가 그 자리에 "특정 사건을 요구하지
+        #: 않는다" 를 적는 값을 넣어 두었다. 카드 발동 블록은 그 자리를
+        #: 반드시 채우므로 (읽지 못한 칸이 0건) 이 신호에 빠진 칸이 없다
+        #: (Phase 3-F-25 실측 · docs/phase6q-…md §3-3).
+        #:
+        #: 🔴 그 태그의 **이름을 여기 적지 않는다** — Lua 의 어휘가 효과
+        #: 라이브러리의 어휘가 되지 않게 지키는 경계이고,
+        #: ``tests/test_event_free_chain_semantic_audit.py`` 가 그것을 센다.
+        #:
+        #: ``False`` 는 **발동 허가가 아니다** — 세트한 턴 ·
+        #: 스펠 스피드 · 카드별 조건 · 비용 · 대상은 그대로 다 본다.
+        activation_waits_for_event=False,
         targets=TargetBinding.single(
             TargetSpec.choosing(
                 ChoiceSpec(
@@ -619,6 +647,20 @@ _COMPULSORY_EVACUATION_DEVICE_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(COMPULSORY_EVACUATION_DEVICE, 0),
         source_card_id=COMPULSORY_EVACUATION_DEVICE,
+        #: 🔴 **사건을 기다리지 않는다** (Phase 6-Q). 손으로 적었다.
+        #: 근거: ``c94192409.lua`` 의 유일한 카드 발동 블록이 **어떤 사건도 적지
+        #: 않는다** — 공식 스크립트가 그 자리에 "특정 사건을 요구하지
+        #: 않는다" 를 적는 값을 넣어 두었다. 카드 발동 블록은 그 자리를
+        #: 반드시 채우므로 (읽지 못한 칸이 0건) 이 신호에 빠진 칸이 없다
+        #: (Phase 3-F-25 실측 · docs/phase6q-…md §3-3).
+        #:
+        #: 🔴 그 태그의 **이름을 여기 적지 않는다** — Lua 의 어휘가 효과
+        #: 라이브러리의 어휘가 되지 않게 지키는 경계이고,
+        #: ``tests/test_event_free_chain_semantic_audit.py`` 가 그것을 센다.
+        #:
+        #: ``False`` 는 **발동 허가가 아니다** — 세트한 턴 ·
+        #: 스펠 스피드 · 카드별 조건 · 비용 · 대상은 그대로 다 본다.
+        activation_waits_for_event=False,
         targets=TargetBinding.single(
             TargetSpec.targeting(
                 ChoiceSpec(
@@ -679,6 +721,20 @@ _DISAPPEAR_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(DISAPPEAR, 0),
         source_card_id=DISAPPEAR,
+        #: 🔴 **사건을 기다리지 않는다** (Phase 6-Q). 손으로 적었다.
+        #: 근거: ``c24623598.lua`` 의 유일한 카드 발동 블록이 **어떤 사건도 적지
+        #: 않는다** — 공식 스크립트가 그 자리에 "특정 사건을 요구하지
+        #: 않는다" 를 적는 값을 넣어 두었다. 카드 발동 블록은 그 자리를
+        #: 반드시 채우므로 (읽지 못한 칸이 0건) 이 신호에 빠진 칸이 없다
+        #: (Phase 3-F-25 실측 · docs/phase6q-…md §3-3).
+        #:
+        #: 🔴 그 태그의 **이름을 여기 적지 않는다** — Lua 의 어휘가 효과
+        #: 라이브러리의 어휘가 되지 않게 지키는 경계이고,
+        #: ``tests/test_event_free_chain_semantic_audit.py`` 가 그것을 센다.
+        #:
+        #: ``False`` 는 **발동 허가가 아니다** — 세트한 턴 ·
+        #: 스펠 스피드 · 카드별 조건 · 비용 · 대상은 그대로 다 본다.
+        activation_waits_for_event=False,
         operations=(),
         provenance=EffectProvenance.official_lua(
             "c24623598.lua 를 읽었으나 후보 조건을 옮기지 못했다."
@@ -871,6 +927,20 @@ _INTRODUCTION_TO_GALLANTRY_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(INTRODUCTION_TO_GALLANTRY, 0),
         source_card_id=INTRODUCTION_TO_GALLANTRY,
+        #: 🔴 **사건을 기다리지 않는다** (Phase 6-Q). 손으로 적었다.
+        #: 근거: ``c69091732.lua`` 의 유일한 카드 발동 블록이 **어떤 사건도 적지
+        #: 않는다** — 공식 스크립트가 그 자리에 "특정 사건을 요구하지
+        #: 않는다" 를 적는 값을 넣어 두었다. 카드 발동 블록은 그 자리를
+        #: 반드시 채우므로 (읽지 못한 칸이 0건) 이 신호에 빠진 칸이 없다
+        #: (Phase 3-F-25 실측 · docs/phase6q-…md §3-3).
+        #:
+        #: 🔴 그 태그의 **이름을 여기 적지 않는다** — Lua 의 어휘가 효과
+        #: 라이브러리의 어휘가 되지 않게 지키는 경계이고,
+        #: ``tests/test_event_free_chain_semantic_audit.py`` 가 그것을 센다.
+        #:
+        #: ``False`` 는 **발동 허가가 아니다** — 세트한 턴 ·
+        #: 스펠 스피드 · 카드별 조건 · 비용 · 대상은 그대로 다 본다.
+        activation_waits_for_event=False,
         # 대상이 하나뿐이어도 ``@primary`` 로 부르지 않는다 — 이 대상은
         # **무작위로 정해지는 것**이고, 이름이 그렇게 말한다.
         targets=(

@@ -906,7 +906,8 @@ def _activate_effect(
     # 처음부터 ``effect_ref`` 로 효과를 지목하고 있었고 (``_NEEDS_EFFECT_REF``),
     # 이 함수만 그것을 보지 않고 있었다. PlayerAction 계약은 바뀌지 않는다.
     activation_kind = _declared_activation_kind(validator, action)
-    scope = _NormalSpellActivation(action.source, activation_kind)
+    waits_for_event = _declared_activation_event(validator, action)
+    scope = _NormalSpellActivation(action.source, activation_kind, waits_for_event)
     always = (
         Requirement(
             ControllerIs(PlayerRef.CONTROLLER, action.source),
@@ -924,7 +925,36 @@ def _activate_effect(
     )
     context = validator.context_for(action)
     if _activation_out_of_scope(
-        validator.view, context, action.source, activation_kind
+        validator.view, context, action.source, activation_kind, waits_for_event
+    ):
+        return always
+
+    # **세트된 일반 함정은 좁은 요구를 걸지 않는다** (Phase 6-Q).
+    #
+    #   RULE-SPELLTRAP-008 — "you can activate Trap Cards **during your
+    #   opponent's turn**"                        → IsTurnPlayer 를 걸지 않는다
+    #   RULE-SPELLTRAP-009 — "you can activate it **at any time** after
+    #   that—starting from the beginning of the next turn"
+    #                                             → PhaseIs 를 걸지 않는다
+    #
+    # 세트해 둔 카드는 이미 제 칸에 있으므로 빈 칸도 필요하지 않다 (세트한
+    # 마법과 같은 이유 — Phase 3-E-14).
+    #
+    # 🔴 **걸지 않는 것이 허가가 아니다.** 이 분기가 ``always`` 만 돌려주는
+    # 것은 "이 관문이 함정에 더할 좁은 규칙이 없다" 는 뜻이고, 실제 제약은
+    # 다른 계층에 **이미 있다**:
+    #
+    #   세트한 턴         ActivationTimingChecker._set_turn_refusal
+    #                    (RULE-SPELLTRAP-009 — 스펠 스피드 2 로 가른다)
+    #   스펠 스피드        ActivationTimingChecker.check (RULE-CHAIN-005)
+    #   체인이 비었는가     Duel (ADR-007 — 체인은 GameState 밖에 산다)
+    #   카드별 조건 · 비용 · 대상
+    #                    EffectActivator.can_activate
+    #
+    # 그 넷 중 하나라도 없다면 이 분기를 열어서는 안 됐다. 넷 다 있다는 것을
+    # ``tests/engine/test_trap_activation_free_chain.py`` 가 센다.
+    if activation_is_set_trap(
+        validator.view, context, action.source, waits_for_event
     ):
         return always
 
@@ -1298,6 +1328,35 @@ TRAP_TRIGGER_MISSING = (
     "공식 스크립트의 SetCode(EVENT_*) 가 EffectDefinition 에 없다)"
 )
 
+#: 함정이 **특정 사건을 기다린다고 적혀 있을 때** (Phase 6-Q).
+#:
+#: ``TRAP_TRIGGER_MISSING`` 과 **다른 사실이다.** 저쪽은 "적지 않아서 모른다"
+#: 이고 이쪽은 "기다린다고 적혀 있는데 엔진이 그 사건을 만들어 내지 못한다"
+#: 다. 한 문장으로 묶으면 고칠 곳이 달라진다 — 저쪽은 정의에 적으면 되고,
+#: 이쪽은 사건 계층이 와야 한다.
+#:
+#: 실측(일반 함정 전수): ``ACTIVATE`` 블록 1,386개 중 **390개(28.1%)** 가
+#: 사건을 적는다 — ``EVENT_ATTACK_ANNOUNCE`` 96 · ``EVENT_SPSUMMON_SUCCESS``
+#: 50 · ``EVENT_CHAINING`` 46 등. 카드 종류만 보고 함정 전체를 통과시키면
+#: 그 390개가 **아무 때나 발동**하게 된다.
+TRAP_EVENT_UNSUPPORTED = (
+    "trap-activation-event (이 함정은 특정 사건이 와야 발동하는데 엔진이 "
+    "그 사건을 만들어 내지 못한다)"
+)
+
+#: 세트되지 않은 함정의 발동 (Phase 6-Q).
+#:
+#: 룰북이 **세트가 앞선다**고 적는다 — RULE-SPELLTRAP-009: *"Before you can
+#: activate a Trap Card, you must Set it on the field first."* 그러므로 패의
+#: 함정을 발동하는 것은 규칙이 금지하는 일이지만, 이 자리는 ``INVALID`` 를
+#: 만들지 않는다 — 발동 **위치**는 이 함수가 범위 조건으로 다루고 있고
+#: (마법도 그렇다), 한 질문에 ``INVALID`` 와 ``UNKNOWN`` 두 길을 두면
+#: 둘이 갈라진다. ``UNKNOWN`` 은 허가가 아니므로 안전한 쪽으로 틀린다.
+TRAP_NOT_SET = (
+    "trap-activation-location (세트가 앞서야 한다 — RULE-SPELLTRAP-009 의 "
+    "\"you must Set it on the field first\")"
+)
+
 #: 몬스터 효과의 발동에 없는 규칙 계층. 함정과 **다른 이유**다 — 이쪽은
 #: 기동 · 유발 · 플립 · 유발즉시 분류가 없어서 속도조차 정할 수 없다
 #: (``engine/activation_timing.py`` 의 ``MONSTER_CLASSIFICATION_MISSING``).
@@ -1451,6 +1510,59 @@ def _declared_activation_kind(validator, action) -> "ActivationKind | None":
     return getattr(definition, "activation_kind", None)
 
 
+def _declared_activation_event(validator, action) -> "bool | None":
+    """
+    이 발동이 가리킨 효과가 **사건을 기다리는가** (Phase 6-Q). 모르면 ``None``.
+
+    ``_declared_activation_kind`` 와 **같은 모양**이다 — 등록소에서 읽어
+    값으로 넘긴다. ``None`` 이 되는 길이 셋이고 전부 "모른다" 다: 등록소를
+    받지 못했거나, 그 효과의 정의가 없거나, 정의가 적지 않았다. 접은 결과가
+    더 넓어지지 않는다 — ``None`` 은 **범위 밖**이다.
+    """
+    source = getattr(validator, "definitions", None)
+    if source is None or action.effect_ref is None:
+        return None
+    definition = source.definition_for(action.effect_ref)
+    if definition is None:
+        return None
+    return getattr(definition, "activation_waits_for_event", None)
+
+
+def activation_is_set_trap(view, context, instance, waits_for_event=None) -> bool:
+    """
+    이 발동이 **세트된 일반 함정의 카드 발동**인가 (Phase 6-Q).
+
+    참이면 요구를 **거의 걸지 않는다** — 룰북이 그렇게 적는다.
+
+    - RULE-SPELLTRAP-008 — *"you can activate Trap Cards **during your
+      opponent's turn**"* → ``IsTurnPlayer`` 를 걸지 않는다
+    - RULE-SPELLTRAP-009 — *"you can activate it **at any time** after
+      that—starting from the beginning of the next turn"* → ``PhaseIs`` 를
+      걸지 않는다
+    - 세트해 둔 카드는 이미 제 칸에 있다 → ``ZoneHasFreeSlot`` 을 걸지 않는다
+      (세트한 마법과 같은 이유 — Phase 3-E-14)
+
+    걸지 않는 것이 **허가가 아니다.** 세트한 턴은
+    :class:`~engine.activation_timing.ActivationTimingChecker` 가 보고
+    (RULE-SPELLTRAP-009), 스펠 스피드도 그쪽이 보고 (RULE-CHAIN-005),
+    카드별 조건 · 비용 · 대상은
+    :meth:`~engine.activation.EffectActivator.can_activate` 가 본다.
+    """
+    return not _activation_out_of_scope(
+        view, context, instance, None, waits_for_event
+    ) and _points_at_set_trap(view, context, instance)
+
+
+def _points_at_set_trap(view, context, instance) -> bool:
+    """가리킨 카드가 **세트된 함정**인가. 정의와 자리를 함께 본다."""
+    definition, _ = _resolve_definition(view, context, instance)
+    if definition is None or not definition.is_trap:
+        return False
+    target = instance if instance is not None else context.source
+    card = view.find(target) if target is not None else None
+    return card is not None and card.zone is Zone.SZONE and not card.face_up
+
+
 def activation_is_monster_ignition(
     view, context, instance, activation_kind=None
 ) -> bool:
@@ -1470,6 +1582,55 @@ def activation_is_monster_ignition(
         return False
     definition, _ = _resolve_definition(view, context, instance)
     return definition is not None and definition.is_monster
+
+
+def _trap_activation_out_of_scope(
+    view, context, instance, definition, waits_for_event
+) -> tuple[tuple[str, str], ...]:
+    """
+    함정의 **카드 발동**을 범위 밖으로 만드는 (사실, 없는 규칙) 들 (Phase 6-Q).
+
+    Phase 3-E-16 부터 이 자리는 **종류 전체**를 한 문장으로 막고 있었다
+    (``TRAP_TRIGGER_MISSING``). 그 문장이 적은 이유는 *"효과마다 유발 조건이
+    있는지 ``EffectDefinition`` 이 적지 않는다"* 였고, **그 진단은 맞았다** —
+    그래서 6-Q 는 그 칸을 만들고
+    (:attr:`~engine.effect.definition.EffectDefinition.activation_waits_for_event`)
+    읽는다. 관문을 없앤 것이 아니라 **답할 수 있게 된 질문만** 통과시킨다.
+
+    네 갈래로 갈린다.
+
+    ======================  =============================================
+    지속 · 카운터 함정       ``_OUT_OF_SCOPE_TYPES`` 가 이유를 댄다
+                            (RULE-SPELLTRAP-010 · 011). 🔴 **그 표가 여기까지
+                            닿지 않고 있었다** — 함정은 위에서 먼저 돌아갔다
+    적지 않았다 (``None``)   ``TRAP_TRIGGER_MISSING`` — 종전과 같다
+    사건을 기다린다 (``True``)  :data:`TRAP_EVENT_UNSUPPORTED`
+    세트되어 있지 않다        :data:`TRAP_NOT_SET` (RULE-SPELLTRAP-009)
+    ======================  =============================================
+
+    넷 다 아니면 **범위 안**이다. 범위 안이라는 것은 "발동해도 된다" 가
+    아니라 "이 발동의 시점을 판정할 수 있다" 이고, 세트한 턴 · 스펠 스피드 ·
+    카드별 조건 · 비용 · 대상은 그 뒤의 관문들이 그대로 본다.
+    """
+    names = set(definition.type_names)
+    out = tuple(
+        (f"{name} 함정의 발동 타이밍을 아직 판정하지 않는다", rule)
+        for name, rule in _OUT_OF_SCOPE_TYPES
+        if name in names
+    )
+    if out:
+        return out
+    if waits_for_event is None:
+        return (("함정인데 발동 사건을 적지 않았다", TRAP_TRIGGER_MISSING),)
+    if waits_for_event:
+        return (("특정 사건이 와야 발동하는 함정이다", TRAP_EVENT_UNSUPPORTED),)
+    if not _points_at_set_trap(view, context, instance):
+        target = instance if instance is not None else context.source
+        card = view.find(target) if target is not None else None
+        where = card.zone.value if card is not None else "?"
+        face = "앞면" if card is not None and card.face_up else "뒷면"
+        return ((f"세트된 함정이 아니다 ({where} · {face})", TRAP_NOT_SET),)
+    return ()
 
 
 def _monster_activation_out_of_scope(
@@ -1520,7 +1681,7 @@ def _monster_activation_out_of_scope(
 
 
 def _activation_out_of_scope(
-    view, context, instance, activation_kind=None
+    view, context, instance, activation_kind=None, waits_for_event=None
 ) -> tuple[tuple[str, str], ...]:
     """
     이 발동을 **이번 Phase 의 범위 밖으로** 만드는 (사실, 없는 규칙) 들.
@@ -1558,7 +1719,9 @@ def _activation_out_of_scope(
         # 적어 두면 그 문장이 틀려도 아무도 모른다.
         # ``names`` 는 아래에서 묶이므로 여기서는 정의에서 바로 읽는다.
         if "TRAP" in set(definition.type_names):
-            return (("함정이다", TRAP_TRIGGER_MISSING),)
+            return _trap_activation_out_of_scope(
+                view, context, instance, definition, waits_for_event
+            )
         if definition.is_monster:
             # **몬스터는 효과 단위로 갈린다** (Phase 6-K). 카드 종류로는
             # 더 이상 답하지 않는다 — 한 카드가 기동 효과와 유발 즉시
@@ -1695,6 +1858,7 @@ class _NormalSpellActivation(Condition):
 
     instance: InstanceId | None = None
     activation_kind: ActivationKind | None = None
+    waits_for_event: "bool | None" = None
     """
     가리킨 효과의 **발동 분류** (Phase 6-K). ``None`` 은 "모른다" 다.
 
@@ -1719,14 +1883,18 @@ class _NormalSpellActivation(Condition):
 
     def _out_of_scope(self, view, context) -> tuple[tuple[str, str], ...]:
         return _activation_out_of_scope(
-            view, context, self.instance, self.activation_kind
+            view, context, self.instance, self.activation_kind, self.waits_for_event
         )
 
     def canonical_state(self) -> tuple:
+        #: 🔴 ``waits_for_event`` 도 **판정을 바꾸는 값**이므로 들어간다
+        #: (Phase 6-Q). 빠뜨리면 사건을 기다리는 함정과 기다리지 않는 함정이
+        #: 같은 조건으로 캐시된다 — ``activation_kind`` 와 같은 이유다.
         return (
             "normal_spell_activation",
             self.instance.value if self.instance is not None else None,
             self.activation_kind.value if self.activation_kind is not None else None,
+            self.waits_for_event,
         )
 
     def to_dict(self) -> dict:
@@ -1735,10 +1903,15 @@ class _NormalSpellActivation(Condition):
             data["instance"] = self.instance.value
         if self.activation_kind is not None:
             data["activation_kind"] = self.activation_kind.value
+        if self.waits_for_event is not None:
+            data["waits_for_event"] = self.waits_for_event
         return data
 
     def describe_ko(self) -> str:
-        return "이번 Phase 가 판정할 수 있는 발동이다 (통상 · 속공 마법 또는 기동 효과)"
+        return (
+            "이번 Phase 가 판정할 수 있는 발동이다 (통상 · 속공 마법 · "
+            "세트된 일반 함정 또는 기동 효과)"
+        )
 
 
 @dataclass(frozen=True, slots=True)
