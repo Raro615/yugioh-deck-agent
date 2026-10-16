@@ -717,6 +717,18 @@ def test_37_only_one_existing_assertion_was_extended():
     목록에 이 파일을 더하는 것으로 고쳤다 — 느슨한 조건으로 바꾸지 않았다.
     그 assertion 의 의미("production 은 0개, 테스트만 부른다")는 그대로이고,
     production 0개는 ``test_01``·``test_04`` 가 따로 지킨다.
+    🔴 **이 핀의 전제가 틀렸다** (Phase 6-N 이 고쳤다). 비교 대상이
+    ``HEAD`` 였다 — 즉 "이 Phase 가 기존 테스트를 건드리지 않았다" 가
+    아니라 **"이 Phase 이후 아무도 기존 테스트 파일에 테스트를 더하지
+    않았다"** 를 단언하고 있었다. 뒤의 것은 이 Phase 가 책임질 수 없는
+    주장이고, 실제로 Phase 6-M 이 ``tests/engine/test_random_selection.py``
+    에 핀 하나를 더하면서 (``test_a_a_move_that_changes_nothing_is_refused``,
+    근거는 6-M 보고서 §14-2) 37 → 38 이 되어 깨졌다.
+
+    🔴 **단언은 약해지지 않았다.** 비교 대상을 이 Phase 의 **마지막
+    commit** 으로 바꿨을 뿐이다 — 삭제 0건과 개수 변화 0건을 이 Phase 의
+    범위 안에서 여전히 그대로 센다. 느슨하게 만든 것이 아니라 **재던 것을
+    정확히 재게** 했다.
     """
     shas = _phase_shas()
     if not shas:
@@ -742,7 +754,9 @@ def test_37_only_one_existing_assertion_was_extended():
             out[name] = len(re.findall(r"^def test_", text, re.M))
         return out
 
-    before, after = counts(base), counts("HEAD")
+    #: 🔴 이 Phase 의 **마지막 commit** 과 비교한다 (Phase 6-N).
+    #: ``HEAD`` 와 비교하면 뒤에 온 모든 작업까지 이 핀이 책임지게 된다.
+    before, after = counts(base), counts(shas[0])
     for name, count in before.items():
         assert name in after, f"테스트 파일이 사라졌다: {name}"
         #: 🔴 테스트 **개수**는 한 건도 줄거나 늘지 않았다 — 고친 것은
