@@ -676,15 +676,28 @@ Lua 파일 이동 — **하나도 건드리지 않았다.** `STRUCTURAL-15 · 34
 기존 commit 을 rewrite · amend 하지 않았고 force push 하지 않았다.
 새 브랜치와 PR 을 만들지 않았다.
 
-| 순서 | commit | 내용 |
-|---|---|---|
-| 1 | (아래 19-4) | production — 룰북 유도를 판정기에 연결한다 |
-| 2 | (아래 19-4) | 테스트 — 신규 39개와 전제가 틀린 기존 핀 열하나 |
-| 3 | (아래 19-4) | 보고서 19절 |
+| 순서 | commit | 내용 | 파일 |
+|---|---|---|---|
+| 1 | `9259e3d` | production — 룰북이 이미 아는 것을 판정기에 연결한다 | `engine/effect/ruling.py` |
+| 2 | `92f5fa9` | 테스트 — 신규 39개와 전제가 틀린 기존 핀 열하나 | 신규 1 + 수정 5 |
+| 3 | `41fb240` | 보고서 — 규칙을 적은 것이 아니라 이미 있던 것을 연결했다 | `docs/phase6o-…md` |
+| 4 | (이 commit) | 보고서 §19-3 · §19-4 에 실제 SHA 와 푸시 출력 | 같음 |
+
+base 는 Phase 6-N 의 마지막 commit `da93fc6` 이다.
 
 ### 19-4. 푸시 결과
 
-(커밋 직후 실제 SHA 와 푸시 출력을 아래에 기록한다.)
+```
+$ git push -u origin claude/pensive-goodall-te1egy
+To https://github.com/Raro615/yugioh-deck-agent
+   da93fc6..41fb240  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy
+branch 'claude/pensive-goodall-te1egy' set up to track 'origin/claude/pensive-goodall-te1egy'.
+```
+
+🟢 **fast-forward (`da93fc6..41fb240`)** — force push 가 아니고 기존
+commit 을 하나도 다시 쓰지 않았다. 지정된 브랜치
+`claude/pensive-goodall-te1egy` 외에 푸시한 곳이 없고, PR 을 만들지
+않았다.
 
 ---
 
