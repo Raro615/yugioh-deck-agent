@@ -874,11 +874,25 @@ ROOT2_EXIT=0
 commit `8ba9932` 다. 기존 commit 을 rewrite · amend 하지 않았고 force push
 하지 않았다. 새 브랜치와 PR 을 만들지 않았다.
 
-(실제 SHA 는 21-4 에 적는다.)
+| 순서 | commit | 내용 | 파일 |
+|---|---|---|---|
+| 1 | `7d3291c` | production — 함정이 스스로 적어 둔 빈 칸을 채운다 | 3파일 (+274 −6) |
+| 2 | `e75e0a8` | 테스트 — 신규 35개와 전제가 거짓이 된 핀 마흔둘 | 신규 1 + 수정 34 |
+| 3 | `ebedc51` | 보고서 — 수준 3 | `docs/phase6q-…md` |
+| 4 | (이 commit) | 보고서 §21-3 · §21-4 에 실제 SHA 와 푸시 출력 | 같음 |
 
 ### 21-4. 푸시 결과
 
-(커밋 직후 실제 SHA 와 푸시 출력을 기록한다.)
+```
+$ git push -u origin claude/pensive-goodall-te1egy
+To https://github.com/Raro615/yugioh-deck-agent
+   8ba9932..ebedc51  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy
+branch 'claude/pensive-goodall-te1egy' set up to track 'origin/claude/pensive-goodall-te1egy'.
+```
+
+🟢 **fast-forward (`8ba9932..ebedc51`)** — force push 가 아니고 기존 commit 을
+하나도 다시 쓰지 않았다. 지정된 브랜치 외에 푸시한 곳이 없고, PR 을 만들지
+않았다.
 
 ---
 
