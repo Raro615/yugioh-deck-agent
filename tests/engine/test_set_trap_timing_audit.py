@@ -79,6 +79,9 @@ POT_OF_GREED = 55144522  # 통상 마법 — 상대가 체인 1 을 만드는 �
 GIFT_OF_GREED = 5915629  # 욕망의 선물 — 상대가 2장 드로우 · 실행 가능
 FINE = 92595643  # 벌금 — 자신 패 2장 버리기 · 대상 **2장**
 FORCEOUT = 94192409  # 강제 탈출 장치 — 몬스터 1장 패로
+#: 🔴 사이버 드래곤 — **효과 몬스터**이고 어느 계층도 답하지 않는다
+#: (Phase 6-O). 룰북 한 줄은 통상 몬스터만 덮는다.
+UNKNOWN_EFFECT_MONSTER = 70095154
 LOST = 24623598  # 로스트 — executable=False
 PRIMER = 69091732  # 의적의 입문서 — 상대 패 5장 이상일 때
 
@@ -508,16 +511,51 @@ def test_08_the_two_that_do_not_execute_fail_for_non_trap_reasons(repository):
     둘을 "함정이라서 안 된다" 로 적으면 고칠 곳을 틀리게 가리킨다. 그래서
     ``SET_CARD_EFFECT_EXECUTION`` 과 ``SET_ACTIVATION_EXECUTION`` 을 나눠
     적는다.
+
+    🔴 **Phase 6-O 에서 강제 탈출 장치의 공백이 닫혔다.**
+
+    그 공백은 "``IsAbleToHand`` 를 옮기지 못했다" 가 아니라 **"그 질문에
+    답할 지식이 없었다"** 였다. 6-O 가 룰북 한 줄
+    (``NORMAL_MONSTER_RULE``)을 그 줄이 덮는 통상 몬스터 684장에 연결했고,
+    이 시험의 대상이 바로 통상 몬스터다 (취옥의 비룡). 그래서 지금은
+    **해결되고 대상이 주인의 패로 돌아간다** — 실측: ``MZONE → HAND``,
+    상대 패 +1장.
+
+    이 시험이 재는 사실("막히는 이유가 함정과 무관하다")은 그대로다. 오히려
+    더 분명해졌다 — 함정을 하나도 건드리지 않고 **규칙 지식만** 넣었더니
+    풀렸다. 그래서 수를 지우지 않고 **양쪽을 다 센다**: 통상 몬스터 대상은
+    해결되고, 룰북이 덮지 않는 효과 몬스터 대상은 **여전히 같은 자리에서**
+    멈춘다.
     """
+    #: 🔴 통상 몬스터 대상 — 6-O 이후 해결된다.
     duel = duel_at(
         repository, mine=(FORCEOUT, LUSTER_DRAGON), their_mzone=(LUSTER_DRAGON,)
     )
+    victim = duel.state.player(P1).zones[Zone.MZONE][0].instance_id
+    their_hand = len(duel.state.player(P1).zones[Zone.HAND])
+    forceout = set_down(duel, P0, FORCEOUT)
+    next_own_turn(duel)
+    result = _force_execute(duel, forceout, FORCEOUT)
+    assert result["combos"] == 1, "대상은 찾았다"
+    assert result["stage"] == "resolved", result
+    assert duel.state.find_instance(victim).zone is Zone.HAND
+    assert len(duel.state.player(P1).zones[Zone.HAND]) == their_hand + 1
+
+    #: 🔴 그런데 **룰북이 덮지 않는** 대상이면 같은 자리에서 멈춘다 —
+    #: 관문 자체는 그대로 있고, 바뀐 것은 그 질문에 답할 지식뿐이다.
+    duel = duel_at(
+        repository,
+        mine=(FORCEOUT, LUSTER_DRAGON),
+        their_mzone=(UNKNOWN_EFFECT_MONSTER,),
+    )
+    stubborn = duel.state.player(P1).zones[Zone.MZONE][0].instance_id
     forceout = set_down(duel, P0, FORCEOUT)
     next_own_turn(duel)
     result = _force_execute(duel, forceout, FORCEOUT)
     assert result["combos"] == 1, "대상은 찾았다"
     assert result["stage"] == "resolve", result
     assert "IsAbleToHand" in result["detail"], result["detail"]
+    assert duel.state.find_instance(stubborn).zone is Zone.MZONE
 
     duel = duel_at(repository, mine=(FINE,) + (LUSTER_DRAGON,) * 5)
     fine = set_down(duel, P0, FINE)

@@ -762,6 +762,17 @@ def test_37_no_existing_test_was_modified_or_deleted():
     리터럴을 쓰지 않고(핀 개수 7을 세는 테스트가 있다),
     ``TextEffectAnalyzer`` 를 호출하지 않는다(호출자 목록을 세는 테스트가
     있다). 그래서 기존 테스트를 건드리지 않았다.
+
+    🔴 **Phase 6-O 가 비교 대상을 고쳤다.** 원래 이 핀은 base 를 ``HEAD`` 와
+    비교했는데, 그러면 "3-F-43 이 기존 테스트를 건드리지 않았다" 가 아니라
+    "**그 뒤에 온 어떤 Phase 도** 당시 존재했던 테스트 파일에 테스트를 더하지
+    않았다" 를 단언하게 된다. 뒤에 올 작업은 이 Phase 가 책임질 수 없다.
+    실제로 Phase 6-M 이 ``tests/engine/test_random_selection.py`` 에
+    ``test_a_a_move_that_changes_nothing_is_refused`` 한 개를 더해서(37→38)
+    이 핀이 깨졌다 — 3-F-43 은 그 파일을 건드리지 않았다. 이 Phase 의
+    **마지막 commit** 과 비교하도록 바꿨다. 재는 사실(이 Phase 가 기존
+    테스트를 수정·삭제했는가)은 그대로이고 단언도 그대로다 — 느슨하게 만든
+    것이 아니라 **재던 것을 정확히 재게** 했다.
     """
     shas = _phase_shas()
     if not shas:
@@ -787,7 +798,9 @@ def test_37_no_existing_test_was_modified_or_deleted():
             out[name] = len(re.findall(r"^def test_", text, re.M))
         return out
 
-    before, after = counts(base), counts("HEAD")
+    #: 🔴 이 Phase 의 **마지막 commit** 과 비교한다 (Phase 6-O).
+    #: ``HEAD`` 와 비교하면 뒤에 온 모든 작업까지 이 핀이 책임지게 된다.
+    before, after = counts(base), counts(shas[0])
     for name, count in before.items():
         assert name in after, f"테스트 파일이 사라졌다: {name}"
         assert after[name] == count, (name, count, after[name])

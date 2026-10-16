@@ -118,6 +118,13 @@ NEW_QUESTIONS = (
 # ======================================================================
 
 
+#: 🔴 **사이버 드래곤 — 효과 몬스터**이고 어느 계층도 답하지 않는다
+#: (Phase 6-O 가 더했다). 룰북 한 줄은 **통상 몬스터**만 덮으므로 이 카드는
+#: 여전히 "모르는 카드" 다. 그 전에는 통상 몬스터를 표본으로 썼는데,
+#: 6-O 가 룰북 줄을 684장에 연결하면서 그것이 더 이상 모르는 카드가 아니다.
+UNKNOWN_EFFECT_MONSTER = 70095154
+
+
 def evacuation_state(repository, *, seed=5) -> GameState:
     """
     자신 마법·함정존에 강제 탈출 장치(앞면), 양쪽 몬스터존에 페더맨.
@@ -464,13 +471,53 @@ def test_d_an_invisible_card_is_unknown(state):
 
 
 def test_d_an_unregistered_card_is_unknown(state):
-    target = state.player(THEIRS).monster_zone[0].instance_id
-    ruling = board_ruling(state, OperationRulingRegistry())
+    """
+    🔴 **Phase 6-O 가 이 시험의 전제를 좁혔다.**
 
-    verdict = ruling.explain(RuleQuestion.MAY_BE_RETURNED_TO_HAND, target)
+    전에는 "등록소가 비어 있으면 어떤 카드든 ``UNKNOWN``" 이었다. 지금은
+    **룰북이 답하지 않는 카드**에 대해서만 그렇다 — 6-O 가 룰북 한 줄
+    (``NORMAL_MONSTER_RULE``)을 그 줄이 덮는 통상 몬스터 684장에 연결했고,
+    그 카드들은 등록소가 비어 있어도 답이 나온다.
 
+    🔴 **단언은 약해지지 않았다.** 두 축을 갈라서 **더** 센다 — 룰북이
+    답하지 않는 카드는 여전히 ``UNKNOWN`` 이고 (아래), 답하는 카드는
+    근거를 들고 ``TRUE`` 다.
+    """
+    empty = OperationRulingRegistry()
+
+    #: 함정은 룰북 한 줄이 말하지 않는다 — 텍스트를 읽어야 한다.
+    trap = state.player(MINE).spell_zone[0].instance_id
+    verdict = board_ruling(state, empty).explain(
+        RuleQuestion.MAY_BE_RETURNED_TO_HAND, trap
+    )
     assert verdict.answer is ConditionResult.UNKNOWN
     assert "확인된 것이 없습니다" in verdict.reason
+
+    #: 🔴 그런데 **통상 몬스터**는 등록소에 줄이 없어도 답이 나온다 (6-O).
+    #:
+    #: 판의 함정만 등록해 둔다 — 빈 등록소로는 **훑기**가 그 함정에서
+    #: 멈추므로 (그것이 ``test_d_one_unknown_card_on_the_board_is_enough_to_
+    #: stop_it`` 이 재는 사실이다) 대상 자신의 답이 가려진다. 두 축을
+    #: 섞지 않기 위해 여기서는 훑기를 깨끗하게 만든다.
+    monster = state.player(THEIRS).monster_zone[0].instance_id
+    trap_only = OperationRulingRegistry(
+        (
+            CardRuleFacts(
+                card_id=COMPULSORY_EVACUATION_DEVICE,
+                restricts_others=False,
+                restriction_basis=RuleBasis.CARD_TEXT,
+                restriction_note="읽었다",
+            ),
+        )
+    )
+    derived = board_ruling(state, trap_only).explain(
+        RuleQuestion.MAY_BE_RETURNED_TO_HAND, monster
+    )
+    assert derived.answer is ConditionResult.TRUE, derived.reason
+    assert "통상 몬스터" in derived.reason
+    #: 🔴 그 답의 근거가 **룰북**이다 — 손으로 적은 줄이 없는데도.
+    assert trap_only.facts_for(FEATHERMAN) is None
+    assert NORMAL_MONSTER_RULE in derived.reason
 
 
 def test_d_a_registered_card_with_an_unchecked_question_is_unknown(state):
@@ -522,6 +569,17 @@ def test_d_one_unknown_card_on_the_board_is_enough_to_stop_it(repository):
         RuleQuestion.MAY_BE_RETURNED_TO_HAND, target
     ) is ConditionResult.TRUE
 
+    #: 🔴 **Phase 6-O** — 모르는 카드를 판에 **놓는다.** 전에는 페더맨을
+    #: 등록에서 빼는 것으로 "모르는 카드" 를 만들었는데, 6-O 가 룰북 한 줄을
+    #: 통상 몬스터 684장에 연결하면서 페더맨은 등록에서 빼도 답이 나온다.
+    #: 재는 사실("판에 모르는 카드가 하나라도 있으면 멈춘다")은 그대로이고,
+    #: 모르는 카드를 **효과 몬스터**로 바꿨다 — 룰북이 덮지 않는 쪽이다.
+    state.create_instance(
+        UNKNOWN_EFFECT_MONSTER,
+        owner=THEIRS,
+        zone=Zone.MZONE,
+        position=Position.FACEUP_ATTACK,
+    )
     unknown_card = OperationRulingRegistry(
         (
             CardRuleFacts(
@@ -543,6 +601,7 @@ def test_d_one_unknown_card_on_the_board_is_enough_to_stop_it(repository):
     )
     assert verdict.answer is ConditionResult.UNKNOWN
     assert "확인된 것이 없어" in verdict.reason
+    assert str(UNKNOWN_EFFECT_MONSTER) in verdict.reason
 
 
 def test_d_a_card_that_can_block_makes_the_answer_unknown(repository):

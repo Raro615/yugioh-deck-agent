@@ -90,7 +90,14 @@ HONEST_REF = EffectRef(HONEST, 0)
 #: (``BoardRuling._interference`` 가 모르는 카드를 만나면 멈춘다).
 FEATHERMAN = 21844576
 #: 룡기병 — ``OPERATION_RULINGS`` 에 **없다.** 간섭 사례에 쓴다.
-LUSTER_DRAGON = 11091375
+#: 🔴 **Phase 6-O 가 표본 카드를 바꿨다.** 전에는 사파이어 드래곤
+#: (11091375) 이었는데 그 카드는 **통상 몬스터**이고, 6-O 가 룰북 한
+#: 줄(``NORMAL_MONSTER_RULE``)을 그 줄이 덮는 684장 전체에 연결하면서
+#: 더 이상 "모르는 카드" 가 아니게 되었다. 이 시험이 재는 사실(판에
+#: 모르는 앞면 카드가 있으면 멈춘다)은 **그대로**이고, 표본만 룰북이
+#: 답하지 않는 카드로 바꿨다 — 단언은 하나도 약해지지 않았다.
+#: 사이버 드래곤 — **효과 몬스터**이고 판정 지식에 없다.
+UNKNOWN_EFFECT_MONSTER = 70095154
 
 
 # ======================================================================
@@ -726,7 +733,7 @@ def test_g02_an_unknown_face_up_card_on_the_field_stops_it(repository):
         CardOperation.return_to_hand(SELF_TARGET, gated=True)
     )
     result, state, placed = executed(
-        repository, definition, source=0, cards=(HONEST, LUSTER_DRAGON)
+        repository, definition, source=0, cards=(HONEST, UNKNOWN_EFFECT_MONSTER)
     )
     assert result.status is ResolutionStatus.UNCHECKED_RULES
     assert result.missing == "return-to-hand-legality (Card.IsAbleToHand 판정)"
@@ -743,7 +750,7 @@ def test_g02_an_unknown_face_up_card_on_the_field_stops_it(repository):
         GameStateView.from_state(state, viewer=MINE), OPERATION_RULINGS
     ).explain(RuleQuestion.MAY_BE_RETURNED_TO_HAND, placed[0].instance_id)
     assert verdict.answer is ConditionResult.UNKNOWN
-    assert str(LUSTER_DRAGON) in verdict.reason
+    assert str(UNKNOWN_EFFECT_MONSTER) in verdict.reason
 
 
 @pytest.mark.real_card

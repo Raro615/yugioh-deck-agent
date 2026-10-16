@@ -82,8 +82,15 @@ MINE, THEIRS = 0, 1
 HONEST_REF = EffectRef(HONEST, 0)
 #: 엘리멘틀 히어로 페더맨 — 통상 몬스터이고 ``OPERATION_RULINGS`` 에 **있다.**
 FEATHERMAN = 21844576
-#: 사파이어 드래곤 — ``OPERATION_RULINGS`` 에 **없다.** 간섭 사례에 쓴다.
-UNREGISTERED = 11091375
+#: 🔴 **Phase 6-O 가 표본 카드를 바꿨다.** 전에는 사파이어 드래곤
+#: (11091375) 이었는데 그 카드는 **통상 몬스터**이고, 6-O 가 룰북 한
+#: 줄(``NORMAL_MONSTER_RULE``)을 그 줄이 덮는 684장 전체에 연결하면서
+#: 더 이상 "모르는 카드" 가 아니게 되었다. 이 시험이 재는 사실(판에
+#: 모르는 앞면 카드가 있으면 멈춘다)은 **그대로**이고, 표본만 룰북이
+#: 답하지 않는 카드로 바꿨다 — 단언은 하나도 약해지지 않았다.
+#: 사이버 드래곤 — **효과 몬스터**이고 ``OPERATION_RULINGS`` 에 없다.
+#: 룰북 한 줄도 효과 몬스터를 덮지 않으므로 여전히 "모르는 카드" 다.
+UNREGISTERED = 70095154
 
 #: 앞면을 말하는 값들 — ``CardInstance.is_faceup`` 이 참인 셋.
 FACE_UP_POSITIONS = (
