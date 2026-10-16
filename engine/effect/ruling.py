@@ -61,7 +61,7 @@ from typing import Mapping, Protocol, runtime_checkable
 
 from engine.condition import ConditionResult
 from engine.effect.semantics import RuleQuestion
-from engine.game_state_view import GameStateView
+from engine.game_state_view import FACE_SENSITIVE_ZONES, GameStateView
 from engine.ids import InstanceId
 from engine.vocabulary import Zone
 
@@ -507,8 +507,19 @@ class BoardRuling:
                 for card in zone.cards:
                     if card is None or card.instance_id == target:
                         continue
-                    if not card.face_up:
+                    if zone.zone in FACE_SENSITIVE_ZONES and not card.face_up:
                         # 세트된 카드는 효과를 적용하지 않는다 (룰북).
+                        #
+                        # 🔴 **자리를 먼저 본다** (Phase 6-N). "세트" 는
+                        # 앞뒷면이 뜻을 갖는 자리에서만 있는 일이고, 묘지에는
+                        # 뒷면이 없다. 자리를 보지 않고 앞뒷면만 보면 패에서
+                        # 버려진 카드가 (``position`` 이 ``FACEDOWN`` 인 채
+                        # 묘지에 있다) "세트된 카드" 로 읽혀 건너뛰어진다 —
+                        # 실측으로 같은 판이 그 카드가 어떻게 거기 갔는지에
+                        # 따라 ``TRUE`` 와 ``UNKNOWN`` 으로 갈렸다.
+                        #
+                        # 그 목록은 ``_face_visibility`` 가 읽는 것과 **같은
+                        # 것**이다. 같은 사실을 두 벌로 적지 않는다.
                         continue
                     if card.card_id is None:
                         return (

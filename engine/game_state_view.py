@@ -883,7 +883,7 @@ def _zone_view(
     return ZoneView(**base, cards=cards, concealed=False)
 
 
-#: 카드의 **앞뒷면이 공개 여부를 좌우하는** 존.
+#: 카드의 **앞뒷면이 뜻을 갖는** 존 (Phase 6-N 에서 공개 이름이 되었다).
 #:
 #: 묘지는 여기 없다. 묘지에 뒷면은 없고 내용은 언제나 공개이기 때문이다.
 #: 그런데 ``move_card`` 는 표시 형식을 건드리지 않으므로, 덱에서 묘지로 간
@@ -892,7 +892,20 @@ def _zone_view(
 #:
 #: 제외 존은 여기 들어 있다. 뒷면 제외가 실제로 존재하고, 그 카드는
 #: 제외한 플레이어만 안다.
-_FACE_SENSITIVE_ZONES: frozenset[Zone] = frozenset(
+#:
+#: 🔴 **묻는 쪽이 둘이다** (Phase 6-N). 이 목록이 답하는 사실은 하나이고
+#: — "이 자리에서 앞뒷면이 뜻을 갖는가" — 그 사실이 필요한 곳이 둘이다.
+#:
+#: 1. :func:`_face_visibility` — 그 카드의 정체가 보이는가.
+#: 2. :class:`~engine.effect.ruling.BoardRuling._interference` — 그 카드가
+#:    효과를 적용하는가 (세트된 카드는 적용하지 않는다).
+#:
+#: 둘이 **같은 사실**을 묻는데 6-N 전에는 2번이 자리를 보지 않고 앞뒷면만
+#: 봤다. 그래서 패에서 버려진 카드(``position`` 이 ``FACEDOWN`` 인 채
+#: 묘지에 있다)가 "세트된 카드" 로 읽혀 **건너뛰어졌다** — 같은 판이 그
+#: 카드가 어떻게 거기 갔는지에 따라 다르게 판정됐다. 사실을 두 벌로 적지
+#: 않기 위해 이름을 공개하고 둘이 같은 것을 읽는다.
+FACE_SENSITIVE_ZONES: frozenset[Zone] = frozenset(
     {Zone.MZONE, Zone.EMZONE, Zone.SZONE, Zone.FZONE, Zone.PZONE, Zone.REMOVED}
 )
 
@@ -930,7 +943,7 @@ def _card_view(
     모두에게 공개하지는 않는다. 그래서 여기서 ``card`` 자체를 바꾸지 않고
     이 관측에서만 드러낸다.
     """
-    if card.zone not in _FACE_SENSITIVE_ZONES:
+    if card.zone not in FACE_SENSITIVE_ZONES:
         return CardView.revealed(card)
     if card.is_faceup or card.controller == viewer:
         return CardView.revealed(card)
