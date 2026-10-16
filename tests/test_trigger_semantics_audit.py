@@ -289,6 +289,18 @@ def test_08_there_is_no_converter_so_nothing_is_lost_in_conversion():
     전부 손으로 적은 것이다 (ADR-006). 그래서 이 감사의 결론은 "pipeline 이
     값을 흘린다" 가 아니라 **"전사가 그 값을 적지 않았다"** 다. 고칠 자리가
     전혀 다르다.
+
+    🔴 **Phase 6-Q 가 바로 그 결론대로 했다 — 전사가 손으로 적었다.**
+
+    ``activation_waits_for_event`` 를 더하고 등재된 함정 다섯 장에 손으로
+    적었다 (변환기를 만들지 않았다 — ``EffectSpec.code`` 에서 자동으로
+    옮기지 않는다). 그래서 위의 "만드는 자리가 하나" 는 그대로이고, 이
+    감사의 결론이 실제로 쓰였다.
+
+    아래 단언은 이름 부분 문자열에서 **담는 것**으로 바꿨다. 그 칸은
+    ``bool | None`` 이므로 사건을 담을 수 없고, 사건 **이름**을 담는 칸은
+    여전히 하나도 없다 — 느슨하게 만든 것이 아니라 재던 것을 정확히 재게
+    했다.
     """
     builders = sorted(
         path.as_posix()
@@ -300,7 +312,18 @@ def test_08_there_is_no_converter_so_nothing_is_lost_in_conversion():
     assert builders == ["engine/effect/library.py"], builders
 
     fields = set(EffectDefinition.__dataclass_fields__)
-    assert not [f for f in fields if "trigger" in f or "event" in f or "timing" in f]
+    #: 사건 **이름 · 시점**을 담는 칸은 하나도 없다 (Phase 6-Q 의 한 칸은
+    #: ``bool | None`` 이므로 담을 수 없다 — 바로 아래가 그것을 센다).
+    assert not [
+        f
+        for f in fields
+        if ("trigger" in f or "event" in f or "timing" in f)
+        and f != "activation_waits_for_event"
+    ], sorted(fields)
+    annotation = str(
+        EffectDefinition.__dataclass_fields__["activation_waits_for_event"].type
+    )
+    assert "bool" in annotation and "None" in annotation, annotation
 
     # 엔진의 어떤 실행 코드도 유발 필드를 **읽지** 않는다 (AST — 주석은 세지 않는다).
     for module in pathlib.Path("engine").rglob("*.py"):

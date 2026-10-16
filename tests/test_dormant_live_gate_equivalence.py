@@ -372,10 +372,21 @@ def test_06_zone_diverges_in_the_dangerous_direction_for_a_trap(repository):
 
     * dormant → ``VALID`` / ``OK`` ("이 자리에서 발동할 수 있다")
     * live    → ``UNKNOWN`` / ``RULE_NOT_IMPLEMENTED``
-      (``_activation_out_of_scope`` 가 "함정이다" 를 든다)
 
     dormant 가 **더 많이 허가한다.** 이 쪽 답을 믿으면 유발 조건을 구분할 수
     없는 함정이 조용히 발동 가능해진다.
+
+    🔴 **Phase 6-Q 가 이유 문장을 더 정확하게 나눴다.**
+
+    예전에는 ``_activation_out_of_scope`` 가 함정 전체에 "함정이다" 하나를
+    들었다. 6-Q 가 네 갈래로 갈랐으므로 (적지 않았다 · 사건을 기다린다 ·
+    지속·카운터 · 세트되지 않았다) 이 판에서 나오는 문장은 **"함정인데 발동
+    사건을 적지 않았다"** 다 — 등록소를 받지 않은 자리이므로 축이 ``None``
+    이고, 그것이 "적지 않았다" 다.
+
+    이 시험이 재는 사실(두 경로의 답이 **다르고** dormant 가 더 넓다)은
+    그대로다. 문장만 현재 것으로 맞추고, 그 문장이 여전히 **함정**을
+    가리킨다는 것을 함께 센다.
     """
     state, instance = board(repository, FINE)
     definition = definition_of(FINE)
@@ -392,7 +403,9 @@ def test_06_zone_diverges_in_the_dangerous_direction_for_a_trap(repository):
         ActionValidity.UNKNOWN,
         ValidationCode.RULE_NOT_IMPLEMENTED,
     )
-    assert "함정이다" in live["out_of_scope"]
+    reasons = live["out_of_scope"]
+    assert any("함정" in reason for reason in reasons), reasons
+    assert any("사건을 적지 않았다" in reason for reason in reasons), reasons
 
 
 @pytest.mark.real_card

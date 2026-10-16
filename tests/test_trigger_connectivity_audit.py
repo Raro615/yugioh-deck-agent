@@ -390,11 +390,36 @@ def test_09_the_definition_layer_has_no_trigger_concept():
     ``TriggerSpec`` 은 **별도 구조**이고 정의와 이어져 있지 않다. 그래서
     "EVENT_PHASE → TriggerSpec" 연결고리는 코드 수준에서 존재하지 않는다
     (§6 의 질문 1 에 대한 답: NO).
+
+    🔴 **Phase 6-Q 가 경계를 한 칸 옮겼다 — 그래서 더 정확하게 센다.**
+
+    6-Q 는 ``activation_waits_for_event: bool | None`` 을 더했다. 이름에
+    "event" 가 들어가지만 담는 것은 **사건이 아니라 참·거짓**이다 — "이
+    카드 발동이 사건을 기다리는가" 하나이고 **어떤** 사건인지는 담지
+    않는다. 그 칸이 필요했던 이유는 ``TRAP_TRIGGER_MISSING`` 이 *"공식
+    스크립트의 SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 스스로
+    적고 있었기 때문이다 (docs/phase6q-…md §2).
+
+    그래서 단언을 이름 부분 문자열에서 **담는 것**으로 바꿨다. 느슨하게
+    만든 것이 아니다 — 아래 둘이 더 센 사실을 잰다:
+
+    ① 사건 **이름**을 담을 수 있는 칸이 하나도 없다
+    ② 그 한 칸의 타입이 ``bool | None`` 이다 (사건을 담을 수 없다)
     """
     fields = set(EffectDefinition.__dataclass_fields__)
+    #: ① 사건 이름 · 시점 · 속도를 담는 칸은 여전히 없다.
     assert not [
-        f for f in fields if "trigger" in f or "event" in f or "speed" in f
+        f
+        for f in fields
+        if ("trigger" in f or "event" in f or "speed" in f)
+        and f != "activation_waits_for_event"
     ], sorted(fields)
+    #: ② 그 한 칸은 **참·거짓**이다 — 사건을 담을 수 없다.
+    annotation = EffectDefinition.__dataclass_fields__[
+        "activation_waits_for_event"
+    ].type
+    assert "bool" in str(annotation) and "None" in str(annotation), annotation
+    assert "TriggerSpec" not in str(annotation)
     assert "activation" in fields  # 조건은 있다 — 유발 사건이 없다
 
 

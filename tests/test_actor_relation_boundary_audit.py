@@ -1068,7 +1068,12 @@ def test_19_this_phase_changed_nothing_in_production(repository):
             ).encode()
         )
 
-    assert decisions == 611
+    #: 🔴 **Phase 6-Q 가 이 수와 digest 를 바꿨다.** 세트된 일반 함정이
+    #: ``legal_actions`` 에 오르게 되었으므로 (RULE-SPELLTRAP-008 · 009)
+    #: 탐색이 고를 수 있는 수가 늘고 체인 응답(``pass``)이 생긴다 —
+    #: 실측 611 → 689 결정, ``pass`` 73건 · ``activate_effect`` 60건.
+    #: 의도한 변화이므로 핀을 갱신했다 (근거: docs/phase6q-…md §18).
+    assert decisions == 689
     assert digest.hexdigest() == (
-        "30fa3597a24d4511d8c92ce9f9921412ffada7546675c4d7d5765381402c4175"
+        "78d35fb4ebc06a6662a9e1205d6d9d89f939e32071e1262547543d628ec4752e"
     )

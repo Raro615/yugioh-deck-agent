@@ -182,6 +182,10 @@ def test_01_the_effect_definition_has_no_event_field():
         "requirements",
         "guards",
         "activation_kind",
+        #: Phase 6-Q — 사건을 **기다리는가** (bool). 어떤 사건인지는 담지
+        #: 않으며, 아래의 ``absent`` 목록과 ``"EVENT" not in source`` 가
+        #: 그 사실을 그대로 센다.
+        "activation_waits_for_event",
         "provenance",
     ]
     for absent in ("code", "event", "point", "trigger", "setcode", "timing"):

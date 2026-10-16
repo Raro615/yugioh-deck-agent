@@ -154,7 +154,8 @@ def test_01_every_registered_trap_is_free_chain_in_the_core_layer(repository):
     그리고 그 사실이 **어느 계층에 있는가**가 이 Phase 의 핵심이다.
 
     - ``core`` 의 ``Card.script`` — **있다** (공식 Lua 의 ``SetCode``)
-    - ``engine`` 의 ``EffectDefinition`` — **없다**
+    - ``engine`` 의 ``EffectDefinition`` — 🔴 **Phase 6-Q 에서 생겼다**
+      (``activation_waits_for_event``)
 
     ``EVENT_FREE_CHAIN`` 을 "언제나 발동 가능" 으로 읽지 않는다. 뜻은 **"유발
     조건이 없다"** 이고, 그래도 세트한 턴 · 스펠 스피드 · 발동 기회(창)는 각각
@@ -185,11 +186,28 @@ def test_01_every_registered_trap_is_free_chain_in_the_core_layer(repository):
         assert card.script.trigger_events == ["EVENT_FREE_CHAIN"], card.name
         assert [s.code for s in card.script.effects] == ["EVENT_FREE_CHAIN"], card.name
 
-    # ③ 그런데 **엔진의 정의에는 그런 자리가 없다.**
+    # ③ 🔴 **엔진의 정의에 자리가 생겼고, 다섯 장 전부 적혀 있다**
+    #    (Phase 6-Q). 원래 이 단정은 "그런 자리가 없다" 였는데, 없다는 것이
+    #    바로 ``TRAP_TRIGGER_MISSING`` 이 적은 이유였으므로 6-Q 가 그 칸을
+    #    만들었다. 그래서 **재는 방향을 뒤집는다** — 느슨하게 만든 것이
+    #    아니라, 자리가 하나이고 값이 전부 적혀 있음을 **더** 센다.
     fields = set(EffectDefinition.__dataclass_fields__)
-    assert not [
-        name for name in fields if "trigger" in name or "event" in name or "timing" in name
-    ], fields
+    event_fields = sorted(
+        name
+        for name in fields
+        if "trigger" in name or "event" in name or "timing" in name
+    )
+    assert event_fields == ["activation_waits_for_event"], event_fields
+    for entry in traps:
+        assert entry.definition.activation_waits_for_event is False, (
+            entry.definition.effect_ref
+        )
+    #: 그리고 **마법 · 몬스터에는 적지 않았다** — 필요한 곳에만 적는다.
+    assert sorted(
+        e.definition.source_card_id
+        for e in EFFECT_LIBRARY
+        if e.definition.activation_waits_for_event is not None
+    ) == sorted(ALL_TRAPS)
     # 그리고 **엔진은 그 데이터를 읽지 않는다.** 상수 이름이 설명 주석에
     # 등장하는 것과, 실행 코드가 ``core`` 의 필드를 읽는 것은 다른 일이다 —
     # 뒤쪽을 잰다.
@@ -298,12 +316,21 @@ def test_04_only_the_validator_blocks_a_set_trap(repository, card_id):
     ========================  =========================================
     Action Space              **통과** — 출발지에 있다 (Phase 3-E-14)
     ``ActivationTimingChecker``  **통과** — 스펠 스피드 2 · 세트한 턴도 안다
-    ``ActionValidator``       **막는다** — ``TRAP`` 이 범위 밖이다
+    ``ActionValidator``       🔴 **등록소가 답을 가른다** (Phase 6-Q)
     ========================  =========================================
 
     이것이 "Trap candidate 가 없다" 와 "candidate 는 있지만 validator 가
-    거부한다" 를 가르는 자리다. 지금은 **뒤쪽**이고, 그래서 고칠 곳이 어디인지
-    분명하다.
+    거부한다" 를 가르는 자리였다. 그리고 **고칠 곳이 정확히 가리켜졌다** —
+    6-Q 가 ``EffectDefinition.activation_waits_for_event`` 를 만들었다.
+
+    🔴 **그래서 세 번째 줄을 두 축으로 센다.**
+
+    ① 등록소를 받지 못한 검증기 → 여전히 ``UNKNOWN`` ·
+       ``TRAP_TRIGGER_MISSING``. "적지 않았다" 는 허가가 아니다.
+    ② 등록소를 받은 검증기 → ``VALID``.
+
+    막는 것이 **카드 종류가 아니라 적어 둔 사실**이 되었다는 뜻이고, 그것이
+    이 시험이 원래 가리키던 바로 그 수정이다.
     """
     duel = duel_at(repository, mine=(card_id, LUSTER_DRAGON))
     instance = set_down(duel, P0, card_id)
@@ -320,13 +347,22 @@ def test_04_only_the_validator_blocks_a_set_trap(repository, card_id):
     )
     assert timed.validity is ActionValidity.VALID, timed.reason
 
-    # ③ 검증기 — 여기서 막힌다. 그리고 ``INVALID`` 가 아니라 ``UNKNOWN`` 이다.
-    verdict = ActionValidator(duel.view(P0)).validate(action)
-    assert verdict.validity is ActionValidity.UNKNOWN
-    assert verdict.missing_rule == TRAP_TRIGGER_MISSING
+    # ③-① 등록소 없는 검증기 — 여전히 ``UNKNOWN`` 이고 ``INVALID`` 가 아니다.
+    blind = ActionValidator(duel.view(P0)).validate(action)
+    assert blind.validity is ActionValidity.UNKNOWN
+    assert blind.missing_rule == TRAP_TRIGGER_MISSING
 
-    # 그래서 후보가 되지 않는다 — 이 Phase 는 그것을 바꾸지 않았다.
-    assert activations(duel, P0, card_id) == []
+    # ③-② 🔴 등록소를 받은 검증기 — 통과한다 (Phase 6-Q).
+    informed = ActionValidator(
+        duel.view(P0), definitions=duel._activator.definitions
+    ).validate(action)
+    assert informed.validity is ActionValidity.VALID, informed.reason
+
+    # 🔴 그리고 **막는 것이 카드 종류가 아니다.** 같은 판 · 같은 카드 ·
+    # 같은 관문인데 등록소를 주었는지만 다르고 답이 갈린다. 후보가 실제로
+    # 생기는지는 카드별 조건과 대상이 정하므로 (판마다 다르다) 여기서 수를
+    # 박지 않는다 — 그것은 Phase 6-Q 의 타깃 시험이 센다.
+    assert blind.validity is not informed.validity
 
 
 @pytest.mark.real_card
@@ -401,13 +437,24 @@ def test_06_the_response_seat_is_already_correct_for_a_set_trap(repository):
     assert timed.validity is ActionValidity.VALID
     assert "스펠 스피드 2" in timed.reason
 
-    # 그래도 후보가 아니다 — 막는 것은 **검증기 하나**다.
-    assert activations(duel, P0, GIFT_OF_GREED) == []
+    # 🔴 **Phase 6-Q — 이제 후보가 된다.** 원래 이 줄은 "그래도 후보가
+    # 아니다. 막는 것은 검증기 하나다" 였고, 그 검증기가 막던 이유가
+    # ``TRAP_TRIGGER_MISSING`` 이었다. 6-Q 가 그 칸을 만들어 적었으므로
+    # 상대 턴의 응답 창에서 스펠 스피드 2 함정이 **적법한 후보**다
+    # (RULE-SPELLTRAP-008 + RULE-CHAIN-005).
+    #
+    # 이 시험이 재는 사실("응답 자리가 이미 올바르다")은 그대로이고, 그
+    # 자리가 **실제로 쓰인다**는 것이 더해졌다.
+    candidates = activations(duel, P0, GIFT_OF_GREED)
+    assert [a.source for a in candidates] == [instance]
+    assert PlayerActionKind.PASS in {a.kind for a in duel.legal_actions(P0).allowed}
+
+    # 등록소를 주지 않은 관문은 **여전히 모른다** — 적지 않은 것은 허가가
+    # 아니다 (6-Q 가 바꾸지 않은 쪽).
     gate = duel._activation_gate(
         action, validator=ActionValidator(duel.view(P0)), selections=()
     )
     assert gate.validity is ActionValidity.UNKNOWN
-    assert [a.kind for a in duel.legal_actions(P0).allowed] == [PlayerActionKind.PASS]
 
 
 # ======================================================================
@@ -652,8 +699,11 @@ def test_10_this_phase_changed_no_behaviour(repository):
     set_down(duel, P0, GIFT_OF_GREED)
     next_own_turn(duel)
 
-    # 함정은 후보가 아니고, 통상 마법은 후보다.
-    assert activations(duel, P0, GIFT_OF_GREED) == []
+    # 🔴 **Phase 6-Q 가 함정을 후보로 만들었다** — 원래 이 줄은 "함정은
+    # 후보가 아니고" 였다. 이 시험이 재는 것은 *후보 수 · 점수 · 해시 ·
+    # 난수가 **읽는 것만으로** 바뀌지 않는다*(멱등성)이고, 그 사실은
+    # 그대로다. 전제 한 줄만 현재 사실로 고친다.
+    assert activations(duel, P0, GIFT_OF_GREED) != []
     assert activations(duel, P0, POT_OF_GREED) != []
 
     before_hash = duel.state.state_hash()

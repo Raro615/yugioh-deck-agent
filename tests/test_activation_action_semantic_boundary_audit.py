@@ -969,7 +969,7 @@ def test_29_an_unregistered_kind_is_still_refused_by_the_executor(repository):
 
 def test_30_the_search_ranking_digest_is_unchanged(repository):
     """
-    §12 — 검색/AI digest 불변: 6판 611결정.
+    §12 — 검색/AI digest 불변: 6판 689결정.
 
     .. note::
        digest 값을 베껴 적지 않는다 — 기존 pin 들을 AST 로 읽어 가장 많은 파일이
@@ -1025,5 +1025,10 @@ def test_30_the_search_ranking_digest_is_unchanged(repository):
             ).encode()
         )
 
-    assert decisions == 611
+    #: 🔴 **Phase 6-Q 가 이 수와 digest 를 바꿨다.** 세트된 일반 함정이
+    #: ``legal_actions`` 에 오르게 되었으므로 (RULE-SPELLTRAP-008 · 009)
+    #: 탐색이 고를 수 있는 수가 늘고 체인 응답(``pass``)이 생긴다 —
+    #: 실측 611 → 689 결정, ``pass`` 73건 · ``activate_effect`` 60건.
+    #: 의도한 변화이므로 핀을 갱신했다 (근거: docs/phase6q-…md §18).
+    assert decisions == 689
     assert digest.hexdigest() == expected

@@ -301,10 +301,41 @@ def test_02_apply_accepts_exactly_what_legal_actions_offered(repository):
 
 def test_03_everything_offered_is_actually_executed(repository):
     """
-    🟢 §2 · §8 B — **후보로 나온 것은 전부 실제로 수락된다.** 거부 0건.
+    §2 · §8 B — **후보로 나온 것은 실제로 수락된다.** 단 하나의 예외가 있고,
+    그 예외는 **행위의 위법이 아니라 보고의 결함**이다.
 
-    즉 "합법인데 실행할 수 없다"(§2 의 B)가 **한 종류도 없다.** 이것이
-    production 을 고칠 이유가 없는 가장 직접적인 근거다.
+    🔴 **Phase 6-Q 가 그 예외를 처음 도달 가능하게 만들었다.**
+
+    원래 이 시험은 "거부 0건" 이었다. 6-Q 가 세트된 일반 함정의 발동을
+    판정하게 되면서 함정이 **체인에 들어갈 수 있게** 되었고, 그래서 링크가
+    셋 쌓인 체인이 실제 듀얼에서 처음 만들어진다. 그 체인을 푸는 과정에서
+    먼저 해결된 링크가 덱을 비우면 **나중에 해결되는 링크의 발동 조건이
+    거짓**이 되고 (예: "자신 DECK 에 2장 이상"), 그 링크는 불발된다.
+
+    그때 ``Duel._resolve_chain`` 이 이렇게 적는다::
+
+        if not resolution.fully_resolved:
+            return DuelStep(action, False, last.code, last.reason)
+
+    즉 **``PASS`` 라는 행위가 거부된 것으로 보고된다.** 그런데 그 행위는
+    적법했고 실제로 수행되었다 — 우선권이 넘어갔고 체인이 풀렸고 놓인
+    카드가 묘지로 갔다. ``accepted`` 하나가 "행위가 위법이었다" 와 "체인의
+    어떤 링크가 불발되었다" 를 **한 값에 담고** 있다.
+
+    🔴 **6-Q 는 이것을 고치지 않았다.** ``DuelStep.accepted`` 의 의미를
+    바꾸는 일은 공유 계약 변경이고 (Phase 6-Q §15 가 체인 재설계를 금지),
+    게다가 ``ChainResolution.__bool__`` 이 *"해결되지 않은 것이 조용히
+    성공으로 읽히는 것을 막기 위해"* 참·거짓을 거부하고 있으므로 반대
+    방향으로 단순히 뒤집을 수도 없다. 근본 원인과 대안은
+    ``docs/phase6q-trap-free-chain-activation.md`` §19-4 에 적었다.
+
+    그래서 이 시험은 **느슨해지는 대신 더 정확해진다.** 아래가 넷을 센다.
+
+    ① ``PASS`` 를 뺀 어떤 종류도 거부되지 않는다 (원래 주장을 그대로 유지)
+    ② 거부된 ``PASS`` 의 이유가 **체인 링크 불발**을 가리킨다
+    ③ 그 자리에서 행위는 **실제로 일어났다** (우선권이 닫히고 듀얼이 계속된다)
+    ④ 🔴 그런데 **풀리지 못한 체인이 그대로 남는다** — 더 깊은 결함이고,
+       아래가 그것을 숨기지 않고 못 박는다
     """
     total_refused: collections.Counter = collections.Counter()
     total_accepted: collections.Counter = collections.Counter()
@@ -320,8 +351,84 @@ def test_03_everything_offered_is_actually_executed(repository):
             total_accepted.update(counts["accepted"])
 
     assert total_accepted, "아무 것도 수락되지 않았다면 측정이 성립하지 않는다"
-    #: 🔴 거부가 **0건**이다.
-    assert total_refused == collections.Counter(), dict(total_refused)
+
+    #: ① ``PASS`` 말고는 거부가 **0건**이다.
+    other = {
+        kind: n
+        for kind, n in total_refused.items()
+        if kind is not PlayerActionKind.PASS
+    }
+    assert other == {}, other
+    #: 그리고 그 ``PASS`` 거부는 **드물다** — 수를 못 박아 둔다.
+    assert total_refused[PlayerActionKind.PASS] == 2, dict(total_refused)
+
+    #: ②③④ 그 상태를 하나 찾아서 **무엇이 일어났는지** 직접 센다.
+    found = None
+    for seed in (303, 305):
+        duel = Duel.start(
+            repository, decks=(list(DIGEST_DECK), list(DIGEST_DECK)), seed=seed
+        )
+        guard = 0
+        while not duel.is_over and guard < 400:
+            guard += 1
+            if duel.advance() is not None:
+                continue
+            legal = duel.legal_actions(duel.to_act)
+            if not legal.allowed:
+                break
+            pick = next(
+                (
+                    a
+                    for a in legal.allowed
+                    if a.kind is PlayerActionKind.ACTIVATE_EFFECT
+                ),
+                None,
+            ) or legal.allowed[0]
+            step = duel.apply(pick)
+            if not step.accepted:
+                found = (duel, pick, step)
+                break
+        if found is not None:
+            break
+
+    assert found is not None, "거부된 PASS 상태를 재현하지 못했다"
+    duel, pick, step = found
+    #: ② 이유가 **체인 링크의 불발**을 가리킨다 — 행위의 위법이 아니다.
+    assert pick.kind is PlayerActionKind.PASS
+    assert "해결하지 못했습니다" in step.reason, step.reason
+    assert "발동 조건이 거짓입니다" in step.reason, step.reason
+    assert step.code is not ValidationCode.RULE_NOT_IMPLEMENTED, step.code
+    assert "허가된 행위가 아닙니다" not in step.reason, step.reason
+    #: ③ 그런데 행위는 실제로 일어났다 — 응답 기회가 닫혔고 듀얼이 계속된다.
+    assert not duel.priority.is_open, duel.priority
+    assert duel.legal_actions(duel.to_act).allowed or duel.is_over
+
+    #: ④ 🔴 **그리고 체인이 비워지지 않는다.** ``Duel._resolve_chain`` 이
+    #: ``if self.chain.is_complete:`` 일 때만 비우고, 링크 하나가 불발되면
+    #: ``is_complete`` 가 거짓이므로 **반쯤 풀린 체인이 남는다.** 실측:
+    #: 링크 3개 · ``resolved_count`` 2 · ``is_complete`` 거짓이고, 그 상태가
+    #: **턴을 넘겨도 사라지지 않는다** (실측으로 턴 5 → 7 까지 그대로).
+    #:
+    #: 이것이 §19-4 가 적은 결함의 **더 깊은 쪽**이다. ``accepted`` 하나가
+    #: 두 사실을 담는 것보다 나쁘다 — 다음 발동이 체인 1 이 아니라 체인 4 가
+    #: 될 수 있다. 6-Q 는 이것을 고치지 않았고 (공유 계약 변경), **재어서
+    #: 남긴다.** 고쳐지면 이 단언이 깨지고 그때 §19-4 를 다시 읽게 된다.
+    assert len(duel.chain.links) == 3, duel.chain
+    assert duel.chain.resolved_count == 2, duel.chain.resolved_count
+    assert not duel.chain.is_complete, duel.chain
+
+    #: 그 체인이 **턴을 넘겨도 남는다.**
+    turn_before = duel.state.turn.turn_number
+    for _ in range(40):
+        if duel.is_over or duel.state.turn.turn_number > turn_before + 1:
+            break
+        if duel.advance() is not None:
+            continue
+        nxt = duel.legal_actions(duel.to_act)
+        if not nxt.allowed:
+            break
+        duel.apply(nxt.allowed[0])
+    assert len(duel.chain.links) == 3, "체인이 조용히 비워졌다면 §19-4 를 고쳐야 한다"
 
 
 def test_04_legal_actions_does_offer_activation(repository):
@@ -962,7 +1069,7 @@ def test_29_the_executor_refuses_an_unregistered_kind(repository):
 
 def test_30_the_search_ranking_digest_is_unchanged(repository):
     """
-    §12 — 검색/AI digest 불변: 6판 611결정.
+    §12 — 검색/AI digest 불변: 6판 689결정.
 
     .. note::
        digest 값을 베껴 적지 않는다 — 기존 pin 들을 AST 로 읽어 가장 많은 파일이
@@ -1018,5 +1125,10 @@ def test_30_the_search_ranking_digest_is_unchanged(repository):
             ).encode()
         )
 
-    assert decisions == 611
+    #: 🔴 **Phase 6-Q 가 이 수와 digest 를 바꿨다.** 세트된 일반 함정이
+    #: ``legal_actions`` 에 오르게 되었으므로 (RULE-SPELLTRAP-008 · 009)
+    #: 탐색이 고를 수 있는 수가 늘고 체인 응답(``pass``)이 생긴다 —
+    #: 실측 611 → 689 결정, ``pass`` 73건 · ``activate_effect`` 60건.
+    #: 의도한 변화이므로 핀을 갱신했다 (근거: docs/phase6q-…md §18).
+    assert decisions == 689
     assert digest.hexdigest() == expected

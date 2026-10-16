@@ -973,31 +973,51 @@ def test_f05_the_model_still_distinguishes_targeting_from_choosing():
 
 
 @pytest.mark.real_card
-def test_g01_the_multi_target_effect_is_still_not_a_legal_action(repository):
+def test_g01_the_multi_target_effect_is_now_a_legal_action(repository):
     """
-    🔴 **이 Phase 는 ``legal_actions`` 를 열지 않았다 — 솔직하게 센다.**
+    🔴 **Phase 6-Q 가 함정 관문을 열었다 — 이 Phase 의 남은 BLOCKER 였다.**
 
-    조합은 10개가 되었지만 벌금은 **함정**이고, 함정은
-    ``TRAP_TRIGGER_MISSING`` (Phase 3-E-16) 때문에 ``ActionValidator`` 에서
-    ``UNKNOWN`` 이다. 공식 스크립트의 ``SetCode(EVENT_*)`` 가
-    ``EffectDefinition`` 에 옮겨지지 않았기 때문이고, 그것은 이 Phase 의
-    범위가 아니다 (§16 이 TRIGGER 자동 발동 시스템을 금지한다).
+    6-P 는 여기서 멈췄다: 조합은 10개가 되었지만 벌금은 **함정**이고,
+    함정은 ``TRAP_TRIGGER_MISSING`` (Phase 3-E-16) 때문에
+    ``ActionValidator`` 에서 ``UNKNOWN`` 이었다. 그 문장이 적은 이유는
+    *"유발 조건을 효과마다 구분할 수 없다 — ``SetCode(EVENT_*)`` 가
+    ``EffectDefinition`` 에 없다"* 였고, 6-P 는 그것을 **별개 BLOCKER** 로
+    보고했다.
 
-    그래서 "실제 다중 대상 효과를 ``legal_actions`` 로 발동했다" 고 **쓰지
-    않는다.** 열거가 풀렸다는 사실과 발동이 적법해졌다는 사실은 다르다.
+    🔴 **6-Q 가 바로 그 칸을 만들었다** (``EffectDefinition.
+    activation_waits_for_event``). 그래서 이제 **열거한 조합 10개가 그대로
+    적법한 ``PlayerAction`` 10개**가 된다 — 6-P 가 만든 것이 실제로
+    쓰이게 되었고, 이 시험의 이름도 과거형이 아니라 현재형으로 바꿨다.
+
+    등록소를 받지 못한 검증기는 **여전히 모른다** — "적지 않았다" 는
+    6-Q 뒤에도 허가가 아니다. 그 축을 함께 센다.
     """
     duel, fine, _ = fine_board(repository, fodder=5)
     definition = entry_for(FINE_REF).definition
     combos = target_combinations(duel.state, MINE, definition, fine)
-    assert len(combos) == 10, "열거는 풀렸다"
+    assert len(combos) == 10, "열거는 6-P 가 풀었다"
 
+    #: ``set_down`` 이 이미 다음 턴으로 넘겨 두었다 (이 파일의 헬퍼) —
+    #: 세트한 턴 제약 자체는 Phase 6-Q 의 타깃 시험이 따로 센다.
+    assert duel._set_this_turn(
+        PlayerAction.activate_effect(
+            actor=MINE, source=fine, effect_ref=FINE_REF, targets=combos[0]
+        )
+    ) is False
+
+    #: 🔴 **열거한 조합 전부**가 후보가 된다.
     activations = [
         action
         for action in duel.legal_actions(MINE).allowed
         if action.kind is PlayerActionKind.ACTIVATE_EFFECT
+        and action.effect_ref == FINE_REF
     ]
-    assert activations == [], "함정 관문이 열렸다 — §16 을 다시 읽어야 한다"
+    assert len(activations) == 10, len(activations)
+    assert {tuple(t.instance_id for t in a.targets) for a in activations} == {
+        tuple(t.instance_id for t in combo) for combo in combos
+    }
 
+    #: 등록소를 받지 못한 검증기는 여전히 ``UNKNOWN`` 이다.
     verdict = ActionValidator(duel.view(MINE)).validate(
         PlayerAction.activate_effect(
             actor=MINE, source=fine, effect_ref=FINE_REF, targets=combos[0]
@@ -1010,8 +1030,13 @@ def test_g01_the_multi_target_effect_is_still_not_a_legal_action(repository):
 @pytest.mark.real_card
 def test_g02_the_same_gate_closes_on_the_single_target_trap(repository):
     """
-    **그 관문은 다중 대상과 무관하다** — 단일 대상 함정도 같은 자리에서
-    막힌다. 즉 남은 BLOCKER 는 "여러 장" 이 아니라 "함정" 이다.
+    **그 관문은 다중 대상과 무관했다** — 단일 대상 함정도 같은 자리에서
+    막혔다. 즉 6-P 의 남은 BLOCKER 는 "여러 장" 이 아니라 "함정" 이었고,
+    🔴 **Phase 6-Q 가 그것을 열었다.**
+
+    이 시험은 이제 **등록소를 받지 못한 검증기**를 잰다 — 그쪽은 여전히
+    ``UNKNOWN`` 이다. 재는 사실(막는 것이 다중 대상이 아니다)은 그대로이고,
+    관문이 **카드 종류가 아니라 적어 둔 사실**에 달려 있음을 보인다.
     """
     duel, (forceout,), _, _ = staged(
         repository, hand=(FORCEOUT,), theirs=(LUSTER_DRAGON,)

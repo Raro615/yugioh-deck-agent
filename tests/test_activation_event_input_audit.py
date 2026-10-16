@@ -362,13 +362,29 @@ def test_07_a_trap_never_becomes_an_ordinary_activation_candidate(repository):
     """
     §17 의 핵심 질문 — **사건 의존 효과가 일반 발동으로 섞이는가.**
 
-    함정은 패에 있든 세트되어 있든 ``ACTIVATE_EFFECT`` 후보가 **되지 않는다.**
-    그리고 막힌 까닭이 이름 붙은 "없는 규칙" 으로 남는다 — 그 문장이 바로
+    막힌 까닭이 이름 붙은 "없는 규칙" 으로 남는다 — 그 문장이 바로
     "사건(``SetCode(EVENT_*)``) 을 구분할 수 없다" 다.
 
     **``INVALID`` 가 아니라 ``UNKNOWN`` 인 것이 중요하다** — 실제 규칙은
     함정 발동을 허락하므로, 금지라고 적으면 거짓이 된다.
+
+    🔴 **Phase 6-Q 가 그 문장이 가리킨 칸을 만들었다 — 그래서 두 축을 센다.**
+
+    이 시험의 원래 결론은 "함정은 패에 있든 세트되어 있든 후보가 되지
+    않는다" 였고, 그 까닭이 ``TRAP_TRIGGER_MISSING`` 이었다. 6-Q 가
+    ``EffectDefinition.activation_waits_for_event`` 를 만들어 등재된 함정에
+    손으로 적었으므로, **등록소를 받은** 검증기는 그 질문에 답할 수 있다.
+
+    이 시험이 재는 사실("사건 의존 효과가 일반 발동으로 섞이지 않는다")은
+    그대로이고, 오히려 더 분명해졌다 — 섞이지 않는 근거가 **카드 종류**가
+    아니라 **적어 둔 사실**이 되었다.
+
+    ① 등록소 없음 → 두 자리 모두 ``UNKNOWN`` · ``TRAP_TRIGGER_MISSING``
+    ② 등록소 있음 → 패는 여전히 범위 밖 (``TRAP_NOT_SET``), 세트된 것만 통과
     """
+    from engine.action_validation import TRAP_NOT_SET
+    from engine.effect.library import definition_registry
+
     for zone in (Zone.HAND, Zone.SZONE):
         state, instance = board(repository, FINE, zone)
         duel = duel_of(state)
@@ -378,8 +394,7 @@ def test_07_a_trap_never_becomes_an_ordinary_activation_candidate(repository):
             actor=MINE, source=instance, effect_ref=EffectRef(FINE, 0)
         )
 
-        assert activations_for(duel, instance) == [], f"{zone.value} 에서 후보가 났다"
-
+        #: ① 등록소를 받지 못한 검증기 — 종전 그대로다.
         verdict = validator.validate(action)
         assert verdict.validity is ActionValidity.UNKNOWN
         assert verdict.validity is not ActionValidity.INVALID
@@ -388,6 +403,18 @@ def test_07_a_trap_never_becomes_an_ordinary_activation_candidate(repository):
         #: 그 문장이 **사건**을 가리킨다.
         assert "EVENT_" in verdict.missing_rule
         assert "유발 조건" in verdict.missing_rule
+
+        #: ② 등록소를 받은 검증기 — 자리가 답을 가른다 (Phase 6-Q).
+        informed = ActionValidator(
+            view, definitions=definition_registry()
+        ).validate(action)
+        if zone is Zone.HAND:
+            #: 🔴 패의 함정은 여전히 범위 밖이다 (RULE-SPELLTRAP-009).
+            assert informed.validity is ActionValidity.UNKNOWN
+            assert informed.missing_rule == TRAP_NOT_SET
+            assert activations_for(duel, instance) == [], "패에서 후보가 났다"
+        else:
+            assert informed.validity is ActionValidity.VALID, informed.reason
 
 
 def test_08_the_missing_rules_name_the_event_gap_explicitly():

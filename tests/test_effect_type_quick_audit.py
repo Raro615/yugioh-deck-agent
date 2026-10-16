@@ -626,7 +626,17 @@ def test_10_effect_definition_has_no_effect_types_field():
     # 이고, 그 분류는 "무엇이 일어났는가" 를 담지 않는다. 이 테스트가
     # 지키는 사실(사건 칸이 없다 · effect_types 가 없다 · code 가 없다)은
     # 그대로이고, 아래 단언들이 그것을 그대로 센다.
-    assert len(definition) == 11
+    #
+    # 🔴 Phase 6-Q 에서 11 → 12 칸 (``activation_waits_for_event``). 그 칸도
+    # **사건 칸이 아니다** — 담는 것은 ``bool | None`` 이고, 그 뜻은 "이 카드
+    # 발동이 사건을 기다리는가" 하나다. **어떤** 사건인지는 담지 않는다.
+    # 그래서 아래의 ``{"code", "trigger_event", "timing", "point", "event"}``
+    # 교집합이 여전히 비어 있고, 그것이 이 테스트가 재는 사실이다.
+    #
+    # 왜 그 칸이 필요했나: ``TRAP_TRIGGER_MISSING`` 이 *"공식 스크립트의
+    # SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 **스스로 적고 있었고**,
+    # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
+    assert len(definition) == 12
     assert definition == {
         "effect_ref",
         "source_card_id",
@@ -638,6 +648,7 @@ def test_10_effect_definition_has_no_effect_types_field():
         "declarations",
         "requirements",
         "guards",
+        "activation_waits_for_event",  # Phase 6-Q — 사건을 **기다리는가** (bool). 어떤 사건인지는 담지 않는다
         "provenance",
     }
 
@@ -1236,7 +1247,7 @@ def test_35_a_quick_o_card_still_plays_and_stays_unknown(repository):
 
 def test_36_the_search_ranking_digest_is_unchanged(repository):
     """
-    🟢 §17 — 검색/AI digest 불변: 6판 611결정.
+    🟢 §17 — 검색/AI digest 불변: 6판 689결정.
 
     .. note::
        digest 값을 베껴 적지 않는다 — 기존 pin 들을 AST 로 읽어 가장 많은
@@ -1290,5 +1301,10 @@ def test_36_the_search_ranking_digest_is_unchanged(repository):
             ).encode()
         )
 
-    assert decisions == 611
+    #: 🔴 **Phase 6-Q 가 이 수와 digest 를 바꿨다.** 세트된 일반 함정이
+    #: ``legal_actions`` 에 오르게 되었으므로 (RULE-SPELLTRAP-008 · 009)
+    #: 탐색이 고를 수 있는 수가 늘고 체인 응답(``pass``)이 생긴다 —
+    #: 실측 611 → 689 결정, ``pass`` 73건 · ``activate_effect`` 60건.
+    #: 의도한 변화이므로 핀을 갱신했다 (근거: docs/phase6q-…md §18).
+    assert decisions == 689
     assert digest.hexdigest() == expected

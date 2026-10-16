@@ -291,7 +291,17 @@ def test_07_no_field_in_the_definition_can_hold_the_timing_code():
     # 이고, 그 분류는 "무엇이 일어났는가" 를 담지 않는다. 이 테스트가
     # 지키는 사실(사건 칸이 없다 · effect_types 가 없다 · code 가 없다)은
     # 그대로이고, 아래 단언들이 그것을 그대로 센다.
-    assert len(fields) == 11
+    #
+    # 🔴 Phase 6-Q 에서 11 → 12 칸 (``activation_waits_for_event``). 그 칸도
+    # **사건 칸이 아니다** — 담는 것은 ``bool | None`` 이고, 그 뜻은 "이 카드
+    # 발동이 사건을 기다리는가" 하나다. **어떤** 사건인지는 담지 않는다.
+    # 그래서 아래의 ``{"code", "trigger_event", "timing", "point", "event"}``
+    # 교집합이 여전히 비어 있고, 그것이 이 테스트가 재는 사실이다.
+    #
+    # 왜 그 칸이 필요했나: ``TRAP_TRIGGER_MISSING`` 이 *"공식 스크립트의
+    # SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 **스스로 적고 있었고**,
+    # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
+    assert len(fields) == 12
     assert fields & {"code", "trigger_event", "timing", "point", "event"} == set()
 
     #: ``TriggerSpec`` 에도 없다 — 3-E-31 이 측정한 그대로다.
@@ -490,7 +500,17 @@ def test_12_this_audit_added_no_production_structure():
     # 이고, 그 분류는 "무엇이 일어났는가" 를 담지 않는다. 이 테스트가
     # 지키는 사실(사건 칸이 없다 · effect_types 가 없다 · code 가 없다)은
     # 그대로이고, 아래 단언들이 그것을 그대로 센다.
-    assert len(dataclasses.fields(EffectDefinition)) == 11
+    #
+    # 🔴 Phase 6-Q 에서 11 → 12 칸 (``activation_waits_for_event``). 그 칸도
+    # **사건 칸이 아니다** — 담는 것은 ``bool | None`` 이고, 그 뜻은 "이 카드
+    # 발동이 사건을 기다리는가" 하나다. **어떤** 사건인지는 담지 않는다.
+    # 그래서 아래의 ``{"code", "trigger_event", "timing", "point", "event"}``
+    # 교집합이 여전히 비어 있고, 그것이 이 테스트가 재는 사실이다.
+    #
+    # 왜 그 칸이 필요했나: ``TRAP_TRIGGER_MISSING`` 이 *"공식 스크립트의
+    # SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 **스스로 적고 있었고**,
+    # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
+    assert len(dataclasses.fields(EffectDefinition)) == 12
     #: 🔴 칸 수는 3-E-19 9 → 6-E 10 (``summons``) → **6-F 11**
     #: (``subject``) 로 움직였다. 이 감사가 production 을 늘리지
     #: 않았다는 사실은 그대로이고, 늘린 주체는 6-E · 6-F 다.

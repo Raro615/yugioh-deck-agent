@@ -1051,7 +1051,7 @@ def test_19_this_phase_changed_no_production_code_and_no_ranking(repository):
     """
     §12 · §19 — production 은 **한 줄도** 바뀌지 않았고 탐색 순위도 그대로다.
 
-    순위는 **실제로 돌려서** 확인한다 — 6판 611결정의 digest 를 못박는다.
+    순위는 **실제로 돌려서** 확인한다 — 6판 689결정의 digest 를 못박는다.
     이 숫자가 바뀌면 Evaluation 이나 Search 가 움직였다는 뜻이다.
     """
     from agent.runner import DuelRunner
@@ -1083,9 +1083,14 @@ def test_19_this_phase_changed_no_production_code_and_no_ranking(repository):
             ).encode()
         )
 
-    assert decisions == 611
+    #: 🔴 **Phase 6-Q 가 이 수와 digest 를 바꿨다.** 세트된 일반 함정이
+    #: ``legal_actions`` 에 오르게 되었으므로 (RULE-SPELLTRAP-008 · 009)
+    #: 탐색이 고를 수 있는 수가 늘고 체인 응답(``pass``)이 생긴다 —
+    #: 실측 611 → 689 결정, ``pass`` 73건 · ``activate_effect`` 60건.
+    #: 의도한 변화이므로 핀을 갱신했다 (근거: docs/phase6q-…md §18).
+    assert decisions == 689
     assert digest.hexdigest() == (
-        "30fa3597a24d4511d8c92ce9f9921412ffada7546675c4d7d5765381402c4175"
+        "78d35fb4ebc06a6662a9e1205d6d9d89f939e32071e1262547543d628ec4752e"
     )
 
     #: 그리고 ``agent/`` 는 소환 · 사건 · 트리거 어휘를 **모른다.**

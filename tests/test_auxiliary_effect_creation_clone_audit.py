@@ -960,7 +960,7 @@ def test_41_state_hash_excludes_block_count():
 
 def test_42_search_digest_pins_unchanged():
     """결정 digest 핀 7개가 **그대로**다 — 이 수정은 duel 에 닿지 않는다."""
-    digest = "30fa3597a24d4511d8c92ce9f9921412ffada7546675c4d7d5765381402c4175"
+    digest = "78d35fb4ebc06a6662a9e1205d6d9d89f939e32071e1262547543d628ec4752e"
     pins = []
     for path in sorted(Path(PROJECT_ROOT / "tests").glob("test_*.py")):
         #: 🔴 **이 파일은 센지 않는다** — 위의 digest 문자열 자체가 잡혀서

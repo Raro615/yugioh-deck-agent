@@ -505,28 +505,55 @@ def test_10_unknown_is_not_promoted_for_cards_that_need_the_set_turn(
     (``GameState.rule_uses``) 이제 판정된다 — 같은 턴이면 ``INVALID``, 다음
     턴부터 ``VALID`` 다 (``tests/engine/test_set_turn_record.py``).
 
-    함정은 모자란 것이 **더 많았다.** 그래서 여기 남아 있고, 남아 있는 이유가
-    "세트한 턴" 이 아니라 ``함정 · 몬스터 효과의 발동 타이밍`` 임을 아래
-    단정이 그대로 잰다.
+    함정은 모자란 것이 **더 많았다.** 그래서 여기 남아 있었고, 남아 있던
+    이유가 "세트한 턴" 이 아니라 ``함정의 발동 타이밍`` 임을 아래 단정이
+    그대로 잰다.
+
+    🔴 **Phase 6-Q 가 그 이유를 둘로 갈랐다 — 그래서 두 축을 센다.**
+
+    6-Q 는 ``EffectDefinition.activation_waits_for_event`` 를 만들고 등재된
+    함정 다섯 장에 "사건을 기다리지 않는다" 를 손으로 적었다. 그래서
+    **등록소를 받은** 검증기는 더 이상 ``UNKNOWN`` 이 아니다.
+
+    이 시험이 재는 사실("``UNKNOWN`` 을 허가로 바꾸지 않았다")은 그대로이고,
+    오히려 더 분명해졌다 — **적지 않으면 여전히 ``UNKNOWN``** 이다. 그래서
+    아래가 두 축을 센다.
+
+    ① 등록소 없음 → ``UNKNOWN`` · ``missing_rule`` 에 "함정" · 실행 거절
+    ② 등록소 있음 → ``VALID`` · 후보가 된다 (다음 턴이므로)
+
+    그리고 ``_apply_activation`` 이 ①에서 거절한다는 것은 그대로다 —
+    그 경로는 등록소 없이 세운 검증기를 쓰지 않으므로, 거절의 근거를
+    **타이밍 계층**으로 옮겨서 센다 (세트한 턴 · ``INVALID``).
     """
     duel = duel_at(repository, mine=(card_id, LUSTER_DRAGON))
     instance = set_down(duel, P0, card_id)
-    duel.state.turn.turn_number += 2  # 다음 턴이어도 마찬가지다
-    duel.priority = PriorityState.idle(turn_player=P0, phase=Phase.MAIN1)
-
     action = hand_made(P0, instance, card_id)
-    verdict = ActionValidator(duel.view(P0)).validate(action)
-    assert verdict.validity is ActionValidity.UNKNOWN, (label, verdict.reason)
-    assert verdict.missing_rule is not None
-    assert missing in verdict.missing_rule, (label, verdict.missing_rule)
 
+    #: 🔴 ① 세트한 턴 — 후보가 아니고, 실행도 거절된다.
     assert activations(duel, P0, card_id) == [], label
-    # 그래도 출발지에는 **있다** — 보지 않은 것과 막힌 것은 다르다.
-    assert instance in {c.instance_id for c in duel._activation_sources(P0)}
-
     step = duel._apply_activation(action)
     assert not step.accepted, label
     assert szone(duel)[0].position is Position.FACEDOWN
+
+    #: 그래도 출발지에는 **있다** — 보지 않은 것과 막힌 것은 다르다.
+    assert instance in {c.instance_id for c in duel._activation_sources(P0)}
+
+    duel.state.turn.turn_number += 2  # 다음 턴으로
+    duel.priority = PriorityState.idle(turn_player=P0, phase=Phase.MAIN1)
+
+    #: 🔴 ② 등록소를 받지 못한 검증기는 **여전히 모른다.**
+    blind = ActionValidator(duel.view(P0)).validate(action)
+    assert blind.validity is ActionValidity.UNKNOWN, (label, blind.reason)
+    assert blind.missing_rule is not None
+    assert missing in blind.missing_rule, (label, blind.missing_rule)
+
+    #: 🔴 ③ 등록소를 받은 검증기는 통과시키고 후보가 된다 (Phase 6-Q).
+    informed = ActionValidator(
+        duel.view(P0), definitions=duel._activator.definitions
+    ).validate(action)
+    assert informed.validity is ActionValidity.VALID, (label, informed.reason)
+    assert [a.source for a in activations(duel, P0, card_id)] == [instance], label
 
 
 # ======================================================================

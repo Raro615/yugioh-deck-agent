@@ -281,30 +281,58 @@ def test_06_a_set_quick_play_cannot_be_activated_on_the_turn_it_was_set(reposito
 @pytest.mark.real_card
 def test_07_a_set_trap_is_still_out_of_scope_for_a_wider_reason(repository):
     """
-    **§19-C · §29-12 — 함정은 여전히 ``UNKNOWN`` 이고, 이유가 다르다.**
+    **§19-C · §29-12 — 세트 기록은 함정에도 남고, 그것이 답을 가른다.**
 
-    세트한 턴 제약은 함정에도 있다 (RULE-SPELLTRAP-009). 그런데 함정에
-    모자란 것은 **그것만이 아니다** — 유발 · 응답 타이밍 계층이 없다. 그래서
-    세트한 턴을 세게 되었어도 범위 밖이고, ``missing_rule`` 이 그 이유를
-    "세트한 턴" 이 아니라 "함정 · 몬스터 효과의 발동 타이밍" 으로 말한다.
+    세트한 턴 제약은 함정에도 있다 (RULE-SPELLTRAP-009). 이 시험이 재는
+    것은 **기록이 카드 종류를 보지 않는다**는 것이고, 그 사실은 그대로다.
 
-    **여기서 함정을 열지 않는 것이 이 Phase 의 경계다.** 기록이 생겼다는
-    이유로 통과시키면 없는 규칙을 있는 것처럼 쓰게 된다.
+    🔴 **Phase 6-Q 가 "더 넓은 이유" 를 닫았다 — 그래서 뒷부분을 고쳤다.**
+
+    원래 이 시험은 "기록이 생겼어도 함정은 범위 밖이다" 로 끝났고, 그
+    근거가 ``TRAP_TRIGGER_MISSING`` ("유발 조건을 효과마다 구분할 수
+    없다") 였다. 6-Q 가 그 칸을 만들어 (``EffectDefinition.
+    activation_waits_for_event``) 등재된 다섯 장에 손으로 적었으므로, 이제
+    **등록소를 받은 검증기**는 그 질문에 답할 수 있다.
+
+    그래도 이 시험의 경계는 그대로다 — **기록이 생겼다는 이유로
+    통과시키지 않는다.** 세트한 턴에는 여전히 후보가 아니고, 막는 것이
+    검증기가 아니라 타이밍 계층(``SET_THIS_TURN`` · ``INVALID``)이다.
+    그래서 **양쪽을 다 센다.**
+
+    그리고 등록소가 없으면 여전히 ``UNKNOWN`` 이다 — "적지 않았다" 는
+    6-Q 뒤에도 허가가 아니다.
     """
     duel = duel_at(repository, mine=(GIFT_OF_GREED, LUSTER_DRAGON))
     instance = set_down(duel, P0, GIFT_OF_GREED)
+    action = made(P0, instance, GIFT_OF_GREED)
 
     # 기록은 함정에도 남는다 — 쓰는 쪽은 카드 종류를 보지 않는다.
-    assert duel._set_this_turn(made(P0, instance, GIFT_OF_GREED)) is True
+    assert duel._set_this_turn(action) is True
+    #: 🔴 세트한 턴에는 후보가 아니다. 막는 곳은 **타이밍 계층**이다.
+    assert activations(duel, P0, GIFT_OF_GREED) == []
+    timed = ActivationTimingChecker(duel.view(P0)).check(
+        ActivationTiming(duel.chain, duel.priority, set_this_turn=True), action
+    )
+    assert timed.validity is ActionValidity.INVALID
+    assert timed.code is ValidationCode.SET_THIS_TURN
 
     next_own_turn(duel)
-    assert duel._set_this_turn(made(P0, instance, GIFT_OF_GREED)) is False
+    assert duel._set_this_turn(action) is False
 
-    verdict = ActionValidator(duel.view(P0)).validate(made(P0, instance, GIFT_OF_GREED))
-    assert verdict.validity is ActionValidity.UNKNOWN
-    assert "함정" in (verdict.missing_rule or ""), verdict.missing_rule
-    assert "set-turn" not in (verdict.missing_rule or "")
-    assert activations(duel, P0, GIFT_OF_GREED) == []
+    #: 🔴 등록소를 받지 못한 검증기는 **여전히 모른다** — 적지 않은 것은
+    #: 허가가 아니다 (6-Q 가 바꾸지 않은 쪽).
+    blind = ActionValidator(duel.view(P0)).validate(action)
+    assert blind.validity is ActionValidity.UNKNOWN
+    assert "함정" in (blind.missing_rule or ""), blind.missing_rule
+    assert "set-turn" not in (blind.missing_rule or "")
+
+    #: 🔴 등록소를 받은 검증기는 통과시키고, 다음 턴이므로 후보가 된다.
+    informed = ActionValidator(
+        duel.view(P0), definitions=duel._activator.definitions
+    ).validate(action)
+    assert informed.validity is ActionValidity.VALID, informed.reason
+    candidates = activations(duel, P0, GIFT_OF_GREED)
+    assert [a.source for a in candidates] == [instance]
 
 
 @pytest.mark.real_card

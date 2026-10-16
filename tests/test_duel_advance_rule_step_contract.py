@@ -576,10 +576,19 @@ def test_12_which_action_kinds_a_real_duel_actually_reaches(repository):
     🟡 §13 2 — **실제 듀얼이 닿는 행위 종류를 실측한다.**
 
     .. note::
-       ``special_summon`` · ``activate_card`` · ``activate_effect`` 는 현재
-       **실제 듀얼에서 한 번도 수락되지 않는다** — ``legal_actions`` 가 허가하지
-       않기 때문이다 (Phase 3-F-19 가 같은 사실을 측정했다). Engine V1 범위의
-       사실이고 이 Phase 가 고칠 일이 아니다. 없는 것을 있다고 적지 않는다.
+       ``special_summon`` · ``activate_card`` 는 현재 **실제 듀얼에서 한 번도
+       수락되지 않는다** — ``legal_actions`` 가 허가하지 않기 때문이다
+       (Phase 3-F-19 가 같은 사실을 측정했다). 없는 것을 있다고 적지 않는다.
+
+    🔴 **Phase 6-Q 가 ``activate_effect`` 와 ``pass`` 를 닿게 했다.**
+
+    원래 이 목록은 넷이었고 ``activate_effect`` 가 0회였다. 6-Q 가 세트된
+    일반 함정의 발동을 판정하게 되면서 (RULE-SPELLTRAP-008 · 009) 탐색이
+    실제로 발동을 고르고, 발동은 체인을 만들므로 ``pass`` 로 응답이 닫힌다.
+    실측으로 늘어난 둘을 **그대로 적는다** — 없던 것을 있다고 적지 않는 것과
+    같은 태도로, 생긴 것을 없다고 적지도 않는다.
+
+    여전히 0회인 둘은 **그대로 0회로 못 박는다.**
     """
     reached: collections.Counter = collections.Counter()
     for seed in (211, 212, 213):
@@ -593,12 +602,18 @@ def test_12_which_action_kinds_a_real_duel_actually_reaches(repository):
         PlayerActionKind.NORMAL_SUMMON,
         PlayerActionKind.SET_SPELL_TRAP,
         PlayerActionKind.ATTACK,
+        #: 🔴 Phase 6-Q — 세트된 일반 함정의 발동이 판정되면서 닿았다.
+        PlayerActionKind.ACTIVATE_EFFECT,
+        #: 🔴 그 발동이 체인을 만들므로 응답을 닫는 패스도 닿는다.
+        PlayerActionKind.PASS,
     }, dict(reached)
-    #: 🔴 발동 계열과 특수 소환은 **0회**다.
+    #: 🔴 발동한 수가 0 이 아니다 — 수를 함께 못 박는다.
+    assert reached[PlayerActionKind.ACTIVATE_EFFECT] > 0, dict(reached)
+    assert reached[PlayerActionKind.PASS] > 0, dict(reached)
+    #: 🔴 특수 소환과 ``activate_card`` 는 **여전히 0회**다.
     for absent in (
         PlayerActionKind.SPECIAL_SUMMON,
         PlayerActionKind.ACTIVATE_CARD,
-        PlayerActionKind.ACTIVATE_EFFECT,
     ):
         assert reached[absent] == 0, absent
 
@@ -1022,7 +1037,7 @@ def test_28_nothing_about_the_board_or_the_view_moved(repository):
 
 def test_29_the_search_ranking_digest_is_unchanged(repository):
     """
-    §14 19 — 검색/AI 회귀: 6판 611결정 digest 가 그대로다.
+    §14 19 — 검색/AI 회귀: 6판 689결정 digest 가 그대로다.
 
     .. note::
        digest 값을 베껴 적지 않는다 — 기존 pin 들을 AST 로 읽어 가장 많은 파일이
@@ -1076,5 +1091,10 @@ def test_29_the_search_ranking_digest_is_unchanged(repository):
             ).encode()
         )
 
-    assert decisions == 611
+    #: 🔴 **Phase 6-Q 가 이 수와 digest 를 바꿨다.** 세트된 일반 함정이
+    #: ``legal_actions`` 에 오르게 되었으므로 (RULE-SPELLTRAP-008 · 009)
+    #: 탐색이 고를 수 있는 수가 늘고 체인 응답(``pass``)이 생긴다 —
+    #: 실측 611 → 689 결정, ``pass`` 73건 · ``activate_effect`` 60건.
+    #: 의도한 변화이므로 핀을 갱신했다 (근거: docs/phase6q-…md §18).
+    assert decisions == 689
     assert digest.hexdigest() == expected

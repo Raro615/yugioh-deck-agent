@@ -392,6 +392,16 @@ def test_09_no_candidate_when_there_is_nowhere_to_put_the_card(repository):
     """
     마법 & 함정 존이 꽉 차면 후보가 아니다 — 발동은 **놓는** 행위이기
     때문이다 (RULE-SPELLTRAP-002: "placing it face-up on the field").
+
+    🔴 **Phase 6-Q 가 세는 범위를 좁혔다.** 이 판을 꽉 채우는 말은 세트된
+    **함정**(욕망의 선물) 다섯 장이고, 6-Q 가 세트된 일반 함정의 발동을
+    판정하게 되었으므로 그 다섯 장이 **각자 후보**가 된다. 자기 칸에 이미
+    있는 카드는 새 칸을 필요로 하지 않으므로 (세트한 마법과 같은 이유 —
+    Phase 3-E-14) 그것이 옳다.
+
+    그래서 재는 것을 **정확히 가리킨다**: 이 시험의 주제는 "**패의** 욕망의
+    항아리가 놓을 자리가 없어 후보가 아니다" 이고, 그것은 그대로다. 함정이
+    후보가 된 것은 느슨해진 것이 아니라 **다른 사실**이므로 함께 센다.
     """
     duel, (pot,) = staged(repository)
     for _ in range(5):
@@ -403,11 +413,21 @@ def test_09_no_candidate_when_there_is_nowhere_to_put_the_card(repository):
         )
     assert len(duel.state.player(MINE).spell_zone) == 5
 
-    assert activations(duel, MINE) == []
+    #: 🔴 패의 욕망의 항아리는 후보가 아니다 — 놓을 자리가 없다.
+    assert [a for a in activations(duel, MINE) if a.effect_ref == POT_REF] == []
     result = ActionValidator(duel.view(MINE)).validate(
         PlayerAction.activate_effect(actor=MINE, source=pot, effect_ref=POT_REF)
     )
     assert result.code is ValidationCode.ZONE_FULL
+
+    #: 그리고 꽉 찬 칸을 채운 **세트된 함정들**은 후보다 (Phase 6-Q) —
+    #: 자기 칸에서 앞면으로 돌리는 발동이므로 새 칸이 필요하지 않다.
+    trap_candidates = [
+        a
+        for a in activations(duel, MINE)
+        if a.effect_ref is not None and a.effect_ref.card_id == THE_GIFT_OF_GREED
+    ]
+    assert len(trap_candidates) == 5, trap_candidates
 
 
 @pytest.mark.real_card
