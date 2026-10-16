@@ -122,7 +122,13 @@ MINE = 0
 #: ``test_05`` 의 **적합** 쪽에 들어간다 (위반 13곳은 그대로다).
 #: 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로
 #: 84개였다.
-STRING_OCCURRENCES = 86
+#: 🔴 86 → **87** (Phase 6-R). 늘어난 하나는 **산문**이다 —
+#: ``Duel._resolve_chain`` 의 주석이 "불발된 체인이 남으면 발동 후보가
+#: ``withheld`` 에도 남지 않고 ``apply`` 가 ``RULE_NOT_IMPLEMENTED``
+#: ("허가된 행위가 아닙니다") 를 돌려준다" 를 적으면서 그 코드 이름을
+#: 인용했다 (실측해서 적은 거짓 코드다). **코드 자리는 그대로**이고
+#: ``CODE_OCCURRENCES`` 가 그것을 따로 센다 — 6-E 와 같은 결의 증가다.
+STRING_OCCURRENCES = 87
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -185,6 +191,20 @@ PROSE_OCCURRENCES = {
     ("engine/trigger_chain.py", 569),
     ("engine/validation.py", 129),
     ("engine/validation.py", 180),
+    # 🔴 **Phase 6-R 이 자리 하나를 더했다 — 산문 14 → 15.**
+    #
+    # ``Duel._resolve_chain`` 의 주석이 **고치기 전의 거짓 코드를 실측해서
+    # 인용한다.** 불발된 링크가 든 체인이 남아 있는 동안 발동 관문이
+    # ``SPELL_SPEED_TOO_LOW`` 로 거절했고, 후보 생성이 그것을 **보류
+    # 목록에도 남기지 않고** 버렸으므로, 호출자가 ``apply`` 로 직접 넣으면
+    # ``RULE_NOT_IMPLEMENTED`` ("허가된 행위가 아닙니다") 가 돌아왔다.
+    #
+    # 🔴 그리고 그것이 **이 감사가 지키는 구분의 증거**다: 그 자리의
+    # ``RULE_NOT_IMPLEMENTED`` 는 "규칙 계층이 없다" 를 뜻하지 않았다 —
+    # ``ActionValidator`` 는 같은 자리에서 ``OK`` 를 돌려주고 있었다. 즉
+    # **거짓**이었고, 6-R 이 그 원인(체인 잔존)을 고쳤다. 코드 자리는
+    # 하나도 늘지 않았다.
+    ("engine/duel.py", 868),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
@@ -535,7 +555,7 @@ def test_02_the_string_count_is_79_but_the_code_count_is_67():
 
     sites = code_sites()
     assert len(sites) == CODE_OCCURRENCES
-    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 14
+    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 15
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()

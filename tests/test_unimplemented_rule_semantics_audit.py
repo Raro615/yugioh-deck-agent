@@ -184,7 +184,15 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: 이 테스트가 지키는 사실 — *"그 코드와 ``UnimplementedRule`` 은 같은
 #: 개념이 아니다"* — 은 그대로이고, 6-M 도 ``UnimplementedRule`` 을
 #: **하나도 만들지 않았다.**
-RULE_NOT_IMPLEMENTED_MENTIONS = 86
+#: 🔴 86 → **87** (Phase 6-R). 늘어난 하나는 **산문**이다 —
+#: ``Duel._resolve_chain`` 의 주석이 "불발된 체인이 남으면 발동 후보가
+#: ``withheld`` 에도 남지 않고 ``apply`` 가 ``RULE_NOT_IMPLEMENTED`` 를
+#: 돌려준다" 를 적으면서 그 코드 이름을 인용했다. 🔴 그리고 그것이 이
+#: 파일이 지키는 구분의 **또 하나의 증거**다: 그 자리에서 돌아오던
+#: ``RULE_NOT_IMPLEMENTED`` 는 ``UnimplementedRule`` 과 아무 관계가 없었고,
+#: 실제로는 **거짓**이었다 (규칙은 그 발동을 허락했고 관문이 체인 잔존
+#: 때문에 막았다). 6-R 도 ``UnimplementedRule`` 을 **하나도 만들지 않았다.**
+RULE_NOT_IMPLEMENTED_MENTIONS = 87
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
