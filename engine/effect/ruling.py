@@ -61,7 +61,11 @@ from typing import Mapping, Protocol, runtime_checkable
 
 from engine.condition import ConditionResult
 from engine.effect.semantics import RuleQuestion
-from engine.game_state_view import FACE_SENSITIVE_ZONES, GameStateView
+from engine.game_state_view import (
+    FACE_SENSITIVE_ZONES,
+    CardDefinitionView,
+    GameStateView,
+)
 from engine.ids import InstanceId
 from engine.vocabulary import Zone
 
@@ -244,6 +248,57 @@ def normal_monster_facts(card_id: int, name: str = "") -> CardRuleFacts:
         restriction_basis=RuleBasis.RULEBOOK,
         restriction_note=note,
     )
+
+
+#: 룰북의 통상 몬스터 한 줄이 **적용되지 않는** 종류 이름들 (Phase 6-O).
+#:
+#: 🔴 **펜듈럼은 통상 몬스터여도 효과가 있다.** 그것이 이 저장소가 이미
+#: 적어 둔 사실이다 — ``core.card_model.Card.has_printed_effect`` 가
+#: "통상 몬스터와 토큰은 아니다 (통상 펜듈럼 몬스터는 펜듈럼 효과가 있으므로
+#: 예외)" 라고 적는다. 그래서 :data:`NORMAL_MONSTER_RULE` 의 "do not have
+#: effects" 가 그 카드들에는 성립하지 않고, **모른다로 남는다.**
+#:
+#: 토큰은 :func:`token_facts` 가 따로 답한다 — 룰북의 다른 줄이다.
+NOT_PLAIN_NORMAL: frozenset[str] = frozenset({"PENDULUM", "TOKEN"})
+
+
+def rulebook_facts(
+    definition: "CardDefinitionView | None",
+) -> "CardRuleFacts | None":
+    """
+    **관측된 카드 정의**에서 룰북 한 줄로 결정되는 사실을 만든다 (Phase 6-O).
+
+    확정할 수 없으면 ``None`` 이고, 그것이 "모른다" 다 — 지어내지 않는다.
+
+    지금 답할 수 있는 것은 **통상 몬스터 하나**다. 근거는
+    :data:`NORMAL_MONSTER_RULE` 이고, 그 줄에서 나오는 결론은
+    :func:`normal_monster_facts` 가 **이미** 적어 두었다. 6-O 가 더한 것은
+    규칙이 아니라 **연결**이다 — 그 줄이 덮는 카드가 저장소에 684장인데
+    손으로 적힌 것이 1장이었다 (실측).
+
+    🔴 **카드 ID 를 보지 않는다.** 보는 것은 관측이 실어 준 카드 **종류**
+    뿐이고 (``is_monster`` · ``type_names`` · ``is_extra_deck``), 그래서
+    카드별 예외가 아니다.
+
+    🔴 **손으로 적은 사실이 이것보다 앞선다.** 이 함수는 등록소에 줄이
+    없을 때만 쓰인다 (:meth:`BoardRuling._facts_of`) — 룰북 유도가 사람이
+    읽고 적은 것을 덮어쓰면 안 된다.
+    """
+    if definition is None or definition.card_id <= 0:
+        return None
+    if not definition.is_monster:
+        # 마법 · 함정은 이 줄이 말하지 않는다. 그쪽은 텍스트를 읽어야 한다.
+        return None
+    if "NORMAL" not in definition.type_names:
+        return None
+    if NOT_PLAIN_NORMAL & set(definition.type_names):
+        return None
+    if definition.is_extra_deck:
+        # 🔴 실측으로 **0장**이지만 (6-O §3) 조건을 적어 둔다. 엑스트라 덱
+        # 통상 몬스터가 생기는 날, 패 · 메인 덱으로 갈 수 있다는 답을
+        # 룰북 한 줄에서 끌어내면 틀린다 (Phase 6-M §4-2).
+        return None
+    return normal_monster_facts(definition.card_id, definition.name)
 
 
 def token_facts(card_id: int, name: str = "") -> CardRuleFacts:
@@ -444,7 +499,7 @@ class BoardRuling:
                 f"{instance} 가 보이지 않아 어떤 카드인지 알 수 없습니다.",
             )
 
-        facts = self._registry.facts_for(card.card_id)
+        facts = self._facts_of(card)
         if facts is None:
             return RulingVerdict(
                 ConditionResult.UNKNOWN,
@@ -493,6 +548,31 @@ class BoardRuling:
         return ConditionResult.UNKNOWN
 
     # ------------------------------------------------------------------
+    def _facts_of(self, card) -> "CardRuleFacts | None":
+        """
+        이 카드에 대해 **확인된 사실.** 없으면 ``None`` (Phase 6-O).
+
+        찾는 자리가 **둘**이고 순서가 있다.
+
+        1. 손으로 적은 등록소 (:class:`OperationRulingRegistry`). 사람이
+           공식 텍스트나 재정을 읽고 적은 것이므로 **가장 먼저**다.
+        2. 관측된 카드 종류에서 **룰북 한 줄로** 유도되는 것
+           (:func:`rulebook_facts`).
+
+        순서가 뒤바뀌면 룰북 유도가 사람이 확인한 것을 덮어쓴다 — 더 좁은
+        근거가 더 넓은 근거를 이기는 것이 맞다.
+
+        🔴 **둘 다 없으면 ``None`` 이고, 그것이 "모른다" 다.** 이 함수는
+        모르는 것을 메꾸지 않는다.
+        """
+        if card.card_id is None:
+            return None
+        declared = self._registry.facts_for(card.card_id)
+        if declared is not None:
+            return declared
+        return rulebook_facts(card.definition)
+
+    # ------------------------------------------------------------------
     def _interference(self, target: InstanceId) -> "str | None":
         """
         판에 **막을 수 있는 것**이 있는가. 없으면 ``None``.
@@ -526,7 +606,7 @@ class BoardRuling:
                             f"{zone.zone.value} 에 정체를 알 수 없는 앞면 "
                             "카드가 있어 막는 것이 있는지 볼 수 없습니다."
                         )
-                    facts = self._registry.facts_for(card.card_id)
+                    facts = self._facts_of(card)
                     if facts is None:
                         return (
                             f"{zone.zone.value} 의 {card.card_id} 에 대해 "
@@ -575,7 +655,9 @@ __all__ = [
     "TOKEN_RULE",
     "NORMAL_MONSTER_RULE",
     "TOKEN_FORBIDDEN",
+    "NOT_PLAIN_NORMAL",
     "normal_monster_facts",
+    "rulebook_facts",
     "token_facts",
     "OperationRulingRegistry",
     "INTERFERENCE_ZONES",
