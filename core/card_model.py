@@ -282,6 +282,34 @@ class LuaScriptInfo:
     """스크립트 전체에서 등장한 EFFECT_* 상수 (EFFECT_TYPE_/EFFECT_FLAG_ 제외)"""
 
 
+#: 카드 **자신의** 일반 소환 / 세트를 막거나 바꿀 수 있는 EDOPro 스크립트 상수.
+#:
+#: EDOPro 에서 「이 카드는 일반 소환할 수 없다」 는 **스크립트가 아니라 카드
+#: 종류 비트** ``TYPE_SPSUMMON`` 으로 적는다 (그래서 전 코퍼스에
+#: ``EFFECT_CANNOT_BE_NORMAL_SUMMONED`` 가 **0건**이다). 그 비트는
+#: :data:`engine.summon_rules.NEVER_NORMAL_SUMMONABLE` 이 이미 접는다.
+#:
+#: 여기 네 상수는 그 비트로 적지 **않는** 나머지 — 조건부 제약과 대체 절차다.
+#:
+#: - ``EFFECT_CANNOT_SUMMON`` — 조건부 일반 소환 금지 (고스트릭 · 가면레온)
+#: - ``EFFECT_CANNOT_SSET`` — 세트 금지. 같은 판정이 세트 경로도 막으므로
+#:   (``engine/action_validation.py`` 의 ``_set_monster``) 함께 본다
+#: - ``EFFECT_LIMIT_SUMMON_PROC`` — "이 절차로만" 일반 소환할 수 있다
+#: - ``EFFECT_SUMMON_PROC`` — 대체 일반 소환 절차 (레벨 워리어 등)
+#:
+#: 🔴 **이 목록은 판정이 아니라 신호다.** 파일 전체 긁기이므로 상수가
+#: *다른* 카드에 걸리는 경우(인스펙트 보더 · 성스러운 광채)도 함께 잡힌다.
+#: 그 방향의 오차는 "모른다" 로 남는 쪽이므로 안전하다. 반대 방향(제약이
+#: 있는데 신호가 없는 것)이 위험한데, Phase 6-U 가 전수로 재서 **0건**임을
+#: 확인했다 (``docs/phase6u-effect-monster-normal-summon.md``).
+NORMAL_SUMMON_RESTRICTION_CODES: tuple[str, ...] = (
+    "EFFECT_CANNOT_SUMMON",
+    "EFFECT_CANNOT_SSET",
+    "EFFECT_LIMIT_SUMMON_PROC",
+    "EFFECT_SUMMON_PROC",
+)
+
+
 @dataclass(slots=True)
 class Card:
     """검색과 필터가 사용하는 정규화된 카드 레코드."""
@@ -492,6 +520,30 @@ class Card:
             or code in self.script.trigger_events
             or any(e.code == code for e in self.effects)
         )
+
+    @property
+    def normal_summon_restriction_signals(self) -> tuple[str, ...] | None:
+        """
+        이 카드의 일반 소환 / 세트를 막을 수 있는 스크립트 상수들.
+
+        **세 가지 답이 서로 다르다** (Phase 6-U §6).
+
+        - ``None`` — **스크립트가 없다.** 제약을 확인할 **정보가 없다**.
+          제약이 없다는 뜻이 **아니다**.
+        - ``()`` — 스크립트를 끝까지 읽었고 :data:`NORMAL_SUMMON_RESTRICTION_CODES`
+          가 **한 건도 없다**. 이것이 "제약 없음을 확인했다" 다.
+        - 비어 있지 않음 — 제약일 수 있는 상수를 찾았다. 어느 카드에
+          걸리는지는 이 값이 말하지 않는다 — 그래서 **모른다**가 된다.
+
+        비어 있음과 ``None`` 을 합치지 않는다. 합치면 스크립트가 없는
+        153장이 "제약 없음" 으로 둔갑한다 (체츠커 ``77435268`` 이 그 예다 —
+        공식 텍스트는 「자신 필드에 몬스터가 존재할 경우, 이 카드는 일반
+        소환할 수 없다」 라고 말하지만 이 저장소에 스크립트가 없다).
+        """
+        if self.script is None:
+            return None
+        codes = set(self.script.effect_codes or ())
+        return tuple(c for c in NORMAL_SUMMON_RESTRICTION_CODES if c in codes)
 
     @property
     def can_self_special_summon_from_hand(self) -> bool:

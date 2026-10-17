@@ -159,6 +159,22 @@ class CardDefinitionView:
     race_name: str | None
     type_names: tuple[str, ...]
     setcodes: tuple[int, ...]
+    normal_summon_restriction_signals: tuple[str, ...] | None = None
+    """
+    일반 소환 / 세트를 막을 수 있는 스크립트 상수들
+    (:attr:`core.card_model.Card.normal_summon_restriction_signals`).
+
+    **세 가지 답이 서로 다르다.** ``None`` 은 "스크립트를 읽지 못했다" 고,
+    ``()`` 는 "끝까지 읽었고 한 건도 없다" 고, 비어 있지 않은 값은 "제약일
+    수 있는 것을 찾았다" 고 말한다.
+
+    기본값이 ``None`` 인 것은 **손으로 만든 관측이 조용히 허가를 얻지
+    않게** 하기 위해서다 — 적지 않았다는 것은 읽지 않았다는 뜻이다.
+
+    ``effect_count`` 와 달리 스크립트 내용을 내보내는 것처럼 보이지만,
+    실어 보내는 것은 **이 목록에 든 네 상수의 등장 여부**뿐이다
+    (:data:`core.card_model.NORMAL_SUMMON_RESTRICTION_CODES`).
+    """
     effect_count: int = 0
     """
     ``EffectRef`` 로 **지목할 수 있는** 효과의 개수.
@@ -235,6 +251,9 @@ class CardDefinitionView:
             race_name=card.race_name,
             type_names=tuple(card.type_names),
             setcodes=tuple(card.setcodes),
+            normal_summon_restriction_signals=(
+                card.normal_summon_restriction_signals
+            ),
             effect_count=len(card.script.effects) if card.script is not None else 0,
         )
 
@@ -258,6 +277,7 @@ class CardDefinitionView:
             self.race_name,
             self.type_names,
             self.setcodes,
+            self.normal_summon_restriction_signals,
             self.effect_count,
         )
 
@@ -288,6 +308,11 @@ class CardDefinitionView:
             "race_name": self.race_name,
             "type_names": list(self.type_names),
             "setcodes": list(self.setcodes),
+            "normal_summon_restriction_signals": (
+                None
+                if self.normal_summon_restriction_signals is None
+                else list(self.normal_summon_restriction_signals)
+            ),
             "effect_count": self.effect_count,
         }
 

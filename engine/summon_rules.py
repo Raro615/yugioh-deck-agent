@@ -77,6 +77,13 @@ NEVER_NORMAL_SUMMONABLE: frozenset[str] = frozenset(
 #: 절차가 확실한 종류. 룰북이 "All Normal Monsters" 라고 못박은 것뿐이다.
 ORDINARY_TYPE_NAME = "NORMAL"
 
+#: 효과 몬스터의 소환 제약을 **읽지 못했을 때** 적는 규칙 이름.
+#:
+#: Phase 6-U 전까지는 효과 몬스터 전부가 이 이름을 달고 나갔다. 지금은
+#: 제약 신호를 **확인하지 못한 경우**에만 달린다 — 스크립트가 없거나,
+#: 상수를 찾았지만 그것이 누구에게 걸리는지 모를 때다.
+SUMMON_RESTRICTION_RULE = "summoning-condition (카드 텍스트의 소환 제약)"
+
 
 class SummonEligibility(str, Enum):
     """일반 소환 절차를 밟을 수 있는가."""
@@ -220,12 +227,31 @@ def assess_normal_summon(
             SummonEligibility.ORDINARY,
             f"레벨 {level} 통상 몬스터입니다 (RULE-SUMMON-009).",
         )
+    #: 🔴 룰북이 효과 몬스터에 건 조건은 "**unless they have a specific
+    #: restriction**" 하나다. 그래서 묻는 것도 하나다 — 이 카드에 그 제약이
+    #: 있는가. 세 가지 답이 서로 다르고, **둘만 "모른다" 다** (Phase 6-U).
+    signals = definition.normal_summon_restriction_signals
+    if signals is None:
+        return SummonAssessment(
+            SummonEligibility.UNDETERMINED,
+            "효과 몬스터이지만 이 카드의 스크립트를 읽을 수 없어 소환 제약이 "
+            "있는지 확인할 수 없습니다. **제약이 없다는 뜻이 아닙니다.**",
+            missing_rule=SUMMON_RESTRICTION_RULE,
+        )
+    if signals:
+        return SummonAssessment(
+            SummonEligibility.UNDETERMINED,
+            "효과 몬스터이고 이 카드의 스크립트에 소환 제약일 수 있는 상수가 "
+            f"있습니다 ({'·'.join(signals)}). 그것이 이 카드 자신에게 걸리는지 "
+            "다른 카드에 걸리는지, 또 어떤 조건인지는 아직 읽지 못합니다.",
+            missing_rule=SUMMON_RESTRICTION_RULE,
+        )
     return SummonAssessment(
-        SummonEligibility.UNDETERMINED,
-        "효과 몬스터는 카드 자신의 제약이 있을 수 있습니다 — 룰북은 "
-        '"most Effect Monsters (unless they have a specific restriction)" '
-        "라고만 말합니다. 이 엔진은 그 제약을 아직 읽지 못합니다.",
-        missing_rule="summoning-condition (카드 텍스트의 소환 제약)",
+        SummonEligibility.ORDINARY,
+        f"레벨 {level} 효과 몬스터이고, 이 카드의 스크립트에 자신의 일반 "
+        "소환을 막는 상수가 한 건도 없습니다 — 룰북이 말하는 \"most Effect "
+        'Monsters (unless they have a specific restriction)" 의 "most" 에 '
+        "해당합니다 (RULE-SUMMON-009).",
     )
 
 
@@ -234,6 +260,7 @@ __all__ = [
     "ONE_TRIBUTE_MAX_LEVEL",
     "NEVER_NORMAL_SUMMONABLE",
     "ORDINARY_TYPE_NAME",
+    "SUMMON_RESTRICTION_RULE",
     "SummonEligibility",
     "SummonAssessment",
     "tributes_for_level",
