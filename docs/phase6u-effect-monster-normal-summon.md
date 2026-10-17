@@ -576,6 +576,50 @@ E assert (14518 + 241) == 14755
 교체 뒤 `git checkout HEAD --` 로 복원하고 작업 트리가 깨끗함(0개 변경)을
 확인했다.
 
+## 13quinquies. 루트 chunk03 (24파일) — 2건 실패, **둘 다 6-U 의 것**
+
+```
+2 failed, 554 passed in 779.82s (0:12:59)
+```
+
+| 테스트 | 원인 | 조치 |
+| --- | --- | --- |
+| `test_settype_clone_contamination_audit::test_31_hidden_information_and_view_are_unchanged` | 🔴 **6-U** — 칸 수 26→27 | 핀 갱신 + `effect_codes` 금지 추가 |
+| `test_variable_rebinding_audit::test_32_hidden_information_and_the_view_are_unchanged` | 🔴 **6-U** — 같음 | 같음 |
+
+고친 뒤 둘 다 통과한다. 금지 목록은 약해지지 않았고 한 줄 늘었다.
+
+## 13sexies. §9 변이 테스트 — **15/15 전부 죽었다**
+
+내가 쓴 프로덕션 코드가 실제로 지켜지는지 보려고 변이 15개를 넣고 각각
+테스트를 돌렸다. 살아남은 변이가 **0건**이다.
+
+| 변이 | 무엇을 망가뜨리는가 | 결과 |
+| --- | --- | --- |
+| M1 | `script is None` → `()` 로 합친다 (§6 상황1/2 혼동) | **KILLED** |
+| M2 | `EFFECT_CANNOT_SSET` 을 감시 목록에서 뺀다 | **KILLED** |
+| M3 | `EFFECT_CANNOT_SUMMON` 을 뺀다 | **KILLED** |
+| M4 | `EFFECT_LIMIT_SUMMON_PROC` · `EFFECT_SUMMON_PROC` 을 뺀다 | **KILLED** |
+| M5 | 관측이 신호를 안 싣는다 (항상 `None`) | **KILLED** |
+| M6 | 관측이 신호를 `()` 로 싣는다 (전부 허가) | **KILLED** |
+| M7 | `canonical_state` 가 신호를 빼먹는다 | **KILLED** |
+| M8 | `to_dict` 가 `None` 을 `[]` 로 적는다 | **KILLED** |
+| M9 | 신호가 있어도 허가한다 | **KILLED** |
+| M10 | 스크립트가 없어도 허가한다 | **KILLED** |
+| M11 | 레벨 검사를 건너뛴다 (레벨 5+ 가 제물 없이 통과) | **KILLED** |
+| M12 | 통상 몬스터 갈래를 지운다 | **KILLED** |
+| M13 | `ORDINARY` 대신 `UNDETERMINED` 를 돌려준다 (수정 무효화) | **KILLED** |
+| M14 | `FORBIDDEN` 종류 검사를 지운다 (`TYPE_SPSUMMON` 통과) | **KILLED** |
+| M15 | `missing_rule` 을 빼먹는다 | **KILLED** |
+
+🔴 **M1 · M6 · M9 · M10 이 이 Phase 의 핵심 불변식을 지킨다** — "제약 없음"
+과 "정보 없음" 을 합치거나, 모름을 조용히 허가로 바꾸는 변이는 전부 죽는다.
+
+방법: 원본을 **메모리에 들고** 변이를 쓰고, `finally` 에서 되돌린 뒤
+`assert path.read_text() == original` 로 복원을 확인했다. `git checkout --`
+를 쓰지 않았다 (커밋되지 않은 작업을 버릴 위험이 있다). 변이가 적용된 채로
+다른 테스트를 돌리지 않았다.
+
 ## 13ter. 부록 — 재정 데이터 재배포 조사 (6-U 의 소환 판정과 **분리된** 사안)
 
 🔴 **이 절은 6-U 의 소환 조건 판정과 무관하다.** `test_27` · `test_29`

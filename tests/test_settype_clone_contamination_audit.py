@@ -1132,11 +1132,18 @@ def test_30_state_hash_and_rng_are_unchanged(repository):
 def test_31_hidden_information_and_view_are_unchanged(repository):
     """🟢 §15 — hidden-information · ``GameStateView`` 불변."""
     fields = {f.name for f in dataclasses.fields(CardDefinitionView)}
-    assert len(fields) == 26
+    #: 🔴 Phase 6-U 에서 26 → 27 (``normal_summon_restriction_signals``).
+    #: 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로
+    #: 26개였다. **금지 목록은 하나도 약해지지 않았다** — 새 칸이 싣는
+    #: 것은 블록 내용이 아니라 네 상수(``core.card_model.
+    #: NORMAL_SUMMON_RESTRICTION_CODES``)의 등장 여부뿐이다.
+    assert len(fields) == 27
     assert "effect_types" not in fields
     assert "script" not in fields
     assert "code" not in fields
+    assert "effect_codes" not in fields
     assert "effect_count" in fields
+    assert "normal_summon_restriction_signals" in fields
 
     duel = opened_duel(repository, seed=33)
     view = duel.view(0)

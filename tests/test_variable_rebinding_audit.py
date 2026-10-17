@@ -1226,10 +1226,17 @@ def test_31_state_hash_rng_and_digest_are_unchanged(repository):
 def test_32_hidden_information_and_the_view_are_unchanged(repository):
     """🟢 §10 — ``CardDefinitionView`` 가 블록 내용을 내보내지 않는다."""
     fields = {f.name for f in dataclasses.fields(CardDefinitionView)}
-    assert len(fields) == 26
+    #: 🔴 Phase 6-U 에서 26 → 27 (``normal_summon_restriction_signals``).
+    #: 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로
+    #: 26개였다. **금지 목록은 하나도 약해지지 않았다** — 새 칸이 싣는
+    #: 것은 블록 내용이 아니라 네 상수(``core.card_model.
+    #: NORMAL_SUMMON_RESTRICTION_CODES``)의 등장 여부뿐이다.
+    assert len(fields) == 27
     assert "effect_count" in fields
+    assert "normal_summon_restriction_signals" in fields
     for banned in ("categories", "properties", "ranges", "target_ranges",
-                   "effect_types", "code", "effects", "script"):
+                   "effect_types", "code", "effects", "script",
+                   "effect_codes"):
         assert banned not in fields, banned
     assert not hasattr(opened_duel(repository, seed=73).view(0), "effects")
 
