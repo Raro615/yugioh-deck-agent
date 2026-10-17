@@ -1137,12 +1137,24 @@ def test_29_the_search_ranking_digest_is_unchanged(repository):
 
 
 def test_30_hidden_information_and_the_view_are_unchanged(repository):
-    """🟢 §10 — ``CardDefinitionView`` 가 블록 내용을 **내보내지 않는다.**"""
+    """
+    🟢 §10 — ``CardDefinitionView`` 가 블록 내용을 **내보내지 않는다.**
+
+    🔴 Phase 6-U 에서 26 → 27 (``normal_summon_restriction_signals``). 이
+    테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로 26개였다.
+    **금지 목록은 하나도 약해지지 않았고 한 줄 늘었다** — 새 칸이 싣는 것은
+    스크립트 본문이 아니라 네 상수(``core.card_model.
+    NORMAL_SUMMON_RESTRICTION_CODES``)의 등장 여부뿐이고, 그 사실은
+    ``tests/engine/test_effect_monster_normal_summon.py`` 의 ``test_c04`` 가
+    카드 50장으로 따로 잰다.
+    """
     fields = {f.name for f in dataclasses.fields(CardDefinitionView)}
-    assert len(fields) == 26
+    assert len(fields) == 27
     assert "effect_count" in fields
+    assert "normal_summon_restriction_signals" in fields
     for banned in ("categories", "properties", "ranges", "target_ranges",
-                   "effect_types", "code", "effects", "script"):
+                   "effect_types", "code", "effects", "script",
+                   "effect_codes", "trigger_events", "locations"):
         assert banned not in fields, banned
     assert not hasattr(opened_duel(repository, seed=63).view(0), "effects")
 
