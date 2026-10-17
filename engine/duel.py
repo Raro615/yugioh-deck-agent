@@ -711,11 +711,53 @@ class Duel:
         )
 
     def _flow_actions(self, seat: int):
+        """
+        흐름을 움직이는 둘 — ``PASS`` 와 ``END_PHASE``.
+
+        🔴 **"패스할 수 없다" 의 이유가 둘이고, 그 둘은 다른 사실이다**
+        (Phase 6-S). 룰북이 그 둘을 따로 적는다 (``TURN PLAYER'S
+        PRIORITY``)::
+
+            As long as the turn player has Priority, the opponent cannot
+            activate cards or effects …
+            After a card's activation, and at the end of each phase or
+            step, Priority passes to the opponent.
+
+        ====================================  ==============================
+        **창이 닫혀 있다**                      우선권을 쥔 사람이 아직 넘기지
+                                              않았다. 🔴 넘기는 쪽 규칙이
+                                              **빠져 있다** — 엔진은 발동
+                                              뒤에만 창을 열고, 페이즈 · 스텝
+                                              의 끝에서는 열지 않는다
+        **창이 열려 있고 상대가 쥐었다**          빠진 규칙이 **없다.** 지금은
+                                              상대의 차례이고, 그 차례가
+                                              끝나면 이쪽으로 온다
+        ====================================  ==============================
+
+        6-S 전까지 이 둘이 ``elif seat != self.turn_player`` 하나에 묶여
+        있었고, 그래서 두 가지가 틀렸다 (실측).
+
+        * 창이 **열려 있는데** 상대가 쥔 자리에서 "우선권이 열려 있지
+          않습니다" 라고 적었다 — **거짓 문장**이다.
+        * 창이 열려 있고 상대가 쥐었는데 **이쪽이 턴 플레이어이면** 어느
+          분기도 밟지 않아 **후보 0 · 보류 0** 이 되었다. 읽는 쪽은 "할 것이
+          없다" 와 "상대를 기다린다" 와 "듀얼이 끝났다" 를 가를 수 없었다.
+        """
         allowed: list[PlayerAction] = []
         withheld: list[WithheldAction] = []
 
         if self.priority.is_open and self.priority.holds(seat):
             allowed.append(PlayerAction.passing(actor=seat))
+        elif self.priority.is_open:
+            # 🔴 **창은 열려 있다** — 다만 상대가 쥐고 있다. ``missing`` 이
+            # 없는 유일한 보류 자리다: 빠진 규칙이 아니라 **순서**다.
+            holder = self.priority.holder.seat
+            withheld.append(
+                WithheldAction(
+                    PlayerActionKind.PASS,
+                    f"응답 기회가 열려 있지만 지금은 P{holder} 의 차례입니다.",
+                )
+            )
         elif seat != self.turn_player:
             withheld.append(
                 WithheldAction(
