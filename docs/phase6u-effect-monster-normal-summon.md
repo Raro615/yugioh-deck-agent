@@ -410,6 +410,176 @@ Phase 에서 전체 루트 실행이 60분 한도에 걸려 결과 없이 중단
 계층을 봐야 한다. 테스트를 고쳐 통과시키지 않았고, 삭제하지도 약화하지도
 않았다. 그대로 두고 여기 적는다. §20 에서 다음 Phase 후보로 올린다.
 
+## 13bis. 루트 chunk01 (26파일) — 7건 실패, 셋만 6-U 의 것
+
+| 테스트 | 원인 | 조치 |
+| --- | --- | --- |
+| `test_clone_sibling_contamination_audit::test_31` | 🔴 **6-U** — `CardDefinitionView` 칸 수 26→27 | 핀 갱신 + 금지 목록에 `effect_codes` 추가 |
+| `test_create_effect_ordinal_audit::test_27` | 🔴 **6-U** — 같음 | 같음 |
+| `test_event_free_chain_semantic_audit::test_07` | 🔴 **6-U** — 같음 | 같음 |
+| `test_event_free_chain_semantic_audit::test_12` | Lua 코퍼스 드리프트 | 통상 마법 975→977 · 지속 마법 468→469 |
+| `test_event_free_chain_semantic_audit::test_13` | Lua 코퍼스 드리프트 | 통상 함정 917→918 |
+| `test_event_free_chain_semantic_audit::test_27` | **데이터 없음** | 🔴 **고치지 않았다** (아래 13bis.3) |
+| `test_effect_type_quick_audit::test_29` | **데이터 없음** | 🔴 **고치지 않았다** |
+
+### 13bis.1 6-U 가 원인이 아님을 어떻게 확인했는가
+
+프로덕션 3파일을 `5a145a5` 버전으로 **임시 교체**해 네 건을 다시 돌렸다.
+넷 전부 똑같이 실패한다.
+
+```
+# 5a145a5 버전으로 교체한 상태
+FAILED ...test_12_spell_corpus_activate_blocks_are_unanimous   E assert ('통상 마법', {True: 977})
+FAILED ...test_13_trap_corpus_and_the_counter_trap_counter_example  E assert 918 == 917
+FAILED ...test_27_the_official_corpus_never_uses_the_term       E assert 15 >= 600
+FAILED ...test_29_the_lua_names_are_absent_from_official_material  E assert 15 >= 800
+4 failed in 3.87s
+```
+
+교체 뒤 `git checkout HEAD --` 로 복원하고 작업 트리가 깨끗함(0개 변경)을
+확인했다. **커밋되지 않은 작업을 버린 것이 아니라 커밋된 내용을 되찾은
+것이다.**
+
+### 13bis.2 코퍼스 드리프트 두 건 (`test_12` · `test_13`)
+
+Lua 스크립트 코퍼스는 `.gitignore` 대상이고 컨테이너마다 다시 내려받는다.
+그 사이 카드가 늘어 `ACTIVATE` 블록 수가 움직였다 (통상 마법 +2 · 지속
+마법 +1 · 통상 함정 +1). 6-T 가 `archetype_setcode_constants.lua` 615→616
+을 처리한 것과 **같은 성격**이다.
+
+🔴 **두 시험의 결론은 하나도 약해지지 않았다.** 그것이 주장하는 것은 절대
+수가 아니다.
+
+- `test_12` 는 **만장일치**를 주장한다 → `per[label][False] == 0` 가 다섯
+  종류 전부에서 여전히 참이다 (그 단언은 건드리지 않았다)
+- `test_13` 은 **카운터 함정과의 대비**를 주장한다 → `EVENT_CHAINING` 144 ·
+  `FREE_CHAIN` 3/210 이 그대로다 (그 단언들도 건드리지 않았다)
+
+측정값(픽스처 `typed_cards` = `repository._cards.values()` 기준, alias 포함):
+
+```
+통상 마법 {True: 977}   장착 마법 {True: 32}   지속 마법 {True: 469}
+필드 마법 {True: 312}   의식 마법 {True: 5}
+통상 함정 {True: 918, False: 390}
+카운터 함정 EVENT_CHAINING 144 · FREE_CHAIN 3 · 합 210
+```
+
+### 13bis.3 🔴 고치지 않고 남긴 두 건 (`test_27` · `test_29`)
+
+두 시험은 `data/rules` · `data/rulings` · `data/ko` 의 파일을 세어
+`scanned >= 600` (또는 `>= 800`) 을 요구한다. 측정된 `scanned` 는 **15** 다.
+
+```
+data/rules:   3 파일
+data/rulings: 11 파일   (전부 data/rulings/ocg/, git 추적 11건)
+data/ko:      1 파일
+            ───────────
+              15
+```
+
+🔴 **15는 커밋된 파일 수와 정확히 같다.** 두 시험이 전제하는 829파일은
+`.gitignore` 에 적힌 `data/rulings/.cache/` 의 **크롤 결과**이고, 신규
+컨테이너에는 존재하지 않는다. 즉 **깨끗한 체크아웃에서 통과할 수 없는
+구조**이고, 이것은 6-U 가 만든 문제도 프로덕션 코드의 결함도 아니다 —
+시험이 커밋되지 않은 로컬 데이터에 의존한다.
+
+세 가지 손댈 방법이 있었고 **셋 다 하지 않았다.**
+
+| 가능한 조치 | 왜 하지 않았는가 |
+| --- | --- |
+| `scanned` 임계값을 15로 낮춘다 | **threshold 완화 금지.** 그리고 15파일에서 0건을 찾는 것은 "많은 공식 자료에 그 용어가 없다" 를 전혀 증명하지 못한다 — 시험의 의미가 사라진다 |
+| `data/rulings/.cache/` 를 크롤로 채운다 | 사용자가 `scripts/fetch_ocg_rulings.py --all` (14,000장 크롤) 실행을 금지했다 |
+| 데이터가 없으면 skip 한다 | **skip 추가 금지.** 그리고 실패를 가리는 일이다 |
+
+그래서 **실패한 채로 남겨 두고 여기 적는다.** 판단이 필요한 자리이므로
+사용자에게 올린다 — 선택지는 (가) 크롤 1회 허용, (나) 축소된 재정 묶음을
+저장소에 커밋, (다) 이 두 시험을 "로컬 데이터 필요" 로 명시적으로 분류하는
+구조를 만드는 것(그러면 `skip` 이 숨김이 아니라 **분류**가 된다)이다.
+
+## 13ter. 부록 — 재정 데이터 재배포 조사 (6-U 의 소환 판정과 **분리된** 사안)
+
+🔴 **이 절은 6-U 의 소환 조건 판정과 무관하다.** `test_27` · `test_29`
+(13bis.3) 를 어떻게 할지 결정하기 위한 조사 기록이고, 이 Phase 는 그
+두 테스트와 재정 데이터를 **한 줄도 바꾸지 않았다.**
+
+### 13ter.1 커밋된 11파일의 정체
+
+`scripts/fetch_ocg_rulings.py` 의 머리말이 직접 말한다.
+
+```
+# 샘플 (저장소에 커밋되는 검증용 표본)
+python -m scripts.fetch_ocg_rulings --sample
+```
+
+즉 `data/rulings/ocg/` 의 11파일은 **이미 fixture 다** — 파싱 검증용으로
+의도적으로 커밋된 표본이고, `--all` 의 크롤 캐시만 `.gitignore` 로 제외된다.
+`bb7796a` 의 커밋 메시지도 "db.yugioh-card.com 에서 **두 장만** 받아
+확인했다 (`--card-id`, `--all` 아님)" 이라고 적는다.
+
+### 13ter.2 재배포 허용 여부 — **확인되지 않는다**
+
+| 확인 항목 | 결과 |
+| --- | --- |
+| 공식 DB 저작권 표시 | `©2026 Konami Digital Entertainment.` · `©2020 Studio Dice/SHUEISHA, TV TOKYO, KONAMI.` |
+| DB 이용 조건 | **이용 약관 동의 필수** — "To use Yu-Gi-Oh! Neuron(TRADING CARD GAME CARD DATABASE), you must agree to the Terms of Use." |
+| DB 페이지의 라이선스·재배포 조항 | **없음** |
+| 약관 본문 | 🔴 **읽지 못했다.** `legal.konami.com` · `www.konami.com` 이 이 환경의 네트워크 정책에서 차단된다 (`getaddrinfo ENOTFOUND`) |
+| 저장소 `LICENSE` / `NOTICE` | **없음** |
+| 저장소 자체의 태도 | `.gitignore` — "원본 룰북 PDF 는 **저작물이라** 저장소에 넣지 않는다. 추출 결과만 커밋한다" |
+
+저작권 주장과 필수 약관은 확인됐고 **허용 조항은 확인할 수 없었다.**
+그래서 재정 데이터를 **한 건도 커밋하지 않았고**, 기존 캐시 파일을 추적
+대상으로 바꾸지도 않았다.
+
+### 13ter.3 🔴 fixture 로는 이 두 테스트의 주장을 담을 수 없다
+
+두 테스트가 주장하는 것은 **"공식 코퍼스 전체에 그 용어가 없다"** 는 전수
+부정이다 (`QUICK_O` 는 공식 용어가 아니다 · `free chain` 은 공식 표현이
+아니다). fixture 는 **고른 데이터**이므로 "내가 고른 데이터에 없다" 는
+공식 용어 여부를 증명하지 못한다.
+
+그래서 **실제 공식 재정을 검증하는 테스트**(전수 부정)와 **fixture 기반
+구조 테스트**(훑는 기계가 작동하는가)는 서로 다른 것이고, 뒤의 것으로 앞의
+것을 대체하면 통과하는 테스트가 더 적게 증명한다. 대체하지 않았다.
+
+### 13ter.4 그런데 측정하면 깨진 것은 **대리 지표**다
+
+커밋된 공식 자료만으로 실제 내용을 쟀다.
+
+```
+커밋된 공식 자료 15파일 · 7,978 KB (≈8.0 MB)
+  data/rules/documents/sd-rulebook-en-v10.json    117 KB   공식 영문 룰북
+  data/rules/{index,structured}/*.json             25 KB
+  data/rulings/ocg/*.json (11파일)              1,328 KB   (4909.json 혼자 636 KB)
+  data/ko/ko-KR.json                           6,506 KB   공식 한국어 카드 텍스트 전량
+
+Lua 이름 적중 (QUICK_O · QUICK_F · TRIGGER_O · TRIGGER_F · EFFECT_TYPE): 0건
+"free chain" / "freechain" 적중: 0건
+
+양성 대조 — 공식 어휘는 실제로 잡힌다
+  룰북:     Quick Effect ✓  Spell Speed ✓  Ignition Effect ✓
+            Trigger Effect ✓  Flip Effect ✓
+  재정 표본: 誘発即時 ✓  誘発効果 ✓
+```
+
+🔴 **두 테스트는 파일 *개수*를 세는데, 주장은 공식 텍스트의 *분량*에 관한
+것이다.** `scanned >= 600` / `>= 800` 은 작은 HTML 캐시 파일 829개에 맞춰
+교정된 **대리 지표**이고, 지금 커밋된 15파일은 8.0 MB 의 공식 텍스트를
+담으면서 적중 0건이며 양성 대조가 전부 작동한다.
+
+즉 **주장의 실체는 이미 깨끗한 체크아웃에서 검증 가능하고, 깨진 것은 파일
+개수라는 대리 지표뿐이다.**
+
+### 13ter.5 결론과 남긴 결정
+
+올바른 수정은 fixture 도 임계값 인하도 아니라 **대리 지표를 바꾸는 것**
+— 파일 개수 대신 훑은 공식 텍스트의 분량과 양성 대조를 재는 것이다. 주장을
+**강화**하는 방향이지만 어쨌든 assertion 변경이므로, 승인 없이 손대지
+않았다. 두 테스트는 실패한 채로 남아 있다.
+
+하지 않은 것: 재정 데이터 커밋 · 캐시 파일 추적 전환 · 임계값 인하 ·
+skip 추가 · assertion 완화 · 크롤 실행 · 6-U 소환 판정 로직과의 혼합.
+
 ## 14. §15 — 거짓 성공 점검
 
 각 항목에 **무엇으로 확인했는지**를 함께 적는다. 확인하지 않은 것은
