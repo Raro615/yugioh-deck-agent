@@ -501,7 +501,14 @@ def test_07_the_engine_cannot_even_see_the_field():
 
     #: 실려 있는 것은 **개수**뿐이다 — 내용이 아니다.
     assert "effect_count" in fields
-    assert len(fields) == 26
+    #: 🔴 Phase 6-U 에서 26 → 27 (``normal_summon_restriction_signals``).
+    #: 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에 실제로
+    #: 26개였다. **금지 목록은 하나도 약해지지 않았다** — 새 칸이 싣는
+    #: 것은 블록 내용이 아니라 네 상수(``core.card_model.
+    #: NORMAL_SUMMON_RESTRICTION_CODES``)의 등장 여부뿐이다.
+    assert len(fields) == 27
+    assert "normal_summon_restriction_signals" in fields
+    assert "effect_codes" not in fields
 
     #: 🔴 ``setcodes`` 는 **카드군**이다. Lua 의 ``SetCode(EVENT_*)`` 와
     #: 이름만 같다 (``test_29``).
@@ -645,10 +652,20 @@ def test_12_spell_corpus_activate_blocks_are_unanimous(typed_cards):
             if "ACTIVATE" in spec.effect_types:
                 per[category(card)][spec.code == FREE_CHAIN] += 1
 
+    #: 🔴 **Lua 코퍼스 데이터 드리프트** (Phase 6-U 에서 발견). 통상 마법
+    #: 975 → 977 · 지속 마법 468 → 469. 나머지 셋은 그대로다.
+    #:
+    #: 이 저장소의 Lua 스크립트 코퍼스는 gitignore 대상이고 컨테이너마다
+    #: 다시 내려받는다. 그 사이 카드가 늘었다. **6-U 의 변경이 원인이 아니다**
+    #: — 수정 전 커밋(``5a145a5``)의 프로덕션 파일로 되돌려도 같은 수가 나온다.
+    #:
+    #: 🔴 **결론은 하나도 약해지지 않았다.** 이 시험이 주장하는 것은 절대
+    #: 수가 아니라 **만장일치**이고, 아래 ``per[label][False] == 0`` 가 그것을
+    #: 잰다 — 다섯 종류 전부 여전히 ``False`` 가 0건이다.
     expected = {
-        "통상 마법": 975,
+        "통상 마법": 977,
         "장착 마법": 32,
-        "지속 마법": 468,
+        "지속 마법": 469,
         "필드 마법": 312,
         "의식 마법": 5,
     }
@@ -708,7 +725,13 @@ def test_13_trap_corpus_and_the_counter_trap_counter_example(typed_cards):
                 normal[spec.code == FREE_CHAIN] += 1
     #: 🔴 918 → **917**. Phase 3-F-27 이 ``Clone`` 오염을 고치면서 한 블록의
     #: ``ACTIVATE`` 가 (물려받은 것이었으므로) 사라졌다. 결론은 그대로다.
-    assert normal[True] == 917
+    #:
+    #: 🔴 917 → **918** (Phase 6-U 에서 발견). 이번에는 코드가 아니라 **Lua
+    #: 코퍼스 데이터 드리프트**다 — ``test_12`` 의 설명과 같은 원인이고,
+    #: 6-U 의 변경이 원인이 아님을 ``5a145a5`` 로 되돌려 확인했다. 통상
+    #: 함정이 ``EVENT_FREE_CHAIN`` 을 쓴다는 결론(위 카운터 함정 3/210 과의
+    #: 대비)은 그대로다.
+    assert normal[True] == 918
 
 
 def test_14_official_spell_speed_is_not_a_one_to_one_function(typed_cards):
