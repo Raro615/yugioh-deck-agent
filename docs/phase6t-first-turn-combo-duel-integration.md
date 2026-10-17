@@ -921,3 +921,13 @@ METRIC 6 실제 해결 = 14
 | `487986f` | `app/discord_bot.py` · `app/main.py` — `recipe` 를 더하고 실행과 계획을 가른다 |
 | `d5a0baa` | 테스트 — 새 파일 45개 + 움직인 기존 핀 다섯 |
 | (이 보고서) | `docs/phase6t-first-turn-combo-duel-integration.md` |
+
+### 푸시
+
+```
+$ git push -u origin claude/pensive-goodall-te1egy
+To https://github.com/Raro615/yugioh-deck-agent
+   67bb9aa..6ed7395  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy
+```
+
+보고서 commit: `6ed7395`
