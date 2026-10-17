@@ -726,7 +726,13 @@ def cmd_deck(agent: DeckAgent, args) -> int:
 
 
 def cmd_combo(agent: DeckAgent, args) -> int:
-    """사용자가 지정한 초기 패로 전개 계획을 만든다 (Phase 4-B)."""
+    """
+    사용자가 지정한 초기 패로 전개를 본다 (Phase 4-B · 6-T).
+
+    🔴 ``--recipe`` 를 주면 **실제 엔진으로 돌린다** (Phase 6-T). 주지
+    않으면 예전처럼 정적 계획만 만들고, 왜 실행하지 않았는지 적는다 —
+    레시피 없이 실행하면 덱 장수를 조건으로 보는 효과가 거짓으로 통과한다.
+    """
     from deck.hand import FixedHand
     from deck.planner import ComboPlanner
     from deck.report import render_plan, render_simulator_steps
@@ -737,11 +743,66 @@ def cmd_combo(agent: DeckAgent, args) -> int:
     for name in unresolved + board_unresolved:
         print(f"  🔴 카드를 찾지 못했습니다: {name}")
 
+    recipe_text = getattr(args, "recipe", "") or ""
+    #: ``.ydk`` 파일 경로를 그대로 받는다 — EDOPro 가 내보낸 파일이다.
+    #: 🔴 줄바꿈이 들어간 레시피 문자열은 경로가 아니므로 먼저 걸러낸다
+    #: (``Path`` 에 아주 긴 문자열을 넣으면 OS 오류가 난다).
+    if recipe_text and "\n" not in recipe_text and len(recipe_text) < 400:
+        candidate = Path(recipe_text)
+        if candidate.is_file():
+            recipe_text = candidate.read_text(encoding="utf-8")
+    _print_opening(agent, recipe_text, hand_ids)
+
     plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
                                                board=board_ids)
+    print()
+    print("=" * 68)
+    print("아래는 실행하지 않은 정적 계획입니다 — 엔진으로 돌린 것이 아닙니다.")
+    print("=" * 68)
     print(render_plan(plan))
     print(render_simulator_steps(plan))
     return 0
+
+
+def _print_opening(agent: DeckAgent, recipe_text: str,
+                   hand_ids: "list[int]") -> None:
+    """🔴 **실제 엔진 실행 절** (Phase 6-T). 레시피가 없으면 그 사실을 적는다."""
+    from deck.opening import build_opening, execute_opening, opening_hand_size
+    from deck.recipe import parse_recipe
+    from deck.report import (
+        render_opening_board,
+        render_opening_run,
+        render_opening_setup,
+    )
+
+    print()
+    print("=" * 68)
+    print("실제 엔진 실행")
+    print("=" * 68)
+    if not recipe_text.strip():
+        print(f"  🔴 하지 않았습니다 — 실제 덱 레시피가 없습니다.")
+        print(f"  패 {opening_hand_size()}장만으로는 부족하고 덱 레시피"
+              " 전체가 필요합니다 — 남은 덱의 장수와 카드가 효과의 발동"
+              " 조건이기 때문입니다.")
+        print("  넘기는 방법: --recipe \"욕망의 항아리 x3, 11091375 x37\"")
+        print("              또는 --recipe <경로>.ydk")
+        return
+
+    parsed = parse_recipe(recipe_text, agent.repository)
+    for note in parsed.notes:
+        print(f"  {note}")
+    for token in parsed.unresolved:
+        print(f"  ⚠️ 레시피에서 카드를 찾지 못했습니다: {token}"
+              " — 덱에 넣지 않았습니다")
+    if parsed.draft is None:
+        print("  🔴 레시피에서 카드를 하나도 읽지 못해 실행하지 않았습니다.")
+        return
+
+    setup = build_opening(agent.repository, parsed.draft, hand_ids)
+    run = execute_opening(setup, agent.repository)
+    print(render_opening_setup(setup))
+    print(render_opening_run(run))
+    print(render_opening_board(setup, agent.repository))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -798,6 +859,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="쉼표로 구분한 카드 ID 또는 카드명 (장수 제한 없음)")
     p.add_argument("--board", default="",
                    help="이미 필드·묘지에 있는 카드 (선택)")
+    p.add_argument("--recipe", default="",
+                   help="실제 덱 레시피 — 주면 엔진으로 실행 검증합니다."
+                        ' 예: "욕망의 항아리 x3, 11091375 x37" 또는 .ydk 경로')
     p.set_defaults(func=cmd_combo)
 
     return parser

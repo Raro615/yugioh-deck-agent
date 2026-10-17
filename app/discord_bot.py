@@ -71,7 +71,8 @@ BOT_NAME = "갈라테아"
 PING_DESCRIPTION = "갈라테아가 살아 있는지 확인합니다"
 SEARCH_DESCRIPTION = "한국어로 카드를 검색합니다"
 DECK_DESCRIPTION = "한국어 요청으로 덱 초안을 만들고 규격을 검증합니다"
-COMBO_DESCRIPTION = "지정한 초기 패로 전개 계획을 세웁니다 (실행 검증 아님)"
+COMBO_DESCRIPTION = ("지정한 초기 패로 전개를 봅니다 —"
+                     " recipe 를 주면 실제 엔진으로 실행합니다")
 
 #: 환경변수 이름 — 테스트와 문서가 같은 상수를 본다.
 TOKEN_ENV = "DISCORD_BOT_TOKEN"
@@ -570,8 +571,74 @@ def _combo_step_lines(agent, plan) -> "list[str]":
     return lines
 
 
+def _executed_lines(agent, recipe_text: str,
+                    hand_ids: "list[int]") -> "list[str]":
+    """
+    🔴 **실제 엔진 실행 절** (Phase 6-T). 레시피가 없으면 빈 목록이 아니라
+    **무엇이 부족한지** 적는다 (§5 · §15).
+
+    ``deck:`` 초안을 실제 덱으로 쓰지 않는 이유가 여기에 적혀 있어야 한다 —
+    출력에 없으면 사용자는 초안으로 검증했다고 믿는다.
+    """
+    from deck.opening import build_opening, execute_opening, opening_hand_size
+    from deck.recipe import parse_recipe
+    from deck.report import (
+        render_opening_board,
+        render_opening_run,
+        render_opening_setup,
+    )
+
+    expected = opening_hand_size()
+    if not recipe_text or not recipe_text.strip():
+        return [
+            "**[실제 엔진 실행]**",
+            "🔴 **하지 않았습니다** — 실제 덱 레시피가 없습니다.",
+            f"선공 전개를 엔진으로 검증하려면 패 {expected}장만으로는"
+            " 부족하고 **덱 레시피 전체**가 필요합니다 — 남은 덱의 장수와"
+            " 카드가 효과의 발동 조건이기 때문입니다 (예: 욕망의 항아리는"
+            " 자신 덱에 2장 이상이어야 해결됩니다).",
+            "🔴 `deck:` 는 **자연어 요청**이고 이 저장소가 추천한 초안을"
+            " 만듭니다 — 사용자가 확정한 덱이 아니므로 그것으로 실행"
+            " 검증하지 않습니다.",
+            "넘기는 방법 (`recipe:`):",
+            "  `recipe:욕망의 항아리 x3, 11091375 x37`",
+            "  또는 YDK 그대로 (`#main` 아래 패스코드 한 줄에 하나)",
+        ]
+
+    parsed = parse_recipe(recipe_text, agent.repository)
+    lines = ["**[실제 엔진 실행]**"]
+    if parsed.unresolved:
+        names = ", ".join(f"`{t}`" for t in parsed.unresolved[:10])
+        lines.append(f"⚠️ 레시피에서 카드를 찾지 못했습니다: {names}"
+                     " — **덱에 넣지 않았습니다.**")
+    for note in parsed.notes:
+        lines.append(f"  {note}")
+    if parsed.draft is None:
+        lines.append("🔴 레시피에서 카드를 하나도 읽지 못해 **실행하지"
+                     " 않았습니다.**")
+        return lines
+
+    setup = build_opening(agent.repository, parsed.draft, hand_ids)
+    run = execute_opening(setup, agent.repository)
+    #: 🔴 **한 줄 요약은 실측에서만 나온다.** 실행한 걸음 · 해결된 걸음 ·
+    #: 상태가 바뀐 걸음을 각각 센다 (세 사실을 묶지 않는다 — 6-R).
+    if setup.can_run:
+        lines.append(
+            f"✅ **엔진이 실제로 {run.executed}걸음 실행**했습니다"
+            f" (해결 {run.resolved} · 상태 변경 {run.state_changes})."
+            " 아래는 실측 기록입니다."
+        )
+    else:
+        lines.append("🔴 **실행하지 않았습니다** — 입력 검증을 통과하지"
+                     " 못했습니다 (아래 참조).")
+    lines.extend(render_opening_setup(setup).splitlines())
+    lines.extend(render_opening_run(run).splitlines())
+    lines.extend(render_opening_board(setup, agent.repository).splitlines())
+    return lines
+
+
 def combo_messages(agent, hand_text: str, board_text: str = "",
-                   deck_text: str = "") -> "list[str]":
+                   deck_text: str = "", recipe_text: str = "") -> "list[str]":
     """
     ``/combo`` 의 응답. **discord 를 모른다.** 메시지 여러 개를 돌려준다.
 
@@ -644,14 +711,32 @@ def combo_messages(agent, hand_text: str, board_text: str = "",
             lines.append(f"덱 초안과 비교: `{deck_text}`"
                          f" → 메인 {draft.main_count}장")
 
+    #: 🔴 **실제 레시피를 주면 엔진으로 돌린다** (Phase 6-T). 자연어
+    #: ``deck:`` 초안과 **가르는 것이 요점**이다 — 초안은 이 저장소가 추천한
+    #: 구성이고 사용자가 확정한 덱이 아니다 (§5).
+    executed_lines = _executed_lines(agent, recipe_text, hand_ids)
+
     plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
                                                board=board_ids, draft=draft)
 
     verdict = combo_verdict(plan)
-    lines.append("")
-    lines.append(f"**판정: {verdict.describe_ko()}**")
-    lines.append(verdict.detail_ko())
 
+    #: 🔴 **실제 실행을 정적 계획보다 앞에 둔다.** 둘을 같은 목록에 섞지
+    #: 않고, 먼저 "실제로 돌린 것" 을 보여 준 다음 "돌리지 않은 계획" 을
+    #: 보여 준다 (§13 "사용자에게 혼동시키지 않는다").
+    if executed_lines:
+        lines.append("")
+        lines.extend(executed_lines)
+
+    lines.append("")
+    lines.append("**[아래는 실행하지 않은 정적 계획입니다]**")
+    lines.append("🔴 카드 데이터를 읽어 만든 계획이고 **엔진으로 돌린 것이"
+                 " 아닙니다.**")
+    #: 🔴 **``ComboVerdict`` 는 이 정적 계획의 판정이다** (Phase 6-T §13).
+    #: 맨 위에 두면 위의 "실제 엔진 실행" 결과의 판정처럼 읽힌다 — 그래서
+    #: 이 절 안으로 옮겼다. 판정 자체는 바꾸지 않았다 (그것은 옳다).
+    lines.append(f"**정적 계획의 판정: {verdict.describe_ko()}**")
+    lines.append(verdict.detail_ko())
     lines.extend(_combo_step_lines(agent, plan))
 
     if plan.stopped_reason:
@@ -747,7 +832,7 @@ class SearchService:
         return search_message(self._agent, query, limit=limit)
 
     def combo_texts(self, hand_text: str, board_text: str = "",
-                    deck_text: str = "") -> "list[str]":
+                    deck_text: str = "", recipe_text: str = "") -> "list[str]":
         """
         전개 계획을 세워 **메시지 목록**을 돌려준다.
 
@@ -761,10 +846,11 @@ class SearchService:
             return [COMBO_UNAVAILABLE_MESSAGE]
         try:
             return combo_messages(self._agent, hand_text, board_text,
-                                  deck_text)
+                                  deck_text, recipe_text)
         except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
             logger.exception("전개 계획 생성에 실패했습니다. 패=%r 필드=%r"
-                             " 덱=%r", hand_text, board_text, deck_text)
+                             " 덱=%r 레시피=%r", hand_text, board_text,
+                             deck_text, recipe_text)
             return [COMBO_ERROR_MESSAGE]
 
     def deck_texts(self, request_text: str) -> "list[str]":
@@ -928,14 +1014,16 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         hand="초기 패 — 카드 이름이나 ID 를 쉼표로. 예: 오르페골 디베르,"
              " 오르페골 스켈레촌",
         board="(선택) 이미 필드·묘지에 있는 카드",
-        deck="(선택) 덱 요청 — 주면 이 패가 덱에서 나올 수 있는지 함께 봅니다")
+        deck="(선택) 덱 요청 — 주면 이 패가 덱에서 나올 수 있는지 함께 봅니다",
+        recipe="(선택) 실제 덱 레시피 — 주면 엔진으로 실행 검증합니다."
+               " 예: 욕망의 항아리 x3, 11091375 x37 / 또는 YDK")
     async def combo_command(interaction: "discord.Interaction",
                             hand: str, board: str = "",
-                            deck: str = "") -> None:
+                            deck: str = "", recipe: str = "") -> None:
         #: 🔴 ``/search`` · ``/deck`` 과 같은 순서다.
         await interaction.response.defer()
         texts = await asyncio.to_thread(
-            combo_service.combo_texts, hand, board, deck)
+            combo_service.combo_texts, hand, board, deck, recipe)
         for text in texts:
             await interaction.followup.send(text)
 
