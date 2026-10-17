@@ -865,3 +865,14 @@ METRIC 침묵 = 1 ['D2']                 METRIC 침묵 = 0 []
 | `2ef071e` | `engine/duel.py` — 패스할 수 없는 두 이유를 가른다 |
 | `47a9286` | 테스트 — 새 파일 39개 + 움직인 기존 핀 둘 |
 | (이 보고서) | `docs/phase6s-legal-action-execution-consistency.md` |
+
+### 푸시
+
+```
+$ git push -u origin claude/pensive-goodall-te1egy
+To https://github.com/Raro615/yugioh-deck-agent
+   c362a0f..cdaf2d4  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy
+branch 'claude/pensive-goodall-te1egy' set up to track 'origin/claude/pensive-goodall-te1egy'.
+```
+
+보고서 commit: `cdaf2d4`
