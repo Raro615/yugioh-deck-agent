@@ -496,6 +496,86 @@ data/ko:      1 파일
 저장소에 커밋, (다) 이 두 시험을 "로컬 데이터 필요" 로 명시적으로 분류하는
 구조를 만드는 것(그러면 `skip` 이 숨김이 아니라 **분류**가 된다)이다.
 
+## 13quater. 루트 chunk02 (26파일) — 6건 실패, **6-U 가 만든 것은 0건**
+
+```
+6 failed, 573 passed, 9 skipped in 1033.20s (0:17:13)
+```
+
+| 테스트 | 원인 | 6-U 가 만들었나 |
+| --- | --- | --- |
+| `test_korean_overlay_display_boundary_audit::test_21_no_existing_test_was_modified_or_deleted` | 감사가 **움직이는 `HEAD`** 와 비교한다 | **아니다** (아래 13quater.1) |
+| `test_korean_overlay_return_value_audit::test_11_the_sole_discarded_apply_claim_is_scoped_to_production` | `PRODUCTION_DIRS` 에 `deck` 이 없다 | **아니다** — 6-T 가 `deck/` 를 만들었다 |
+| `test_korean_overlay_unapplied_audit::test_01` | 카드 DB / ko 오버레이 드리프트 | **아니다** |
+| `test_korean_overlay_unapplied_audit::test_13` | 같음 | **아니다** |
+| `test_korean_overlay_unapplied_audit::test_21` | 같음 | **아니다** |
+| `test_korean_overlay_unapplied_audit::test_25` | 같음 | **아니다** |
+
+### 13quater.1 `test_21` — 감사가 자기 Phase 가 아니라 `HEAD` 를 본다
+
+이 감사는 3-F-44 Phase 가 **기존 테스트를 수정하지 않았음**을 주장한다.
+그런데 끝점을 `counts("HEAD")` 로 잡아서, **그 뒤의 모든 Phase** 가 기존
+파일에 테스트를 한 건이라도 더하면 깨진다.
+
+`def test_` 개수를 시점별로 직접 세어 보면:
+
+| 시점 | 달라진 테스트 파일 |
+| --- | --- |
+| 3-F-44 자신의 마지막 커밋 `cdeaf7a7` | **0개** ← 🔴 감사의 **실제 주장은 참이다** |
+| `5a145a5` (6-U 시작 전) | **1개** — `tests/engine/test_random_selection.py` 37→38 ← **이미 실패하고 있었다** |
+| HEAD (6-U 적용 후) | 2개 — 위의 한 건 + `tests/engine/test_normal_summon.py` 59→60 |
+
+즉 **6-U 전에 이미 빨간불**이었고, 6-U 는 이미 실패하던 단언에 줄 하나를
+더했을 뿐이다. 6-U 가 더한 그 한 건은 `test_an_effect_monster_whose_
+restriction_cannot_be_read_is_still_unknown` — 체츠커로 보류 경로를 고정하는
+**정당한 추가**다.
+
+🔴 **고치지 않았다.** 고치려면 감사의 끝점을 `shas[0]` 로 바꿔야 하는데
+그것은 범위 밖의 assertion 변경이다. 되돌리려면 정당한 테스트 추가를
+지워야 하므로 그쪽도 하지 않는다.
+
+### 13quater.2 `test_11` — `PRODUCTION_DIRS` 에 `deck` 이 없다
+
+```
+PRODUCTION_DIRS = ("analysis","app","core","engine","rules","rulings",
+                   "scripts","sources","agent")
+```
+
+`rows` 에 `('deck/opening.py', 352, False)` 가 들어 있는데 `deck` 이 목록에
+없어 `len(prod) + len(tests) == len(rows)` 가 **12 + 339 ≠ 354** 로 깨진다.
+`deck/` 는 **6-T** 가 만든 패키지다. 6-U 는 `deck/` 를 한 줄도 고치지 않았다.
+
+### 13quater.3 드리프트 4건 — 카드 DB 가 4장 늘었다
+
+```
+load 레코드   14,514 → 14,518   (+4)
+합계 모집단   14,755 → 14,759   (+4)
+```
+
+`data/cards.cdb` 는 `.gitignore` 대상이고 컨테이너마다 다시 내려받는다
+(`python -m scripts.fetch_official_db`). 그 사이 카드가 4장 늘었다.
+
+### 13quater.4 판별 방법 — 5건 전부 `5a145a5` 에서도 동일하게 실패
+
+프로덕션 3파일을 `5a145a5` 버전으로 임시 교체해 다시 돌렸다. **숫자까지
+똑같다.**
+
+```
+# 5a145a5 버전으로 교체한 상태
+E assert (12 + 339) == 354
+E AssertionError: {'ko 항목': 13899, 'load 레코드': 14518, '오버레이 적용': 13892, 'canonical 카드': 14127}
+E assert 14759 == 14755
+E assert 14759 == 14755
+E assert (14518 + 241) == 14755
+5 failed, 30 passed, 4 skipped in 106.89s
+```
+
+(`test_21` 은 git 이력을 보는 감사라 프로덕션 교체로는 판별되지 않으므로
+위 13quater.1 처럼 `def test_` 개수를 시점별로 직접 셌다.)
+
+교체 뒤 `git checkout HEAD --` 로 복원하고 작업 트리가 깨끗함(0개 변경)을
+확인했다.
+
 ## 13ter. 부록 — 재정 데이터 재배포 조사 (6-U 의 소환 판정과 **분리된** 사안)
 
 🔴 **이 절은 6-U 의 소환 조건 판정과 무관하다.** `test_27` · `test_29`
