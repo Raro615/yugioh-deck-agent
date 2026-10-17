@@ -153,3 +153,122 @@ def render_simulator_steps(plan: ComboPlan) -> str:
     lines.append("  🔴 사이트는 규칙을 집행하지 않습니다 — 조작이"
                  " 된다는 것이 합법이라는 뜻은 아닙니다")
     return "\n".join(lines)
+
+# ======================================================================
+# Phase 6-T — 실제 실행 결과
+# ======================================================================
+
+
+def render_opening_setup(setup) -> str:
+    """
+    선공 상태 구성 결과. 🔴 **검증한 것과 못한 것을 같은 표에 섞지 않는다.**
+    """
+    lines = ["", "선공 상태 구성", _RULE]
+    if setup.duel is None:
+        lines.append("  🔴 상태를 만들지 않았습니다.")
+    else:
+        duel = setup.duel
+        lines.append(f"  턴 {duel.state.turn.turn_number} ·"
+                     f" {duel.state.turn.phase.value} · 선공 P0")
+        lines.append(f"  시작 패 {len(setup.hand)}장 ·"
+                     f" 남은 메인 덱 {len(setup.deck_rest)}장 ·"
+                     f" 엑스트라 {len(setup.extra)}장")
+        lines.append("  선공 첫 턴 드로우 없음 (룰북) · 일반 소환권 미사용"
+                     " · 사용한 효과 없음")
+
+    satisfied = [f for f in setup.all_findings
+                 if f.outcome is ValidationOutcome.SATISFIED]
+    lines.append("")
+    lines.append(f"  검증 통과 {len(satisfied)}건")
+    if setup.violations:
+        lines.append(f"  🔴 위반 {len(setup.violations)}건")
+        for finding in setup.violations:
+            lines.append(f"    - {finding.rule}: {finding.detail}")
+    if setup.unverifiable:
+        lines.append(f"  ⚠️ 검증 불가 {len(setup.unverifiable)}건"
+                     " — **문제 없음이 아닙니다**")
+        for finding in setup.unverifiable:
+            lines.append(f"    - {finding.rule}: {finding.detail}")
+    if setup.blockers:
+        lines.append("")
+        lines.append("  🔴 실행하지 않은 이유")
+        for blocker in setup.blockers:
+            lines.append(f"    - {blocker}")
+    if setup.unknowns:
+        lines.append("")
+        lines.append("  🔴 알 수 없는 것 (실행 결과를 읽을 때 함께 보아야 합니다)")
+        for unknown in setup.unknowns:
+            lines.append(f"    - {unknown}")
+    return "\n".join(lines)
+
+
+def render_opening_run(run) -> str:
+    """
+    **실제로 실행한 걸음**들. 🔴 정적 계획과 섞지 않는다.
+
+    각 걸음이 세 사실을 따로 적는다 — 행위 수락 · 체인 등록 · 효과 해결
+    (Phase 6-R · 6-T).
+    """
+    lines = ["", "🔴 실제 엔진 실행 (검증된 걸음)", _RULE]
+    if not run.steps:
+        lines.append("  실행한 걸음이 없습니다.")
+    for step in run.steps:
+        lines.append(f"  {step.describe_ko()}")
+        bits = [f"판정 {step.gate_code}",
+                f"수락 {'예' if step.accepted else '아니오'}",
+                f"결과 {step.step_code}"]
+        if step.chain_links_after:
+            bits.append(f"체인 링크 {step.chain_links_after}"
+                        f" (해결 {step.chain_resolved_after})")
+        bits.append("상태 변경 " + ("있음" if step.state_changed else "없음"))
+        lines.append(f"      {' · '.join(bits)}")
+        if step.effect_ref:
+            lines.append(f"      효과 {step.effect_ref}"
+                         + (f" · 대상 {len(step.targets)}개"
+                            if step.targets else ""))
+        if step.effect_events:
+            lines.append(f"      적용된 효과 기록: "
+                         f"{', '.join(step.effect_events)}")
+        lines.append(f"      이유: {step.reason}")
+        if step.note:
+            lines.append(f"      🔴 {step.note}")
+        lines.append(f"      이 뒤의 행동 후보 {step.next_candidates}건")
+    lines.append("")
+    lines.append(f"  실행 {run.executed}걸음 · 해결 {run.resolved}걸음 ·"
+                 f" 상태 변경 {run.state_changes}걸음")
+    if run.stopped_reason:
+        lines.append(f"  멈춘 이유: {run.stopped_reason}")
+    return "\n".join(lines)
+
+
+def render_opening_board(setup, repository=None) -> str:
+    """실행 뒤의 판 — **읽은 것만** 적는다. 이름은 저장소가 있을 때만."""
+    from engine.vocabulary import Zone
+
+    lines = ["", "현재까지의 결과 (실제 GameState)", _RULE]
+    if setup.duel is None:
+        lines.append("  상태가 없습니다.")
+        return "\n".join(lines)
+    state = setup.duel.state
+    rows = (
+        ("몬스터 존", Zone.MZONE), ("마법·함정 존", Zone.SZONE),
+        ("패", Zone.HAND), ("묘지", Zone.GRAVE), ("제외", Zone.REMOVED),
+        ("엑스트라 덱", Zone.EXTRA), ("남은 덱", Zone.DECK),
+    )
+    for label, zone in rows:
+        cards = [c for c in state.player(0).zone(zone) if c]
+        if zone is Zone.DECK:
+            lines.append(f"  {label}: {len(cards)}장")
+            continue
+        def _label(card) -> str:
+            found = repository.get(card.card_id) if repository else None
+            return (f"{found.display_name()} [{card.card_id}]" if found
+                    else f"[{card.card_id}]")
+
+        names = ", ".join(_label(c) for c in cards) or "없음"
+        lines.append(f"  {label}: {len(cards)}장 — {names}")
+    lines.append("")
+    lines.append("  🔴 집의 강도 평가는 미구현입니다 (Phase 6-V). 위에 적은"
+                 " 것은 검증된 현재 자원뿐이고, 방해 수단의 수를 카드"
+                 " 텍스트만 보고 세지 않았습니다.")
+    return "\n".join(lines)
