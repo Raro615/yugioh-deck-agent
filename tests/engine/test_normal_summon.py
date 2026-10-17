@@ -58,7 +58,8 @@ DARK_MAGICIAN = 46986414  # 블랙 매지션 — 레벨 7 통상 (제물 2장)
 DARK_HOLE = 53129443  # 블랙홀 — 마법 카드
 CHAOS_SOLDIER = 5405694  # 카오스 솔저 — 의식 몬스터
 ULTIMATE_DRAGON = 23995346  # 궁극의 푸른 눈의 백룡 — 융합 (엑스트라 덱)
-KURIBOH = 40640057  # 크리보 — 레벨 1 **효과** 몬스터
+KURIBOH = 40640057  # 크리보 — 레벨 1 **효과** 몬스터 (6-U 에서 허가가 났다)
+CETUS = 77435268  # 체츠커 — 효과 몬스터이고 **스크립트가 없다** (6-U: 모른다)
 
 
 # ======================================================================
@@ -261,13 +262,23 @@ def test_a_refused_summon_does_not_spend_the_right(state, executor):
         summon(state, BLUE_EYES),  # 제물이 필요하다 (UNKNOWN)
         summon(state, DARK_HOLE),  # 마법 카드 (INVALID)
         summon(state, CHAOS_SOLDIER),  # 의식 몬스터 (INVALID)
-        summon(state, KURIBOH),  # 효과 몬스터 (UNKNOWN)
         PlayerAction.normal_summon(MINE, InstanceId(9999)),  # 없는 카드
     ):
         executor.execute(state, action)
 
     assert summoned_count(state) == 0
     assert len(state.player(MINE).monster_zone) == 0
+
+    #: 🔴 **크리보는 Phase 6-U 에서 허가가 났다.** 전까지 이 목록에
+    #: "효과 몬스터 (UNKNOWN)" 로 들어 있었는데, 그 전제가 틀렸다 — 크리보의
+    #: 스크립트에는 자신의 일반 소환을 막는 상수가 한 건도 없고, 룰북이
+    #: 말하는 "most Effect Monsters" 에 해당한다 (RULE-SUMMON-009).
+    #:
+    #: 그래서 여기서는 **대조군**이 된다: 실패가 권리를 쓰지 않는다는 것과
+    #: 성공이 권리를 **정확히 한 번** 쓴다는 것은 같은 불변식의 양면이다.
+    executor.execute(state, summon(state, KURIBOH))
+    assert summoned_count(state) == 1
+    assert len(state.player(MINE).monster_zone) == 1
 
 
 @requires_official_db
@@ -439,17 +450,49 @@ def test_a_monster_that_needs_tributes_is_unknown_not_refused(state):
 
 
 @requires_official_db
-def test_an_effect_monster_is_unknown_because_its_text_is_unread(state):
+def test_an_effect_monster_without_a_restriction_signal_is_permitted(state):
     """
     룰북은 "most Effect Monsters (**unless they have a specific
-    restriction**)" 라고 말한다. 그 제약은 카드 텍스트에 있고, 이 엔진은
-    아직 읽지 못한다. 확인하지 못한 것을 허가로 바꾸지 않는다.
+    restriction**)" 라고 말한다.
+
+    🔴 **이 시험은 Phase 6-U 까지 반대를 기대했다** — 효과 몬스터 전부가
+    ``UNKNOWN`` 이기를. 그 기대가 틀린 전제였다. 그것은 "제약을 읽는 계층이
+    없다" 를 "이 카드에 제약이 있는지 모른다" 로 옮겨 적은 것인데, **두
+    문장은 다른 사실이다.** 카드 자신의 스크립트에 제약 상수가 있는지는
+    이미 추출되어 있었고(``LuaScriptInfo.effect_codes``), 아무도 세어 본
+    적이 없었다. 크리보는 한 건도 없다 → 룰북의 "most" 다.
     """
     result = verdict(state, summon(state, KURIBOH))
+
+    assert result.validity is ActionValidity.VALID
+    assert result.code is ValidationCode.OK
+    assert result.missing_rule is None
+
+
+@requires_official_db
+def test_an_effect_monster_whose_restriction_cannot_be_read_is_still_unknown(
+    repository,
+):
+    """
+    **확인하지 못한 것을 허가로 바꾸지 않는다** — 그 불변식은 그대로다.
+
+    체츠커의 공식 텍스트는 「자신 필드에 몬스터가 존재할 경우, 이 카드는
+    일반 소환할 수 없다」 라고 **직접** 말하는데 이 저장소에 스크립트가
+    없다. 증거를 만들 수 없으므로 ``UNKNOWN`` 으로 남는다.
+    """
+    game = GameState.create(
+        repository, decks=([CETUS] + [FEATHERMAN] * 12, [FEATHERMAN] * 10)
+    )
+    game.draw(MINE, 2)
+    game.draw(THEIRS, 1)
+    game.turn.set_phase(Phase.MAIN1)
+
+    result = verdict(game, summon(game, CETUS))
 
     assert result.validity is ActionValidity.UNKNOWN
     assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
     assert "summoning-condition" in result.missing_rule
+    assert result.permits_execution is False
 
 
 @requires_official_db
@@ -494,7 +537,12 @@ def test_the_assessment_separates_four_answers(repository):
     assert assess(CHAOS_SOLDIER) is SummonEligibility.FORBIDDEN
     assert assess(ULTIMATE_DRAGON) is SummonEligibility.FORBIDDEN
     assert assess(DARK_HOLE) is SummonEligibility.FORBIDDEN
-    assert assess(KURIBOH) is SummonEligibility.UNDETERMINED
+    #: 🔴 Phase 6-U 전까지 크리보가 ``UNDETERMINED`` 쪽에 있었다. 네 답은
+    #: 그대로 넷이지만, **크리보는 그 답이 아니었다** — 자리를 옮긴 것이
+    #: 판정 체계가 아니라 이 한 장의 사실이다.
+    assert assess(KURIBOH) is SummonEligibility.ORDINARY
+    #: 네 번째 답은 **증거를 만들 수 없는 카드**가 지킨다.
+    assert assess(CETUS) is SummonEligibility.UNDETERMINED
 
 
 def test_an_unreadable_definition_is_undetermined_not_refused():

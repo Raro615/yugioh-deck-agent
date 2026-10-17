@@ -668,8 +668,9 @@ def test_h_the_level_is_not_even_consulted(repository):
 
 def test_h_nothing_became_permitted(repository):
     """
-    🔴 **이 변경은 허가를 하나도 늘리지 않았다.** ``ORDINARY`` 는 542장
-    그대로이고, 움직인 것은 "모른다 · 제물이 필요하다" → "안 된다" 뿐이다.
+    🔴 **그 변경(Phase 6-C)은 허가를 하나도 늘리지 않았다.** ``ORDINARY``
+    는 542장 그대로이고, 움직인 것은 "모른다 · 제물이 필요하다" → "안 된다"
+    뿐이었다.
 
     ::
 
@@ -677,6 +678,22 @@ def test_h_nothing_became_permitted(repository):
         forbidden       148 →  492   (+344)
         needs_tribute 2,066 → 1,804  (-262)
         undetermined  4,311 → 4,229  ( -82)
+
+    🔴 **Phase 6-U 가 그 다음 칸을 움직였다** (이 Phase 와 무관한 변경이고,
+    이 시험이 세는 것은 코퍼스 분포이므로 숫자가 따라 움직인다). 이번에
+    움직인 것은 "모른다" → "된다" 이고, 근거는 카드 **자신의 스크립트에
+    소환 제약 상수가 없다는 사실**이다 (``docs/phase6u-effect-monster-
+    normal-summon.md``).
+
+    ::
+
+        ordinary        542 → 4,570  (+4,028)
+        forbidden       492 →   492   (그대로)
+        needs_tribute 1,804 → 1,804  (그대로)
+        undetermined  4,229 →   201  (-4,028)
+
+    남은 201장은 **허가하지 않은 것이 옳은** 카드들이다 — 스크립트가 없는
+    153장과 제약 상수를 가진 48장.
     """
     import collections
 
@@ -689,10 +706,10 @@ def test_h_nothing_became_permitted(repository):
         ] += 1
 
     assert sum(counts.values()) == 7067
-    assert counts[SummonEligibility.ORDINARY] == 542
+    assert counts[SummonEligibility.ORDINARY] == 4570
     assert counts[SummonEligibility.FORBIDDEN] == 492
     assert counts[SummonEligibility.NEEDS_TRIBUTE] == 1804
-    assert counts[SummonEligibility.UNDETERMINED] == 4229
+    assert counts[SummonEligibility.UNDETERMINED] == 201
 
 
 # ======================================================================
@@ -710,40 +727,72 @@ def test_i_girsu_is_read_as_the_card_it_is(repository):
     assert definition.setcodes == (SET_ORCUST, SET_MEKK_KNIGHT)
 
 
-def test_i_girsu_is_still_undetermined_and_the_reason_is_not_the_archetype(
-    repository,
-):
+def test_i_girsu_is_permitted_and_the_reason_is_not_the_archetype(repository):
     """
-    🔴 **카드군 조건이 생겨도 기르수의 일반 소환은 열리지 않는다.**
+    🔴 **카드군 조건은 기르수의 일반 소환과 아무 상관이 없다** — 그것이
+    이 시험의 요지이고, 그 요지는 변하지 않았다.
 
-    막는 것이 다른 것이기 때문이다 — 효과 몬스터의 소환 제약을 카드
-    텍스트에서 읽는 계층이 없다 (``missing_rule``). 이 Phase 가 그것을
-    고치지 않았고, 고쳤다고 말하지도 않는다.
+    바뀐 것은 **다른 Phase 의 사실**이다. 이 시험은 카드군 조건이 생겼을
+    때 기르수가 ``UNDETERMINED`` 임을 적었고, 그때는 맞았다. 그러나 적어 둔
+    근거("효과 몬스터의 소환 제약을 읽는 계층이 없다")를 **"그러므로 영원히
+    모른다"** 로 읽으면 틀린 전제가 된다 — Phase 6-U 가 카드 자신의
+    스크립트를 읽어 기르수에 제약 상수가 **한 건도 없음**을 확인했다.
+
+    그래서 지금 확인할 것은 그대로 하나다: 판정의 이유에 **카드군이
+    나오지 않는다**. 열린 것도 카드군 때문이 아니다.
     """
     assessment = assess_normal_summon(
         CardDefinitionView.of(repository.get(GIRSU))
     )
 
-    assert assessment.eligibility is SummonEligibility.UNDETERMINED
-    assert assessment.permits_procedure is False
+    assert assessment.eligibility is SummonEligibility.ORDINARY
+    assert assessment.permits_procedure is True
     assert assessment.is_refusal is False
-    assert assessment.missing_rule is not None
-    assert "summoning-condition" in assessment.missing_rule
+    assert assessment.missing_rule is None
     # 카드군 때문이 아니다 — 이유에 카드군이 나오지 않는다.
     assert "카드군" not in assessment.reason
     assert "setcode" not in assessment.reason
+    assert "오르페골" not in assessment.reason
+    #: 근거는 룰북이다.
+    assert "RULE-SUMMON-009" in assessment.reason
 
 
-def test_i_the_validator_withholds_girsu_rather_than_refusing(state):
+def test_i_the_validator_permits_girsu_and_still_withholds_the_unreadable(
+    state, repository
+):
+    """
+    기르수 쪽은 Phase 6-U 에서 허가가 났다 (위 시험의 설명 참고).
+
+    🔴 **보류가 사라진 것이 아니다.** 증거를 만들 수 없는 카드는 그대로
+    보류된다 — 그쪽을 함께 재지 않으면 이 시험이 "이제 전부 허가된다" 로
+    읽힌다.
+    """
     action = PlayerAction.normal_summon(MINE, in_hand(state, GIRSU))
     result = ActionValidator(GameStateView.from_state(state, viewer=MINE)).validate(
         action
     )
 
-    assert result.validity is ActionValidity.UNKNOWN
-    assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert "summoning-condition" in result.missing_rule
-    assert result.permits_execution is False
+    assert result.validity is ActionValidity.VALID
+    assert result.code is ValidationCode.OK
+    assert result.missing_rule is None
+    assert result.permits_execution is True
+
+    #: 체츠커 — 공식 텍스트에 제약이 있는데 이 저장소에 스크립트가 없다.
+    cetus = 77435268
+    withheld = GameState.create(
+        repository, decks=([cetus] + [FEATHERMAN] * 12, [FEATHERMAN] * 10)
+    )
+    withheld.draw(MINE, 2)
+    withheld.draw(THEIRS, 1)
+    withheld.turn.set_phase(Phase.MAIN1)
+    held = ActionValidator(
+        GameStateView.from_state(withheld, viewer=MINE)
+    ).validate(PlayerAction.normal_summon(MINE, in_hand(withheld, cetus)))
+
+    assert held.validity is ActionValidity.UNKNOWN
+    assert held.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert "summoning-condition" in held.missing_rule
+    assert held.permits_execution is False
 
 
 def test_i_what_the_archetype_condition_does_buy_girsu(view, state):

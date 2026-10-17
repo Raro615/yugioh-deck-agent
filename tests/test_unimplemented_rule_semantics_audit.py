@@ -909,7 +909,9 @@ def test_14_two_real_conditions_report_missing_rules_without_unimplemented_rule(
     카드 정의를 읽고 **조건부로** 규칙 이름을 낸다.
 
     - 제물이 필요한 몬스터 → ``UNKNOWN`` + ``tribute-summon ...``
-    - 효과 몬스터 → ``UNKNOWN`` + ``summoning-condition ...``
+    - **소환 제약을 확인할 수 없는** 효과 몬스터 → ``UNKNOWN`` +
+      ``summoning-condition ...`` (스크립트가 없거나 제약 상수를 찾은 경우.
+      🔴 Phase 6-U 전까지는 효과 몬스터 **전부**였다)
     - 엑스트라 덱 · 의식 · 토큰 → ``FALSE`` + **빈 튜플** (거부다, 미구현이 아니다)
 
     ``UnimplementedRule`` 은 이것을 할 수 없다 — 무조건 ``UNKNOWN`` 이다.

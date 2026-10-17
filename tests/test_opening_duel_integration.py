@@ -733,7 +733,17 @@ def test_e03_the_journal_records_only_applied_effects(repository):
     **§10 · §14 — ``EventJournal`` 에 적용된 것만 남는다.**
 
     기록의 ``EFFECT`` 사건 수가 걸음들이 적은 ``effect_events`` 의 합과
-    같다 — 양쪽이 같은 사실을 센다.
+    같다 — 양쪽이 같은 사실을 센다. **그 불변식이 이 시험의 요지다.**
+
+    🔴 **목록 자체는 Phase 6-U 에서 길어졌다.** 전까지 한 건(욕망의
+    항아리)뿐이었는데, 그것은 효과 몬스터를 일반 소환할 수 없어서 어니스트가
+    필드에 나오지 못했기 때문이다 (당시의 ``test_g01`` 이 그 사실을 재어
+    두었다). 6-U 가 그 관문을 열었고, 이제 어니스트가 소환된 **뒤에** 그
+    효과가 발동·해결된다.
+
+    🔴 **소환이 효과를 적은 것이 아니다.** 소환 걸음의 ``effect_events`` 는
+    비어 있고, 발동은 **다른 걸음**이다 (6-U §19). 그 구분은 아래
+    ``test_g01`` 이 걸음 단위로 고정한다.
     """
     setup = opened(repository)
     run = execute_opening(setup, repository)
@@ -743,7 +753,7 @@ def test_e03_the_journal_records_only_applied_effects(repository):
     ]
     recorded = [ref for step in run.steps for ref in step.effect_events]
     assert journal_effects == recorded, (journal_effects, recorded)
-    assert journal_effects == [f"{POT}:e[0]"]
+    assert journal_effects == [f"{POT}:e[0]", f"{HONEST}:e[0]"]
 
 
 @pytest.mark.real_card
@@ -930,25 +940,23 @@ def activation_for(duel, seat, card_id):
 
 
 @pytest.mark.real_card
-def test_g01_an_effect_monster_cannot_be_normal_summoned_yet(repository):
+def test_g01_an_effect_monster_is_now_normal_summoned_in_this_path(repository):
     """
-    🔴 **§14-L 의 실측 — 어니스트는 이 경로에서 통상 소환할 수 없다.**
+    🔴 **이 시험은 깨지도록 적혀 있었다.** 6-T 가 이렇게 남겼다:
 
-    처음 이 시험은 "어니스트를 통상 소환한 뒤 효과를 발동한다" 로 적었고
-    **틀렸다.** 실측하면 검증기가 이렇게 답한다::
+        "이것이 Phase 6-U 가 넓히기 전에 알아야 하는 BLOCKER 이고, 이
+        시험이 그것을 재어서 남긴다 — **풀리면 이 단언이 깨진다.**"
 
-        어니스트    ['MONSTER', 'EFFECT'] -> UNKNOWN  RULE_NOT_IMPLEMENTED
-                   missing=summoning-condition (카드 텍스트의 소환 제약)
-        사파이어 드래곤 ['MONSTER', 'NORMAL'] -> VALID    OK
+    Phase 6-U 가 풀었다. 그때의 ``UNKNOWN`` 은 **당시 옳은 답**이었다 —
+    읽지 못하는 것을 허가로 올리면 규칙이 금지한 소환을 허가하게 되기
+    때문이다 (ADR-006 · §3-8). 틀린 전제는 "그 제약을 읽을 데이터가 없다"
+    쪽이었고, 6-U 가 카드 자신의 스크립트에서 제약 상수를 세어 어니스트에
+    **한 건도 없음**을 확인했다.
 
-    🔴 **그리고 그것이 옳다.** 효과 몬스터는 카드 텍스트에 소환 제약이 있을
-    수 있고 (예: "이 카드는 통상 소환할 수 없다"), 엔진은 그 문장을 읽지
-    못한다. 읽지 못하는 것을 ``VALID`` 로 올리면 규칙이 금지한 소환을
-    허가하게 된다 — ``UNKNOWN`` 이 정확한 답이다 (ADR-006 · §3-8).
-
-    그래서 **선공 전개의 폭이 통상 몬스터로 묶인다.** 이것이 Phase 6-U 가
-    넓히기 전에 알아야 하는 BLOCKER 이고, 이 시험이 그것을 재어서 남긴다 —
-    풀리면 이 단언이 깨진다.
+    🔴 **그래서 지금 재는 것은 셋이다.** 허가가 났다는 것 · 실제로 필드에
+    나온다는 것 · **그리고 소환이 효과를 발동한 것은 아니라는 것**
+    (6-U §19). 마지막 하나를 빼면 이 시험이 "소환했으니 효과도 돌았다" 로
+    읽힌다.
     """
     from engine.action import PlayerAction
     from engine.action_validation import ActionValidator
@@ -969,20 +977,89 @@ def test_g01_an_effect_monster_cannot_be_normal_summoned_yet(repository):
         )
         seen[instance.card_id] = verdict
 
-    #: 통상 몬스터는 허가가 난다.
+    #: 통상 몬스터는 전부터 허가가 났다.
     assert seen[LUSTER].validity is ActionValidity.VALID
-    #: 🔴 효과 몬스터는 **모른다** — 금지가 아니라 모름이다.
+    #: 🔴 어니스트도 이제 허가가 난다 — 그리고 **모름이 사라진 것이 아니다**
+    #: (``test_g01c`` 가 증거를 만들 수 없는 카드를 함께 잰다).
     honest = seen[HONEST]
-    assert honest.validity is ActionValidity.UNKNOWN
-    assert honest.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert honest.missing_rule == "summoning-condition (카드 텍스트의 소환 제약)"
-    #: 그래서 후보로 나오지 않는다 — ``UNKNOWN`` 은 후보가 아니다.
+    assert honest.validity is ActionValidity.VALID
+    assert honest.code is ValidationCode.OK
+    assert honest.missing_rule is None
+
+    #: 그래서 후보로 나온다.
     offered = [
         a for a in duel.legal_actions(0).allowed
         if a.kind is PlayerActionKind.NORMAL_SUMMON
         and duel.state.find_instance(a.source).card_id == HONEST
     ]
+    assert len(offered) == 1
+
+    #: 그리고 실제로 필드에 나온다.
+    before = duel.view(0).normal_summons_used[0]
+    step = duel.apply(offered[0])
+    assert step.accepted is True
+    placed = [c for c in duel.state.player(0).monster_zone if c is not None]
+    assert [c.card_id for c in placed] == [HONEST]
+    assert duel.view(0).normal_summons_used[0] == before + 1
+
+    #: 🔴 **§19 — 소환이 효과를 발동하지 않았다.** 체인이 비어 있고,
+    #: 기록에도 이 걸음의 효과 사건이 없다 (RULE-CHAIN-011).
+    assert len(duel.chain) == 0
+    assert [
+        str(e.effect_ref) for e in setup.journal if e.kind.name == "EFFECT"
+    ] == []
+
+
+@pytest.mark.real_card
+def test_g01c_a_card_without_a_script_is_still_withheld_in_this_path(repository):
+    """
+    🔴 **6-U 가 모름을 없앤 것이 아니다.** 증거를 만들 수 없는 카드는 이
+    경로에서도 그대로 보류된다 — 체츠커 ``77435268`` 의 공식 텍스트는
+    「자신 필드에 몬스터가 존재할 경우, 이 카드는 일반 소환할 수 없다」 라고
+    직접 말하는데 이 저장소에 스크립트가 없다.
+    """
+    from engine.action import PlayerAction
+    from engine.action_validation import ActionValidator
+    from engine.validation import ActionValidity
+
+    cetus = 77435268
+    assert repository.get(cetus).script is None, "전제: 스크립트가 없다"
+
+    recipe = f"{cetus} x3\n{LUSTER} x37"
+    parsed = parse_recipe(recipe, repository)
+    setup = build_opening(
+        repository, parsed.draft, [cetus, LUSTER, LUSTER, LUSTER, LUSTER]
+    )
+    assert setup.duel is not None, setup.blockers
+    duel = setup.duel
+    validator = ActionValidator(
+        duel.view(0), definitions=duel._activator.definitions
+    )
+    verdict = validator.validate(
+        PlayerAction.normal_summon(
+            actor=0, source=in_hand_of(duel, cetus)
+        )
+    )
+
+    assert verdict.validity is ActionValidity.UNKNOWN
+    assert verdict.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert verdict.missing_rule == "summoning-condition (카드 텍스트의 소환 제약)"
+
+    #: 그래서 후보로 나오지 않는다.
+    offered = [
+        a for a in duel.legal_actions(0).allowed
+        if a.kind is PlayerActionKind.NORMAL_SUMMON
+        and duel.state.find_instance(a.source).card_id == cetus
+    ]
     assert offered == []
+
+
+def in_hand_of(duel, card_id: int, player: int = 0):
+    return next(
+        c.instance_id
+        for c in duel.state.player(player).hand
+        if c.card_id == card_id
+    )
 
 
 @pytest.mark.real_card

@@ -13,9 +13,12 @@ Phase 6-J — **유발 효과를 실제로 해결할 수 있는가.** 답: 아�
    몬스터 효과를 발동할 ``PlayerAction`` 이    (기동 · 유발 · 플립 ·
    없다. ``ActionValidator`` 는 패의 통상      유발즉시 분류가 없다)
    마법만 판정한다.
- **B2 사건 생성** — ``monster_summoned``    ``summoning-condition``
-   효과 몬스터를 일반 소환할 수 없으므로        (카드 텍스트의 소환 제약)
-   "이 카드가 소환되었을 때" 사건이 안 난다.
+ **B2 사건 생성** — ``monster_summoned``    (Phase 6-U 에서 풀렸다)
+   효과 몬스터를 일반 소환할 수 없으므로
+   "이 카드가 소환되었을 때" 사건이 안 났다.
+   🔴 6-U 가 카드 자신의 스크립트에서 소환
+   제약 상수를 세어 관문을 열었다. **사건은
+   이제 난다.** 남은 막은 등재(ADR-006)다.
  **B1 해결** — ``special_summon`` 9건       소생 제한을 판정할 계층
    ``may_be_special_summoned`` 가 **언제나**
    ``UNKNOWN`` 이고, ``build_executor`` 에
@@ -364,27 +367,49 @@ def test_08_b3_no_player_action_can_activate_a_monster_effect(repository):
 
 
 @requires_official_db
-def test_09_b2_the_engine_cannot_normal_summon_an_effect_monster(repository):
+def test_09_b2_the_summon_that_makes_the_event_is_no_longer_blocked(repository):
     """
-    🔴 **B2 — 사건을 만들 수 없다.** ``monster_summoned`` 후보에 걸린다.
+    🔴 **B2 가 풀렸다** — 그리고 그것이 B2 의 전부가 아니다.
 
-    「이 카드를 **일반 소환했을 때**」 가 유발 조건인 등록은, 그 일반 소환을
-    엔진이 수행할 수 없어서 사건 자체가 나지 않는다.
+    이 시험은 "``monster_summoned`` 사건을 만들 수 없다" 를 **소환 판정이
+    막혀서**라고 적었다. 그 진단은 맞았지만 그 다음 문장("효과 몬스터의
+    소환 제약을 읽는 층이 없다")을 **영구적 한계**로 전제한 것이 틀렸다.
+    Phase 6-U 가 마그나의 스크립트를 읽어 제약 상수가 **한 건도 없음**을
+    확인했고, 그래서 일반 소환이 실제로 수행된다.
 
-    **통상 몬스터는 소환된다** — 즉 소환 절차가 없는 것이 아니라 **효과
-    몬스터의 소환 제약을 읽는 층**이 없다.
+    🔴 **그렇다고 B2 가 "효과가 해결된다" 가 된 것은 아니다.** 사건을 만들
+    수 있게 된 것뿐이고, 등재(ADR-006)는 여전히 없다 — 아래에서 그것을
+    함께 고정한다.
     """
     magna = assess_normal_summon(CardDefinitionView.of(repository.get(MAGNA)))
-    assert magna.eligibility is SummonEligibility.UNDETERMINED
-    assert magna.missing_rule == "summoning-condition (카드 텍스트의 소환 제약)"
+    assert magna.eligibility is SummonEligibility.ORDINARY
+    assert magna.missing_rule is None
 
-    #: 대조군 — 통상 몬스터는 판정이 난다.
+    #: 대조군 — 통상 몬스터는 전부터 판정이 났다.
     plain = assess_normal_summon(CardDefinitionView.of(repository.get(FEATHERMAN)))
     assert plain.eligibility is SummonEligibility.ORDINARY
 
     duel = Duel.start(repository=repository, decks=([MAGNA] * 20, [MAGNA] * 20), seed=5)
     duel.state.turn.set_phase(Phase.MAIN1)
-    assert {a.kind.value for a in duel.legal_actions(MINE).allowed} == {"end_phase"}
+    kinds = {a.kind.value for a in duel.legal_actions(MINE).allowed}
+    assert "normal_summon" in kinds
+    assert "end_phase" in kinds
+
+    #: 그리고 실제로 소환된다 — 사건을 만들 자리가 생겼다.
+    action = next(
+        a for a in duel.legal_actions(MINE).allowed
+        if a.kind.value == "normal_summon"
+    )
+    step = duel.apply(action)
+    assert step.accepted is True
+    placed = [c for c in duel.state.player(MINE).monster_zone if c is not None]
+    assert [c.card_id for c in placed] == [MAGNA]
+
+    #: 🔴 **그런데 효과는 해결되지 않는다.** 등재가 없다 (ADR-006).
+    from engine.effect.library import entry_for
+
+    assert entry_for(MAGNA) is None
+    assert len(duel.chain) == 0
 
 
 def test_10_b1_the_special_summon_gate_can_never_be_answered():
@@ -683,9 +708,13 @@ def test_17_girsu_is_blocked_three_layers_up(repository):
         assert ExecutionBlocker.DEFINITION_MISSING in readiness.blockers
         assert readiness.is_resolvable is False
 
-    #: 그리고 사건을 만들 수도 없다 (B2).
+    #: 🔴 **막는 층이 하나 줄었다.** 이 줄은 "사건을 만들 수도 없다 (B2)"
+    #: 라고 적혀 있었고, 그 근거가 소환 판정의 ``UNDETERMINED`` 였다.
+    #: Phase 6-U 가 기르수의 스크립트를 읽어 제약 상수가 없음을 확인했으므로
+    #: 소환은 이제 수행된다. **남은 막이 위의 둘**(자리를 모른다 ·
+    #: 정의가 없다)이고, 그 둘은 이 Phase 가 고치지 않았다.
     verdict = assess_normal_summon(CardDefinitionView.of(repository.get(GIRSU)))
-    assert verdict.eligibility is SummonEligibility.UNDETERMINED
+    assert verdict.eligibility is SummonEligibility.ORDINARY
 
 
 # ======================================================================
