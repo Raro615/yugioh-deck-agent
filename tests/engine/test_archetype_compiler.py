@@ -142,9 +142,24 @@ def test_a_the_table_is_the_only_source_of_a_code(table):
     이름을 코드로 바꾸는 근거는 ``archetype_setcode_constants.lua`` 하나다.
     그 표가 ``ScriptConstants`` 에 실리고, ``EngineVocabulary.archetypes``
     가 감싸기만 한다 — 값을 만들지 않는다.
+
+    🔴 **615 → 616** (Phase 6-T 에서 움직였다, 그리고 **이 Phase 의 변경
+    때문이 아니다**).
+
+    ``data/constants/archetype_setcode_constants.lua`` 는 상류에서 계속
+    갱신되는 파일이고 ``.gitignore`` 대상이다 ("상류에서 계속 갱신되는
+    데이터는 커밋하지 않는다"). 6-T 작업을 시작할 때 이 컨테이너의 클론이
+    낡아 있어서 ``python -m scripts.fetch_official_db`` 로 다시 받았고,
+    그 사이 상류에 카드군 하나가 늘었다 (실측 616).
+
+    🔴 **6-T 는 ``engine/`` 을 한 줄도 바꾸지 않았다** — 바꾼 생산 파일은
+    ``deck/`` 와 ``app/`` 뿐이다. 그래서 이 수의 이동은 **데이터 드리프트**
+    이고, 이 핀이 그것을 드러내도록 설계되어 있다는 증거다. 늘어난 카드군의
+    이름은 가를 수 없다 — 그 파일이 저장소에 없으므로 이전 판과 비교할
+    대상이 없다.
     """
     constants = ScriptConstants.load()
-    assert len(table.archetypes) == len(constants.setcodes) == 615
+    assert len(table.archetypes) == len(constants.setcodes) == 616
     for name in table.archetypes.names():
         assert table.archetypes.value(name) == constants.setcodes[f"SET_{name}"]
 
@@ -470,7 +485,7 @@ def test_d_a_card_with_no_archetype_is_false_for_every_resolved_name(view, state
 @requires_official_db
 def test_e_no_resolved_name_ever_matches_across_a_different_base(repository, table):
     """
-    🔴 **차단이 줄어든 것으로 정확성을 주장하지 않는다.** 615개 카드군을
+    🔴 **차단이 줄어든 것으로 정확성을 주장하지 않는다.** 616개 카드군을
     전부 질의해서, 걸린 카드가 **같은 base 를 공유하지 않는 경우가 하나도
     없음**을 확인한다. 하나라도 있으면 그것이 거짓 양성이다.
     """
@@ -508,7 +523,7 @@ def test_e_the_exact_match_population_is_always_a_subset(repository, table):
 @requires_official_db
 def test_e_seventy_eight_archetypes_are_wider_than_an_exact_match(repository, table):
     """
-    실측: 615개 중 **78개**가 정확 일치보다 넓고, 그 78개의 합계가
+    실측: 616개 중 **78개**가 정확 일치보다 넓고, 그 78개의 합계가
     **1,880 → 3,008장 (+1,128)** 이다. 나머지 537개는 차이가 없다.
 
     이 수가 :meth:`~core.card_repository.CardRepository.by_setcode` 와

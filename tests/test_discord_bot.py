@@ -1316,12 +1316,28 @@ class _ComboCard:
         return blocks
 
 
-def test_44_the_combo_command_is_registered_with_its_three_arguments():
+def test_44_the_combo_command_is_registered_with_its_four_arguments():
     r"""🟢 §8-1 — ``/combo`` 가 실제 트리에 등록되고 인자가 맞다.
 
-    인자 셋은 :meth:`~deck.planner.ComboPlanner.plan` 이 **실제로 받는
+    앞의 셋은 :meth:`~deck.planner.ComboPlanner.plan` 이 **실제로 받는
     것**이다 (``hand_source`` · ``board`` · ``draft``). 플래너가 받지 않는
     입력은 만들지 않았다.
+
+    .. note::
+       🔴 **넷째 인자 ``recipe`` 가 Phase 6-T 에서 붙었다** (이름도 맞췄다 —
+       숫자를 이름에 적어 두면 숫자가 변할 때 이름이 거짓이 된다).
+
+       이 시험이 틀린 가정을 갖고 있었던 것이 아니다 — 그때는 셋이었다.
+       6-T 가 **실제 덱 레시피**를 받는 길을 더했고, 그것은 플래너가 아니라
+       :func:`~deck.opening.build_opening` 이 받는다.
+
+       🔴 ``deck`` 과 **가르는 것이 요점**이다: ``deck`` 은 자연어 요청이고
+       ``DeckBuilder`` 의 **초안**을 만든다 (사용자가 확정한 덱이 아니다).
+       그 초안으로 실행 검증하면 "사용자의 덱으로 전개를 검증했다" 가
+       거짓이 된다 (6-T §5). 그래서 레시피를 받는 자리를 따로 두었다.
+
+       **하위 호환**: ``recipe`` 는 **마지막 선택 인자**이므로 기존 호출이
+       그대로 돈다 (``test_45`` 가 그 경로를 그대로 센다).
     """
     pytest.importorskip("discord", reason="봇 전용 의존성 (requirements-bot.txt)")
 
@@ -1331,9 +1347,11 @@ def test_44_the_combo_command_is_registered_with_its_three_arguments():
 
     combo = commands["combo"]
     assert combo.description == bot.COMBO_DESCRIPTION
-    assert [p.name for p in combo.parameters] == ["hand", "board", "deck"]
+    assert [p.name for p in combo.parameters] == ["hand", "board", "deck",
+                                                  "recipe"]
     #: 패는 필수, 나머지는 선택 — 무작위 패 생성이 없으므로 패는 받아야 한다
-    assert [p.required for p in combo.parameters] == [True, False, False]
+    assert [p.required for p in combo.parameters] == [True, False, False,
+                                                      False]
 
 
 def test_45_a_valid_hand_reaches_the_existing_combo_planner(monkeypatch):
@@ -1523,6 +1541,23 @@ def test_51_an_unsupported_only_plan_is_not_called_a_candidate(monkeypatch):
     r"""🔴 §8-7 — 미구현 규칙뿐이면 **전개 후보라고 적지 않는다.**
 
     🔴 그리고 "미구현" 과 "불가능" 을 구분한다.
+
+    .. note::
+       🔴 **판정 줄의 이름과 자리가 움직였다** (Phase 6-T).
+
+       ``**판정: …**`` → ``**정적 계획의 판정: …**`` 이고, 맨 위가 아니라
+       **정적 계획 절 안**에 있다.
+
+       이 시험이 틀린 가정을 갖고 있었던 것이 아니다 — 그때는 ``/combo``
+       출력에 정적 계획뿐이었으므로 맨 위의 "판정" 이 그 계획의 판정이었다.
+       6-T 가 **실제 엔진 실행 절**을 그 위에 더했고, 그러면 같은 줄이
+       "방금 실행한 결과의 판정" 처럼 읽힌다 (6-T §13 "기존 /combo 의
+       '확정' 표현이 실제 실행 검증을 의미하는 것처럼 보인다면 출력의
+       의미를 바로잡는다").
+
+       ``ComboVerdict`` 자체는 **바꾸지 않았다** — 그것은 옳다. 바꾼 것은
+       그 판정이 무엇에 대한 판정인지 이름으로 적은 것이다. 이 시험이
+       지키는 사실("미구현뿐이면 후보라고 적지 않는다")은 그대로다.
     """
     import deck.planner
 
@@ -1536,11 +1571,16 @@ def test_51_an_unsupported_only_plan_is_not_called_a_candidate(monkeypatch):
     agent = _ComboAgent({1: _ComboCard(1, "카드하나")})
     text = "\n".join(bot.combo_messages(agent, "1"))
 
-    assert "**판정: 엔진 미지원 (계획 불가)**" in text
+    assert "**정적 계획의 판정: 엔진 미지원 (계획 불가)**" in text
     assert "미구현이라는 사실이지 불가능이라는 뜻은 아닙니다" in text
     assert "융합 소환 (재료 선택 절차 없음)" in text
     #: 성공으로 보이게 하는 표시가 없다
     assert "✔" not in text
+    #: 🔴 그리고 그 판정이 **정적 계획 절 안**에 있다 — 맨 위가 아니다.
+    assert text.index("**[아래는 실행하지 않은 정적 계획입니다]**") < text.index(
+        "**정적 계획의 판정:")
+    #: 🔴 레시피를 주지 않았으므로 실행했다고 적지 않는다.
+    assert "엔진이 실제로" not in text
 
 
 def test_52_a_long_plan_is_split_not_truncated(monkeypatch):
@@ -1756,10 +1796,14 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
     received: list[tuple] = []
 
     class _Service:
-        def combo_texts(self, hand_text, board_text="", deck_text=""):
+        #: 🔴 ``recipe_text`` 가 Phase 6-T 에서 붙었다 — 가짜 구현도 같은
+        #: 서명을 받아야 한다. 서명을 안 맞추면 이 시험은 "defer 가 먼저"
+        #: 가 아니라 ``TypeError`` 를 본다 (``test_08`` 의 주석과 같은 결).
+        def combo_texts(self, hand_text, board_text="", deck_text="",
+                        recipe_text=""):
             order.append("combo")
             worker.append(threading.get_ident())
-            received.append((hand_text, board_text, deck_text))
+            received.append((hand_text, board_text, deck_text, recipe_text))
             return ["첫 번째", "두 번째", "세 번째"]
 
         def prepare(self):  # pragma: no cover - on_ready 전용
@@ -1797,6 +1841,8 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
     #: 🔴 세 메시지를 다 보냈다
     assert sent == ["첫 번째", "두 번째", "세 번째"]
     #: 🔴 세 인자가 그대로 전달됐다
-    assert received == [("오르페골 디베르", "오르페골 코어", "오르페골 덱")]
+    #: 🔴 넷째 칸은 ``recipe`` 이고, 이 호출은 주지 않았으므로 **빈 문자열**
+    #: 이다 — "주지 않았다" 가 그대로 전달된다 (Phase 6-T).
+    assert received == [("오르페골 디베르", "오르페골 코어", "오르페골 덱", "")]
     #: 🔴 동기 작업이 이벤트 루프 밖에서 돌았다
     assert worker and worker[0] != loop_thread

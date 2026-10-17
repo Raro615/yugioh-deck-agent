@@ -308,9 +308,13 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     assert constants.setcode("SET_ELEMENTAL_HERO") == SET_ELEMENTAL_HERO
 
     # ① 이제 ``EngineVocabulary`` 가 카드군 묶음을 내보낸다.
+    #: 🔴 **615 → 616** (Phase 6-T). 상류 데이터가 늘었고 이 Phase 의 변경
+    #: 때문이 아니다 — 까닭은
+    #: ``tests/engine/test_archetype_compiler.py`` 의
+    #: ``test_a_the_table_is_the_only_source_of_a_code`` 설명에 적었다.
     vocabulary = default_vocabulary()
     assert "archetypes" in vocabulary.__slots__
-    assert len(vocabulary.archetypes) == 615
+    assert len(vocabulary.archetypes) == 616
     assert vocabulary.archetypes.value("ORCUST") == SET_ORCUST
     # 🔴 그 묶음은 여전히 ``others`` 에서 오지 않는다 — 출처가 다르다.
     assert "ORCUST" not in vocabulary.constants.others
