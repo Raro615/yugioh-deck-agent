@@ -286,25 +286,62 @@ def test_09_the_three_withheld_sites_fill_missing_from_three_different_sources()
     """
     **F-3 (§8): 같은 칸이 자리마다 다른 출처에서 채워진다.**
 
-    세 자리뿐이고 전부 ``engine/duel.py`` 안에 있다.
+    전부 ``engine/duel.py`` 안에 있다.
 
     ====================  ===============================================
-    ``duel.py:620``       손으로 쓴 문자열 (``ValidationResult`` 가 **없다**)
-    ``duel.py:633``       ``plan.unresolved_rules`` (verdict 의 것이 **아니다**)
-    ``duel.py:654``       ``verdict.missing_rule``
+    ``_flow_actions``     손으로 쓴 문자열 (``ValidationResult`` 가 **없다**)
+    ``_flow_actions``     ``plan.unresolved_rules`` (verdict 의 것이 **아니다**)
+    ``_withheld_board_``  ``verdict.missing_rule``
+    ``_flow_actions``     🔴 **채우지 않는다** (Phase 6-S) — 아래 참조
     ====================  ===============================================
 
-    고치지 않고 적어 둔다 — 세 자리가 같은 칸에 다른 종류의 값을 넣는다는
+    고치지 않고 적어 둔다 — 자리마다 같은 칸에 다른 종류의 값을 넣는다는
     사실 자체가 이 경계의 계약이 느슨하다는 증거다.
+
+    🔴 **세 자리에서 네 자리가 되었다** (Phase 6-S)
+    ----------------------------------------------
+    이 시험이 틀린 가정을 갖고 있었던 것이 아니다 — 그 시점에 실제로 세
+    자리였다. 6-S 가 ``_flow_actions`` 의 **묶인 조건 하나**를 갈랐고, 그
+    분기가 넷째 자리를 만들었다.
+
+    갈라야 했던 이유: "패스할 수 없다" 의 이유가 둘인데 하나로 묶여 있었고
+    (``elif seat != self.turn_player``), 그래서 **창이 열려 있는데도**
+    "우선권이 열려 있지 않습니다" 라고 적었다 (거짓 문장) — 그리고 창이
+    열려 있고 상대가 쥐었는데 이쪽이 턴 플레이어이면 어느 분기도 밟지 않아
+    **후보 0 · 보류 0** 이 되었다 (침묵).
+
+    🔴 **그리고 넷째 자리는 이 시험이 지적한 느슨함을 늘리지 않는다** —
+    ``missing`` 을 **채우지 않는다.** 그 자리에서 빠진 규칙은 없고 (지금은
+    상대의 차례일 뿐이다) 없는 것을 빈 값으로 채우지 않는다. 그래서 네
+    자리 중 ``missing`` 을 주는 것은 여전히 **셋**이고, 출처도 여전히 셋이다.
+    근거는 ``docs/phase6s-legal-action-execution-consistency.md`` 와
+    ``tests/engine/test_legal_action_candidate_consistency.py`` 의 ``F`` 절.
     """
     sites = constructions("WithheldAction")
-    assert len(sites) == 3
+    assert len(sites) == 4
     assert all(site.startswith("engine/duel.py:") for site in sites)
 
     source = source_of("engine/duel.py")
     assert 'missing="우선권을 여는 규칙 (Phase 2-F)"' in source
     assert 'missing="; ".join(plan.unresolved_rules) or None' in source
     assert "missing=verdict.missing_rule" in source
+
+    #: 🔴 넷째 자리는 ``missing`` 을 **주지 않는다** — 출처는 셋 그대로다.
+    tree = ast.parse(source)
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "WithheldAction"
+    ]
+    assert len(calls) == 4
+    with_missing = [
+        node
+        for node in calls
+        if any(keyword.arg == "missing" for keyword in node.keywords)
+    ]
+    assert len(with_missing) == 3, len(with_missing)
 
 
 # ======================================================================
