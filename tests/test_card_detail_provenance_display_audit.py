@@ -71,9 +71,12 @@ KO_CARD = 483                 # 패러렐 텔레포트 — 한국어 이름 + �
 NO_KO_CARD = 212652           # Trap of the Poisonous Scorpion — 한국어 없음
 LUA_KO_CARD = 89631139        # 푸른 눈의 백룡
 
+#: 🔴 ``deck`` 은 Phase 6-T 가 만든 production 디렉터리다 — 여기 빠져
+#: 있으면 ``deck/`` 을 건드린 Phase 가 "production 을 바꾸지 않았다" 를
+#: 거짓으로 통과한다 (Phase 6-W 가 더했다).
 PRODUCTION_DIRS = (
-    "analysis", "app", "core", "engine", "rules", "rulings", "scripts",
-    "sources", "agent",
+    "analysis", "app", "core", "deck", "engine", "rules", "rulings",
+    "scripts", "sources", "agent",
 )
 
 #: 🔴 데이터 유무는 **마커**로 거른다 — 함수 안에서 건너뛰기를 직접 호출하지

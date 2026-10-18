@@ -106,9 +106,12 @@ UNAPPLIED = {
 #: 대표 alias 사례 — 판본 295517 의 원본은 22702055 다
 ALIAS_SAMPLE = (295517, 22702055)
 
+#: 🔴 ``deck`` 은 Phase 6-T 가 만든 production 디렉터리다 — 여기 빠져
+#: 있으면 ``deck/`` 을 건드린 Phase 가 "production 을 바꾸지 않았다" 를
+#: 거짓으로 통과한다 (Phase 6-W 가 더했다).
 PRODUCTION_DIRS = (
-    "analysis", "app", "core", "engine", "rules", "rulings", "scripts",
-    "sources", "agent",
+    "analysis", "app", "core", "deck", "engine", "rules", "rulings",
+    "scripts", "sources", "agent",
 )
 
 

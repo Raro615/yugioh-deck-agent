@@ -60,9 +60,15 @@ NO_RECORD = 7                # 대응 레코드가 아예 없는 항목
 CANONICAL_CARDS = 14127
 CANONICAL_WITHOUT_KOREAN = 399
 
+#: 🔴 ``deck`` 은 Phase 6-T 가 만든 production 디렉터리다 (``deck/opening.py`` ·
+#: ``deck/recipe.py``). 여기 빠져 있어서 ``test_11`` 의 **전수 분류**가
+#: 깨졌다 — ``deck/opening.py`` 의 ``.apply(...)`` 세 자리가 production 도
+#: tests 도 아닌 것으로 남았다 (Phase 6-W 가 고쳤다). 그 셋은 반환값을
+#: 버리지 않으므로 "버리는 자리는 하나" 라는 진술 자체는 참이었고,
+#: **분모가 틀렸다.**
 PRODUCTION_DIRS = (
-    "analysis", "app", "core", "engine", "rules", "rulings", "scripts",
-    "sources", "agent",
+    "analysis", "app", "core", "deck", "engine", "rules", "rulings",
+    "scripts", "sources", "agent",
 )
 
 

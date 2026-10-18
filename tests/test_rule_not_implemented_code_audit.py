@@ -128,7 +128,13 @@ MINE = 0
 #: ("허가된 행위가 아닙니다") 를 돌려준다" 를 적으면서 그 코드 이름을
 #: 인용했다 (실측해서 적은 거짓 코드다). **코드 자리는 그대로**이고
 #: ``CODE_OCCURRENCES`` 가 그것을 따로 센다 — 6-E 와 같은 결의 증가다.
-STRING_OCCURRENCES = 87
+#: 🔴 87 → **88** (Phase 6-V, Phase 6-W 가 실측해 정정). 늘어난 하나는
+#: **코드 자리**다 — ``engine.trigger.TriggerEligibilityJudge`` 의
+#: ``_zone_from_summon`` 이 "소환 사건이 적은 도착지와 지금 자리가 다르다"
+#: 를 ``UNKNOWN`` 으로 돌려주는 관문이다. 그 사이의 이동을 이 계층이 읽지
+#: 못하므로 **코드가 생겨야 풀리는 모름**이고, 그래서 ``CODE_OCCURRENCES``
+#: 도 함께 72 → 73 이다 (산문 15는 그대로).
+STRING_OCCURRENCES = 88
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -179,14 +185,23 @@ PROSE_OCCURRENCES = {
     # 새로 생긴 자리는 **743** — ``GROUP_MEMBERSHIP_RULE`` 의 주석이 왜 이
     # 코드를 쓰는지(코드가 생겨야 풀리는 모름) 적는다. 그래서 산문은
     # 13 → **14** 다.
-    ("engine/trigger.py", 743),
-    ("engine/trigger.py", 771),
-    ("engine/trigger.py", 1337),
+    #
+    # 🔴 **Phase 6-V 에서 여섯 자리가 전부 밀렸다** (6-W 가 실측해 정정).
+    # 그 Phase 가 ``summoned_zone_for`` 와 ``_zone_from_summon`` 을 넣어
+    # 모듈이 2,059 → 2,199 줄이 됐고, 자리들이 그 아래로 밀렸다:
+    # 743 → 775 · 771 → 803 · 1337 → 1369 (+32), 그리고
+    # 1696 → 1741 · 1702 → 1747 · 1725 → 1770 (+45).
+    #
+    # **산문은 15 그대로다.** 6-V 가 더한 ``RULE_NOT_IMPLEMENTED`` 는
+    # 코드 자리이므로 ``CODE_OCCURRENCES`` 가 72 → 73 으로 받는다.
+    ("engine/trigger.py", 775),
+    ("engine/trigger.py", 803),
+    ("engine/trigger.py", 1369),
     # 3-E-45: ``_event_relation`` 이 왜 세 갈래인가를 적은 docstring 셋
     # (6-F 가 네 갈래로 늘렸고, 그 설명도 같은 자리에 있다).
-    ("engine/trigger.py", 1696),
-    ("engine/trigger.py", 1702),
-    ("engine/trigger.py", 1725),
+    ("engine/trigger.py", 1741),
+    ("engine/trigger.py", 1747),
+    ("engine/trigger.py", 1770),
     ("engine/trigger_chain.py", 553),
     ("engine/trigger_chain.py", 569),
     ("engine/validation.py", 129),
@@ -239,7 +254,11 @@ PROSE_OCCURRENCES = {
 #: 거절 둘이다 — 엑스트라 덱 몬스터를 패 · 메인 덱으로 보내려는 이동과
 #: 이미 목적지에 있어 **일어나지 않는** 이동. 둘 다 코드 자리이고 둘 다
 #: ``UNSUPPORTED_OPERATION`` 과 짝지으므로 "모른다" 쪽이다.
-CODE_OCCURRENCES = 72
+#: 🔴 72 → **73** (Phase 6-V, Phase 6-W 가 실측해 정정).
+#: ``TriggerEligibilityJudge._zone_from_summon`` 의 관문 하나다 — 소환
+#: 사건이 적은 도착지와 지금 관측된 자리가 다를 때 **그 사이의 이동을
+#: 읽지 못한다**고 적는다. 판이 아니라 코드가 생겨야 풀리는 모름이다.
+CODE_OCCURRENCES = 73
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {

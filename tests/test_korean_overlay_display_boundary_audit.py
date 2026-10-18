@@ -73,9 +73,12 @@ KO_ENTRIES = 13899
 CANONICAL_CARDS = 14127
 STATUS_COUNTS = {"lua_verified": 12687, "text_derived": 756, "no_effect": 684}
 
+#: 🔴 ``deck`` 은 Phase 6-T 가 만든 production 디렉터리다 — 여기 빠져
+#: 있으면 ``deck/`` 을 건드린 Phase 가 "production 을 바꾸지 않았다" 를
+#: 거짓으로 통과한다 (Phase 6-W 가 더했다).
 PRODUCTION_DIRS = (
-    "analysis", "app", "core", "engine", "rules", "rulings", "scripts",
-    "sources", "agent",
+    "analysis", "app", "core", "deck", "engine", "rules", "rulings",
+    "scripts", "sources", "agent",
 )
 
 
@@ -468,36 +471,57 @@ def test_20_no_forbidden_path_and_no_data_file_was_touched():
 
 
 def test_21_no_existing_test_was_modified_or_deleted():
-    r"""🔴 §4 — 기존 테스트 수정·삭제 0건."""
+    r"""🔴 §4 — 기존 테스트 수정·삭제 0건.
+
+    .. note::
+       **처음 이 단정은 ``base`` 와 ``HEAD`` 를 비교했고 그것이 틀렸다**
+       (Phase 6-W 가 고쳤다). ``test_20`` 바로 위의 주석이 같은 실수를 이미
+       적어 두었는데 — "그러면 뜻이 '이 Phase 가 production 을 바꾸지
+       않았다' 에서 '이 Phase **이후** 아무도 바꾸지 않았다' 로 바뀐다" —
+       ``test_21`` 만 고치지 않고 남아 있었다.
+
+       실제로 그렇게 깨졌다. Phase 6-U 가
+       ``tests/engine/test_normal_summon.py`` 에 시험 하나를 더하자 (59 →
+       60) 이 단정이 실패했다. 3-F-44 의 commit 들은 그 파일을 건드린 적이
+       **없으므로 진술은 참이었고 측정이 틀렸다.**
+
+       그래서 ``_changed_files`` 와 같은 결로 **commit 하나하나**가 건드린
+       테스트 파일을 본다. 그 commit 의 부모에 이미 있던 테스트 파일을
+       건드렸다면 실패다 — **시험 수가 같아도 실패**이므로 옛 비교보다 더
+       엄격하다.
+    """
     shas = _phase_shas()
     if not shas:
         pytest.skip("이 Phase 의 commit 이 아직 없다")
-    base = subprocess.run(
-        ["git", "rev-parse", f"{shas[-1]}^"],
-        cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
-    ).stdout.strip()
 
-    def counts(ref: str) -> dict[str, int]:
-        listing = subprocess.run(
-            ["git", "ls-tree", "-r", "--name-only", ref, "tests/"],
+    def test_count(ref: str, name: str) -> "int | None":
+        """``ref`` 에서 그 파일의 시험 수. 그 자리에 파일이 없으면 ``None``."""
+        done = subprocess.run(
+            ["git", "show", f"{ref}:{name}"],
+            cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
+        )
+        if done.returncode != 0:
+            return None
+        return len(re.findall(r"^def test_", done.stdout, re.M))
+
+    offenders: list[tuple[str, str, int, "int | None"]] = []
+    for sha in shas:
+        touched = subprocess.run(
+            ["git", "show", "--name-only", "--format=", sha],
             cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
         ).stdout.split()
-        out: dict[str, int] = {}
-        for name in listing:
-            if not name.endswith(".py"):
+        for name in touched:
+            if not (name.startswith("tests/") and name.endswith(".py")):
                 continue
-            text = subprocess.run(
-                ["git", "show", f"{ref}:{name}"],
-                cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
-            ).stdout
-            out[name] = len(re.findall(r"^def test_", text, re.M))
-        return out
+            before = test_count(f"{sha}^", name)
+            #: 그 commit 이 **새로 만든** 파일은 기존 테스트가 아니다.
+            if before is None:
+                continue
+            #: 삭제했다면 ``after`` 가 ``None`` 으로 남아 함께 보고된다.
+            offenders.append((sha, name, before, test_count(sha, name)))
 
-    before, after = counts(base), counts("HEAD")
-    for name, count in before.items():
-        assert name in after, f"테스트 파일이 사라졌다: {name}"
-        assert after[name] == count, (name, count, after[name])
-    assert {p for p in _changed_files() if p in before} == set()
+    #: 🔴 기존 테스트 파일을 건드린 자리가 **하나도 없다.**
+    assert offenders == [], offenders
 
 
 @requires_cards_cdb
