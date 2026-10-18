@@ -1214,7 +1214,8 @@ _HONEST_IGNITION_ENTRY = LibraryEntry(
 #: ``e1:SetType(EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O)`` →
 #: :attr:`~engine.vocabulary.ActivationKind.TRIGGER`. ``e1:SetCode(
 #: EVENT_SUMMON_SUCCESS)`` 는 **정의가 아니라 트리거 등록**이 들고 간다
-#: (``TriggerSpec.point`` · ``summons``) — 같은 사실을 두 벌로 적지 않는다.
+#: (시점과 소환 종류는 ``engine.trigger`` 쪽 선언에 있다) — 같은 사실을
+#: 두 벌로 적지 않는다.
 #:
 #: ``s.tgfilter`` 의 ``c:IsSetCard({SET_ORCUST,SET_WORLD_LEGACY})`` 는 후보
 #: 조건으로, ``c:IsAbleToGrave()`` 는 **관문으로** 옮겼다 — 어리석은 매장

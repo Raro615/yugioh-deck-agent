@@ -50,6 +50,7 @@ from engine.state.use_registry import LimitScope
 from engine.target_bridge import target_combinations
 from engine.trigger import (
     EligibilityGate,
+    summoned_zone_for,
     TimingEvent,
     TimingPoint,
     TriggerStatus,
@@ -441,7 +442,9 @@ def test_d02_the_activation_zone_reason_names_the_summon_event(repository):
     )
     assert "MZONE" in zone.result.reason
     assert "소환 사건" in zone.result.reason
-    assert "HAND" in zone.result.reason and "MZONE" in zone.result.reason
+    #: 🔴 이유문이 **자리**를 가리킨다. 출발지(HAND)는 적지 않는다 — 관문이
+    #: 받는 것이 ``Zone`` 하나이고 (3-F-5 경계), 사건 전체가 아니다.
+    assert "자리를 적었습니다" in zone.result.reason
 
 
 @requires_official_db
@@ -477,8 +480,13 @@ def test_d03_a_non_summon_event_does_not_open_the_zone_gate(repository):
             to_phase=GamePhase.BATTLE,
         )
     )
+    candidate = _candidate_for(judge, build, instance)
+    #: 🔴 **읽기 단계에서 이미 ``None`` 이다** — 페이즈 전이는 자리를
+    #: 말하지 않는다. 관문은 사건을 보지 않고 이 값을 받는다 (3-F-5 경계).
+    assert summoned_zone_for(phase_event, candidate.source) is None
+
     verdict = judge._activation_zone(
-        _candidate_for(judge, build, instance), spec, phase_event
+        candidate, spec, summoned_to=summoned_zone_for(phase_event, candidate.source)
     )
     assert verdict.result.validity is ActionValidity.UNKNOWN
     assert verdict.result.code is ValidationCode.RULE_NOT_IMPLEMENTED
@@ -528,8 +536,15 @@ def test_d04_a_summon_event_about_another_card_does_not_open_the_gate(repository
         if c.card_id == GIRSU
     )
     assert other != instance
+    #: 🔴 읽기 단계가 **그 카드가 아니라서** ``None`` 을 돌려준다.
+    assert summoned_zone_for(event, other) is None
+    #: 소환된 쪽에는 자리를 말해 준다 — 같은 사건, 다른 카드.
+    assert summoned_zone_for(event, instance) is Zone.MZONE
+
     verdict = judge._activation_zone(
-        _candidate_for(judge, build, other), spec, event
+        _candidate_for(judge, build, other),
+        spec,
+        summoned_to=summoned_zone_for(event, other),
     )
     assert verdict.result.validity is ActionValidity.UNKNOWN
 
@@ -902,7 +917,7 @@ def test_g02_the_production_code_has_no_card_id(repository):
     assert "ORCUST" not in trigger_source
     assert "SET_" not in trigger_source
     #: 이 Phase 가 더한 판정 함수에 카드별 분기가 없다.
-    head = trigger_source.index("def _zone_from_summon_event")
+    head = trigger_source.index("def _zone_from_summon")
     body = trigger_source[head : trigger_source.index("def _trigger_condition", head)]
     assert "card_id" not in body
     assert str(GIRSU) not in body

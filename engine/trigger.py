@@ -421,6 +421,38 @@ class TimingEvent:
         return self.describe_ko()
 
 
+def summoned_zone_for(
+    event: "TimingEvent | None", source: "InstanceId | None"
+) -> "Zone | None":
+    """
+    그 사건이 **이 카드**를 어느 자리에 내놓았는가. 아니면 ``None``.
+
+    🔴 **읽기이고 판단이 아니다** (Phase 6-V). 적격성은 아무것도 정하지
+    않는다 — ``MonsterSummoned`` 가 적어 둔 ``to_zone`` 을 그 카드에 대해
+    꺼내 줄 뿐이고, 그것으로 발동 자리를 인정할지는
+    :meth:`TriggerEligibilityJudge._activation_zone` 이 정한다.
+
+    왜 관문 밖에 있는가
+    -------------------
+    관문이 사건을 들고 있으면 **"사건과 후보를 함께 보는 관문"** 이 생긴다.
+    3-F-5 가 그것을 계층 경계로 적어 두었고 (다섯 관문 중 사건을 받는 것은
+    ``_event_relation`` 하나이고 그것은 후보를 받지 않는다), 6-F 는 같은
+    문제를 **필요한 최소 값**(``source``)을 넘기는 쪽으로 풀었다. 이
+    함수는 그 설계를 따른다 — 관문에 가는 것은 ``Zone`` 하나다.
+
+    ``None`` 인 경우가 셋이고 **셋 다 "자리를 모른다" 가 아니다**:
+    사건이 없다 · 소환 사건이 아니다 · 그 소환이 **다른 카드**의 것이다.
+    마지막이 중요하다 — 그래서 패에 있는 같은 이름 카드의 자리가 열리지
+    않는다.
+    """
+    delta = event.delta if event is not None else None
+    if not isinstance(delta, MonsterSummoned):
+        return None
+    if source is None or delta.card != source:
+        return None
+    return delta.to_zone
+
+
 def timing_for(delta: StateDelta) -> TimingEvent:
     """
     변화 하나를 시점으로. **옮길 이름이 없으면 그 사실을 사건으로 남긴다.**
@@ -1643,10 +1675,20 @@ class TriggerEligibilityJudge:
             # 그때는 주체 질문이 올라와 있지 않았다. 주체를 맞춰 보려면
             # 필요한 것은 ``source`` (인스턴스) 하나다.
             self._event_relation(spec, event, candidate.source),
-            # 🔴 **사건을 함께 넘긴다** (Phase 6-V). 소환 계열에서는 발동
-            # 자리를 사건이 말하고, 그 근거가 관문 안에 있어야 한다 —
-            # ``_activation_zone`` 의 설명 참고.
-            self._activation_zone(candidate, spec, event),
+            # 🔴 **후보 전체도 사건도 아니라 "자리 값" 하나를 넘긴다**
+            # (Phase 6-V). 6-F 가 ``_event_relation`` 에 ``source`` 를
+            # 넘긴 것과 **같은 설계**다 (설계 C · 3-F-8 §5) — 관문이 사건을
+            # 들고 있으면 "사건과 후보를 함께 보는 관문" 이 생기고, 그것은
+            # 3-F-5 가 계층 경계로 적어 둔 것을 깨뜨린다.
+            #
+            # 여기서 하는 일은 **비교가 아니라 읽기**다:
+            # :func:`summoned_zone_for` 가 "그 사건이 이 카드를 어디에
+            # 내놓았는가" 를 돌려주고, 적격성 판단은 관문이 한다.
+            self._activation_zone(
+                candidate,
+                spec,
+                summoned_to=summoned_zone_for(event, candidate.source),
+            ),
             self._trigger_condition(candidate, spec, definition),
             self._execution_authority(spec, definition),
             self._cost_feasibility(candidate, definition),
@@ -1820,7 +1862,7 @@ class TriggerEligibilityJudge:
         self,
         candidate: TriggerCandidate,
         spec: TriggerSpec,
-        event: "TimingEvent | None" = None,
+        summoned_to: "Zone | None" = None,
     ) -> GateVerdict:
         """
         지금 있는 자리에서 발동할 수 있는가.
@@ -1859,9 +1901,13 @@ class TriggerEligibilityJudge:
         🔴 **거짓 양성을 만들지 않는다.** 사건이 적은 도착지와 관측이 보는
         현재 자리가 **둘 다** 맞아야 통과한다 — 해결 중에 그 카드가 다시
         움직였으면 관측 쪽이 달라지므로 통과하지 않는다.
+
+        🔴 **사건을 받지 않는다.** 받는 것은 :func:`summoned_zone_for` 가
+        읽어 준 ``Zone`` 하나다 — 관문이 사건과 후보를 함께 들고 있으면
+        3-F-5 가 계층 경계로 적어 둔 census 가 깨진다.
         """
         if spec.activates_from is None:
-            licensed = self._zone_from_summon_event(candidate, spec, event)
+            licensed = self._zone_from_summon(candidate, spec, summoned_to)
             if licensed is not None:
                 return licensed
             return _gate(
@@ -1895,30 +1941,25 @@ class TriggerEligibilityJudge:
             f"({'/'.join(sorted(z.value for z in spec.activates_from))}).",
         )
 
-    def _zone_from_summon_event(
+    def _zone_from_summon(
         self,
         candidate: TriggerCandidate,
         spec: TriggerSpec,
-        event: "TimingEvent | None",
+        summoned_to: "Zone | None",
     ) -> "GateVerdict | None":
         """
-        소환 사건이 **발동 자리를 직접 말하는가.** 말하지 않으면 ``None``.
+        소환이 **발동 자리를 직접 말하는가.** 말하지 않으면 ``None``.
 
-        ``None`` 은 "자리를 모른다" 가 아니라 **"이 사건은 자리를 말하지
+        ``None`` 은 "자리를 모른다" 가 아니라 **"이 소환은 자리를 말하지
         않는다"** 다 — 부르는 쪽이 그때 원래의 ``UNKNOWN`` 을 낸다.
 
         근거와 적용 조건은 :meth:`_activation_zone` 의 설명에 있다.
         """
-        if event is None:
+        if summoned_to is None:
             return None
         if spec.point is not TimingPoint.MONSTER_SUMMONED:
             return None
         if spec.subject is not TriggerSubject.SELF:
-            return None
-        delta = event.delta
-        if not isinstance(delta, MonsterSummoned):
-            return None
-        if candidate.source is None or delta.card != candidate.source:
             return None
 
         card = self._view.find(candidate.source)
@@ -1932,14 +1973,14 @@ class TriggerEligibilityJudge:
                 f"{candidate.source} 가 관측에 보이지 않아 자리를 확인할 수 "
                 "없습니다.",
             )
-        if card.zone is not delta.to_zone:
+        if card.zone is not summoned_to:
             # 사건이 적은 도착지와 지금 자리가 다르다 — 그 사이에 무엇이
             # 있었는지 이 계층은 모른다. **모른다고 적는다.**
             return _gate(
                 EligibilityGate.ACTIVATION_ZONE,
                 ActionValidity.UNKNOWN,
                 ValidationCode.RULE_NOT_IMPLEMENTED,
-                f"소환 사건은 {delta.to_zone.value} 를 적었는데 지금 자리는 "
+                f"소환 사건은 {summoned_to.value} 를 적었는데 지금 자리는 "
                 f"{card.zone.value} 입니다 — 그 사이의 이동을 읽지 못합니다.",
                 notes=("activates_from 미선언", "소환 후 이동"),
             )
@@ -1948,8 +1989,7 @@ class TriggerEligibilityJudge:
             ActionValidity.VALID,
             ValidationCode.OK,
             f"{card.zone.value} 에서 발동할 수 있습니다 — 소환 사건이 이 "
-            f"카드의 자리를 적었습니다 ({delta.summon.value} 소환, "
-            f"{delta.from_zone.value} → {delta.to_zone.value}).",
+            f"카드의 자리를 적었습니다 ({summoned_to.value}).",
             notes=("자리의 근거는 소환 사건이다",),
         )
 
@@ -2137,6 +2177,7 @@ def _sorted_values(values) -> tuple:
 
 
 __all__ = [
+    "summoned_zone_for",
     "TriggerError",
     "TimingPoint",
     "TriggerRequirement",
