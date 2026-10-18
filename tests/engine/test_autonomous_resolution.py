@@ -5,7 +5,7 @@ Phase 6-Y — **AI 가 스스로 고르는가.**
 주었다.** 6-Y 는 그 둘을 정책에게 옮긴다.
 
     legal_actions → Policy.decide        발동 시점 (A) — 이미 되고 있었다
-    사건 → TriggerOffer → activate_trigger  발동 여부 (§5) — 6-Y 가 열었다
+    사건 → TriggerOffer → activate_effect  발동 여부 (§5) — 6-Y 가 열었다
     looked_at → ChoiceOffer → choose_cards  해결 시점 (B) — 6-Y 가 열었다
 
 🔴 **두 시점의 정보가 다르다.** 발동 시점에는 덱이 보이지 않고, 해결 시점에는
@@ -125,7 +125,7 @@ class _Cheater:
 
     name = "cheater"
 
-    def activate_trigger(self, offer) -> bool:
+    def activate_effect(self, offer) -> bool:
         return True
 
     def choose_cards(self, offer):
@@ -138,7 +138,7 @@ class _TooMany:
 
     name = "too-many"
 
-    def activate_trigger(self, offer) -> bool:
+    def activate_effect(self, offer) -> bool:
         return True
 
     def choose_cards(self, offer):
@@ -450,13 +450,22 @@ def test_c06_an_empty_deck_offers_nothing_and_invents_nothing(repository):
     )
     duel = setup.duel
     _agent_summons(duel)
+    #: 🔴 **제안은 생긴다** — 발동 조건은 덱 장수만 보므로 카드군 카드가
+    #: 없어도 적법하다. 막히는 자리는 그 **뒤**다.
     offers = trigger_offers(duel, repository, MINE)
-    if not offers:
-        pytest.skip("이 덱에서는 제안이 생기지 않는다 — 그것도 정상 중단이다")
+    assert len(offers) == 1, offers
+
     run = run_trigger(duel, repository, MINE, offers[0], FirstPermittedChoice())
-    #: 허용된 후보가 없으므로 고를 것이 없고, 거절로 멈춘다.
+    #: 후보가 0건이므로 고를 것이 없고, 장수로 거절된다.
+    assert run.activated is True
+    assert run.choice is not None
+    assert run.choice.permitted == ()
+    assert run.chosen == ()
     assert run.refused is not None
+    assert "최소 1장" in run.refused.reason
+    #: 🔴 **카드를 만들지 않았다.**
     assert len(duel.state.player(MINE).zone(Zone.GRAVE)) == 0
+    assert len(duel.state.player(MINE).zone(Zone.DECK)) == 35
 
 
 # ======================================================================
@@ -499,7 +508,7 @@ def test_d03_choosing_the_same_card_twice_is_refused(repository):
     class Doubler:
         name = "doubler"
 
-        def activate_trigger(self, offer) -> bool:
+        def activate_effect(self, offer) -> bool:
             return True
 
         def choose_cards(self, offer):

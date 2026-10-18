@@ -1,8 +1,8 @@
 """
 ChoicePolicy — **해결 중에 무엇을 고를 것인가** (Phase 6-Y).
 
-    TriggerOffer   "이 유발을 발동할 수 있다"   → activate_trigger(offer) -> bool
-    ChoiceOffer    "이 카드들 중에 고를 수 있다" → choose_cards(offer) -> (InstanceId, …)
+    제안: "이 효과를 발동할 수 있다"      → activate_effect(offer) -> bool
+    제안: "이 카드들 중에 고를 수 있다"   → choose_cards(offer) -> (InstanceId, …)
 
 :class:`~agent.policy.Policy` 와 **다른 시점**이다
 ---------------------------------------------------
@@ -17,26 +17,28 @@ ChoicePolicy — **해결 중에 무엇을 고를 것인가** (Phase 6-Y).
 그래서 두 시점을 한 프로토콜로 합치지 않는다. 합치면 "덱을 보고 발동할지
 정한다" 가 되고, 그것은 규칙이 허락한 범위가 아니다.
 
+🔴 이 계층은 **제안이 왜 생겼는지 모른다**
+--------------------------------------------
+제안을 만드는 쪽은 조립 층(``integration``)이고, 그쪽이 사건 · 시점 ·
+선언을 읽는다. 이 파일은 그 기계를 **모른다** — 받은 제안의 **모양만**
+읽는다 (``offer.permitted`` · ``offer.minimum`` · ``offer.requirement_known``).
+
+그 경계는 이 저장소가 이미 적어 둔 것이다 — ``agent/`` 의 어느 파일도 사건
+계층의 어휘를 **글자로도** 쓰지 않는다. 루트의 연결성 감사가 그 어휘 넷을
+``agent/**.py`` 전수에서 센다. 6-Y 가 한 번 그 경계를 깼다가 이름을 고쳤고,
+그 기록은 보고서 부록 A 에 있다.
+
 정책의 말은 허가가 아니다
 -------------------------
-여기서 고른 것을 그대로 쓰지 않는다. :func:`~integration.autonomy.run_trigger`
-가 후보 목록에 있는지 · 장수가 맞는지 · 움직일 수 있다고 판정됐는지 다시
-보고, 어긋나면 거절한다 (:class:`~integration.autonomy.SelectionRefused`).
-그 뒤에도 ``ChainResolver`` 가 ``TargetResolver`` 와 ``BoardRuling`` 으로
-한 번 더 본다.
+여기서 고른 것을 그대로 쓰지 않는다. 조립 층이 후보 목록에 있는지 · 장수가
+맞는지 · 움직일 수 있다고 판정됐는지 다시 보고, 어긋나면 거절한다. 그 뒤에도
+``ChainResolver`` 가 ``TargetResolver`` 와 ``BoardRuling`` 으로 한 번 더 본다.
 
 여기서 하지 않는 것
 -------------------
 **어느 카드가 좋은지 모른다.** 이 파일의 정책들은 인터페이스가 도는지와
 **정책이 달라지면 전개도 달라지는지**를 보이기 위한 기준점이고, 오르페골
 전개를 아는 AI 가 아니다. 평가도 탐색도 없다.
-
-``agent`` 는 ``engine`` 만 import 한다
----------------------------------------
-후보를 **만드는** 일은 조립 층(``integration``)의 몫이다 — 등록 정보를
-읽어야 하고, 그것은 ADR-007 이 ``agent`` 에 금지한 일이다. 그래서 이
-파일은 ``integration`` 도 ``core`` 도 import 하지 않고, 받은 제안의 **모양만**
-읽는다 (``offer.permitted`` · ``offer.minimum``).
 """
 
 from __future__ import annotations
@@ -57,7 +59,7 @@ class ChoicePolicy(Protocol):
 
     name: str
 
-    def activate_trigger(self, offer) -> bool:
+    def activate_effect(self, offer) -> bool:
         ...  # pragma: no cover - 프로토콜
 
     def choose_cards(self, offer) -> "tuple[InstanceId, ...]":
@@ -76,14 +78,14 @@ def _take(offer, instances) -> "tuple[InstanceId, ...]":
 
 class FirstPermittedChoice:
     """
-    **허용된 후보의 앞쪽**을 집고, 유발은 **언제나 발동한다.**
+    **허용된 후보의 앞쪽**을 집고, 제안은 **언제나 받아들인다.**
 
     후보 순서는 관측의 순서다 (``CandidateResolver`` 가 존을 훑는 순서),
     그래서 같은 판이면 같은 선택이 나온다.
 
-    🔴 **"언제나 발동" 은 전략이 아니라 기준점이다.** 강제 유발과 임의
-    유발을 가르는 지식이 이 엔진에 없으므로
-    (``TriggerRequirement.UNKNOWN``), 이 정책은 그 모름을 **자기 선택으로**
+    🔴 **"언제나 발동" 은 전략이 아니라 기준점이다.** 발동이 강제인지
+    임의인지를 가르는 지식이 이 엔진에 없고 (제안의
+    ``requirement_known`` 이 거짓이다), 이 정책은 그 모름을 **자기 선택으로**
     메꾼다 — 규칙이 강제한다고 주장하지 않는다.
     """
 
@@ -92,7 +94,7 @@ class FirstPermittedChoice:
     def __init__(self, name: str = "first-permitted"):
         self.name = name
 
-    def activate_trigger(self, offer) -> bool:
+    def activate_effect(self, offer) -> bool:
         return True
 
     def choose_cards(self, offer) -> "tuple[InstanceId, ...]":
@@ -104,7 +106,7 @@ class FirstPermittedChoice:
 
 class DeclineChoice:
     """
-    **아무 유발도 발동하지 않는다.** 대조군이다.
+    **아무 효과도 발동하지 않는다.** 대조군이다.
 
     쓸모는 하나다 — 발동이 **선택**임을 보이는 것. 이 정책으로 돌린 판에서
     카드가 움직이지 않으면, 움직인 판의 그 이동은 정책의 결정이다.
@@ -115,7 +117,7 @@ class DeclineChoice:
     def __init__(self, name: str = "decline"):
         self.name = name
 
-    def activate_trigger(self, offer) -> bool:
+    def activate_effect(self, offer) -> bool:
         return False
 
     def choose_cards(self, offer) -> "tuple[InstanceId, ...]":
@@ -148,7 +150,7 @@ class RandomChoice:
         """몇 번 뽑았는가. 정책이 **생각한 양**이지 듀얼의 좌표가 아니다."""
         return self._draws
 
-    def activate_trigger(self, offer) -> bool:
+    def activate_effect(self, offer) -> bool:
         self._draws += 1
         return bool(self._rng.randrange(2))
 

@@ -156,7 +156,7 @@ class ChoiceSelector(Protocol):
 
     name: str
 
-    def activate_trigger(self, offer: TriggerOffer) -> bool:
+    def activate_effect(self, offer: TriggerOffer) -> bool:
         ...  # pragma: no cover - 프로토콜
 
     def choose_cards(self, offer: ChoiceOffer) -> "tuple[InstanceId, ...]":
@@ -337,7 +337,7 @@ def run_trigger(
 
     🔴 4번이 없으면 정책의 말이 허가가 된다.
     """
-    wants = bool(selector.activate_trigger(offer))
+    wants = bool(selector.activate_effect(offer))
     if not wants:
         return TriggerRun(
             offer=offer,
