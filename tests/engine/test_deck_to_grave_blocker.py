@@ -56,7 +56,15 @@ from engine.effect.library import (
     implementation_registry,
 )
 from engine.effect.operation import OperationKind
-from engine.effect.ruling import BoardRuling, RuleQuestion, rulebook_facts
+from engine.effect.ruling import (
+    BoardRuling,
+    CardRuleFacts,
+    OperationRulingRegistry,
+    RuleBasis,
+    RuleFact,
+    RuleQuestion,
+    rulebook_facts,
+)
 from engine.effect.target import PRIMARY_TARGET, TargetSelection, TargetRequirement
 from engine.effect.targeting import TargetResolver
 from engine.game_state_view import CardDefinitionView, GameStateView
@@ -838,3 +846,121 @@ def test_h02_the_production_code_gained_no_card_branch(repository):
     #: 묘지 상수 이름도 판정 계층에 없다 — 유도를 더하지 않았다는 뜻이다.
     assert "EFFECT_CANNOT_TO_GRAVE" not in ruling_source
     assert "EFFECT_TO_GRAVE_REDIRECT" not in ruling_source
+
+
+# ======================================================================
+# I. 🔴 막는 것이 **사실 하나**임을 보인다 (§13.1 의 근거)
+# ======================================================================
+
+
+@pytest.mark.real_card
+@requires_official_db
+def test_i01_one_registered_fact_lets_the_same_path_resolve(repository):
+    """
+    🔴 **해결 경로는 이미 완성되어 있다.** 막는 것은 판정 사실 하나다.
+
+    ``OPERATION_RULINGS`` 의 **사본**에 성유물－『성장』의
+    ``MAY_BE_SENT_TO_GRAVE`` 를 한 줄 넣고 **같은 프로덕션 해결 경로**를
+    돌린다. 그러면 ``UNCHECKED_RULES`` 가 ``RESOLVED`` 가 되고 카드가 실제로
+    덱에서 묘지로 간다.
+
+    읽는 법
+    -------
+    이것이 보이는 것: 조작 · 체인 해결 · ``EventJournal`` 은 준비돼 있다.
+    이것이 **보이지 않는** 것: 818장에 대한 **유도의 정당성**. 그 사실을
+    여기서는 손으로 넣었다.
+
+    🔴 **그래서 이것은 수준 3 달성이 아니다.** 프로덕션 등록소는 그대로이고
+    (``test_i02``), 프로덕션 경로에서 기르수 효과는 여전히 멈춘다
+    (``test_g01``). 이 시험은 §13.1 추천의 **근거**를 고정한다.
+    """
+    others = [cid for cid in _orcust_pool(repository) if cid != SELF_GRAVE_TRIGGER]
+    #: 앞쪽 넷은 패로 뽑힌다 — 그 뒤에 두어야 덱에 남는다.
+    setup = _girsu_board(repository, deck_pool=others[:4] + [SELF_GRAVE_TRIGGER] + others[4:])
+    duel = setup.duel
+    source = _summon_girsu(duel)
+    _, _, _, found = _girsu_candidates(duel, source)
+    chosen = next(
+        i
+        for i in found.eligible
+        if duel.state.find_instance(i).card_id == SELF_GRAVE_TRIGGER
+    )
+
+    #: 🔴 **사본**이다. 원본 등록소는 건드리지 않는다.
+    derived = OperationRulingRegistry(
+        tuple(OPERATION_RULINGS.facts_for(c) for c in OPERATION_RULINGS.card_ids)
+    )
+    note = (
+        "자기 스크립트가 EVENT_TO_GRAVE 를 SINGLE 로 등록한다 — 공식 "
+        "텍스트가 「이 카드가 묘지로 보내졌을 경우」다."
+    )
+    derived.register(
+        CardRuleFacts(
+            card_id=SELF_GRAVE_TRIGGER,
+            answers={
+                RuleQuestion.MAY_BE_SENT_TO_GRAVE: RuleFact(
+                    ConditionResult.TRUE, RuleBasis.CARD_TEXT, note
+                )
+            },
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=note,
+        )
+    )
+    assert len(derived) == len(OPERATION_RULINGS) + 1
+
+    deck_before = len(duel.state.player(MINE).zone(Zone.DECK))
+    grave_before = len(duel.state.player(MINE).zone(Zone.GRAVE))
+    registry = definition_registry()
+    activated = EffectActivator(registry, implementation_registry()).activate(
+        duel.state,
+        Chain(),
+        PlayerAction.activate_effect(
+            actor=MINE, source=source, effect_ref=EffectRef(GIRSU, 0)
+        ),
+        (TargetSelection(PRIMARY_TARGET, Selection.of(chosen)),),
+        authorization=GRANTED,
+    )
+    assert activated.status.value == "activated"
+
+    journal = EventJournal()
+    resolved = ChainResolver(
+        build_executor(journal, rulings=derived), registry
+    ).resolve_top(duel.state, activated.chain)
+
+    #: 🔴 여기서는 끝까지 간다.
+    assert resolved.result.status.name == "RESOLVED", resolved.result.reason
+    assert len(duel.state.player(MINE).zone(Zone.DECK)) == deck_before - 1
+    assert len(duel.state.player(MINE).zone(Zone.GRAVE)) == grave_before + 1
+    moved = duel.state.find_instance(chosen)
+    #: **그 인스턴스**가 갔다 — 같은 이름의 다른 장이 아니다.
+    assert moved.zone is Zone.GRAVE
+    assert moved.card_id == SELF_GRAVE_TRIGGER
+
+    #: 기록이 이동과 섞기를 둘 다 적는다.
+    entries = [str(e) for e in journal]
+    assert entries, "해결했는데 기록이 비었다"
+    assert any("send_to_grave" in text for text in entries), entries
+    assert any("DECK" in text and "GRAVE" in text for text in entries), entries
+
+
+@requires_official_db
+def test_i02_the_production_registry_is_untouched():
+    """
+    🔴 ``test_i01`` 이 **원본을 바꾸지 않았다**는 것을 따로 센다.
+
+    사본에 넣은 사실이 프로덕션 등록소로 새면 ``test_f01`` 이 조용히 뜻을
+    잃는다 — 그래서 원본의 크기와 내용을 함께 고정한다.
+    """
+    assert len(OPERATION_RULINGS) == 19
+    assert SELF_GRAVE_TRIGGER not in OPERATION_RULINGS
+    #: 원본에서 묘지 질문에 답하는 것은 **통상 몬스터 한 장**뿐이다.
+    answering = [
+        card_id
+        for card_id in OPERATION_RULINGS.card_ids
+        if OPERATION_RULINGS.facts_for(card_id).answer_for(
+            RuleQuestion.MAY_BE_SENT_TO_GRAVE
+        )
+        is not None
+    ]
+    assert answering == [FEATHERMAN], answering
