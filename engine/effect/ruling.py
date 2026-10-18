@@ -336,7 +336,7 @@ SEND_TO_GRAVE_RULE: str = (
 )
 
 
-def self_grave_trigger_fact(definition) -> "RuleFact | None":
+def self_grave_text_fact(definition) -> "RuleFact | None":
     """
     **그 카드 자신의 텍스트**가 자기 묘지행을 적었는가. 아니면 ``None``.
 
@@ -367,16 +367,16 @@ def self_grave_trigger_fact(definition) -> "RuleFact | None":
       between the basic rules and a card's effect, the card effect takes
       precedence."*
     """
-    signals = getattr(definition, "self_grave_trigger_signals", None)
-    if not signals:
-        #: ``None`` (스크립트를 읽지 못했다) 과 ``()`` (읽었고 없다) 를 **같이**
-        #: 돌려보낸다. 둘 다 이 증거로는 말할 수 없는 상태이고, 그 구분은
-        #: 관측에 남아 있어 보고가 할 수 있다 — 판정은 양쪽 모두 모른다.
+    evidence = getattr(definition, "self_grave_text_evidence", None)
+    #: 🔴 ``is True`` 로 묻는다. ``None`` (스크립트를 읽지 못했다) 과
+    #: ``False`` (읽었고 없다) 는 **둘 다** 이 증거로 말할 수 없는 상태이고,
+    #: 그 구분은 관측에 남아 있어 보고가 할 수 있다 — 판정은 양쪽 모두
+    #: 모른다. ``if not evidence`` 로 적으면 두 값이 한 칸에 들어간다.
+    if evidence is not True:
         return None
-    where = " · ".join(signals)
     note = (
-        f"{definition.name}: 자기 묘지행 유발을 등록한다 ({where}) — "
-        f"룰북: {SEND_TO_GRAVE_RULE}"
+        f"{definition.name}: 자기 묘지행을 전제한 효과가 그 카드 텍스트에 "
+        f"있다 — 룰북: {SEND_TO_GRAVE_RULE}"
     )
     return RuleFact(ConditionResult.TRUE, RuleBasis.CARD_TEXT, note)
 
@@ -388,7 +388,7 @@ def self_grave_trigger_fact(definition) -> "RuleFact | None":
 #: 한꺼번에 답하는 것과 **반대 방향**의 설계다 — 그쪽은 근거가 "효과가
 #: 없다" 여서 다섯에 모두 걸리지만, 이쪽 근거는 묘지에 대한 것뿐이다).
 DERIVED_FACTS: dict[RuleQuestion, object] = {
-    RuleQuestion.MAY_BE_SENT_TO_GRAVE: self_grave_trigger_fact,
+    RuleQuestion.MAY_BE_SENT_TO_GRAVE: self_grave_text_fact,
 }
 
 
@@ -747,7 +747,7 @@ __all__ = [
     "rulebook_facts",
     "token_facts",
     "SEND_TO_GRAVE_RULE",
-    "self_grave_trigger_fact",
+    "self_grave_text_fact",
     "DERIVED_FACTS",
     "derived_fact",
     "OperationRulingRegistry",

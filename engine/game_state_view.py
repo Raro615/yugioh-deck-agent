@@ -175,21 +175,25 @@ class CardDefinitionView:
     실어 보내는 것은 **이 목록에 든 네 상수의 등장 여부**뿐이다
     (:data:`core.card_model.NORMAL_SUMMON_RESTRICTION_CODES`).
     """
-    self_grave_trigger_signals: tuple[str, ...] | None = None
+    self_grave_text_evidence: bool | None = None
     """
-    이 카드가 **자기 묘지행**을 전제로 등록한 효과 블록들
-    (:attr:`core.card_model.Card.self_grave_trigger_signals`).
+    이 카드 자신의 텍스트가 **자기가 묘지로 보내진 상황**을 적었는가
+    (:attr:`core.card_model.Card.self_grave_text_evidence`).
 
     **세 가지 답이 서로 다르다.** ``None`` 은 "스크립트를 읽지 못했다" 고,
-    ``()`` 는 "끝까지 읽었고 그런 블록이 없다" 고, 비어 있지 않은 값은 "그
-    카드 자신의 텍스트가 자기 묘지행을 적었다" 고 말한다.
+    ``False`` 는 "끝까지 읽었고 그런 자리가 없다" 고, ``True`` 는 "그 카드
+    자신의 텍스트가 자기 묘지행을 적었다" 고 말한다. ``False`` 는 "묘지로
+    못 간다" 가 **아니다** — 이 증거로는 말할 수 없다는 뜻이다.
 
     기본값이 ``None`` 인 것은 :attr:`normal_summon_restriction_signals` 와
     같은 이유다 — **손으로 만든 관측이 조용히 허가를 얻지 않게** 한다.
-    여기서는 그 방향이 특히 중요하다: 이 값이 비어 있지 않으면 판정이
-    ``TRUE`` 를 낼 수 있으므로, 적지 않은 관측은 ``None`` 이어야 한다.
+    여기서는 그 방향이 특히 중요하다: 이 값이 ``True`` 면 판정이 묘지 이동을
+    허가할 수 있으므로, 적지 않은 관측은 ``None`` 이어야 한다.
 
-    실어 보내는 것은 스크립트 내용이 아니라 **블록 이름 목록**이다.
+    🔴 **한 비트만 싣는다.** 어느 효과 자리가 그렇게 적었는지, 어떤 사건
+    이름으로 등록했는지는 **내보내지 않는다** — 그것을 실으면 카드의 유발
+    사건 정체가 관측으로 나가고, 관측은 그것을 담지 않는다. 판정이 필요한
+    것은 "그 텍스트가 있는가" 한 가지다.
     """
     effect_count: int = 0
     """
@@ -270,7 +274,7 @@ class CardDefinitionView:
             normal_summon_restriction_signals=(
                 card.normal_summon_restriction_signals
             ),
-            self_grave_trigger_signals=card.self_grave_trigger_signals,
+            self_grave_text_evidence=card.self_grave_text_evidence,
             effect_count=len(card.script.effects) if card.script is not None else 0,
         )
 
@@ -295,7 +299,7 @@ class CardDefinitionView:
             self.type_names,
             self.setcodes,
             self.normal_summon_restriction_signals,
-            self.self_grave_trigger_signals,
+            self.self_grave_text_evidence,
             self.effect_count,
         )
 
@@ -331,14 +335,10 @@ class CardDefinitionView:
                 if self.normal_summon_restriction_signals is None
                 else list(self.normal_summon_restriction_signals)
             ),
-            #: ``None`` 은 ``None`` 으로 남는다 — ``[]`` 로 바꾸면 "읽지
-            #: 않았다" 가 "읽었고 없다" 로 둔갑하고, 그 둘의 판정 결과가
-            #: 다르다 (``UNKNOWN`` 대 ``TRUE`` 를 가르는 값이다).
-            "self_grave_trigger_signals": (
-                None
-                if self.self_grave_trigger_signals is None
-                else list(self.self_grave_trigger_signals)
-            ),
+            #: ``None`` 은 ``None`` 으로 남는다 — ``False`` 로 바꾸면 "읽지
+            #: 않았다" 가 "읽었고 없다" 로 둔갑한다. 지금은 둘의 판정 결과가
+            #: 같지만 뜻이 다르고, 뜻이 같아지는 날이 오면 안 된다.
+            "self_grave_text_evidence": self.self_grave_text_evidence,
             "effect_count": self.effect_count,
         }
 

@@ -569,31 +569,43 @@ class Card:
         return tuple(c for c in NORMAL_SUMMON_RESTRICTION_CODES if c in codes)
 
     @property
-    def self_grave_trigger_signals(self) -> tuple[str, ...] | None:
+    def self_grave_text_evidence(self) -> bool | None:
         """
-        이 카드가 **자기 묘지행**을 전제로 등록한 효과 블록들.
+        이 카드 자신의 텍스트가 **자기가 묘지로 보내진 상황**을 적었는가.
 
         **세 가지 답이 서로 다르다** (:attr:`normal_summon_restriction_signals`
         와 같은 규약, Phase 6-U §6).
 
         - ``None`` — **스크립트가 없다.** 증거를 찾을 **정보가 없다**.
           증거가 없다는 뜻이 **아니다**.
-        - ``()`` — 스크립트를 끝까지 읽었고 그런 블록이 **한 건도 없다**.
+        - ``False`` — 스크립트를 끝까지 읽었고 그런 자리가 **없다**.
           이것은 "묘지로 못 간다" 가 아니라 **"이 증거로는 말할 수 없다"** 다.
-        - 비어 있지 않음 — 블록 이름들 (``e1`` · ``e2`` …). 그 카드 자신의
-          텍스트가 자기 묘지행을 적었다는 증거다.
+        - ``True`` — 그 카드 자신의 텍스트가 자기 묘지행을 적었다.
+
+        🔴 **``False`` 와 ``None`` 을 ``if not`` 으로 합치지 말 것.** 둘의
+        판정 결과가 같아서 지금은 티가 나지 않지만, 뜻이 다르다. 읽는 쪽은
+        ``is True`` 로 묻는다.
 
         🔴 **범위를 함께 본다.** :data:`SELF_GRAVE_TRIGGER_SCOPE` 없이
         사건만 보면 *남이* 묘지로 갈 때 반응하는 카드가 자기 묘지행의
         증거로 읽힌다 — 그것은 거짓 허가다.
+
+        .. note::
+           🔴 **왜 블록 이름을 돌려주지 않는가** (Phase 6-X 가 한 번
+           그렇게 만들었다가 고쳤다). 이 값은 관측
+           (:class:`~engine.game_state_view.CardDefinitionView`) 에 실린다.
+           블록 이름과 사건 이름을 실으면 **유발 메타데이터가 관측으로
+           나가고**, 그것을 금지하는 감사가 있다
+           (``tests/test_trigger_semantics_audit.py`` 의 ``test_13``) —
+           내부에 데이터가 있다는 것과 AI 가 그것을 볼 수 있다는 것은 다른
+           일이다. 판정이 필요한 것은 **한 비트**이므로 한 비트만 싣는다.
         """
         if self.script is None:
             return None
-        return tuple(
-            spec.index or f"#{position}"
-            for position, spec in enumerate(self.script.effects)
-            if spec.code == SELF_GRAVE_TRIGGER_EVENT
+        return any(
+            spec.code == SELF_GRAVE_TRIGGER_EVENT
             and SELF_GRAVE_TRIGGER_SCOPE in set(spec.effect_types)
+            for spec in self.script.effects
         )
 
     @property

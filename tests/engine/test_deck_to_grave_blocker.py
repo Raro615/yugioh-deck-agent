@@ -633,7 +633,7 @@ def test_f01_the_gate_now_tells_evidence_from_no_evidence(repository):
 
     #: 🔴 **갈린다** — 이것이 6-W 와 달라진 전부다.
     assert answers["A 증거 있다"][0] is ConditionResult.TRUE, answers
-    assert "자기 묘지행 유발을 등록한다" in answers["A 증거 있다"][1]
+    assert "자기 묘지행을 전제한 효과가 그 카드 텍스트에 있다" in answers["A 증거 있다"][1]
 
     #: 증거가 없는 둘은 그대로 ``UNKNOWN`` 이다 — 근거 없는 허가를 주지
     #: 않는다는 것이 이 Phase 가 **지킨** 쪽이다.
@@ -720,8 +720,8 @@ def test_g01_activation_succeeds_and_resolution_stops_at_the_gate(repository):
     #: "해결이 멈춘다" 는 6-X 가 유도를 더한 뒤에도 성립하고, 그것이
     #: **근거 없는 허가를 주지 않는다**는 뜻이다 (``test_f01`` 과 짝이다).
     assert all(
-        not repository.get(duel.state.find_instance(i).card_id)
-        .self_grave_trigger_signals
+        repository.get(duel.state.find_instance(i).card_id).self_grave_text_evidence
+        is not True
         for i in found.eligible
     )
 
@@ -762,9 +762,11 @@ def test_g02_nothing_moves_before_or_after_the_blocked_resolution(repository):
     definition, _, _, found = _girsu_candidates(duel, source)
     chosen = found.eligible[0]
     #: ``test_g01`` 과 같은 전제 — 이 후보에는 증거가 없다.
-    assert not repository.get(
-        duel.state.find_instance(chosen).card_id
-    ).self_grave_trigger_signals
+    assert (
+        repository.get(duel.state.find_instance(chosen).card_id)
+        .self_grave_text_evidence
+        is not True
+    )
 
     deck_before = len(duel.state.player(MINE).zone(Zone.DECK))
     grave_before = len(duel.state.player(MINE).zone(Zone.GRAVE))

@@ -55,7 +55,7 @@ from engine.effect.ruling import (
     RuleBasis,
     RuleQuestion,
     derived_fact,
-    self_grave_trigger_fact,
+    self_grave_text_fact,
 )
 from engine.effect.target import PRIMARY_TARGET, TargetSelection
 from engine.effect.targeting import TargetResolver
@@ -76,7 +76,7 @@ GRANTED = ValidationResult.valid()
 
 #: 성유물－『성장』 — 「이 카드가 묘지로 보내졌을 경우」. **증거가 있다.**
 GROWTH = 93920420
-#: 오르페골 코어 — 스크립트를 끝까지 읽었고 그 블록이 없다 (``()``).
+#: 오르페골 코어 — 스크립트를 끝까지 읽었고 그런 자리가 없다 (``False``).
 NO_EVIDENCE = 55051920
 #: 텐사우전드 드래곤 — 증거 없는 **효과 몬스터** (어리석은 매장의 후보가 된다).
 NO_EVIDENCE_MONSTER = 10000
@@ -123,8 +123,8 @@ def _ask(
     return board.explain(question, target)
 
 
-def _signals(repository, card_id) -> "tuple[str, ...] | None":
-    return repository.get(card_id).self_grave_trigger_signals
+def _evidence(repository, card_id) -> "bool | None":
+    return repository.get(card_id).self_grave_text_evidence
 
 
 def _resolve_deck_choice(game, source, card_id, effect_ref, chosen_filter):
@@ -178,7 +178,7 @@ def test_a01_the_derivation_is_bound_to_exactly_one_question():
     이쪽 근거는 묘지에 대한 것뿐이므로 **한 질문에만** 걸린다.
     """
     assert set(DERIVED_FACTS) == {RuleQuestion.MAY_BE_SENT_TO_GRAVE}
-    assert DERIVED_FACTS[RuleQuestion.MAY_BE_SENT_TO_GRAVE] is self_grave_trigger_fact
+    assert DERIVED_FACTS[RuleQuestion.MAY_BE_SENT_TO_GRAVE] is self_grave_text_fact
 
 
 @requires_official_db
@@ -190,24 +190,26 @@ def test_a02_the_signal_has_three_different_answers(repository):
     흘러간다. 이 Phase 에서는 그 방향이 **거짓 허가**가 되므로 특히 중요하다.
     """
     #: 스크립트가 없다 — 읽지 못했다.
-    assert _signals(repository, FEATHERMAN) is None
-    #: 끝까지 읽었고 그 블록이 없다.
-    assert _signals(repository, NO_EVIDENCE) == ()
-    assert _signals(repository, FORTRESS) == ()
-    #: 찾았다 — 블록 이름이 담긴다.
-    found = _signals(repository, GROWTH)
-    assert found and all(re.fullmatch(r"e\d+|#\d+", name) for name in found), found
+    assert _evidence(repository, FEATHERMAN) is None
+    #: 끝까지 읽었고 그런 자리가 없다.
+    assert _evidence(repository, NO_EVIDENCE) is False
+    assert _evidence(repository, FORTRESS) is False
+    #: 찾았다.
+    assert _evidence(repository, GROWTH) is True
+    #: 🔴 ``False`` 와 ``None`` 이 **다른 값**이다 — ``if not`` 으로 합칠 수
+    #: 없다는 것이 이 규약의 요점이다.
+    assert _evidence(repository, NO_EVIDENCE) is not None
 
 
 @requires_official_db
 def test_a03_only_a_nonempty_signal_becomes_a_fact(repository):
-    """``None`` 과 ``()`` 는 **둘 다** 사실이 되지 않는다."""
+    """``None`` 과 ``False`` 는 **둘 다** 사실이 되지 않는다."""
     for card_id in (FEATHERMAN, NO_EVIDENCE, FORTRESS):
         view = CardDefinitionView.of(repository.get(card_id))
-        assert self_grave_trigger_fact(view) is None, card_id
+        assert self_grave_text_fact(view) is None, card_id
 
     view = CardDefinitionView.of(repository.get(GROWTH))
-    fact = self_grave_trigger_fact(view)
+    fact = self_grave_text_fact(view)
     assert fact is not None
     assert fact.answer is ConditionResult.TRUE
     #: 근거는 **그 카드의 텍스트**다 — 룰북 유도가 아니다.
@@ -244,7 +246,7 @@ def test_a04_the_scope_constant_is_load_bearing(repository):
     derived = {
         card.id
         for card in repository.all_cards()
-        if card.script is not None and card.self_grave_trigger_signals
+        if card.self_grave_text_evidence is True
     }
     assert derived == with_scope, len(derived ^ with_scope)
 
@@ -287,7 +289,7 @@ def test_b01_no_card_in_the_corpus_forbids_its_own_grave_movement(repository):
 
     #: 🔴 그래서 그 세 장 **자신**은 묘지행 증거도 금지도 없다 — ``UNKNOWN``.
     for card_id in users:
-        assert _signals(repository, card_id) == (), card_id
+        assert _evidence(repository, card_id) is False, card_id
 
 
 @requires_official_db
@@ -333,7 +335,7 @@ def test_c01_an_ordinary_deck_monster_moves_by_effect(repository):
     """§5-1 — 일반적인 덱 몬스터가 효과로 묘지로 간다 (증거가 있을 때)."""
     verdict = _ask(repository, GROWTH)
     assert verdict.answer is ConditionResult.TRUE
-    assert "자기 묘지행 유발을 등록한다" in verdict.reason
+    assert "자기 묘지행을 전제한 효과가 그 카드 텍스트에 있다" in verdict.reason
 
 
 @requires_official_db
@@ -355,7 +357,7 @@ def test_c02_the_only_explicit_prohibition_is_the_token_rule(repository):
     conflicting = [
         card.id
         for card in repository.all_cards()
-        if "TOKEN" in set(card.type_names) and card.self_grave_trigger_signals
+        if "TOKEN" in set(card.type_names) and card.self_grave_text_evidence
     ]
     assert conflicting == [], conflicting
 
@@ -429,12 +431,12 @@ def test_c07_a_missing_script_never_becomes_a_permission(repository):
     scriptless = [
         card.id
         for card in repository.all_cards()
-        if card.self_grave_trigger_signals is None
+        if card.self_grave_text_evidence is None
     ]
     assert len(scriptless) > 0
     for card_id in scriptless[:50]:
         view = CardDefinitionView.of(repository.get(card_id))
-        assert self_grave_trigger_fact(view) is None, card_id
+        assert self_grave_text_fact(view) is None, card_id
 
     #: 페더맨의 ``TRUE`` 는 유도가 아니다 — 근거가 룰북이다.
     verdict = _ask(repository, FEATHERMAN)
@@ -628,7 +630,7 @@ def test_d04_choosing_a_card_without_evidence_still_stops(repository):
         source,
         GIRSU,
         EffectRef(GIRSU, 0),
-        lambda cid: not repository.get(cid).self_grave_trigger_signals,
+        lambda cid: repository.get(cid).self_grave_text_evidence is not True,
     )
     assert activated.status.value == "activated"
     assert resolved.result.status.name == "UNCHECKED_RULES"
@@ -737,7 +739,7 @@ def test_f02_the_derivation_never_answers_false():
     사실에서 "갈 수 없다" 가 나오지 않는다 — 그 방향이 거짓 금지다.
     """
     source = (ROOT / "engine" / "effect" / "ruling.py").read_text("utf-8")
-    body = source[source.index("def self_grave_trigger_fact") :]
+    body = source[source.index("def self_grave_text_fact") :]
     body = body[: body.index("\nDERIVED_FACTS")]
     assert "ConditionResult.TRUE" in body
     assert "ConditionResult.FALSE" not in body
@@ -758,7 +760,7 @@ def test_f03_the_registry_and_the_rulebook_still_come_first(repository):
         RuleQuestion.MAY_BE_SENT_TO_GRAVE
     )
     assert declared is not None and declared.basis is RuleBasis.RULEBOOK
-    assert _signals(repository, FEATHERMAN) is None
+    assert _evidence(repository, FEATHERMAN) is None
     verdict = _ask(repository, FEATHERMAN)
     assert verdict.reason == declared.note
 
@@ -797,7 +799,7 @@ GRAVE_GOING_PHRASES: tuple[tuple[str, str, str], ...] = (
 @requires_official_db
 def test_g01_the_newly_permitted_population_is_measured(repository):
     """새로 허가된 카드 수를 고정한다. 숫자가 움직이면 여기서 드러난다."""
-    newly = [c for c in repository.all_cards() if c.self_grave_trigger_signals]
+    newly = [c for c in repository.all_cards() if c.self_grave_text_evidence is True]
     assert len(newly) == 991, len(newly)
     assert sum(1 for c in newly if not c.is_extra_deck) == 818
     assert sum(1 for c in newly if c.is_extra_deck) == 173
@@ -811,7 +813,7 @@ def test_g02_every_newly_permitted_card_is_corroborated_by_its_text(repository):
     6-U 가 4,028장에 한 것과 같은 역검증이다. 각 카드의 텍스트에 룰북이
     묘지행으로 규정한 행동 가운데 하나가 적혀 있다.
     """
-    newly = [c for c in repository.all_cards() if c.self_grave_trigger_signals]
+    newly = [c for c in repository.all_cards() if c.self_grave_text_evidence is True]
     counts = {label: 0 for label, _, _ in GRAVE_GOING_PHRASES}
     unexplained = []
     for card in newly:
@@ -836,7 +838,7 @@ def test_g02_every_newly_permitted_card_is_corroborated_by_its_text(repository):
 @requires_official_db
 def test_g03_no_prohibited_card_slipped_into_the_permission(repository):
     """🔴 **반대 방향** — 자기 묘지행을 금지하는 상수를 가진 카드가 섞이지 않았다."""
-    newly = [c for c in repository.all_cards() if c.self_grave_trigger_signals]
+    newly = [c for c in repository.all_cards() if c.self_grave_text_evidence is True]
     for code in ("EFFECT_CANNOT_TO_GRAVE", "EFFECT_CANNOT_TO_GRAVE_AS_COST"):
         bad = [c.id for c in newly if code in (c.script.effect_codes or ())]
         assert bad == [], (code, bad)
@@ -856,7 +858,7 @@ def test_g04_a_redirect_carrier_may_still_go_to_the_grave_itself(repository):
     그리고 그 카드가 필드에 깔리면 훑기가 멈춘다 (``test_c04`` 와 같은
     경로) — 대체 효과를 무시하지 않는다는 뜻이다.
     """
-    newly = [c for c in repository.all_cards() if c.self_grave_trigger_signals]
+    newly = [c for c in repository.all_cards() if c.self_grave_text_evidence is True]
     carriers = sorted(
         c.id
         for c in newly
@@ -908,7 +910,7 @@ def test_g05_the_verdict_distribution_changed_only_one_way(repository):
             book = rulebook_facts(view)
             if book is not None:
                 prior = book.answer_for(question)
-        derived = self_grave_trigger_fact(view)
+        derived = self_grave_text_fact(view)
         if prior is not None:
             already += 1
             if derived is not None and derived.answer is not prior.answer:
