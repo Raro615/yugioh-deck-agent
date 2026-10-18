@@ -309,6 +309,29 @@ NORMAL_SUMMON_RESTRICTION_CODES: tuple[str, ...] = (
     "EFFECT_SUMMON_PROC",
 )
 
+#: 카드가 **자기 자신이 묘지로 보내지는 것**을 전제로 등록하는 사건.
+#:
+#: 룰북이 이 모양을 묘지행에 직접 묶는다 (``Send to the Graveyard``):
+#:
+#:     "A card can be sent to the Graveyard in various ways. Destroying a
+#:      card, discarding, and Tributing a monster are all actions that send
+#:      a card to the Graveyard, and will normally activate **"When this
+#:      card is sent to the Graveyard…"** Trigger Effects."
+#:
+#: 🔴 **이것은 허가가 아니라 증거다.** "제약이 없으면 보낼 수 있다" 를
+#: 말하는 문장은 룰북에 없고 (Phase 6-W §3.5 가 전수로 확인했다), 그래서
+#: 이 저장소는 그 추론을 쓰지 않는다. 쓰는 것은 반대 방향이다 — **그 카드
+#: 자신의 텍스트가 자기가 묘지로 보내진 상황을 적었다면, 그 카드는 묘지로
+#: 보내질 수 있다.**
+SELF_GRAVE_TRIGGER_EVENT: str = "EVENT_TO_GRAVE"
+
+#: 그 사건이 **자기 자신**에게 걸렸다고 말하는 적용 범위.
+#:
+#: ``EffectSpec.effect_types`` 의 적용 범위 축에서 ``SINGLE`` 은 "이 카드
+#: 한 장" 이다 (``FIELD`` · ``EQUIP`` 과 **0회 공존**한다). 범위를 보지
+#: 않으면 *남의* 묘지행에 반응하는 카드가 자기 묘지행의 증거로 읽힌다.
+SELF_GRAVE_TRIGGER_SCOPE: str = "SINGLE"
+
 
 @dataclass(slots=True)
 class Card:
@@ -544,6 +567,34 @@ class Card:
             return None
         codes = set(self.script.effect_codes or ())
         return tuple(c for c in NORMAL_SUMMON_RESTRICTION_CODES if c in codes)
+
+    @property
+    def self_grave_trigger_signals(self) -> tuple[str, ...] | None:
+        """
+        이 카드가 **자기 묘지행**을 전제로 등록한 효과 블록들.
+
+        **세 가지 답이 서로 다르다** (:attr:`normal_summon_restriction_signals`
+        와 같은 규약, Phase 6-U §6).
+
+        - ``None`` — **스크립트가 없다.** 증거를 찾을 **정보가 없다**.
+          증거가 없다는 뜻이 **아니다**.
+        - ``()`` — 스크립트를 끝까지 읽었고 그런 블록이 **한 건도 없다**.
+          이것은 "묘지로 못 간다" 가 아니라 **"이 증거로는 말할 수 없다"** 다.
+        - 비어 있지 않음 — 블록 이름들 (``e1`` · ``e2`` …). 그 카드 자신의
+          텍스트가 자기 묘지행을 적었다는 증거다.
+
+        🔴 **범위를 함께 본다.** :data:`SELF_GRAVE_TRIGGER_SCOPE` 없이
+        사건만 보면 *남이* 묘지로 갈 때 반응하는 카드가 자기 묘지행의
+        증거로 읽힌다 — 그것은 거짓 허가다.
+        """
+        if self.script is None:
+            return None
+        return tuple(
+            spec.index or f"#{position}"
+            for position, spec in enumerate(self.script.effects)
+            if spec.code == SELF_GRAVE_TRIGGER_EVENT
+            and SELF_GRAVE_TRIGGER_SCOPE in set(spec.effect_types)
+        )
 
     @property
     def can_self_special_summon_from_hand(self) -> bool:

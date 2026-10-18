@@ -175,6 +175,22 @@ class CardDefinitionView:
     실어 보내는 것은 **이 목록에 든 네 상수의 등장 여부**뿐이다
     (:data:`core.card_model.NORMAL_SUMMON_RESTRICTION_CODES`).
     """
+    self_grave_trigger_signals: tuple[str, ...] | None = None
+    """
+    이 카드가 **자기 묘지행**을 전제로 등록한 효과 블록들
+    (:attr:`core.card_model.Card.self_grave_trigger_signals`).
+
+    **세 가지 답이 서로 다르다.** ``None`` 은 "스크립트를 읽지 못했다" 고,
+    ``()`` 는 "끝까지 읽었고 그런 블록이 없다" 고, 비어 있지 않은 값은 "그
+    카드 자신의 텍스트가 자기 묘지행을 적었다" 고 말한다.
+
+    기본값이 ``None`` 인 것은 :attr:`normal_summon_restriction_signals` 와
+    같은 이유다 — **손으로 만든 관측이 조용히 허가를 얻지 않게** 한다.
+    여기서는 그 방향이 특히 중요하다: 이 값이 비어 있지 않으면 판정이
+    ``TRUE`` 를 낼 수 있으므로, 적지 않은 관측은 ``None`` 이어야 한다.
+
+    실어 보내는 것은 스크립트 내용이 아니라 **블록 이름 목록**이다.
+    """
     effect_count: int = 0
     """
     ``EffectRef`` 로 **지목할 수 있는** 효과의 개수.
@@ -254,6 +270,7 @@ class CardDefinitionView:
             normal_summon_restriction_signals=(
                 card.normal_summon_restriction_signals
             ),
+            self_grave_trigger_signals=card.self_grave_trigger_signals,
             effect_count=len(card.script.effects) if card.script is not None else 0,
         )
 
@@ -278,6 +295,7 @@ class CardDefinitionView:
             self.type_names,
             self.setcodes,
             self.normal_summon_restriction_signals,
+            self.self_grave_trigger_signals,
             self.effect_count,
         )
 
@@ -312,6 +330,14 @@ class CardDefinitionView:
                 None
                 if self.normal_summon_restriction_signals is None
                 else list(self.normal_summon_restriction_signals)
+            ),
+            #: ``None`` 은 ``None`` 으로 남는다 — ``[]`` 로 바꾸면 "읽지
+            #: 않았다" 가 "읽었고 없다" 로 둔갑하고, 그 둘의 판정 결과가
+            #: 다르다 (``UNKNOWN`` 대 ``TRUE`` 를 가르는 값이다).
+            "self_grave_trigger_signals": (
+                None
+                if self.self_grave_trigger_signals is None
+                else list(self.self_grave_trigger_signals)
             ),
             "effect_count": self.effect_count,
         }

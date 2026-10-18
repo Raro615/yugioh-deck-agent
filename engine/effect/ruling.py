@@ -322,6 +322,85 @@ def token_facts(card_id: int, name: str = "") -> CardRuleFacts:
 
 
 # ======================================================================
+# 카드 자신의 텍스트에서 **질문 하나**에 대해 유도되는 것 (Phase 6-X)
+# ======================================================================
+#: 룰북 원문. **자기 묘지행 유발**을 묘지행에 묶는 줄이다.
+#:
+#:     "A card can be sent to the Graveyard in various ways. Destroying a
+#:      card, discarding, and Tributing a monster are all actions that send
+#:      a card to the Graveyard, and will normally activate "When this card
+#:      is sent to the Graveyard…" Trigger Effects."
+SEND_TO_GRAVE_RULE: str = (
+    "all actions that send a card to the Graveyard, and will normally "
+    'activate "When this card is sent to the Graveyard…" Trigger Effects'
+)
+
+
+def self_grave_trigger_fact(definition) -> "RuleFact | None":
+    """
+    **그 카드 자신의 텍스트**가 자기 묘지행을 적었는가. 아니면 ``None``.
+
+    왜 이것이 근거가 되는가
+    -----------------------
+    :data:`SEND_TO_GRAVE_RULE` 이 그 텍스트 모양을 묘지행에 **직접** 묶는다
+    — "When this card is sent to the Graveyard…" 유발 효과는 카드를 묘지로
+    보내는 행동이 발동시킨다. 그러므로 그런 유발을 **인쇄한** 카드는 묘지로
+    보내지는 카드다.
+
+    🔴 **쓰지 않은 추론이 하나 있다.** "제약 상수가 없으니 보낼 수 있다" 는
+    말하지 않는다. 그 추론을 licensing 하는 문장이 룰북에 없고 (Phase 6-W
+    §3.5 가 ``Send to the Graveyard`` 항목 전문을 읽어 ``unless`` ·
+    ``restriction`` 이 **둘 다 없음**을 확인했다), 근거 없는 허가는 이
+    계층이 하지 않는 일이다. 그래서 유도는 **증거가 있는 쪽으로만** 간다.
+
+    이 함수가 하지 않는 일
+    ----------------------
+    - **다른 질문에 답하지 않는다.** 묘지로 보내질 수 있다는 것은 패로
+      되돌려질 수 있다거나 제외될 수 있다는 뜻이 아니다
+      (:data:`DERIVED_FACTS` 가 질문 하나에만 이 함수를 묶는다).
+    - **판을 보지 않는다.** 지금 적용 중인 금지 · 대체 효과는
+      :meth:`BoardRuling._interference` 가 따로 본다. 그래서 이 함수가
+      ``TRUE`` 를 돌려주어도 판이 막으면 답은 ``UNKNOWN`` 이다.
+    - **금지를 덮지 않는다.** 등록소와 룰북 유도가 먼저 답하고
+      (:meth:`BoardRuling._facts_of`), 이 함수는 **그 둘이 침묵할 때만**
+      불린다. 룰북이 그 순서를 요구한다 — *"If there is a discrepancy
+      between the basic rules and a card's effect, the card effect takes
+      precedence."*
+    """
+    signals = getattr(definition, "self_grave_trigger_signals", None)
+    if not signals:
+        #: ``None`` (스크립트를 읽지 못했다) 과 ``()`` (읽었고 없다) 를 **같이**
+        #: 돌려보낸다. 둘 다 이 증거로는 말할 수 없는 상태이고, 그 구분은
+        #: 관측에 남아 있어 보고가 할 수 있다 — 판정은 양쪽 모두 모른다.
+        return None
+    where = " · ".join(signals)
+    note = (
+        f"{definition.name}: 자기 묘지행 유발을 등록한다 ({where}) — "
+        f"룰북: {SEND_TO_GRAVE_RULE}"
+    )
+    return RuleFact(ConditionResult.TRUE, RuleBasis.CARD_TEXT, note)
+
+
+#: 질문 → 그 질문 **하나**에만 쓰는 유도 함수.
+#:
+#: 🔴 **표로 둔 이유가 범위다.** 유도를 질문에 묶어 두지 않으면 묘지행의
+#: 근거가 다섯 질문 전부로 번진다 (:func:`normal_monster_facts` 가 다섯을
+#: 한꺼번에 답하는 것과 **반대 방향**의 설계다 — 그쪽은 근거가 "효과가
+#: 없다" 여서 다섯에 모두 걸리지만, 이쪽 근거는 묘지에 대한 것뿐이다).
+DERIVED_FACTS: dict[RuleQuestion, object] = {
+    RuleQuestion.MAY_BE_SENT_TO_GRAVE: self_grave_trigger_fact,
+}
+
+
+def derived_fact(question: RuleQuestion, definition) -> "RuleFact | None":
+    """:data:`DERIVED_FACTS` 에 그 질문이 있으면 유도한다. 없으면 ``None``."""
+    derive = DERIVED_FACTS.get(question)
+    if derive is None or definition is None:
+        return None
+    return derive(definition)
+
+
+# ======================================================================
 # 모음
 # ======================================================================
 
@@ -500,14 +579,22 @@ class BoardRuling:
             )
 
         facts = self._facts_of(card)
-        if facts is None:
-            return RulingVerdict(
-                ConditionResult.UNKNOWN,
-                f"{card.card_id} 에 대해 확인된 것이 없습니다.",
-            )
-
-        fact = facts.answer_for(question)
+        fact = None if facts is None else facts.answer_for(question)
         if fact is None:
+            #: 🔴 **마지막 자리** (Phase 6-X). 등록소와 룰북 유도가 둘 다
+            #: 침묵할 때만 카드 자신의 텍스트에서 유도한다. 순서가 뒤바뀌면
+            #: 유도가 사람이 확인한 금지를 덮는다 — 룰북이 그 순서를 요구한다
+            #: (*"If there is a discrepancy between the basic rules and a
+            #: card's effect, the card effect takes precedence."*).
+            #:
+            #: 유도는 **질문 하나**에만 걸린다 (:data:`DERIVED_FACTS`).
+            fact = derived_fact(question, card.definition)
+        if fact is None:
+            if facts is None:
+                return RulingVerdict(
+                    ConditionResult.UNKNOWN,
+                    f"{card.card_id} 에 대해 확인된 것이 없습니다.",
+                )
             return RulingVerdict(
                 ConditionResult.UNKNOWN,
                 f"{card.card_id} 에 대해 '{question.value}' 는 확인되지 "
@@ -659,6 +746,10 @@ __all__ = [
     "normal_monster_facts",
     "rulebook_facts",
     "token_facts",
+    "SEND_TO_GRAVE_RULE",
+    "self_grave_trigger_fact",
+    "DERIVED_FACTS",
+    "derived_fact",
     "OperationRulingRegistry",
     "INTERFERENCE_ZONES",
     "UNSCANNED_ZONES",
