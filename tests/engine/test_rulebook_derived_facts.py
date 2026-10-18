@@ -146,16 +146,22 @@ def definition_view(repository, card_id: int) -> CardDefinitionView:
 # ======================================================================
 
 
-def test_a01_the_registry_holds_eighteen_hand_written_cards():
+def test_a01_the_registry_holds_nineteen_hand_written_cards():
     """
     **§4-A 1 · 2** — 등록소는 **카드 ID → 확인된 사실**의 표이고, 지금
-    **18장**이 손으로 적혀 있다.
+    **19장**이 손으로 적혀 있다.
 
     6-O 는 이 표에 줄을 더하지 않았다 (§14 "모든 OPERATION_RULINGS 데이터
     확장" 금지).
+
+    🔴 **Phase 6-V 가 한 줄 더했다 (18 → 19): 기르수.** 등재된 카드는
+    판에 깔리고, 모르는 카드가 하나라도 있으면 판 전체의 답이 ``UNKNOWN``
+    이 된다 (``BoardRuling._interference``) — 어니스트가 6-K 에서 들어온
+    것과 **같은 이유**다. 그 줄의 ``answers`` 는 비어 있다: 묻지 않은 것을
+    참으로 채우지 않았다.
     """
-    assert len(OPERATION_RULINGS) == 18
-    assert len(OPERATION_RULINGS.card_ids) == 18
+    assert len(OPERATION_RULINGS) == 19
+    assert len(OPERATION_RULINGS.card_ids) == 19
     assert FEATHERMAN in OPERATION_RULINGS.card_ids
     assert HONEST in OPERATION_RULINGS.card_ids
     assert POT_OF_GREED in OPERATION_RULINGS.card_ids
@@ -781,8 +787,10 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
     from engine.effect.library import EFFECT_LIBRARY
     from engine.effect.operation import OperationKind
 
-    assert len(EFFECT_LIBRARY) == 17
-    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 14
+    #: 🔴 17 → 18 · 14 → 15 (Phase 6-V). 아래가 재는 것은 **욕망의 항아리의
+    #: 실행이 그대로인가** 이고, 그 사실은 변하지 않았다.
+    assert len(EFFECT_LIBRARY) == 18
+    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 15
 
     definition = definition_registry().definition_for(
         EffectRef(POT_OF_GREED, 0)
@@ -828,10 +836,15 @@ def test_g02_the_registry_data_was_not_expanded():
     """
     🔴 **§14 — "모든 OPERATION_RULINGS 데이터 확장" 을 하지 않았다.**
 
-    손으로 적은 줄은 18장 그대로이고, 늘어난 것은 **유도**다.
+    6-O 가 손으로 적은 줄을 늘리지 않았다는 사실은 그대로다 — 그때
+    18장이었고 늘어난 것은 **유도**였다.
+
+    🔴 **Phase 6-V 가 한 줄 더했다 (19).** 6-O 의 금지를 어긴 것이 아니라
+    6-V 가 새 카드를 등재했기 때문이고, 아래 단언이 지키는 "유도는
+    ``ruling.py`` 에 있고 ``library.py`` 는 그것을 쓰지 않는다" 는 그대로다.
     """
     library = source_of("engine/effect/library.py")
-    assert len(OPERATION_RULINGS) == 18
+    assert len(OPERATION_RULINGS) == 19
     #: 라이브러리 쪽은 6-O 가 건드리지 않았다 — 유도는 ruling.py 에 있다.
     assert "rulebook_facts" not in library
 

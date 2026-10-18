@@ -49,6 +49,7 @@ from engine.effect.library import (
     DISAPPEAR,
     EFFECT_LIBRARY,
     FINE,
+    GIRSU,
     HONEST,
     MONSTER_REBORN,
     MYSTICAL_SPACE_TYPHOON,
@@ -295,7 +296,7 @@ def resolve_directly(
 # ======================================================================
 
 
-def test_a_the_library_is_exactly_seventeen_real_cards():
+def test_a_the_library_is_exactly_eighteen_real_cards():
     """
     **이것이 전부라는 것이 사실이다.** 14,127장 중 여기 있는 것만
     실행되고, 늘어나면 이 단언이 깨진다 — 그것이 이 테스트의 일이다.
@@ -312,8 +313,13 @@ def test_a_the_library_is_exactly_seventeen_real_cards():
     같은 성질의 고침이고, 다른 점이 하나 있다 — 이것은 **몬스터**이고
     ``executable=False`` 다. 그래서 "실행되는 카드" 의 수는 13 그대로다
     (``test_a_every_declined_card_says_what_is_missing`` 이 센다).
+
+    🔴 Phase 6-V 에서 **기르수(69811710)** 가 열여덟 번째로 더해졌다. 같은
+    성질의 고침이고, 다른 점은 이것이 목록의 **첫 유발 효과**라는 것이다
+    (``ActivationKind.TRIGGER``). ``executable=True`` 이므로 실행되는 카드
+    수도 14 → 15 로 움직인다.
     """
-    assert len(EFFECT_LIBRARY) == 17
+    assert len(EFFECT_LIBRARY) == 18
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -325,10 +331,11 @@ def test_a_the_library_is_exactly_seventeen_real_cards():
         INTRODUCTION_TO_GALLANTRY,  # Phase 2-AC — 발동 조건이 상대 패의 장수
         RELOAD,  # Phase 2-AI — 패 전부를 되돌리고 되돌린 만큼 드로우한다
         HONEST,  # Phase 6-K — 첫 **몬스터** 효과 (기동). 실행하지 않는다
+        GIRSU,  # Phase 6-V — 첫 **유발** 효과. 소환 성공에 반응한다
     }
 
 
-def test_a_thirteen_real_effect_refs_are_executable():
+def test_a_fifteen_real_effect_refs_are_executable():
     """
     §1 — ``LUA_VERIFIED`` + ``EffectRef`` + 등록된 구현. **이 셋이 다
     맞을 때만** ``EXECUTABLE`` 이다 (ADR-006).
@@ -368,9 +375,10 @@ def test_a_thirteen_real_effect_refs_are_executable():
             RELOAD,
             COMPULSORY_EVACUATION_DEVICE,  # Phase 2-AK
             HONEST,  # Phase 6-L — 첫 **몬스터** 효과 (자기 참조)
+            GIRSU,  # Phase 6-V — 첫 **유발** 효과 (덱에서 묘지로)
         )
     }
-    assert len(executable) == 14
+    assert len(executable) == 15
 
 
 def test_a_every_declined_card_says_what_is_missing():

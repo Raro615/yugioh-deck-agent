@@ -577,26 +577,59 @@ def test_09_a_registration_without_a_range_stays_unknown(repository):
     없다는 이유로 "필드에서 발동" 을 넣지 않는다 (지시서 §6 오류 D).
     corpus 의 **3,358건**이 이 상태이고, 그것이 이 Phase 가 넓히지 못한
     부분이다.
+
+    🔴 **Phase 6-V 가 이 사실을 반으로 갈랐다.** 선언이 없는 것은 그대로
+    인데, **소환 사건은 자리를 직접 말한다** — ``MonsterSummoned`` 가
+    ``to_zone`` 을 적고 그 카드가 사건의 주체이면 발동 시점의 위치가 곧 그
+    도착지다. 그래서 6-V 이후:
+
+    * 소환 사건 → 자리가 **열린다** (근거는 추측이 아니라 사건)
+    * 그 밖의 사건 → 그대로 ``UNKNOWN``
+
+    두 쪽을 **같은 시험에서** 잰다. 한쪽만 적으면 "6-V 가 선언 없는 등록
+    전부를 열었다" 로 읽히고, 그것은 사실이 아니다 (``EVENT_TO_GRAVE``
+    907건 등은 발동 순간 카드가 필드에 없다).
     """
     spec = one_spec(repository, NO_RANGE_CARD)
     assert spec.activates_from is None
     assert spec.from_zones is None
     assert spec.subject is TriggerSubject.SELF  # 6-F 는 그대로 일한다
+    assert spec.point is TimingPoint.MONSTER_SUMMONED
 
     duel, [here] = board(repository, NO_RANGE_CARD, Zone.MZONE)
     event = _matching_event(spec, here)
     candidate, eligibility, gate = judge_at(duel, spec, event, here)
 
-    #: 주체는 통과하고 자리는 모른다.
+    #: 주체는 통과한다 (6-F).
     assert eligibility.gate(EligibilityGate.EVENT_RELATION).validity is (
         ActionValidity.VALID
     )
-    assert gate.validity is ActionValidity.UNKNOWN
-    assert gate.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert "선언되지 않았습니다" in gate.result.reason
-    assert candidate.status is TriggerStatus.ELIGIBLE  # 수집기는 자리를 안 본다
-    #: 🔴 그래도 발동 가능이 아니다 — 자리를 모르기 때문이다.
+    #: 🔴 **소환 사건이므로 자리가 열린다** (6-V).
+    assert gate.validity is ActionValidity.VALID
+    assert gate.code is ValidationCode.OK
+    assert "소환 사건" in gate.result.reason
+    assert candidate.status is TriggerStatus.ELIGIBLE
+
+    #: 🔴 **그래도 발동 가능이 아니다** — 이유가 자리에서 **정의**로 옮겼다.
     assert eligibility.may_activate is False
+    blocked = {v.gate for v in eligibility.blocking}
+    assert EligibilityGate.ACTIVATION_ZONE not in blocked
+    assert EligibilityGate.EXECUTION_AUTHORITY in blocked
+
+    #: 🔴 **소환이 아닌 사건에서는 그대로 모른다.** 같은 선언 · 같은 카드다.
+    from engine.effect.delta import PhaseChanged
+    from engine.vocabulary import Phase as GamePhase
+
+    other = TimingEvent.from_delta(
+        PhaseChanged(
+            from_turn=1, from_player=MINE, from_phase=GamePhase.MAIN1,
+            to_turn=1, to_player=MINE, to_phase=GamePhase.BATTLE,
+        )
+    )
+    _, still_unknown = zone_gate(duel.view(MINE), spec, candidate, other)
+    assert still_unknown.validity is ActionValidity.UNKNOWN
+    assert still_unknown.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert "선언되지 않았습니다" in still_unknown.result.reason
 
 
 @requires_official_db

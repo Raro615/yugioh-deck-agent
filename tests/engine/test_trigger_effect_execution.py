@@ -201,6 +201,14 @@ def test_05_the_census_of_what_blocks_resolution(repository):
     🔴 **2,999 와 0 의 거리가 이 Phase 의 결론이다.** 해결 동작은 옮길 수
     있고 실행기도 지원하는데, 그 앞의 세 층이 없어서 **하나도 실행되지
     않는다.** 정적 분석 성공과 실제 실행 성공을 가르는 것이 §12 의 요구다.
+
+    🔴 **Phase 6-V 가 그 0 을 1 로 만들었다** — 기르수 ① 하나를 등재했다.
+    이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 6-J 시점에 실제로
+    0건이었다. ``definition_missing`` 도 4,173 → 4,172 로 하나 줄었다.
+
+    🔴 **"실제 해결 성공" 은 여전히 0 이다.** 6-V 는 발동까지 갔고 해결은
+    ``Card.IsAbleToGrave`` 관문에서 멈춘다 — 그 측정은
+    ``tests/engine/test_summon_trigger_execution.py`` 의 F 묶음에 있다.
     """
     analyzer = EffectAnalyzer(repository)
     definitions, implementations = definition_registry(), implementation_registry()
@@ -244,13 +252,15 @@ def test_05_the_census_of_what_blocks_resolution(repository):
 
     assert registered == 4173
     assert len(refs) == 4173
-    assert with_definition == 0
+    #: 🔴 6-V 가 기르수 ① 을 등재했다 (0 → 1).
+    assert with_definition == 1
     assert len(two_gate) == 31
     assert len(resolvable) == 2999
     assert len(resolvable & two_gate) == 24
 
     assert blockers == {
-        "definition_missing": 4173,
+        #: 🔴 6-V: 4,173 → 4,172 (기르수 ① 의 정의가 생겼다).
+        "definition_missing": 4172,
         "operation_unreadable": 726,
         "cost_unpayable": 260,
         "operation_untranslatable": 222,
@@ -648,7 +658,7 @@ def test_15_the_existing_activate_effects_still_resolve(repository):
     assert len(duel.journal.events) >= 2
 
 
-def test_16_the_library_is_unchanged_and_still_has_no_trigger(repository=None):
+def test_16_the_library_now_has_exactly_one_trigger(repository=None):
     """
     ``EFFECT_LIBRARY`` 에 **유발 효과가 없다.**
 
@@ -662,17 +672,24 @@ def test_16_the_library_is_unchanged_and_still_has_no_trigger(repository=None):
     어니스트 ① 이고 ``ActivationKind.IGNITION`` 이다 — **유발 효과가 아니고**
     (이 테스트의 이름이 지키는 사실) 그것이 이 테스트의 전부다.
 
-    🔴 **Phase 6-L 에서 그 한 건이 실행까지 된다** (13 → 14). 유발 효과가
-    하나도 없다는 사실은 그대로이고, 아래 마지막 단언이 그것을 분류로
-    직접 센다 — 수가 아니라 분류가 이 테스트가 지키는 것이다.
+    🔴 **Phase 6-L 에서 그 한 건이 실행까지 된다** (13 → 14).
+
+    🔴 **Phase 6-V 가 이 테스트의 이름을 바꿨다 (17 → 18).** 그때까지 "유발
+    효과가 하나도 없다" 가 사실이었고 이 테스트가 그것을 분류로 세고
+    있었다. 6-V 가 기르수 ① 을 ``ActivationKind.TRIGGER`` 로 등재했으므로
+    그 사실이 끝났다 — **단언을 지우지 않고 수를 세는 쪽으로 바꿨다.**
+    유발 즉시(``QUICK``)와 플립(``FLIP``)은 **여전히 0건**이고, 그것이 이
+    테스트가 계속 지키는 사실이다.
     """
-    assert len(EFFECT_LIBRARY) == 17
+    assert len(EFFECT_LIBRARY) == 18
     assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0}
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 14
-    #: 🔴 등재된 발동 분류에 **유발 · 유발 즉시 · 플립이 하나도 없다.**
-    assert {
-        entry.definition.activation_kind for entry in EFFECT_LIBRARY
-    } == {None, ActivationKind.IGNITION}
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 15
+    #: 🔴 등재된 발동 분류 — 유발이 **정확히 하나**이고 유발 즉시 · 플립은 없다.
+    kinds = [entry.definition.activation_kind for entry in EFFECT_LIBRARY]
+    assert set(kinds) == {None, ActivationKind.IGNITION, ActivationKind.TRIGGER}
+    assert kinds.count(ActivationKind.TRIGGER) == 1
+    assert kinds.count(ActivationKind.QUICK) == 0
+    assert kinds.count(ActivationKind.FLIP) == 0
 
 
 # ======================================================================
@@ -700,13 +717,22 @@ def test_17_girsu_is_blocked_three_layers_up(repository):
         assert compilation.spec.subject is TriggerSubject.SELF
         assert compilation.spec.activates_from is None
 
+    #: 🔴 **6-V 가 ``DEFINITION_MISSING`` 을 풀었다.** 그 전까지 두 등록
+    #: 모두 정의가 없었고, 이제 ``e[0]`` (일반 소환) 에는 정의가 있다.
+    #: ``e[1]`` (특수 소환) 은 그대로 없다 — 6-V 는 그쪽을 등재하지 않았다.
     definitions = definition_registry()
-    for readiness in readiness_for(
-        repository, GIRSU, definitions=definitions,
-        implementations=implementation_registry(),
-    ):
-        assert ExecutionBlocker.DEFINITION_MISSING in readiness.blockers
-        assert readiness.is_resolvable is False
+    by_ref = {
+        r.effect_ref: r
+        for r in readiness_for(
+            repository, GIRSU, definitions=definitions,
+            implementations=implementation_registry(),
+        )
+    }
+    normal = by_ref[EffectRef(GIRSU, 0)]
+    assert ExecutionBlocker.DEFINITION_MISSING not in normal.blockers
+    special = by_ref[EffectRef(GIRSU, 1)]
+    assert ExecutionBlocker.DEFINITION_MISSING in special.blockers
+    assert special.is_resolvable is False
 
     #: 🔴 **막는 층이 하나 줄었다.** 이 줄은 "사건을 만들 수도 없다 (B2)"
     #: 라고 적혀 있었고, 그 근거가 소환 판정의 ``UNDETERMINED`` 였다.

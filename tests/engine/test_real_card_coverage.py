@@ -226,16 +226,20 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
     assert len(corpus) == 12702
     assert len(activate_only) == 1385
 
-    from engine.effect.library import EFFECT_LIBRARY, HONEST
+    from engine.effect.library import EFFECT_LIBRARY, GIRSU, HONEST
 
-    # ① ``ACTIVATE`` 모양이 아닌 등재는 **정확히 하나**다.
+    # ① ``ACTIVATE`` 모양이 아닌 등재는 **정확히 둘**이다.
+    #
+    # 🔴 Phase 6-V 에서 하나가 둘이 됐다 — 기르수 ① 은 ``SINGLE +
+    # TRIGGER_O`` 이고 ``EFFECT_TYPE_ACTIVATE`` 가 아니다. 이 시험이
+    # 가리키는 "엔진이 담는 모양" 이 **유발 쪽으로 한 장 더** 넓어졌다.
     not_activate = []
     for entry in EFFECT_LIBRARY:
         row = corpus.get(entry.card_id)
         assert row is not None, entry.card_id
         if "EFFECT_TYPE_ACTIVATE" not in row["types"]:
             not_activate.append(entry.card_id)
-    assert not_activate == [HONEST], not_activate
+    assert not_activate == [HONEST, GIRSU], not_activate
 
     # ② 그 하나가 기동 효과이고, **실행된다** (Phase 6-L).
     assert corpus[HONEST]["types"] >= {
@@ -290,11 +294,14 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
     unexplained = used - NOT_A_RULE - SUPPORTED - PROVED_BY_EXECUTION
     assert unexplained == set(), unexplained
     assert PROVED_BY_EXECUTION <= used
-    #: 🔴 빼고 센 카드가 **어니스트 하나**다 — 블록이 셋인 첫 등재 카드.
-    from engine.effect.library import HONEST
+    #: 🔴 빼고 센 카드가 **둘**이다 — 블록이 셋 이상인 등재 카드들.
+    #: 어니스트(6-K)가 첫 번째이고 기르수(6-V)가 두 번째다. 기르수는
+    #: 블록이 **넷**이다 (e1 · e2 클론 · e3 기동 · 해결 중 생기는 내부 e1).
+    from engine.effect.library import GIRSU, HONEST
 
-    assert skipped == [HONEST], skipped
+    assert skipped == [HONEST, GIRSU], skipped
     assert corpus[HONEST]["blocks"] == 3
+    assert corpus[GIRSU]["blocks"] >= 3
 
 
 def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
@@ -320,10 +327,11 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
 
     from engine.effect.library import EFFECT_LIBRARY
 
-    from engine.effect.library import HONEST
+    from engine.effect.library import GIRSU, HONEST
 
+    #: 🔴 14 → 15 (Phase 6-V, 기르수 ①).
     executable = {e.card_id for e in EFFECT_LIBRARY if e.executable}
-    assert len(executable) == 14
+    assert len(executable) == 15
     # 실행되는 카드는 **하나도 빠짐없이** 막는 것이 없어야 한다.
     #
     # 🔴 어니스트는 예외 집합에 있다 (Phase 6-L). ``clean`` 은
@@ -331,8 +339,13 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     # **애초에 그 슬라이스에 없다** — 막는 것이 있어서가 아니라 세는 범위가
     # 다르기 때문이다. 이 파일이 재는 516 은 "ACTIVATE 하나뿐인 카드 중" 의
     # 수이고, 그 수는 **바뀌지 않았다.**
+    #
+    # 🔴 **기르수도 같은 이유로 예외다** (Phase 6-V). ``SINGLE + TRIGGER_O``
+    # 이고 ``EFFECT_TYPE_ACTIVATE`` 가 아니므로 그 슬라이스에 들어오지
+    # 않는다. 두 장 다 "막는 것이 있다" 가 아니라 **세는 범위가 다르다** 다.
     assert HONEST not in set(activate_only)
-    assert executable <= set(clean) | {53129443, 83764718, HONEST}
+    assert GIRSU not in set(activate_only)
+    assert executable <= set(clean) | {53129443, 83764718, HONEST, GIRSU}
 
 
 def test_a_the_repeated_blockers_are_ranked_and_already_filed(corpus, activate_only):

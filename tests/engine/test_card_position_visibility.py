@@ -599,7 +599,12 @@ def test_d03_five_registered_effects_put_cards_in_the_graveyard(repository):
     )
     #: 실측 (Phase 6-N). 육신보살 · 무정한 말살 · 의적의 입문서 ·
     #: 어리석은 매장 · 벌금.
-    assert movers == [15103313, 69091732, 73148972, 81439173, 92595643], movers
+    #:
+    #: 🔴 **Phase 6-V 에서 기르수(69811710)가 여섯 번째다.** 같은
+    #: ``SEND_TO_GRAVE`` 이고, 다른 점은 이것이 **유발** 효과라는 것뿐이다.
+    assert movers == [
+        15103313, 69091732, 69811710, 73148972, 81439173, 92595643
+    ], movers
 
 
 @pytest.mark.real_card

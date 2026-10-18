@@ -1265,9 +1265,12 @@ def test_k02_the_library_grew_no_executable_entry():
     🔴 **§12 — 6-M 은 실행 범위를 넓히지 않았다.** 정확성만 바꿨다.
 
     등재 17건 · 실행 가능 14건은 6-L 과 같다. 그 사실을 그대로 적는다.
+
+    🔴 **Phase 6-V 가 둘 다 하나씩 늘렸다** (18 · 15). 6-M 이 범위를 넓히지
+    않았다는 사실은 그대로이고, 넓힌 것은 6-V 다 — 기르수 ① 하나.
     """
-    assert len(EFFECT_LIBRARY) == 17
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 14
+    assert len(EFFECT_LIBRARY) == 18
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 15
 
 
 def test_k03_only_one_registered_operation_declares_its_origin():

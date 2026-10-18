@@ -833,7 +833,8 @@ def test_t_phase_2ah_registered_no_real_card_and_none_uses_a_guard():
     from engine.effect.library import EFFECT_LIBRARY
 
     # Phase 2-AI 에서 리로드가 열여섯 번째, Phase 6-K 에서 어니스트 ① 이
-    # 열일곱 번째다. 아래 단언(이 목록의 성질)은 **약해지지 않았다**.
-    assert len(EFFECT_LIBRARY) == 17
+    # 열일곱 번째, Phase 6-V 에서 기르수 ① 이 **열여덟 번째**다.
+    # 아래 단언(이 목록의 성질)은 **약해지지 않았다**.
+    assert len(EFFECT_LIBRARY) == 18
     for entry in EFFECT_LIBRARY:
         assert entry.definition.guards == ()

@@ -934,11 +934,12 @@ def test_f_the_registry_covers_every_registered_real_card():
     registered = set(OPERATION_RULINGS.card_ids)
     assert {entry.card_id for entry in EFFECT_LIBRARY} <= registered
     assert FEATHERMAN in registered
-    # 🔴 17 → 18 (Phase 6-K). 어니스트가 등재되면서 **같은 이유로** 여기도
-    # 들어왔다 — 발동하지 않아도 그 카드는 필드에 깔려 있고, 모르는 카드가
-    # 하나라도 있으면 판 전체의 답이 ``UNKNOWN`` 이 된다. 이 테스트가
-    # 지키는 사실이 바로 그것이므로, 수만 움직이고 단언은 그대로다.
-    assert len(OPERATION_RULINGS) == 18
+    # 🔴 17 → 18 (Phase 6-K) → **19** (Phase 6-V). 어니스트와 기르수가
+    # 등재되면서 **같은 이유로** 여기도 들어왔다 — 발동하지 않아도 그
+    # 카드는 필드에 깔려 있고, 모르는 카드가 하나라도 있으면 판 전체의
+    # 답이 ``UNKNOWN`` 이 된다. 이 테스트가 지키는 사실이 바로 그것이므로,
+    # 수만 움직이고 단언은 그대로다.
+    assert len(OPERATION_RULINGS) == 19
 
 
 def test_f_no_spell_or_trap_claims_to_be_returnable(repository):

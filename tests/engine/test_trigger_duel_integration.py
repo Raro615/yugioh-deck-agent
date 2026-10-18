@@ -246,30 +246,46 @@ def test_02_the_ordinal_is_the_place_in_the_script_not_the_enumerate_index(repos
 
 
 @requires_official_db
-def test_03_no_compiled_trigger_has_a_definition_today(repository):
+def test_03_exactly_one_compiled_trigger_has_a_definition(repository):
     """
-    **§5 · §9 의 측정값** — 연결 성공 **0건**, 모호 **0건**.
+    **§5 · §9 의 측정값** — 6-I 시점에 연결 성공 **0건**, 모호 **0건**이었다.
 
-    ``EFFECT_LIBRARY`` 의 등재에 **유발 효과가 하나도 없다.** 그래서 실패
-    이유가 "식별이 모호하다" 가 아니라 **"정의가 없다"** 다. 그 둘을 섞으면
-    다음 단계가 엉뚱한 곳을 고치게 된다.
+    그때 ``EFFECT_LIBRARY`` 의 등재에 **유발 효과가 하나도 없었고**, 그래서
+    실패 이유가 "식별이 모호하다" 가 아니라 **"정의가 없다"** 였다. 그 둘을
+    섞으면 다음 단계가 엉뚱한 곳을 고치게 된다.
 
-    🔴 **16 → 17 로 움직였고, 측정값 0 은 그대로다** (Phase 6-K). 6-I 시점에
-    등재가 전부 마법의 ``ACTIVATE`` 였고 그것은 참이었다. 늘어난 한 건은
-    어니스트 ① 인데 ``EFFECT_TYPE_IGNITION`` 이고, 기동 효과는
-    ``TriggerSpec`` 으로 컴파일되지 않는다 — 아래 순회가 그것을 실제로
-    확인한다 (등록된 트리거 **0건** 이 여전히 참이다).
+    🔴 **16 → 17 로 움직였고, 측정값 0 은 그대로였다** (Phase 6-K). 늘어난
+    한 건은 어니스트 ① 인데 ``EFFECT_TYPE_IGNITION`` 이고, 기동 효과는
+    ``TriggerSpec`` 으로 컴파일되지 않는다.
+
+    🔴 **Phase 6-V 가 그 0 을 1 로 만들었다.** 기르수 ① 을 등재했고 그것은
+    ``SINGLE + TRIGGER_O`` 이므로 **실제로 컴파일된다.** 이 시험의 이름이
+    가리키던 사실이 끝났으므로, 지우는 대신 **정확히 하나이고 그것이
+    무엇인지**를 센다 — 둘이 되면 깨진다.
+
+    그래서 "식별이 모호하지 않다" 는 여전히 지켜진다: 등록된 트리거를 가진
+    등재 카드가 기르수뿐이고, 그 등록의 ordinal 이 정의의 ordinal 과 **같다.**
     """
-    from engine.effect.library import EFFECT_LIBRARY
+    from engine.effect.library import EFFECT_LIBRARY, GIRSU
 
     definitions = definition_registry()
-    assert len(definitions) == len(EFFECT_LIBRARY) == 17
+    assert len(definitions) == len(EFFECT_LIBRARY) == 18
     assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0}
 
+    with_registered_trigger = {}
     for entry in EFFECT_LIBRARY:
         found = compiled_triggers(repository, entry.card_id)
         registered = [c for c in found.compilations if c.is_registered]
-        assert registered == [], (entry.card_id, registered)
+        if registered:
+            with_registered_trigger[entry.card_id] = registered
+
+    assert list(with_registered_trigger) == [GIRSU], list(with_registered_trigger)
+    #: 🔴 **식별이 모호하지 않다** — 정의가 가리키는 ordinal 의 등록이 있다.
+    ordinals = {
+        c.spec.effect_ref.ordinal for c in with_registered_trigger[GIRSU]
+    }
+    assert 0 in ordinals, ordinals
+    assert definitions.definition_for(EffectRef(GIRSU, 0)) is not None
 
 
 # ======================================================================
@@ -1007,7 +1023,7 @@ def test_23_the_registered_effects_are_a_prefix_of_the_script_blocks(repository)
 
 
 @requires_official_db
-def test_24_the_whole_corpus_has_no_trigger_with_an_executable_definition(repository):
+def test_24_the_whole_corpus_has_exactly_one_executable_trigger(repository):
     """
     **§17-8 의 교차표** — 전수로 한 번 센다.
 
@@ -1047,8 +1063,11 @@ def test_24_the_whole_corpus_has_no_trigger_with_an_executable_definition(reposi
                     with_implementation += 1
 
     assert registered == 4173
-    assert with_definition == 0
-    assert with_implementation == 0
+    #: 🔴 **Phase 6-V 가 0 을 1 로 만들었다** — 기르수 ① 하나이고, 구현도
+    #: 등록되어 있다 (``executable=True``). 이 시험의 이름이 가리키던 사실이
+    #: 끝났으므로 수를 센다: 둘이 되면 깨진다.
+    assert with_definition == 1
+    assert with_implementation == 1
 
 
 # ======================================================================

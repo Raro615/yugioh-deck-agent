@@ -339,25 +339,31 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     assert compiled.condition == IsSetCard((SET_ORCUST,))
     assert compiled.is_complete is True
 
-    # ④ 🔴 **그래도 이 Phase 가 등재를 늘리지는 않았다.** 옮길 수 있다는
-    #    것과 적어 두었다는 것은 다른 말이고, ``EFFECT_LIBRARY`` 는 아직
-    #    카드군 조건을 쓰지 않는다.
+    # ④ 🔴 **6-D 는 등재를 늘리지 않았고, Phase 6-V 가 늘렸다.**
     #
-    #    🔴 수가 16 에서 17 로 **움직였다** (Phase 6-K). 이 테스트가 틀린
-    #    가정을 갖고 있었던 것이 아니라, 6-D 시점에 실제로 16건이었다. 늘린
-    #    것은 카드군 조건이 아니라 어니스트 ① 이고, 그것도
-    #    ``executable=False`` 다 — 아래 단언이 지키는 "카드군 조건이 등재를
-    #    늘리지 않았다" 는 여전히 참이다.
-    from engine.effect.library import EFFECT_LIBRARY, HONEST
+    #    수가 16 → 17 (6-K, 어니스트 ①) → **18** (6-V, 기르수 ①) 로
+    #    움직였다. 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그때마다
+    #    실제로 그 수였다.
+    #
+    #    🔴 **그리고 6-V 가 이 단언의 내용을 뒤집었다.** 6-D 는 "카드군
+    #    조건을 만들 자리" 만 만들고 쓰지 않았는데, 6-V 가 기르수 ① 을
+    #    등재하면서 그 자리를 **처음으로 썼다** (``s.tgfilter`` 의
+    #    ``IsSetCard({SET_ORCUST,SET_WORLD_LEGACY})``). 그래서 "쓰는 등재가
+    #    없다" 를 지우고 **정확히 하나이고 그것이 무엇인지**를 고정한다.
+    from engine.effect.library import EFFECT_LIBRARY, GIRSU, HONEST
 
-    assert len(EFFECT_LIBRARY) == 17
-    assert [
+    assert len(EFFECT_LIBRARY) == 18
+    using_archetype = [
         entry.card_id for entry in EFFECT_LIBRARY
         if entry.definition.targets
         and any(
-            "IsSetCard" in binding.describe_ko() for binding in entry.definition.targets
+            "카드군" in binding.describe_ko() for binding in entry.definition.targets
         )
-    ] == []
+    ]
+    assert using_archetype == [GIRSU], using_archetype
+    #: 🔴 조건을 만드는 자리는 **여전히 한 곳**이다 — 기르수의 정의도
+    #: ``IsSetCard`` 를 직접 부르지 않고 ``compile_archetype_condition`` 을
+    #: 통한다 (위 ② 의 단언이 그것을 지킨다).
     #: 🔴 Phase 6-L — 어니스트가 **실행 가능**이 되어 이 집합에서 빠졌다.
     #: 6-K 가 그것을 실행 불가로 실은 이유는 "정의가 '이 효과의 카드' 를
     #: 가리킬 이름이 없다" 였고, 6-L 이 그 이름을 만들었다 (``SELF_TARGET``).
@@ -888,23 +894,29 @@ def test_j_nothing_can_add_an_archetype_to_a_card_in_play():
             assert "AddSetcode" not in text, module.as_posix()
 
 
-def test_j_this_phase_turned_on_no_new_execution():
+def test_j_the_archetype_condition_is_now_used_by_exactly_one_execution():
     """
-    등재된 효과는 그대로 16개이고, 전부 ``ACTIVATE`` 모양이다. 카드군
-    조건이 생겼다고 유발 효과가 켜지지 않았다.
-    """
-    from engine.effect.library import EFFECT_LIBRARY
+    🔴 **이 시험의 이름이 Phase 6-V 에서 바뀌었다.**
 
-    # 🔴 16 → 17 (Phase 6-K, 어니스트 ①) → 실행 수 13 → **14** (Phase 6-L).
-    # 이 테스트가 지키는 것은 "**카드군 조건**이 실행을 켜지 않았다" 이고,
-    # 늘어난 하나는 카드군 조건이 아니라 자기 참조(``SELF_TARGET``)에서
-    # 왔다. 아래 두 줄이 그것을 이름으로 못박는다.
-    assert len(EFFECT_LIBRARY) == 17
-    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 14
-    #: 🔴 실행되는 효과 중 **카드군 조건을 쓰는 것이 하나도 없다.**
-    assert [
+    원래 이름은 ``test_j_this_phase_turned_on_no_new_execution`` 이었고,
+    "카드군 조건이 생겼다고 실행이 켜지지 않았다" 를 지켰다. **그 시점에
+    맞았다** — 6-C/6-D 는 조건과 그것을 만드는 자리만 만들었다.
+
+    6-V 가 기르수 ① 을 등재하면서 그 조건을 **처음으로 실행 경로에
+    썼다.** 그래서 "하나도 없다" 가 끝났고, 지우는 대신 **정확히 하나이고
+    그것이 무엇인지**를 고정한다. 둘이 되면 이 단언이 깨진다.
+    """
+    from engine.effect.library import EFFECT_LIBRARY, GIRSU
+
+    # 🔴 16 → 17 (6-K, 어니스트 ①) → 18 (6-V, 기르수 ①).
+    #    실행 수 13 → 14 (6-L) → **15** (6-V).
+    assert len(EFFECT_LIBRARY) == 18
+    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 15
+    #: 🔴 실행되는 효과 중 카드군 조건을 쓰는 것이 **정확히 하나**다.
+    using = [
         entry.card_id
         for entry in EFFECT_LIBRARY
         if entry.executable
         and any("카드군" in b.describe_ko() for b in entry.definition.targets)
-    ] == []
+    ]
+    assert using == [GIRSU], using

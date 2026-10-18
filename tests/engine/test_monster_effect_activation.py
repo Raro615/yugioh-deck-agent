@@ -365,17 +365,26 @@ def test_b03_the_kind_is_part_of_the_canonical_state():
 
 def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
     """
-    등재 17건 중 분류를 적은 것은 **하나**이고 그것이 기동 효과다 (ADR-006).
+    등재 중 분류를 적은 것은 **둘**이고, 둘 다 **손으로** 적었다 (ADR-006).
 
     자동 변환이 **없다**는 사실이 여기서 고정된다 — 코퍼스의 4,106개 기동
-    효과 중 등재된 것은 하나뿐이다.
+    효과 중 등재된 것은 하나뿐이고, 4,173개 유발 등록 중 등재된 것도
+    하나뿐이다.
+
+    🔴 **Phase 6-V 에서 하나가 둘이 됐다** (어니스트 기동 + 기르수 유발).
+    이 시험이 틀린 가정을 갖고 있었던 것이 아니라 6-K 시점에 실제로
+    하나였다. 지키는 사실은 "**자동 변환이 없다**" 이고, 수가 아니라
+    ``EffectSpec.effect_types`` 에서 자동으로 옮기지 않는다는 것이 요지다.
     """
     declared = {
         entry.definition.effect_ref: entry.definition.activation_kind
         for entry in EFFECT_LIBRARY
         if entry.definition.activation_kind is not None
     }
-    assert declared == {HONEST_REF: ActivationKind.IGNITION}
+    assert declared == {
+        HONEST_REF: ActivationKind.IGNITION,
+        EffectRef(GIRSU, 0): ActivationKind.TRIGGER,
+    }
     entry = next(e for e in EFFECT_LIBRARY if e.definition.effect_ref == HONEST_REF)
     #: 🔴 **Phase 6-L 에서 실행된다.** 6-K 시점에는 ``executable=False`` ·
     #: ``operations=()`` 였고 그것이 참이었다 — 막던 것은 "정의가 '이 효과의
@@ -1062,8 +1071,12 @@ def test_m02_girsu_is_not_forced_to_work(repository):
     """
     🔴 **기르수를 억지로 실행시키지 않았다** (§11 금지).
 
-    정의를 등록하지 않았으므로 분류를 읽을 수 없고, 그래서 Phase 6-K
-    이후에도 범위 밖이다. 이유는 **"분류를 적지 않았다"** 이고 그것이 참이다.
+    🔴 **Phase 6-V 가 기르수 ①(``e[0]``, 유발)을 등재했다.** 그런데 이
+    시험이 묻는 것은 ③(``e[2]``, **기동**)이고 6-V 는 그것을 등재하지
+    않았다. 그래서 기동 쪽 답은 그대로 "분류를 적지 않았다" 다.
+
+    두 ordinal 을 **구분해서** 잰다 — 하나를 등재했다고 나머지가 열리지
+    않는다는 것이 이 시험이 지키는 사실이다.
     """
     duel, instance = board(repository, GIRSU)
     verdict = judged(
@@ -1074,8 +1087,13 @@ def test_m02_girsu_is_not_forced_to_work(repository):
     assert verdict.validity is ActionValidity.UNKNOWN
     assert verdict.missing_rule == MONSTER_ACTIVATION_MISSING
 
-    #: 목록에도 들어가지 않았다.
-    assert GIRSU not in {entry.card_id for entry in EFFECT_LIBRARY}
+    #: 🔴 목록에는 들어왔지만 **그 ordinal 이 아니다.**
+    refs = {
+        entry.effect_ref for entry in EFFECT_LIBRARY
+        if entry.effect_ref.card_id == GIRSU
+    }
+    assert refs == {EffectRef(GIRSU, 0)}, refs
+    assert EffectRef(GIRSU, GIRSU_IGNITION_ORDINAL) not in refs
 
 
 # ======================================================================
@@ -1093,8 +1111,12 @@ def test_n01_no_card_id_branch_was_added_to_the_activation_path():
     🔴 **카드 ID · 이름으로 분기하지 않는다** (§3-5).
 
     어니스트의 번호가 production 에 나타나는 자리는 ``library.py`` 의
-    **선언 한 곳**뿐이다 — 등재 목록이고 분기가 아니다. 기르수의 번호는
-    production 에 **하나도 없다.**
+    **선언 한 곳**뿐이다 — 등재 목록이고 분기가 아니다.
+
+    🔴 **Phase 6-V 에서 기르수도 같은 자리에 들어왔다.** 그 전까지는
+    production 에 하나도 없었고 이 시험이 그것을 지켰다. 6-V 가 기르수 ①
+    을 등재했으므로 어니스트와 **똑같이** ``library.py`` 한 곳이 된다 —
+    늘어난 것은 분기가 아니라 **선언**이고, 그 구분이 이 시험의 요지다.
     """
     honest_code, girsu_code = [], []
     for path in _production_files():
@@ -1110,10 +1132,12 @@ def test_n01_no_card_id_branch_was_added_to_the_activation_path():
         if GIRSU in numbers:
             girsu_code.append(relative)
     assert honest_code == ["engine/effect/library.py"], honest_code
-    #: 🔴 기르수의 번호는 production **코드**에 하나도 없다. ``engine/
-    #: condition/model.py`` 의 docstring 이 그 카드를 예로 들지만 (6-D 가
-    #: 카드군 조건을 설명하며 적었다) 그것은 설명이고 분기가 아니다.
-    assert girsu_code == [], girsu_code
+    #: 🔴 **이 줄이 Phase 6-V 에서 뒤집혔다.** 그때까지 "기르수의 번호는
+    #: production 코드에 하나도 없다" 였고 참이었다 — 6-V 가 기르수 ① 을
+    #: 등재했으므로 어니스트와 **같은 한 자리**가 된다. ``engine/condition/
+    #: model.py`` 의 docstring 이 그 카드를 예로 드는 것은 설명이고 분기가
+    #: 아니며, 그 사실도 그대로다 (아래 AST 검사가 **비교가 아님**을 센다).
+    assert girsu_code == ["engine/effect/library.py"], girsu_code
 
     #: 그 한 자리도 **비교**가 아니라 상수 선언이다.
     tree = ast.parse(

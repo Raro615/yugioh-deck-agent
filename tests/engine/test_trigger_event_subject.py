@@ -496,10 +496,17 @@ def test_08_only_the_summoned_copy_is_a_candidate(repository, two_copies):
             assert str(other.source) in other.reason
 
         #: 🔴 통과한 하나도 **발동 가능이 아니다** (지시서 §16-6).
+        #:
+        #: 🔴 **Phase 6-V 가 막는 관문을 바꿨다.** 그 전까지는 자리를
+        #: 몰라서(``ACTIVATION_ZONE``) 막혔는데, 6-V 가 소환 사건에서 자리를
+        #: 읽게 했으므로 이제 막는 것은 **정의가 없다**
+        #: (``EXECUTION_AUTHORITY``) 다. 이 시험의 요지(인스턴스 구분)는
+        #: 그대로이고, 바뀐 것은 "왜 아직 발동할 수 없는가" 뿐이다.
         assert eligibility.may_activate is False
         blocked = {v.gate for v in eligibility.blocking}
         assert EligibilityGate.EVENT_RELATION not in blocked
-        assert EligibilityGate.ACTIVATION_ZONE in blocked
+        assert EligibilityGate.ACTIVATION_ZONE not in blocked
+        assert EligibilityGate.EXECUTION_AUTHORITY in blocked
         assert eligibility.fully_checked is False
 
 

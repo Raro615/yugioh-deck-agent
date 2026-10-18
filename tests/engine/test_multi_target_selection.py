@@ -346,10 +346,14 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
             if choice.allow_duplicates:
                 duplicates.append(card)
 
-    assert len(EFFECT_LIBRARY) == 17, "정의 수가 바뀌면 이 Phase 를 다시 읽는다"
-    assert bindings == 9
+    #: 🔴 17 → 18 (Phase 6-V, 기르수 ①). 기르수의 선택은 **정확히 1장**
+    #: (``Duel.SelectMatchingCard(...,1,1,nil)``) 이므로 ``exact_one`` 이
+    #: 5 → 6 이고, 여러 장 선택(``multi``)과 가변 장수(``variable``)는
+    #: 그대로다 — 이 Phase 가 지키는 사실은 그 둘이다.
+    assert len(EFFECT_LIBRARY) == 18, "정의 수가 바뀌면 이 Phase 를 다시 읽는다"
+    assert bindings == 10
     assert multi == [FINE], multi
-    assert len(exact_one) == 5, exact_one
+    assert len(exact_one) == 6, exact_one
     assert variable == [], "가변 장수 효과가 생겼다 — §6 을 다시 읽어야 한다"
     assert optional == [], optional
     assert duplicates == [], duplicates

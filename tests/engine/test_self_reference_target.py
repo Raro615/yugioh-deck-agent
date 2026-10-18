@@ -48,6 +48,7 @@ from engine.effect.executor import (
 )
 from engine.effect.library import (
     EFFECT_LIBRARY,
+    GIRSU,
     HONEST,
     OPERATION_RULINGS,
     POT_OF_GREED,
@@ -1066,16 +1067,20 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     등재는 17건 그대로이고 **실행되는 것이 13 에서 14 로** 늘었다.
 
     늘어난 하나가 어니스트 ① 이고, 그것이 **첫 몬스터 효과 실행**이다.
+
+    🔴 **Phase 6-V 가 둘 다 하나씩 늘렸다** (18 · 15). 늘어난 하나가
+    기르수 ① 이고 그것이 **첫 유발 효과 실행**이다 — 6-L 이 "첫 몬스터
+    효과" 였던 것과 같은 자리의 다음 걸음이다.
     """
-    assert len(EFFECT_LIBRARY) == 17
+    assert len(EFFECT_LIBRARY) == 18
     executable = [e for e in EFFECT_LIBRARY if e.executable]
-    assert len(executable) == 14
+    assert len(executable) == 15
     monsters = [
         e.definition.source_card_id
         for e in executable
         if e.definition.activation_kind is not None
     ]
-    assert monsters == [HONEST]
+    assert monsters == [HONEST, GIRSU], monsters
 
 
 # ======================================================================
