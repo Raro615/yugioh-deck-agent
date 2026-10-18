@@ -476,6 +476,18 @@ Deck after any time you search it"*).
 | `tests/test_korean_overlay_unapplied_audit` **×4** | **기존 실패** (로컬 `cards.cdb` 14,759 대 핀 14,755) | 같음 |
 | 🔴 `tests/engine/test_effect_activation_path::test_25` | **신규** — 내 이름 변경이 깼다 | **고쳤다** (부록 A.2) |
 
+### 11.2.1 개명 뒤 재확인
+
+마지막 개명(`accept_offer`)이 다른 것을 깨지 않았는지 두 묶음을 다시 돌렸다.
+
+```
+pytest tests/engine tests/agent
+  1 failed, 3949 passed in 576.81s (0:09:36)
+```
+
+🔴 **남은 1건은 위 표의 기존 실패 하나뿐**이다 — `test_25` 가 통과로
+돌아왔고, 신규 실패는 0건이다.
+
 ### 11.3 내 변경이 움직인 12건 — 전부 해소
 
 | 원인 | 건수 | 고친 것 |
