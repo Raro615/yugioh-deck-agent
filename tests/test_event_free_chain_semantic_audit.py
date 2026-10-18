@@ -506,7 +506,12 @@ def test_07_the_engine_cannot_even_see_the_field():
     #: 26개였다. **금지 목록은 하나도 약해지지 않았다** — 새 칸이 싣는
     #: 것은 블록 내용이 아니라 네 상수(``core.card_model.
     #: NORMAL_SUMMON_RESTRICTION_CODES``)의 등장 여부뿐이다.
-    assert len(fields) == 27
+    #: 🔴 Phase 6-X 에서 27 → **28** (``self_grave_trigger_signals``).
+    #: 금지 목록은 또 하나도 약해지지 않았다 — 새 칸이 싣는 것은 블록
+    #: **내용**이 아니라 **블록 이름**(``e2`` 같은 Lua 변수명)뿐이고,
+    #: ``EVENT_TO_GRAVE`` 를 ``SINGLE`` 범위로 등록한 블록이 어느 것인지만
+    #: 말한다. 그 이름에서 효과가 무엇을 하는지는 읽을 수 없다.
+    assert len(fields) == 28
     assert "normal_summon_restriction_signals" in fields
     assert "effect_codes" not in fields
 
