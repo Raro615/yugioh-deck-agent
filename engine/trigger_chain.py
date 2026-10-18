@@ -46,6 +46,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from engine.chain import Chain, ChainError, ChainLink
 from engine.effect.definition import (
@@ -67,6 +68,12 @@ from engine.trigger import (
 )
 from engine.trigger_order import TriggerOrderer, TriggerOrdering
 from engine.validation import ActionValidity, ValidationCode
+
+if TYPE_CHECKING:  # pragma: no cover - 주석용
+    from collections.abc import Mapping
+
+    from engine.effect.target import TargetSelection
+    from engine.ids import EffectRef
 
 
 class ChainInsertion(str, Enum):
@@ -328,12 +335,38 @@ class TriggerChainIntegrator:
         ).judge_all(collection, self._registry)
         return TriggerOrderer(self._view).order(event, judged)
 
-    def plan(self, chain: Chain, ordering: TriggerOrdering) -> TriggerChainPlan:
+    def plan(
+        self,
+        chain: Chain,
+        ordering: TriggerOrdering,
+        *,
+        selections: "Mapping[EffectRef, tuple[TargetSelection, ...]] | None" = None,
+    ) -> TriggerChainPlan:
         """
         무엇이 체인에 들어갈 수 있는지 정한다. **아직 넣지 않는다.**
 
         ``ordering`` 의 순서를 **그대로** 쓴다 — 다시 정렬하지 않으므로
         입력 순서가 결과를 바꾸지 않는다 (F-3-C 가 이미 보장한다).
+
+        ``selections`` (Phase 6-Y)
+            **밖에서 정해진 대상 선택.** 효과마다
+            :class:`~engine.effect.target.TargetSelection` 들을 준다.
+
+            왜 받는가 — 이 계층은 "대상 선택이 아직 정해지지 않았다" 를
+            이유로 링크를 거절한다 (:meth:`_missing_execution_inputs`). 그
+            말이 맞지만, **정해졌을 때 그것을 받을 통로가 없었다.** 그래서
+            고르는 사람이 골라도 체인에 오르지 못했다 — 6-Y 가 찾은
+            끊김이다.
+
+            🔴 **주지 않으면 아무것도 바뀌지 않는다.** 기본값이 ``None``
+            이고, 그때는 6-Y 이전과 **같은 거절**을 그대로 돌려준다.
+
+            🔴 **이것은 허가가 아니다.** 여기서 하는 일은 "정해졌는가" 를
+            보는 것뿐이고, 그 선택이 적법한지는 판정하지 않는다. 링크가
+            쌓인 뒤 :class:`~engine.chain.ChainResolver` 가
+            :class:`~engine.effect.targeting.TargetResolver` 와
+            :class:`~engine.effect.ruling.BoardRuling` 로 다시 본다. 관문이
+            둘인 자리를 하나로 줄이지 않는다.
         """
         if not isinstance(chain, Chain):
             raise TypeError(f"Chain 이 필요합니다: {type(chain).__name__}")
@@ -341,12 +374,13 @@ class TriggerChainIntegrator:
             raise TypeError(
                 f"TriggerOrdering 이 필요합니다: {type(ordering).__name__}"
             )
+        decided = dict(selections) if selections else {}
 
         started = bool(chain.resolved_count)
         sequence = len(chain)
         entries: list[TriggerChainEntry] = []
         for eligibility in ordering.canonical_sequence:
-            entry = self._entry(eligibility, sequence, started)
+            entry = self._entry(eligibility, sequence, started, decided)
             entries.append(entry)
             if entry.link is not None:
                 sequence += 1
@@ -380,9 +414,14 @@ class TriggerChainIntegrator:
 
     # ------------------------------------------------------------------
     def _entry(
-        self, eligibility: TriggerEligibility, sequence: int, started: bool
+        self,
+        eligibility: TriggerEligibility,
+        sequence: int,
+        started: bool,
+        decided: "dict[EffectRef, tuple[TargetSelection, ...]] | None" = None,
     ) -> TriggerChainEntry:
         """``ELIGIBLE`` 후보 하나를 링크로 만들 수 있는지 본다."""
+        decided = decided or {}
         candidate = eligibility.candidate
         if eligibility.status is not TriggerStatus.ELIGIBLE:  # pragma: no cover
             # 정리 계층이 이미 갈라 놓았다. 그래도 조용히 통과시키지 않는다.
@@ -419,7 +458,8 @@ class TriggerChainIntegrator:
         if forbidden is not None:
             return forbidden
 
-        missing = self._missing_execution_inputs(definition)
+        chosen = tuple(decided.get(candidate.effect_ref, ()))
+        missing = self._missing_execution_inputs(definition, chosen)
         if missing:
             return TriggerChainEntry(
                 eligibility,
@@ -443,6 +483,9 @@ class TriggerChainIntegrator:
                 actor=candidate.controller,
                 effect_ref=candidate.effect_ref,
                 source=candidate.source,
+                #: 밖에서 정해진 선택을 **링크가 들고 간다.** 해결 계층이
+                #: 거기서 읽고 다시 판정한다.
+                selections=chosen,
             ),
         )
 
@@ -477,22 +520,33 @@ class TriggerChainIntegrator:
         )
 
     def _missing_execution_inputs(
-        self, definition: EffectDefinition
+        self,
+        definition: EffectDefinition,
+        chosen: "tuple[TargetSelection, ...]" = (),
     ) -> tuple[str, ...]:
         """
-        링크를 만들려면 있어야 하는데 **트리거 계층이 갖고 있지 않은 것**.
+        링크를 만들려면 있어야 하는데 **아직 정해지지 않은 것**.
 
         대상 선택과 비용 영수증이다. 둘 다 이 계층 밖에서 정해지고, 없는
         것을 빈 값으로 채우면 대상 없이 해결되는 효과와 비용을 안 낸 효과가
         조용히 판에 들어간다.
+
+        ``chosen`` (Phase 6-Y)
+            밖에서 **정해져 들어온** 선택. 요구된 이름이 전부 들어왔으면
+            "대상 선택" 을 빠진 것으로 세지 않는다.
+
+            🔴 **빠짐을 세는 것과 적법성을 보는 것은 다른 일이다.** 여기서는
+            "그 이름에 결정이 있는가" 만 본다 — 어느 카드를 골랐는지, 그것이
+            규칙에 맞는지는 해결 계층이 다시 본다.
         """
         missing: list[str] = []
         if definition.requires_target:
-            missing.append(
-                "대상 선택 ("
-                + ", ".join(str(ref) for ref in definition.target_refs)
-                + ")"
-            )
+            answered = {selection.ref for selection in chosen}
+            waiting = [ref for ref in definition.target_refs if ref not in answered]
+            if waiting:
+                missing.append(
+                    "대상 선택 (" + ", ".join(str(ref) for ref in waiting) + ")"
+                )
         if definition.has_cost:
             missing.append(f"비용 지불 영수증 ({definition.cost.describe_ko()})")
         return tuple(missing)
