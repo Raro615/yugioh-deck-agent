@@ -789,11 +789,21 @@ skip 도 없었다는 뜻이다.
 | 1 | `9cd4d82` | **Phase 6-W**: 덱→묘지 경로가 멈추는 자리를 측정하고 고정한다 (새 테스트 23건, A–H) |
 | 2 | `be8fd5f` | **Phase 6-W**: 이전 Phase 때부터 깨져 있던 루트 감사 3건을 고친다 (루트 테스트 7파일) |
 | 3 | `6d0728e` | **Phase 6-W**: 막는 것이 판정 사실 하나임을 테스트로 고정한다 (`test_i01` · `test_i02`) |
-| 4 | (아래) | **Phase 6-W 보고서** |
+| 4 | `8f0f93b` | **Phase 6-W 보고서**: 요청된 14항목 순서로 작성한다 |
 
 🔴 **프로덕션 파일은 하나도 커밋에 들어 있지 않다.** 네 커밋이 건드린
 것은 `tests/` 와 `docs/` 뿐이다.
 
-푸시: `git push -u origin claude/pensive-goodall-te1egy`
+```
+$ git push -u origin claude/pensive-goodall-te1egy
+To https://github.com/Raro615/yugioh-deck-agent
+   1f05b00..8f0f93b  claude/pensive-goodall-te1egy -> claude/pensive-goodall-te1egy
+branch 'claude/pensive-goodall-te1egy' set up to track
+       'origin/claude/pensive-goodall-te1egy'.
+```
 
-(§PUSH_RESULT)
+✅ **푸시 완료** — 재시도 없이 한 번에 성공했다. Pull request 는 요청받지
+않았으므로 만들지 않았다.
+
+**다음 Phase 는 자동으로 시작하지 않는다.** §13 의 추천과 §12 의 BLOCKER
+목록을 검토해 주시면 그 범위로 이어가겠습니다.
