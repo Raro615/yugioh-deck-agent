@@ -1643,7 +1643,10 @@ class TriggerEligibilityJudge:
             # 그때는 주체 질문이 올라와 있지 않았다. 주체를 맞춰 보려면
             # 필요한 것은 ``source`` (인스턴스) 하나다.
             self._event_relation(spec, event, candidate.source),
-            self._activation_zone(candidate, spec),
+            # 🔴 **사건을 함께 넘긴다** (Phase 6-V). 소환 계열에서는 발동
+            # 자리를 사건이 말하고, 그 근거가 관문 안에 있어야 한다 —
+            # ``_activation_zone`` 의 설명 참고.
+            self._activation_zone(candidate, spec, event),
             self._trigger_condition(candidate, spec, definition),
             self._execution_authority(spec, definition),
             self._cost_feasibility(candidate, definition),
@@ -1814,15 +1817,53 @@ class TriggerEligibilityJudge:
         )
 
     def _activation_zone(
-        self, candidate: TriggerCandidate, spec: TriggerSpec
+        self,
+        candidate: TriggerCandidate,
+        spec: TriggerSpec,
+        event: "TimingEvent | None" = None,
     ) -> GateVerdict:
         """
         지금 있는 자리에서 발동할 수 있는가.
 
         선언하지 않았으면 ``UNKNOWN`` 이다 — **적지 않은 것을 "어디서든
         발동 가능" 으로 읽지 않는다.**
+
+        🔴 **예외가 하나다: 소환 사건이 자리를 직접 말한다** (Phase 6-V).
+
+        ``EFFECT_TYPE_SINGLE`` 트리거 등록은 ``SetRange`` 를 적지 않는다 —
+        실측으로 SINGLE 트리거 5,304건 중 **5,204건**이 그렇다. 그 등록에서
+        ``activates_from`` 이 비는 것은 데이터가 없어서가 아니라 **그 축으로
+        적히지 않기 때문**이고, 그래서 이 관문이 전부 ``UNKNOWN`` 을 냈다.
+
+        그런데 소환 계열 사건에서는 **사건 자신이 자리를 들고 있다.**
+        :class:`~engine.effect.delta.MonsterSummoned` 가 ``to_zone`` 을 적고,
+        그 카드가 사건의 주체이면 "발동하는 순간 이 카드가 어디 있는가" 의
+        답이 바로 그 ``to_zone`` 이다. 소환이 성공했다는 것이 곧 그 몬스터가
+        몬스터 존에 나왔다는 뜻이므로 **추론이 아니라 사건의 내용**이다.
+
+        🔴 **왜 SINGLE 전체에 적용하지 않는가.** 같은 5,204건에
+        ``EVENT_TO_GRAVE`` 907 · ``EVENT_DESTROYED`` 379 ·
+        ``EVENT_LEAVE_FIELD`` 95 · ``EVENT_REMOVE`` 113 이 섞여 있고, 그
+        효과들이 발동하는 순간 카드는 **필드에 없다** (묘지 · 제외). 그쪽에
+        ``MZONE`` 을 채우면 드로우 개구리(56840658)에서 이미 재현된 **잘못된
+        확신**이 된다 (``trigger_compiler`` 의 ``_split_range`` 설명). 그래서
+        사건이 자리를 **말해 주는** 경우만 읽는다.
+
+        적용 조건은 셋이고 **데이터만 본다** (카드별 분기가 없다):
+
+        1. 시점이 :attr:`TimingPoint.MONSTER_SUMMONED` 다
+        2. 주체가 :attr:`TriggerSubject.SELF` 다 — 그때만 사건의 도착지가
+           **이 카드**의 것이다 (``FIELD`` 등록에서는 다른 카드의 자리다)
+        3. 사건의 변화가 ``MonsterSummoned`` 이고 그 카드가 후보의 출처다
+
+        🔴 **거짓 양성을 만들지 않는다.** 사건이 적은 도착지와 관측이 보는
+        현재 자리가 **둘 다** 맞아야 통과한다 — 해결 중에 그 카드가 다시
+        움직였으면 관측 쪽이 달라지므로 통과하지 않는다.
         """
         if spec.activates_from is None:
+            licensed = self._zone_from_summon_event(candidate, spec, event)
+            if licensed is not None:
+                return licensed
             return _gate(
                 EligibilityGate.ACTIVATION_ZONE,
                 ActionValidity.UNKNOWN,
@@ -1852,6 +1893,64 @@ class TriggerEligibilityJudge:
             ValidationCode.SOURCE_WRONG_ZONE,
             f"{card.zone.value} 는 발동할 수 있는 자리가 아닙니다 "
             f"({'/'.join(sorted(z.value for z in spec.activates_from))}).",
+        )
+
+    def _zone_from_summon_event(
+        self,
+        candidate: TriggerCandidate,
+        spec: TriggerSpec,
+        event: "TimingEvent | None",
+    ) -> "GateVerdict | None":
+        """
+        소환 사건이 **발동 자리를 직접 말하는가.** 말하지 않으면 ``None``.
+
+        ``None`` 은 "자리를 모른다" 가 아니라 **"이 사건은 자리를 말하지
+        않는다"** 다 — 부르는 쪽이 그때 원래의 ``UNKNOWN`` 을 낸다.
+
+        근거와 적용 조건은 :meth:`_activation_zone` 의 설명에 있다.
+        """
+        if event is None:
+            return None
+        if spec.point is not TimingPoint.MONSTER_SUMMONED:
+            return None
+        if spec.subject is not TriggerSubject.SELF:
+            return None
+        delta = event.delta
+        if not isinstance(delta, MonsterSummoned):
+            return None
+        if candidate.source is None or delta.card != candidate.source:
+            return None
+
+        card = self._view.find(candidate.source)
+        if card is None:
+            # 소환은 됐는데 관측에 안 보인다 — 자리를 **확인할 수 없다.**
+            # 사건만 믿고 통과시키지 않는다 (관측이 규칙의 입력이다).
+            return _gate(
+                EligibilityGate.ACTIVATION_ZONE,
+                ActionValidity.UNKNOWN,
+                ValidationCode.HIDDEN_CARD,
+                f"{candidate.source} 가 관측에 보이지 않아 자리를 확인할 수 "
+                "없습니다.",
+            )
+        if card.zone is not delta.to_zone:
+            # 사건이 적은 도착지와 지금 자리가 다르다 — 그 사이에 무엇이
+            # 있었는지 이 계층은 모른다. **모른다고 적는다.**
+            return _gate(
+                EligibilityGate.ACTIVATION_ZONE,
+                ActionValidity.UNKNOWN,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"소환 사건은 {delta.to_zone.value} 를 적었는데 지금 자리는 "
+                f"{card.zone.value} 입니다 — 그 사이의 이동을 읽지 못합니다.",
+                notes=("activates_from 미선언", "소환 후 이동"),
+            )
+        return _gate(
+            EligibilityGate.ACTIVATION_ZONE,
+            ActionValidity.VALID,
+            ValidationCode.OK,
+            f"{card.zone.value} 에서 발동할 수 있습니다 — 소환 사건이 이 "
+            f"카드의 자리를 적었습니다 ({delta.summon.value} 소환, "
+            f"{delta.from_zone.value} → {delta.to_zone.value}).",
+            notes=("자리의 근거는 소환 사건이다",),
         )
 
     def _trigger_condition(

@@ -39,6 +39,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from engine.archetype_compiler import compile_archetype_condition
 from engine.condition import (
     And,
     ConditionResult,
@@ -217,6 +218,8 @@ INTRODUCTION_TO_GALLANTRY = 69091732
 RELOAD = 22589918
 # Phase 6-K — **목록의 첫 몬스터**다. 실행하지 않는다.
 HONEST = 37742478
+# Phase 6-V — **목록의 첫 유발 효과**다 (그 전까지 전부 기동 · 카드 발동).
+GIRSU = 69811710
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -1198,6 +1201,95 @@ _HONEST_IGNITION_ENTRY = LibraryEntry(
 )
 
 
+#: 잭나이츠 오르페골 기르수 — "①: 이 카드가 일반 소환·특수 소환했을 때에
+#: 발동할 수 있다. 덱에서 「오르페골」 또는 「성유물」 카드 1장을 묘지로
+#: 보낸다. (1턴에 1번)"
+#:
+#: **이 목록의 첫 유발 효과다** (Phase 6-V). 그 전까지 등재된 17건은 전부
+#: 기동 효과이거나 마법 · 함정의 카드 발동이었고, ``ActivationKind.TRIGGER``
+#: 를 쓰는 정의가 하나도 없었다.
+#:
+#: 옮긴 자리
+#: ---------
+#: ``e1:SetType(EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O)`` →
+#: :attr:`~engine.vocabulary.ActivationKind.TRIGGER`. ``e1:SetCode(
+#: EVENT_SUMMON_SUCCESS)`` 는 **정의가 아니라 트리거 등록**이 들고 간다
+#: (``TriggerSpec.point`` · ``summons``) — 같은 사실을 두 벌로 적지 않는다.
+#:
+#: ``s.tgfilter`` 의 ``c:IsSetCard({SET_ORCUST,SET_WORLD_LEGACY})`` 는 후보
+#: 조건으로, ``c:IsAbleToGrave()`` 는 **관문으로** 옮겼다 — 어리석은 매장
+#: (81439173)이 세워 둔 그 가름이다 (Phase 2-X).
+#:
+#: 🔴 **카드군 코드를 숫자로 적지 않았다.** ``compile_archetype_condition``
+#: 이 상수 표에서 이름을 해석한다 (``SET_ORCUST`` → ``0x11b`` ·
+#: ``SET_WORLD_LEGACY`` → ``0xfe``). 숫자를 손으로 적으면 상수 표가 갱신될
+#: 때 조용히 어긋난다.
+#:
+#: 발동 조건은 ``s.tgtg`` 의 ``chk==0`` 갈래에서 **덱 장수 부분만** 옮겼다.
+#: "오르페골 또는 성유물이면서 묘지로 갈 수 있는 것이 덱에 있는가" 는 덱을
+#: 세어서는 답할 수 없고, 그 부분 이전은 욕망의 항아리 · 어리석은 매장과
+#: 같은 태도다 (필요조건이지 충분조건이 아니다).
+#:
+#: 옮기지 못한 것
+#: --------------
+#: 1. **1턴에 1번** (``e1:SetCountLimit(1,id)``) — ``UseRegistry`` 는 횟수를
+#:    세기만 하고 "몇 번까지 허용인가" 는 Phase 4 다 (``engine/__init__``).
+#:    그래서 이 정의는 그 제약을 **주장하지 않는다.**
+#: 2. ``s.tgop`` 뒤쪽의 ``GetColumnGroupCount()>=2`` 에서 ``EFFECT_ADD_TYPE``
+#:    (튜너 추가)로 가는 갈래 — 열 계층도 일시 효과 계층도 없다.
+#: 3. ``Duel.BreakEffect`` — 같은 해결 안의 처리 분리를 표현할 자리가 없다.
+#:
+#: 셋 다 **이 효과를 실행 불가로 만들지는 않는다.** 1번은 제약을 덜 거는
+#: 쪽이 아니라 **적지 않는** 쪽이고 (그 사실을 여기 적는다), 2 · 3 은 덱에서
+#: 묘지로 보내는 일 **뒤에** 오는 추가 처리다.
+_GIRSU_TRIGGER_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(GIRSU, 0),
+        source_card_id=GIRSU,
+        targets=TargetBinding.single(
+            TargetSpec.choosing(
+                ChoiceSpec(
+                    source=CandidateSource(
+                        # ``LOCATION_DECK, 0`` — 자신 덱만이다.
+                        zones=frozenset({Zone.DECK}),
+                        owner=PlayerRef.CONTROLLER,
+                        # ``s.tgfilter`` 의 **앞쪽만**. 뒤쪽
+                        # ``IsAbleToGrave`` 는 관문이 들고 간다.
+                        require=compile_archetype_condition(
+                            ("SET_ORCUST", "SET_WORLD_LEGACY")
+                        ).condition,
+                    ),
+                    minimum=1,
+                    maximum=1,
+                )
+            )
+        ),
+        operations=(CardOperation.send_to_grave(PRIMARY_TARGET, gated=True),),
+        activation=ZoneCountAtLeast(PlayerRef.CONTROLLER, Zone.DECK, 1),
+        activation_kind=ActivationKind.TRIGGER,
+        provenance=EffectProvenance.official_lua(
+            "c69811710.lua 의 e1 (EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O, "
+            "EVENT_SUMMON_SUCCESS) 에서 발동 분류를, s.tgfilter 의 "
+            "IsSetCard({SET_ORCUST,SET_WORLD_LEGACY}) 에서 후보 조건을, "
+            "s.tgop 의 Duel.SendtoGrave(tc,REASON_EFFECT) 에서 하는 일을 "
+            "옮겼다. IsAbleToGrave 는 관문으로, 발동 조건은 덱 장수 부분만 "
+            "옮겼다. SetCountLimit(1,id) 와 GetColumnGroupCount 갈래는 "
+            "옮기지 못했다 (Phase 6-V)."
+        ),
+    ),
+    lua_file="c69811710.lua",
+    lua_excerpt=(
+        "e1:SetType(EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O); "
+        "e1:SetCode(EVENT_SUMMON_SUCCESS); e1:SetCountLimit(1,id); "
+        "s.tgfilter = c:IsSetCard({SET_ORCUST,SET_WORLD_LEGACY}) and "
+        "c:IsAbleToGrave(); "
+        "Duel.SelectMatchingCard(tp,s.tgfilter,tp,LOCATION_DECK,0,1,1,nil); "
+        "Duel.SendtoGrave(tc,REASON_EFFECT)"
+    ),
+    executable=True,
+)
+
+
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
     _POT_OF_GREED_ENTRY,
@@ -1223,6 +1315,8 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _RELOAD_ENTRY,
     # Phase 6-K — 첫 몬스터 효과. 실행하지 않는다.
     _HONEST_IGNITION_ENTRY,
+    # Phase 6-V — 첫 유발 효과.
+    _GIRSU_TRIGGER_ENTRY,
 )
 
 
@@ -1299,6 +1393,28 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
             restricts_others=False,
             restriction_basis=RuleBasis.CARD_TEXT,
             restriction_note=f"어니스트: {_SPELL_TRAP_READ}",
+        ),
+        #: 🔴 **기르수** (Phase 6-V) — 어니스트와 **같은 이유로** 여기
+        #: 들어온다: 등재된 카드는 판에 깔리고, 모르는 카드가 하나라도
+        #: 있으면 판 전체의 답이 ``UNKNOWN`` 이 된다
+        #: (``BoardRuling._interference``).
+        #:
+        #: ``answers`` 는 **비어 있다.** 효과 몬스터이므로
+        #: ``normal_monster_facts`` 를 쓸 수 없고 (그 근거는 "효과가 없다"
+        #: 는 룰북 한 줄이다), 기르수의 공식 텍스트는 자기 자신을 어디로
+        #: 보낼 수 있는지 **말하지 않는다.** 묻지 않은 것을 참으로 채우지
+        #: 않는다 — 어니스트가 ``MAY_BE_RETURNED_TO_HAND`` 하나만 들고 있는
+        #: 것과 같은 규율이다.
+        #:
+        #: 🔴 **그래서 기르수 ① 의 해결은 여전히 멈춘다.** 막는 것은 이
+        #: 카드가 아니라 **덱에서 고른 카드**의 ``MAY_BE_SENT_TO_GRAVE``
+        #: 이고, 그 카드들은 여기 등록되어 있지 않다 (6-V 보고서 §11).
+        CardRuleFacts(
+            card_id=GIRSU,
+            answers={},
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=f"기르수: {_SPELL_TRAP_READ}",
         ),
     )
     + tuple(
