@@ -201,7 +201,18 @@ def test_01_the_three_part_modules_exist_and_are_large():
         # ``TriggerRegistry`` 를 만드는 production 자리는 여전히 0곳이다
         # (``test_13``).
         "engine/trigger.py": 2199,
-        "engine/trigger_chain.py": 594,
+        #: 🔴 594 → **648** (Phase 6-Y). ``plan`` 이 밖에서 정해진 대상
+        #: 선택을 받는 통로 하나다 (``selections=None`` 기본값).
+        #:
+        #: 🔴 **이번에는 dormant 가 깨졌다.** 앞의 갱신들은 전부 "늘어난
+        #: 코드가 후보를 모으는 자리를 늘리지 않았다" 였는데, 6-Y 는
+        #: ``integration/autonomy.py`` 에서 이 모듈을 **실제로 돌린다**
+        #: (``test_trigger_connectivity_audit::test_04`` ·
+        #: ``test_trigger_ownership_audit::test_10``). 그래서 이 파일의
+        #: 이름이 말하는 "dormant" 는 이제 ``engine/duel.py`` 에 대해서만
+        #: 참이다 — ``legal_actions`` 는 여전히 유발을 제공하지 않는다
+        #: (``BLOCKER-6Y-1``).
+        "engine/trigger_chain.py": 648,
         "engine/trigger_order.py": 443,
     }
     #: 2,698 → **2,718** (Phase 6-B 의 ``ActionEvent`` 가드 +20)
@@ -215,7 +226,8 @@ def test_01_the_three_part_modules_exist_and_are_large():
     #: 나머지 두 모듈은 **한 줄도 바뀌지 않았다** — 그것이 이번 변경이
     #: 축 하나에만 닿았다는 증거다.
     #: 🔴 3,096 → **3,236** (Phase 6-V). "크다" 는 요지는 그대로다.
-    assert sum(sizes.values()) == 3236
+    #: 🔴 3,236 → **3,290** (Phase 6-Y: ``trigger_chain`` +54).
+    assert sum(sizes.values()) == 3290
 
 
 def test_02_the_two_assembly_modules_exist():
@@ -942,7 +954,18 @@ def test_25_this_phase_changed_no_production_file():
         # ``TriggerRegistry`` 를 만드는 production 자리는 여전히 0곳이다
         # (``test_13``).
         "engine/trigger.py": 2199,
-        "engine/trigger_chain.py": 594,
+        #: 🔴 594 → **648** (Phase 6-Y). ``plan`` 이 밖에서 정해진 대상
+        #: 선택을 받는 통로 하나다 (``selections=None`` 기본값).
+        #:
+        #: 🔴 **이번에는 dormant 가 깨졌다.** 앞의 갱신들은 전부 "늘어난
+        #: 코드가 후보를 모으는 자리를 늘리지 않았다" 였는데, 6-Y 는
+        #: ``integration/autonomy.py`` 에서 이 모듈을 **실제로 돌린다**
+        #: (``test_trigger_connectivity_audit::test_04`` ·
+        #: ``test_trigger_ownership_audit::test_10``). 그래서 이 파일의
+        #: 이름이 말하는 "dormant" 는 이제 ``engine/duel.py`` 에 대해서만
+        #: 참이다 — ``legal_actions`` 는 여전히 유발을 제공하지 않는다
+        #: (``BLOCKER-6Y-1``).
+        "engine/trigger_chain.py": 648,
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
         "engine/event_pipeline.py": 500,
@@ -1003,7 +1026,16 @@ def test_25_this_phase_changed_no_production_file():
         #: 잡는다. 늘어난 코드가 하는 일은 **관문 하나의 답**을 바꾸는
         #: 것이고, dormant 모듈을 부르는 자리는 하나도 더하지 않았다.
         "engine/trigger.py": 840,
-        "engine/trigger_chain.py": 257,
+        #: 🔴 257 → **268** (Phase 6-Y). 문자열을 벗긴 줄 수가 **11줄**
+        #: 늘었다 — ``plan`` 의 키워드 인자와 ``decided`` 사전, ``_entry`` 의
+        #: 인자 하나, ``_missing_execution_inputs`` 의 ``answered`` ·
+        #: ``waiting`` 계산, 링크의 ``selections=chosen``. 나머지 43줄은
+        #: docstring 이고 이 핀은 그것에 둔감하다.
+        #:
+        #: 🔴 **실행 코드가 움직였다는 것이 요지다.** 앞의 Phase 들은 이
+        #: 핀을 움직이지 않았거나(docstring 만 고쳤다) 움직여도 dormant 를
+        #: 깨지 않았는데, 6-Y 는 깼다.
+        "engine/trigger_chain.py": 268,
         "engine/trigger_order.py": 194,
         "engine/timing.py": 194,
         "engine/event_pipeline.py": 227,

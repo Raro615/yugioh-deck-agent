@@ -319,14 +319,32 @@ def test_09_the_ordering_layer_already_records_the_choice_it_cannot_make():
     assert "같은 플레이어의 여러 트리거를 그 사람이 고르는 순서" in UNRESOLVED_ORDER_RULES
 
 
-def test_10_the_dormant_integrator_builds_links_without_any_action():
+def test_10_the_integrator_builds_links_without_any_action():
     """
-    **§4 — 잠든 계층은 ``PlayerAction`` 없이 ``ChainLink`` 를 만든다.**
+    **§4 — 통합기는 ``PlayerAction`` 없이 ``ChainLink`` 를 만든다.**
 
-    ``TriggerChainIntegrator._entry`` 의 인자에 ``action`` 이 없고, 만드는
-    링크에 ``selections`` 도 ``payments`` 도 없다. 그러므로 **그대로 연결하면**
-    ``legal_actions()`` 를 우회하는 두 번째 경로가 된다. 지금은 불리지 않으므로
-    모순이 아니다 (Phase 3-E-20).
+    ``TriggerChainIntegrator._entry`` 의 인자에 ``action`` 이 없다. 그러므로
+    **연결하면** ``legal_actions()`` 를 우회하는 두 번째 경로가 된다
+    (Phase 3-E-20 이 그 위험을 미리 적었다).
+
+    .. warning::
+       🔴 **Phase 6-Y 가 그것을 불렀다.** 이 테스트의 원래 문장은 "지금은
+       불리지 않으므로 모순이 아니다" 였고, 그 말이 **더 이상 참이 아니다**
+       — ``integration.autonomy`` 가 이 통합기를 만들어 체인을 세우고
+       ``ChainResolver`` 로 해결한다
+       (``test_trigger_connectivity_audit::test_04``).
+
+       그래서 **두 번째 경로가 실제로 생겼다.** 6-Y 는 그것을 숨기지 않고
+       ``BLOCKER-6Y-1`` 로 적었다 — 올바른 해법은 유발 발동을
+       ``legal_actions`` 에 올려 경로를 **하나로 되돌리는** 것이고, 그것은
+       ``ACTIVATION_KINDS_IN_SCOPE`` 를 넓히는 공유 계약 변경이다.
+
+       그 경로가 **무검증은 아니다.** 후보는 ``TriggerEligibilityJudge`` 의
+       다섯 관문을 지나고, 정책이 고른 선택은 배선이 한 번
+       (``_judge_choice``) · 해결 계층이 또 한 번
+       (``TargetResolver`` · ``BoardRuling``) 본다. 그러나 그것은
+       ``ActionValidator`` 가 아니고, 이 테스트가 가리키는 위험은 **판정의
+       주체가 둘로 갈린다**는 것이다.
     """
     tree = ast.parse(
         (PROJECT_ROOT / "engine/trigger_chain.py").read_text(encoding="utf-8")
@@ -347,10 +365,17 @@ def test_10_the_dormant_integrator_builds_links_without_any_action():
                 )
     assert "_entry" in builders, builders
     params, kwargs = builders["_entry"]
+    #: 🔴 **여전히 ``PlayerAction`` 을 받지 않는다** — 이것이 이 테스트의 본문
+    #: 이고, 6-Y 가 바꾸지 않았다.
     assert "action" not in params, params
-    assert kwargs == {"sequence", "actor", "effect_ref", "source"}
-    #: 비용 영수증과 선택이 빠져 있다 — 발동 경로가 채우는 바로 그 둘이다.
-    assert "selections" not in kwargs and "payments" not in kwargs
+    #: 🔴 ``selections`` 가 늘었다 (Phase 6-Y). 밖에서 **정해진** 선택을
+    #: 링크가 들고 가게 했다 — 그것이 없어서 고르는 사람이 골라도 체인에
+    #: 오르지 못했다.
+    assert kwargs == {"sequence", "actor", "effect_ref", "source", "selections"}
+    #: 🔴 **비용 영수증은 여전히 빠져 있다.** 발동 경로가 채우는 둘 중
+    #: 하나만 열렸다 — 비용이 있는 효과는 이 경로로 올 수 없다
+    #: (``_missing_execution_inputs`` 가 거절한다).
+    assert "payments" not in kwargs
 
 
 # ======================================================================

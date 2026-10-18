@@ -202,8 +202,12 @@ PROSE_OCCURRENCES = {
     ("engine/trigger.py", 1741),
     ("engine/trigger.py", 1747),
     ("engine/trigger.py", 1770),
-    ("engine/trigger_chain.py", 553),
-    ("engine/trigger_chain.py", 569),
+    # 🔴 **Phase 6-Y 가 두 자리를 밀었다** (553 → 607 · 569 → 623).
+    # ``plan`` 의 ``selections`` 통로와 그 설명이 위에 들어가 +54 줄이다.
+    # **문자열 88 · 코드 73 · 산문 15 는 그대로다** — 늘어난 것은 설명이고
+    # 이 코드를 쓰는 자리가 늘지 않았다.
+    ("engine/trigger_chain.py", 607),
+    ("engine/trigger_chain.py", 623),
     ("engine/validation.py", 129),
     ("engine/validation.py", 180),
     # 🔴 **Phase 6-R 이 자리 하나를 더했다 — 산문 14 → 15.**

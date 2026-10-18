@@ -156,8 +156,17 @@ def test_01_the_integration_layer_has_no_production_importer():
         "engine.trigger_observation"
     }
 
-    #: 그 아래 두 모듈은 ``engine.timing`` 을 통해서만 닿는다.
-    assert importers.get("engine.trigger_chain", set()) == {"engine.timing"}
+    #: 🔴 **Phase 6-Y 가 다른 쪽 문을 열었다.** ``integration.autonomy`` 가
+    #: ``engine.trigger_chain`` 으로 들어온다 — 사건에서 후보를 꺼내 정책에게
+    #: 주고, 정책이 고른 선택을 ``plan`` 에 돌려주는 배선이다.
+    #:
+    #: ``engine.timing`` 은 **여전히 0곳**이다. 6-Y 는 그 모듈을 쓰지 않고
+    #: ``trigger_chain`` 을 직접 부른다 — 수집·정렬·삽입을 한 줄로 잇는
+    #: 더 윗층이 필요하지 않았다.
+    assert importers.get("engine.trigger_chain", set()) == {
+        "engine.timing",
+        "integration.autonomy",
+    }
     assert importers.get("engine.trigger_order", set()) == {
         "engine.timing",
         "engine.trigger_chain",
@@ -178,6 +187,11 @@ def test_02_engine_trigger_reaches_production_only_as_a_type():
     #: 사건을 기존 계층에 넘긴다) 과 ``integration.trigger_registry``
     #: (등록소를 만든다). 아래 ``activation_timing`` 단정은 그대로다:
     #: **살아 있는 경로가 가져가는 이름은 여전히 ``TimingPoint`` 하나**다.
+    #: 🔴 Phase 6-Y 에서 ``integration.autonomy`` 가 늘었다 — 사건을 시점으로
+    #: 펼치고(``timing_events``) 후보의 상태·요구를 읽는다
+    #: (``TriggerStatus`` · ``TriggerRequirement``). 아래
+    #: ``activation_timing`` 단정은 그대로다: **살아 있는 발동 판정 경로가
+    #: 가져가는 이름은 여전히 ``TimingPoint`` 하나**다.
     assert importers["engine.trigger"] == {
         "engine.activation_timing",
         "engine.event_pipeline",
@@ -187,6 +201,7 @@ def test_02_engine_trigger_reaches_production_only_as_a_type():
         "engine.trigger_compiler",
         "engine.trigger_observation",
         "integration.trigger_registry",
+        "integration.autonomy",
     }
 
     source = (PROJECT_ROOT / "engine/activation_timing.py").read_text(encoding="utf-8")
@@ -254,11 +269,22 @@ def test_04_no_production_module_constructs_the_trigger_structures():
     #: 모으기 시작한 것이 아니다 — ``engine/duel.py`` 에는 여전히
     #: ``trigger`` 라는 말이 없다
     #: (``test_trigger_pipeline_dormant_audit::test_12``).
+    #: 🔴 셋 → **넷** (Phase 6-Y). ``integration/autonomy.py`` 가
+    #: **통합기**(``TriggerChainIntegrator``)를 만든다 — 6-I 가 등록소까지
+    #: 만들고 멈춘 자리의 다음 한 칸이다.
+    #:
+    #: 🔴 그리고 위의 구분이 **여기서 처음으로 한쪽이 바뀐다.** 6-Y 는
+    #: 후보를 모으기만 하지 않고 체인을 세워 해결까지 돌린다. 다만
+    #: **듀얼 루프가 스스로 도는 것은 아니다** — ``engine/duel.py`` 에는
+    #: 여전히 그 말이 없고 (``..._dormant_audit::test_12``),
+    #: ``legal_actions`` 는 유발을 제공하지 않는다 (``BLOCKER-6Y-1``).
     assert sorted(callers) == [
         "engine/event_pipeline.py",
         "engine/trigger_compiler.py",
+        "integration/autonomy.py",
         "integration/trigger_registry.py",
     ], callers
+    assert callers["integration/autonomy.py"] == ["TriggerChainIntegrator("], callers
     assert callers["engine/trigger_compiler.py"] == ["TriggerSpec("], callers
     assert callers["engine/event_pipeline.py"] == ["TriggerCollector("]
     assert callers["integration/trigger_registry.py"] == ["TriggerRegistry("]
