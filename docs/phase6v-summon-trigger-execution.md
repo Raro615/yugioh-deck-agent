@@ -54,12 +54,13 @@ entry_for(EffectRef(HONEST,0)) # 있음
 
 | 파일 | 함수 · 자리 | 무엇을 |
 | --- | --- | --- |
-| `engine/trigger.py` | `TriggerEligibilityJudge.judge` | `_activation_zone` 에 `event` 를 넘긴다 |
-| `engine/trigger.py` | `TriggerEligibilityJudge._activation_zone` | 선언이 없으면 소환 사건을 먼저 본다 |
-| `engine/trigger.py` | `TriggerEligibilityJudge._zone_from_summon_event` (신규) | 사건이 자리를 말하는지 판정 |
+| `engine/trigger.py` | `summoned_zone_for` (신규 모듈 함수) | 그 사건이 이 카드를 어느 자리에 내놓았는가 (**읽기**) |
+| `engine/trigger.py` | `TriggerEligibilityJudge.judge` | 그 **값 하나**를 관문에 넘긴다 (사건이 아니다) |
+| `engine/trigger.py` | `TriggerEligibilityJudge._activation_zone` | 선언이 없으면 그 값을 먼저 본다 |
+| `engine/trigger.py` | `TriggerEligibilityJudge._zone_from_summon` (신규) | 그 값으로 자리를 인정할지 **판정** |
 | `engine/effect/library.py` | `_GIRSU_TRIGGER_ENTRY` (신규) · `GIRSU` 상수 · `OPERATION_RULINGS` 한 줄 | 기르수 ① 등재 |
 
-### 2.1 `_zone_from_summon_event` — 왜 소환 계열만인가
+### 2.1 `summoned_zone_for` · `_zone_from_summon` — 왜 소환 계열만인가
 
 `EFFECT_TYPE_SINGLE` 트리거 등록은 `SetRange` 를 적지 않는다. 전수 측정:
 
@@ -293,74 +294,6 @@ EventJournal: 0건
 에 기르수 번호가 0회, `ORCUST`·`SET_` 가 0회이고, 새 판정 함수 본문에
 `card_id` 가 없다.
 
-## 10. 🔴 설계 경계를 한 번 깼고, 테스트가 잡았다
-
-이 절은 **내가 틀린 기록**이다. 숨기면 다음 Phase 가 같은 실수를 한다.
-
-### 10.1 무엇을 깼는가
-
-첫 구현은 `_activation_zone` 관문에 `TimingEvent` 를 **그대로** 넘겼다.
-`tests/engine` 3,553건은 전부 통과했고 루트 회귀에서 깨졌다:
-
-```
-FAILED tests/test_trigger_spec_declaration_audit.py
-       ::test_15_no_gate_sees_the_event_and_the_candidate_together
-```
-
-그 시험은 Phase 3-F-5 의 **발견**을 census 로 고정한다:
-
-> 다섯 관문 중 사건을 받는 것은 `_event_relation` **하나**이고, 그 관문은
-> 후보를 받지 **않는다.** `event.actor` 와 `candidate.controller` 를
-> 비교해야 하는데 **두 값이 같은 함수 안에 있는 관문이 하나도 없다.**
-> 그래서 이것은 필드 추가가 아니라 **계층 경계의 문제**다.
-
-내 구현은 `_activation_zone` 을 `(event=True, candidate=True)` 로 만들어
-그 census 를 깼다.
-
-### 10.2 왜 테스트를 고치지 않았는가
-
-그 시험의 요지가 **옳다.** 그리고 저장소가 같은 문제를 푸는 방법을 이미
-적어 두었다 — Phase 6-F 가 `_event_relation` 에 주체 질문을 더할 때
-**후보 전체가 아니라 필요한 최소 값**(`source`)을 넘겼고, 그래서 census 가
-유지됐다 (설계 C · 3-F-8 §5).
-
-### 10.3 어떻게 고쳤는가
-
-같은 설계를 따랐다. 관문이 받는 것은 `Zone` **하나**다.
-
-```python
-def summoned_zone_for(event, source) -> "Zone | None":
-    """그 사건이 이 카드를 어느 자리에 내놓았는가. 읽기이고 판단이 아니다."""
-```
-
-`judge` 가 그 값을 계산해 넘기고, 적격성은 관문이 정한다. `None` 인 경우가
-셋이고 **셋 다 "자리를 모른다" 가 아니다**: 사건이 없다 · 소환 사건이
-아니다 · 그 소환이 **다른 카드**의 것이다. 마지막이 패의 같은 이름 카드를
-걸러낸다 (`test_d04`).
-
-census 복원 확인:
-
-| 관문 | event | candidate |
-| --- | --- | --- |
-| `_event_relation` | ✅ | — |
-| `_activation_zone` | — | ✅ |
-| `_trigger_condition` | — | ✅ |
-| `_execution_authority` | — | — |
-| `_cost_feasibility` | — | ✅ |
-
-**결과적으로 더 나은 구현이 됐다.** 관문은 사건 해석을 하지 않고, 사건
-읽기는 이름이 붙은 한 함수에 모였다.
-
-### 10.4 같은 회귀가 잡은 다른 것
-
-`test_11_the_declaration_type_has_exactly_one_production_module` 도 깨졌다 —
-`library.py` 의 **docstring** 이 `TriggerSpec` 이라는 낱말을 썼기 때문이고
-의존은 없었다. 이것도 테스트가 아니라 내 설명을 고쳤다: 그 시험이 지키는
-"live 경로는 선언을 모른다" 가 옳고, `library.py` 는 그 타입을 쓰지 않는다.
-
-🔴 **교훈: `tests/engine` 만으로는 설계 경계 감사를 지나칠 수 없다.** 그
-감사들은 루트에 있다.
-
 ## 11. 남아 있는 구조적 BLOCKER
 
 순서는 **수직 경로에서 만나는 순서**다. 1번이 §4 가 말하는 "첫 번째 실제
@@ -463,7 +396,7 @@ ordinal 단위로 고정한다.
 
 권장 순서는 **A → C → B** 다. A 없이는 무엇을 배선해도 판이 바뀌지 않는다.
 
-## 13. 성공 수준 판정
+## 14. 성공 수준 판정
 
 | 수준 | 요구 | 판정 |
 | --- | --- | --- |
@@ -489,3 +422,71 @@ ordinal 단위로 고정한다.
 
 🔴 **실제로 실행하지 않은 행동을 성공이라고 기록하지 않았다.** F 묶음 5건이
 "여기서 멈춘다" 를 단언으로 적는다.
+
+## 부록 A. 🔴 설계 경계를 한 번 깼고, 테스트가 잡았다
+
+이 절은 **내가 틀린 기록**이다. 숨기면 다음 Phase 가 같은 실수를 한다.
+
+### A.1 무엇을 깼는가
+
+첫 구현은 `_activation_zone` 관문에 `TimingEvent` 를 **그대로** 넘겼다.
+`tests/engine` 3,553건은 전부 통과했고 루트 회귀에서 깨졌다:
+
+```
+FAILED tests/test_trigger_spec_declaration_audit.py
+       ::test_15_no_gate_sees_the_event_and_the_candidate_together
+```
+
+그 시험은 Phase 3-F-5 의 **발견**을 census 로 고정한다:
+
+> 다섯 관문 중 사건을 받는 것은 `_event_relation` **하나**이고, 그 관문은
+> 후보를 받지 **않는다.** `event.actor` 와 `candidate.controller` 를
+> 비교해야 하는데 **두 값이 같은 함수 안에 있는 관문이 하나도 없다.**
+> 그래서 이것은 필드 추가가 아니라 **계층 경계의 문제**다.
+
+내 구현은 `_activation_zone` 을 `(event=True, candidate=True)` 로 만들어
+그 census 를 깼다.
+
+### A.2 왜 테스트를 고치지 않았는가
+
+그 시험의 요지가 **옳다.** 그리고 저장소가 같은 문제를 푸는 방법을 이미
+적어 두었다 — Phase 6-F 가 `_event_relation` 에 주체 질문을 더할 때
+**후보 전체가 아니라 필요한 최소 값**(`source`)을 넘겼고, 그래서 census 가
+유지됐다 (설계 C · 3-F-8 §5).
+
+### A.3 어떻게 고쳤는가
+
+같은 설계를 따랐다. 관문이 받는 것은 `Zone` **하나**다.
+
+```python
+def summoned_zone_for(event, source) -> "Zone | None":
+    """그 사건이 이 카드를 어느 자리에 내놓았는가. 읽기이고 판단이 아니다."""
+```
+
+`judge` 가 그 값을 계산해 넘기고, 적격성은 관문이 정한다. `None` 인 경우가
+셋이고 **셋 다 "자리를 모른다" 가 아니다**: 사건이 없다 · 소환 사건이
+아니다 · 그 소환이 **다른 카드**의 것이다. 마지막이 패의 같은 이름 카드를
+걸러낸다 (`test_d04`).
+
+census 복원 확인:
+
+| 관문 | event | candidate |
+| --- | --- | --- |
+| `_event_relation` | ✅ | — |
+| `_activation_zone` | — | ✅ |
+| `_trigger_condition` | — | ✅ |
+| `_execution_authority` | — | — |
+| `_cost_feasibility` | — | ✅ |
+
+**결과적으로 더 나은 구현이 됐다.** 관문은 사건 해석을 하지 않고, 사건
+읽기는 이름이 붙은 한 함수에 모였다.
+
+### A.4 같은 회귀가 잡은 다른 것
+
+`test_11_the_declaration_type_has_exactly_one_production_module` 도 깨졌다 —
+`library.py` 의 **docstring** 이 `TriggerSpec` 이라는 낱말을 썼기 때문이고
+의존은 없었다. 이것도 테스트가 아니라 내 설명을 고쳤다: 그 시험이 지키는
+"live 경로는 선언을 모른다" 가 옳고, `library.py` 는 그 타입을 쓰지 않는다.
+
+🔴 **교훈: `tests/engine` 만으로는 설계 경계 감사를 지나칠 수 없다.** 그
+감사들은 루트에 있다.
