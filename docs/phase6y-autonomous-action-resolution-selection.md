@@ -515,3 +515,121 @@ Deck after any time you search it"*).
 ## 14. Git 커밋·푸시 결과
 
 (§GIT_RESULTS)
+
+---
+
+## 부록 A. 🔴 루트 회귀가 세 가지를 잡았다
+
+이 절은 **내가 틀린 기록**이다. 셋 다 `tests/engine` 3,638건과 Duel 수직
+통합 418건을 **전부 통과한 뒤** 루트에서 깨졌다.
+
+### A.1 🔴 내가 이 Phase 의 금지를 어겼다 — `pytest.skip` 추가
+
+```
+FAILED tests/test_lua_verified_provenance_audit.py::test_39_no_test_was_deleted_and_no_skip_was_added
+FAILED tests/test_provenance_consumer_audit.py::test_39_no_test_was_deleted_and_no_skip_was_added
+FAILED tests/test_update_coverage_contract_audit.py::test_41_no_test_was_deleted_and_no_skip_was_added
+    ('tests/engine/test_autonomous_resolution.py',
+     'pytest.skip("이 덱에서는 제안이 생기지 않는다 — 그것도 정상 중단이다")')
+```
+
+§9 가 **skip 추가를 금지**한다. 내가 `test_c06` 에 그것을 넣었다 — 카드군
+카드가 없는 덱에서 제안이 생길지 몰라서 빠져나갈 구멍을 둔 것이다.
+
+🔴 **구멍을 만든 이유가 게으름이었다.** 실제로 재 보니 제안은 **생긴다** —
+발동 조건이 덱 장수만 보므로 카드군 카드가 없어도 적법하고, 막히는 자리는
+그 뒤다 (허용 후보 0건 → 장수로 거절). skip 을 지우고 그 사실을 단언으로
+적었다. **단언이 2개에서 7개로 늘었다.**
+
+### A.2 🔴 `agent/` 가 사건 계층의 어휘를 쓰면 안 된다
+
+```
+FAILED tests/test_trigger_connectivity_audit.py::test_15_the_agent_layer_knows_nothing_about_triggers
+    (path.name, token)  — agent/choice.py 에 'trigger'
+```
+
+그 감사는 `agent/**.py` 전수에서 네 토큰(`Trigger` · `trigger` ·
+`TimingEvent` · `TimingPoint`)을 **글자로** 센다. 내 `ChoicePolicy` 의
+메서드 이름이 `activate_trigger` 였다.
+
+🔴 **이름만의 문제가 아니었다.** 정책이 결정하는 것은 "제안된 효과를
+발동할 것인가" 이고, 그 제안이 **왜** 생겼는지(사건 · 시점 · 선언)는
+정책이 알 필요가 없다. 이름이 그 사실을 흐리고 있었다.
+
+테스트가 아니라 구현을 고쳤다 — 6-X 부록 A 와 같은 방법이다.
+
+| | 첫 구현 | 고친 뒤 |
+| --- | --- | --- |
+| 프로토콜 메서드 | `activate_trigger(offer)` | **`activate_effect(offer)`** |
+| `agent/choice.py` 의 금지 토큰 | 다수 (docstring 포함) | **0건** |
+| 정책이 읽는 것 | 같다 (`offer.permitted` · `offer.minimum` · `offer.requirement_known`) | 같다 |
+| 감사 | 실패 | **수정 없이 통과** |
+
+🔴 **감사 파일 이름조차 적을 수 없었다.** docstring 에서 그 감사를
+`tests/test_trigger_connectivity_audit.py` 로 가리켰더니 그것도 걸렸다 —
+전수 토큰 검사이므로 파일명 안의 토큰도 센다. 이름 없이 "루트의 연결성
+감사" 로 적었다.
+
+### A.3 🔴 **Phase 3-E-20 이 이 Phase 의 위험을 미리 적어 두었다**
+
+```
+FAILED tests/test_trigger_ownership_audit.py::test_10_the_dormant_integrator_builds_links_without_any_action
+    assert "selections" not in kwargs and "payments" not in kwargs
+```
+
+그 테스트의 원래 문장이 이렇다.
+
+> **§4 — 잠든 계층은 `PlayerAction` 없이 `ChainLink` 를 만든다.**
+> `TriggerChainIntegrator._entry` 의 인자에 `action` 이 없고, 만드는 링크에
+> `selections` 도 `payments` 도 없다. 그러므로 **그대로 연결하면
+> `legal_actions()` 를 우회하는 두 번째 경로가 된다.** 지금은 불리지
+> 않으므로 모순이 아니다 (Phase 3-E-20).
+
+🔴 **6-Y 가 그것을 불렀다.** 마지막 문장이 더 이상 참이 아니다.
+
+**그래서 숨기지 않고 적는다.** 그 경로가 무검증은 아니다 —
+
+| 관문 | 무엇이 판정하는가 |
+| --- | --- |
+| ① | `TriggerEligibilityJudge` 의 다섯 관문 (후보가 적법한가) |
+| ② | `integration.autonomy._judge_choice` (고른 것이 후보 목록에 있는가) |
+| ③ | `ChainResolver` → `TargetResolver` · `BoardRuling` (적법성 재판정) |
+
+그러나 그 셋 중 어느 것도 **`ActionValidator` 가 아니다.** 이 감사가
+가리키는 위험은 "검증이 없다" 가 아니라 **"판정의 주체가 둘로 갈린다"** 다.
+
+🔴 **올바른 해법은 경로를 하나로 되돌리는 것**이고, 그것이
+`BLOCKER-6Y-1` 이다 — 유발 발동을 `legal_actions` 에 올리면 두 번째 경로가
+사라진다. 그 변경은 `ACTIVATION_KINDS_IN_SCOPE` 를 넓히는 **공유 계약
+변경**이므로 §10 에 따라 **사용자 승인 대상**으로 남겼다.
+
+감사는 약화하지 않고 **다시 적었다** — `action` 이 없다는 본문은 그대로,
+`selections` 가 늘었다는 사실과 `payments` 는 여전히 없다는 사실을 각각
+단언한다 (비용이 있는 효과는 이 경로로 올 수 없다).
+
+### A.4 휴면 센서스 — 6-Y 가 파이프라인을 **깨웠다**
+
+| 감사 | 전 | 후 |
+| --- | --- | --- |
+| `connectivity::test_01` — `engine.trigger_chain` 의 importer | `{engine.timing}` | `{engine.timing, integration.autonomy}` |
+| `connectivity::test_02` — `engine.trigger` 의 importer | 8곳 | **9곳** |
+| `connectivity::test_04` — 트리거 구조를 만드는 production 자리 | 3곳 | **4곳** (`TriggerChainIntegrator(`) |
+| `dormant::test_01` · `test_25` — `trigger_chain.py` 줄 수 | 594 | **648** (문자열 벗긴 257 → **268**) |
+| `rule_not_implemented::test_02` — 산문 줄번호 | 553 · 569 | **607 · 623** (총수 88 · 73 · 15 불변) |
+
+🔴 **앞의 모든 갱신과 다른 점이 하나 있다.** 6-B · 6-F · 6-H · 6-V 는
+전부 "늘어난 코드가 후보를 모으는 자리를 늘리지 않았다 — dormant 를 깨지
+않는다" 였다. 6-Y 는 **깼다.** 그래서 그 파일 이름이 말하는 "dormant" 는
+이제 `engine/duel.py` 에 대해서만 참이다 (`legal_actions` 는 여전히 유발을
+제공하지 않는다).
+
+### A.5 남는 교훈
+
+6-X 부록 A 가 적은 문장이 또 맞았다 — *"관측에 새 칸을 더할 때는 '이 값이
+무엇을 말하는가' 를 먼저 묻는다."* 6-Y 가 한 줄 더한다.
+
+🔴 **휴면 계층을 깨울 때는 "누가 그 휴면을 세고 있는가" 를 먼저 찾는다.**
+이 저장소는 휴면을 **다섯 감사**로 세고 있었고 (importer 그래프 · 생성자
+자리 · 줄 수 둘 · 소유권), 그중 하나는 **깨우면 생기는 위험까지** 적어
+두었다 (3-E-20). 그 다섯을 먼저 읽었다면 `BLOCKER-6Y-1` 을 설계 **전에**
+알았을 것이고, 두 번째 경로를 만들지 않는 쪽을 먼저 저울질했을 것이다.
