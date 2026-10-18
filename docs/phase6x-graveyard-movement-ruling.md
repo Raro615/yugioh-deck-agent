@@ -192,7 +192,7 @@ UNCHECKED_RULES: #0 를 묘지로 보낼 수 있는지 판정할 수 없습니�
 
 ```python
 DERIVED_FACTS: dict[RuleQuestion, object] = {
-    RuleQuestion.MAY_BE_SENT_TO_GRAVE: self_grave_trigger_fact,
+    RuleQuestion.MAY_BE_SENT_TO_GRAVE: self_grave_text_fact,
 }
 ```
 
@@ -212,28 +212,31 @@ DERIVED_FACTS: dict[RuleQuestion, object] = {
 
 | 파일 | 추가 | 무엇 |
 | --- | --- | --- |
-| `core/card_model.py` | +51 | `SELF_GRAVE_TRIGGER_EVENT` · `SELF_GRAVE_TRIGGER_SCOPE` · `Card.self_grave_trigger_signals` |
-| `engine/game_state_view.py` | +26 | `CardDefinitionView.self_grave_trigger_signals` (필드 27 → **28**) + `of` · `canonical_state` · `to_dict` |
-| `engine/effect/ruling.py` | +105 | `SEND_TO_GRAVE_RULE` · `self_grave_trigger_fact` · `DERIVED_FACTS` · `derived_fact` · `BoardRuling.explain` 의 마지막 자리 |
+| `core/card_model.py` | +51 | `SELF_GRAVE_TRIGGER_EVENT` · `SELF_GRAVE_TRIGGER_SCOPE` · `Card.self_grave_text_evidence` |
+| `engine/game_state_view.py` | +26 | `CardDefinitionView.self_grave_text_evidence` (필드 27 → **28**) + `of` · `canonical_state` · `to_dict` |
+| `engine/effect/ruling.py` | +105 | `SEND_TO_GRAVE_RULE` · `self_grave_text_fact` · `DERIVED_FACTS` · `derived_fact` · `BoardRuling.explain` 의 마지막 자리 |
 | `tests/engine/test_graveyard_movement_ruling.py` | **신규** 31건 | A–G |
 | `tests/engine/test_deck_to_grave_blocker.py` | 수정 | 6-W 가 고정한 BLOCKER 가 풀렸다 (§11.2) |
 | `docs/phase6x-graveyard-movement-ruling.md` | **신규** | 이 보고서 |
 
 ### 5.1 세 값 규약을 6-U 에서 그대로 가져왔다
 
-`Card.self_grave_trigger_signals` 는 **세 가지 답**을 구분한다.
+`Card.self_grave_text_evidence` 는 **세 가지 답**을 구분한다.
 
 | 값 | 뜻 | 판정 |
 | --- | --- | --- |
 | `None` | 스크립트가 **없다** — 증거를 찾을 정보가 없다 | `UNKNOWN` |
-| `()` | 끝까지 읽었고 그 블록이 **없다** | `UNKNOWN` |
-| 비어 있지 않음 | 블록 이름들 (`e2` …) — **증거다** | `TRUE` |
+| `False` | 끝까지 읽었고 그런 자리가 **없다** | `UNKNOWN` |
+| `True` | 그 카드 자신의 텍스트가 자기 묘지행을 적었다 | `TRUE` |
 
-실측 분포: `None` **1,440** · `()` **11,696** · 증거 **991**.
+실측 분포: `None` **1,440** · `False` **11,696** · `True` **991**.
 
-🔴 **`None` 과 `()` 를 합치지 않았다.** 이 Phase 에서 그 방향은 특히
-위험하다 — 합치면 "읽지 않았다" 가 허가로 흘러간다. `to_dict` 도 `None` 을
-`[]` 로 바꾸지 않는다.
+🔴 **`None` 과 `False` 를 합치지 않았다.** 이 Phase 에서 그 방향은 특히
+위험하다 — 합치면 "읽지 않았다" 가 허가로 흘러간다. 읽는 쪽은 `is True`
+로 묻고, `to_dict` 도 `None` 을 `False` 로 바꾸지 않는다.
+
+🔴 **처음에는 블록 이름 목록(`('e2',)`)을 실었다가 한 비트로 좁혔다.**
+이유는 부록 A 에 있다.
 
 ### 5.2 `_interference` 를 건드리지 않은 이유
 
@@ -542,3 +545,110 @@ Phase 와 사용자 승인** 대상이다.
 ## 15. Git 커밋·푸시 결과
 
 (§GIT_RESULTS)
+
+---
+
+## 부록 A. 🔴 설계 경계를 또 깼고, 또 루트가 잡았다
+
+이 절은 **내가 틀린 기록**이다. 6-V 부록 A 와 같은 종류의 실수를 **같은
+자리에서** 다시 했다.
+
+### A.1 무엇을 깼는가
+
+첫 구현은 관측에 **블록 이름 목록**을 실었다.
+
+```python
+Card.self_grave_trigger_signals -> tuple[str, ...] | None   # ('e2',)
+CardDefinitionView.self_grave_trigger_signals
+```
+
+`tests/engine` 3,600여 건과 Duel 수직 통합 513건이 **전부 통과했고**, 루트
+회귀에서 깨졌다.
+
+```
+FAILED tests/test_trigger_semantics_audit.py
+       ::test_13_trigger_metadata_never_reaches_the_observation
+FAILED tests/test_event_phase_semantics_audit.py
+       ::test_15_the_view_exposes_the_current_phase_but_no_trigger_metadata
+```
+
+두 감사의 주장:
+
+> **§12 · §16-D — 유발 메타데이터가 관측으로 나가지 않는다.**
+> 내부에 데이터가 있다는 것과 AI 가 그것을 볼 수 있다는 것은 다른 일이다.
+
+그리고 그것을 두 가지로 지킨다 — `CardDefinitionView` ·
+`GameStateView` 의 **필드 이름**에 `trigger` · `event` 가 없고,
+`engine/game_state_view.py` **본문**에 `EVENT_` · `trigger` ·
+`TriggerSpec` 토큰이 없다.
+
+### A.2 이름 충돌이 아니라 **내용 위반**이었다
+
+처음에는 이름만 걸린 줄 알았다. 아니었다. `('e2',)` 는
+
+- **어느 효과 자리**가 그렇게 등록했는지 말하고,
+- 그 자리가 **어떤 사건**(`EVENT_TO_GRAVE`)으로 등록했는지 docstring 이
+  적고 있었다.
+
+즉 상대 카드의 유발 사건 정체가 관측으로 나갈 수 있었다. **감사의 주장이
+옳았고 내 구현이 틀렸다.**
+
+### A.3 어떻게 고쳤는가 — 6-F · 6-V 와 같은 방법
+
+받는 쪽에 필요한 **최소값**만 넘긴다. 판정이 필요한 것은 "그 텍스트가
+있는가" **한 가지**이므로 한 비트만 싣는다.
+
+```python
+Card.self_grave_text_evidence -> bool | None
+```
+
+| | 첫 구현 | 고친 뒤 |
+| --- | --- | --- |
+| 관측이 내보내는 것 | 블록 이름 목록 + (문서로) 사건 이름 | **한 비트** |
+| 세 값 규약 | `None` · `()` · 비어 있지 않음 | `None` · `False` · `True` |
+| 감사 두 건 | 실패 | **수정 없이 통과** |
+| 기르수 해결 | `RESOLVED` | `RESOLVED` (동일) |
+
+🔴 **고친 쪽이 더 좁다.** 테스트를 바꾸지 않았고, 내보내는 정보가 줄었다.
+
+### A.4 남는 교훈
+
+**6-V 가 적은 문장이 그대로 또 맞았다** — *"tests/engine 만으로는 설계 경계
+감사를 지나칠 수 없다 — 그 감사들은 루트에 있다."*
+
+6-X 가 거기에 한 줄 더한다. **관측에 새 칸을 더할 때는 "이 값이 무엇을
+말하는가" 를 먼저 묻는다.** 6-U 의 `normal_summon_restriction_signals` 는
+상수 **등장 여부**를 실었으므로 통과했고, 내 첫 구현은 **어느 자리가 어떤
+사건으로** 를 실었으므로 걸렸다. 같은 모양의 칸이라고 같은 경계에 있는
+것이 아니다.
+
+### A.5 `.code` 센서스 — 이쪽은 경계가 **안 깨졌다**
+
+같은 회귀가 둘을 더 잡았다.
+
+```
+FAILED tests/test_activation_precondition_audit.py::test_05_no_engine_file_reads_the_code_field
+FAILED tests/test_effectdefinition_trigger_boundary_audit.py::test_14_the_engine_never_reads_the_setcode_argument_today
+```
+
+두 감사의 **주장**은 "`engine` production 이 `EffectSpec.code` 를 읽지
+않는다" 이고, 그 주장은 **그대로 참이다** — `core/card_model.py` 는
+`engine/` 이 아니다. `test_14` 의 `engine/` 전용 단언은 통과했다.
+
+그리고 측정해 보니 `core/card_model.py` 는 **이 Phase 전에도 이미**
+`.code` 를 읽고 있었다.
+
+| 줄 | 수신자 | 어디 | 언제 |
+| --- | --- | --- | --- |
+| 544 | `e.code` | `Card.has_code` | 이 Phase 전부터 |
+| 606 | `spec.code` | `Card.self_grave_text_evidence` | **6-X** |
+| 620 | `eff.code` | `Card.can_self_special_summon_from_hand` | 이 Phase 전부터 |
+
+앞뒤 둘이 센서스에 없었던 것은 그 감사가 **수신 변수 이름**으로 세기
+때문이고 (그 선택의 이유는 감사 자신의 주석이 적는다 — `"block"` 이
+`"blocked"` 에 걸린 과거 때문이다), 6-X 의 변수명이 우연히 `spec` 이어서
+드러났다.
+
+그래서 이쪽은 **분모 정정**이다. 두 센서스에 `core/card_model.py` 를
+더하고, `test_05` 에는 `engine/` 전용 단언을 **새로 하나 더했다** —
+그것이 그 감사가 실제로 지켜야 하는 것이다.
