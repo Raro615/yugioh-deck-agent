@@ -294,6 +294,94 @@ EventJournal: 0건
 에 기르수 번호가 0회, `ORCUST`·`SET_` 가 0회이고, 새 판정 함수 본문에
 `card_id` 가 없다.
 
+## 10. 테스트 통과 · 실패 · 실행 시간
+
+전부 `-p no:randomly` 로, 실제 종료 코드를 읽었다.
+
+| # | 명령어 | 통과 | 실패 | 시간 |
+| --- | --- | --- | --- | --- |
+| 1 | `pytest tests/engine/test_summon_trigger_execution.py` | **23** | **0** | 3.41s |
+| 2 | `pytest tests/engine` | **3,553** | **0** | 342.50s (5:42) |
+| 3 | 루트 영향 파일 51개 + `test_opening_duel_integration` | **1,372** | **2** | 2,075.29s (34:35) |
+
+### 10.1 §6 의 위험 기반 순서를 지켰다
+
+| 단계 | 무엇을 | 결과 |
+| --- | --- | --- |
+| ① 변경 모듈 타깃 | `test_summon_trigger_execution` · `test_trigger_effect_execution` · `test_rule_gate_grave_discard` · `test_real_card_execution` · `test_effect_monster_normal_summon` · `test_normal_summon` | 272 passed |
+| ② Duel 수직 통합 | `test_opening_duel_integration` · `test_action_legality` · `test_legal_action_candidate_consistency` · `test_chain` · `test_chain_response` · `test_trigger_chain` · `test_trap_activation_free_chain` · `test_card_definition_view` · `test_archetype_condition` + Discord | 466 passed |
+| ③ 관련 엔진 전체 | `tests/engine` | 3,553 passed |
+| ④ 공유 계약 변경 범위 | 루트 영향 파일 51개 (`EFFECT_LIBRARY` · `OPERATION_RULINGS` · `activates_from` · `ACTIVATION_ZONE` · `definition_registry` · `compiled_triggers` 를 언급하는 파일 전수) | 1,372 passed / 2 failed |
+
+🔴 **6-U 처럼 한 시간 넘는 전체 루트를 반복하지 않았다.** 영향 파일을
+grep 으로 특정해 51개로 좁혔고, 그 안에서 공유 계약 감사 두 건이 실제로
+잡혔다 (부록 A).
+
+### 10.2 루트 실패 44건의 분류 — **42건 고침**
+
+| 원인 | 건수 | 6-V 의 것인가 | 상태 |
+| --- | --- | --- | --- |
+| 목록 수 17→18 · 실행 14→15 | 20 | 🔴 **예** | **고침** |
+| 카드 종류 분포 (몬스터 1→2) | 4 | 🔴 **예** | **고침** |
+| 발동 조건 8→9 | 3 | 🔴 **예** | **고침** |
+| 코드 집합에 `EVENT_SUMMON_SUCCESS` | 5 | 🔴 **예** | **고침** |
+| "untouched" 계열 몬스터 분기 | 4 | 🔴 **예** | **고침** |
+| 줄 수 핀 (2,059→2,199 · 813→840) | 2 | 🔴 **예** | **고침** |
+| 폐쇄·등장·거부 카운트 +1 | 2 | 🔴 **예** | **고침** |
+| 🔴 **설계 경계 감사** (`test_15` · `test_11`) | 2 | 🔴 **예** | **구현을 고쳤다** (부록 A) |
+| 재정 데이터 의존 (`.gitignore` 크롤 캐시) | 1 | 아니다 | 그대로 |
+| 에이전트 상대 자원 한계 주장 | 1 | 아니다 | 그대로 |
+
+**남은 2건**:
+
+```
+FAILED tests/agent/test_opponent_resource_weighting_audit.py
+       ::test_07_a_whole_duel_never_offers_a_choice_about_opponent_resources
+FAILED tests/test_event_free_chain_semantic_audit.py
+       ::test_27_the_official_corpus_never_uses_the_term
+```
+
+🔴 **둘 다 6-V 와 무관함을 확인했다.** 프로덕션 2파일을 `73f1d8a`
+(6-V 시작 지점) 버전으로 임시 교체해 다시 돌렸고 **같은 자리에서 같은
+값으로** 실패한다:
+
+```
+# 73f1d8a 의 engine/trigger.py · engine/effect/library.py 로 교체한 상태
+tests/agent/test_opponent_resource_weighting_audit.py:305  [1, 1, 1, ...]
+tests/test_event_free_chain_semantic_audit.py:1105         15
+2 failed in 3.90s
+```
+
+확인 뒤 `git checkout HEAD --` 로 복원했다. 두 건은 6-U 보고서 §13 · §18-2
+가 이미 원인과 조치를 기록해 두었다 (에이전트 한계 주장 무효화 ·
+`data/rulings/.cache` 부재). **6-V 는 그 둘을 건드리지 않았다.**
+
+### 10.3 테스트 정책 — 금지 사항 점검
+
+| 금지 | 지켰는가 |
+| --- | --- |
+| 테스트 삭제 | 하지 않았다 |
+| `skip` 추가 | 하지 않았다 |
+| assertion 완화 | 하지 않았다 — 사실이 끝난 네 자리는 "0개" 를 **"정확히 하나"** 로 바꿨고, 둘이 되면 깨진다 |
+| threshold 완화 | 하지 않았다 |
+| 기존 실패와 신규 회귀를 섞기 | 가렸다 — 10.2 의 표와 `73f1d8a` 교체 판별 |
+
+🔴 **그리고 테스트가 옳았던 자리에서는 테스트가 아니라 구현을 고쳤다**
+(부록 A). 내 테스트의 틀린 전제 4건도 측정으로 바로잡았고 네 번 다 엔진이
+옳았다 (§8-2).
+
+### 10.4 변경 규모
+
+```
+프로덕션  2파일  +259 / -2
+  engine/trigger.py        +144   (summoned_zone_for · _zone_from_summon · judge)
+  engine/effect/library.py +117   (_GIRSU_TRIGGER_ENTRY · GIRSU · OPERATION_RULINGS)
+
+테스트   48파일  +1,581 / -231
+  새 파일 1 (test_summon_trigger_execution.py, 23건)
+  정정  47 (루트 감사 42건 + engine 쪽 21건이 겹친다)
+```
+
 ## 11. 남아 있는 구조적 BLOCKER
 
 순서는 **수직 경로에서 만나는 순서**다. 1번이 §4 가 말하는 "첫 번째 실제
@@ -395,6 +483,28 @@ ordinal 단위로 고정한다.
 효과가 듀얼 루프 안에서 흐를 수 있다.
 
 권장 순서는 **A → C → B** 다. A 없이는 무엇을 배선해도 판이 바뀌지 않는다.
+
+## 13. Git 커밋 · 푸시 결과
+
+브랜치 `claude/pensive-goodall-te1egy` · 시작 `73f1d8a` (6-U 완료 지점).
+
+| 커밋 | 내용 |
+| --- | --- |
+| `0a3210e` | **프로덕션** — 소환 사건에서 발동 자리를 읽고 기르수 ① 등재 |
+| `a5dad0d` | **테스트** — 수직 경로 23건 + 기존 기대 21건 정정 |
+| `164884e` | **보고서** — 조사·수정·측정과 수준 판정 |
+| `08fdb3b` | **프로덕션 재설계** — 관문이 사건 대신 자리 값을 받는다 (3-F-5 경계 유지) |
+| `a00373b` | **테스트** — 루트 감사 42건 정정 |
+| `129b665` | 보고서 — 부록 A (설계 경계를 깼다가 고친 기록) |
+| `38ce987` | 보고서 — 절 번호를 요청된 13항목 순서와 맞춤 |
+| (이 커밋) | 보고서 — §10 테스트 결과 · §13 Git 결과 |
+
+- 전부 `git push -u origin claude/pensive-goodall-te1egy` 로 푸시됨
+  (재시도 없이 1회 성공)
+- **기존 commit 을 rewrite/amend 하지 않았다.** force push 없음, 새 브랜치
+  없음, PR 없음
+- 프로덕션 · 테스트 · 보고서를 **분리된 커밋**으로 올렸다
+- 모든 커밋에 요구된 attribution 두 줄이 붙어 있다
 
 ## 14. 성공 수준 판정
 
