@@ -595,21 +595,30 @@ def test_e02_exactly_one_girsu_candidate_carries_that_evidence(repository):
 
 
 @requires_official_db
-def test_f01_the_gate_cannot_tell_the_three_situations_apart(repository):
+def test_f01_the_gate_now_tells_evidence_from_no_evidence(repository):
     """
-    🔴 **수준 2 미달성의 정확한 내용.**
+    🔴 **Phase 6-X 가 이 자리를 고쳤다.** 6-W 가 재던 것은 "셋 다 같은
+    답이고 이유문까지 같다" 였고, 그 이름은
+    ``test_f01_the_gate_cannot_tell_the_three_situations_apart`` 였다.
 
-    §5 는 세 상황을 가르라고 한다 — A 가능 · B 불가 · C 정보 부족. 지금
-    판정 계층은 **셋 다 같은 답**을 내고 이유문까지 같다. 등록소에 줄이
-    없고 ``rulebook_facts`` 가 순수 통상 몬스터에만 답하기 때문이다.
+    무엇이 바뀌었는가
+    -----------------
+    카드 **자신의 텍스트**가 자기 묘지행을 적었으면 ``TRUE`` 가 된다
+    (:func:`~engine.effect.ruling.self_grave_trigger_fact`). 그래서 증거가
+    있는 카드와 없는 카드가 **갈린다.**
 
-    🔴 **묘지행을 금지하는 카드(B)조차 ``FALSE`` 가 아니라 ``UNKNOWN``**
-    이다 — 그 사실이 이 Phase 가 찾은 가장 날카로운 측정이다.
+    🔴 **6-W 의 분류 하나가 틀렸다** (6-X 가 Lua 를 읽고 정정했다).
+    차원요새 병기를 "B — 자기가 묘지에 못 간다" 로 적었는데, 그 카드의
+    ``EFFECT_CANNOT_TO_GRAVE`` 는 ``EFFECT_TYPE_FIELD`` +
+    ``SetTargetRange(LOCATION_DECK,LOCATION_DECK)`` 다 — **남의 덱 카드**가
+    묘지로 가는 것을 막는 지속 효과이고, 자기 제한이 아니다. 그래서 그
+    카드 자신의 묘지행은 지금도 ``UNKNOWN`` 이 맞다 (``test_graveyard_movement_ruling.py`` 의
+    ``test_b03`` 이 그 상수의 실제 범위를 고정한다).
     """
     cases = {
-        "B 불가": CANNOT_TO_GRAVE,
-        "A 가능": SELF_GRAVE_TRIGGER,
-        "C 정보부족": 55051920,  # 오르페골 코어 — 두 상수 다 없다
+        "A 증거 있다": SELF_GRAVE_TRIGGER,
+        "증거 없다 (오르페골 코어)": 55051920,
+        "증거 없다 (차원요새 병기 — 자기 제한이 아니다)": CANNOT_TO_GRAVE,
     }
     answers = {}
     for label, card_id in cases.items():
@@ -622,10 +631,15 @@ def test_f01_the_gate_cannot_tell_the_three_situations_apart(repository):
         verdict = board.explain(RuleQuestion.MAY_BE_SENT_TO_GRAVE, instance)
         answers[label] = (verdict.answer, verdict.reason)
 
-    #: 셋 다 ``UNKNOWN`` 이다.
-    assert {a for a, _ in answers.values()} == {ConditionResult.UNKNOWN}, answers
-    #: 이유문도 같은 모양이다 — 구분이 아예 없다.
-    for label, (_, reason) in answers.items():
+    #: 🔴 **갈린다** — 이것이 6-W 와 달라진 전부다.
+    assert answers["A 증거 있다"][0] is ConditionResult.TRUE, answers
+    assert "자기 묘지행 유발을 등록한다" in answers["A 증거 있다"][1]
+
+    #: 증거가 없는 둘은 그대로 ``UNKNOWN`` 이다 — 근거 없는 허가를 주지
+    #: 않는다는 것이 이 Phase 가 **지킨** 쪽이다.
+    for label in list(cases)[1:]:
+        answer, reason = answers[label]
+        assert answer is ConditionResult.UNKNOWN, (label, answers[label])
         assert "확인된 것이 없습니다" in reason, (label, reason)
 
     #: 🔴 대조군 — 통상 몬스터만 답이 난다 (룰북 한 줄).
@@ -700,6 +714,16 @@ def test_g01_activation_succeeds_and_resolution_stops_at_the_gate(repository):
     source = _summon_girsu(duel)
     definition, _, _, found = _girsu_candidates(duel, source)
     chosen = found.eligible[0]
+    #: 🔴 **전제를 적어 둔다** (Phase 6-X 가 명시로 바꿨다). 이 판의 후보
+    #: 가운데 자기 묘지행 증거를 가진 카드가 **한 장도 없다** — 기본 풀의
+    #: 성유물－『성장』은 패로 뽑히거나 40장 절단에서 빠진다. 그래서 아래의
+    #: "해결이 멈춘다" 는 6-X 가 유도를 더한 뒤에도 성립하고, 그것이
+    #: **근거 없는 허가를 주지 않는다**는 뜻이다 (``test_f01`` 과 짝이다).
+    assert all(
+        not repository.get(duel.state.find_instance(i).card_id)
+        .self_grave_trigger_signals
+        for i in found.eligible
+    )
 
     registry = definition_registry()
     activated = EffectActivator(registry, implementation_registry()).activate(
@@ -737,6 +761,10 @@ def test_g02_nothing_moves_before_or_after_the_blocked_resolution(repository):
     source = _summon_girsu(duel)
     definition, _, _, found = _girsu_candidates(duel, source)
     chosen = found.eligible[0]
+    #: ``test_g01`` 과 같은 전제 — 이 후보에는 증거가 없다.
+    assert not repository.get(
+        duel.state.find_instance(chosen).card_id
+    ).self_grave_trigger_signals
 
     deck_before = len(duel.state.player(MINE).zone(Zone.DECK))
     grave_before = len(duel.state.player(MINE).zone(Zone.GRAVE))
@@ -873,6 +901,15 @@ def test_i01_one_registered_fact_lets_the_same_path_resolve(repository):
     🔴 **그래서 이것은 수준 3 달성이 아니다.** 프로덕션 등록소는 그대로이고
     (``test_i02``), 프로덕션 경로에서 기르수 효과는 여전히 멈춘다
     (``test_g01``). 이 시험은 §13.1 추천의 **근거**를 고정한다.
+
+    .. note::
+       🔴 **Phase 6-X 가 그 추천을 실행했다.** 이제 같은 카드가 **등록소
+       사본 없이도** 해결된다 — 유도가 그 사실을 카드 자신의 텍스트에서
+       읽는다 (``test_graveyard_movement_ruling.py`` 의 ``test_d01``).
+
+       이 시험을 남겨 두는 이유는 **등가성**이다. 손으로 적은 사실과
+       유도된 사실이 **같은 결과**에 이른다는 것을 보이므로, 유도가
+       등록소를 흉내 낸 것이 아니라 같은 자리에 들어갔다는 증거다.
     """
     others = [cid for cid in _orcust_pool(repository) if cid != SELF_GRAVE_TRIGGER]
     #: 앞쪽 넷은 패로 뽑힌다 — 그 뒤에 두어야 덱에 남는다.
