@@ -5,7 +5,7 @@ Phase 6-Y — **AI 가 스스로 고르는가.**
 주었다.** 6-Y 는 그 둘을 정책에게 옮긴다.
 
     legal_actions → Policy.decide        발동 시점 (A) — 이미 되고 있었다
-    사건 → TriggerOffer → activate_effect  발동 여부 (§5) — 6-Y 가 열었다
+    사건 → TriggerOffer → accept_offer  발동 여부 (§5) — 6-Y 가 열었다
     looked_at → ChoiceOffer → choose_cards  해결 시점 (B) — 6-Y 가 열었다
 
 🔴 **두 시점의 정보가 다르다.** 발동 시점에는 덱이 보이지 않고, 해결 시점에는
@@ -125,7 +125,7 @@ class _Cheater:
 
     name = "cheater"
 
-    def activate_effect(self, offer) -> bool:
+    def accept_offer(self, offer) -> bool:
         return True
 
     def choose_cards(self, offer):
@@ -138,7 +138,7 @@ class _TooMany:
 
     name = "too-many"
 
-    def activate_effect(self, offer) -> bool:
+    def accept_offer(self, offer) -> bool:
         return True
 
     def choose_cards(self, offer):
@@ -508,7 +508,7 @@ def test_d03_choosing_the_same_card_twice_is_refused(repository):
     class Doubler:
         name = "doubler"
 
-        def activate_effect(self, offer) -> bool:
+        def accept_offer(self, offer) -> bool:
             return True
 
         def choose_cards(self, offer):

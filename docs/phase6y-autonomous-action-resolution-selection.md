@@ -450,7 +450,56 @@ Deck after any time you search it"*).
 
 ## 11. 관련 회귀 테스트·시간·종료 코드
 
-(§TEST_RESULTS)
+§9 의 위험 기반 순서를 따랐다. 프로덕션 변경이 **엔진 1파일 + 신규 2파일**
+이므로 영향 파일을 **73개**로 특정했다 (`trigger_chain` · `TriggerChainIntegrator`
+· `ChainInsertion` · `integration` · `agent/` · 센서스 상수 · 테스트 트리를
+`rglob` 로 훑는 감사, 합집합).
+
+### 11.1 최종 실행
+
+| 단계 | 범위 | 통과 | 실패 | 건너뜀 | 시간 | exit |
+| --- | --- | --- | --- | --- | --- | --- |
+| ① 변경 모듈 타깃 | 6파일 | **175** | 0 | 0 | 49.57s | **0** |
+| ② Agent·Duel 수직 통합 + Discord | `tests/agent` + 2파일 | **418** | **1** | 0 | 236.42s (3:56) | 1 |
+| ③ 관련 엔진 전체 | `tests/engine` | **3,637** | **1** | 0 | 389.96s (6:29) | 1 |
+| ④ 루트 영향 파일 | 73파일 | **1,972** | **6** | 8 | 3,170.26s (52:50) | 1 |
+
+모두 `-p no:randomly -q --no-header --tb=short` 로 돌렸다.
+
+### 11.2 실패 8건의 분류
+
+| 실패 | 분류 | 증명 |
+| --- | --- | --- |
+| `tests/agent/…::test_07_a_whole_duel_never_offers_a_choice_about_opponent_resources` | **기존 실패** | `374b27b` worktree 에서 **같은 줄 같은 값**(`[1, 1, 1, …]`)으로 실패 |
+| `tests/test_effect_type_quick_audit::test_29` | **기존 실패** (재정 캐시, `15 >= 800`) | 6-X §12.2 가 같은 worktree 로 확인 |
+| `tests/test_event_free_chain_semantic_audit::test_27` | **기존 실패** (같음, `15 >= 600`) | 같음 |
+| `tests/test_korean_overlay_unapplied_audit` **×4** | **기존 실패** (로컬 `cards.cdb` 14,759 대 핀 14,755) | 같음 |
+| 🔴 `tests/engine/test_effect_activation_path::test_25` | **신규** — 내 이름 변경이 깼다 | **고쳤다** (부록 A.2) |
+
+### 11.3 내 변경이 움직인 12건 — 전부 해소
+
+| 원인 | 건수 | 고친 것 |
+| --- | --- | --- |
+| 🔴 **내가 넣은 `pytest.skip`** | **3** | **지웠다** (단언 2 → 7) |
+| 🔴 **설계 경계** — `agent/` 의 어휘 (사건 쪽) | **1** | **구현을 고쳤다** |
+| 🔴 **설계 경계** — `agent/` 의 어휘 (엔진 쪽) | **1** | **구현을 또 고쳤다** |
+| 🔴 **3-E-20 의 경고** — 두 번째 경로 | **1** | 감사를 다시 적었다 (단정 +1) |
+| 휴면 센서스 (importer · 생성자 자리 · 줄 수 ×2) | **5** | 센서스 값 + 근거 |
+| `RULE_NOT_IMPLEMENTED` 산문 줄번호 | **1** | 줄번호 (총수 88 · 73 · 15 불변) |
+
+1차 루트 실행은 **17 failed / 1,961 passed** 였고 최종은
+**6 failed / 1,972 passed** 다 — 줄어든 11건과 늘어난 통과 11건이 같다.
+(여기에 `tests/engine` 의 신규 1건을 더해 12건이다.)
+
+### 11.4 테스트 정책 — 금지 사항 점검
+
+- 기존 테스트 **삭제 0건** · **assertion 완화 0건** · **threshold 완화 0건**.
+- 🔴 **skip 추가 1건을 내가 했고, 지웠다** (부록 A.1). 지금 저장소의
+  `pytest.skip` 은 전부 이 Phase 전의 것이다.
+- 단정이 **세 자리에서 늘었다** — `test_c06` (2 → 7) ·
+  `ownership::test_10` (+1) · `connectivity::test_04` (+1).
+- 🔴 **실행하지 않은 것을 성공으로 적지 않았다.** `BLOCKER-6Y-2` (상대
+  응답 순환)는 `test_g02` 가 "돌지 않는다" 를 단언으로 적는다.
 
 ---
 
@@ -514,14 +563,38 @@ Deck after any time you search it"*).
 
 ## 14. Git 커밋·푸시 결과
 
-(§GIT_RESULTS)
+브랜치 `claude/pensive-goodall-te1egy` · 시작 지점 `374b27b` (6-X 완료).
+
+| # | 커밋 | 내용 |
+| --- | --- | --- |
+| 1 | `3477bd2` | **엔진** — `plan` 이 정해진 대상 선택을 받을 통로를 연다 |
+| 2 | `d884c5f` | **배선·정책** — 엔진의 후보를 정책에게 주고 결정을 되돌린다 |
+| 3 | `5f3e710`(의 앞) | **테스트 29건** — AI 가 결정한 것과 시험이 준 것을 가른다 |
+| 4 | `5f3e710` | 보고서 (§11 · §14 미완으로 먼저 커밋) |
+| 5 | `05e3d1a`(의 앞) | 🔴 `agent` 의 어휘 수정 + 내가 넣은 skip 제거 |
+| 6 | `05e3d1a`(의 앞) | 휴면 센서스 다섯 정정 |
+| 7 | `05e3d1a` | 보고서 부록 A |
+| 8 | (아래) | 🔴 `accept_offer` 로 최종 개명 + §11 · §14 실측 |
+
+```
+$ git push -u origin claude/pensive-goodall-te1egy
+   374b27b..05e3d1a  claude/pensive-goodall-te1egy -> …
+```
+
+✅ **푸시 완료** · 작업 트리 깨끗 · Pull request 는 요청받지 않았으므로
+만들지 않았다.
+
+**다음 Phase 는 자동으로 시작하지 않는다.** §13.1 과 §13.2 는 묶어서 하는
+것이 맞고, `ACTIVATION_KINDS_IN_SCOPE` 를 넓히는 **공유 계약 변경**이므로
+§10 에 따라 **사용자 승인**을 기다린다.
 
 ---
 
-## 부록 A. 🔴 루트 회귀가 세 가지를 잡았다
+## 부록 A. 🔴 회귀가 네 가지를 잡았다
 
-이 절은 **내가 틀린 기록**이다. 셋 다 `tests/engine` 3,638건과 Duel 수직
-통합 418건을 **전부 통과한 뒤** 루트에서 깨졌다.
+이 절은 **내가 틀린 기록**이다. 넷 다 `tests/engine` 3,638건과 Duel 수직
+통합 418건을 **전부 통과한 뒤** 깨졌다 — 셋은 루트에서, 하나는 이름을 고친
+뒤 `tests/engine` 에서.
 
 ### A.1 🔴 내가 이 Phase 의 금지를 어겼다 — `pytest.skip` 추가
 
@@ -558,17 +631,40 @@ FAILED tests/test_trigger_connectivity_audit.py::test_15_the_agent_layer_knows_n
 
 테스트가 아니라 구현을 고쳤다 — 6-X 부록 A 와 같은 방법이다.
 
-| | 첫 구현 | 고친 뒤 |
-| --- | --- | --- |
-| 프로토콜 메서드 | `activate_trigger(offer)` | **`activate_effect(offer)`** |
-| `agent/choice.py` 의 금지 토큰 | 다수 (docstring 포함) | **0건** |
-| 정책이 읽는 것 | 같다 (`offer.permitted` · `offer.minimum` · `offer.requirement_known`) | 같다 |
-| 감사 | 실패 | **수정 없이 통과** |
+#### 🔴 그리고 **같은 경계를 두 번 깼다**
+
+고친 이름이 `activate_effect` 였는데, 그것도 금지 토큰이었다. 다른 감사가
+잡았다.
+
+```
+FAILED tests/engine/test_effect_activation_path.py::test_25_the_search_policy_needs_no_activation_branch
+    ('choice.py', {'activate_effect'})
+```
+
+> **§15 — 탐색에 발동 전용 분기를 넣지 않았다.** 후보 목록이 넓어진
+> 것만으로 저절로 들어오고, 시뮬레이션되고, 점수를 받는다. **`agent/`
+> 어디에도 발동의 이름이 없다**는 것을 AST 토큰으로 지킨다.
+
+금지 목록이 `ACTIVATE_CARD` · `ACTIVATE_EFFECT` · `activate_card` ·
+`activate_effect` · `EffectRef` · `effect_ref` · `SpellPlaced` 다.
+
+🔴 **두 번 깬 것이 배울 점이다.** 첫 이름은 *사건* 계층의 어휘였고
+(`trigger`), 두 번째는 *엔진* 계층의 어휘였다 (`activate_effect`). 둘 다
+"정책이 무엇을 결정하는가" 가 아니라 **"그 결정이 엔진에서 무엇이 되는가"**
+를 이름에 적은 것이다. 정책은 그것을 알 필요가 없다.
+
+그래서 세 번째 이름은 정책이 **하는 일**만 말한다.
+
+| | 1차 | 2차 | 최종 |
+| --- | --- | --- | --- |
+| 프로토콜 메서드 | `activate_trigger` | `activate_effect` | **`accept_offer`** |
+| 어느 계층의 어휘인가 | 사건 | 엔진 | **정책 자신** |
+| 감사 | 연결성 실패 | 발동 경로 실패 | **둘 다 수정 없이 통과** |
+| 정책이 읽는 것 | 같다 (`offer.permitted` · `offer.minimum` · `offer.requirement_known`) | 같다 | 같다 |
 
 🔴 **감사 파일 이름조차 적을 수 없었다.** docstring 에서 그 감사를
-`tests/test_trigger_connectivity_audit.py` 로 가리켰더니 그것도 걸렸다 —
-전수 토큰 검사이므로 파일명 안의 토큰도 센다. 이름 없이 "루트의 연결성
-감사" 로 적었다.
+파일명으로 가리켰더니 그것도 걸렸다 — 전수 토큰 검사이므로 파일명 안의
+토큰도 센다. 이름 없이 "루트와 엔진의 두 감사" 로 적었다.
 
 ### A.3 🔴 **Phase 3-E-20 이 이 Phase 의 위험을 미리 적어 두었다**
 
