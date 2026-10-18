@@ -521,10 +521,27 @@ def test_14_the_engine_never_reads_the_setcode_argument_today():
         if lines:
             readers[str(path.relative_to(PROJECT_ROOT))] = lines
 
+    #: 🔴 **Phase 6-X 에서 ``core/card_model.py`` 가 더해졌다.**
+    #: :attr:`~core.card_model.Card.self_grave_text_evidence` 가 블록마다
+    #: ``spec.code`` 를 보고 자기 묘지행을 전제한 자리가 있는지 센다.
+    #:
+    #: 이 감사가 지키는 **경계는 그대로다** — 그 파일은 ``engine/`` 이
+    #: 아니고, ``engine`` production 은 여전히 그 값을 읽지 않는다.
+    #:
+    #: 그리고 ``core/card_model.py`` 는 **이 Phase 전에도 이미** ``.code``
+    #: 를 읽고 있었다. 실측으로 세 자리다 — 544 ``e.code``
+    #: (:meth:`~core.card_model.Card.has_code`) · 606 ``spec.code`` (6-X) ·
+    #: 620 ``eff.code``
+    #: (:attr:`~core.card_model.Card.can_self_special_summon_from_hand`).
+    #: 앞뒤 둘이 센서스에 없었던 것은 이 감사가 **수신 변수 이름**으로
+    #: 세기 때문이고 (그 선택의 이유는 위 주석에 적혀 있다), 6-X 의
+    #: 변수명이 우연히 ``spec`` 이어서 드러났다.
     assert set(readers) == {
         "analysis/effect_analyzer.py",
         "sources/lua_loader.py",
+        "core/card_model.py",
     }, readers
+    #: 🔴 이 단언이 이 시험의 본문이고, **바뀌지 않았다**.
     assert not [name for name in readers if name.startswith("engine/")]
 
 
