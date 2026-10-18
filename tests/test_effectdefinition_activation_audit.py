@@ -145,6 +145,10 @@ ACTIVATION_FROM_SET_TARGET = (
     81439173,  # 어리석은 매장   — IsExistingMatchingCard(... LOCATION_DECK ... 1 ...)
     73148972,  # 무정한 말살     — IsExistingTarget(...) and GetFieldGroupCount(...)>0
     22589918,  # 리로드          — IsPlayerCanDraw(tp) and IsExistingMatchingCard(... HAND ...)
+    #: 🔴 Phase 6-V — 기르수 ①. ``s.tgtg`` 의 ``chk==0`` 갈래가
+    #: ``IsExistingMatchingCard(s.tgfilter,tp,LOCATION_DECK,0,1,nil)`` 이고,
+    #: 조건 함수(``SetCondition``)는 **없다** — 어리석은 매장과 같은 모양이다.
+    69811710,  # 기르수          — IsExistingMatchingCard(... LOCATION_DECK ... 1 ...)
 )
 
 
@@ -678,8 +682,12 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
     # 않았다** — 수만 움직였다.
-    assert len(EFFECT_LIBRARY) == 17
-    assert len(with_activation) == 8
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
+    # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 17건이었다.
+    assert len(EFFECT_LIBRARY) == 18
+    #: 🔴 8 → **9** (Phase 6-V, 기르수 ①).
+    assert len(with_activation) == 9
 
     from_target = [
         entry.definition.effect_ref.card_id
@@ -687,7 +695,8 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
         if not analyses[entry.definition.effect_ref].activation.has_condition_function
     ]
     assert sorted(from_target) == sorted(ACTIVATION_FROM_SET_TARGET)
-    assert len(from_target) == 7
+    #: 🔴 7 → **8** (Phase 6-V).
+    assert len(from_target) == 8
 
     #: 일곱 장 모두 ``SetTarget`` 이 있고 ``chk==0`` 분기를 가진다.
     for card_id in ACTIVATION_FROM_SET_TARGET:

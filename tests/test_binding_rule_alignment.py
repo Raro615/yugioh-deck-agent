@@ -1064,7 +1064,10 @@ def test_35_engine_v1_definitions_are_untouched():
     from engine.effect.library import EFFECT_LIBRARY
     refs = {(e.definition.effect_ref.card_id, e.definition.effect_ref.ordinal)
             for e in EFFECT_LIBRARY}
-    assert len(EFFECT_LIBRARY) == 17
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
+    # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 17건이었다.
+    assert len(EFFECT_LIBRARY) == 18
     assert {ordinal for _c, ordinal in refs} == {0}
     assert {c for c, _o in refs} & set(PHASE32_CARDS) == set()
 

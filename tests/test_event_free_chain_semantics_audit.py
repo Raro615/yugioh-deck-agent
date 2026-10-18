@@ -331,9 +331,17 @@ def test_08_the_code_carries_no_discriminating_information_here(repository):
         card = repository.get(ref.card_id)
         codes.add(card.script.effects[ref.ordinal].code)
 
-    assert codes == {"EVENT_FREE_CHAIN", None}, codes
-    assert len([c for c in codes if c]) == 1, codes
-    assert len(EFFECT_LIBRARY) == 17
+    #: 🔴 Phase 6-V 에서 상수가 **둘**이 됐다 (기르수 ①의
+    #: ``EVENT_SUMMON_SUCCESS``). 이 테스트가 지키는 사실은 "한 블록이
+    #: 가질 수 있는 것은 **하나의** 상수 아니면 없음" 이고, 그것은 블록마다
+    #: 하나라는 뜻이므로 **그대로다** — 등재 전체의 상수가 하나라는 뜻이
+    #: 아니었다.
+    assert codes == {"EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", None}, codes
+    assert len([c for c in codes if c]) == 2, codes
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
+    # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 17건이었다.
+    assert len(EFFECT_LIBRARY) == 18
 
 
 # ======================================================================

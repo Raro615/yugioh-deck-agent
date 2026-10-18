@@ -879,9 +879,11 @@ def test_21_every_real_card_in_the_library_declares_an_empty_cost():
     import engine.effect.library as library
 
     entries = [value for name, value in vars(library).items() if name.endswith("_ENTRY")]
-    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①). 늘어난 한 건도 비용이 없으므로
-    # 아래 단언(전부 빈 비용)은 **약해지지 않았다** — 수만 움직였다.
-    assert len(entries) == 17, len(entries)
+    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①), Phase 6-V 에서 17 → **18**
+    # (기르수 ①). 늘어난 두 건 다 비용이 없으므로 아래 단언(전부 빈 비용)은
+    # **약해지지 않았다** — 수만 움직였다. 기르수의 Lua 에 ``SetCost`` 가
+    # 없다 (``s.tgtg`` 는 target 이고 cost 가 아니다).
+    assert len(entries) == 18, len(entries)
     for entry in entries:
         assert entry.definition.cost.costs == (), entry.definition.source_card_id
 

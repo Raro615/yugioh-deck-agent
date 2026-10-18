@@ -346,22 +346,28 @@ def test_03_each_precondition_item_is_classified(repository):
     # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
     # 않았다** — 수만 움직였다.
-    assert len(rows) == 17
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 첫 유발 효과 ·
+    # ``executable=True``). 그 시점에 실제로 17건이었다.
+    assert len(rows) == 18
 
     #: 발동 조건 — 실제로 들어 있다 (D).
-    assert sum(1 for r in rows if r["activation"] is not None) == 8, [
+    #: 🔴 8 → **9** (6-V). 기르수 ① 의 발동 조건은 ``s.tgtg`` 의 덱 장수
+    #: 부분이다 (``ZoneCountAtLeast``) — 사건이 아니라 **상태**이고, 그래서
+    #: 아래 ``test_11`` 이 지키는 "조건은 판을 읽는다" 가 그대로다.
+    assert sum(1 for r in rows if r["activation"] is not None) == 9, [
         r["card_id"] for r in rows if r["activation"] is not None
     ]
     #: 비용 — 칸은 있고 값은 **전부 비어 있다** (STRUCTURAL-120).
     assert all(not r["has_cost"] for r in rows)
     #: effect_ref/ordinal — 있다. 전부 0 이다.
     assert {r["ordinal"] for r in rows} == {0}
-    #: 카드 종류 — 등재된 것은 마법 11 · 함정 5 · **몬스터 1** (Phase 6-K).
+    #: 카드 종류 — 등재된 것은 마법 11 · 함정 5 · **몬스터 2**.
     #:
-    #: 🔴 3-E-32 시점에 몬스터가 0 이었고 그것은 참이었다. 어니스트 ① 이
-    #: 들어오면서 사실이 바뀌었다 — 수를 지우지 않고 그대로 센다.
+    #: 🔴 3-E-32 시점에 몬스터가 0 이었고 그것은 참이었다. 어니스트 ①(6-K)
+    #: 과 기르수 ①(6-V)이 들어오면서 사실이 바뀌었다 — 수를 지우지 않고
+    #: 그대로 센다. 마법 · 함정 두 열은 **하나도 움직이지 않았다.**
     assert collections.Counter(r["kind"] for r in rows) == {
-        "spell": 11, "trap": 5, "monster": 1
+        "spell": 11, "trap": 5, "monster": 2
     }
 
 
@@ -540,10 +546,16 @@ def test_10_the_trigger_condition_lives_in_the_dormant_registry():
 
 
 def test_11_the_can_activate_condition_lives_in_the_definition(repository):
-    """§6 — 발동 가능 조건은 ``EffectDefinition.activation`` 이다 (8/16 에 있다)."""
+    """
+    §6 — 발동 가능 조건은 ``EffectDefinition.activation`` 이다 (9/18 에 있다).
+
+    🔴 8/17 → **9/18** (Phase 6-V). 기르수 ① 의 조건도 **상태 조건**이다
+    (자신 덱에 1장 이상) — 사건을 묻지 않는다. 이 테스트가 지키는 사실이
+    그것이므로 유발 효과가 들어와도 약해지지 않았다.
+    """
     rows = registered_rows(repository)
     with_condition = [r for r in rows if r["activation"] is not None]
-    assert len(with_condition) == 8, [r["card_id"] for r in with_condition]
+    assert len(with_condition) == 9, [r["card_id"] for r in with_condition]
 
     #: 그 조건은 **판을 읽는다** — 사건이 아니라 상태다.
     sample = next(
@@ -580,13 +592,11 @@ def test_12_the_timing_lives_in_its_own_module_and_comes_from_card_type():
 
 
 def test_13_sixteen_registered_definitions_are_tabulated(repository):
-    """§5 — 표본 **16개** 전수. 데이터가 불완전한 칸을 억지로 채우지 않는다."""
+    """§5 — 표본 전수. 데이터가 불완전한 칸을 억지로 채우지 않는다."""
     rows = registered_rows(repository)
-    # 🔴 Phase 6-K 에서 16 → 17 (어니스트 ①, 첫 몬스터 효과 ·
-    # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
-    # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
-    # 않았다** — 수만 움직였다.
-    assert len(rows) == 17
+    # 🔴 16 → 17 (6-K, 어니스트 ①) → **18** (6-V, 기르수 ①). 이 테스트가
+    # 틀린 가정을 갖고 있었던 것이 아니라 그때마다 실제로 그 수였다.
+    assert len(rows) == 18
 
     #: 모든 줄이 같은 모양으로 채워진다.
     #:
@@ -598,11 +608,21 @@ def test_13_sixteen_registered_definitions_are_tabulated(repository):
         assert row["kind"] in {"spell", "trap", "monster"}
         assert isinstance(row["executable"], bool)
         if row["kind"] == "monster":
-            #: ①(기동)은 ``SetCode`` 가 없어 ``codes`` 에 들어오지 않고,
-            #: ②(유발 즉시)의 ``EVENT_FREE_CHAIN`` 과 그 해결이 만드는
-            #: ``EFFECT_UPDATE_ATTACK`` 만 남는다. 🔴 **등재된 효과는 ① 이고**
-            #: 이 둘 중 어느 것도 아니다 — 그것이 "사건 코드가 없는 발동" 이다.
-            assert row["codes"] == ("EVENT_FREE_CHAIN", "EFFECT_UPDATE_ATTACK")
+            #: 🔴 몬스터 줄이 **둘**이고 서로 다르다 (Phase 6-V).
+            #:
+            #: 어니스트 — ①(기동)은 ``SetCode`` 가 없어 ``codes`` 에 들어오지
+            #: 않고, ②(유발 즉시)의 ``EVENT_FREE_CHAIN`` 과 그 해결이 만드는
+            #: ``EFFECT_UPDATE_ATTACK`` 만 남는다. 등재된 효과는 ① 이고 이 둘
+            #: 중 어느 것도 아니다 — "사건 코드가 없는 발동" 이다.
+            #:
+            #: 기르수 — 등재된 ①이 **사건 코드를 가진다**
+            #: (``EVENT_SUMMON_SUCCESS``). 그것이 6-V 가 더한 새 모양이고,
+            #: 같은 칸에 억지로 맞추지 않고 **실제 사실**을 적는다.
+            assert row["codes"] in (
+                ("EVENT_FREE_CHAIN", "EFFECT_UPDATE_ATTACK"),
+                ("EVENT_SUMMON_SUCCESS", "EVENT_SPSUMMON_SUCCESS",
+                 "EFFECT_ADD_TYPE"),
+            ), row["codes"]
         else:
             assert row["codes"] == ("EVENT_FREE_CHAIN",)
         assert row["ordinal"] == 0
@@ -612,7 +632,8 @@ def test_13_sixteen_registered_definitions_are_tabulated(repository):
     #: 않는다). Phase 6-L 에서 13 → 14 — 어니스트 ① 의 자기 참조 해석이
     #: 연결되어 ``executable=True`` 가 되었다. 이 테스트가 틀린 가정을 갖고
     #: 있었던 것이 아니라 그 시점에 실제로 13건이었다.
-    assert sum(1 for r in rows if r["executable"]) == 14
+    #: 🔴 14 → **15** (Phase 6-V, 기르수 ①).
+    assert sum(1 for r in rows if r["executable"]) == 15
 
 
 def test_14_three_real_traps_are_withheld_with_the_trap_reason(repository):
@@ -668,10 +689,16 @@ def test_16_monster_effects_are_blocked_for_a_different_reason(repository):
     assert MONSTER_ACTIVATION_MISSING != TRAP_TRIGGER_MISSING
     assert "기동" in MONSTER_ACTIVATION_MISSING or "분류" in MONSTER_ACTIVATION_MISSING
 
-    #: 등재된 몬스터 효과가 **하나**이고, Phase 6-L 에서 실행 가능해졌다.
+    #: 등재된 몬스터 효과가 **둘**이다 — 어니스트 ①(기동, 6-K/6-L)과
+    #: 기르수 ①(유발, 6-V).
+    #:
+    #: 🔴 **그래도 이 테스트가 재는 사실은 그대로다**: 막는 이유가 함정과
+    #: 다르다. 기르수가 들어왔어도 ``MONSTER_ACTIVATION_MISSING`` 과
+    #: ``TRAP_TRIGGER_MISSING`` 은 여전히 다른 문자열이고, 통상 몬스터는
+    #: 여전히 후보를 하나도 내지 않는다.
     rows = registered_rows(repository)
     monsters = [r for r in rows if r["kind"] == "monster"]
-    assert len(monsters) == 1, monsters
+    assert len(monsters) == 2, monsters
     assert monsters[0]["executable"] is True
     #: 통상 몬스터는 후보를 내지 않는다.
     assert activatable_effects(LUSTER_DRAGON) == ()

@@ -1035,7 +1035,10 @@ def test_34_engine_v1_definitions_are_untouched():
     # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
     # 않았다** — 수만 움직였다.
-    assert len(EFFECT_LIBRARY) == 17
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
+    # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 17건이었다.
+    assert len(EFFECT_LIBRARY) == 18
     assert {ordinal for _c, ordinal in refs} == {0}
     assert {c for c, _o in refs} & set(PHASE32_CARDS) == set()
 

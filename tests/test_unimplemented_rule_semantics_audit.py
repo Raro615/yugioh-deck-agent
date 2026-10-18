@@ -192,7 +192,10 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: ``RULE_NOT_IMPLEMENTED`` 는 ``UnimplementedRule`` 과 아무 관계가 없었고,
 #: 실제로는 **거짓**이었다 (규칙은 그 발동을 허락했고 관문이 체인 잔존
 #: 때문에 막았다). 6-R 도 ``UnimplementedRule`` 을 **하나도 만들지 않았다.**
-RULE_NOT_IMPLEMENTED_MENTIONS = 87
+#: 🔴 87 → 88 (Phase 6-V). ``_zone_from_summon`` 이 "사건의 도착지와 지금
+#: 자리가 다르다" 를 ``RULE_NOT_IMPLEMENTED`` 로 적는다 — 그 사이의 이동을
+#: 읽는 계층이 없다는 뜻이고, 모름을 허가로 바꾸지 않는 그 정책 그대로다.
+RULE_NOT_IMPLEMENTED_MENTIONS = 88
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
@@ -888,8 +891,14 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     # 🔴 16 → 17 (Phase 6-K, 어니스트 ①). 늘어난 한 건도 ``activation`` 이
     # ``None`` 이므로 "UnimplementedRule 이 하나도 없다" 는 이 테스트의
     # 사실은 그대로다 — 수만 움직이고 단언은 약해지지 않았다.
-    assert len(EFFECT_LIBRARY) == 17
-    assert len(activations) == 8
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
+    # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 17건이었다.
+    assert len(EFFECT_LIBRARY) == 18
+    #: 🔴 8 → **9** (Phase 6-V). 기르수 ① 의 ``activation`` 도
+    #: ``UnimplementedRule`` 이 아니다 (``ZoneCountAtLeast``) — 이 테스트가
+    #: 지키는 사실이 그것이므로 그대로다.
+    assert len(activations) == 9
     assert not any(isinstance(a, UnimplementedRule) for a in activations)
 
     #: 여덟 개 전부 **판정 가능한** 조건이다 — UNKNOWN 을 내지 않는다.

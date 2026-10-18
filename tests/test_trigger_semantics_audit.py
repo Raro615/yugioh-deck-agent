@@ -359,14 +359,21 @@ def test_09_no_registered_effect_needs_a_trigger_event(repository):
         types.update(spec.effect_types)
 
     #: 🔴 Phase 6-K 에서 어니스트 ① 이 들어왔다 — ``code`` 가 없고
-    #: ``effect_types`` 가 ``IGNITION`` 이다. 이 테스트가 지키는 사실은
-    #: **"유발 이벤트를 쓰는 효과가 한 건도 없다"** 이고, 그것은 그대로다:
-    #: 코드는 ``EVENT_FREE_CHAIN`` 아니면 없음이고, 종류에 ``TRIGGER`` 계열이
-    #: 하나도 없다. 수만 움직이고 단언은 약해지지 않았다.
-    assert codes == {"EVENT_FREE_CHAIN", None}, codes
-    assert types == {"ACTIVATE", "IGNITION"}, types
-    assert not [t for t in types if t.startswith(("TRIGGER", "QUICK", "FLIP"))], types
-    assert len(EFFECT_LIBRARY) == 17
+    #: ``effect_types`` 가 ``IGNITION`` 이다.
+    #:
+    #: 🔴 **Phase 6-V 가 이 테스트의 사실을 끝냈다.** 그때까지 "유발 이벤트를
+    #: 쓰는 효과가 한 건도 없다" 가 참이었다. 6-V 가 기르수 ①
+    #: (``EVENT_SUMMON_SUCCESS`` · ``SINGLE``+``TRIGGER_O``)을 등재했으므로
+    #: 코드와 종류 양쪽에 유발이 들어온다. 지우는 대신 **정확히 하나**임을
+    #: 센다 — ``QUICK`` 과 ``FLIP`` 은 여전히 0건이고 그것이 남은 사실이다.
+    assert codes == {"EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", None}, codes
+    assert types == {"ACTIVATE", "IGNITION", "SINGLE", "TRIGGER_O"}, types
+    assert not [t for t in types if t.startswith(("QUICK", "FLIP"))], types
+    assert sorted(t for t in types if t.startswith("TRIGGER")) == ["TRIGGER_O"]
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
+    # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 17건이었다.
+    assert len(EFFECT_LIBRARY) == 18
 
 
 def test_10_analysis_can_say_it_failed_on_conditions_but_not_on_triggers():
@@ -426,8 +433,15 @@ def test_11_free_chain_must_not_be_read_as_a_trigger_event(repository):
         ):
             correct_trigger.append(card.id)
 
-    assert len(naive_trigger) == 16, "틀린 읽기는 전부를 유발로 본다"
-    assert correct_trigger == [], "맞는 읽기는 하나도 유발로 보지 않는다"
+    #: 🔴 **Phase 6-V 가 오른쪽을 0 에서 1 로 만들었다.** 그때까지 "맞는
+    #: 읽기는 하나도 유발로 보지 않는다" 가 참이었고 그것이 이 테스트의
+    #: 요지였다. 기르수 ① 이 등재되면서 **실제로 유발 사건을 쓰는 효과가
+    #: 하나** 생겼다.
+    #:
+    #: 두 읽기의 차이는 그대로 남는다 — 틀린 읽기는 17건 전부를 유발로
+    #: 보고(``EVENT_FREE_CHAIN`` 까지), 맞는 읽기는 **하나만** 본다.
+    assert len(naive_trigger) == 17, "틀린 읽기는 전부를 유발로 본다"
+    assert correct_trigger == [69811710], correct_trigger
 
 
 @pytest.mark.real_card

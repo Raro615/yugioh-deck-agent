@@ -321,10 +321,18 @@ def test_05_every_executable_effect_is_a_spell_or_a_trap(repository):
         else:
             #: 🔴 마법 · 함정이 아니면 몬스터다 — 다른 범주는 들어올 수 없다.
             assert mask & TYPE_MONSTER, f"{card.name} mask=0x{mask:x}"
-            #: 🔴 그리고 **유발 효과가 아니다.** 사건을 묻지 않는 기동 효과만
-            #: 열거 대상이 될 수 있다는 이 Phase 의 결론을 여기서 센다.
-            assert (
-                entry.definition.activation_kind is ActivationKind.IGNITION
+            #: 🔴 **Phase 6-V 에서 이 단언이 갈라졌다.** 그때까지 등재된
+            #: 몬스터 효과는 기동 하나(어니스트 ①)뿐이고 "사건을 묻지 않는
+            #: 기동 효과만 열거 대상이 될 수 있다" 가 참이었다. 6-V 가
+            #: 기르수 ①(유발)을 등재했으므로 분류가 둘이 된다.
+            #:
+            #: 🔴 **열거 대상이라는 뜻은 아니다.** 유발 효과는
+            #: ``ACTIVATE_EFFECT`` 후보가 되지 않는다 (사건이 시점을 정한다 —
+            #: ``MONSTER_ACTIVATION_MISSING_BY_KIND``). 여기서 세는 것은
+            #: **등재 분류**이고 열거 가능성이 아니다.
+            assert entry.definition.activation_kind in (
+                ActivationKind.IGNITION,
+                ActivationKind.TRIGGER,
             ), (card.name, entry.definition.activation_kind)
             label = "MONSTER"
         seen[label] = seen.get(label, 0) + 1
@@ -332,7 +340,9 @@ def test_05_every_executable_effect_is_a_spell_or_a_trap(repository):
     #: 측정값 (3-E-30 → Phase 6-L). 숫자가 바뀌면 이 Phase 의 결론을 다시
     #: 봐야 한다. 🔴 마법 · 함정 세 열은 **하나도 움직이지 않았다** — 몬스터
     #: 열 하나가 더해졌을 뿐이다.
-    assert seen == {"SPELL": 6, "QUICKPLAY": 3, "TRAP": 4, "MONSTER": 1}, seen
+    #: 🔴 ``MONSTER`` 1 → **2** (Phase 6-V, 기르수 ①). 마법 · 함정 세 열은
+    #: 여기서도 **하나도 움직이지 않았다**.
+    assert seen == {"SPELL": 6, "QUICKPLAY": 3, "TRAP": 4, "MONSTER": 2}, seen
 
 
 @requires_official_db

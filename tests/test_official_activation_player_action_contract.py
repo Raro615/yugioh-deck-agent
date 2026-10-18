@@ -358,9 +358,11 @@ def test_04_the_monster_effect_activation_maps_to_the_same_action_kind(repositor
         if (repository.get(entry.definition.effect_ref.card_id) or None) is not None
         and repository.get(entry.definition.effect_ref.card_id).is_monster
     ]
-    assert len(monsters) == 1, monsters
-    #: 🔴 Phase 6-L — 실행된다. 6-K 에서는 ``False`` 였다.
-    assert monsters[0].executable is True, monsters
+    #: 🔴 1 → **2** (Phase 6-V, 기르수 ①). 이 테스트가 재는 것은 아래 줄
+    #: — **새 ActionKind 가 없다** — 이고, 몬스터 효과가 둘이 되어도 그대로다.
+    assert len(monsters) == 2, monsters
+    #: 🔴 Phase 6-L · 6-V — 둘 다 실행된다. 6-K 에서는 ``False`` 였다.
+    assert [entry.executable for entry in monsters] == [True, True], monsters
     #: 공식 용어와 엔진 종류의 대응이 **그대로**다 — 새 ActionKind 가 없다.
     from engine.action import PlayerActionKind, _NEEDS_EFFECT_REF
 

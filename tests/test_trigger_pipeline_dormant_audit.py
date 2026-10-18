@@ -194,7 +194,13 @@ def test_01_the_three_part_modules_exist_and_are_large():
         # ``compile_trigger_spec`` 의 production 호출자는 여전히 0곳이고
         # (6-H 보고서 §16), ``TriggerRegistry`` 를 만드는 production 자리도
         # 여전히 0곳이다 (``test_13``).
-        "engine/trigger.py": 2059,
+        # 🔴 2059 → **2199** (Phase 6-V). ``summoned_zone_for`` ·
+        # ``_zone_from_summon`` · ``_activation_zone`` 의 설명이다.
+        # **dormant 를 깨지 않는다** — 늘어난 코드는 관문 하나를 사건이
+        # 말해 준 자리에서만 열고, 후보를 모으는 자리를 늘리지 않았다.
+        # ``TriggerRegistry`` 를 만드는 production 자리는 여전히 0곳이다
+        # (``test_13``).
+        "engine/trigger.py": 2199,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
     }
@@ -208,7 +214,8 @@ def test_01_the_three_part_modules_exist_and_are_large():
     #: 🔴 3,036 → **3,096** (Phase 6-H). ``engine/trigger.py`` 만 +60 이고
     #: 나머지 두 모듈은 **한 줄도 바뀌지 않았다** — 그것이 이번 변경이
     #: 축 하나에만 닿았다는 증거다.
-    assert sum(sizes.values()) == 3096
+    #: 🔴 3,096 → **3,236** (Phase 6-V). "크다" 는 요지는 그대로다.
+    assert sum(sizes.values()) == 3236
 
 
 def test_02_the_two_assembly_modules_exist():
@@ -341,7 +348,14 @@ def test_06_the_duel_closure_excludes_the_assembly_and_two_part_modules():
     #: 계층은 원래 폐쇄 안이었다. 🔴 **휴면 모듈 넷은 그대로 폐쇄 밖이다**
     #: (아래 루프가 그것을 고정한다). 즉 이 수가 는 것이 트리거 계층이
     #: 켜졌다는 뜻이 아니다.
-    assert len(closure) == 58
+    #: 🔴 58 → **59** (Phase 6-V)? **아니다** — 6-V 는 새 모듈을 만들지
+    #: 않았다. 늘어난 하나는 ``engine.archetype_compiler`` 이고,
+    #: ``engine.effect.library`` 가 기르수 ① 의 카드군 조건을 만들려고
+    #: 그것을 import 하기 때문이다 (숫자를 손으로 적지 않는 쪽을 골랐다).
+    #:
+    #: 🔴 **휴면 모듈 넷은 그대로 폐쇄 밖이다** — 아래 루프가 그것을
+    #: 고정하고, 그것이 이 감사의 질문이다. 트리거 계층이 켜진 것이 아니다.
+    assert len(closure) == 59
     for module in (
         "engine.trigger_chain",
         "engine.trigger_order",
@@ -921,7 +935,13 @@ def test_25_this_phase_changed_no_production_file():
         # ``compile_trigger_spec`` 의 production 호출자는 여전히 0곳이고
         # (6-H 보고서 §16), ``TriggerRegistry`` 를 만드는 production 자리도
         # 여전히 0곳이다 (``test_13``).
-        "engine/trigger.py": 2059,
+        # 🔴 2059 → **2199** (Phase 6-V). ``summoned_zone_for`` ·
+        # ``_zone_from_summon`` · ``_activation_zone`` 의 설명이다.
+        # **dormant 를 깨지 않는다** — 늘어난 코드는 관문 하나를 사건이
+        # 말해 준 자리에서만 열고, 후보를 모으는 자리를 늘리지 않았다.
+        # ``TriggerRegistry`` 를 만드는 production 자리는 여전히 0곳이다
+        # (``test_13``).
+        "engine/trigger.py": 2199,
         "engine/trigger_chain.py": 594,
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
@@ -977,7 +997,12 @@ def test_25_this_phase_changed_no_production_file():
         # 나머지는 **거부 하나와 모름 하나**를 내는 분기다. 통과를 내는
         # 자리는 하나도 늘지 않았고 (``test_15`` 가 ``OTHER`` 가 ``VALID``
         # 를 낼 수 없음을 격자로 고정한다), 후보를 모으는 자리도 그대로다.
-        "engine/trigger.py": 813,
+        #: 🔴 813 → **840** (Phase 6-V). 🔴 **docstring 이 아니라 실행
+        #: 코드가 27줄 늘었다** — ``summoned_zone_for`` 와
+        #: ``_zone_from_summon`` 의 갈래들이다. 이 핀이 그 사실을 정확히
+        #: 잡는다. 늘어난 코드가 하는 일은 **관문 하나의 답**을 바꾸는
+        #: 것이고, dormant 모듈을 부르는 자리는 하나도 더하지 않았다.
+        "engine/trigger.py": 840,
         "engine/trigger_chain.py": 257,
         "engine/trigger_order.py": 194,
         "engine/timing.py": 194,

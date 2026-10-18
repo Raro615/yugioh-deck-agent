@@ -844,7 +844,10 @@ def test_21_no_registered_effect_has_a_cost_so_the_live_filter_removes_nothing()
     # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
     # 않았다** — 수만 움직였다.
-    assert len(EFFECT_LIBRARY) == 17
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
+    # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 17건이었다.
+    assert len(EFFECT_LIBRARY) == 18
     assert costed_entries == []
     assert "if definition.cost.costs:" in source_of("engine/duel.py")
 
@@ -1247,7 +1250,14 @@ def test_30_r3_is_fixed_and_no_gate_production_contradicts_the_unknown_policy():
     #: 그래서 production 을 고쳐 짝을 리터럴로 되돌렸다. 🔴 **감사를
     #: 약하게 만들지 않고 코드를 고쳤다** — 그 증거가 아래 ``event_gate``
     #: 집합이 **한 짝도 늘지 않았다**는 것이다.
-    assert len(literal) + len(conditional) == 22
+    #: 🔴 22 → **25** (Phase 6-V). ``_zone_from_summon`` 이 ``_gate`` 세
+    #: 자리를 더했다 — 관측에 안 보임(``HIDDEN_CARD``) · 사건의 도착지와
+    #: 지금 자리가 다름(``UNKNOWN``) · 통과(``VALID``).
+    #:
+    #: 🔴 **여기서도 짝을 리터럴로 적었다.** 6-F 가 전달 한 줄로 줄였다가
+    #: 이 감사에 걸려 되돌린 그 모양을 그대로 따랐다 — 아래
+    #: ``conditional`` 이 **하나도 늘지 않았다**는 것이 그 증거다.
+    assert len(literal) + len(conditional) == 25
     assert len(conditional) == 1  # _trigger_condition 의 UNKNOWN 분기
 
     disagreements = [row for row in literal if row["policy"] is not row["declared"]]

@@ -1138,16 +1138,28 @@ def test_28_on_the_registered_set_the_value_is_a_constant(repository):
     # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
     # 않았다** — 수만 움직였다.
-    assert len(rows) == 17
-    #: 🔴 Phase 6-K — 몬스터 한 줄만 모양이 다르다. ①(기동)은 ``SetCode`` 가
-    #: 없어 ``None`` 이고, ②(유발 즉시)가 ``EVENT_FREE_CHAIN`` 이다. **등재된
-    #: 것은 ① 이므로** 이 줄은 "그 상수를 쓰지 않는 등재" 의 첫 사례다.
+    #: 🔴 17 → 18 (Phase 6-V, 기르수 ①).
+    assert len(rows) == 18
+    #: 🔴 Phase 6-K — 몬스터 줄만 모양이 다르다. 어니스트 ①(기동)은
+    #: ``SetCode`` 가 없어 ``None`` 이고, ②(유발 즉시)가
+    #: ``EVENT_FREE_CHAIN`` 이다. **등재된 것은 ① 이므로** 그 줄은 "그
+    #: 상수를 쓰지 않는 등재" 의 첫 사례다.
+    #:
+    #: 🔴 Phase 6-V 에서 몬스터 줄이 **둘**이 됐다. 기르수 ① 은 ``SetCode``
+    #: 를 적고 그 값이 ``EVENT_SUMMON_SUCCESS`` 다 — 같은 상수를 쓰지 않는
+    #: 두 번째 사례이고, 이번에는 **코드가 없어서가 아니라 다른 코드**다.
     spell_trap = [row for row in rows if row[2] != "몬스터"]
     assert len(spell_trap) == 16, spell_trap
     assert all(codes == (FREE_CHAIN,) for *_, codes in spell_trap), spell_trap
     monsters = [row for row in rows if row[2] == "몬스터"]
-    assert len(monsters) == 1, monsters
-    assert monsters[0][3][0] is None, monsters
+    #: 🔴 1 → **2** (Phase 6-V, 기르수 ①).
+    assert len(monsters) == 2, monsters
+    #: 어니스트 ① — 등재된 블록의 코드가 **없다**. 기르수 ① — **다르다**.
+    #: 두 줄의 ``codes`` 는 카드의 블록 전체이고, 등재된 것은 0번이다.
+    first_codes = sorted(
+        str(row[3][0]) for row in monsters
+    )
+    assert first_codes == ["EVENT_SUMMON_SUCCESS", "None"], first_codes
     assert all(ordinal == 0 for _, ordinal, *_ in rows)
 
     #: 그런데 **공식 스펠 스피드는 둘로 갈린다** — 같은 상수, 다른 속도.

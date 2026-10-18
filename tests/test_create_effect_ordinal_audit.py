@@ -628,7 +628,10 @@ def test_17_all_sixteen_effect_definitions_are_untouched(repository):
     # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
     # 않았다** — 수만 움직였다.
-    assert len(EFFECT_LIBRARY) == 17
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
+    # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 17건이었다.
+    assert len(EFFECT_LIBRARY) == 18
     for entry in EFFECT_LIBRARY:
         ref = entry.definition.effect_ref
         card = repository.get(ref.card_id)
@@ -645,9 +648,22 @@ def test_17_all_sixteen_effect_definitions_are_untouched(repository):
             #: 블록이 **셋**이다 — ①기동 · ②유발 즉시, 그리고 ② 의 해결이
             #: 함수 안에서 만드는 ``EFFECT_UPDATE_ATTACK`` 까지 로더가 센다.
             #: 등재된 것은 **0번(기동)** 이다.
-            assert len(card.script.effects) == 3, ref
+            #: 🔴 **Phase 6-V 에서 몬스터 효과가 둘이 됐다.** 분류로
+            #: 가른다 — 어니스트는 기동이고 기르수는 유발이다. 억지로 같은
+            #: 칸에 맞추지 않고 **각 효과의 실제 사실**을 적는다.
+            from engine.vocabulary import ActivationKind as _Kind
+
             assert ref.resolve(card) is not None, ref
-            assert ref.resolve(card).code is None, ref
+            if entry.definition.activation_kind is _Kind.IGNITION:
+                #: 어니스트 — 블록 셋, 등재된 ①은 ``SetCode`` 가 없다.
+                assert len(card.script.effects) == 3, ref
+                assert ref.resolve(card).code is None, ref
+            else:
+                #: 기르수 — 블록 넷 (①유발 · ②그 클론 · ③기동 · 해결 중
+                #: 생기는 내부 블록), 등재된 ①은 사건 코드를 **가진다.**
+                assert entry.definition.activation_kind is _Kind.TRIGGER, ref
+                assert len(card.script.effects) == 4, ref
+                assert ref.resolve(card).code == "EVENT_SUMMON_SUCCESS", ref
             continue
         assert ref.ordinal == 0, ref
         assert len(card.script.effects) == 1, (ref, len(card.script.effects))

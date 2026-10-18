@@ -516,8 +516,11 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
     # 않았다** — 수만 움직였다.
-    assert len(EFFECT_LIBRARY) == 17
-    assert len(card_ids) == 17
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
+    # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 17건이었다.
+    assert len(EFFECT_LIBRARY) == 18
+    assert len(card_ids) == 18
 
     kinds = collections.Counter()
     executable_kinds = collections.Counter()
@@ -538,18 +541,20 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
         kinds[kind] += 1
         if by_card[card_id].executable:
             executable_kinds[kind] += 1
-    #: 🔴 몬스터가 **하나** 있다 (Phase 6-K).
-    assert kinds["monster"] == 1, dict(kinds)
+    #: 🔴 몬스터가 **둘** 있다 — 어니스트 ①(6-K) · 기르수 ①(6-V).
+    assert kinds["monster"] == 2, dict(kinds)
     assert kinds["spell"] + kinds["trap"] == 16, dict(kinds)
     #: 🔴 **실행되는 몬스터가 하나 있다** (Phase 6-L · 어니스트 ①). 6-K
     #: 시점에는 0이었고 그것이 그때의 사실이었다. 단언을 지우지 않는다 —
     #: 마법 · 함정 쪽 13 을 따로 못박아서, 늘어난 하나가 **몬스터 쪽이고
     #: 거기뿐**임을 센다.
-    assert executable_kinds["monster"] == 1, dict(executable_kinds)
+    #: 🔴 1 → **2** (Phase 6-V, 기르수 ①). 마법 · 함정 쪽 13 은 **그대로**
+    #: 이고, 그것이 "늘어난 하나가 몬스터 쪽이고 거기뿐" 을 센다.
+    assert executable_kinds["monster"] == 2, dict(executable_kinds)
     assert executable_kinds["spell"] + executable_kinds["trap"] == 13, dict(
         executable_kinds
     )
-    assert sum(executable_kinds.values()) == 14, dict(executable_kinds)
+    assert sum(executable_kinds.values()) == 15, dict(executable_kinds)
 
 
 def test_13_the_engine_splits_on_effect_ref_not_on_card_versus_effect(repository):

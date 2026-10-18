@@ -123,7 +123,10 @@ CODE_MEMBER_COUNT = 48
 #: 거절 둘이다 — 엑스트라 덱 몬스터를 패 · 메인 덱으로 보내려는 이동과
 #: 이미 목적지에 있어 **일어나지 않는** 이동. 둘 다 코드 자리이고 둘 다
 #: ``UNSUPPORTED_OPERATION`` 과 짝지으므로 "모른다" 쪽이다.
-CODE_OCCURRENCES = 72
+#: 🔴 72 → 73 (Phase 6-V). ``_zone_from_summon`` 한 자리가 더해졌다 —
+#: 거부 생성(``REJECTION_PRODUCTIONS``)도 같이 하나 늘었으므로 아래
+#: "차이가 13" 은 그대로다.
+CODE_OCCURRENCES = 73
 
 #: 그중 **거부를 만드는** 자리.
 #:
@@ -167,7 +170,9 @@ CODE_OCCURRENCES = 72
 #: 🔴 같은 Phase 가 더한 **거부** 쪽 하나는 여기 세지 않는다 — 이 효과가
 #: 적어 둔 출발 자리를 어긋난 경우이고, 그쪽은 공식 텍스트가 적은 것을
 #: 옮긴 **아는 규칙**이므로 ``SOURCE_WRONG_ZONE`` 이다.
-REJECTION_PRODUCTIONS = 59
+#: 🔴 59 → 60 (Phase 6-V). ``_zone_from_summon`` 의 "사건의 도착지와 지금
+#: 자리가 다르다" 갈래가 거부 생성 한 자리를 더했다.
+REJECTION_PRODUCTIONS = 60
 
 #: enum 이 **섹션 주석으로 선언한** 묶음 → 멤버 수.
 DECLARED_SECTIONS = {

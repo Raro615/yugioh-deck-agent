@@ -447,7 +447,11 @@ def test_10_every_registered_effect_is_free_chain_not_a_trigger(repository):
         codes.append(spec.code if spec is not None else None)
 
     assert len(EFFECT_LIBRARY) >= 16
-    assert set(codes) == {"EVENT_FREE_CHAIN", None}, collections.Counter(codes)
+    #: 🔴 Phase 6-V 에서 ``EVENT_SUMMON_SUCCESS`` 가 들어왔다 (기르수 ①).
+    #: 아래 "코드가 없는 쪽이 정확히 한 건이고 그것이 기동 효과" 는 그대로다.
+    assert set(codes) == {
+        "EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", None
+    }, collections.Counter(codes)
     #: 🔴 코드가 없는 쪽이 **정확히 한 건**이고, 그것이 기동 효과다.
     from engine.effect.library import HONEST
     from engine.vocabulary import ActivationKind

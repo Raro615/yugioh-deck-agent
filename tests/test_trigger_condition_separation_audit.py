@@ -293,14 +293,21 @@ def test_04_every_registered_effect_is_free_chain(repository):
     # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
     # 않았다** — 수만 움직였다.
-    assert len(EFFECT_LIBRARY) == 17
+    # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
+    # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
+    # 아니라 그 시점에 실제로 17건이었다.
+    assert len(EFFECT_LIBRARY) == 18
     #: 🔴 Phase 6-K — 열일곱 번째(어니스트 ①)는 ``code`` 가 **없다.** 기동
     #: 효과는 사건이 아니라 선언으로 발동하므로 ``SetCode`` 를 적지 않는다.
-    #: 이 테스트가 지키는 사실("등재된 효과가 유발 사건을 쓰지 않는다")은
-    #: 그대로이고, 아래 두 줄이 그것을 갈라서 센다.
-    assert len(codes) == 17
-    assert set(codes) == {"EVENT_FREE_CHAIN", None}
+    #:
+    #: 🔴 **Phase 6-V 가 "등재된 효과가 유발 사건을 쓰지 않는다" 를
+    #: 끝냈다.** 기르수 ① 이 ``EVENT_SUMMON_SUCCESS`` 를 쓴다. 지우는 대신
+    #: 세 갈래를 **각각** 센다 — 자유 체인 16 · 유발 1 · 코드 없음 1.
+    assert len(codes) == 18
+    assert set(codes) == {"EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", None}
     assert len([c for c in codes if c == "EVENT_FREE_CHAIN"]) == 16
+    assert len([c for c in codes if c == "EVENT_SUMMON_SUCCESS"]) == 1
+    assert len([c for c in codes if c is None]) == 1
 
 
 @pytest.mark.real_card
@@ -323,7 +330,10 @@ def test_05_the_eight_activation_conditions_are_state_conditions(repository):
             "condition": definition.activation.describe_ko(),
         }
 
-    assert len(with_condition) == 8
+    #: 🔴 8 → **9** (Phase 6-V, 기르수 ①). 기르수의 조건도 **상태 조건**
+    #: 이다 (자신 덱에 1장 이상) — 사건을 묻지 않는다. 이 파일이 지키는
+    #: 사실이 그것이므로 유발 효과가 들어와도 약해지지 않았다.
+    assert len(with_condition) == 9
     #: 사례로 쓰는 넷의 종류를 못박는다.
     assert with_condition[POT_OF_GREED]["types"] == ["SPELL"]
     assert with_condition[RELOAD]["types"] == ["QUICKPLAY", "SPELL"]
