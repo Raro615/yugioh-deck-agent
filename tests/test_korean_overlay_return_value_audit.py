@@ -68,7 +68,7 @@ CANONICAL_WITHOUT_KOREAN = 399
 #: **분모가 틀렸다.**
 PRODUCTION_DIRS = (
     "analysis", "app", "core", "deck", "engine", "rules", "rulings",
-    "scripts", "sources", "agent",
+    "scripts", "sources", "agent", "integration",
 )
 
 

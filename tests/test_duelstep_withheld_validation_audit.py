@@ -605,6 +605,24 @@ def test_18_m3_is_still_dormant_and_cannot_reach_either_boundary():
        **0회**로 그대로다. 그래서 한 목록을 **두 목록으로 나눈다**: 등록 쪽은
        0 을 유지하고, 선언 쪽은 컴파일러 한 자리임을 적는다. 단정을 약하게
        만든 것이 아니라 **섞여 있던 두 사실을 분리**한 것이다.
+
+    .. warning::
+       🔴 **Phase 6-Z 가 그 잇는 일을 했다.** 유발 발동이
+       ``Duel.legal_actions`` 에 오르고 ``Duel.apply`` 가 받는다. 그래서 이
+       Phase 가 쟀던 세 사실 중 하나는 **더 이상 참이 아니다** — 듀얼 루프는
+       이제 유발 후보를 받는다.
+
+       🔴 **그러나 두 사실은 그대로다.** ``engine/duel.py`` 는 등록소를
+       만들지 않고 (``TriggerRegistry`` 생성 0회), 트리거 계층의 **타입
+       이름을 하나도 모른다.** 받는 것은 ``offers(duel, seat)`` 를 가진
+       불투명한 값이고 (``triggers: object | None``), 그것을 만드는 일은
+       조립 층의 몫이다 (ADR-007).
+
+       그래서 낱말 검사를 **이름 검사**로 바꾼다 — 그것이 애초에 재려던
+       것이다. 지금 이 시험이 말하는 것은 "M3 가 잠들어 있다" 가 아니라
+       **"M3 가 깨어났어도 ``Duel`` 은 그 계층을 읽지 않는다"** 다.
+       무엇이 깨어났는지는
+       ``tests/engine/test_trigger_normal_path_integration.py`` 가 센다.
     """
     specs = []
     registries = []
@@ -625,7 +643,21 @@ def test_18_m3_is_still_dormant_and_cannot_reach_either_boundary():
     assert registries == []
     #: 선언을 만드는 자리는 컴파일러 하나뿐이다.
     assert sorted(set(specs)) == ["engine/trigger_compiler.py"], specs
-    assert "trigger" not in source_of("engine/duel.py")
+    #: 🔴 **``Duel`` 은 트리거 계층의 이름을 하나도 모른다** (Phase 6-Z).
+    duel = source_of("engine/duel.py")
+    for name in (
+        "TriggerRegistry",
+        "TriggerCollector",
+        "TriggerChainIntegrator",
+        "TriggerEligibilityJudge",
+        "TriggerSpec",
+        "TimingEvent",
+        "TimingPoint",
+        "timing_events",
+    ):
+        assert name not in duel, name
+    #: 들고 있는 칸은 **불투명하다** — 타입이 ``object`` 다.
+    assert "triggers: object | None = None" in duel
 
     #: 그리고 컴파일러는 수집기 · 판정기 · 레지스트리를 **부르지 않는다** —
     #: 선언을 돌려줄 뿐 누구에게도 싣지 않는다.

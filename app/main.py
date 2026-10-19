@@ -764,10 +764,33 @@ def cmd_combo(agent: DeckAgent, args) -> int:
     return 0
 
 
+def opening_wiring(repository) -> tuple:
+    """
+    선공 전개 실행에 꽂을 둘 — ``(chooser, triggers)`` (Phase 6-Z).
+
+    꽂지 않으면 유발 효과가 ``legal_actions`` 에 오르지 않고, 올라도 해결
+    중에 고를 사람이 없어 거절된다. 둘 다 조립 층과 Agent 층의 것이므로
+    ``deck`` 이 만들지 않고 **부르는 쪽**이 값으로 넘긴다.
+
+    🔴 **왜 이 자리인가.** 사용자에게 보이는 경로가 둘이다 — CLI 와
+    Discord 어댑터. 둘이 각자 꽂으면 같은 입력에 다른 답이 나오고, 어느
+    쪽이 맞는지 알 수 없다. 그리고 어댑터는 ``agent`` · ``integration`` 을
+    직접 import 하지 않는다 (``tests/test_discord_bot.py::test_15``) —
+    그 경계를 지키면서 같은 것을 꽂는 유일한 방법이 **공용 자리 하나**다.
+
+    🔴 ``FirstPermittedChoice`` 는 **전략이 아니라 기준점**이다 —
+    ``first_meaningful`` 과 같은 자리다 (허용된 후보의 앞쪽을 집는다).
+    이것으로 돌린 결과는 실제로 일어난 일이고, 최선의 전개가 아니다.
+    """
+    from agent.choice import FirstPermittedChoice
+    from integration.autonomy import PolicyChooser, TriggerSource
+
+    return PolicyChooser(FirstPermittedChoice()), TriggerSource(repository)
+
+
 def _print_opening(agent: DeckAgent, recipe_text: str,
                    hand_ids: "list[int]") -> None:
     """🔴 **실제 엔진 실행 절** (Phase 6-T). 레시피가 없으면 그 사실을 적는다."""
-    from agent.choice import FirstPermittedChoice
     from deck.opening import build_opening, execute_opening, opening_hand_size
     from deck.recipe import parse_recipe
     from deck.report import (
@@ -775,7 +798,6 @@ def _print_opening(agent: DeckAgent, recipe_text: str,
         render_opening_run,
         render_opening_setup,
     )
-    from integration.autonomy import PolicyChooser, TriggerSource
 
     print()
     print("=" * 68)
@@ -809,12 +831,13 @@ def _print_opening(agent: DeckAgent, recipe_text: str,
     #: 🔴 ``FirstPermittedChoice`` 는 **전략이 아니라 기준점**이다 —
     #: ``first_meaningful`` 과 같은 자리다 (허용된 후보의 앞쪽을 집는다).
     #: 아래 출력은 그 선택으로 실제로 일어난 일이고, 최선의 전개가 아니다.
+    chooser, triggers = opening_wiring(agent.repository)
     setup = build_opening(
         agent.repository,
         parsed.draft,
         hand_ids,
-        chooser=PolicyChooser(FirstPermittedChoice()),
-        triggers=TriggerSource(agent.repository),
+        chooser=chooser,
+        triggers=triggers,
     )
     run = execute_opening(setup, agent.repository)
     print("  🔴 고른 방식은 검증용 기준점입니다 — 행동은"

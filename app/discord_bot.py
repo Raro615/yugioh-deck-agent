@@ -580,7 +580,7 @@ def _executed_lines(agent, recipe_text: str,
     ``deck:`` 초안을 실제 덱으로 쓰지 않는 이유가 여기에 적혀 있어야 한다 —
     출력에 없으면 사용자는 초안으로 검증했다고 믿는다.
     """
-    from agent.choice import FirstPermittedChoice
+    from app.main import opening_wiring
     from deck.opening import build_opening, execute_opening, opening_hand_size
     from deck.recipe import parse_recipe
     from deck.report import (
@@ -588,7 +588,6 @@ def _executed_lines(agent, recipe_text: str,
         render_opening_run,
         render_opening_setup,
     )
-    from integration.autonomy import PolicyChooser, TriggerSource
 
     expected = opening_hand_size()
     if not recipe_text or not recipe_text.strip():
@@ -626,15 +625,17 @@ def _executed_lines(agent, recipe_text: str,
     #: 해결 중에 고를 사람이 없어 거절된다. 둘 다 조립 층과 Agent 층의
     #: 것이므로 ``deck`` 이 만들지 않고 **이 자리가 값으로** 넘긴다.
     #:
-    #: 🔴 ``FirstPermittedChoice`` 는 **전략이 아니라 기준점**이다 —
-    #: ``first_meaningful`` 과 같은 자리다 (허용된 후보의 앞쪽을 집는다).
-    #: 아래 출력은 그 선택으로 실제로 일어난 일이고, 최선의 전개가 아니다.
+    #: 🔴 **CLI 와 같은 것을 꽂는다** — ``app.main.opening_wiring`` 하나가
+    #: 만든다. 어댑터가 제 손으로 만들면 ``agent`` · ``integration`` 을 직접
+    #: import 하게 되고, 그 경계는 Phase 5-A 부터 지켜 온 것이다
+    #: (``test_discord_bot::test_15``).
+    chooser, triggers = opening_wiring(agent.repository)
     setup = build_opening(
         agent.repository,
         parsed.draft,
         hand_ids,
-        chooser=PolicyChooser(FirstPermittedChoice()),
-        triggers=TriggerSource(agent.repository),
+        chooser=chooser,
+        triggers=triggers,
     )
     run = execute_opening(setup, agent.repository)
     #: 🔴 **한 줄 요약은 실측에서만 나온다.** 실행한 걸음 · 해결된 걸음 ·

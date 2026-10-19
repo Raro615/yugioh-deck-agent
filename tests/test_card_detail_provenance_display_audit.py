@@ -76,7 +76,7 @@ LUA_KO_CARD = 89631139        # 푸른 눈의 백룡
 #: 거짓으로 통과한다 (Phase 6-W 가 더했다).
 PRODUCTION_DIRS = (
     "analysis", "app", "core", "deck", "engine", "rules", "rulings",
-    "scripts", "sources", "agent",
+    "scripts", "sources", "agent", "integration",
 )
 
 #: 🔴 데이터 유무는 **마커**로 거른다 — 함수 안에서 건너뛰기를 직접 호출하지

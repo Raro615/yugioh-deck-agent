@@ -1348,6 +1348,12 @@ def test_33_this_phase_changed_no_production_file():
         # 지문이 지키는 것은 "관문이 그대로 있다" 이므로 호출 이름까지만
         # 집는다 — 인자를 포함해 집으면 지문이 **관문의 존재**가 아니라
         # 호출의 모양을 고정하게 된다.
-        ("engine/action_validation.py", "_NormalSpellActivation(action.source"),
+        #
+        # 🔴 **그 말대로 했어야 했다** (Phase 6-Z). 6-K 가 "호출 이름까지만"
+        # 이라고 적고도 첫 인자를 함께 집어 두었고, 6-Z 가 네 번째 인자
+        # (사건 목록) 를 더해 호출이 여러 줄로 나뉘면서 그 지문이 깨졌다.
+        # 깨진 것은 관문이 아니라 **줄바꿈**이다. 그래서 적어 둔 뜻대로
+        # 이름까지만 집는다.
+        ("engine/action_validation.py", "_NormalSpellActivation("),
     ):
         assert needle in source_of(path), f"{path} 에 {needle} 이 없습니다"

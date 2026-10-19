@@ -78,7 +78,7 @@ STATUS_COUNTS = {"lua_verified": 12687, "text_derived": 756, "no_effect": 684}
 #: 거짓으로 통과한다 (Phase 6-W 가 더했다).
 PRODUCTION_DIRS = (
     "analysis", "app", "core", "deck", "engine", "rules", "rulings",
-    "scripts", "sources", "agent",
+    "scripts", "sources", "agent", "integration",
 )
 
 

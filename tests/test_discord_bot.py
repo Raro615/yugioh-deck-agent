@@ -256,10 +256,17 @@ def test_15_the_bot_reuses_app_main_and_touches_no_other_layer():
 
     #: 그리고 검색·덱 로직을 다시 쓰지 않았다 — 기존 함수를 부른다
     source = Path(bot.__file__).read_text(encoding="utf-8")
+    #: 🔴 **Phase 6-Z 가 하나를 더했다** — ``opening_wiring(``.
+    #:
+    #: 6-Z 는 유발 발동과 해결 시점 선택을 전개 실행에 꽂았다. 그 둘은
+    #: ``agent`` 와 ``integration`` 의 것이므로 어댑터가 직접 만들면 위의
+    #: 금지 목록을 어긴다. 그래서 공용 자리 하나(``app.main.opening_wiring``)
+    #: 가 만들고 CLI 와 어댑터가 **같은 것**을 받는다 — 경계도 지키고 둘이
+    #: 갈라지지도 않는다.
     for reused in ("search_korean(", "format_card_line(",
                    "parse_deck_request(", "DeckBuilder(", "DeckValidator(",
                    "_parse_card_ids(", "FixedHand(", "ComboPlanner(",
-                   "hand_effect_facts("):
+                   "hand_effect_facts(", "opening_wiring("):
         assert reused in source, reused
     #: 직접 필터·검색 엔진을 세우거나, 덱 구성·검증을 다시 구현하지 않는다.
     #: 🔴 ``resolve_archetype`` 은 카드군 해석이고 ``DeckBuilder`` 가 한다 —

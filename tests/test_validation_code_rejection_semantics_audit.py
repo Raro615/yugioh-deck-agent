@@ -682,7 +682,11 @@ def test_10_source_forbidden_is_a_different_code_from_structural_source_forbidde
     #: 정의 등록소를 받게 되면서 ``__init__`` 과 ``definitions`` 프로퍼티가
     #: 이 자리보다 **위**에서 32줄 늘었다. 자리가 **하나뿐**이라는 사실은
     #: 그대로이고, 그것이 이 단언이 지키는 것이다.
-    assert hits == [("engine/action_validation.py", 233)]
+    #:
+    #: 🔴 **다시 233 → 255 로 밀렸다** (Phase 6-Z, +22). 같은 이유다 —
+    #: 검증기가 사건 목록도 받게 되면서 ``__init__`` 과 ``event_backed``
+    #: 프로퍼티가 이 자리보다 위에서 늘었다. 자리는 여전히 하나다.
+    assert hits == [("engine/action_validation.py", 255)]
 
 
 # ======================================================================

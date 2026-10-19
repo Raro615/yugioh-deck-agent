@@ -73,7 +73,7 @@ LANGUAGE_ATTRS = {
 #: 거짓으로 통과한다 (Phase 6-W 가 더했다).
 PRODUCTION_DIRS = (
     "analysis", "app", "core", "deck", "engine", "rules", "rulings",
-    "scripts", "sources", "agent",
+    "scripts", "sources", "agent", "integration",
 )
 
 

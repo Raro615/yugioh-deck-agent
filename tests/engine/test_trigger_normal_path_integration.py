@@ -1148,14 +1148,37 @@ def test_c12_the_discord_and_cli_paths_share_the_same_wiring():
     그리고 **꽂는 것을 ``deck`` 이 만들지 않는다** — ``build_opening`` 은
     받아서 넘기기만 한다 (``deck`` 이 ``integration`` 을 읽지 않는다).
     """
+    #: 🔴 **만드는 자리는 하나다** — ``app.main.opening_wiring``.
+    #:
+    #: 어댑터가 제 손으로 만들면 ``agent`` · ``integration`` 을 직접 import
+    #: 하게 되고, 그 경계는 Phase 5-A 부터 지켜 온 것이다
+    #: (``tests/test_discord_bot.py::test_15``). 그래서 공용 자리 하나가
+    #: 만들고 둘이 그것을 부른다.
+    factory = _source("app/main.py")
+    assert "def opening_wiring(" in factory
+    assert "PolicyChooser(FirstPermittedChoice())" in factory
+    assert "TriggerSource(repository)" in factory
+    #: 🔴 **기준점임을 그 자리가 말한다** — 최선이라고 적지 않는다.
+    assert "기준점" in factory
+
     for path in ("app/discord_bot.py", "app/main.py"):
         source = _source(path)
-        assert "PolicyChooser(" in source, path
-        assert "TriggerSource(" in source, path
-        assert "chooser=PolicyChooser(" in source, path
-        assert "triggers=TriggerSource(" in source, path
-        #: 🔴 **기준점임을 출력이 말한다** — 최선이라고 적지 않는다.
-        assert "기준점" in source, path
+        assert "opening_wiring(" in source, path
+        assert "chooser=chooser" in source, path
+        assert "triggers=triggers" in source, path
+
+    #: 🔴 어댑터는 그 둘의 계층을 **직접 읽지 않는다.**
+    bot_imports = [
+        line.strip()
+        for line in _source("app/discord_bot.py").splitlines()
+        if line.strip().startswith(("import ", "from "))
+    ]
+    for line in bot_imports:
+        for forbidden in ("agent", "integration", "engine", "core"):
+            assert forbidden not in line, (line, forbidden)
+
+    #: 🔴 **사용자에게 보이는 출력이 기준점임을 말한다.**
+    assert "기준점" in _source("app/discord_bot.py")
 
     #: ``deck`` 은 조립 층을 읽지 않는다 — 받아서 넘기기만 한다.
     opening = _source("deck/opening.py")
