@@ -741,10 +741,35 @@ def test_h_the_compiler_never_touches_the_duel_or_the_journal():
     🔴 **배선하지 않았다.** ``Duel`` 은 이 컴파일러를 모르고, 기록 계층도
     모른다 — 후보 수집은 실행이 끝난 뒤 **바깥쪽**이 하는 일이다
     (``event_pipeline`` 의 머리말이 적어 둔 그대로).
+
+    🔴 **Phase 6-Z 가 후보를 ``Duel`` 에 **값으로** 넣었다.** 그래서 낱말
+    검사가 더 이상 통하지 않고 (``triggers`` 라는 칸이 생겼다), 대신 **import
+    로** 센다 — 그것이 애초에 재려던 것이다: ``Duel`` 이 트리거 계층의 코드를
+    읽는가. 읽지 않는다. 받는 것은 ``offers(duel, seat)`` 를 가진 **아무
+    물건**이고, 그 물건을 만드는 일은 조립 층의 몫이다 (ADR-007).
     """
     duel = pathlib.Path("engine/duel.py").read_text(encoding="utf-8")
     assert "trigger_compiler" not in duel
-    assert "trigger" not in duel.lower()
+
+    #: 🔴 **트리거 계층을 import 하지 않는다.**
+    tree = ast.parse(duel)
+    modules = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            modules.add(node.module)
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+    assert not [m for m in modules if "trigger" in m], sorted(modules)
+    #: 그리고 트리거 계층의 타입 이름을 **글자로도** 쓰지 않는다.
+    for name in (
+        "TriggerRegistry",
+        "TriggerCollector",
+        "TriggerChainIntegrator",
+        "TimingEvent",
+        "TimingPoint",
+        "timing_events",
+    ):
+        assert name not in duel, name
 
     for name in ("engine/effect/journal.py", "engine/action_execution.py"):
         source = pathlib.Path(name).read_text(encoding="utf-8")

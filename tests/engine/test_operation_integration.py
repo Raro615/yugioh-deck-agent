@@ -1264,14 +1264,51 @@ def test_k_the_executor_makes_no_choice_of_its_own():
     """
     source = pathlib.Path("engine/effect/executor.py").read_text("utf-8")
     tree = ast.parse(source)
-    functions = {
-        node.name
+
+    #: 🔴 **실행기의 메서드만 본다** (Phase 6-Z). 모듈 전체를 보면
+    #: :class:`~engine.effect.executor.ResolutionChooser` 의 ``choose`` 선언이
+    #: 걸리는데, 그것은 실행기가 고른다는 뜻이 **아니라 누가 고르는지를 적어
+    #: 둔 자리**다. 범위를 클래스로 좁히는 것이 예전 검사보다 약하지 않다 —
+    #: 실행기 자신이 고르는 함수를 가지면 여전히 깨진다.
+    executor = next(
+        node
         for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == "EffectExecutor"
+    )
+    methods = {
+        node.name
+        for node in executor.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
-
+    assert methods, "실행기의 메서드를 하나도 찾지 못하면 이 시험은 비어 있다"
     for forbidden in ("choose", "select_", "score", "policy"):
-        assert not any(forbidden in name for name in functions)
+        assert not any(forbidden in name for name in methods), forbidden
+
+    #: 🔴 **그리고 ``choose`` 라는 이름은 프로토콜 하나에만 있다.** 그 몸통은
+    #: ``...`` 이므로 **아무것도 고르지 않는다** — 고르는 사람은 바깥에 있다.
+    declared = [
+        (parent.name, node.name)
+        for parent in ast.walk(tree)
+        if isinstance(parent, ast.ClassDef)
+        for node in parent.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and "choose" in node.name
+    ]
+    assert declared == [("ResolutionChooser", "choose")], declared
+    protocol = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == "ResolutionChooser"
+    )
+    body = next(
+        node for node in protocol.body if isinstance(node, ast.FunctionDef)
+    ).body
+    assert all(
+        isinstance(stmt, ast.Expr)
+        and isinstance(stmt.value, ast.Constant)
+        and stmt.value.value is Ellipsis
+        for stmt in body
+    ), ast.dump(protocol)
 
     # 1. 전역 random 을 **import 하지 않는다.**
     for node in ast.walk(tree):

@@ -1495,6 +1495,7 @@ def build_executor(
     destruction: DestructionRuling | None = None,
     movement: MovementRuling | None = None,
     rulings: "OperationRulingRegistry | None" = None,
+    chooser: object | None = None,
 ) -> EffectExecutor:
     """
     이 목록의 구현을 아는 실행기.
@@ -1517,6 +1518,11 @@ def build_executor(
     실렸다는 사실이 판정을 대신하게 되고, 그것은 ``destruction`` 을 몰래
     바꾸지 않는 것과 같은 이유로 하지 않는다 (ADR-006).
 
+    ``chooser`` 는 **해결 중에 고르는 사람**이다 (Phase 6-Z). 주지 않으면
+    아직 정해지지 않은 선택이 **그대로 거절**된다 — ``destruction`` ·
+    ``movement`` 와 같은 규율이다 (ADR-006): 없는 것을 기본값으로 메꾸지
+    않는다. 엔진이 전략적으로 좋은 카드를 대신 고르지 않는다.
+
     체인 해결기는 만들어 주지 않는다 — :class:`~engine.chain.ChainResolver`
     는 이 실행기와 정의 저장소를 받아 **부르는 쪽이** 만든다.
     """
@@ -1526,6 +1532,7 @@ def build_executor(
         destruction=destruction,
         movement=movement,
         rulings=rulings,
+        chooser=chooser,
     )
 
 

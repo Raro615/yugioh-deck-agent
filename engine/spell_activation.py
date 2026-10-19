@@ -480,7 +480,7 @@ def duel_activator(journal=None):
     )
 
 
-def duel_resolver(journal=None):
+def duel_resolver(journal=None, chooser=None):
     """
     듀얼이 쓰는 **해결기**. 기존 ``ChainResolver`` 를 그대로 쓴다.
 
@@ -510,13 +510,18 @@ def duel_resolver(journal=None):
     #
     # 지식은 판과 무관하고, 판을 보고 답을 합성하는 일은 실행기가 계획
     # 시점의 투영된 판으로 그때그때 한다 (Phase 2-AL).
+    # 🔴 **고르는 사람도 여기서 넘긴다** (Phase 6-Z). ``rulings`` 와 같은
+    # 자리이고 같은 이유다 — 부르는 쪽이 고르고, 주지 않으면 아직 정해지지
+    # 않은 선택은 거절된다.
     return ChainResolver(
-        build_executor(journal=journal, rulings=OPERATION_RULINGS),
+        build_executor(
+            journal=journal, rulings=OPERATION_RULINGS, chooser=chooser
+        ),
         definition_registry(),
     )
 
 
-def duel_components(journal=None) -> dict:
+def duel_components(journal=None, chooser=None) -> dict:
     """
     journal **하나를 공유하는** 실행기·발동기·해결기 한 벌 (Phase 6-B).
 
@@ -531,6 +536,11 @@ def duel_components(journal=None) -> dict:
     않는다 (``test_e_the_duel_makes_no_rules_of_its_own`` 이 AST 로 고정).
     그래서 **journal 객체를 만드는 일도 여기서** 한다 — 듀얼은 그것을
     값으로 받아 들고만 있는다.
+
+    ``chooser`` (Phase 6-Z) 는 **해결 중에 고르는 사람**이고, 해결기를 통해
+    실행기까지 내려간다. 주지 않으면 아직 정해지지 않은 선택이 거절된다 —
+    :mod:`engine.duel` 이 ``engine.effect`` 를 import 하지 않으므로 이
+    객체도 **값으로만** 넘어간다 (``journal`` 과 같은 자리다).
 
     ``journal`` 을 주지 않으면 새로 만든다. 🔴 명시적으로 ``False`` 를
     주면 **기록하지 않는 한 벌**이 나온다 — 탐색 사본이 쓰는 쪽이다
@@ -550,7 +560,7 @@ def duel_components(journal=None) -> dict:
         "journal": shared,
         "_executor": duel_executor(journal=shared),
         "_activator": duel_activator(journal=shared),
-        "_resolver": duel_resolver(journal=shared),
+        "_resolver": duel_resolver(journal=shared, chooser=chooser),
         "_placement": NormalSpellPlacement(journal=shared),
     }
 

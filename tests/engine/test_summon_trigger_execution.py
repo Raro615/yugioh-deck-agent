@@ -681,28 +681,34 @@ def test_f01_the_plan_refuses_to_invent_a_selection(repository):
 
 @pytest.mark.real_card
 @requires_official_db
-def test_f02_the_duel_loop_never_offers_a_deck_choosing_effect(repository):
+def test_f02_the_action_never_carries_a_deck_instance(repository):
     """
-    🔴 **STRUCTURAL-125 — 덱에서 고르는 효과는 ``legal_actions`` 후보가 될
-    수 없다.** 이 Phase 가 만든 한계가 아니라 이미 선언된 경계다.
+    🔴 **STRUCTURAL-125 — ``PlayerAction`` 에 덱의 인스턴스를 적지 않는다.**
+    이 Phase 가 만든 한계가 아니라 이미 선언된 경계다.
 
-    ``target_bridge.target_combinations`` 가 ``looked_at`` 으로 후보를 센
-    **뒤 평소 관측으로 다시 좁힌다** — ``PlayerAction`` 은 정책에게 가는
-    데이터이고, 거기에 덱의 인스턴스를 적으면 정책이 후보 목록을 읽는 것만
-    으로 덱 내용을 알게 된다.
+    ``PlayerAction`` 은 ``legal_actions`` 가 정책에게 **그대로 건네는
+    데이터**이고, 거기에 덱의 카드를 적으면 정책이 후보 목록을 읽는 것만으로
+    덱 내용을 알게 된다.
 
-    그래서 소환 뒤에도 ``activate_effect`` 가 제시되지 않는다. **이것을
-    "효과가 없다" 로 읽지 않도록** 같은 자리에서 조합 수가 0 인 것까지
-    함께 잰다.
+    🔴 **Phase 6-Z 가 그 경계를 지키는 방식을 바꿨다.** 예전에는 조합을
+    0건으로 만들어 발동 자체를 막았고, 그래서 소환 뒤에도 ``activate_effect``
+    가 제시되지 않았다. 지금은 그 고르기를 **해결 시점으로 옮긴다** — 조합은
+    빈 조합 하나이고, 행위에는 덱의 카드가 한 장도 없다.
+
+    이 판은 사건 원천을 꽂지 않았으므로 (``_girsu_board``) 유발 후보 자체가
+    오르지 않는다. 그 사실도 그대로 센다 — 배선이 없으면 아무것도 달라지지
+    않는다.
     """
     setup = _girsu_board(repository)
     duel = setup.duel
     instance = _summon_girsu(duel)
     definition = definition_registry().definition_for(EffectRef(GIRSU, 0))
 
-    combos = target_combinations(duel.state, MINE, definition, instance)
-    assert list(combos) == [], "덱 후보가 Action 에 적히면 숨은 정보가 샌다"
+    combos = list(target_combinations(duel.state, MINE, definition, instance))
+    #: 🔴 **빈 조합 하나다** — 덱의 카드가 한 장도 들어 있지 않다.
+    assert combos == [()], "덱 후보가 Action 에 적히면 숨은 정보가 샌다"
 
+    assert duel.triggers is None
     offered = {a.kind.value for a in duel.legal_actions(MINE).allowed}
     assert "activate_effect" not in offered
     assert "end_phase" in offered

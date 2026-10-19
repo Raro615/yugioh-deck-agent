@@ -61,7 +61,7 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Callable
+from typing import Callable, Protocol, runtime_checkable
 
 from engine.condition import (
     ConditionContext,
@@ -97,7 +97,13 @@ from engine.effect.operation import (
     SpecialSummonOperation,
 )
 from engine.effect.journal import EventJournal
-from engine.effect.target import SELF_TARGET, SelectionCount, Shortfall
+from engine.effect.target import (
+    SELF_TARGET,
+    SelectionCount,
+    Shortfall,
+    TargetRef,
+    TargetSelection,
+)
 from engine.execution import (
     NO_EXECUTION_VALUES,
     BoardQuantity,
@@ -405,6 +411,46 @@ class EffectImplementationRegistry:
         return f"<EffectImplementationRegistry n={len(self._refs)}>"
 
 
+#: **해결 중에 고르는 사람** (Phase 6-Z).
+#:
+#: 받는 것은 :class:`ResolutionChoice` 하나이고 돌려주는 것은 고른
+#: ``InstanceId`` 들이다. 판을 받지 않는다 — 요청에 실린 **관측**만 본다.
+#:
+#: 🔴 **엔진이 대신 고르지 않는다.** 주지 않으면 아직 정해지지 않은 선택은
+#: 거절되고, 그것이 기본 상태다 (ADR-006 과 같은 규율: 등록되지 않은 것은
+#: 없는 것이 아니라 **할 수 없는 것**이다).
+@runtime_checkable
+class ResolutionChooser(Protocol):
+    """해결 중 선택 요청에 답하는 것."""
+
+    def choose(self, request: "ResolutionChoice") -> "tuple[InstanceId, ...]":
+        ...  # pragma: no cover - 프로토콜
+
+
+@dataclass(frozen=True, slots=True)
+class ResolutionChoice:
+    """
+    **지금 이 효과가 고르라고 한 것.** 해결 중에 만들어진다.
+
+    🔴 **발동 시점의 대상 지정과 다르다.** 이 요청은 효과가 실제로 해결되는
+    시점의 판에서 만들어지므로, 상대의 응답이 판을 바꿨다면 그 바뀐 판에서
+    후보가 나온다. 발동 시점에 미리 열어 두지 않는다.
+
+    ``view`` 는 **규칙이 선언한 ``looked_at`` 만** 연 관측이다 — 그 효과가
+    볼 수 있는 것만 보이고, 그 밖은 평소대로 가려져 있다.
+    """
+
+    effect_ref: EffectRef
+    target_ref: TargetRef
+    view: GameStateView
+    candidates: "tuple[InstanceId, ...]"
+    minimum: int
+    maximum: int
+
+    def __len__(self) -> int:
+        return len(self.candidates)
+
+
 class EffectExecutor:
     """
     효과를 실제로 적용한다. **효과가 판을 바꾸는 공식 진입점이다.**
@@ -420,6 +466,7 @@ class EffectExecutor:
         "_summoning",
         "_movement",
         "_rulings",
+        "_chooser",
     )
 
     def __init__(
@@ -430,6 +477,7 @@ class EffectExecutor:
         summoning: SummonRuling | None = None,
         movement: MovementRuling | None = None,
         rulings: "OperationRulingRegistry | None" = None,
+        chooser: "ResolutionChooser | None" = None,
     ):
         self._lookup = lookup if lookup is not None else EmptyImplementationLookup()
         # 기록은 **선택**이다. 없으면 아무것도 적지 않고, 있어도 실행
@@ -462,6 +510,14 @@ class EffectExecutor:
         # 그 판은 **효과 시작 시점**에 멈춰 있었다. STRUCTURAL-94 가
         # 조건에서 일으킨 것과 **같은 종류의 버그**다 (2-AH 가 고친 그것).
         self._rulings = rulings
+        # **해결 중에 고르는 사람** (Phase 6-Z). 주지 않으면 아직 정해지지
+        # 않은 선택은 **그대로 거절**된다 — 6-Z 이전과 같다.
+        #
+        # 🔴 이것은 허가가 아니다. 고르는 사람이 돌려준 것을
+        # :class:`~engine.effect.targeting.TargetResolver` 가 **같은 자리에서
+        # 다시** 본다 (``_ask_for_choice``). 정책의 말이 적법성을 대신하지
+        # 않는다.
+        self._chooser = chooser
 
     @property
     def journal(self) -> EventJournal | None:
@@ -593,12 +649,18 @@ class EffectExecutor:
 
         pending = context.pending_targets(definition)
         if pending:
-            return _fail(
-                ResolutionStatus.INVALID_TARGET,
-                ValidationCode.TOO_FEW_SELECTED,
-                "아직 고르지 않은 대상이 있습니다: "
-                + ", ".join(str(ref) for ref in pending),
-            )
+            # 🔴 **여기가 "해결 중 선택" 의 자리다** (Phase 6-Z).
+            #
+            # 이 지점의 판은 발동 시점의 판이 아니다 — 체인이 역순으로
+            # 풀리므로 상대의 응답이 이미 적용되어 있다. 그래서 후보를
+            # **지금** 센다.
+            #
+            # 고르는 사람이 없으면 6-Z 이전과 **같은 거절**이다. 엔진이
+            # 대신 고르지 않는다.
+            asked = self._ask_for_choice(state, definition, context, pending)
+            if isinstance(asked, EffectResult):
+                return asked
+            context = asked
 
         declared = self._check_declarations(
             definition, context, self._read_quantity(state, context)
@@ -872,6 +934,107 @@ class EffectExecutor:
             return len(player.zone(quantity.zone))
 
         return read
+
+    # ------------------------------------------------------------------
+    # 해결 중 선택 — 엔진이 세고, 고르는 사람이 고르고, 엔진이 다시 본다
+    # ------------------------------------------------------------------
+    def _ask_for_choice(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        pending: "tuple[TargetRef, ...]",
+    ) -> "ResolutionContext | EffectResult":
+        """
+        아직 정해지지 않은 선택을 **지금** 묻는다 (Phase 6-Z).
+
+        책임이 셋으로 갈린다.
+
+        1. **엔진이 센다** — :meth:`~engine.effect.targeting.TargetResolver.
+           candidates` 가 규칙이 선언한 ``looked_at`` 을 열고 후보를 만든다.
+           여기서 후보를 새로 세지 않는다.
+        2. **고르는 사람이 고른다** — :class:`ResolutionChooser`. 판을 받지
+           않고 요청에 실린 관측만 본다.
+        3. **엔진이 다시 본다** — 같은 ``TargetResolver`` 의
+           :meth:`~engine.effect.targeting.TargetResolver.validate` 로. 정책의
+           말이 적법성을 대신하지 않는다.
+
+        🔴 **고르는 사람이 없으면 거절한다.** 6-Z 이전과 같은 자리 · 같은
+        코드 · 같은 문장이다 — 열린 것은 "있을 때 묻는다" 하나다.
+
+        🔴 **판을 바꾸지 않는다.** 이 함수가 돌려주는 것은 선택이 더해진
+        **새 문맥**이고, 판은 계획이 전부 끝난 뒤에야 바뀐다 (2-AH).
+        """
+        if self._chooser is None:
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.TOO_FEW_SELECTED,
+                "아직 고르지 않은 대상이 있습니다: "
+                + ", ".join(str(ref) for ref in pending),
+            )
+
+        by_ref = {binding.ref: binding for binding in definition.targets}
+        added: list[TargetSelection] = []
+        for ref in pending:
+            binding = by_ref.get(ref)
+            if binding is None or binding.spec.choice is None:  # pragma: no cover
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.TOO_FEW_SELECTED,
+                    f"{ref} 에 고를 자리가 없습니다.",
+                )
+            spec = binding.spec
+            # ① 규칙이 선언한 ``looked_at`` 만 연다. 효과가 볼 수 있는 것을
+            #    효과의 눈으로 본다 (``_check_targets`` 와 같은 호출).
+            granted = GameStateView.from_state(
+                state,
+                viewer=context.controller,
+                looked_at=spec.looked_at_zones(),
+            )
+            resolver = TargetResolver(granted)
+            found = resolver.candidates(spec, context.condition_context())
+            request = ResolutionChoice(
+                effect_ref=definition.effect_ref,
+                target_ref=ref,
+                view=granted,
+                candidates=tuple(found.eligible),
+                minimum=spec.choice.minimum,
+                maximum=spec.choice.maximum,
+            )
+            # ② 고르는 사람이 고른다.
+            try:
+                picked = tuple(self._chooser.choose(request))
+            except Exception as error:  # pragma: no cover - 정책의 잘못
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.TOO_FEW_SELECTED,
+                    f"{ref} 를 고르는 중 정책이 실패했습니다: {error}",
+                )
+            # ③ 엔진이 다시 본다. **후보 목록 밖은 여기서 걸린다.**
+            outside = [i for i in picked if i not in found.eligible]
+            if outside:
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                    f"{ref} 에 후보가 아닌 카드가 들어왔습니다: "
+                    + ", ".join(str(i) for i in outside),
+                )
+            selection = Selection(picked)
+            checked = resolver.validate(spec, selection, context.condition_context(), ref)
+            if not checked.permits_selection:
+                status = (
+                    ResolutionStatus.INVALID_TARGET
+                    if checked.legality is TargetLegality.ILLEGAL
+                    else ResolutionStatus.UNCHECKED_RULES
+                )
+                return _fail(
+                    status,
+                    checked.code,
+                    f"{ref} 의 선택이 규칙에 맞지 않습니다: {checked.reason}",
+                )
+            added.append(TargetSelection(ref, selection))
+
+        return replace(context, selections=context.selections + tuple(added))
 
     def _check_declarations(
         self,

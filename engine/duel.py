@@ -81,7 +81,7 @@ from engine.spell_activation import (
 from engine.summon import duel_executor
 from engine.turn_progression import ProgressionStatus, TurnProgressor
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
-from engine.vocabulary import Phase, Zone
+from engine.vocabulary import ActivationKind, Phase, Zone
 
 
 #: 전투가 일어나는 존들. 공격자와 대상 모두 여기 있는 카드다.
@@ -286,6 +286,44 @@ class Duel:
     사본의 해결이 진짜의 대기 목록을 건드리지 않는다.
     """
 
+    triggers: object | None = None
+    """
+    **사건에서 유발 후보를 만드는 것** (Phase 6-Z). 또는 ``None``.
+
+    생략하면 유발 발동이 ``legal_actions`` 에 오르지 않는다 — 6-Z 이전과
+    같은 동작이다. 🔴 **없는 것을 기본값으로 메꾸지 않는다** (ADR-006 과
+    같은 규율).
+
+    기대하는 모양은 하나다::
+
+        offers(duel, seat) -> 제안들
+
+    돌려주는 것마다 ``effect_ref`` · ``source`` · ``event_key`` 가 있어야
+    한다 (그 셋이 이 칸이 아는 전부다 — 타입 이름은 모른다). ``event_key`` 는 **그 사건을 가리키는 값**이고, 같은 사건으로 두
+    번 발동하는 것을 막는 데 쓴다 (:attr:`consumed_events`).
+
+    🔴 **타입을 이름으로 적지 않는다.** :mod:`engine.duel` 은
+    ``engine.effect`` 도 ``integration`` 도 import 하지 않는다 (ADR-007 ·
+    ``test_e_the_duel_makes_no_rules_of_its_own``). 그래서 이 칸은
+    ``journal`` 과 같이 **값으로만** 들고 있는다.
+
+    후보를 **묻는 것만으로는 아무것도 바뀌지 않는다** — 이 칸을 읽는
+    :meth:`_trigger_actions` 는 판도 사건도 소비하지 않는다.
+    """
+    consumed_events: frozenset = frozenset()
+    """
+    **이미 유발 발동에 쓴 사건들** (Phase 6-Z).
+
+    같은 사건으로 같은 효과가 두 번 발동하는 것을 막는다. 담는 것은
+    ``(event_key, effect_ref)`` 짝이다 — 한 사건에 서로 다른 효과가 각각
+    한 번씩 발동하는 것은 막지 않는다.
+
+    흐름의 위치이고 판의 모양이 아니므로 ``state_hash()`` 에 들어가지
+    않는다 (:attr:`chain` · :attr:`priority` 와 같은 자리). ``frozenset``
+    이므로 ``dataclasses.replace`` 로 뜬 사본이 **값으로** 가져간다 —
+    사본의 발동이 진짜의 소비 목록을 건드리지 않는다.
+    """
+
     @property
     def _response_loop(self) -> ResponseLoop:
         """
@@ -313,6 +351,8 @@ class Duel:
         first_player: int = 0,
         life_points: int = DEFAULT_LIFE_POINTS,
         journal: object | None = None,
+        chooser: object | None = None,
+        triggers: object | None = None,
     ) -> "Duel":
         """
         듀얼을 시작한다 — 섞고, **5장씩** 뽑고, 선공의 드로우 페이즈에 선다.
@@ -333,6 +373,19 @@ class Duel:
           다른 뜻이므로 가른다.
 
         어느 쪽이든 **행동은 같다.** 기록이 행동을 바꾸면 기록이 아니다.
+
+        ``chooser`` (Phase 6-Z):
+
+        * **해결 중에 고르는 사람.** 해결기를 통해 실행기까지 내려간다.
+        * 생략하면 아직 정해지지 않은 선택이 **거절**된다 — 엔진이 대신
+          고르지 않는다.
+
+        ``triggers`` (Phase 6-Z):
+
+        * **사건에서 유발 후보를 만드는 것.** 생략하면 유발 발동이
+          ``legal_actions`` 에 오르지 않는다 (6-Z 이전과 같다).
+        * 🔴 이 모듈은 그 객체의 타입을 **이름으로 적지 않는다** —
+          ``journal`` 과 같은 이유다. 만드는 일은 조립 층이 한다.
         """
         state = GameState.create(
             repository,
@@ -356,7 +409,8 @@ class Duel:
             #: 비용 지불 · 효과 해결)가 **같은** journal 을 공유해야 순서가
             #: 사실이 된다. 한 벌로 묶어 만드는 것이 그 공유를 보장하는
             #: 유일한 방법이다 (Phase 6-B).
-            **duel_components(journal=journal),
+            **duel_components(journal=journal, chooser=chooser),
+            triggers=triggers,
         )
 
     # ------------------------------------------------------------------
@@ -413,9 +467,16 @@ class Duel:
 
         # 정의 등록소를 함께 넘긴다 (Phase 6-K) — 효과의 발동 분류는
         # 관측에 없고 정의에 있다. 발동기가 쓰는 것과 **같은 등록소**다.
-        validator = ActionValidator(
-            self.view(seat), definitions=self._activator.definitions
-        )
+        #
+        # 사건 목록도 함께 넘긴다 (Phase 6-Z) — "이 효과를 지금 발동할
+        # 사건이 있는가" 도 관측에 없다. 그 판정을 들고 있는 것은
+        # :attr:`triggers` 이고, 이 자리가 그것을 읽어 **값으로** 준다
+        # (``ActivationTiming.set_this_turn`` 과 같은 자리다).
+        #
+        # 🔴 **묻기만 한다.** ``_trigger_offers`` 는 판도 사건도 바꾸지
+        # 않는다 — 소비는 ``apply`` 가 수락한 뒤에만 적는다.
+        offers = self._trigger_offers(seat)
+        validator = self.activation_validator(seat, offers)
 
         # **응답 창이 열려 있으면 판을 바꾸는 후보를 내지 않는다**
         # (Phase 3-E-11). 체인은 효과 발동의 사슬이고, 소환 · 세트 · 공격은
@@ -433,6 +494,7 @@ class Duel:
         # 변하지 않는다.**
         if self.priority.is_open and self.priority.holds(seat):
             allowed.extend(self._activation_actions(seat, validator))
+            allowed.extend(self._trigger_actions(seat, validator, offers))
         elif seat == self.turn_player and not self.priority.is_open:
             for card in self.state.player(seat).hand:
                 # 패의 한 장이 **여러 후보**가 된다 — 소환 · 몬스터 세트 ·
@@ -452,6 +514,7 @@ class Duel:
                         allowed.append(candidate)
             allowed.extend(self._attack_actions(seat, validator))
             allowed.extend(self._activation_actions(seat, validator))
+            allowed.extend(self._trigger_actions(seat, validator, offers))
 
         # 흐름을 움직이는 둘은 **검증기가 아니라 흐름 계층**이 답한다.
         # 검증기는 ``GameStateView`` 만 보는데, 우선권과 진행은 판 밖에
@@ -556,6 +619,20 @@ class Duel:
                     continue
                 if definition.cost.costs:
                     continue
+                if definition.activation_kind is ActivationKind.TRIGGER:
+                    # **유발은 판에서 만들지 않는다** (Phase 6-Z).
+                    #
+                    # 이 함수는 판에 있는 카드에서 후보를 만들고, 유발
+                    # 효과의 시점은 판이 아니라 **사건**이 정한다
+                    # (RULE-EFFECT-004). 사건에서 만드는 자리는
+                    # :meth:`_trigger_actions` 하나다.
+                    #
+                    # 🔴 **두 길이 같은 후보를 내지 않게 하는 줄이다.**
+                    # 6-Z 전까지 여기서 만든 유발 후보는 관문이 전부
+                    # 거절했으므로 (``MONSTER_ACTIVATION_MISSING_BY_KIND``)
+                    # 이 줄이 없어도 결과가 같았다. 사건이 관문을 열게 된
+                    # 지금은, 없으면 같은 발동이 **목록에 두 번** 오른다.
+                    continue
                 for targets in target_combinations(
                     self.state, seat, definition, card.instance_id
                 ):
@@ -577,6 +654,119 @@ class Duel:
                     ):
                         continue
                     allowed.append(candidate)
+        return allowed
+
+    def activation_validator(self, seat: int, offers=None) -> ActionValidator:
+        """
+        이 자리에서 **발동을 판정하는 검증기** (Phase 6-Z).
+
+        🔴 **만드는 자리를 하나로 둔다.** 검증기는 관측에 없는 사실을 둘
+        받는다 — 효과의 발동 분류(``definitions``, Phase 6-K)와 지금 사건이
+        뒷받침하는 발동들(``event_backed``, 6-Z). 둘 다 "주지 않으면 더 좁은
+        답" 이므로, 한 자리라도 빠뜨리면 **오류 없이 조용히** 후보 생성과
+        재검증이 갈라진다. 그것이 STRUCTURAL-134 가 고친 어긋남이다.
+
+        세 곳이 이것을 부른다 — :meth:`legal_actions` (후보 생성),
+        :meth:`_apply_activation` (적용 직전 재검증), 그리고 보고 계층
+        (``deck/opening.py`` 의 ``_gate_code``). 셋이 **같은 함수**를 쓰므로
+        같은 판에서 같은 답이 나온다.
+
+        ``offers`` 를 주면 그것을 쓰고, 주지 않으면 :meth:`_trigger_offers`
+        로 읽는다 — 같은 걸음에서 두 번 읽지 않으려는 것이고, 읽기만 하므로
+        답은 같다.
+        """
+        if offers is None:
+            offers = self._trigger_offers(seat)
+        return ActionValidator(
+            self.view(seat),
+            definitions=self._activator.definitions,
+            event_backed=frozenset(
+                (offer.source, offer.effect_ref) for offer in offers
+            ),
+        )
+
+    def _trigger_offers(self, seat: int):
+        """
+        **지금 이 자리에 사건이 열어 준 제안들** (Phase 6-Z).
+
+        :attr:`triggers` 가 없으면 빈 짝이다. 있으면 그것에 물어보고, 이미
+        쓴 사건을 걸러 낸다 (:attr:`consumed_events`).
+
+        🔴 **읽기만 한다.** 판도 사건 기록도 :attr:`consumed_events` 도
+        건드리지 않으므로, 몇 번 불러도 같은 답이고 **후보를 묻는 것만으로
+        사건이 소비되지 않는다.** 소비는 :meth:`_apply_activation` 이 발동을
+        수락한 뒤에만 적는다.
+
+        두 곳이 이것을 부른다 — :meth:`legal_actions` (후보를 만들려고) 와
+        :meth:`_apply_activation` (수락한 발동이 어느 사건의 것인지 알려고).
+        둘이 **같은 함수**를 부르므로 목록과 적용이 갈라지지 않는다
+        (STRUCTURAL-134 와 같은 규율).
+        """
+        if self.triggers is None:
+            return ()
+        return tuple(
+            offer
+            for offer in self.triggers.offers(self, seat)
+            if (offer.event_key, offer.effect_ref) not in self.consumed_events
+        )
+
+    def _trigger_actions(self, seat: int, validator: ActionValidator, offers=()):
+        """
+        **사건이 열어 준 유발 발동 후보들** (Phase 6-Z).
+
+        후보의 재료는 :meth:`_trigger_offers` 가 읽어 온 제안들이고, 이
+        함수는 그것을 **행위로 환전하고 관문에 태우기만** 한다. 제안이
+        없으면 (``triggers`` 가 없거나 사건이 없거나) **빈 목록**이다 —
+        6-Z 이전과 같다. 없는 것을 기본값으로 메꾸지 않는다 (ADR-006).
+
+        왜 ``_activation_actions`` 와 따로인가
+        --------------------------------------
+        그쪽은 **판에 있는 카드**에서 후보를 만든다 (자리 · 분류 · 조건).
+        유발은 **사건**에서 나온다 — 같은 카드가 같은 자리에 있어도 사건이
+        없으면 후보가 아니다. 출처가 다르므로 함수를 가른다.
+
+        무엇을 지키는가
+        ---------------
+        1. **사건이 있어야 한다.** 후보는 :attr:`triggers` 가 기록된 사건에서
+           만든 것만이고, 이 함수는 사건을 만들지 않는다.
+        2. **같은 사건으로 두 번 발동하지 않는다.**
+           :attr:`consumed_events` 에 든 ``(event_key, effect_ref)`` 짝은
+           :meth:`_trigger_offers` 가 이미 걸러 냈다.
+        3. **묻는 것만으로 아무것도 바뀌지 않는다.** 이 함수는 판도
+           :attr:`consumed_events` 도 건드리지 않는다 — 소비는 :meth:`apply`
+           가 발동을 **수락한 뒤에만** 적는다.
+        4. **관문은 같다.** 만든 후보를 ``_activation_gate`` 에 그대로 태운다
+           — ``legal_actions`` 와 ``apply`` 가 같은 함수 · 같은 판을 본다
+           (STRUCTURAL-134).
+
+        🔴 **강제/임의를 가르지 않는다.** 그 지식이 이 엔진에 없으므로
+        (``TriggerRequirement.UNKNOWN``) 후보로 **내놓기만** 하고, 발동할지는
+        고르는 쪽이 정한다. "모른다" 를 임의로도 강제로도 바꾸지 않는다.
+        """
+        allowed: list[PlayerAction] = []
+        for offer in offers:
+            candidate = PlayerAction.activate_effect(
+                actor=seat,
+                source=offer.source,
+                effect_ref=offer.effect_ref,
+            )
+            definition = self._activator.definitions.definition_for(
+                offer.effect_ref
+            )
+            if definition is None:  # pragma: no cover - 제안이 보증한다
+                continue
+            try:
+                selections = selections_for(definition, candidate)
+            except TargetBridgeError:  # pragma: no cover
+                continue
+            if (
+                self._activation_gate(
+                    candidate, validator=validator, selections=selections
+                ).validity
+                is not ActionValidity.VALID
+            ):
+                continue
+            allowed.append(candidate)
         return allowed
 
     def _set_this_turn(self, action: PlayerAction) -> "bool | None":
@@ -1090,6 +1280,21 @@ class Duel:
                 action, False, ValidationCode.TARGET_COUNT_MISMATCH, str(error)
             )
 
+        # 🔴 **사건은 여기서 다시 읽는다** (Phase 6-Z). ``legal_actions``
+        # 가 만든 목록을 믿지 않는 것과 같은 이유다 — 목록을 만든 뒤 판과
+        # 사건 기록이 바뀌었을 수 있다. 같은 함수를 다시 부르므로
+        # **만료되거나 이미 소비된 사건은 여기서 사라진다.**
+        offers = self._trigger_offers(action.actor)
+        consuming = next(
+            (
+                offer
+                for offer in offers
+                if offer.source == action.source
+                and offer.effect_ref == action.effect_ref
+            ),
+            None,
+        )
+
         # ① **판을 바꾸기 전에** 세 관문을 지난다. ``legal_actions`` 가 쓰는
         # 것과 **같은 함수**이고 **같은 판**이다 (STRUCTURAL-134).
         #
@@ -1097,9 +1302,7 @@ class Duel:
         # 입구이고, 아무 ``PlayerAction`` 이나 들어올 수 있다.
         gate = self._activation_gate(
             action,
-            validator=ActionValidator(
-                self.view(action.actor), definitions=self._activator.definitions
-            ),
+            validator=self.activation_validator(action.actor, offers),
             selections=selections,
         )
         if gate.validity is not ActionValidity.VALID:
@@ -1142,6 +1345,18 @@ class Duel:
             )
 
         self.chain = activated.chain
+
+        # ④ **사건을 소비한다** (Phase 6-Z). 발동이 성립한 **뒤**다 —
+        # 거절된 발동은 사건을 쓰지 않았으므로, 거절 뒤에 다시 시도할 수
+        # 있어야 한다 (후보를 묻는 것만으로도 소비되지 않는 것과 같은
+        # 이유다).
+        #
+        # ``None`` 은 **사건에서 온 발동이 아니다** — 기동 효과 · 마법 ·
+        # 함정의 발동이고, 그 길은 사건을 쓰지 않으므로 적을 것이 없다.
+        if consuming is not None:
+            self.consumed_events = self.consumed_events | {
+                (consuming.event_key, consuming.effect_ref)
+            }
 
         # ⑤ **여기서 해결하지 않는다** (Phase 3-E-11 · RULE-CHAIN-001).
         #

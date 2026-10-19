@@ -580,6 +580,7 @@ def _executed_lines(agent, recipe_text: str,
     ``deck:`` 초안을 실제 덱으로 쓰지 않는 이유가 여기에 적혀 있어야 한다 —
     출력에 없으면 사용자는 초안으로 검증했다고 믿는다.
     """
+    from agent.choice import FirstPermittedChoice
     from deck.opening import build_opening, execute_opening, opening_hand_size
     from deck.recipe import parse_recipe
     from deck.report import (
@@ -587,6 +588,7 @@ def _executed_lines(agent, recipe_text: str,
         render_opening_run,
         render_opening_setup,
     )
+    from integration.autonomy import PolicyChooser, TriggerSource
 
     expected = opening_hand_size()
     if not recipe_text or not recipe_text.strip():
@@ -618,7 +620,22 @@ def _executed_lines(agent, recipe_text: str,
                      " 않았습니다.**")
         return lines
 
-    setup = build_opening(agent.repository, parsed.draft, hand_ids)
+    #: 🔴 **유발 발동과 해결 시점 선택을 꽂는다** (Phase 6-Z).
+    #:
+    #: 꽂지 않으면 유발 효과가 ``legal_actions`` 에 오르지 않고, 올라도
+    #: 해결 중에 고를 사람이 없어 거절된다. 둘 다 조립 층과 Agent 층의
+    #: 것이므로 ``deck`` 이 만들지 않고 **이 자리가 값으로** 넘긴다.
+    #:
+    #: 🔴 ``FirstPermittedChoice`` 는 **전략이 아니라 기준점**이다 —
+    #: ``first_meaningful`` 과 같은 자리다 (허용된 후보의 앞쪽을 집는다).
+    #: 아래 출력은 그 선택으로 실제로 일어난 일이고, 최선의 전개가 아니다.
+    setup = build_opening(
+        agent.repository,
+        parsed.draft,
+        hand_ids,
+        chooser=PolicyChooser(FirstPermittedChoice()),
+        triggers=TriggerSource(agent.repository),
+    )
     run = execute_opening(setup, agent.repository)
     #: 🔴 **한 줄 요약은 실측에서만 나온다.** 실행한 걸음 · 해결된 걸음 ·
     #: 상태가 바뀐 걸음을 각각 센다 (세 사실을 묶지 않는다 — 6-R).
@@ -627,6 +644,12 @@ def _executed_lines(agent, recipe_text: str,
             f"✅ **엔진이 실제로 {run.executed}걸음 실행**했습니다"
             f" (해결 {run.resolved} · 상태 변경 {run.state_changes})."
             " 아래는 실측 기록입니다."
+        )
+        lines.append(
+            "🔴 고른 방식은 **검증용 기준점**입니다 — 행동은"
+            " `first_meaningful` (판을 바꾸는 후보의 첫 번째), 해결 중의"
+            " 카드 선택은 `first-permitted` (허용된 후보의 앞쪽). **최선의"
+            " 전개가 아닙니다.**"
         )
     else:
         lines.append("🔴 **실행하지 않았습니다** — 입력 검증을 통과하지"

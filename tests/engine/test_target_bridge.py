@@ -685,22 +685,36 @@ def test_18b_a_target_only_the_effect_may_see_is_not_a_candidate(repository):
     ``legal_actions`` 가 정책에게 **그대로 건네는 데이터**다 — 거기에 덱의
     카드를 적으면 후보 목록을 읽는 것만으로 덱 내용이 새어 나간다.
 
-    그래서 다리가 **평소 관측으로 한 번 더 좁힌다.** 효과에게 준 권한은
-    해결 중에만 유효하다.
+    그래서 다리가 그 고르기를 **발동 시점에 짝지우지 않는다.** 효과에게 준
+    권한은 해결 중에만 유효하다.
 
     Phase 3-E-3 은 이 카드가 후보가 아닌 이유를 "대상을 건넬 길이 없다"
     (STRUCTURAL-121) 로 적었다. 길은 생겼고, 이제 이유가 **관측 경계**다.
+
+    🔴 **Phase 6-Z 가 그 경계를 지키는 방식을 바꿨다.** 예전에는 조합을
+    0건으로 만들어 발동 자체를 막았다 (후보가 없으므로 후보도 아니다). 지금은
+    그 고르기를 **해결 시점으로 옮긴다** — 발동은 되고, 행위에는 덱의 카드가
+    한 장도 실리지 않는다. 새는 것이 없다는 사실이 같고, 측정이 더 강하다.
     """
     duel, (spell,), _ = staged(repository, hand=(FOOLISH_BURIAL,), mine=())
     definition = DEFINITIONS.definition_for(EffectRef(FOOLISH_BURIAL, 0))
 
-    # 규칙은 이 효과에게 덱을 열어 준다.
-    binding = chosen_bindings(definition)[0]
+    # 규칙은 이 효과에게 덱을 열어 준다 — 그 선언은 그대로다.
+    binding = definition.targets[0]
     assert binding.spec.looked_at_zones() == frozenset({Zone.DECK})
 
-    # 그런데도 후보 조합이 없다 — 평소 관측에 보이지 않기 때문이다.
-    assert target_combinations(duel.state, MINE, definition, spell) == []
-    assert activations(duel) == []
+    # 🔴 그래서 발동 시점에 짝지울 자리가 **없다** (Phase 6-Z).
+    from engine.target_bridge import decided_at_resolution
+
+    assert decided_at_resolution(binding.spec) is True
+    assert chosen_bindings(definition) == ()
+
+    # 조합은 **빈 조합 하나**이고, 발동은 후보가 된다.
+    assert target_combinations(duel.state, MINE, definition, spell) == [()]
+    offered = activations(duel)
+    assert len(offered) == 1, offered
+    # 🔴 **그 행위에 덱의 카드가 없다.**
+    assert offered[0].targets == ()
 
     # 덱의 카드를 손으로 적어 넣으면 검증기가 막는다 (이중 방어).
     deck_card = duel.state.player(MINE).deck.cards()[0].instance_id

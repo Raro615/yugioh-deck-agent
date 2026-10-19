@@ -767,6 +767,7 @@ def cmd_combo(agent: DeckAgent, args) -> int:
 def _print_opening(agent: DeckAgent, recipe_text: str,
                    hand_ids: "list[int]") -> None:
     """🔴 **실제 엔진 실행 절** (Phase 6-T). 레시피가 없으면 그 사실을 적는다."""
+    from agent.choice import FirstPermittedChoice
     from deck.opening import build_opening, execute_opening, opening_hand_size
     from deck.recipe import parse_recipe
     from deck.report import (
@@ -774,6 +775,7 @@ def _print_opening(agent: DeckAgent, recipe_text: str,
         render_opening_run,
         render_opening_setup,
     )
+    from integration.autonomy import PolicyChooser, TriggerSource
 
     print()
     print("=" * 68)
@@ -798,8 +800,26 @@ def _print_opening(agent: DeckAgent, recipe_text: str,
         print("  🔴 레시피에서 카드를 하나도 읽지 못해 실행하지 않았습니다.")
         return
 
-    setup = build_opening(agent.repository, parsed.draft, hand_ids)
+    #: 🔴 **유발 발동과 해결 시점 선택을 꽂는다** (Phase 6-Z).
+    #:
+    #: 꽂지 않으면 유발 효과가 ``legal_actions`` 에 오르지 않고, 올라도
+    #: 해결 중에 고를 사람이 없어 거절된다. 둘 다 조립 층과 Agent 층의
+    #: 것이므로 ``deck`` 이 만들지 않고 **이 자리가 값으로** 넘긴다.
+    #:
+    #: 🔴 ``FirstPermittedChoice`` 는 **전략이 아니라 기준점**이다 —
+    #: ``first_meaningful`` 과 같은 자리다 (허용된 후보의 앞쪽을 집는다).
+    #: 아래 출력은 그 선택으로 실제로 일어난 일이고, 최선의 전개가 아니다.
+    setup = build_opening(
+        agent.repository,
+        parsed.draft,
+        hand_ids,
+        chooser=PolicyChooser(FirstPermittedChoice()),
+        triggers=TriggerSource(agent.repository),
+    )
     run = execute_opening(setup, agent.repository)
+    print("  🔴 고른 방식은 검증용 기준점입니다 — 행동은"
+          " first_meaningful, 해결 중의 카드 선택은 first-permitted."
+          " 최선의 전개가 아닙니다.")
     print(render_opening_setup(setup))
     print(render_opening_run(run))
     print(render_opening_board(setup, agent.repository))

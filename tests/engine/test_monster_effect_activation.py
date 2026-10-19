@@ -1225,9 +1225,36 @@ def test_n05_both_production_call_sites_pass_the_definition_source():
         and isinstance(node.func, ast.Name)
         and node.func.id == "ActionValidator"
     ]
-    assert len(calls) == 2, len(calls)
-    for call in calls:
-        assert [kw.arg for kw in call.keywords] == ["definitions"], ast.unparse(call)
+    #: 🔴 **만드는 자리를 하나로 묶었다** (Phase 6-Z). 6-Z 가 관측에 없는
+    #: 둘째 사실(``event_backed``)을 더하면서, 자리마다 손으로 넘기던 모양이
+    #: 위험해졌다 — 한 자리라도 빠뜨리면 **오류 없이 조용히** 후보 생성과
+    #: 재검증이 갈라지고, 그것이 STRUCTURAL-134 가 고친 어긋남이다.
+    #:
+    #: 그래서 ``Duel.activation_validator`` 하나가 만들고, 쓰는 자리는 그것을
+    #: 부른다. 이 시험은 **그 자리가 하나임**과 **둘을 다 넘김**을 센다.
+    assert len(calls) == 1, [ast.unparse(call) for call in calls]
+    assert sorted(kw.arg for kw in calls[0].keywords) == [
+        "definitions",
+        "event_backed",
+    ], ast.unparse(calls[0])
+
+    #: 그리고 **세 자리가 그 공장을 부른다** — 후보 생성 · 재검증 · 보고.
+    factory_users = sorted(
+        {
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+            and any(
+                isinstance(inner, ast.Attribute)
+                and inner.attr == "activation_validator"
+                for inner in ast.walk(node)
+            )
+        }
+    )
+    assert factory_users == ["_apply_activation", "legal_actions"], factory_users
+    reporting = (PROJECT_ROOT / "deck" / "opening.py").read_text(encoding="utf-8")
+    assert "duel.activation_validator(" in reporting
+    assert "ActionValidator(" not in reporting, "보고가 제 검증기를 만들면 갈라진다"
 
     activation_source = (PROJECT_ROOT / "engine" / "activation.py").read_text(
         encoding="utf-8"

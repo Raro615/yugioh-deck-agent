@@ -328,23 +328,28 @@ def test_10_the_integrator_builds_links_without_any_action():
     (Phase 3-E-20 이 그 위험을 미리 적었다).
 
     .. warning::
-       🔴 **Phase 6-Y 가 그것을 불렀다.** 이 테스트의 원래 문장은 "지금은
-       불리지 않으므로 모순이 아니다" 였고, 그 말이 **더 이상 참이 아니다**
-       — ``integration.autonomy`` 가 이 통합기를 만들어 체인을 세우고
-       ``ChainResolver`` 로 해결한다
-       (``test_trigger_connectivity_audit::test_04``).
+       🔴 **Phase 6-Y 가 그것을 불렀고, Phase 6-Z 가 되돌렸다.**
 
-       그래서 **두 번째 경로가 실제로 생겼다.** 6-Y 는 그것을 숨기지 않고
-       ``BLOCKER-6Y-1`` 로 적었다 — 올바른 해법은 유발 발동을
-       ``legal_actions`` 에 올려 경로를 **하나로 되돌리는** 것이고, 그것은
-       ``ACTIVATION_KINDS_IN_SCOPE`` 를 넓히는 공유 계약 변경이다.
+       6-Y 에서 ``integration.autonomy`` 가 이 통합기를 만들어 체인을 세우고
+       ``ChainResolver`` 로 해결했다 — 그것이 ``BLOCKER-6Y-1`` 이고, 이
+       테스트가 미리 적어 둔 위험이 실제로 일어난 자리였다.
 
-       그 경로가 **무검증은 아니다.** 후보는 ``TriggerEligibilityJudge`` 의
-       다섯 관문을 지나고, 정책이 고른 선택은 배선이 한 번
-       (``_judge_choice``) · 해결 계층이 또 한 번
-       (``TargetResolver`` · ``BoardRuling``) 본다. 그러나 그것은
-       ``ActionValidator`` 가 아니고, 이 테스트가 가리키는 위험은 **판정의
-       주체가 둘로 갈린다**는 것이다.
+       6-Z 가 유발 발동을 ``legal_actions`` 에 올려 경로를 **하나로
+       되돌렸다.** 그래서 지금 배선에는 ``ChainResolver(`` ·
+       ``integrator.plan(`` · ``extend(`` 호출이 **하나도 없고**
+       (``test_trigger_normal_path_integration::test_c05`` 가 센다), 체인을
+       쌓는 자리는 ``Duel`` 하나다. 판정의 주체도 하나로 돌아왔다 —
+       ``Duel.activation_validator`` 가 만든 ``ActionValidator`` 가 후보
+       생성과 재검증에 **같이** 쓰인다.
+
+       🔴 **그리고 넓힌 것은 ``ACTIVATION_KINDS_IN_SCOPE`` 가 아니었다.**
+       그 집합은 ``{IGNITION}`` 그대로이고 (넓히면 사건 없이도 유발이
+       발동된다), 대신 "지금 사건이 뒷받침하는 발동" 을 값으로 받는다
+       (``ActionValidator(event_backed=…)``).
+
+       🔴 **이 테스트의 본문은 여전히 참이다.** ``_entry`` 는 지금도
+       ``PlayerAction`` 을 받지 않으므로, **다시 연결하면** 같은 위험이 다시
+       생긴다. 그래서 이 테스트는 지워지지 않는다.
     """
     tree = ast.parse(
         (PROJECT_ROOT / "engine/trigger_chain.py").read_text(encoding="utf-8")

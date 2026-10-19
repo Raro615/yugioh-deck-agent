@@ -625,13 +625,21 @@ def test_b01_the_gate_is_shared_by_generation_and_execution():
     """
     🔴 **STRUCTURAL-134 의 해소가 코드에 남아 있다** (Phase 3-E-13).
 
-    ``_activation_gate`` 의 생산 호출이 둘이고, 하나는 후보 생성
-    (``_activation_actions``) 하나는 실행 (``_apply_activation``) 이다.
+    ``_activation_gate`` 의 생산 호출이 **셋**이고, 둘은 후보 생성
+    (``_activation_actions`` · ``_trigger_actions``) 하나는 실행
+    (``_apply_activation``) 이다.
+
+    🔴 **Phase 6-Z 가 셋째를 더했다.** 유발 후보는 사건에서 나오므로 판에서
+    후보를 만드는 ``_activation_actions`` 와 **출처가 다르다** — 그래서 함수를
+    갈랐다. 그러나 관문은 **하나**다: 새 함수가 제 관문을 세우면 그 순간
+    STRUCTURAL-134 가 되돌아온다 (목록을 만든 자리와 적용하는 자리가 서로 다른
+    판을 읽는 어긋남).
     """
     sites = sorted(call_sites("_activation_gate"))
     assert sites == [
         ("engine/duel.py", "_activation_actions"),
         ("engine/duel.py", "_apply_activation"),
+        ("engine/duel.py", "_trigger_actions"),
     ], sites
 
 

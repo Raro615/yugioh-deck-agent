@@ -247,13 +247,29 @@ def check_hand_against_recipe(
 
 
 def build_opening(
-    repository, draft: DeckDraft, hand: "list[int]", *, journal=None
+    repository,
+    draft: DeckDraft,
+    hand: "list[int]",
+    *,
+    journal=None,
+    chooser=None,
+    triggers=None,
 ) -> OpeningSetup:
     """
     레시피와 패로 **선공 1턴 메인 페이즈**를 만든다.
 
     🔴 위반이 하나라도 있으면 ``duel`` 을 만들지 **않는다.** 틀린 덱으로
     전개를 돌려서 나온 결과는 검증이 아니다.
+
+    ``chooser`` · ``triggers`` 는 **그대로 ``Duel`` 에 넘긴다** (Phase 6-Z).
+    여기서 만들지 않는 이유는 둘이 조립 층의 것이기 때문이다 —
+    ``integration.autonomy`` 의 ``PolicyChooser`` · ``TriggerSource``. 이
+    모듈이 그것을 직접 만들면 ``deck`` 이 ``integration`` 을 import 하게
+    되고, 지금 그 방향의 import 는 **0곳**이다.
+
+    🔴 **주지 않으면 6-Z 이전과 같다.** ``triggers`` 가 없으면 유발 후보가
+    ``legal_actions`` 에 오르지 않고, ``chooser`` 가 없으면 해결 시점의
+    선택이 그대로 거절된다. 없는 것을 기본값으로 메꾸지 않는다 (ADR-006).
     """
     from deck.validator import DeckValidator
     from engine.duel import Duel, TurnStep, duel_components
@@ -316,7 +332,8 @@ def build_opening(
         priority=PriorityState.idle(turn_player=0, phase=Phase.DRAW),
         step=TurnStep.OPEN,  # 🔴 선공 첫 턴은 뽑지 않는다 (룰북)
         first_player=0,
-        **duel_components(journal=journal or EventJournal()),
+        **duel_components(journal=journal or EventJournal(), chooser=chooser),
+        triggers=triggers,
     )
     walked = _walk_to_main1(duel)
     if walked is not None:
@@ -446,14 +463,15 @@ def _gate_code(duel, action, repository) -> str:
     검증기가 답하지 않으므로 (Phase 6-S §4) 그 사실을 적는다.
     """
     from engine.action import PlayerActionKind
-    from engine.action_validation import ActionValidator
     from engine.target_bridge import TargetBridgeError, selections_for
 
     if action.kind in (PlayerActionKind.PASS, PlayerActionKind.END_PHASE):
         return "FLOW"  # 흐름 계층이 답한다 — 검증기가 아니다
-    validator = ActionValidator(
-        duel.view(action.actor), definitions=duel._activator.definitions
-    )
+    #: 🔴 **듀얼이 쓰는 검증기를 그대로 받는다** (Phase 6-Z). 여기서 손으로
+    #: 만들면 관측에 없는 사실을 하나 빠뜨리기 쉽고 (``event_backed``), 그러면
+    #: 실제로 수락된 발동을 보고가 "규칙 계층이 없다" 로 적는다 — 실측으로
+    #: 그렇게 적혔다 (유발 발동이 ``RULE_NOT_IMPLEMENTED`` 로 보였다).
+    validator = duel.activation_validator(action.actor)
     if action.kind is not PlayerActionKind.ACTIVATE_EFFECT:
         return validator.validate(action).code.name
     definition = duel._activator.definitions.definition_for(action.effect_ref)

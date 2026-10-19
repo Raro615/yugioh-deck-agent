@@ -216,9 +216,38 @@ def test_02_engine_trigger_reaches_production_only_as_a_type():
 
 
 def test_03_the_duel_loop_never_mentions_the_trigger_layer():
-    """**§4 — ``engine/duel.py`` 에 ``trigger`` 라는 글자가 없다.**"""
+    """
+    **§4 — ``engine/duel.py`` 가 트리거 계층의 코드를 읽지 않는다.**
+
+    🔴 **Phase 6-Z 가 재는 모양을 바꿨다.** 6-Z 는 유발 후보를 ``Duel`` 에
+    **값으로** 넣었고 (``triggers: object | None``), 그래서 "trigger 라는
+    글자가 없다" 는 낱말 검사가 더 이상 통하지 않는다.
+
+    낱말 대신 **그 검사가 애초에 재려던 것**을 센다 — ``Duel`` 이 트리거
+    계층을 import 하는가, 그 타입 이름을 아는가. 둘 다 아니다. 받는 것은
+    ``offers(duel, seat)`` 를 가진 **아무 물건**이고, 그것을 만드는 일은
+    조립 층의 몫이다 (ADR-007). 예전 검사보다 약하지 않다: 트리거 계층의
+    이름이 하나라도 들어오면 여전히 깨진다.
+    """
     duel_source = (PROJECT_ROOT / "engine/duel.py").read_text(encoding="utf-8")
-    assert "trigger" not in duel_source.lower()
+
+    for name in (
+        "TriggerRegistry",
+        "TriggerCollector",
+        "TriggerChainIntegrator",
+        "TriggerEligibilityJudge",
+        "TriggerOrderer",
+        "TimingEvent",
+        "TimingPoint",
+        "timing_events",
+        #: 🔴 조립 층의 타입 이름도 모른다. (``_trigger_offers`` 는 ``Duel``
+        #: 자신의 메서드이고, ``integration`` 은 경계를 적어 둔 설명문에
+        #: 나오므로 둘은 여기 넣지 않는다 — 조립 층을 import 하지 않는다는
+        #: 사실은 아래 AST 검사가 센다.)
+        "TriggerSource",
+        "PolicyChooser",
+    ):
+        assert name not in duel_source, name
 
     tree = ast.parse(duel_source)
     imported = {
@@ -227,6 +256,14 @@ def test_03_the_duel_loop_never_mentions_the_trigger_layer():
         if isinstance(node, ast.ImportFrom) and node.module
     }
     assert not [m for m in imported if m in TRIGGER_MODULES], sorted(imported)
+    #: 🔴 조립 층도 효과 계층도 import 하지 않는다 (ADR-007).
+    assert not [
+        m
+        for m in imported
+        if m.startswith(("integration", "engine.effect", "core", "analysis"))
+    ], sorted(imported)
+    #: 🔴 **들고 있는 칸은 불투명하다** — 타입이 ``object`` 다.
+    assert "triggers: object | None = None" in duel_source
 
 
 def test_04_no_production_module_constructs_the_trigger_structures():
@@ -545,21 +582,36 @@ def test_11_chain_links_are_created_by_activation_from_a_player_action(repositor
     assert isinstance(duel.chain.links[0], ChainLink)
 
 
-def test_12_there_is_no_trigger_action_kind_and_no_trigger_legal_action():
+def test_12_there_is_no_trigger_action_kind_even_though_triggers_are_offered():
     """
-    **§9 — 트리거는 ``PlayerAction`` 이 되지 않는다. 될 자리도 없다.**
+    **§9 — 트리거용 ``PlayerActionKind`` 가 없다. 생기지도 않았다.**
 
-    ``PlayerActionKind`` 에 트리거용 종류가 없고, ``legal_actions`` 가 후보를
-    만드는 네 자리(패 · 공격 · 발동 · 흐름) 어디에도 트리거가 없다.
+    🔴 **Phase 6-Z 가 유발을 후보로 올렸다** — 그러나 **새 행위 종류를 만들지
+    않았다.** 유발 발동은 기존 ``ACTIVATE_EFFECT`` 이고, 그래서 탐색 ·
+    기록 · 검증이 전부 기존 계약을 그대로 쓴다. 새 종류를 만들었다면 그
+    계약을 읽는 모든 자리가 갈라졌을 것이다.
+
+    이 시험은 그 둘을 함께 센다: 종류는 늘지 않았고, 후보를 만드는 자리는
+    넷에서 **다섯**이 되었다 (사건에서 만드는 자리가 더해졌다).
     """
     kinds = {kind.value for kind in PlayerActionKind}
     assert not [k for k in kinds if "trigger" in k], kinds
 
     source = (PROJECT_ROOT / "engine/duel.py").read_text(encoding="utf-8")
     body = source.split("def legal_actions")[1].split("\n    def ")[0]
-    for helper in ("_activation_actions", "_attack_actions", "_flow_actions"):
-        assert helper in body
-    assert "trigger" not in body.lower()
+    for helper in (
+        "_activation_actions",
+        "_attack_actions",
+        "_flow_actions",
+        "_trigger_actions",
+    ):
+        assert helper in body, helper
+
+    #: 🔴 **그 자리가 만드는 것은 ``ACTIVATE_EFFECT`` 다.** 사건에서 왔다는
+    #: 사실이 행위의 모양을 바꾸지 않는다.
+    maker = source.split("def _trigger_actions")[1].split("\n    def ")[0]
+    assert "PlayerAction.activate_effect(" in maker
+    assert "PlayerActionKind" not in maker
 
 
 # ======================================================================

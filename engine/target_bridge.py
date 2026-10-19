@@ -85,6 +85,7 @@ from engine.effect.targeting import TargetResolver
 from engine.game_state_view import GameStateView
 from engine.ids import InstanceId
 from engine.state.game_state import GameState
+from engine.vocabulary import Zone
 
 
 #: 열거할 대상 조합 수의 **상한** (Phase 6-P).
@@ -176,6 +177,47 @@ class TargetBridgeError(RuntimeError):
     """
 
 
+#: **평소 관측이 가리는 자리들** (Phase 6-Z).
+#:
+#: 이 자리의 카드는 ``PlayerAction`` 이 가리킬 수 없다 — 적으면 정책이 후보
+#: 목록을 읽는 것만으로 그 내용을 알게 된다 (``STRUCTURAL-125``). 그래서
+#: 거기서 고르는 효과는 **해결 시점**에 고른다.
+#:
+#: 🔴 **패는 여기 없다.** 자기 패는 평소 관측에 보이므로 (``CandidateSource``
+#: 의 주인이 ``CONTROLLER`` 다) 발동 시점에 가리킬 수 있고, 실제로 그렇게
+#: 하고 있는 효과가 있다 (벌금 92595643 — 패 2장). 그 동작을 바꾸지 않는다.
+CONCEALED_ZONES: frozenset[Zone] = frozenset({Zone.DECK, Zone.EXTRA})
+
+
+def decided_at_resolution(spec) -> bool:
+    """
+    이 선택이 **해결 시점**에 정해지는가.
+
+    둘을 **함께** 본다.
+
+    1. 규칙상 **대상 지정이 아니다** (``CHOOSING``). 대상 지정은 발동 시점에
+       선언하는 것이고 (``EFFECT_FLAG_CARD_TARGET``), 고르기는 해결 중에
+       일어난다 — 공식 스크립트가 그 둘을 다른 자리에 적는다
+       (``SetTarget`` 대 ``SetOperation``).
+    2. 고르는 자리가 **평소 관측에 가려져 있다** (:data:`CONCEALED_ZONES`).
+
+    왜 둘 다인가 — 1번만 보면 벌금(패 2장)의 발동 시점 열거가 사라진다. 그
+    효과는 자기 패에서 고르므로 발동 시점에 가리킬 수 있고, 그 동작을
+    바꾸는 것은 이 Phase 의 범위가 아니다. 2번만 보면 대상 지정인데 덱을
+    보는 효과가 조용히 미뤄진다 (등재된 효과에 그런 모양은 **0건**이지만
+    조건을 적어 둔다).
+
+    🔴 **이것은 규칙 판정이 아니라 전달 방식의 결정이다.** 미뤄진 선택도
+    같은 ``TargetResolver`` 가 같은 ``looked_at`` 으로 세고 같은 규칙으로
+    검증한다 — 바뀌는 것은 **언제 묻는가**뿐이다.
+    """
+    if spec.is_targeting or spec.is_random or spec.is_bulk:
+        return False
+    if spec.choice is None:
+        return False
+    return bool(spec.looked_at_zones() & CONCEALED_ZONES)
+
+
 def chosen_bindings(
     definition,
 ) -> "tuple[TargetBinding, ...]":
@@ -184,11 +226,17 @@ def chosen_bindings(
 
     ``at_random`` · ``at_bulk`` 는 빠진다 — 발동 시점에 정하지 않으므로
     ``PlayerAction`` 이 가리킬 것이 없다.
+
+    🔴 **해결 시점에 정해지는 고르기도 빠진다** (Phase 6-Z,
+    :func:`decided_at_resolution`). 같은 이유다 — 가려진 자리의 카드를
+    ``PlayerAction`` 이 가리킬 수 없으므로, 발동 시점에 짝지울 것이 없다.
     """
     return tuple(
         binding
         for binding in definition.targets
-        if not binding.spec.is_random and not binding.spec.is_bulk
+        if not binding.spec.is_random
+        and not binding.spec.is_bulk
+        and not decided_at_resolution(binding.spec)
     )
 
 
@@ -400,6 +448,8 @@ __all__ = [
     "unsupported_enumeration",
     "target_combinations",
     "chosen_bindings",
+    "CONCEALED_ZONES",
+    "decided_at_resolution",
     "required_target_count",
     "selections_for",
     "targets_from",

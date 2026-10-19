@@ -43,9 +43,27 @@
 의 일이고 이 모듈은 그것을 대신하지 않는다. 하는 일은 그 순환이 만든 **사건
 하나**에서 유발을 꺼내 정책에게 묻고, 결정을 엔진에 돌려주는 것이다.
 
-**상대 응답과 우선권을 돌리지 않는다.** 그것은 ``Duel`` 안의 응답 순환이고,
-유발 발동이 ``Duel.apply`` 를 지나게 되는 날 함께 열린다 (6-Y 보고서 §12 의
-``BLOCKER-6Y-1``).
+6-Z 가 연 것 — **정상 경로로 들어갔다**
+----------------------------------------
+6-Y 의 ``run_trigger`` 는 ``plan`` · ``extend`` · ``ChainResolver`` 를 직접
+불러 **``legal_actions`` 를 지나지 않는 둘째 길**을 만들었다 (보고서 §12 의
+``BLOCKER-6Y-1`` — Phase 3-E-20 이 미리 경고해 둔 자리다). 6-Z 가 그 길을
+닫았다::
+
+    TriggerSource.offers      Duel.triggers 가 읽는다 → legal_actions 에
+          ↓                   유발 후보가 오른다 (사건이 있을 때만)
+    Duel.apply                같은 관문으로 재검증하고 체인에 올린다
+          ↓                   상대에게 응답 기회가 열린다 (RULE-CHAIN-001)
+    상대의 PASS → 내 PASS       둘 다 그만하겠다고 해야 풀린다
+          ↓                   (RULE-CHAIN-001)
+    ChainResolver → EffectExecutor
+          ↓  PolicyChooser.choose   **해결 중에** 비로소 묻는다
+    정책이 고른다 → 엔진이 다시 본다
+
+그래서 이 모듈은 이제 체인을 **쌓지 않는다.** 쌓는 자리는 ``Duel`` 하나다.
+
+**상대 응답과 우선권도 ``Duel`` 이 돌린다.** 이 모듈은 그 순환에 행위를
+넣고 결과를 읽기만 한다.
 """
 
 from __future__ import annotations
@@ -53,16 +71,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
-from engine.chain import Chain, ChainResolver
 from engine.condition import ConditionContext, ConditionResult
 from engine.effect.ruling import BoardRuling, RuleQuestion
 from engine.effect.semantics import declared_gate_question
-from engine.effect.target import TargetSelection
 from engine.effect.targeting import TargetResolver
-from engine.cost import Selection
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
 from engine.trigger import TimingEvent, TriggerRequirement, TriggerStatus, timing_events
+from engine.validation import ValidationCode
 from engine.trigger_chain import TriggerChainIntegrator
 
 from integration.trigger_registry import registry_for_view
@@ -146,6 +162,22 @@ class TriggerOffer:
     @property
     def requirement_known(self) -> bool:
         return self.requirement is not TriggerRequirement.UNKNOWN
+
+    @property
+    def event_key(self) -> TimingEvent:
+        """
+        **그 사건을 가리키는 값** (Phase 6-Z). ``Duel.consumed_events`` 가
+        이것으로 같은 사건의 중복 발동을 막는다.
+
+        🔴 **사건 자체다** — 새 식별자를 만들지 않는다. ``TimingEvent`` 는
+        불변이고 값 동치이므로 (``frozen=True``), 같은 기록을 다시 펼치면
+        **같은 값**이 나온다. 그것이 요구 조건이다: 후보를 두 번 물으면
+        같은 열쇠가 나와야 하고, 다른 소환은 다른 열쇠여야 한다.
+
+        따로 번호를 붙이면 그 번호를 **어디에 적어 두어야** 하고, 적어 둔
+        곳이 ``Duel`` 밖이면 두 기록이 갈라진다.
+        """
+        return self.event
 
 
 @runtime_checkable
@@ -290,53 +322,181 @@ def choice_offer_for(
         spec,
         ConditionContext(player=seat, source=source, effect_ref=effect_ref),
     )
-    question = _movement_question(definition)
-    ruling = BoardRuling(granted, _rulings())
-    candidates: list[ChoiceCandidate] = []
-    for instance in found.eligible:
-        card = granted.find(instance)
-        if question is None:
-            verdict, reason = ConditionResult.UNKNOWN, (
-                "이 조작에 대응하는 규칙 질문이 없어 움직일 수 있는지 "
-                "판정하지 않았습니다."
-            )
-        else:
-            explained = ruling.explain(question, instance)
-            verdict, reason = explained.answer, explained.reason
-        candidates.append(
-            ChoiceCandidate(
-                instance=instance,
-                card_id=card.card_id if card is not None else None,
-                verdict=verdict,
-                reason=reason,
-            )
-        )
     return ChoiceOffer(
         effect_ref=effect_ref,
         target_ref=binding.ref,
         view=granted,
-        candidates=tuple(candidates),
+        candidates=_judged_candidates(
+            granted, found.eligible, _movement_question(definition)
+        ),
         minimum=spec.choice.minimum,
         maximum=spec.choice.maximum,
     )
 
 
+def choice_offer_from_request(request) -> ChoiceOffer:
+    """
+    **엔진이 해결 중에 보낸 요청**을 정책이 읽는 모양으로 옮긴다 (Phase 6-Z).
+
+    ``request`` 는 :class:`~engine.effect.executor.ResolutionChoice` 다 —
+    효과 · 대상 칸 · 규칙이 열어 준 관측 · 후보 · 장수. 엔진이 이미 다
+    세어 두었으므로 **여기서 후보를 다시 세지 않는다.**
+
+    :func:`choice_offer_for` 와 **같은 모양**을 만든다 — 정책은 두 길을
+    구별하지 않는다. 다른 것은 후보를 누가 세었는가 하나다.
+
+    ==================  ===========================================
+    ``choice_offer_for``  조립 층이 ``TargetResolver`` 를 불러 센다.
+                          발동 **전에** 미리 보여 줄 때 쓴다
+    이 함수                엔진이 해결 중에 세어 보내 준 것을 옮긴다.
+                          그것이 **실제 해결 시점**이다
+    ==================  ===========================================
+    """
+    definition = _definition(request.effect_ref)
+    return ChoiceOffer(
+        effect_ref=request.effect_ref,
+        target_ref=request.target_ref,
+        view=request.view,
+        candidates=_judged_candidates(
+            request.view, request.candidates, _movement_question(definition)
+        ),
+        minimum=request.minimum,
+        maximum=request.maximum,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ChoiceRecord:
+    """
+    **해결 중에 실제로 일어난 선택 하나**의 기록 (Phase 6-Z).
+
+    재현에 필요한 것만 담는다 — 무엇을 물었고(``offer``) 무엇을 골랐는가
+    (``chosen``). 같은 판 · 같은 정책이면 같은 기록이 나온다.
+
+    🔴 **이 기록은 AI 의 관측이 아니다.** ``offer.view`` 는 규칙이 그 효과에
+    열어 준 관측이고 (``looked_at``), 그 안에는 덱이 보인다. 그래서 이
+    기록은 **보고와 재현을 위해 조립 층이** 들고 있는 것이고, 어느 정책에도
+    되돌려주지 않는다. 정책이 보는 것은 그때 그 요청 하나뿐이다.
+    """
+
+    effect_ref: EffectRef
+    target_ref: object
+    offer: ChoiceOffer
+    chosen: "tuple[InstanceId, ...]"
+
+
+class PolicyChooser:
+    """
+    엔진의 **해결 시점 요청**을 정책에게 옮기는 것 (Phase 6-Z).
+
+    :class:`~engine.effect.executor.ResolutionChooser` 모양이다 —
+    ``choose(request) -> (InstanceId, …)`` 하나. 그 요청은 ``EffectExecutor``
+    가 **계획 중에** 보내므로, 이 자리가 불리는 때가 곧 해결 시점이다.
+
+    🔴 **옮기기만 한다.** 고른 것을 다시 보지 않는다 — 그것은 엔진의 일이고
+    엔진이 **이미 한다**: 후보 목록 밖은 ``CANDIDATE_NOT_ELIGIBLE``, 장수와
+    중복은 ``TargetResolver.validate`` 의 ``_check_count``, 움직일 수 있는지는
+    해결 중의 ``BoardRuling`` 관문 (6-X). 이쪽에서 한 번 더 걸러 버리면 엔진이
+    무엇을 거절하는지가 가려진다.
+
+    🔴 **판을 받지 않는다.** 요청에 실린 관측만 정책에게 준다. 그래서 정책은
+    ``GameState`` 도 ``Duel`` 도 만질 수 없다.
+
+    물은 것과 고른 것은 :attr:`records` 에 남는다 — 그것이 "선택이 **해결
+    중에** 일어났다" 는 증거이고, 재현의 좌표다.
+    """
+
+    __slots__ = ("selector", "_records")
+
+    def __init__(self, selector: ChoiceSelector):
+        if not hasattr(selector, "choose_cards"):
+            raise AutonomyError(
+                "choose_cards(offer) 를 가진 정책이 필요합니다: "
+                f"{type(selector).__name__}"
+            )
+        self.selector = selector
+        self._records: list[ChoiceRecord] = []
+
+    @property
+    def records(self) -> tuple[ChoiceRecord, ...]:
+        """물은 것과 고른 것, 순서대로."""
+        return tuple(self._records)
+
+    def choose(self, request) -> "tuple[InstanceId, ...]":
+        offer = choice_offer_from_request(request)
+        chosen = tuple(self.selector.choose_cards(offer))
+        self._records.append(
+            ChoiceRecord(
+                effect_ref=request.effect_ref,
+                target_ref=request.target_ref,
+                offer=offer,
+                chosen=chosen,
+            )
+        )
+        return chosen
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        name = getattr(self.selector, "name", type(self.selector).__name__)
+        return f"<PolicyChooser {name} asked={len(self._records)}>"
+
+
+@dataclass(frozen=True, slots=True)
+class TriggerSource:
+    """
+    ``Duel.triggers`` 가 기대하는 모양 — ``offers(duel, seat)`` (Phase 6-Z).
+
+    🔴 **이것이 유발을 정상 경로에 올리는 전부다.** ``Duel`` 은 등록 정보를
+    읽지 못하므로 (``engine`` 은 ``core`` 를 import 하지 않는다 — ADR-007),
+    사건에서 유발을 꺼내는 일을 조립 층에 맡기고 **값으로** 받는다. 이 칸이
+    비어 있으면 유발 후보가 아예 오르지 않는다 (6-Z 이전과 같다).
+
+    🔴 **묻는 것만으로 아무것도 바뀌지 않는다.** :func:`trigger_offers` 는
+    사건 기록을 읽기만 하고, 같은 사건을 두 번 쓰지 않게 막는 것은 ``Duel``
+    의 ``consumed_events`` 다 — 이쪽이 상태를 들고 있지 않다.
+    """
+
+    repository: object
+
+    def offers(self, duel, seat: int) -> tuple[TriggerOffer, ...]:
+        return trigger_offers(duel, self.repository, seat)
+
+
 def run_trigger(
-    duel, repository, seat: int, offer: TriggerOffer, selector: ChoiceSelector
+    duel, repository, seat: int, offer: TriggerOffer, selector: ChoiceSelector, *,
+    chooser: "PolicyChooser | None" = None,
 ) -> TriggerRun:
     """
-    유발 하나를 **정책에게 묻고 엔진으로 실행한다.**
+    유발 하나를 **정상 Duel 경로로** 발동한다 (Phase 6-Z).
 
-    순서가 요점이다.
+    순서가 요점이고, **6-Y 와 달라진 것이 그 순서다.**
 
-    1. 정책에게 **발동할 것인가**를 묻는다 (덱을 보여 주기 전에).
-    2. 발동하겠다면 규칙이 선언한 ``looked_at`` 을 열고 후보를 만든다.
-    3. 정책에게 **어느 카드인가**를 묻는다.
-    4. 고른 것이 후보 목록에 있는지, 장수가 맞는지 **다시 본다.**
-    5. 엔진의 ``plan`` · ``extend`` · ``ChainResolver`` 로 해결한다.
+    1. 정책에게 **발동할 것인가**를 묻는다 (덱을 보여 주기 **전에**).
+    2. ``duel.legal_actions(seat)`` 에 그 발동이 올라 있는지 본다 — 사건이
+       없거나 이미 쓴 사건이면 올라 있지 않다.
+    3. ``duel.apply`` 로 발동한다. 같은 관문이 **다시** 판정하고, 체인에
+       링크가 오르고, **상대에게 응답 기회가 열린다** (RULE-CHAIN-001).
+    4. 응답 기회를 지난다 — 둘 다 **패스**해야 체인이 풀린다
+       (RULE-CHAIN-001). 🔴 패스도 ``legal_actions`` 를 지나 ``apply`` 로
+       넣는다 — 손으로 우선권을 돌리지 않는다. 상대가 실제로 응답하는
+       경로는 이 함수가 돌리지 않는다 (그것은 ``DuelRunner`` 의 일이다).
+    5. 체인이 풀리는 **그 안에서** ``EffectExecutor`` 가 선택을 묻고
+       (``PolicyChooser``), 고른 것을 엔진이 다시 본다.
 
-    🔴 4번이 없으면 정책의 말이 허가가 된다.
+    🔴 **3번이 6-Y 와 다른 전부다.** 6-Y 는 ``plan`` · ``extend`` ·
+    ``ChainResolver`` 를 직접 불러 ``legal_actions`` 를 **지나지 않는 둘째
+    길**을 만들었다 (Phase 3-E-20 이 경고한 자리). 지금은 체인을 쌓는 자리가
+    ``Duel`` 하나다.
+
+    🔴 **5번이 6-Y 와 다른 나머지다.** 6-Y 는 체인을 쌓기 **전에** 골랐으므로
+    그것은 해결 시점의 선택이 아니었다. 지금은 해결 중에 묻는다 — 그 증거가
+    ``chooser.records`` 이고, 후보는 **그때의 판**에서 세어진다.
+
+    ``chooser`` 는 이 듀얼에 꽂아 둔 :class:`PolicyChooser` 다. 주면 무엇을
+    묻고 무엇을 골랐는지 결과에 적는다. 주지 않으면 그 칸이 빈다 — **듀얼의
+    동작은 달라지지 않는다** (선택을 받는 쪽은 듀얼 안의 실행기다).
     """
+    from engine.action import PlayerAction
+
     wants = bool(selector.accept_offer(offer))
     if not wants:
         return TriggerRun(
@@ -345,88 +505,113 @@ def run_trigger(
             notes=("정책이 발동하지 않기로 했다",),
         )
 
-    choice = choice_offer(duel, seat, offer)
-    if choice is None:
-        chosen: tuple[InstanceId, ...] = ()
-        selections: tuple[TargetSelection, ...] = ()
-    else:
-        chosen = tuple(selector.choose_cards(choice))
-        refusal = _judge_choice(choice, chosen)
-        if refusal is not None:
-            return TriggerRun(
-                offer=offer,
-                activated=True,
-                choice=choice,
-                chosen=chosen,
-                refused=refusal,
-            )
-        selections = (
-            TargetSelection(choice.target_ref, Selection.of(*chosen)),
-        )
-
-    view = duel.view(seat)
-    build = registry_for_view(view, repository)
-    integrator = _integrator(view, build.registry)
-    ordering = integrator.collect_and_order(offer.event)
-    plan = integrator.plan(
-        Chain(), ordering, selections={offer.effect_ref: selections}
+    action = PlayerAction.activate_effect(
+        actor=seat, source=offer.source, effect_ref=offer.effect_ref
     )
-    chain = integrator.extend(Chain(), plan)
-    if not len(chain):
-        reasons = "; ".join(entry.reason for entry in plan.entries) or "이유 없음"
+    legal = duel.legal_actions(seat)
+    if action not in legal.allowed:
         return TriggerRun(
             offer=offer,
             activated=True,
-            choice=choice,
-            chosen=chosen,
             refused=SelectionRefused(
-                f"체인에 오르지 못했습니다: {reasons}", chosen
+                "이 발동은 지금 허가된 행위가 아닙니다 (사건이 없거나 이미 "
+                f"쓴 사건입니다). 허가된 행위 {len(legal.allowed)}건."
             ),
+            notes=("legal_actions 에 오르지 않았다",),
         )
 
-    resolution = ChainResolver(_executor(duel.journal), _definitions()).resolve_top(
-        duel.state, chain
+    step = duel.apply(action)
+    if not step.accepted:
+        return TriggerRun(
+            offer=offer,
+            activated=True,
+            refused=SelectionRefused(f"{step.code.value}: {step.reason}"),
+            notes=("Duel.apply 가 거절했다",),
+        )
+
+    notes = [f"legal_actions → apply 로 발동했다 (후보 {len(legal.allowed)}건)"]
+    links = len(duel.chain)
+
+    # ④ **응답 기회를 지난다.** 둘 다 패스해야 풀린다 (RULE-CHAIN-001).
+    #    패스도 ``legal_actions`` 를 지나 ``apply`` 로 넣는다 — 손으로
+    #    우선권을 돌리지 않는다.
+    last = step
+    passes = 0
+    while duel.priority.is_open and passes < 4:
+        holder = duel.priority.holder.seat
+        passing = PlayerAction.passing(actor=holder)
+        if passing not in duel.legal_actions(holder).allowed:  # pragma: no cover
+            notes.append(f"P{holder} 의 패스가 허가되지 않았다")
+            break
+        last = duel.apply(passing)
+        passes += 1
+        notes.append(f"P{holder} 가 패스했다")
+        if not last.accepted:  # pragma: no cover
+            break
+
+    record = None if chooser is None else next(
+        (r for r in reversed(chooser.records) if r.effect_ref == offer.effect_ref),
+        None,
     )
+    chosen = () if record is None else record.chosen
+
+    # 🔴 **해결이 거절된 이유를 엔진에게서 받는다.** 배선이 따로 판정하지
+    # 않으므로 (``PolicyChooser`` 가 옮기기만 한다), 거절 문장은 엔진이 쓴
+    # 것이다 — ``TargetResolver._check_count`` · ``BoardRuling`` 관문 ·
+    # ``_ask_for_choice`` 의 후보 검사.
+    resolved = bool(passes) and last.code is ValidationCode.OK
     return TriggerRun(
         offer=offer,
         activated=True,
-        choice=choice,
+        choice=None if record is None else record.offer,
         chosen=chosen,
-        links=len(chain),
-        resolution=resolution.result.status.name,
-        resolution_reason=resolution.result.reason,
+        links=links,
+        resolution="RESOLVED" if resolved else None,
+        resolution_reason=last.reason,
+        refused=(
+            None if resolved else SelectionRefused(f"{last.code.value}: {last.reason}", chosen)
+        ),
+        notes=tuple(notes),
     )
 
 
 # ======================================================================
 # 내부 — 전부 이미 있는 것을 부른다
 # ======================================================================
-def _judge_choice(
-    offer: ChoiceOffer, chosen: "tuple[InstanceId, ...]"
-) -> "SelectionRefused | None":
-    """정책이 고른 것을 **다시 본다.** 정책의 말은 허가가 아니다."""
-    if len(set(chosen)) != len(chosen):
-        return SelectionRefused("같은 카드를 두 번 골랐습니다.", chosen)
-    if len(chosen) < offer.minimum:
-        return SelectionRefused(
-            f"{len(chosen)}장 골랐습니다 (최소 {offer.minimum}장).", chosen
-        )
-    if len(chosen) > offer.maximum:
-        return SelectionRefused(
-            f"{len(chosen)}장 골랐습니다 (최대 {offer.maximum}장).", chosen
-        )
-    known = {c.instance: c for c in offer.candidates}
-    for instance in chosen:
-        candidate = known.get(instance)
-        if candidate is None:
-            return SelectionRefused(
-                f"{instance} 는 후보 목록에 없습니다.", chosen
+def _judged_candidates(
+    view: GameStateView, instances, question: "RuleQuestion | None"
+) -> tuple[ChoiceCandidate, ...]:
+    """
+    후보마다 **움직일 수 있는가**를 붙인다. 판정은 ``BoardRuling`` 이 한다.
+
+    🔴 ``TRUE`` 가 아닌 후보도 **목록에 남긴다** — 왜 못 고르는지가
+    정책에게도 보여야 하고, 지워 버리면 "후보가 없다" 와 "후보는 있는데
+    규칙이 막는다" 를 가를 수 없다.
+
+    질문이 없으면 ``UNKNOWN`` 이다 — 그 조작에 대응하는 규칙 질문이 이
+    엔진에 없다는 뜻이고, **없는 것을 허가로 바꾸지 않는다.**
+    """
+    ruling = BoardRuling(view, _rulings())
+    judged: list[ChoiceCandidate] = []
+    for instance in instances:
+        card = view.find(instance)
+        if question is None:
+            verdict, reason = ConditionResult.UNKNOWN, (
+                "이 조작에 대응하는 규칙 질문이 없어 움직일 수 있는지 "
+                "판정하지 않았습니다."
             )
-        if not candidate.permitted:
-            return SelectionRefused(
-                f"{instance} 는 고를 수 없습니다: {candidate.reason}", chosen
+        else:
+            explained = ruling.explain(question, instance)
+            verdict, reason = explained.answer, explained.reason
+        judged.append(
+            ChoiceCandidate(
+                instance=instance,
+                card_id=card.card_id if card is not None else None,
+                verdict=verdict,
+                reason=reason,
             )
-    return None
+        )
+    return tuple(judged)
 
 
 def _movement_question(definition) -> "RuleQuestion | None":
@@ -484,12 +669,16 @@ __all__ = [
     "AutonomyError",
     "ChoiceCandidate",
     "ChoiceOffer",
+    "ChoiceRecord",
     "ChoiceSelector",
+    "PolicyChooser",
     "SelectionRefused",
     "TriggerOffer",
     "TriggerRun",
+    "TriggerSource",
     "choice_offer",
     "choice_offer_for",
+    "choice_offer_from_request",
     "run_trigger",
     "trigger_offers",
 ]

@@ -160,9 +160,9 @@ class ActionValidator:
     - :meth:`requirements` — 종류별 요구 목록 (설명 · 디버깅용).
     """
 
-    __slots__ = ("_view", "_evaluator", "_definitions")
+    __slots__ = ("_view", "_evaluator", "_definitions", "_event_backed")
 
-    def __init__(self, view: GameStateView, *, definitions=None):
+    def __init__(self, view: GameStateView, *, definitions=None, event_backed=()):
         if not isinstance(view, GameStateView):
             raise TypeError(
                 "ActionValidator 는 GameStateView 만 받습니다. GameState 를 "
@@ -177,6 +177,7 @@ class ActionValidator:
         self._view = view
         self._evaluator = ConditionEvaluator(view)
         self._definitions = definitions
+        self._event_backed = frozenset(event_backed)
 
     @property
     def view(self) -> GameStateView:
@@ -205,6 +206,27 @@ class ActionValidator:
         동작 그대로다.
         """
         return self._definitions
+
+    @property
+    def event_backed(self) -> frozenset:
+        """
+        지금 **실제 사건이 열어 준** 발동들. ``(source, effect_ref)`` 짝의
+        모음이고, 비어 있는 것이 기본이다 (Phase 6-Z).
+
+        왜 관측이 아니라 값인가 — "이 효과를 지금 발동할 사건이 있는가" 는
+        판 위의 사실이 아니라 **사건 기록과 유발 계층의 판정**이다
+        (``EventJournal`` · ``TriggerEligibilityJudge``). 둘 다
+        ``GameStateView`` 밖에 살고, 검증기는 관측만 읽는다 (ADR-007).
+        그래서 ``definitions`` · ``ActivationTiming.set_this_turn`` 과
+        **같은 방식**으로, 그것을 들고 있는 흐름 계층이 값으로 넘긴다.
+
+        🔴 **주지 않으면 판정이 넓어지지 않는다.** 비어 있으면 유발 효과는
+        "사건이 시점을 정한다" 로 범위 밖이고, 그것이 6-Z 이전의 동작
+        그대로다. 거꾸로 여기에 짝이 들었다고 **발동이 허가되는 것도
+        아니다** — 사건은 시점을 열 뿐이고, 조건 · 비용 · 대상 · 스펠
+        스피드는 각자의 계층이 따로 본다.
+        """
+        return self._event_backed
 
     # ==================================================================
     # 1층 — 모양
@@ -907,7 +929,10 @@ def _activate_effect(
     # 이 함수만 그것을 보지 않고 있었다. PlayerAction 계약은 바뀌지 않는다.
     activation_kind = _declared_activation_kind(validator, action)
     waits_for_event = _declared_activation_event(validator, action)
-    scope = _NormalSpellActivation(action.source, activation_kind, waits_for_event)
+    event_backed = _activation_has_event(validator, action)
+    scope = _NormalSpellActivation(
+        action.source, activation_kind, waits_for_event, event_backed
+    )
     always = (
         Requirement(
             ControllerIs(PlayerRef.CONTROLLER, action.source),
@@ -925,7 +950,12 @@ def _activate_effect(
     )
     context = validator.context_for(action)
     if _activation_out_of_scope(
-        validator.view, context, action.source, activation_kind, waits_for_event
+        validator.view,
+        context,
+        action.source,
+        activation_kind,
+        waits_for_event,
+        event_backed,
     ):
         return always
 
@@ -955,6 +985,38 @@ def _activate_effect(
     # ``tests/engine/test_trap_activation_free_chain.py`` 가 센다.
     if activation_is_set_trap(
         validator.view, context, action.source, waits_for_event
+    ):
+        return always
+
+    # **사건이 열어 준 유발 효과도 좁은 요구를 걸지 않는다** (Phase 6-Z).
+    #
+    #   RULE-EFFECT-004 — 유발 효과는 *"specific times"* 에 발동하고, 그
+    #   시점을 고르는 것은 플레이어가 아니라 **사건**이다.
+    #
+    # 그러므로 기동 효과에 걸던 둘을 걸지 않는다.
+    #
+    #   IsTurnPlayer   사건은 **상대 턴에도** 일어난다. 걸면 상대 턴에
+    #                  일어난 사건의 유발을 '규칙이 금지한다' 고 거짓말한다
+    #   PhaseIs        사건은 메인 페이즈에만 일어나지 않는다 (전투 · 엔드)
+    #
+    # 빈 칸도 걸지 않는다 — 효과의 발동은 카드를 어디에도 놓지 않는다
+    # (기동 효과와 같은 이유).
+    #
+    # 🔴 **걸지 않는 것이 허가가 아니다.** 이 분기가 ``always`` 만
+    # 돌려주는 것은 "이 관문이 유발에 더할 좁은 규칙이 없다" 는 뜻이고,
+    # 실제 제약은 다른 계층에 **이미 있다** (세트된 함정과 같은 자리다):
+    #
+    #   사건이 있는가 · 사건과의 관계 · 발동 자리 · 유발 조건 · 실행 권한
+    #                    TriggerEligibilityJudge 의 다섯 관문. 그 판정을
+    #                    지난 짝만 ``event_backed`` 에 들어온다
+    #   같은 사건의 중복   Duel.consumed_events (RULE-EFFECT-004 — 한 사건이
+    #                    같은 효과를 두 번 열지 않는다)
+    #   스펠 스피드 · 체인  ActivationTimingChecker (RULE-CHAIN-005) · Duel
+    #   조건 · 비용 · 대상  EffectActivator.can_activate
+    #
+    # 그 넷 중 하나라도 없다면 이 분기를 열어서는 안 됐다.
+    if activation_is_event_backed_trigger(
+        validator.view, context, action.source, activation_kind, event_backed
     ):
         return always
 
@@ -1528,6 +1590,66 @@ def _declared_activation_event(validator, action) -> "bool | None":
     return getattr(definition, "activation_waits_for_event", None)
 
 
+def _activation_has_event(validator, action) -> bool:
+    """
+    이 발동을 **실제 사건이 열어 주었는가** (Phase 6-Z). 모르면 ``False``.
+
+    ``_declared_activation_kind`` · ``_declared_activation_event`` 와 **같은
+    모양**이지만 읽는 곳이 다르다 — 그 둘은 정의 등록소(불변 지식)를 읽고,
+    이쪽은 흐름 계층이 넘겨 준 **지금의 사건 목록**을 읽는다
+    (:attr:`ActionValidator.event_backed`).
+
+    짝으로 묻는다 — ``(source, effect_ref)``. 카드만 맞고 효과가 다른
+    발동, 효과만 맞고 **다른 인스턴스**인 발동은 둘 다 사건이 열어 준 것이
+    아니다. 어느 한쪽만 보면 같은 카드 두 장 중 사건을 맞지 않은 쪽이
+    발동할 수 있게 된다.
+
+    ``False`` 가 되는 길이 여럿이고 **전부 "사건이 없다"** 다 — 목록을
+    받지 못했거나, 비었거나, 이 짝이 들어 있지 않다. 접은 결과가 더
+    넓어지지 않는다: ``False`` 는 **범위 밖**이다.
+    """
+    if action.source is None or action.effect_ref is None:
+        return False
+    backing = getattr(validator, "event_backed", None)
+    if not backing:
+        return False
+    return (action.source, action.effect_ref) in backing
+
+
+def activation_is_event_backed_trigger(
+    view, context, instance, activation_kind=None, event_backed=False
+) -> bool:
+    """
+    이 발동이 **사건이 열어 준 몬스터의 유발 효과**인가 (Phase 6-Z).
+
+    :func:`activation_is_monster_ignition` 과 같은 자리의 술어다 — 범위를
+    정하는 곳과 요구를 만드는 곳이 **같은 함수**를 쓴다. 두 곳이 각자
+    판단하면 범위와 요구가 갈라진다 (6-K 가 기동 효과에서 겪은 자리다).
+
+    셋을 **다 같이** 본다.
+
+    ====================  =============================================
+    분류가 ``TRIGGER``     분류만 맞아도 안 되고, 분류가 틀리면 사건이
+                          있어도 이 길이 아니다
+    사건이 있다            ``event_backed`` — 유발 계층의 판정을 지난 짝
+    몬스터 효과다          이번 범위는 몬스터의 유발 하나다. 마법 · 함정의
+                          유발은 각자의 경로가 따로 있고, 그 경로에
+                          사건을 넣는 것은 이번 변경의 범위가 아니다
+    ====================  =============================================
+
+    🔴 **자리를 여기서 보지 않는다.** 기동 효과는 메인 몬스터 존으로
+    좁혔지만 (:data:`IGNITION_ACTIVATION_ZONES`), 유발 효과의 발동 자리는
+    효과마다 다르고 (패 · 필드 · 묘지 · 제외) 그것을 판정하는 계층이
+    **이미 있다** — ``TriggerEligibilityJudge`` 의 ``ACTIVATION_ZONE``
+    관문이다. 그 판정을 지난 짝만 ``event_backed`` 에 들어오므로, 여기서
+    다시 좁히면 규칙이 두 곳에 적히고 둘이 갈라진다.
+    """
+    if activation_kind is not ActivationKind.TRIGGER or not event_backed:
+        return False
+    definition, _ = _resolve_definition(view, context, instance)
+    return definition is not None and definition.is_monster
+
+
 def activation_is_set_trap(view, context, instance, waits_for_event=None) -> bool:
     """
     이 발동이 **세트된 일반 함정의 카드 발동**인가 (Phase 6-Q).
@@ -1634,7 +1756,7 @@ def _trap_activation_out_of_scope(
 
 
 def _monster_activation_out_of_scope(
-    view, context, instance, definition, activation_kind
+    view, context, instance, definition, activation_kind, event_backed=False
 ) -> tuple[tuple[str, str], ...]:
     """
     **몬스터 효과**의 발동을 범위 밖으로 만드는 것들 (Phase 6-K).
@@ -1663,6 +1785,19 @@ def _monster_activation_out_of_scope(
     """
     if activation_kind is None:
         return (("효과의 발동 분류가 적혀 있지 않다", MONSTER_ACTIVATION_MISSING),)
+    # **사건이 있으면 유발 효과는 범위 안이다** (Phase 6-Z).
+    #
+    # 이 자리가 유발을 막고 있던 이유는 *"그 시점을 고르는 것은 플레이어가
+    # 아니라 사건이다"* 였고 (:data:`MONSTER_ACTIVATION_MISSING_BY_KIND`),
+    # **그 진단은 맞았다.** 6-Z 는 그 문장을 지우지 않고 **사건을 들고
+    # 온다** — 유발 계층이 실제 사건과 적법한 타이밍을 판정해 열어 준 짝만
+    # ``event_backed`` 로 들어오고, 그 짝에 대해서만 위 문장이 더 이상
+    # 참이 아니다 (6-Q 가 함정의 유발 조건에서 한 것과 같은 자리다).
+    #
+    # 🔴 사건이 없으면 **아무것도 달라지지 않는다** — 아래 줄이 그대로
+    # ``MONSTER_ACTIVATION_MISSING_BY_KIND[TRIGGER]`` 를 돌려준다.
+    if activation_kind is ActivationKind.TRIGGER and event_backed:
+        return ()
     if activation_kind not in ACTIVATION_KINDS_IN_SCOPE:
         return (
             (
@@ -1681,7 +1816,12 @@ def _monster_activation_out_of_scope(
 
 
 def _activation_out_of_scope(
-    view, context, instance, activation_kind=None, waits_for_event=None
+    view,
+    context,
+    instance,
+    activation_kind=None,
+    waits_for_event=None,
+    event_backed=False,
 ) -> tuple[tuple[str, str], ...]:
     """
     이 발동을 **이번 Phase 의 범위 밖으로** 만드는 (사실, 없는 규칙) 들.
@@ -1727,7 +1867,7 @@ def _activation_out_of_scope(
             # 더 이상 답하지 않는다 — 한 카드가 기동 효과와 유발 즉시
             # 효과를 함께 가지는 것이 실측 856장(10.4%)이다.
             return _monster_activation_out_of_scope(
-                view, context, instance, definition, activation_kind
+                view, context, instance, definition, activation_kind, event_backed
             )
         # 마법도 함정도 몬스터도 아니다 (토큰 등). 종류 축 자체가 비어 있다.
         return (("통상 마법이 아니다", MONSTER_ACTIVATION_MISSING),)
@@ -1859,6 +1999,7 @@ class _NormalSpellActivation(Condition):
     instance: InstanceId | None = None
     activation_kind: ActivationKind | None = None
     waits_for_event: "bool | None" = None
+    event_backed: bool = False
     """
     가리킨 효과의 **발동 분류** (Phase 6-K). ``None`` 은 "모른다" 다.
 
@@ -1883,7 +2024,12 @@ class _NormalSpellActivation(Condition):
 
     def _out_of_scope(self, view, context) -> tuple[tuple[str, str], ...]:
         return _activation_out_of_scope(
-            view, context, self.instance, self.activation_kind, self.waits_for_event
+            view,
+            context,
+            self.instance,
+            self.activation_kind,
+            self.waits_for_event,
+            self.event_backed,
         )
 
     def canonical_state(self) -> tuple:
@@ -1895,6 +2041,10 @@ class _NormalSpellActivation(Condition):
             self.instance.value if self.instance is not None else None,
             self.activation_kind.value if self.activation_kind is not None else None,
             self.waits_for_event,
+            #: 🔴 ``event_backed`` 도 들어간다 (Phase 6-Z). 같은 효과가 사건이
+            #: 있을 때와 없을 때 **다른 답**을 내므로, 빠뜨리면 사건 없이 물은
+            #: 결과가 사건이 있을 때의 캐시로 쓰인다 (그 반대도 마찬가지다).
+            self.event_backed,
         )
 
     def to_dict(self) -> dict:
@@ -1905,6 +2055,8 @@ class _NormalSpellActivation(Condition):
             data["activation_kind"] = self.activation_kind.value
         if self.waits_for_event is not None:
             data["waits_for_event"] = self.waits_for_event
+        if self.event_backed:
+            data["event_backed"] = True
         return data
 
     def describe_ko(self) -> str:

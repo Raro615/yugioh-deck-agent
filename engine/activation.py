@@ -92,6 +92,7 @@ from engine.payment import (
 )
 from engine.priority import PriorityState
 from engine.state.game_state import GameState
+from engine.target_bridge import decided_at_resolution
 from engine.validation import ValidationCode, ValidationResult
 
 
@@ -771,6 +772,21 @@ class EffectActivator:
                         + ". 고른 결과를 밖에서 넣을 수 없습니다.",
                         authorization=verdict,
                     )
+                continue
+            if decided_at_resolution(binding.spec) and chosen.get(binding.ref) is None:
+                # 🔴 **해결 시점에 고르는 자리를 비워 둘 수 있다** (Phase 6-Z).
+                #
+                # 그 선택은 가려진 자리에서 일어나므로 ``PlayerAction`` 이
+                # 가리킬 수 없고 (``STRUCTURAL-125``), 공식 스크립트도 그것을
+                # ``SetTarget`` 이 아니라 ``SetOperation`` 에 적는다. 그래서
+                # 발동 시점에 비어 있는 것이 **정상**이고, 실제 선택은
+                # ``EffectExecutor`` 가 해결 중에 묻는다.
+                #
+                # 🔴 **들어온 것을 거절하지는 않는다.** 아래 ``TargetResolver``
+                # 가 그대로 본다 — 무작위 · 전부와 달리 "고르는 사람이 있는"
+                # 선택이므로, 밖에서 이미 정해 보낸 것도 적법하면 적법하다.
+                # (그 길은 6-W · 6-X 의 시험들이 쓴다. 정상 후보 생성은 그런
+                # 행위를 **만들지 않는다** — ``chosen_bindings`` 가 뺀다.)
                 continue
             # 규칙마다 들여다보는 자리가 다르므로 **규칙마다** 관측을
             # 만든다 (Phase 2-Y). 하나로 합쳐서 전부 열면, 덱을 보는

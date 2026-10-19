@@ -541,10 +541,30 @@ def test_11_the_live_timing_layer_is_called_constantly(repository):
 
 
 def test_12_the_duel_module_never_mentions_the_pipeline():
-    """**§3: ``duel.py`` 가 "trigger" 라는 말을 한 번도 쓰지 않는다.**"""
+    """
+    **§3: ``duel.py`` 가 사건 파이프라인의 코드를 읽지 않는다.**
+
+    🔴 **Phase 6-Z 가 재는 모양을 바꿨다.** 유발 후보를 ``Duel`` 에 **값으로**
+    넣었으므로 (``triggers: object | None``) 낱말 검사가 통하지 않는다. 대신
+    그 검사가 재려던 것을 센다 — 파이프라인과 트리거 계층의 **이름**을
+    아는가. 모른다.
+
+    (``test_03`` 과 같은 자리이고 같은 이유다. 이쪽은 ``event_pipeline`` 축을
+    함께 센다.)
+    """
     duel = source_of("engine/duel.py")
-    assert "trigger" not in duel
-    assert "Trigger" not in duel
+    for name in (
+        "event_pipeline",
+        "EventPipeline",
+        "EventContext",
+        "TriggerRegistry",
+        "TriggerCollector",
+        "TriggerChainIntegrator",
+        "TimingEvent",
+        "TimingPoint",
+    ):
+        assert name not in duel, name
+    assert "triggers: object | None = None" in duel
 
 
 def test_13_only_the_compiler_builds_a_declaration_and_nobody_builds_a_registry():

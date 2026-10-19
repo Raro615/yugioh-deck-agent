@@ -347,26 +347,49 @@ def test_05_a_card_with_no_definition_at_all_is_not_a_candidate(repository):
     [
         (MYSTICAL_SPACE_TYPHOON, "속공 마법 — RULE-SPELLTRAP-007"),
         (THE_GIFT_OF_GREED, "함정 — RULE-SPELLTRAP-009"),
-        (FOOLISH_BURIAL, "대상이 **덱**에 있다 — 정책이 볼 수 없는 자리"),
     ],
 )
 def test_06_out_of_scope_cards_are_not_candidates(repository, card_id, why):
     """
     **§18-2 · §18-4 — 범위 밖은 후보가 아니다.**
 
-    셋 다 ``executable=True`` 인데도 후보가 아니다. 이유가 서로 다르고, 그
+    둘 다 ``executable=True`` 인데도 후보가 아니다. 이유가 서로 다르고, 그
     차이를 다음 시험들이 각각 적는다.
 
-    **어리석은 매장의 이유가 Phase 3-E-4 에서 달라졌다.** 그때는 "대상을
-    건넬 길이 없다" (STRUCTURAL-121) 였고, 이제 길은 있다. 그런데도 후보가
-    아닌 이유는 그 대상이 **덱**에 있기 때문이다 — ``PlayerAction`` 은
-    정책에게 가는 데이터이므로 거기에 덱의 카드를 적으면 후보 목록을 읽는
-    것만으로 덱 내용이 새어 나간다 (STRUCTURAL-125,
-    ``test_18b`` 가 이 사실을 따로 적는다).
+    🔴 **어리석은 매장이 이 목록에서 빠졌다** (Phase 6-Z). 그 카드가 후보가
+    아니던 이유는 "대상이 덱에 있다" 였고, 6-Z 가 **그 고르기를 해결 시점으로
+    옮겼다.** 그래서 지금은 후보가 되고, 대신 그 행위에 덱 인스턴스가 한 장도
+    실리지 않는다. 지키려던 경계는 그대로이므로 **다음 시험이 그것을 따로
+    센다** (``test_06b``) — 목록에서만 빼고 측정에서 빼지 않는다.
     """
     assert activatable_effects(card_id), "executable 이 아니면 이 시험이 흐려진다"
     duel, _ = staged(repository, hand=(card_id,))
     assert activations(duel, MINE) == [], why
+
+
+@pytest.mark.real_card
+def test_06b_a_deck_choosing_card_is_a_candidate_with_no_deck_target(repository):
+    """
+    🔴 **STRUCTURAL-125 가 지키려던 것은 그대로다** (Phase 6-Z).
+
+    어리석은 매장은 후보가 **된다** — 발동은 적법하고, 룰북이 덱을 열어 주는
+    자리는 **해결 중**이다. 그래서 ``PlayerAction`` 에는 덱의 카드가 한 장도
+    없다: 정책이 후보 목록을 읽는 것만으로는 덱 내용을 알 수 없다.
+
+    6-Z 이전에는 같은 경계가 "후보가 0건" 으로 나타났다. 지금 모양이 더
+    강하다 — 발동은 되고, 새는 것은 없다.
+    """
+    assert activatable_effects(FOOLISH_BURIAL)
+    duel, _ = staged(repository, hand=(FOOLISH_BURIAL,))
+    offered = activations(duel, MINE)
+    assert len(offered) == 1, offered
+    assert offered[0].effect_ref == EffectRef(FOOLISH_BURIAL, 0)
+    #: 🔴 **대상이 비어 있다.**
+    assert offered[0].targets == ()
+    #: 그리고 덱은 평소 관측에 보이지 않는다 — 경계의 근거다.
+    deck = duel.state.player(MINE).deck.cards()
+    assert deck
+    assert all(duel.view(MINE).find(c.instance_id) is None for c in deck)
 
 
 @pytest.mark.real_card

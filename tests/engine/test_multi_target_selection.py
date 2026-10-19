@@ -783,13 +783,28 @@ def test_e04_the_ceiling_looks_at_the_filtered_pool(repository):
     가려진 카드를 세어서 상한을 넘겼다고 하면, 쓸 수 없는 후보 때문에 쓸
     수 있는 효과가 막힌다. 덱에 30장이 있어도 패의 후보만 센다.
     """
+    from engine.target_bridge import decided_at_resolution
+
     duel, _, fodder, _ = staged(repository, hand_fodder=10)
     assert len(duel.state.player(MINE).zones[Zone.DECK]) == 30
-    definition = fabricated_definition(
+
+    #: ① **가려진 자리를 보는 고르기는 열거하지 않는다** (Phase 6-Z). 덱의
+    #:    30장이 상한을 넘기지 않는 것은 그대로이고, 이유가 더 강해졌다 —
+    #:    아예 발동 시점에 정하지 않는다.
+    hidden = fabricated_definition(
         minimum=5, maximum=5, zones=frozenset({Zone.HAND, Zone.DECK})
     )
+    assert [decided_at_resolution(b.spec) for b in hidden.targets] == [True]
+    assert target_combinations(duel.state, MINE, hidden, fodder[0]) == [()]
+
+    #: ② **보이는 자리만 보는 고르기는 거른 뒤의 수로 상한을 본다.** 패의
+    #:    10장에서 5장 → 252 조합이고, 전부 평소 관측에 보이는 카드다.
+    definition = fabricated_definition(
+        minimum=5, maximum=5, zones=frozenset({Zone.HAND})
+    )
+    assert [decided_at_resolution(b.spec) for b in definition.targets] == [False]
     combos = target_combinations(duel.state, MINE, definition, fodder[0])
-    assert len(combos) == 252, "덱의 30장을 세어 상한을 넘겼다"
+    assert len(combos) == 252, "패의 10장을 세지 않았다"
     for combo in combos:
         for target in combo:
             assert duel.view(MINE).find(target.instance_id) is not None
@@ -958,17 +973,44 @@ def test_f05_the_model_still_distinguishes_targeting_from_choosing():
         )
         is None
     )
-    bridge_text = BRIDGE.read_text(encoding="utf-8")
-    assert "is_targeting" not in bridge_text.split('"""')[-1]
-
-    #: 그리고 읽는 프로덕션 자리는 ``engine/effect/target.py`` 한 곳이다.
+    #: 🔴 **읽는 프로덕션 자리가 둘이 되었다** (Phase 6-Z). 이 시험이 못
+    #: 박아 둔 공백에 실제로 손이 닿았고, 그래서 여기서 **무엇을 갈랐는지**
+    #: 적는다.
+    #:
+    #: 6-Z 가 가른 축은 "대상 지정 대 해결 시 선택" 이 **아니다** — 가려진
+    #: 자리를 보는 고르기만 해결 시점으로 미룬다. ``is_targeting`` 은 그
+    #: 판단에서 **배제 조건**으로만 쓰인다: 대상 지정은 미루지 않는다. 그래서
+    #: 대상 지정 효과의 경로는 한 글자도 달라지지 않았다.
     readers = []
     for path in sorted((ROOT / "engine").rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Attribute) and node.attr == "is_targeting":
                 readers.append(path.relative_to(ROOT).as_posix())
-    assert readers == ["engine/effect/target.py"], readers
+    assert readers == [
+        "engine/effect/target.py",
+        "engine/target_bridge.py",
+    ], readers
+
+    #: 🔴 **다리에서 읽는 자리는 하나이고, 그것은 미루기를 막는 자리다.**
+    from engine.target_bridge import decided_at_resolution
+
+    bridge_tree = ast.parse(BRIDGE.read_text(encoding="utf-8"))
+    owners = [
+        node.name
+        for node in ast.walk(bridge_tree)
+        if isinstance(node, ast.FunctionDef)
+        and any(
+            isinstance(inner, ast.Attribute) and inner.attr == "is_targeting"
+            for inner in ast.walk(node)
+        )
+    ]
+    assert owners == ["decided_at_resolution"], owners
+    #: 그리고 대상 지정은 **미뤄지지 않는다** — 강제 탈출 장치로 센다.
+    assert (
+        decided_at_resolution(forceout_spec) is False
+    ), "대상 지정을 미루면 기존 발동 경로가 달라진다"
+    assert decided_at_resolution(fine_spec) is False, "패는 가려진 자리가 아니다"
 
 
 # ======================================================================
@@ -1376,12 +1418,29 @@ def test_k03_a_random_binding_is_still_excluded(repository):
 
 @pytest.mark.real_card
 def test_k04_the_deck_target_is_still_outside_the_ordinary_view(repository):
-    """**어리석은 매장은 여전히 후보가 없다** (STRUCTURAL-125)."""
+    """
+    **어리석은 매장의 덱은 여전히 평소 관측 밖이다** (STRUCTURAL-125).
+
+    🔴 **Phase 6-Z 가 모양을 바꿨다.** 그 고르기가 해결 시점으로 옮겨졌으므로
+    발동 시점에 짝지울 자리가 **없고** (``chosen_bindings`` 가 빈 짝이다),
+    조합은 빈 조합 하나다 — "대상 없이 발동한다". 지키려던 것은 그대로다:
+    ``PlayerAction`` 에 덱의 카드가 실리지 않는다.
+    """
+    from engine.target_bridge import decided_at_resolution
+
     duel, (burial,), _, _ = staged(repository, hand=(FOOLISH_BURIAL,))
     definition = DEFINITIONS.definition_for(EffectRef(FOOLISH_BURIAL, 0))
-    binding = chosen_bindings(definition)[0]
+    #: 규칙은 이 효과에게 덱을 열어 준다 — 그 선언은 그대로다.
+    binding = definition.targets[0]
     assert binding.spec.looked_at_zones() == frozenset({Zone.DECK})
-    assert target_combinations(duel.state, MINE, definition, burial) == []
+    #: 🔴 그리고 그 선언이 **미루는 이유**다.
+    assert decided_at_resolution(binding.spec) is True
+    assert chosen_bindings(definition) == ()
+    assert target_combinations(duel.state, MINE, definition, burial) == [()]
+    #: 평소 관측에는 덱이 보이지 않는다 — 경계의 근거다.
+    deck = duel.state.player(MINE).zones[Zone.DECK].cards()
+    assert deck
+    assert all(duel.view(MINE).find(c.instance_id) is None for c in deck)
 
 
 @pytest.mark.real_card

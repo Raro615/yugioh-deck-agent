@@ -801,24 +801,39 @@ def test_g02_nothing_moves_before_or_after_the_blocked_resolution(repository):
 
 @pytest.mark.real_card
 @requires_official_db
-def test_g03_the_duel_loop_still_offers_no_activation(repository):
+def test_g03_the_deck_never_reaches_the_action(repository):
     """
-    §7-13 — ``STRUCTURAL-125`` 는 그대로다. 이 Phase 는 그것도 바꾸지
-    않았다.
+    §7-13 — ``STRUCTURAL-125`` **가 지키려던 것**은 그대로다: 덱 인스턴스가
+    ``PlayerAction`` 에 실리지 않는다.
 
     🔴 **그리고 그 경계가 옳다** — ``PlayerAction`` 에 덱 인스턴스를 적으면
     정책이 후보 목록을 읽는 것만으로 덱 내용을 알게 된다. 고쳐야 할 것은
     경계가 아니라 **선택을 해결 시점으로 옮기는 것**이다 (``test_a01``).
+
+    🔴 **Phase 6-Z 가 그 문장대로 했다.** 그래서 이 시험이 재는 모양이
+    바뀌었다 — 조합이 0건이던 자리가 **빈 조합 하나**가 되었다 ("대상 없이
+    발동한다"). 경계는 그대로이고, 측정이 더 강해졌다: 발동은 올라오고, 그
+    행위에 덱 인스턴스는 한 장도 없다.
+
+    이 판은 유발 원천을 꽂지 않았으므로 (``_girsu_board``) 발동 후보 자체가
+    오르지 않는다 — 그 사실도 그대로 센다.
     """
-    from engine.target_bridge import target_combinations
+    from engine.target_bridge import chosen_bindings, target_combinations
 
     setup = _girsu_board(repository)
     duel = setup.duel
     source = _summon_girsu(duel)
     definition = definition_registry().definition_for(EffectRef(GIRSU, 0))
 
-    assert list(target_combinations(duel.state, MINE, definition, source)) == []
+    #: 🔴 발동 시점에 짝지울 자리가 **없다** — 고르기가 해결 시점이다.
+    assert chosen_bindings(definition) == ()
+    #: 그래서 조합은 빈 조합 하나다. **덱 인스턴스가 한 장도 없다.**
+    combinations = list(target_combinations(duel.state, MINE, definition, source))
+    assert combinations == [()]
+
     offered = {a.kind.value for a in duel.legal_actions(MINE).allowed}
+    #: 이 판에는 사건 원천이 꽂혀 있지 않으므로 유발이 오르지 않는다.
+    assert duel.triggers is None
     assert "activate_effect" not in offered
     assert "end_phase" in offered
 
