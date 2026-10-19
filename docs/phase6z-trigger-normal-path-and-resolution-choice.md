@@ -372,8 +372,8 @@ A 수직 경로 8 · B 시점과 경계 14 · C 구조 13.
 | ① 변경 모듈 표적 | 6-W · 6-X · 6-Y 시험 파일 3개 | **85 passed** |
 | ① 새 시험 | `test_trigger_normal_path_integration.py` | **35 passed** |
 | ② 복원 확인 | 6-I `test_trigger_duel_integration.py` + 새 파일 | **61 passed** |
-| ③ Duel 수직 + 엔진 전체 | `tests/engine` | **3,673 passed** (375s) |
-| ④ 공유 계약 루트 감사 + Agent + Discord | `tests/` (engine 제외) | *§9.4* |
+| ③ Duel 수직 + 엔진 전체 | `tests/engine` | **3,673 passed · 0 failed** |
+| ④ 공유 계약 루트 감사 + Agent + Discord | `tests/` (engine 제외) | **2,834 passed · 8 failed (전부 선행)** — §9.4 |
 
 **③ 중간에 한 번 10건이 깨졌고, 전부 고쳤다.** 그 10건이 §9.2 의 표이고,
 하나도 "원인 불명" 이 아니었다 — 전부 6-Z 가 의도적으로 바꾼 두 가지
@@ -394,6 +394,8 @@ A 수직 경로 8 · B 시점과 경계 14 · C 구조 13.
 두 시간을 돌리면 중간에 끊길 때 아무 결과도 남지 않는다 — 실제로 컨테이너가
 한 번 재시작됐다).
 
+**첫 실행** (고치기 전):
+
 | 묶음 | 결과 |
 |---|---|
 | 루트 1/4 | 637 passed |
@@ -402,6 +404,20 @@ A 수직 경로 8 · B 시점과 경계 14 · C 구조 13.
 | 루트 4/4 | 438 passed · **9 failed** |
 | `tests/agent` · `tests/rules` · `tests/rulings` | 526 passed · 1 skipped · **2 failed** |
 | **합계** | **2,821 passed · 10 skipped · 21 failed** |
+
+**최종 실행** (고친 뒤, 엔진까지 함께 다시 돌렸다):
+
+| 묶음 | 결과 |
+|---|---|
+| `tests/engine` | **3,673 passed · 0 failed** |
+| 루트 1/4 | 637 passed · 0 failed |
+| 루트 2/4 | 617 passed · 5 skipped · 2 failed *(선행)* |
+| 루트 3/4 | 607 passed · 4 skipped · 4 failed *(선행)* |
+| 루트 4/4 | 447 passed · 0 failed |
+| `tests/agent` · `tests/rules` · `tests/rulings` | 526 passed · 1 skipped · 2 failed *(선행)* |
+| **합계** | **6,507 passed · 10 skipped · 8 failed** |
+
+🔴 **남은 8건이 아래의 선행 실패 8건과 정확히 같다.** 새 회귀 0건이다.
 
 #### 선행 실패 8건 — 기준 커밋 `e429146` 워크트리에서도 **같이** 실패한다
 
@@ -540,6 +556,17 @@ test_15` 가 그것을 잡았다 (부록 A.5). 지금은 공용 자리 하나가
 
 🔴 **단, 수준 3 의 범위를 넓혀 말하지 않는다.** 아래 BLOCKER 를 읽어야
 한다.
+
+---
+
+### 최종 검증 상태
+
+| | |
+|---|---|
+| 전체 | **6,507 passed · 10 skipped · 8 failed** |
+| 실패 8건 | **전부 선행** — 기준 커밋 `e429146` 에서도 같이 실패한다 |
+| 새 회귀 | **0건** |
+| 삭제·skip·assertion 완화 | **0건** |
 
 ---
 
