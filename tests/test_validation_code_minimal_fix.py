@@ -315,10 +315,25 @@ def test_09_the_trigger_pipeline_is_dormant_so_m3_was_left_alone():
             f"{name} 의 production 생성 자리가 달라졌다: {sites}"
         )
 
-    #: 그리고 ``Duel`` 은 트리거를 **한 번도 언급하지 않는다.**
+    #: 🔴 **Phase 6-Z 가 듀얼 루프를 이었다** — ``triggers`` 라는 칸이
+    #: 생겼으므로 낱말 검사는 더 이상 통하지 않는다. 그 검사가 재려던 것은
+    #: "``Duel`` 이 트리거 계층의 코드를 읽는가" 이고, 답은 여전히 아니다:
+    #: 타입 이름을 하나도 모르고 들고 있는 칸은 ``object`` 다 (ADR-007).
+    #: 무엇이 실제로 이어졌는지는
+    #: ``tests/engine/test_trigger_normal_path_integration.py`` 가 센다.
     duel = source_of("engine/duel.py")
-    assert "trigger" not in duel
-    assert "Trigger" not in duel
+    for absent in (
+        "TriggerSpec",
+        "TriggerRegistry",
+        "TriggerCollector",
+        "TriggerEligibilityJudge",
+        "TriggerChainIntegrator",
+        "TriggerCandidate",
+        "TimingEvent",
+        "TimingPoint",
+    ):
+        assert absent not in duel, absent
+    assert "triggers: object | None = None" in duel
 
 
 def test_10_m3_was_left_to_3e45_and_is_now_fixed():
@@ -727,7 +742,11 @@ def test_24_only_four_production_lines_changed_their_code():
     #: 이 파일을 처음 쓸 때 1 로 적어 틀렸다. 그리고 그 세 자리는 이번
     #: 수정이 **옳다는 근거**다: 같은 파일이 "확실한 거부" 에 이미 이 코드를
     #: 쓰고 있었다 (3-E-37 §가 지목한 바로 그 사실).
-    assert executor.count("ValidationCode.CANDIDATE_NOT_ELIGIBLE") == 4
+    #: 🔴 4 → **5** (Phase 6-Z). 늘어난 하나는 ``_ask_for_choice`` 가
+    #: 고르는 사람이 **후보 목록 밖**을 골랐을 때 쓰는 자리다. "확실한 거부"
+    #: 이므로 이 코드가 맞고, 그것이 이 단정이 지키는 구분이다 — 같은 파일이
+    #: 이미 네 자리에서 같은 뜻으로 쓰고 있었다.
+    assert executor.count("ValidationCode.CANDIDATE_NOT_ELIGIBLE") == 5
     for path, cls in (
         ("engine/activation.py", "EffectActivator"),
         ("engine/effect/executor.py", "EffectExecutor"),

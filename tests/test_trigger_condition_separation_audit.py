@@ -220,10 +220,22 @@ def test_02_the_trigger_spec_is_the_one_that_carries_a_point():
         "activates_from",
         "condition",
     ]
-    #: 그런데 그 ``TriggerSpec`` 은 dormant 다 — production 이 소비하지 않는다.
+    #: 🔴 **그 선언을 ``Duel`` 이 읽지 않는다.** Phase 6-Z 가 유발 발동을
+    #: 듀얼 루프에 이었지만, 선언을 읽어 후보로 바꾸는 일은 조립 층이 하고
+    #: ``Duel`` 은 그 결과만 불투명한 값으로 받는다 (``offers(duel, seat)``).
+    #: 그래서 사건에 관한 칸을 ``Duel`` 이 아는 자리는 **여전히 없다** —
+    #: 이 시험의 요지가 그것이다.
     duel = source_of("engine/duel.py")
     assert "TriggerSpec" not in duel
-    assert "trigger" not in duel
+    #: 🔴 **``.point`` 를 읽는 자리가 없다.** 낱말이 아니라 AST 로 센다 —
+    #: ``life_points`` 처럼 같은 글자를 품은 이름이 있기 때문이다.
+    reads_point = [
+        node.lineno
+        for node in ast.walk(ast.parse(duel))
+        if isinstance(node, ast.Attribute) and node.attr == "point"
+    ]
+    assert reads_point == [], reads_point
+    assert "triggers: object | None = None" in duel
 
 
 @pytest.mark.real_card
@@ -724,14 +736,42 @@ def test_17_this_phase_changed_no_production_file():
 
 def test_18_the_dormant_pipeline_was_not_connected():
     """
-    **dormant pipeline 을 production 에 연결하지 않았다** (§16).
+    **``Duel`` 은 수집 계층의 코드를 읽지 않는다** (§16).
 
     "구조가 존재한다" 와 "지금 연결해야 한다" 를 섞지 않는다.
+
+    .. warning::
+       🔴 **Phase 6-Z 가 듀얼 루프를 이었다.** 유발 발동이
+       ``Duel.legal_actions`` 에 오르고 ``Duel.apply`` 가 받는다. 그래서
+       ``engine/duel.py`` 에 ``triggers`` 라는 **칸**이 생겼고, "trigger
+       라는 글자가 없다" 는 낱말 검사가 더 이상 통하지 않는다.
+
+       낱말 대신 **그 검사가 애초에 재려던 것**을 센다 — ``Duel`` 이 트리거
+       계층의 코드를 읽는가. 읽지 않는다: 그 계층의 타입 이름을 하나도
+       모르고 (아래 목록), import 도 하지 않으며, 들고 있는 칸은
+       ``triggers: object | None`` 으로 **불투명하다**. 받는 것은
+       ``offers(duel, seat)`` 를 가진 아무 물건이고, 그것을 만드는 일은
+       조립 층의 몫이다 (ADR-007).
+
+       예전 검사보다 약하지 않다 — 트리거 계층의 이름이 하나라도 들어오면
+       여전히 깨진다. 무엇이 실제로 이어졌는지는
+       ``tests/engine/test_trigger_normal_path_integration.py`` 가 센다.
     """
     duel = source_of("engine/duel.py")
-    for absent in ("TriggerRegistry", "TriggerCollector", "TriggerEligibilityJudge",
-                   "trigger", "Trigger"):
+    for absent in (
+        "TriggerRegistry",
+        "TriggerCollector",
+        "TriggerEligibilityJudge",
+        "TriggerChainIntegrator",
+        "TriggerSpec",
+        "TimingEvent",
+        "TimingPoint",
+        "TimingCoordinator",
+        "timing_events",
+    ):
         assert absent not in duel, absent
+    #: 들고 있는 칸은 **불투명하다** — 타입이 ``object`` 다.
+    assert "triggers: object | None = None" in duel
 
     #: 그리고 dormant 다섯 모듈은 그대로 dormant 다 — `agent/` 가 모르는 채다.
     for rel in ("agent/evaluation.py", "agent/search.py", "agent/heuristic.py",

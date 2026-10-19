@@ -738,8 +738,19 @@ def test_11_the_declaration_type_has_exactly_one_production_module():
     ):
         assert absent not in duel_source, absent
 
-    #: 그리고 `Duel` 에는 등록소를 담을 칸이 없다.
-    assert not any("trigger" in name for name in Duel.__dataclass_fields__)
+    #: 🔴 **Phase 6-Z 가 칸 하나를 만들었다** — ``triggers``. 그러나 그 칸의
+    #: 타입은 ``object`` 이고, 위의 단정이 그것을 지킨다: ``Duel`` 은 선언 ·
+    #: 등록소 · 수집기 · 후보의 **이름을 하나도 모른다.** 받는 것은
+    #: ``offers(duel, seat)`` 를 가진 아무 물건이다 (ADR-007).
+    #:
+    #: 그래서 이 시험의 §13 — "잘 설계되어 있다" 와 "duel 에서 작동한다" 를
+    #: 가른다 — 는 **방향이 바뀐 채로 그대로 참이다**: 지금은 duel 에서
+    #: 작동하고, 그 작동이 선언 타입을 live 경로로 들여오지 않았다.
+    fields = Duel.__dataclass_fields__
+    assert [name for name in fields if "trigger" in name] == ["triggers"], list(fields)
+    assert fields["triggers"].type in ("object | None", '"object | None"'), fields[
+        "triggers"
+    ].type
     assert not any("registry" in name for name in Duel.__dataclass_fields__)
 
 

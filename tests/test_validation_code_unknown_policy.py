@@ -652,7 +652,26 @@ def test_28_the_trigger_pipeline_is_still_dormant():
     assert [site.split(":")[0] for site in constructed] == [
         "engine/trigger_compiler.py"
     ], constructed
-    assert "trigger" not in source_of("engine/duel.py")
+    #: 🔴 **Phase 6-Z 가 듀얼 루프를 이었다** — 그래도 ``Duel`` 은 그 계층의
+    #: 타입 이름을 하나도 모르고, 등록소를 만드는 production 자리도 여전히
+    #: ``trigger_compiler.py`` 하나다. 낱말 검사를 이름 검사로 바꾼다
+    #: (``tests/test_trigger_pipeline_dormant_audit.py::test_12`` 와 같은
+    #: 자리이고 같은 이유다).
+    duel = source_of("engine/duel.py")
+    for absent in (
+        "TriggerRegistry",
+        "TriggerCollector",
+        "TriggerEligibilityJudge",
+        "TriggerChainIntegrator",
+        "TriggerSpec",
+        "TimingEvent",
+        "TimingPoint",
+        "TimingCoordinator",
+        "timing_events",
+    ):
+        assert absent not in duel, absent
+    #: 들고 있는 칸은 **불투명하다** — 타입이 ``object`` 다.
+    assert "triggers: object | None = None" in duel
 
 
 @requires_official_db

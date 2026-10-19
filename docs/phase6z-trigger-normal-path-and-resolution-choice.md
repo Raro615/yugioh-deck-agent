@@ -388,7 +388,78 @@ A 수직 경로 8 · B 시점과 경계 14 · C 구조 13.
 | `test_trigger_pipeline_dormant_audit::test_12` | 같은 낱말 검사 | 파이프라인·트리거 타입 이름 8개를 모른다 |
 | `test_trigger_ownership_audit::test_10` | (본문 그대로 통과) | 🔴 경고문만 고쳤다 — "6-Y 가 둘째 경로를 만들었다" → "6-Z 가 되돌렸다". **본문은 그대로다**: `_entry` 가 지금도 `PlayerAction` 을 받지 않으므로 다시 연결하면 같은 위험이 생긴다 |
 
-### 9.4 전체 결과 — *실행 중, 끝나면 이 절을 채운다*
+### 9.4 ④ 전체 결과 — `tests/` (engine 제외)
+
+93개 루트 파일을 네 묶음으로 쪼개고 하위 디렉터리를 따로 돌렸다 (한 번에
+두 시간을 돌리면 중간에 끊길 때 아무 결과도 남지 않는다 — 실제로 컨테이너가
+한 번 재시작됐다).
+
+| 묶음 | 결과 |
+|---|---|
+| 루트 1/4 | 637 passed |
+| 루트 2/4 | 615 passed · 5 skipped · **4 failed** |
+| 루트 3/4 | 605 passed · 4 skipped · **6 failed** |
+| 루트 4/4 | 438 passed · **9 failed** |
+| `tests/agent` · `tests/rules` · `tests/rulings` | 526 passed · 1 skipped · **2 failed** |
+| **합계** | **2,821 passed · 10 skipped · 21 failed** |
+
+#### 선행 실패 8건 — 기준 커밋 `e429146` 워크트리에서도 **같이** 실패한다
+
+`git worktree add /tmp/…/base6z e429146` 로 기준 커밋을 따로 깔고 (카드
+데이터는 심볼릭 링크로 공유) 같은 시험을 돌려 확인했다.
+
+```
+FAILED tests/agent/test_opponent_resource_weighting_audit.py::test_07_…
+FAILED tests/test_effect_type_quick_audit.py::test_29_…
+FAILED tests/test_event_free_chain_semantic_audit.py::test_27_…
+FAILED tests/test_korean_overlay_unapplied_audit.py::test_01_…
+FAILED tests/test_korean_overlay_unapplied_audit.py::test_13_…
+FAILED tests/test_korean_overlay_unapplied_audit.py::test_21_…
+FAILED tests/test_korean_overlay_unapplied_audit.py::test_25_…
+FAILED tests/rulings/test_data_audit.py::test_every_repository_card_can_reach_a_cid
+  → 기준 커밋: 7 failed (앞 넷 · 뒤 셋) + 1 failed (rulings) — 전부 동일
+```
+
+🔴 **6-Z 가 손대지 않았고, 고치지도 않았다.** 재정 캐시 데이터와 한국어
+오버레이 데이터에 걸린 별개 문제다 (6-U 가 같은 것을 기록해 두었다).
+
+#### 새 회귀 13건 — 전부 고쳤다
+
+**13건이 같은 가족이다**: "트리거 파이프라인은 휴면이고 듀얼 루프에 이어지지
+않았다" 를 `engine/duel.py` 에 *"trigger 라는 글자가 없다"* 로 재던 감사들.
+6-Z 가 그 연결을 했으므로 전부 깨졌다.
+
+🔴 **낱말 검사를 이름 검사로 바꿨다 — 그것이 애초에 재려던 것이다.**
+`Duel` 은 트리거 계층의 **타입 이름을 하나도 모르고** (`TriggerRegistry` ·
+`TriggerCollector` · `TriggerChainIntegrator` · `TriggerEligibilityJudge` ·
+`TriggerSpec` · `TriggerCandidate` · `TimingEvent` · `TimingPoint` ·
+`TimingCoordinator` · `timing_events`), import 도 하지 않으며, 들고 있는 칸은
+`triggers: object | None` 으로 불투명하다. 예전 검사보다 약하지 않다 — 그
+이름이 하나라도 들어오면 여전히 깨진다.
+
+| 시험 | 재는 모양이 어떻게 바뀌었는가 |
+|---|---|
+| `test_event_phase_semantics_audit::test_13` | 낱말 → 이름 9개 + 불투명 칸 |
+| `test_event_relation_minimal_fix::test_17` | 같음 (`spec.matches` 자리 둘은 그대로) |
+| `test_trigger_condition_separation_audit::test_18` | 같음 (`agent/` 다섯 모듈이 모르는 것도 그대로) |
+| `test_validation_code_unknown_policy::test_28` | 같음 (`TriggerSpec` 생성 자리 하나도 그대로) |
+| `test_validation_code_minimal_fix::test_09` | 같음 (생성 자리 표도 그대로) |
+| `test_trigger_condition_separation_audit::test_02` | 🔴 `"point" not in duel` 을 **AST** 로 바꿨다 — `life_points` 가 같은 글자를 품는다. `.point` 를 읽는 자리 0곳 |
+| `test_trigger_lifetime_audit::test_02` | 🔴 `_activation_actions` 에 `ActivationKind.TRIGGER` 가 생겼다 — **읽은 것이 아니라 빼기 위해서다.** 사건 쪽 이름 다섯(`event`·`journal`·`candidates`·`collect`·`offer`)은 여전히 0개이고, `TRIGGER` 가 쓰인 **한 자리의 모양**을 AST 로 고정했다 (비교 → `continue`) |
+| `test_trigger_lifetime_audit::test_03` | 🔴 메서드 이름은 §8 의 **대리 지표**였다. 본체를 직접 센다 — `Duel` 은 `TriggerCandidate` 를 이름으로도 모르고, `engine/` 의 어느 모듈도 `TriggerCandidate` 와 `PlayerAction` 을 코드로 함께 다루지 않는다 (그 검사는 원래대로 통과한다) |
+| `test_trigger_lifetime_audit::test_08` | 🔴 **제목이 더 이상 전부 참이 아니다.** 6-Z 가 `consumed_events` 를 만들었다 — 규칙이 요구하는 기억이다 (한 사건이 같은 효과를 두 번 열지 않는다). **보통의 발동 경로는 그것을 읽지 않는다**는 사실을 `test_02` 가 AST 로 센다 |
+| `test_trigger_spec_declaration_audit::test_11` | 칸이 생겼지만 **타입이 `object`** 임을 필드 타입으로 센다 |
+| `test_result_actor_provenance_design_audit::test_01` | `build_executor(` 호출 인자가 둘 → 셋 (`chooser`). 🔴 한 줄 지문을 **인자 이름**으로 바꿨다 — 지문이 줄바꿈을 고정하면 재는 것이 자리의 수가 아니라 서식이 된다 |
+| ↳ `test_09` | 같은 자리 + `chooser` 기본값이 `None` 임을 함께 센다 |
+| `test_validation_code_minimal_fix::test_24` | `CANDIDATE_NOT_ELIGIBLE` 자리 4 → **5**. 늘어난 하나가 `_ask_for_choice` 의 "후보 목록 밖" 거절이고, 같은 파일이 이미 네 자리에서 같은 뜻으로 쓰고 있었다 |
+
+재검증: 고친 8파일 **174 passed**.
+
+#### 그 앞 단계에서 고친 것 (§9.3 의 ③ 중간)
+
+표적 묶음(17 파일, 460건)에서 5건, 그 전에 유발 감사 셋과
+`test_rule_not_implemented_code_audit` 둘. 🔴 그중 하나는 **감사가 옳고 내가
+틀린** 경우였다 — §14 의 A.6 에 적는다.
 
 ---
 
@@ -426,6 +497,23 @@ triggers=TriggerSource(agent.repository))` 를 넘긴다.
 - `_gate_code` 가 `duel.activation_validator` 를 쓰도록 고쳤다 (§3.1) —
   그 전에는 실제로 수락된 유발 발동을 `판정 RULE_NOT_IMPLEMENTED` 로
   적었다.
+
+🔴 **꽂는 자리는 `app.main.opening_wiring` 하나다.** 처음에는 두 진입점이
+각자 `PolicyChooser(FirstPermittedChoice())` 와 `TriggerSource(...)` 를
+만들었는데, 그러면 어댑터가 `agent` · `integration` 을 직접 import 하게 되고
+그 경계는 Phase 5-A 부터 지켜 온 것이다 — `tests/test_discord_bot.py::
+test_15` 가 그것을 잡았다 (부록 A.5). 지금은 공용 자리 하나가 만들고 CLI 와
+어댑터가 **같은 것**을 받는다. 각자 꽂으면 같은 입력에 다른 답이 나온다.
+
+**연결되지 않은 지점** (명시):
+
+- `agent/runner.py` 의 `DuelRunner` 와 `agent/simulation.py` 의
+  `DuelSimulator` 는 `triggers` 를 꽂지 않는다. 그래서 **탐색 경로에는 유발
+  후보가 오르지 않는다.** 꽂으면 탐색이 유발까지 보게 되지만, 그것은
+  `legal_actions` 한 번의 비용을 12배로 올리는 변경이므로
+  (`BLOCKER-6Z-4`) 이번 범위가 아니다.
+- `/combo` 밖의 Discord 명령(`/search` · `/deck`)은 전개를 돌리지 않으므로
+  꽂을 자리가 없다.
 
 ---
 
@@ -586,7 +674,39 @@ status` 가 그 파일을 `??` (새 파일) 가 아니라 `M` (수정) 으로 �
 `test_d01` 이 그 차이를 재는 자리다. `tests/test_trigger_ownership_audit.py`
 의 경고문이 그 함수를 가리키고 있었으므로 그 문장도 함께 고쳤다.
 
-### A.5 선공 첫 패를 늘리려 했다
+### A.5 🔴 감사가 옳았고 내가 틀렸다 — 어댑터 경계를 깼다
+
+`/combo` 를 연결하면서 `app/discord_bot.py` 에 `agent.choice` 와
+`integration.autonomy` 를 직접 import 했다. `tests/test_discord_bot.py::
+test_15` 가 그것을 잡았다 — 그 어댑터는 Phase 5-A 부터 `app` · `deck` 만
+읽기로 되어 있고, `core` · `engine` · `agent` · `analysis` · `rules` ·
+`rulings` · `sources` 는 **하나도** import 하지 않는다.
+
+🔴 **단정을 고치지 않고 코드를 고쳤다.** `app.main.opening_wiring` 하나가
+`(chooser, triggers)` 를 만들고 CLI 와 어댑터가 **같은 것**을 받는다. 그래야
+경계도 지키고 둘이 갈라지지도 않는다 (사용자에게 보이는 경로가 둘이므로,
+각자 꽂으면 같은 입력에 다른 답이 나온다). `test_15` 의 재사용 함수 목록에
+그 이름을 더해 단정이 **더 좁아졌다.**
+
+🔴 **교훈**: 연결을 할 때 "어느 층에서 부르는가" 를 먼저 묻는다. 부를 수
+있다는 것이 불러도 된다는 뜻이 아니다.
+
+### A.6 지문이 서식을 고정하고 있었다 — 세 자리
+
+세 감사가 호출을 **한 줄 문자열**로 집어 두었고, 6-Z 가 인자를 더해 호출이
+여러 줄로 나뉘면서 깨졌다. 깨진 것은 그 감사가 지키려던 사실이 아니라
+**줄바꿈**이다.
+
+* `test_dormant_live_gate_equivalence::test_33` — 6-K 가 "호출 이름까지만
+  집는다" 고 **적어 두고도** 첫 인자를 함께 집었다. 적어 둔 뜻대로 고쳤다.
+* `test_result_actor_provenance_design_audit::test_01` · `test_09` —
+  `build_executor(journal=…, rulings=…)` 를 AST 의 **인자 이름**으로 센다.
+
+🔴 **교훈**: 지문이 재려는 것이 "자리의 수" 이면 자리의 수를 세고, 문자열로
+집지 않는다. 문자열 지문은 서식 변경에 깨지고, 깨질 때 **무엇이 깨졌는지**를
+말해 주지 않는다.
+
+### A.7 선공 첫 패를 늘리려 했다
 
 `extra_hand` 를 더하며 패를 6장으로 만들어 `build_opening` 이 듀얼을 만들지
 않았다 (*"선공 첫 패 장수: 6장"*). 검증을 우회하지 않고 **보고 싶은 카드를

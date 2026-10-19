@@ -627,13 +627,41 @@ def test_16_only_the_event_relation_gate_changed():
 
 def test_17_the_gate_is_still_dormant_and_nothing_was_connected():
     """
-    **파이프라인을 연결하지 않았다.** ``duel.py`` 는 여전히 트리거를 한 번도
-    언급하지 않고, ``spec.matches`` 를 부르는 자리도 ``engine/trigger.py``
-    두 곳뿐이다.
+    ``duel.py`` 는 트리거 계층의 코드를 읽지 않고, ``spec.matches`` 를 부르는
+    자리도 ``engine/trigger.py`` 두 곳뿐이다.
+
+    .. warning::
+       🔴 **Phase 6-Z 가 듀얼 루프를 이었다.** 유발 발동이
+       ``Duel.legal_actions`` 에 오르고 ``Duel.apply`` 가 받는다. 그래서
+       ``engine/duel.py`` 에 ``triggers`` 라는 **칸**이 생겼고, "trigger
+       라는 글자가 없다" 는 낱말 검사가 더 이상 통하지 않는다.
+
+       낱말 대신 **그 검사가 애초에 재려던 것**을 센다 — ``Duel`` 이 트리거
+       계층의 코드를 읽는가. 읽지 않는다: 그 계층의 타입 이름을 하나도
+       모르고 (아래 목록), import 도 하지 않으며, 들고 있는 칸은
+       ``triggers: object | None`` 으로 **불투명하다**. 받는 것은
+       ``offers(duel, seat)`` 를 가진 아무 물건이고, 그것을 만드는 일은
+       조립 층의 몫이다 (ADR-007).
+
+       예전 검사보다 약하지 않다 — 트리거 계층의 이름이 하나라도 들어오면
+       여전히 깨진다. 무엇이 실제로 이어졌는지는
+       ``tests/engine/test_trigger_normal_path_integration.py`` 가 센다.
     """
     duel = source_of("engine/duel.py")
-    assert "trigger" not in duel
-    assert "Trigger" not in duel
+    for absent in (
+        "TriggerRegistry",
+        "TriggerCollector",
+        "TriggerEligibilityJudge",
+        "TriggerChainIntegrator",
+        "TriggerSpec",
+        "TimingEvent",
+        "TimingPoint",
+        "TimingCoordinator",
+        "timing_events",
+    ):
+        assert absent not in duel, absent
+    #: 들고 있는 칸은 **불투명하다** — 타입이 ``object`` 다.
+    assert "triggers: object | None = None" in duel
 
     callers = []
     for path in sorted(PROJECT_ROOT.glob("engine/**/*.py")) + sorted(

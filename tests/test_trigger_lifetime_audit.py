@@ -136,8 +136,20 @@ def test_02_activation_candidates_never_look_at_an_event():
     **§3-3 · §3-4 — 후보 생성은 사건을 읽지 않는다.**
 
     ``_activation_actions`` 가 읽는 것은 ``self.state`` · 검증기 · 정의
-    저장소뿐이다. ``event`` · ``journal`` · ``trigger`` · ``candidate`` 라는
-    이름이 **한 번도 나오지 않는다.**
+    저장소뿐이다. ``event`` · ``journal`` · ``candidate`` 라는 이름이 **한 번도
+    나오지 않는다.**
+
+    .. warning::
+       🔴 **Phase 6-Z 가 그 함수에 ``ActivationKind.TRIGGER`` 를 적었다** —
+       그러나 **읽은 것이 아니라 빼기 위해서다.** 유발 효과의 시점은 사건이
+       정하므로 (RULE-EFFECT-004) 판에서 후보를 만드는 이 함수는 그것을
+       건너뛴다. 사건에서 만드는 자리는 ``_trigger_actions`` 하나다.
+
+       그래서 "trigger" 를 낱말로 금지하는 대신 **그 한 자리의 모양을
+       고정한다** — ``ActivationKind.TRIGGER`` 와 비교해서 ``continue`` 하는
+       분기 하나. 다른 모양으로 쓰이면 (예: 사건을 조회하는 데) 아래
+       단정이 깨진다. 예전 검사보다 약하지 않다: 사건 쪽 이름 넷은 여전히
+       **하나도** 허용하지 않는다.
     """
     node = function_body("engine/duel.py", "_activation_actions")
     names = {
@@ -149,10 +161,30 @@ def test_02_activation_candidates_never_look_at_an_event():
         for inner in ast.walk(node)
         if isinstance(inner, ast.Attribute)
     }
-    for forbidden in ("event", "journal", "trigger", "candidates", "collect"):
+    #: 🔴 사건 쪽 이름은 **하나도** 없다 (``consumed_events`` 도 읽지 않는다).
+    for forbidden in ("event", "journal", "candidates", "collect", "offer"):
         assert not [n for n in names if forbidden in n.lower()], (forbidden, sorted(names))
     #: 반대로 판은 읽는다.
     assert "state" in names
+
+    #: 🔴 **"trigger" 라는 이름이 쓰이는 자리는 하나이고, 그것은 제외다.**
+    excludes = [
+        inner
+        for inner in ast.walk(node)
+        if isinstance(inner, ast.If)
+        and isinstance(inner.test, ast.Compare)
+        and isinstance(inner.test.left, ast.Attribute)
+        and inner.test.left.attr == "activation_kind"
+        and any(
+            isinstance(comparator, ast.Attribute) and comparator.attr == "TRIGGER"
+            for comparator in inner.test.comparators
+        )
+        and len(inner.body) == 1
+        and isinstance(inner.body[0], ast.Continue)
+    ]
+    assert len(excludes) == 1, ast.dump(node)
+    triggerish = sorted(n for n in names if "trigger" in n.lower())
+    assert triggerish == ["TRIGGER"], triggerish
 
 
 def test_03_no_translation_function_exists_from_candidate_to_action():
@@ -161,10 +193,32 @@ def test_03_no_translation_function_exists_from_candidate_to_action():
     production 에 없다.**
 
     ``engine/`` 전체에서 ``TriggerCandidate`` 를 받아 ``PlayerAction`` 을
-    돌려주는 함수가 없고, ``Duel`` 에는 그런 이름의 메서드도 없다.
+    돌려주는 함수가 없다.
+
+    .. warning::
+       🔴 **Phase 6-Z 가 ``Duel._trigger_actions`` 를 만들었다** — 이름에
+       "trigger" 가 들어간 메서드다. 그러나 그 함수가 받는 것은
+       ``TriggerCandidate`` 가 **아니다**: ``effect_ref`` · ``source`` ·
+       ``event_key`` 셋만 있는 **불투명한 제안**이고, ``Duel`` 은 그 타입의
+       이름조차 모른다.
+
+       그래서 이 시험의 본문(아래 ``together`` 검사)이 **그대로 참이다** —
+       ``engine/`` 의 어느 모듈도 ``TriggerCandidate`` 와 ``PlayerAction`` 을
+       코드로 함께 다루지 않는다. 그것이 §8 이 지키려던 것이고, 메서드 이름은
+       그 사실의 대리 지표였을 뿐이다. 지금은 **본체를 직접 센다.**
     """
+    #: 🔴 ``Duel`` 은 ``TriggerCandidate`` 를 **이름으로도 모른다.**
+    duel_source = (PROJECT_ROOT / "engine/duel.py").read_text(encoding="utf-8")
+    assert "TriggerCandidate" not in duel_source
+    #: 그리고 후보를 행위로 바꾸는 자리는 **하나**다.
     duel_methods = {name for name in vars(Duel) if not name.startswith("__")}
-    assert not [m for m in duel_methods if "trigger" in m or "candidate" in m], duel_methods
+    #: ``triggers`` 는 메서드가 아니라 **칸**이다 (불투명한 값).
+    assert sorted(m for m in duel_methods if "trigger" in m) == [
+        "_trigger_actions",
+        "_trigger_offers",
+        "triggers",
+    ], sorted(duel_methods)
+    assert not [m for m in duel_methods if "candidate" in m], duel_methods
 
     #: **코드로** 둘을 함께 다루는 모듈이 없어야 한다. 설명 문장에서 둘을
     #: 나란히 말하는 모듈은 셋 있는데 (``__init__.py`` · ``turn_progression.py`` ·
@@ -323,11 +377,25 @@ def test_07_collecting_the_same_event_twice_yields_the_candidates_twice(reposito
 @pytest.mark.real_card
 def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
     """
-    **§10 stale — 현재 구조에는 "처리했다" 는 기록이 없다.**
+    **§10 — 보통의 발동은 "처리했다" 를 기억해서 사라지지 않는다.**
 
     발동한 카드가 다시 후보가 되지 않는 이유는 **상태가 바뀌었기 때문**이고
-    (카드가 손을 떠났다), "이미 처리했다" 를 기억해서가 아니다. ``Duel`` 의
-    필드에 그런 기록이 없다.
+    (카드가 손을 떠났다), "이미 처리했다" 를 기억해서가 아니다.
+
+    .. warning::
+       🔴 **Phase 6-Z 가 기억 하나를 만들었다** — ``Duel.consumed_events``.
+       그래서 이 시험의 제목("기억하는 것이 없다")은 **더 이상 전부 참이
+       아니고**, 그렇게 적는다.
+
+       🔴 **그 기억은 사건 전용이고, 규칙이 요구한다.** 한 사건이 같은 효과를
+       두 번 열지 않는다 (RULE-EFFECT-004) — 그것은 판의 모양으로 알 수 없는
+       사실이므로 (카드가 그 자리에 그대로 있다) 기억해야 한다.
+
+       🔴 **보통의 발동 경로는 그것을 읽지 않는다.** ``_activation_actions``
+       가 ``consumed_events`` 도 ``journal`` 도 읽지 않는다는 것을
+       ``test_02`` 가 AST 로 센다. 그래서 §10 이 지키려던 것 — "역사가 후보를
+       지우지 않는다" — 는 **보통의 발동에 대해 그대로**다. 이 시험이 아래에서
+       그것을 실제로 걸어 보인다.
     """
     duel = at_main1(small_duel(repository))
     seat = duel.turn_player
@@ -381,6 +449,16 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
         #: 그 사실을 아래에서 **따로 고정한다** — 칸 목록만 갱신하면 이
         #: 테스트가 지키려던 것이 사라진다.
         "journal",
+        #: 🔴 **Phase 6-Z 가 칸 둘을 더했다.**
+        #:
+        #: ``triggers``        사건에서 후보를 만드는 것. 불투명한 값이고,
+        #:                     없으면 유발 후보가 아예 오르지 않는다
+        #: ``consumed_events`` **"이미 처리했다" 를 적는 자리** — 이 시험의
+        #:                     제목이 더 이상 전부 참이 아닌 이유다. 사건
+        #:                     전용이고, 보통의 발동 경로는 읽지 않는다
+        #:                     (``test_02``)
+        "triggers",
+        "consumed_events",
     }
 
     #: 🔴 ``journal`` 이 적법성 판정에 쓰이지 않는다 (Phase 6-B).

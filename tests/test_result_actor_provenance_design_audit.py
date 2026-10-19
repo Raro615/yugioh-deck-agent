@@ -308,10 +308,31 @@ def test_01_the_effect_result_has_exactly_one_production_producer():
     #: (``rulings=OPERATION_RULINGS``). 조작 판정 지식을 ``build_executor``
     #: 가 기본값으로 넣지 않기 때문이고 (ADR-006), 그래서 **부르는 쪽이
     #: 고른다.** 자리의 수는 여전히 하나다 — 그것이 이 테스트의 사실이다.
+    #: 🔴 **Phase 6-Z 가 같은 자리에 인자를 하나 더 넘긴다**
+    #: (``chooser=chooser`` — 해결 중에 고르는 사람). 같은 이유다: 실행기가
+    #: 기본값으로 메꾸지 않으므로 (ADR-006) **부르는 쪽이 고른다.** 자리의
+    #: 수는 여전히 하나이고, 그것이 이 테스트의 사실이다.
+    #:
+    #: 호출이 여러 줄로 나뉘었으므로 한 줄 지문 대신 **인자 이름**을 센다 —
+    #: 지문이 줄바꿈을 고정하면 재는 것이 자리의 수가 아니라 서식이 된다.
+    import ast as _ast
+
     activation_source = source_of("engine/spell_activation.py")
     assert activation_source.count("build_executor(") == 1
+    call = next(
+        node
+        for node in _ast.walk(_ast.parse(activation_source))
+        if isinstance(node, _ast.Call)
+        and isinstance(node.func, _ast.Name)
+        and node.func.id == "build_executor"
+    )
+    assert sorted(kw.arg for kw in call.keywords) == [
+        "chooser",
+        "journal",
+        "rulings",
+    ], _ast.unparse(call)
     assert (
-        "build_executor(journal=journal, rulings=OPERATION_RULINGS)"
+        "OPERATION_RULINGS"
         in activation_source
     )
 
@@ -550,6 +571,9 @@ def test_09_production_now_records_the_journal_events_through_the_duel():
     """
     #: ① 공장의 **기본값은 그대로 ``None``** 이다 — 바뀐 것은 부르는 쪽이다.
     assert inspect.signature(build_executor).parameters["journal"].default is None
+    #: 🔴 **Phase 6-Z 가 더한 ``chooser`` 도 같은 규율이다** — 기본이
+    #: ``None`` 이고, 주지 않으면 아직 정해지지 않은 선택이 거절된다.
+    assert inspect.signature(build_executor).parameters["chooser"].default is None
 
     #: ② 그런데 듀얼의 해결기는 이제 journal 을 **받는다.**
     recorded = duel_resolver(journal=EventJournal())
@@ -564,12 +588,23 @@ def test_09_production_now_records_the_journal_events_through_the_duel():
     #: ④ ``duel_resolver`` 가 journal 을 **그대로 넘긴다** (그 한 자리가
     #: 끊겨 있던 연결이다).
     activation_source = source_of("engine/spell_activation.py")
-    #: 🔴 Phase 6-L 이 같은 호출에 ``rulings`` 를 더했다 (``test_01`` 의
-    #: 설명과 같은 자리). journal 을 그대로 넘기는 사실은 그대로다.
-    assert (
-        "build_executor(journal=journal, rulings=OPERATION_RULINGS)"
-        in activation_source
+    #: 🔴 Phase 6-L 이 같은 호출에 ``rulings`` 를 더했고 Phase 6-Z 가
+    #: ``chooser`` 를 더했다 (``test_01`` 의 설명과 같은 자리). **journal 을
+    #: 그대로 넘기는 사실은 그대로이고**, 그것이 이 단정이 재는 것이다 —
+    #: 지문이 줄바꿈을 고정하지 않도록 인자 이름으로 센다.
+    import ast as _ast
+
+    call = next(
+        node
+        for node in _ast.walk(_ast.parse(activation_source))
+        if isinstance(node, _ast.Call)
+        and isinstance(node.func, _ast.Name)
+        and node.func.id == "build_executor"
     )
+    passed = {kw.arg: _ast.unparse(kw.value) for kw in call.keywords}
+    assert passed.get("journal") == "journal", passed
+    assert passed.get("rulings") == "OPERATION_RULINGS", passed
+    assert passed.get("chooser") == "chooser", passed
     assert "build_executor()" not in activation_source
 
     #: ⑤ 비용 쪽도 journal 을 들린 지불기를 주입한다.
