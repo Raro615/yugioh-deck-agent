@@ -1644,29 +1644,83 @@ def test_i02_a_gate_blocked_activation_leaves_no_withheld_reason(repository):
 
 
 @pytest.mark.real_card
-def test_i03_the_withheld_sites_are_now_four(repository):
+def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
+    repository,
+):
     """
-    **보류 자리가 셋에서 넷이 되었다** — 그리고 넷째는 ``missing`` 이 없다.
+    **보류 자리마다 ``missing`` 을 채우는 기준이 같은가.**
 
     ``tests/test_duelstep_withheld_validation_audit.py::test_09`` 가 이
     경계의 계약이 느슨하다고 적었다 ("세 자리가 같은 칸에 다른 종류의 값을
     넣는다"). 6-S 의 넷째 자리는 그 칸을 **비운다** — 빠진 규칙이 아니라
     순서이므로 넣을 값이 없다. 없는 것을 빈 값으로 채우지 않는다.
+
+    🔴 **Phase 6-AA 가 자리 셋을 더했다** (넷 → 일곱). 그래서 이 시험이
+    세는 것을 **수에서 기준으로** 옮긴다 — 수만 세면 자리가 늘 때마다
+    숫자를 고치게 되고, 정작 지켜야 할 것(채우는 기준)은 세지 않는다.
+
+    ==========================================  ===========  ==============
+    자리                                          ``missing``  왜
+    ==========================================  ===========  ==============
+    ``_trigger_actions`` 강제 · 임의 판정 불가      **있다**     근거가 생겨야
+                                                             풀린다 (6-AA)
+    ``_trigger_actions`` 사본에 사건 기록 없음      **있다**     기록을 물려주는
+                                                             변경이 필요하다
+    ``_flow_actions``   우선권이 열리지 않았다      **있다**     여는 규칙이 없다
+    ``_flow_actions``   창은 열렸고 상대 차례다     **없다**     순서다 (6-S)
+    ``_flow_actions``   페이즈 전환이 거절됐다      **있다**     진행 규칙이 댄다
+    ``_flow_actions``   강제 유발이 열려 있다       **없다**     규칙이 **있다** —
+                                                             막는 것이 규칙의
+                                                             결과다 (6-AA)
+    ``_withheld_board_actions``                   **있다**     발동 규칙이 댄다
+    ==========================================  ===========  ==============
     """
     source = production_source("engine/duel.py")
-    assert source.count("WithheldAction(") == 4, source.count("WithheldAction(")
-    tree = method_tree(Duel._flow_actions)
-    constructions = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "WithheldAction"
-    ]
-    assert len(constructions) == 3, len(constructions)
-    with_missing = [
-        node
-        for node in constructions
-        if any(kw.arg == "missing" for kw in node.keywords)
-    ]
-    assert len(with_missing) == 2, len(with_missing)
+    tree = ast.parse(source)
+    by_function: dict[str, list] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        sites = [
+            inner
+            for inner in ast.walk(node)
+            if isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Name)
+            and inner.func.id == "WithheldAction"
+        ]
+        if sites:
+            by_function[node.name] = sites
+
+    #: 🔴 **보류를 만드는 자리는 이 셋뿐이다** — 늘면 여기서 드러난다.
+    assert sorted(by_function) == [
+        "_flow_actions",
+        "_trigger_actions",
+        "_withheld_board_actions",
+    ], sorted(by_function)
+    assert source.count("WithheldAction(") == sum(
+        len(v) for v in by_function.values()
+    ), "함수 밖에서 보류를 만드는 자리가 있다"
+
+    def filled(name):
+        return [
+            any(kw.arg == "missing" for kw in node.keywords)
+            for node in by_function[name]
+        ]
+
+    #: 🔴 **유발 쪽 둘은 전부 채운다** — 둘 다 "근거가 생겨야 풀린다" 다.
+    assert filled("_trigger_actions") == [True, True], filled("_trigger_actions")
+    #: 🔴 **판 쪽 하나도 채운다** — 발동 규칙이 이유를 댄다.
+    assert filled("_withheld_board_actions") == [True], filled(
+        "_withheld_board_actions"
+    )
+    #: 🔴 **흐름 쪽 넷 중 둘은 비운다** — 넣을 값이 없는 자리다.
+    flow = filled("_flow_actions")
+    assert len(flow) == 4, flow
+    assert flow.count(True) == 2 and flow.count(False) == 2, flow
+
+    #: 🔴 **비운 자리가 왜 비었는지 코드가 적는다.** 빈 칸을 설명 없이 두면
+    #: 다음 사람이 "빠뜨렸다" 로 읽고 아무 값이나 채운다.
+    body = source[source.index("def _flow_actions") :]
+    body = body[: body.index("\n    def ")]
+    assert "빠진 규칙이 아니라 **순서**다" in body
+    assert "규칙이 요구한 처리를" in body
