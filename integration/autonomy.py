@@ -500,6 +500,23 @@ class PolicyChooser:
         )
         return chosen
 
+    def forked(self) -> "PolicyChooser":
+        """
+        **같은 정책 · 빈 기록**인 사본 (Phase 6-AB).
+
+        탐색 사본은 해결 시점 선택을 **해야** 한다 — 그러지 않으면 사본이
+        원본보다 못 해결하고, 미래의 값이 규칙이 아니라 배선 때문에 달라진다
+        (``EffectExecutor.chooser`` 의 설명).
+
+        🔴 그런데 사본의 선택이 :attr:`records` 에 섞이면 그 목록은 더 이상
+        "실제 듀얼에서 **해결 중에** 무엇을 물었는가" 의 증거가 아니다 —
+        일어나지 않은 선택이 섞인다. 그래서 기록만 새로 받는다.
+
+        정책(:attr:`selector`)은 **그대로 공유한다.** 사본이 다른 정책으로
+        고르면 재는 미래가 실제로 밟을 미래가 아니다.
+        """
+        return PolicyChooser(self.selector)
+
     def __repr__(self) -> str:  # pragma: no cover - 표시용
         name = getattr(self.selector, "name", type(self.selector).__name__)
         return f"<PolicyChooser {name} asked={len(self._records)}>"

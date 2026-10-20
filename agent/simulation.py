@@ -200,15 +200,87 @@ class Simulator:
         버려지는데 기록은 남으므로, 그 기록은 실제 판과 **모순된다** —
         "기록된 상태 변경은 실제 적용된 상태와 모순되지 않는다" 가 깨진다.
 
-        그래서 사본은 **기록하지 않는 한 벌**로 바꿔 끼운다. 미래를 재는
-        일에 역사가 필요하지 않고, 사본의 역사를 따로 모아 둘 쓸모도 없다.
+        그래서 사본은 **자기 기록**으로 바꿔 끼운다.
+
+        🔴 **Phase 6-AB 가 "기록하지 않는 한 벌" 을 "물려받은 기록" 으로
+        바꿨다.** 그 전까지는 ``journal=False`` 였고, 그래서 사본이 **과거
+        사건을 잃었다** — 유발 후보는 기록된 사건에서 나오므로 (Phase 6-Z)
+        사본의 ``legal_actions`` 가 원본과 **다른 답**을 냈다. 실측::
+
+            원본 후보 5 (유발 있음)   사본 후보 4 (유발 없음)
+
+        미래를 재는 일에 역사가 필요하지 않다는 그때의 판단이 **틀렸다** —
+        지금 무엇을 발동할 수 있는가가 역사에 달려 있다.
+
+        🔴 **6-B 의 요구는 그대로 지킨다.** 사본은 부모의 기록 **객체**를
+        쓰지 않는다: 부모의 사건들을 씨앗으로 받은 **새 ``EventJournal``**
+        이고 (``EventJournal(events=…)`` 가 그 생성자다), 사본의 전개는 그
+        새 객체에만 쌓인다. 그래서 사본의 역사가 진짜 듀얼의 기록에 남지
+        않는다.
+
+        🔴 **형제 분기도 섞이지 않는다.** 포크마다 새 객체를 만들고, 씨앗으로
+        넘기는 ``JournalEvent`` 들은 불변(frozen)이므로 공유해도 한쪽의
+        전개가 다른 쪽에 보이지 않는다.
+
+        ``consumed_events`` · ``timing_floor`` 는 값(``frozenset`` · ``int``)
+        이므로 ``dataclasses.replace`` 가 그대로 값으로 가져간다 — 사본의
+        소비가 부모의 목록을 늘리지 않는다 (Phase 6-AA ``test_d04``).
         """
         self._forks += 1
         return dataclasses.replace(
             self.duel,
             state=self.duel.state.clone(),
-            **duel_components(journal=False),
+            **duel_components(
+                journal=self._forked_journal(),
+                chooser=self._forked_chooser(),
+            ),
         )
+
+    def _forked_journal(self):
+        """
+        부모의 사건을 **씨앗으로 받은 새 기록** (Phase 6-AB).
+
+        부모가 기록하지 않는 듀얼이면 (``journal is None``) 사본도 기록하지
+        않는다 — 없는 역사를 지어내지 않는다.
+        """
+        from engine.effect.journal import EventJournal
+
+        parent = self.duel.journal
+        if parent is None:
+            return False
+        return EventJournal(tuple(parent))
+
+    def _forked_chooser(self):
+        """
+        부모와 **같은 정책**으로 해결 시점 선택을 하는 것 (Phase 6-AB).
+
+        사본은 실행기 한 벌을 새로 만들므로 (``duel_components``) 이 자리를
+        채우지 않으면 **사본 안에서만** 해결 시점 선택이 거절된다. 실측한
+        증상 — 사본에서 발동은 되는데 해결이::
+
+            아직 고르지 않은 대상이 있습니다: @primary
+
+        로 멈췄다. 그러면 "해결할 수 있는 효과" 가 원본과 사본에서 달라지고,
+        미래의 값이 규칙이 아니라 배선을 재게 된다.
+
+        🔴 **고르는 사람을 지어내지 않는다.** 부모에게 없으면 사본도 없다 —
+        그 듀얼에서는 아직 정해지지 않은 선택이 실제로 거절되는 것이 맞다.
+
+        🔴 **기록은 물려주지 않는다.** 고르는 사람이 ``forked()`` 를 주면
+        그것을 쓴다 (:meth:`integration.autonomy.PolicyChooser.forked` 가 같은
+        정책 · 빈 기록을 돌려준다) — 사본에서 물은 것이 실제 듀얼의 선택
+        기록에 섞이면 그 기록은 증거가 아니게 된다. 주지 않는 고르는 사람은
+        그대로 쓴다: 모양이 ``choose(request)`` 하나뿐이므로
+        (:class:`~engine.effect.executor.ResolutionChooser`) 기록을 가졌는지
+        이쪽에서 알 방법이 없고, 없는 메서드를 요구하면 계약이 넓어진다.
+        """
+        resolver = self.duel._resolver
+        executor = getattr(resolver, "executor", None)
+        chooser = getattr(executor, "chooser", None)
+        if chooser is None:
+            return None
+        forked = getattr(chooser, "forked", None)
+        return forked() if callable(forked) else chooser
 
     @staticmethod
     def _settle_forced_passes(fork: Duel) -> "DuelStep | None":

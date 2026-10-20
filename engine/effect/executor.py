@@ -524,6 +524,25 @@ class EffectExecutor:
         return self._journal
 
     @property
+    def chooser(self) -> "ResolutionChooser | None":
+        """
+        **해결 중에 고르는 사람** — 읽기만 한다 (Phase 6-AB).
+
+        왜 꺼낼 수 있어야 하는가 — 탐색 사본은 실행기 한 벌을 **새로** 만들고
+        (``engine.spell_activation.duel_components``), 그때 이 자리가 비면
+        사본 안에서 해결 시점 선택이 **거절된다**. 실측한 증상::
+
+            simulate → "아직 고르지 않은 대상이 있습니다: @primary"
+
+        그러면 사본은 원본이 해결할 수 있는 효과를 해결할 수 없는 것으로
+        재고, 미래의 값이 **엔진 배선 때문에** 달라진다.
+
+        🔴 **바꿀 수는 없다.** 고르는 사람을 중간에 갈아 끼우면 같은 해결이
+        다른 답을 내므로, 이 자리는 생성 시점에만 정해진다.
+        """
+        return self._chooser
+
+    @property
     def destruction(self) -> DestructionRuling:
         return self._destruction
 
