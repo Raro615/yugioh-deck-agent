@@ -572,10 +572,16 @@ def _combo_step_lines(agent, plan) -> "list[str]":
 
 
 def _executed_lines(agent, recipe_text: str,
-                    hand_ids: "list[int]") -> "list[str]":
+                    hand_ids: "list[int]") -> "tuple[list[str], bool]":
     """
     🔴 **실제 엔진 실행 절** (Phase 6-T). 레시피가 없으면 빈 목록이 아니라
     **무엇이 부족한지** 적는다 (§5 · §15).
+
+    돌려주는 것은 ``(줄들, 입력이 거절되었는가)`` 짝이다 (Phase 6-AA).
+    둘째 값이 참이면 **이번 요청의 입력이 규칙에 어긋났다**는 뜻이고, 그때
+    부르는 쪽은 정적 전개 추천을 **내지 않는다** — 거절한 입력에 대해
+    "이렇게 전개하면 된다" 를 보여 주면 사용자는 자기 입력이 통과한 줄로
+    읽는다 (사용자 실험 ③ 이 그것을 잡았다).
 
     ``deck:`` 초안을 실제 덱으로 쓰지 않는 이유가 여기에 적혀 있어야 한다 —
     출력에 없으면 사용자는 초안으로 검증했다고 믿는다.
@@ -604,7 +610,7 @@ def _executed_lines(agent, recipe_text: str,
             "넘기는 방법 (`recipe:`):",
             "  `recipe:욕망의 항아리 x3, 11091375 x37`",
             "  또는 YDK 그대로 (`#main` 아래 패스코드 한 줄에 하나)",
-        ]
+        ], False
 
     parsed = parse_recipe(recipe_text, agent.repository)
     lines = ["**[실제 엔진 실행]**"]
@@ -617,7 +623,10 @@ def _executed_lines(agent, recipe_text: str,
     if parsed.draft is None:
         lines.append("🔴 레시피에서 카드를 하나도 읽지 못해 **실행하지"
                      " 않았습니다.**")
-        return lines
+        #: 레시피를 읽지 못한 것은 **입력 거절이 아니다** — 규칙 위반을
+        #: 판정한 것이 아니라 글자를 못 읽은 것이므로, 정적 계획은 그대로
+        #: 보여 준다 (그쪽은 레시피를 쓰지 않는다).
+        return lines, False
 
     #: 🔴 **유발 발동과 해결 시점 선택을 꽂는다** (Phase 6-Z).
     #:
@@ -643,8 +652,8 @@ def _executed_lines(agent, recipe_text: str,
     if setup.can_run:
         lines.append(
             f"✅ **엔진이 실제로 {run.executed}걸음 실행**했습니다"
-            f" (해결 {run.resolved} · 상태 변경 {run.state_changes})."
-            " 아래는 실측 기록입니다."
+            f" (효과 해결 {run.effects_resolved}걸음 · 상태 변경"
+            f" {run.state_changes}걸음). 아래는 실측 기록입니다."
         )
         lines.append(
             "🔴 고른 방식은 **검증용 기준점**입니다 — 행동은"
@@ -658,7 +667,7 @@ def _executed_lines(agent, recipe_text: str,
     lines.extend(render_opening_setup(setup).splitlines())
     lines.extend(render_opening_run(run).splitlines())
     lines.extend(render_opening_board(setup, agent.repository).splitlines())
-    return lines
+    return lines, not setup.can_run
 
 
 def combo_messages(agent, hand_text: str, board_text: str = "",
@@ -738,7 +747,26 @@ def combo_messages(agent, hand_text: str, board_text: str = "",
     #: 🔴 **실제 레시피를 주면 엔진으로 돌린다** (Phase 6-T). 자연어
     #: ``deck:`` 초안과 **가르는 것이 요점**이다 — 초안은 이 저장소가 추천한
     #: 구성이고 사용자가 확정한 덱이 아니다 (§5).
-    executed_lines = _executed_lines(agent, recipe_text, hand_ids)
+    executed_lines, input_refused = _executed_lines(
+        agent, recipe_text, hand_ids
+    )
+
+    #: 🔴 **입력이 거절되면 정적 전개 추천을 내지 않는다** (Phase 6-AA —
+    #: 사용자 실험 ③). 실측으로, 「기르수: 패 4장 > 덱 3장」으로 거절한
+    #: 요청에 대해 아래 정적 계획이 기르수 소환과 효과를 나열하고 "확정" ·
+    #: "엔진이 허가함" 으로 적었다. 그 두 문장이 한 응답 안에 같이 있으면
+    #: 사용자는 입력이 통과한 줄로 읽는다.
+    if input_refused:
+        if executed_lines:
+            lines.append("")
+            lines.extend(executed_lines)
+        lines.append("")
+        lines.append("🔴 **정적 전개 추천은 내지 않았습니다** — 이번 요청의"
+                     " 입력이 규칙 검증을 통과하지 못했습니다.")
+        lines.append("거절한 입력에 대해 전개를 추천하면 그 입력이 통과한"
+                     " 것으로 읽힙니다. 위에 적힌 위반을 고쳐서 다시"
+                     " 보내 주세요.")
+        return paginate(lines)
 
     plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
                                                board=board_ids, draft=draft)
@@ -776,6 +804,21 @@ def combo_messages(agent, hand_text: str, board_text: str = "",
         lines.append("")
         lines.append("**[사람이 직접 확인할 것]**")
         lines.extend(f"  - {item}" for item in plan.manual_checks)
+        #: 🔴 **레시피 검사와 충돌하지 않게 한다** (Phase 6-AA — 사용자 실험
+        #: ②). 정적 계획은 ``draft`` 를 받지 않으면 "패가 덱에서 나올 수
+        #: 있는지 확인하지 않았다" 고 적는다. 그 문장은 **플래너에 대해서는
+        #: 참**이지만, 같은 응답에서 레시피가 그것을 이미 검사했다면 읽는
+        #: 쪽에는 모순으로 보인다. 플래너의 판정을 바꾸지 않고 **누가 무엇을
+        #: 검사했는지** 적는다.
+        if recipe_text and recipe_text.strip() and draft is None:
+            lines.append("")
+            lines.append("🔴 위 항목 중 **패가 덱에서 나올 수 있는지**는"
+                         " 위쪽 `[실제 엔진 실행]` 절이 `recipe:` 로 **이미"
+                         " 검사했습니다.**")
+            lines.append("정적 계획은 자연어 `deck:` 초안을 받지 않아 그"
+                         " 검사를 하지 않았다고 적습니다 — 두 절이 다른"
+                         " 입력을 보기 때문이고, 실제 판정은 `recipe:` 쪽"
+                         "입니다.")
 
     return paginate(lines)
 

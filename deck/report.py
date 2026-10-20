@@ -234,8 +234,18 @@ def render_opening_run(run) -> str:
             lines.append(f"      🔴 {step.note}")
         lines.append(f"      이 뒤의 행동 후보 {step.next_candidates}건")
     lines.append("")
-    lines.append(f"  실행 {run.executed}걸음 · 해결 {run.resolved}걸음 ·"
-                 f" 상태 변경 {run.state_changes}걸음")
+    #: 🔴 **"해결" 의 뜻을 적는다** (Phase 6-AA — 사용자 실험 ④).
+    #:
+    #: ``resolved`` 는 **해결까지 막히지 않은 걸음** 수이고 효과를 해결한
+    #: 걸음 수가 아니다 — 체인을 만들지 않는 소환 · 세트도 "막히지 않았다"
+    #: 이므로 들어온다. 그 수만 보여 주면 "효과를 N번 해결했다" 로 읽힌다.
+    #: 그래서 **효과 해결 수를 따로** 적는다 (기록에 ``EffectEvent`` 가 남은
+    #: 걸음만 센 실측이다).
+    lines.append(f"  실행 {run.executed}걸음 · 상태 변경 {run.state_changes}걸음")
+    lines.append(f"  막히지 않고 끝난 걸음 {run.resolved} / {run.executed}"
+                 f" (🔴 효과를 그만큼 해결했다는 뜻이 **아닙니다**)")
+    lines.append(f"  그중 **효과가 실제로 해결된 걸음** {run.effects_resolved}걸음"
+                 f" (기록에 EffectEvent 가 남은 걸음)")
     if run.stopped_reason:
         lines.append(f"  멈춘 이유: {run.stopped_reason}")
     return "\n".join(lines)

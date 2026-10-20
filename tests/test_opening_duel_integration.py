@@ -762,12 +762,24 @@ def test_e04_the_stop_reason_separates_finished_from_blocked(repository):
     🔴 **"더 할 것이 없다" 와 "상한에 닿았다" 와 "막혔다" 를 가른다.**
 
     전개가 끝난 것은 실패가 아니다 (§11 마지막 줄).
+
+    🔴 **Phase 6-AA 가 그 문장을 한정했다** (사용자 실험 ③). 6-T 는 "전개가
+    여기서 끝났다" 로 단정했는데, 그 문장은 **이 저장소가 모든 전개 수단을
+    안다**고 가정한다 — 실행 구현이 등재된 효과는 15개이고 유발은 하나다.
+    끝난 것은 전개가 아니라 **이 범위에서 고를 수 있는 것**이다.
+
+    세 가지를 가르는 요구는 그대로이고, 이 시험이 그것을 **더 좁게** 센다:
+    범위에 대한 한정이 있는가, 그리고 "막혔다" 를 여전히 부정하는가.
     """
     setup = opened(repository)
     run = execute_opening(setup, repository)
     assert run.stopped_reason
     assert "판을 바꿀 후보가 더 없습니다" in run.stopped_reason
-    assert "막힌 것이 아닙니다" in run.stopped_reason
+    #: 🔴 **막혔다고 적지 않는다** — 그 요구는 그대로다.
+    assert "엔진이 막았다는 뜻도 아닙니다" in run.stopped_reason
+    #: 🔴 **그리고 끝났다고 단정하지도 않는다** (6-AA 가 더한 한정).
+    assert "현재 지원 범위" in run.stopped_reason
+    assert "전개가 끝났다는 뜻이 아니고" in run.stopped_reason
 
     #: 상한에 닿으면 **다른** 이유가 적힌다.
     tight = opened(repository)

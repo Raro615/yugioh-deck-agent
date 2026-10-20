@@ -432,7 +432,32 @@ class OpeningRun:
 
     @property
     def resolved(self) -> int:
+        """
+        **해결까지 막히지 않은 걸음** 수. 🔴 효과를 해결한 걸음 수가 **아니다.**
+
+        체인을 만들지 않는 걸음(소환 · 세트)도 "막히지 않았다" 이므로 여기
+        들어온다. 그래서 이 수가 걸음 수와 같은 것이 정상이고, 그것을
+        "효과를 그만큼 해결했다" 로 읽으면 틀린다 — 효과 해결은
+        :attr:`effects_resolved` 가 센다 (Phase 6-AA 가 가른 자리).
+        """
         return sum(1 for s in self.steps if s.accepted and s.resolved)
+
+    @property
+    def effects_resolved(self) -> int:
+        """
+        **실제로 효과가 해결된 걸음** 수 (Phase 6-AA).
+
+        기록에 ``EffectEvent`` 가 남은 걸음만 센다 — 적용된 링크만 그 사건을
+        남기므로 (``EventJournal``) 이 수는 주장이 아니라 **실측**이다.
+        """
+        return sum(1 for s in self.steps if s.accepted and s.effect_events)
+
+    #: 🔴 **"체인에 링크가 몇 번 올랐는가" 는 여기서 셀 수 없다** (6-AA 가
+    #: 한 번 그렇게 만들었다가 지웠다). ``ExecutedStep.chain_links_after``
+    #: 는 **걸음이 끝난 뒤 남은** 링크 수이고, 체인이 풀리면 0 이 된다 —
+    #: 그래서 그 수를 세면 "발동이 한 번도 없었다" 로 읽힌다 (실측: 유발을
+    #: 발동하고 해결한 전개에서 0 이 나왔다). 발동 횟수가 필요하면 기록의
+    #: ``EffectEvent`` 를 세야 하고, 그것이 :attr:`effects_resolved` 다.
 
     @property
     def state_changes(self) -> int:
@@ -566,9 +591,18 @@ def execute_opening(
             kinds = sorted({a.kind.value for a in legal.allowed})
             flow_only = {"end_phase", "pass"} >= set(kinds)
             run.stopped_reason = (
+                #: 🔴 **단정하지 않는다** (Phase 6-AA — 사용자 실험 ③).
+                #:
+                #: 6-T 는 이 자리를 "전개가 여기서 끝났다" 로 적었다. 그
+                #: 문장은 **이 저장소가 모든 전개 수단을 안다**고 가정한다 —
+                #: 실행 구현이 등재된 효과는 15개이고 (``EFFECT_LIBRARY``)
+                #: 유발은 하나다. 즉 끝난 것은 전개가 아니라 **이 범위에서
+                #: 고를 수 있는 것**이다.
                 f"판을 바꿀 후보가 더 없습니다 — 남은 후보는 흐름뿐입니다"
-                f" ({kinds}). 전개가 여기서 끝났다는 뜻이고, 막힌 것이"
-                f" 아닙니다."
+                f" ({kinds}). 🔴 이것은 **이 저장소의 현재 지원 범위 ·"
+                f" 후보 생성 · 검증용 선택 방식에서** 더 고를 것이 없다는"
+                f" 뜻입니다. 실제로 이 패의 전개가 끝났다는 뜻이 아니고,"
+                f" 엔진이 막았다는 뜻도 아닙니다."
                 if flow_only else
                 f"검증용 선택 방식이 고를 행동을 찾지 못했습니다"
                 f" (후보 {len(legal.allowed)}건: {kinds})"
