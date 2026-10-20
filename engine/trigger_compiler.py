@@ -81,9 +81,41 @@ Lua 의 사본이 아니라 ``StateDelta`` / ``JournalEvent`` 에서 파생된 �
     TRIGGER_O   임의 표기만 3,625   강제 표기만    4
     TRIGGER_F   강제 표기만   394   임의 표기만   45   ← 10%가 어긋난다
 
-그래서 :attr:`~engine.trigger.TriggerRequirement.UNKNOWN` 과
-:attr:`~engine.trigger.TriggerWording.UNKNOWN` 을 그대로 둔다. 둘은
-"아직 확인되지 않았다" 를 뜻하는 값이고, 그것이 지금의 사실이다.
+그래서 접미사만으로는 채우지 않는다.
+
+🔴 **Phase 6-AA 가 근거를 하나 더 들고 왔다 — 카드 자신의 텍스트.**
+「발동**할 수 있다**」는 허가의 진술이고 「발동**한다**」는 수행의 진술이다.
+그것은 접미사의 **이름 풀이가 아니라 카드가 적어 둔 문장**이므로 3-F-26 이
+근거 없음으로 적은 것과 다른 종류의 증거다
+(``core.card_model.Card.activation_permission_text`` 가 그 값을 만든다).
+
+그 두 근거를 **이렇게** 쓴다 (:func:`requirement_from`):
+
+====================  =============  ==========================
+텍스트                 접미사          판정
+====================  =============  ==========================
+「…할 수 있다」만       ``TRIGGER_O``   ``OPTIONAL``
+「…한다」만            ``TRIGGER_F``   ``MANDATORY``
+둘이 **어긋난다**       —              ``UNKNOWN`` ← 3-F-26 의 반례들
+텍스트가 섞였다/없다    —              ``UNKNOWN``
+====================  =============  ==========================
+
+🔴 **접미사는 혼자 답을 만들지 못한다.** 위 표에서 접미사의 역할은 텍스트와
+어긋날 때 **판정을 거두는 것**뿐이다. 그래서 접미사의 뜻풀이가 틀렸더라도 이
+판정은 틀린 쪽으로 넓어지지 않는다 — 좁아질 뿐이다. 3-F-26 의 결론
+("접미사의 뜻은 근거가 없다") 을 **뒤집지 않고 그대로 쓴다.**
+
+실측 (유발 선언 블록 8,052개 · 카드 5,857장)::
+
+    OPTIONAL    5,176 (64.3%)   텍스트=임의만 × TRIGGER_O
+    MANDATORY     514 ( 6.4%)   텍스트=강제만 × TRIGGER_F
+    UNKNOWN     2,362 (29.3%)
+       ├ 텍스트 미기재  1,517   ← 「발동…」 문장이 아예 없다
+       ├ 텍스트 혼재      766   ← 붙이는 방법에 따라 답이 달라진다
+       └ 둘이 어긋남       79   ← 3-F-26 이 센 반례 그대로
+
+:attr:`~engine.trigger.TriggerWording.UNKNOWN` (때 / 경우) 은 **그대로
+둔다** — 그것은 놓친 타이밍의 축이고 타이밍 윈도우가 있어야 쓸 수 있다.
 """
 
 from __future__ import annotations
@@ -94,7 +126,12 @@ from typing import Sequence
 
 from engine.effect.delta import SummonKind
 from engine.ids import EffectRef
-from engine.trigger import TimingPoint, TriggerSpec, TriggerSubject
+from engine.trigger import (
+    TimingPoint,
+    TriggerRequirement,
+    TriggerSpec,
+    TriggerSubject,
+)
 from engine.vocabulary import Zone
 
 #: ``EffectSpec.declared_types`` 에서 **트리거 등록**을 뜻하는 이름들.
@@ -118,6 +155,52 @@ TRIGGER_DECLARATION_TYPES: frozenset[str] = frozenset({"TRIGGER_O", "TRIGGER_F"}
 #: 계층이 생겨야 풀린다. ``FLIP`` 과 옮길 수 있는 코드를 **함께** 가진
 #: 블록은 **0개**이므로 이 분기가 멀쩡한 선언을 가로채지 않는다.
 FLIP_DECLARATION_TYPE = "FLIP"
+
+#: 접미사가 **임의** 쪽을 가리키는 선언. 🔴 혼자서는 아무것도 결정하지 않는다.
+OPTIONAL_DECLARATION_TYPE = "TRIGGER_O"
+
+#: 접미사가 **강제** 쪽을 가리키는 선언. 🔴 같은 규율이다.
+MANDATORY_DECLARATION_TYPE = "TRIGGER_F"
+
+#: 카드 텍스트가 말하는 두 값 (``core.card_model.activation_permission_text``).
+#:
+#: 🔴 **문자열로 받는다.** 이 모듈은 ``core`` 를 import 하지 않는다
+#: (``tests/test_trigger_compiler.py`` 의
+#: ``test_h_the_compiler_borrows_nothing_from_analysis``) — 문자열과 숫자만
+#: 받는 것이 그 경계를 지키는 방법이고, 6-D 부터의 규율이다.
+TEXT_OPTIONAL = "optional"
+TEXT_MANDATORY = "mandatory"
+
+
+def requirement_from(
+    declared_types: Sequence[str], text_permission: "str | None"
+) -> TriggerRequirement:
+    """
+    이 블록의 발동이 **강제인가 임의인가** (Phase 6-AA). 모르면 ``UNKNOWN``.
+
+    두 근거가 **같은 쪽을 말할 때만** 판정한다 (모듈 머리말의 표).
+
+    - 근거 1 **카드 텍스트** — ``text_permission``. 카드가 제 입으로 적은
+      허가/수행의 진술이고, 이것이 **답을 만드는 쪽**이다.
+    - 근거 2 **Lua 접미사** — ``declared_types``. 어긋날 때 **판정을 거두는
+      데만** 쓴다 (3-F-26: 접미사의 뜻풀이는 근거가 없다).
+
+    🔴 **발동 가능성과 섞지 않는다.** 이 값은 "규칙이 발동을 요구하는가" 이고,
+    조건이 참인가 · 비용을 낼 수 있는가 · 지금이 그 시점인가는 전부 다른
+    질문이며 다른 계층이 답한다 (``TriggerEligibilityJudge`` 의 다섯 관문).
+    강제 효과도 조건이 거짓이면 발동하지 않는다.
+    """
+    kinds = set(declared_types)
+    says_optional = OPTIONAL_DECLARATION_TYPE in kinds
+    says_mandatory = MANDATORY_DECLARATION_TYPE in kinds
+    if says_optional and says_mandatory:
+        # 한 블록이 둘을 함께 선언했다 — 접미사가 자기 안에서 어긋난다.
+        return TriggerRequirement.UNKNOWN
+    if text_permission == TEXT_OPTIONAL and says_optional:
+        return TriggerRequirement.OPTIONAL
+    if text_permission == TEXT_MANDATORY and says_mandatory:
+        return TriggerRequirement.MANDATORY
+    return TriggerRequirement.UNKNOWN
 
 
 @dataclass(frozen=True, slots=True)
@@ -461,6 +544,7 @@ def compile_trigger_spec(
     event_code: str | None,
     ranges: Sequence[str] = (),
     event_subject_claim: str | None = None,
+    text_permission: "str | None" = None,
 ) -> TriggerCompilation | None:
     """
     효과 블록 하나의 등록 정보를 :class:`~engine.trigger.TriggerSpec` 으로.
@@ -469,6 +553,11 @@ def compile_trigger_spec(
     ``TRIGGER_O`` · ``TRIGGER_F`` 가 없다). 결과 객체를 만들지 않는 이유는
     Phase 6-D 와 같다 — "트리거가 아니다" 와 "트리거인데 옮기지 못했다" 가
     같은 값이 되면 안 된다.
+
+    ``text_permission`` (Phase 6-AA) 은 **카드 텍스트가 말하는 허가/수행**
+    이다 (``core.card_model.Card.activation_permission_text``). 주지 않으면
+    :attr:`~engine.trigger.TriggerRequirement.UNKNOWN` 이고, 그것이 6-AA
+    이전의 동작 그대로다 — 없는 것을 기본값으로 메꾸지 않는다 (ADR-006).
     """
     if not isinstance(effect_ref, EffectRef):
         raise TypeError(f"EffectRef 가 필요합니다: {type(effect_ref).__name__}")
@@ -545,6 +634,7 @@ def compile_trigger_spec(
         summons=timing.summons,
         subject=subject,
         activates_from=activates_from,
+        requirement=requirement_from(kinds, text_permission),
     )
     return TriggerCompilation(
         status=TriggerCompilationStatus.COMPILED,
@@ -561,7 +651,12 @@ __all__ = [
     "NOT_HANDLER_CLAIM",
     "SELF_SCOPE_DECLARATION",
     "FLIP_DECLARATION_TYPE",
+    "MANDATORY_DECLARATION_TYPE",
+    "OPTIONAL_DECLARATION_TYPE",
+    "TEXT_MANDATORY",
+    "TEXT_OPTIONAL",
     "TRIGGER_DECLARATION_TYPES",
+    "requirement_from",
     "EVENT_TIMING",
     "TriggerCompilationStatus",
     "TriggerCompilation",

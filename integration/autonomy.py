@@ -158,10 +158,30 @@ class TriggerOffer:
     controller: int
     requirement: TriggerRequirement
     reason: str
+    event_sequence: int = -1
+    """
+    이 사건이 기록된 **번호** (Phase 6-AA). ``EventJournal`` 이 identity 로
+    쓰는 값 그대로다 (``JournalEvent.sequence``).
+
+    🔴 **흐름 위의 자리를 가리킨다.** 사건이 지나간 시점의 것인지 판정하는
+    데 쓰고, 그 판정은 ``Duel`` 이 한다 — 이 계층은 번호를 **옮기기만**
+    한다. ``-1`` 은 번호를 모른다는 뜻이고, 그때 ``Duel`` 은 그 제안을
+    **내놓지 않는다** (모르는 것을 지금 것으로 읽지 않는다).
+    """
 
     @property
     def requirement_known(self) -> bool:
         return self.requirement is not TriggerRequirement.UNKNOWN
+
+    @property
+    def is_optional(self) -> bool:
+        """근거 있는 **임의** 유발인가 (Phase 6-AA)."""
+        return self.requirement is TriggerRequirement.OPTIONAL
+
+    @property
+    def is_mandatory(self) -> bool:
+        """근거 있는 **강제** 유발인가 (Phase 6-AA)."""
+        return self.requirement is TriggerRequirement.MANDATORY
 
     @property
     def event_key(self) -> TimingEvent:
@@ -252,12 +272,21 @@ def trigger_offers(duel, repository, seat: int) -> tuple[TriggerOffer, ...]:
 
     🔴 **``ELIGIBLE`` 만 돌려준다.** ``UNDETERMINED`` 는 "발동할 수 있는지
     모른다" 이고, 모르는 것을 후보로 올리면 ``UNKNOWN`` 이 허가가 된다.
+
+    🔴 **기록이 없으면 빈 짝이다** (Phase 6-AA). 사건에서 유발을 꺼내는
+    일이므로 사건 기록이 없으면 꺼낼 것이 없다 — 그것은 오류가 아니라
+    사실이다.
+
+    6-Z 는 이 자리에서 :class:`AutonomyError` 를 던졌고, 그래서 **기록
+    없는 사본의 ``legal_actions`` 가 터졌다** (``agent.simulation`` 의
+    ``_fork`` 가 ``journal=False`` 로 한 벌을 바꿔 끼운다). 후보를 묻는
+    일이 예외를 던지면 그 사본으로는 **아무 행동도 평가할 수 없다** —
+    실측으로 ``Simulator.simulate`` 가 모든 행동에 ``ERROR`` 를 돌려주었다.
+    빈 짝을 돌려주고, "판정하지 못했다" 는 사실은 ``Duel`` 이 보류 목록에
+    적는다 (보고서 §4).
     """
     if duel.journal is None:
-        raise AutonomyError(
-            "이 듀얼에는 EventJournal 이 없습니다. build_opening(journal=…) "
-            "으로 만들어야 사건에서 유발을 꺼낼 수 있습니다."
-        )
+        return ()
     view = duel.view(seat)
     build = registry_for_view(view, repository)
     integrator = _integrator(view, build.registry)
@@ -280,6 +309,7 @@ def trigger_offers(duel, repository, seat: int) -> tuple[TriggerOffer, ...]:
                         controller=candidate.controller,
                         requirement=candidate.requirement,
                         reason=_gate_summary(eligibility),
+                        event_sequence=recorded.sequence,
                     )
                 )
     return tuple(offers)

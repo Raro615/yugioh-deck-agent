@@ -21,6 +21,8 @@ Phase 6-Y — **AI 가 스스로 고르는가.**
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from agent.choice import (
@@ -291,17 +293,47 @@ def test_b01_the_offer_comes_from_the_summon_event(repository):
 
 @pytest.mark.real_card
 @requires_official_db
-def test_b02_the_forced_or_optional_distinction_stays_unknown(repository):
+def test_b02_the_forced_or_optional_distinction_now_has_evidence(repository):
     """
     🔴 §5 의 요구 — **강제와 임의를 가를 수 없으면 그것을 적는다.**
 
-    이 엔진에 그 지식이 없다 (``TriggerRequirement.UNKNOWN``). 그래서
-    배선은 발동을 **강제하지 않고** 정책에게 묻는다.
+    🔴 **Phase 6-AA 가 근거를 들고 왔다.** 6-Y 때 이 자리는
+    ``TriggerRequirement.UNKNOWN`` 이었고, 그것이 그때의 사실이었다. 지금은
+    카드 자신의 텍스트가 「발동**할 수 있다**」로 적었고 (허가의 진술) Lua
+    선언도 어긋나지 않으므로 **임의**로 판정된다.
+
+    🔴 **그래서 §5 의 요구가 사라진 것이 아니다** — 근거가 모이지 않는
+    효과는 여전히 ``UNKNOWN`` 이고, 그때 배선은 발동 여부를 정책에게
+    **맡기지 않는다** (``Duel`` 이 보류로 돌린다). 이 시험이 그 둘을 함께
+    센다: 근거가 있는 쪽과 없는 쪽.
     """
     _, _, offers, _ = _drive(repository, DeclineChoice())
     offer = offers[0]
-    assert offer.requirement is TriggerRequirement.UNKNOWN
-    assert offer.requirement_known is False
+    #: ① 근거가 있다 — 임의다.
+    assert offer.requirement is TriggerRequirement.OPTIONAL
+    assert offer.requirement_known is True
+    assert offer.is_optional is True
+    assert offer.is_mandatory is False
+
+    #: ② 🔴 **근거는 카드 텍스트다** — 카드 ID 가 아니다.
+    card = repository.get(GIRSU)
+    assert card.activation_permission_text == "optional"
+    assert "발동할 수 있다" in card.desc
+    assert "발동한다" not in card.desc
+
+    #: ③ 근거가 모이지 않으면 여전히 ``UNKNOWN`` 이다. 🔴 그런 카드가
+    #:    실제로 있다는 것을 corpus 에서 확인한다 — 없으면 이 단정이
+    #:    아무것도 재지 않는다.
+    from engine.trigger_compiler import requirement_from
+
+    assert (
+        requirement_from(["SINGLE", "TRIGGER_O"], None)
+        is TriggerRequirement.UNKNOWN
+    )
+    assert (
+        requirement_from(["SINGLE", "TRIGGER_F"], "optional")
+        is TriggerRequirement.UNKNOWN
+    ), "텍스트와 선언이 어긋나면 판정을 거둔다"
 
 
 @pytest.mark.real_card
@@ -327,7 +359,7 @@ def test_b04_the_opponent_is_offered_nothing(repository):
 
 
 @requires_official_db
-def test_b05_a_duel_without_a_journal_is_refused(repository):
+def test_b05_a_duel_without_a_journal_says_so_instead_of_guessing(repository):
     """
     기록이 없으면 사건을 꺼낼 수 없다 — **조용히 0건으로 넘기지 않는다.**
 
@@ -335,6 +367,15 @@ def test_b05_a_duel_without_a_journal_is_refused(repository):
     ``journal`` 을 주지 않으면 기록이 없다고 가정했는데, 그 함수는
     ``journal or EventJournal()`` 로 **항상 켜 준다.** 그래서 두 사실을
     따로 적는다 — 흔한 경로는 잊을 수 없다는 것과, 그래도 가드가 있다는 것.
+
+    🔴 **Phase 6-AA 가 가드의 자리를 옮겼다.** 6-Y 는 배선이
+    :class:`AutonomyError` 를 던졌고, 그러면 **후보를 묻는 일이 터진다** —
+    실측으로 기록 없는 사본(``agent.simulation`` 의 ``_fork``)의
+    ``Simulator.simulate`` 가 모든 행동에 ``ERROR`` 를 돌려주었다.
+
+    그래서 배선은 빈 짝을 돌려주고, **"판정하지 못했다" 는 ``Duel`` 의 보류
+    목록이 말한다.** 조용히 넘기지 않는다는 요구는 그대로이고, 말하는 자리가
+    바뀐 것이다 — 이 시험이 그 자리를 센다.
     """
     others = [cid for cid in _orcust_pool(repository) if cid != GROWTH]
     lines = [f"{GIRSU} x1"] + [f"{cid} x1" for cid in others[:39]]
@@ -356,9 +397,23 @@ def test_b05_a_duel_without_a_journal_is_refused(repository):
         journal=False,
     )
     assert silent.journal is None
-    with pytest.raises(AutonomyError) as caught:
-        trigger_offers(silent, repository, MINE)
-    assert "EventJournal" in str(caught.value)
+    #: ② 기록이 없으면 꺼낼 것이 없다 — 빈 짝이다 (터지지 않는다).
+    assert trigger_offers(silent, repository, MINE) == ()
+
+    #: ③ 🔴 **그래도 조용하지 않다.** 유발 원천을 꽂은 듀얼이라면
+    #:    ``legal_actions`` 가 "판정하지 못했다" 를 보류에 적는다.
+    from engine.duel import TRIGGER_HISTORY_MISSING
+    from integration.autonomy import TriggerSource
+
+    wired = dataclasses.replace(silent, triggers=TriggerSource(repository))
+    legal = wired.legal_actions(MINE)
+    held = [w for w in legal.withheld if w.missing == TRIGGER_HISTORY_MISSING]
+    assert len(held) == 1, [(w.kind.value, w.reason) for w in legal.withheld]
+    assert "사건 기록이 없는 사본" in held[0].reason
+    #: 그리고 유발 후보는 오르지 않았다 — 지어내지 않는다.
+    assert not [
+        a for a in legal.allowed if a.kind is PlayerActionKind.ACTIVATE_EFFECT
+    ]
 
 
 # ======================================================================

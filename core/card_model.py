@@ -332,6 +332,19 @@ SELF_GRAVE_TRIGGER_EVENT: str = "EVENT_TO_GRAVE"
 #: 않으면 *남의* 묘지행에 반응하는 카드가 자기 묘지행의 증거로 읽힌다.
 SELF_GRAVE_TRIGGER_SCOPE: str = "SINGLE"
 
+#: 🔴 **카드가 자기 발동이 임의라고 말하는 문구** (Phase 6-AA).
+#:
+#: 「발동**할 수 있다**」는 허가의 진술이다 — 카드가 제 입으로 "해도 되고
+#: 안 해도 된다" 고 적은 것이고, 그것이 임의의 뜻 그대로다.
+ACTIVATION_OPTIONAL_PHRASE: str = "발동할 수 있다"
+
+#: 카드가 자기 발동이 강제라고 말하는 문구.
+#:
+#: 「발동**한다**」는 수행의 진술이다. 🔴 ``발동할 수 없다`` (금지) 와
+#: ``발동을 무효로 한다`` (무효화) 는 이 문자열을 **포함하지 않으므로**
+#: 섞이지 않는다 — 실측으로 확인했다 (보고서 §3).
+ACTIVATION_MANDATORY_PHRASE: str = "발동한다"
+
 
 @dataclass(slots=True)
 class Card:
@@ -607,6 +620,51 @@ class Card:
             and SELF_GRAVE_TRIGGER_SCOPE in set(spec.effect_types)
             for spec in self.script.effects
         )
+
+    @property
+    def activation_permission_text(self) -> "str | None":
+        """
+        이 카드 **자신의 텍스트**가 발동을 허가로 적었는가, 수행으로 적었는가
+        (Phase 6-AA). 셋 중 하나다.
+
+        =============  ==================================================
+        ``"optional"``   「발동할 수 있다」만 있다 — 카드가 허가로 적었다
+        ``"mandatory"``  「발동한다」만 있다 — 카드가 수행으로 적었다
+        ``None``         **말할 수 없다.** 둘 다 없거나(미기재) 둘 다 있다
+        =============  ==================================================
+
+        🔴 **``None`` 이 "임의가 아니다" 를 뜻하지 않는다.** 이 텍스트로는
+        답할 수 없다는 뜻이고, 읽는 쪽은 그것을
+        :attr:`~engine.trigger.TriggerRequirement.UNKNOWN` 으로 받는다.
+
+        🔴 **왜 카드 단위이면서 효과 단위 판정에 쓸 수 있는가.** 이 저장소에
+        문장과 효과 블록을 잇는 계층이 **없다** (``tests/
+        test_effect_block_alignment_audit.py`` 가 그 공백을 적어 두었다).
+        그래서 「①」이 어느 블록인지 모른다. 그런데 **모든 발동 문장이 같은
+        쪽을 말할 때**는 그것을 몰라도 답이 하나다 — 어느 문장이 어느 블록에
+        붙든 결론이 같기 때문이다. 둘이 섞여 있으면 (``None``) 붙이는 방법에
+        따라 답이 달라지므로 **판정하지 않는다.**
+
+        🔴 **공식 규칙에는 이 구분이 없다.** 룰북(``data/rules/structured/
+        sd-rulebook-en-v10.json`` 의 ``effect_types``)은 유발 효과의 발동
+        시점만 적고 강제 · 임의를 적지 않는다. 그래서 근거는 **카드 텍스트
+        하나**이고 (``RuleBasis.CARD_TEXT`` 와 같은 자리), 그 사실을 숨기지
+        않는다.
+
+        🔴 **Lua 의 ``TRIGGER_O`` · ``TRIGGER_F`` 접미사는 여기서 보지
+        않는다.** Phase 3-F-26 이 그 뜻풀이를 **근거 없음**으로 기록했다
+        (공식 자료에 그 이름이 0회). 접미사를 쓰는 자리는 이 값을 **받는
+        쪽**이고, 거기서도 혼자 답을 만들지 않는다 — 이 값과 **어긋날 때
+        판정을 거두는** 데만 쓴다 (``engine/trigger_compiler.py``).
+        """
+        text = self.desc or ""
+        optional = ACTIVATION_OPTIONAL_PHRASE in text
+        mandatory = ACTIVATION_MANDATORY_PHRASE in text
+        if optional and not mandatory:
+            return "optional"
+        if mandatory and not optional:
+            return "mandatory"
+        return None
 
     @property
     def can_self_special_summon_from_hand(self) -> bool:

@@ -125,6 +125,12 @@ def compiled_triggers(
             event_code=effect.raw.code,
             ranges=effect.raw.ranges,
             event_subject_claim=effect.event_subject_claim,
+            #: 🔴 **카드 텍스트가 말하는 허가/수행** (Phase 6-AA). 이 자리가
+            #: 그것을 읽는 이유는 하나다 — 컴파일러는 ``core`` 를 import
+            #: 하지 않으므로 (ADR-007) 카드를 들고 있는 조립 층이 **값으로**
+            #: 넘긴다. 6-K 가 발동 분류를, 6-Z 가 사건 목록을 넘긴 것과
+            #: 같은 자리다.
+            text_permission=card.activation_permission_text,
         )
         if compilation is None:
             #: 트리거 등록이 **아니다** (``TRIGGER_O`` · ``TRIGGER_F`` 없음).

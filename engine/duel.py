@@ -84,6 +84,28 @@ from engine.validation import ActionValidity, ValidationCode, ValidationResult
 from engine.vocabulary import ActivationKind, Phase, Zone
 
 
+#: 🔴 **강제 · 임의를 판정할 수 없을 때 빠진 것** (Phase 6-AA).
+#:
+#: 무엇이 모자란지 적는다 — 공식 규칙에 이 구분이 없고 (룰북의
+#: ``effect_types`` 가 유발 효과의 발동 시점만 적는다), 카드 텍스트로도
+#: 답이 하나로 모이지 않은 경우다. 판이 바뀌어도 풀리지 않고 **근거가
+#: 생겨야** 풀리므로 보류의 ``missing`` 에 적는다.
+TRIGGER_REQUIREMENT_MISSING = (
+    "유발의 강제 · 임의 판정 근거 (Phase 6-AA — 룰북에 그 구분이 없고 "
+    "카드 텍스트도 한쪽으로 모이지 않았다)"
+)
+
+#: 🔴 **사본이 사건 기록을 들고 있지 않을 때 빠진 것** (Phase 6-AA).
+#:
+#: ``agent.simulation`` 의 ``_fork`` 는 기록하지 않는 한 벌로 바꿔 끼운다
+#: (Phase 6-B — 사본의 전개가 진짜 기록에 남지 않게). 그 사본은 **과거
+#: 사건을 모르므로** 유발 후보를 만들 수 없다. 사본에 부모의 기록을
+#: 물려주면 풀리지만 그것은 탐색의 깊이와 점수를 바꾸는 변경이므로
+#: ``BLOCKER-6AA-1`` 로 적는다.
+TRIGGER_HISTORY_MISSING = (
+    "사본이 물려받은 사건 기록 (Phase 6-AA — BLOCKER-6AA-1)"
+)
+
 #: 전투가 일어나는 존들. 공격자와 대상 모두 여기 있는 카드다.
 BATTLE_TARGET_ZONES: tuple[Zone, ...] = (Zone.MZONE, Zone.EMZONE)
 
@@ -310,13 +332,47 @@ class Duel:
     후보를 **묻는 것만으로는 아무것도 바뀌지 않는다** — 이 칸을 읽는
     :meth:`_trigger_actions` 는 판도 사건도 소비하지 않는다.
     """
+    timing_floor: int = 0
+    """
+    **이번 페이즈가 시작될 때의 기록 번호** (Phase 6-AA).
+
+    이 번호보다 **앞의** 사건은 지나간 시점의 것이므로 유발 후보를 열지
+    않는다. 담는 것은 ``JournalEvent.sequence`` 와 같은 축의 값이다 — 기록이
+    identity 로 쓰는 번호 그대로이고 (``EventJournal`` 의 설명), 새 식별자를
+    만들지 않는다.
+
+    🔴 **근거는 룰북의 페이즈 구조다.** *"After a card's activation, and at
+    the end of each phase or step, Priority passes to the opponent"*
+    (TURN PLAYER'S PRIORITY). 메인 페이즈 1 에 일어난 사건의 유발을 배틀
+    페이즈에 발동하는 것은 그 사건의 시점이 아니다.
+
+    🔴 **실측으로 고친 결함이다.** 6-Z 까지 이 칸이 없었고,
+    :meth:`_trigger_offers` 가 기록 **전체**를 매번 다시 펼쳤다. 그래서
+    메인 페이즈 1 의 일반 소환 유발이 같은 턴의 BATTLE · MAIN2 · END 에서,
+    그리고 다음 턴의 DRAW · STANDBY 에서까지 관문을 **통과했다**
+    (``gate=valid/ok``, 보고서 §4 의 실측).
+
+    🔴 **페이즈 안에서의 만료는 이것으로 판정하지 않는다.** 같은 페이즈
+    안에서 "그 사건의 시점이 이미 지났는가" 를 묻는 것은 타이밍 윈도우
+    계층의 일이고 이 엔진에 그 계층이 없다. 근거 없는 일괄 규칙("다음
+    행동이면 만료") 을 만들지 않고 ``BLOCKER-6AA-2`` 로 적는다.
+    """
     consumed_events: frozenset = frozenset()
     """
-    **이미 유발 발동에 쓴 사건들** (Phase 6-Z).
+    **이미 유발 발동에 쓴 기회들** (Phase 6-Z · 6-AA 가 단위를 고쳤다).
 
-    같은 사건으로 같은 효과가 두 번 발동하는 것을 막는다. 담는 것은
-    ``(event_key, effect_ref)`` 짝이다 — 한 사건에 서로 다른 효과가 각각
-    한 번씩 발동하는 것은 막지 않는다.
+    담는 것은 ``(event_key, effect_ref, source)`` **세 짝**이다.
+
+    🔴 **``source`` 가 6-AA 에서 들어왔다.** 6-Z 는 ``(event_key,
+    effect_ref)`` 둘만 담았고, 그러면 **한 사건이 같은 이름의 카드 두 장을
+    함께 유발시킬 때** 한 장이 발동하면 다른 장의 적법한 기회까지 함께
+    닫힌다 — ``EffectRef`` 는 ``(card_id, ordinal)`` 이므로 **개체를 가르지
+    않는다** (``engine/ids.py``).
+
+    🔴 **카드명 단위 횟수 제한과 다른 축이다.** 「이 카드명의 ①의 효과는
+    1턴에 1번」 같은 제약은 개체가 아니라 **이름**에 걸리고, 그것을 세는
+    자리는 ``GameState.rule_uses`` 다. 이 칸은 **한 사건이 한 기회를 두 번
+    열지 않는다** 만 말한다 (RULE-EFFECT-004 — 시점을 정하는 것은 사건이다).
 
     흐름의 위치이고 판의 모양이 아니므로 ``state_hash()`` 에 들어가지
     않는다 (:attr:`chain` · :attr:`priority` 와 같은 자리). ``frozenset``
@@ -494,7 +550,9 @@ class Duel:
         # 변하지 않는다.**
         if self.priority.is_open and self.priority.holds(seat):
             allowed.extend(self._activation_actions(seat, validator))
-            allowed.extend(self._trigger_actions(seat, validator, offers))
+            opened, held = self._trigger_actions(seat, validator, offers)
+            allowed.extend(opened)
+            withheld.extend(held)
         elif seat == self.turn_player and not self.priority.is_open:
             for card in self.state.player(seat).hand:
                 # 패의 한 장이 **여러 후보**가 된다 — 소환 · 몬스터 세트 ·
@@ -514,7 +572,9 @@ class Duel:
                         allowed.append(candidate)
             allowed.extend(self._attack_actions(seat, validator))
             allowed.extend(self._activation_actions(seat, validator))
-            allowed.extend(self._trigger_actions(seat, validator, offers))
+            opened, held = self._trigger_actions(seat, validator, offers)
+            allowed.extend(opened)
+            withheld.extend(held)
 
         # 흐름을 움직이는 둘은 **검증기가 아니라 흐름 계층**이 답한다.
         # 검증기는 ``GameStateView`` 만 보는데, 우선권과 진행은 판 밖에
@@ -689,8 +749,16 @@ class Duel:
         """
         **지금 이 자리에 사건이 열어 준 제안들** (Phase 6-Z).
 
-        :attr:`triggers` 가 없으면 빈 짝이다. 있으면 그것에 물어보고, 이미
-        쓴 사건을 걸러 낸다 (:attr:`consumed_events`).
+        :attr:`triggers` 가 없으면 빈 짝이다. 있으면 그것에 물어보고, **셋을
+        걸러 낸다**:
+
+        1. **지나간 시점** — :attr:`timing_floor` 보다 앞의 기록에서 나온
+           제안 (Phase 6-AA). 번호를 **모르는** 제안(``-1``)도 여기서 빠진다
+           — 지금 것인지 말할 수 없으면 내놓지 않는다.
+        2. **이미 쓴 기회** — :attr:`consumed_events` 에 든 ``(event_key,
+           effect_ref, source)`` 세 짝.
+        3. (내놓을지 말지는 :meth:`_trigger_actions` 가 근거에 따라 가른다 —
+           여기서는 제안을 그대로 들고 온다.)
 
         🔴 **읽기만 한다.** 판도 사건 기록도 :attr:`consumed_events` 도
         건드리지 않으므로, 몇 번 불러도 같은 답이고 **후보를 묻는 것만으로
@@ -707,8 +775,45 @@ class Duel:
         return tuple(
             offer
             for offer in self.triggers.offers(self, seat)
-            if (offer.event_key, offer.effect_ref) not in self.consumed_events
+            if self._opportunity_is_open(offer)
         )
+
+    def _mandatory_offers(self, seat: int) -> tuple:
+        """
+        이 자리에 **근거 있는 강제 유발**이 열려 있는가 (Phase 6-AA).
+
+        🔴 **읽기만 한다** — :meth:`_trigger_offers` 와 같은 함수를 부르므로
+        후보 목록과 흐름 판정이 **같은 답**을 본다. 모름(``UNKNOWN``)은 여기
+        들어오지 않는다: 모르는 것을 강제로 바꾸면 흐름이 영영 막힌다.
+        """
+        return tuple(
+            offer for offer in self._trigger_offers(seat) if offer.is_mandatory
+        )
+
+    def _opportunity_is_open(self, offer) -> bool:
+        """
+        이 제안이 **지금의 기회**인가 (Phase 6-AA). 읽기만 한다.
+
+        둘을 본다 — 사건이 이번 페이즈의 것인가 (:attr:`timing_floor`), 그
+        기회를 이미 썼는가 (:attr:`consumed_events`).
+        """
+        sequence = getattr(offer, "event_sequence", -1)
+        if sequence < self.timing_floor:
+            # 지나간 페이즈의 사건이거나 (``sequence`` 가 바닥보다 앞),
+            # 번호를 모른다 (``-1`` 은 ``timing_floor >= 0`` 보다 늘 작다).
+            return False
+        return self._consumption_key(offer) not in self.consumed_events
+
+    @staticmethod
+    def _consumption_key(offer) -> tuple:
+        """
+        이 기회를 가리키는 **세 짝** — 사건 · 효과 · 카드 개체 (Phase 6-AA).
+
+        🔴 세 번째가 ``source`` 다. 빼면 한 사건이 같은 이름의 카드 두 장을
+        함께 유발시킬 때 한 장의 발동이 다른 장의 기회까지 닫는다
+        (:attr:`consumed_events` 의 설명).
+        """
+        return (offer.event_key, offer.effect_ref, offer.source)
 
     def _trigger_actions(self, seat: int, validator: ActionValidator, offers=()):
         """
@@ -739,12 +844,55 @@ class Duel:
            — ``legal_actions`` 와 ``apply`` 가 같은 함수 · 같은 판을 본다
            (STRUCTURAL-134).
 
-        🔴 **강제/임의를 가르지 않는다.** 그 지식이 이 엔진에 없으므로
-        (``TriggerRequirement.UNKNOWN``) 후보로 **내놓기만** 하고, 발동할지는
-        고르는 쪽이 정한다. "모른다" 를 임의로도 강제로도 바꾸지 않는다.
+        🔴 **강제 · 임의 · 모름을 가른다** (Phase 6-AA). 6-Z 는 셋을 한
+        덩어리로 내놓고 발동 여부를 전부 고르는 쪽에 맡겼는데, 그것은
+        **모름을 임의로 승격**시키는 일이었다 — 고르는 쪽이 거절한 것과
+        규칙이 거절을 허락한 것이 구별되지 않았다.
+
+        ======================  ==========================================
+        근거 있는 **임의**        후보로 올린다. 발동도 포기도 고르는 쪽의 것
+        근거 있는 **강제**        후보로 올린다. 그리고 **흐름을 막는다** —
+                                이 기회가 열려 있는 동안 페이즈를 넘길 수
+                                없다 (:meth:`_flow_actions`). 규칙이 요구한
+                                처리를 임의 거절로 생략하지 않는다
+        **모름**                 후보로 올리지 **않는다.** 보류 목록에 무엇을
+                                모르는지 적는다 — 조용히 넘어가지 않는다
+        ======================  ==========================================
+
+        돌려주는 것은 ``(허가, 보류)`` 짝이다.
         """
         allowed: list[PlayerAction] = []
+        withheld: list[WithheldAction] = []
+        if self.triggers is not None and self.journal is None:
+            # 🔴 **사건 기록이 없는 사본이다** (Phase 6-AA). 유발은 사건에서
+            # 나오므로 기록이 없으면 꺼낼 것이 없다 — 그런데 그것을 조용히
+            # "후보 0건" 으로 두면 읽는 쪽이 "유발이 없다" 로 읽는다. 둘은
+            # 다른 사실이므로 **보류에 적는다.**
+            #
+            # 이 자리를 밟는 것은 ``agent.simulation`` 의 ``_fork`` 다 —
+            # 기록하지 않는 한 벌로 바꿔 끼우기 때문이다 (Phase 6-B).
+            withheld.append(
+                WithheldAction(
+                    PlayerActionKind.ACTIVATE_EFFECT,
+                    "사건 기록이 없는 사본에서는 유발 후보를 판정할 수 "
+                    "없습니다 (유발은 기록된 사건에서 나옵니다).",
+                    missing=TRIGGER_HISTORY_MISSING,
+                )
+            )
         for offer in offers:
+            if not (offer.is_optional or offer.is_mandatory):
+                # 🔴 **모름은 후보가 아니다.** 무엇을 모르는지 적는다.
+                withheld.append(
+                    WithheldAction(
+                        PlayerActionKind.ACTIVATE_EFFECT,
+                        "이 유발이 강제인지 임의인지 판정할 수 없어 발동 "
+                        "여부를 고르는 쪽에 맡기지 않았습니다 — 모름을 "
+                        "임의로 바꾸면 규칙이 요구한 처리가 조용히 생략될 "
+                        "수 있습니다.",
+                        missing=TRIGGER_REQUIREMENT_MISSING,
+                    )
+                )
+                continue
             candidate = PlayerAction.activate_effect(
                 actor=seat,
                 source=offer.source,
@@ -767,7 +915,7 @@ class Duel:
             ):
                 continue
             allowed.append(candidate)
-        return allowed
+        return allowed, withheld
 
     def _set_this_turn(self, action: PlayerAction) -> "bool | None":
         """
@@ -958,6 +1106,25 @@ class Duel:
             )
 
         if seat == self.turn_player and not self.priority.is_open:
+            # 🔴 **강제 유발이 열려 있으면 페이즈를 넘길 수 없다**
+            # (Phase 6-AA). 규칙이 요구한 처리를 "다른 것을 하겠다" 로
+            # 생략하는 길을 막는다 — 그것이 강제가 임의와 다른 전부다.
+            #
+            # 🔴 **대신 발동해 주지는 않는다.** 엔진이 대신 고르면 해결 중의
+            # 선택(어느 카드인가)까지 엔진이 정하게 되고, 그것은 6-Z 가 세운
+            # 경계를 무너뜨린다. 그래서 **흐름을 막고 후보를 남긴다** —
+            # 고르는 쪽이 그 발동을 집는 것 말고는 나아갈 길이 없다.
+            forced = self._mandatory_offers(seat)
+            if forced:
+                withheld.append(
+                    WithheldAction(
+                        PlayerActionKind.END_PHASE,
+                        f"강제 유발 {len(forced)}건이 열려 있습니다 — "
+                        "규칙이 요구한 처리를 넘기고 페이즈를 끝낼 수 "
+                        "없습니다.",
+                    )
+                )
+                return allowed, withheld
             plan = TurnProgressor().plan(self.state)
             if plan.permits_transition:
                 allowed.append(PlayerAction.end_phase(actor=seat))
@@ -1181,6 +1348,13 @@ class Duel:
         self.priority = PriorityState.idle(
             turn_player=self.state.turn.turn_player, phase=self.state.turn.phase
         )
+        # 🔴 **페이즈가 바뀌었다 — 앞의 사건은 지나간 시점이다**
+        # (Phase 6-AA, :attr:`timing_floor` 의 설명이 근거를 적는다).
+        #
+        # 여기가 페이즈를 바꾸는 **유일한 자리**이므로 (``TurnProgressor.
+        # advance`` 를 부르는 production 호출 하나) 바닥을 올리는 자리도
+        # 하나다. 올리지 않으면 지나간 유발이 영영 열려 있다.
+        self.timing_floor = len(self.journal) if self.journal is not None else 0
         if self.state.turn.phase is Phase.DRAW:
             self.step = TurnStep.DRAW_PENDING
         return DuelStep(
@@ -1355,7 +1529,7 @@ class Duel:
         # 함정의 발동이고, 그 길은 사건을 쓰지 않으므로 적을 것이 없다.
         if consuming is not None:
             self.consumed_events = self.consumed_events | {
-                (consuming.event_key, consuming.effect_ref)
+                self._consumption_key(consuming)
             }
 
         # ⑤ **여기서 해결하지 않는다** (Phase 3-E-11 · RULE-CHAIN-001).
