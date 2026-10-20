@@ -585,15 +585,24 @@ def test_c04_a_rejected_illegal_action_spends_no_opportunity(repository):
 @requires_official_db
 def test_c05_declining_leaves_the_offer_open_within_the_phase(repository):
     """
-    🔴 **측정해 둔 한계 — ``BLOCKER-6AA-2``.**
-
     같은 페이즈 안에서 발동하지 않기로 한 임의 유발은 **다시 제안된다.**
-    실제 규칙에서는 그 시점이 지나면 기회가 사라지지만, 그것을 판정하려면
-    타이밍 윈도우 계층이 필요하고 이 엔진에 그 계층이 없다.
 
-    🔴 **근거 없는 일괄 규칙을 만들지 않았다** ("다음 행동이면 만료"). 대신
-    현재 동작을 **측정으로 고정한다** — 윈도우 계층이 생기는 날 이 시험이
-    먼저 깨지고, 그때 수명을 다시 적게 된다.
+    🔴 **6-AA 는 이것을 ``BLOCKER-6AA-2`` 로 적었고, 그 읽기가 틀렸다.**
+    그때의 글은 "실제 규칙에서는 그 시점이 지나면 기회가 사라지지만 그것을
+    판정하려면 타이밍 윈도우 계층이 필요하다" 였다. Phase 6-AB 가 공식
+    재정을 찾아 보니 **어휘가 가른다** — 「때」 효과는 그 사건이 *마지막에
+    일어난 일*이어야 하고, 「경우」 효과는 그렇지 않다 (출처는
+    ``core.card_model.Card.activation_wording_text`` 의 설명).
+
+    기르수의 텍스트는 「경우에 발동」 이다 (실측:
+    ``tests/engine/test_trigger_execution_and_timing.py::test_b01``). 그래서
+    **이 동작은 결함이 아니라 규칙대로**다. 아래 단정들은 6-AA 그대로 두고
+    (같은 사실을 재므로) 읽는 법만 고쳤다. 어휘로 닫히는 쪽은
+    ``test_b03_synthetic_a_when_trigger_closes_after_another_action`` 이
+    합성으로 센다.
+
+    🔴 그때 **근거 없는 일괄 규칙을 만들지 않은 것**("다음 행동이면 만료")은
+    옳았다. 그 규칙을 세웠다면 「경우」 효과의 적법한 기회를 닫았을 것이다.
     """
     setup, _ = _board(repository, selector=DeclineChoice())
     duel = setup.duel
@@ -610,7 +619,7 @@ def test_c05_declining_leaves_the_offer_open_within_the_phase(repository):
     assert duel.apply(sets[0]).accepted is True
     assert duel.state.turn.phase is Phase.MAIN1
 
-    #: 🔴 **아직 열려 있다** — 이것이 측정된 한계다.
+    #: 🔴 **아직 열려 있다** — 「경우」 이므로 규칙이 그렇게 정했다 (6-AB).
     assert len(duel._trigger_offers(MINE)) == 1
     assert _trigger_action(duel) is not None
 

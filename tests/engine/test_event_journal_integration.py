@@ -324,7 +324,17 @@ def test_c_a_search_fork_records_nothing_in_the_real_journal(repository):
     진짜 듀얼의 기록에 남는다** — 사본은 버려지는데 기록은 남으므로 그
     기록은 실제 판과 모순된다.
 
-    그래서 사본은 **기록하지 않는 한 벌**을 받는다.
+    그래서 사본은 **자기 기록**을 받는다.
+
+    🔴 **Phase 6-AB 가 그 "자기 기록" 의 모양을 고쳤다.** 6-B 는 사본에
+    ``journal=False`` 로 **기록하지 않는 한 벌**을 주었다. 그런데 6-Z 부터
+    유발 후보가 기록된 사건에서 나오므로, 기록이 없는 사본은 **과거를 잃고**
+    원본과 다른 후보를 냈다 (실측: 원본 5 · 사본 4). 지금은 부모의 사건을
+    씨앗으로 받은 **새 ``EventJournal``** 이다.
+
+    🔴 **이 시험이 재려는 것은 그대로다** — 아래 "진짜 기록은 한 줄도 늘지
+    않았다" 가 그것이고, 그 단정은 손대지 않았다. ``fork.journal is None`` 은
+    그것의 **대리 지표**였으므로, 대리 지표 대신 **섞이지 않음을 직접** 센다.
     """
     from agent.simulation import Simulator
 
@@ -341,7 +351,10 @@ def test_c_a_search_fork_records_nothing_in_the_real_journal(repository):
     simulator = Simulator(duel=duel)
     fork = simulator._fork()
 
-    assert fork.journal is None, "사본은 적지 않는다"
+    #: 🔴 **다른 객체이고, 부모의 사건을 그대로 받았다** (6-AB).
+    assert fork.journal is not None, "사본도 역사를 들고 있다"
+    assert fork.journal is not duel.journal, "같은 객체면 사본의 전개가 섞인다"
+    assert tuple(fork.journal) == tuple(duel.journal)
     assert fork.state is not duel.state, "판은 복제됐다"
     #: 규칙은 공유하지 않고 **같은 모양**으로 다시 만든다 — 사본이 진짜와
     #: 같은 규칙으로 돌아야 한다
@@ -353,6 +366,10 @@ def test_c_a_search_fork_records_nothing_in_the_real_journal(repository):
 
     #: 🔴 진짜 기록은 한 줄도 늘지 않았다
     assert len(duel.journal) == before
+    #: 🔴 **그런데 사본은 적었다** — 격리가 "아무도 적지 않는다" 로 이루어진
+    #: 것이 아님을 센다. 이것이 빠지면 ``_fork`` 가 다시 기록을 떼어 내도
+    #: 위 단정이 통과한다 (6-AB).
+    assert len(fork.journal) > before
     #: 그리고 진짜 판도 그대로다
     assert fork.state.state_hash() != duel.state.state_hash()
 

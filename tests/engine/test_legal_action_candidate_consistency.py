@@ -1656,22 +1656,37 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     순서이므로 넣을 값이 없다. 없는 것을 빈 값으로 채우지 않는다.
 
     🔴 **Phase 6-AA 가 자리 셋을 더했다** (넷 → 일곱). 그래서 이 시험이
-    세는 것을 **수에서 기준으로** 옮긴다 — 수만 세면 자리가 늘 때마다
+    세는 것을 **수에서 기준으로** 옮겼다 — 수만 세면 자리가 늘 때마다
     숫자를 고치게 되고, 정작 지켜야 할 것(채우는 기준)은 세지 않는다.
+
+    🔴 **Phase 6-AB 가 다시 열이 되었고 자리 하나를 옮겼다.** 강제 유발의
+    보류가 ``_flow_actions`` (``END_PHASE`` 한 자리) 에서
+    ``_enforce_mandatory`` (흐름 전체) 로 갔다. **기준은 그대로**이므로 표만
+    고친다 — 그것이 이 시험이 수 대신 기준을 세게 된 이유다.
+
+    기준 하나: ``missing`` 은 **근거가 생겨야 풀리는 자리**에만 찬다. 규칙이
+    **있어서** 막는 자리는 비운다 — 없는 것을 빈 값으로 채우지 않는다.
 
     ==========================================  ===========  ==============
     자리                                          ``missing``  왜
     ==========================================  ===========  ==============
+    ``_enforce_mandatory`` 강제인데 관문이 막았다   **있다**     규칙이 요구하는데
+                                                             절차를 보장할 근거가
+                                                             없다 (6-AB)
+    ``_enforce_mandatory`` 강제를 먼저 처리해야     **없다**     규칙이 **있다** —
+                                                             막는 것이 규칙의
+                                                             결과다
     ``_trigger_actions`` 강제 · 임의 판정 불가      **있다**     근거가 생겨야
                                                              풀린다 (6-AA)
-    ``_trigger_actions`` 사본에 사건 기록 없음      **있다**     기록을 물려주는
-                                                             변경이 필요하다
-    ``_flow_actions``   우선권이 열리지 않았다      **있다**     여는 규칙이 없다
+    ``_trigger_actions`` 사건 기록이 없다           **있다**     기록이 있어야
+                                                             판정된다
+    ``_trigger_actions`` 「때 / 경우」 판정 불가     **있다**     근거가 생겨야
+                                                             풀린다 (6-AB)
+    ``_trigger_actions`` 「때」 타이밍을 놓쳤다      **없다**     규칙이 그렇게
+                                                             정했다 (6-AB)
     ``_flow_actions``   창은 열렸고 상대 차례다     **없다**     순서다 (6-S)
+    ``_flow_actions``   우선권이 열리지 않았다      **있다**     여는 규칙이 없다
     ``_flow_actions``   페이즈 전환이 거절됐다      **있다**     진행 규칙이 댄다
-    ``_flow_actions``   강제 유발이 열려 있다       **없다**     규칙이 **있다** —
-                                                             막는 것이 규칙의
-                                                             결과다 (6-AA)
     ``_withheld_board_actions``                   **있다**     발동 규칙이 댄다
     ==========================================  ===========  ==============
     """
@@ -1691,8 +1706,9 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
         if sites:
             by_function[node.name] = sites
 
-    #: 🔴 **보류를 만드는 자리는 이 셋뿐이다** — 늘면 여기서 드러난다.
+    #: 🔴 **보류를 만드는 자리는 이 넷뿐이다** — 늘면 여기서 드러난다.
     assert sorted(by_function) == [
+        "_enforce_mandatory",
         "_flow_actions",
         "_trigger_actions",
         "_withheld_board_actions",
@@ -1707,20 +1723,35 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
             for node in by_function[name]
         ]
 
-    #: 🔴 **유발 쪽 둘은 전부 채운다** — 둘 다 "근거가 생겨야 풀린다" 다.
-    assert filled("_trigger_actions") == [True, True], filled("_trigger_actions")
-    #: 🔴 **판 쪽 하나도 채운다** — 발동 규칙이 이유를 댄다.
+    #: 🔴 **유발 쪽 넷 중 셋은 채우고 하나는 비운다.** 셋은 "근거가 생겨야
+    #: 풀린다" 이고, 넷째("「때」 타이밍을 놓쳤다")는 **규칙이 답했으므로**
+    #: 넣을 값이 없다 (6-AB).
+    trigger = filled("_trigger_actions")
+    assert len(trigger) == 4, trigger
+    assert trigger.count(True) == 3 and trigger.count(False) == 1, trigger
+    #: 🔴 **판 쪽 하나는 채운다** — 발동 규칙이 이유를 댄다.
     assert filled("_withheld_board_actions") == [True], filled(
         "_withheld_board_actions"
     )
-    #: 🔴 **흐름 쪽 넷 중 둘은 비운다** — 넣을 값이 없는 자리다.
+    #: 🔴 **흐름 쪽 셋 중 하나는 비운다** — 순서는 빠진 규칙이 아니다 (6-S).
     flow = filled("_flow_actions")
-    assert len(flow) == 4, flow
-    assert flow.count(True) == 2 and flow.count(False) == 2, flow
+    assert len(flow) == 3, flow
+    assert flow.count(True) == 2 and flow.count(False) == 1, flow
+    #: 🔴 **강제 쪽 둘은 하나씩이다** — 보장할 근거가 없는 쪽은 채우고,
+    #: 규칙이 **있어서** 막는 쪽은 비운다 (6-AB).
+    forced = filled("_enforce_mandatory")
+    assert len(forced) == 2, forced
+    assert forced.count(True) == 1 and forced.count(False) == 1, forced
 
     #: 🔴 **비운 자리가 왜 비었는지 코드가 적는다.** 빈 칸을 설명 없이 두면
-    #: 다음 사람이 "빠뜨렸다" 로 읽고 아무 값이나 채운다.
-    body = source[source.index("def _flow_actions") :]
-    body = body[: body.index("\n    def ")]
-    assert "빠진 규칙이 아니라 **순서**다" in body
-    assert "규칙이 요구한 처리를" in body
+    #: 다음 사람이 "빠뜨렸다" 로 읽고 아무 값이나 채운다. 자리마다 **그 함수
+    #: 안에서** 적혀 있어야 한다 — 다른 함수의 설명으로 대신하지 않는다.
+    def function_body(name: str) -> str:
+        body = source[source.index(f"def {name}") :]
+        return body[: body.index("\n    def ")]
+
+    assert "빠진 규칙이 아니라 **순서**다" in function_body("_flow_actions")
+    assert "규칙이 요구한 처리를" in function_body("_enforce_mandatory")
+    assert "그렇게 정했으므로 ``missing`` 을 비운다" in function_body(
+        "_trigger_actions"
+    )

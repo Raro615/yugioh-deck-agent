@@ -1258,10 +1258,21 @@ def test_the_executor_now_carries_per_duel_state_so_forks_must_not_share_it(
 
     🔴 **단정을 약하게 바꾼 것이 아니다.** 지키려던 것은 "사본과 원본이
     섞이지 않는다" 이고 그것은 그대로다. 바뀐 것은 **지키는 방법**이다 —
-    예전에는 "공유해도 상태가 없어서" 안전했고, 지금은
-    :meth:`~agent.simulation.Simulator._fork` 가 **기록하지 않는 한 벌로
-    바꿔 끼워서** 안전하다. 그래서 칸 목록을 새 사실로 갱신하고,
-    **그 새 안전장치를 함께 고정한다** (단정이 1개에서 5개로 늘었다).
+    예전에는 "공유해도 상태가 없어서" 안전했고, 6-B 부터는
+    :meth:`~agent.simulation.Simulator._fork` 가 기록을 바꿔 끼워서
+    안전하다. 그래서 칸 목록을 새 사실로 갱신하고, **그 새 안전장치를 함께
+    고정한다.**
+
+    🔴 **Phase 6-AB 가 바꿔 끼우는 방법을 고쳤다.** 6-B 는 사본에
+    ``journal=False`` 로 **기록하지 않는 한 벌**을 주었고, 6-AB 는 부모의
+    사건을 씨앗으로 받은 **새 ``EventJournal``** 을 준다. 왜 — 유발 후보는
+    기록된 사건에서 나오므로 (6-Z) 기록이 없는 사본은 **과거를 잃고** 원본과
+    다른 후보를 냈다 (실측: 원본 5 · 사본 4).
+
+    🔴 **그래서 이 시험이 재는 것을 더 좁혔다.** "사본은 적지 않는다" 는
+    섞이지 않음의 **대리 지표**였고, 지금은 섞이지 않음을 **직접** 센다 —
+    다른 객체인가 · 부모의 사건을 그대로 받았는가 · 사본의 전개가 부모에
+    남지 않는가. 셋 다 "적지 않는다" 보다 강한 주장이다.
     """
     from engine.action_execution import ActionExecutor
 
@@ -1269,6 +1280,9 @@ def test_the_executor_now_carries_per_duel_state_so_forks_must_not_share_it(
     assert ActionExecutor.__slots__ == ("_handlers", "_journal")
 
     duel = duel_with(repository)
+    #: 🔴 메인 페이즈까지 **진짜 듀얼에서** 진행한다 — 그래야 부모에게
+    #: 물려줄 역사가 있고, 사본에 고를 것이 생긴다 (6-AB).
+    to_main_phase(duel)
     simulator = Simulator(duel=duel)
     fork = simulator._fork()
 
@@ -1276,7 +1290,25 @@ def test_the_executor_now_carries_per_duel_state_so_forks_must_not_share_it(
     #: 듀얼의 기록에 남고, 그 기록은 버려진 판을 말하므로 거짓이 된다
     assert fork._executor is not duel._executor
     assert duel.journal is not None, "진짜 듀얼은 기록한다"
-    assert fork.journal is None, "사본은 적지 않는다"
+
+    #: 🔴 **다른 객체다** — 사본의 전개가 부모의 기록에 쌓이지 않는다 (6-AB).
+    assert fork.journal is not None, "사본도 역사를 들고 있다 (6-AB)"
+    assert fork.journal is not duel.journal, "같은 객체면 섞인다"
+    #: 🔴 **부모의 사건을 그대로 받았다** — 미래를 재는 데 역사가 필요하다.
+    assert tuple(fork.journal) == tuple(duel.journal)
+
+    #: 🔴 **사본의 전개가 부모에 남지 않는다** — 이것이 지키려던 것이고,
+    #: "적지 않는다" 보다 직접적인 주장이다.
+    before = len(duel.journal)
+    summons = [
+        action
+        for action in fork.legal_actions(fork.to_act).allowed
+        if action.kind is PlayerActionKind.NORMAL_SUMMON
+    ]
+    assert summons, "소환할 것이 없으면 이 단정이 아무것도 재지 않는다"
+    assert fork.apply(summons[0]).accepted is True
+    assert len(fork.journal) > before
+    assert len(duel.journal) == before
 
     #: 그래도 **같은 규칙**으로 돈다 — 안전을 위해 능력을 줄이지 않았다
     assert fork._executor.supported == duel._executor.supported

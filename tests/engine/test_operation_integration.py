@@ -1275,17 +1275,64 @@ def test_k_the_executor_makes_no_choice_of_its_own():
         for node in ast.walk(tree)
         if isinstance(node, ast.ClassDef) and node.name == "EffectExecutor"
     )
-    methods = {
-        node.name
+    members = [
+        node
         for node in executor.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    ]
+    methods = {node.name for node in members}
     assert methods, "실행기의 메서드를 하나도 찾지 못하면 이 시험은 비어 있다"
-    for forbidden in ("choose", "select_", "score", "policy"):
-        assert not any(forbidden in name for name in methods), forbidden
 
-    #: 🔴 **그리고 ``choose`` 라는 이름은 프로토콜 하나에만 있다.** 그 몸통은
-    #: ``...`` 이므로 **아무것도 고르지 않는다** — 고르는 사람은 바깥에 있다.
+    #: 🔴 **묻는 자리와 답하는 자리를 가른다** (Phase 6-AB). 금지하려는 것은
+    #: 실행기가 **고르는 것**이고, 들고 있는 고르는 사람을 **읽기만 하는 칸**은
+    #: 고르는 것이 아니다 — 이 시험의 docstring 이 ``ResolutionChooser.choose``
+    #: 선언에 대해 이미 하는 구분과 같다.
+    #:
+    #: 그래서 낱말 금지의 범위에서 "``return self._<칸>`` 하나뿐인 property"
+    #: 를 뺀다. 약해지지 않는다: 몸통이 한 줄의 ``return self._…`` 가 아니면
+    #: 여전히 걸리고, 고르는 **함수**를 가지면 여전히 깨진다.
+    def _is_plain_field_property(node) -> bool:
+        decorators = {
+            d.id for d in node.decorator_list if isinstance(d, ast.Name)
+        }
+        if "property" not in decorators:
+            return False
+        body = [
+            stmt
+            for stmt in node.body
+            if not (
+                isinstance(stmt, ast.Expr)
+                and isinstance(stmt.value, ast.Constant)
+                and isinstance(stmt.value.value, str)
+            )
+        ]
+        if len(body) != 1 or not isinstance(body[0], ast.Return):
+            return False
+        value = body[0].value
+        return (
+            isinstance(value, ast.Attribute)
+            and isinstance(value.value, ast.Name)
+            and value.value.id == "self"
+            and value.attr.startswith("_")
+        )
+
+    deciding = {
+        node.name for node in members if not _is_plain_field_property(node)
+    }
+    for forbidden in ("choose", "select_", "score", "policy"):
+        assert not any(forbidden in name for name in deciding), forbidden
+
+    #: 🔴 **그리고 뺀 칸이 진짜 그 모양인지 센다.** 이름만 통과시키지 않는다.
+    exempt = {
+        node.name for node in members if _is_plain_field_property(node)
+    } & {name for name in methods if "choose" in name or "policy" in name}
+    assert exempt == {"chooser"}, exempt
+
+    #: 🔴 **그리고 ``choose`` 라는 이름의 함수는 프로토콜 하나에만 있다.** 그
+    #: 몸통은 ``...`` 이므로 **아무것도 고르지 않는다** — 고르는 사람은 바깥에
+    #: 있다. (``EffectExecutor.chooser`` 는 함수가 아니라 읽기 전용 칸이므로
+    #: 여기 걸리지 않는다: 그 이름에 ``choose`` 가 들어 있지만 **부를 수 있는
+    #: 고르기**가 아니다.)
     declared = [
         (parent.name, node.name)
         for parent in ast.walk(tree)
@@ -1293,6 +1340,7 @@ def test_k_the_executor_makes_no_choice_of_its_own():
         for node in parent.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and "choose" in node.name
+        and not _is_plain_field_property(node)
     ]
     assert declared == [("ResolutionChooser", "choose")], declared
     protocol = next(
