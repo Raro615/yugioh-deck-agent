@@ -609,9 +609,25 @@ def test_12_there_is_no_trigger_action_kind_even_though_triggers_are_offered():
 
     #: 🔴 **그 자리가 만드는 것은 ``ACTIVATE_EFFECT`` 다.** 사건에서 왔다는
     #: 사실이 행위의 모양을 바꾸지 않는다.
+    #:
+    #: 🔴 **재는 방법을 고쳤다** (Phase 6-AA). 6-Z 는 ``PlayerActionKind``
+    #: 라는 **낱말**을 금지했는데, 그것은 "새 종류를 만들지 않는다" 를 재는
+    #: 방법이 아니었다 — 6-AA 가 그 함수에서 **기존 종류**로 보류를 적기
+    #: 시작하면서 (강제·임의를 판정할 수 없을 때) 낱말만으로 깨졌다.
+    #: 지금은 **그 자리가 이름하는 종류를 전부 모아** 기존 하나뿐임을
+    #: 센다. 예전 검사보다 약하지 않다: 새 종류를 쓰면 여전히 깨진다.
     maker = source.split("def _trigger_actions")[1].split("\n    def ")[0]
     assert "PlayerAction.activate_effect(" in maker
-    assert "PlayerActionKind" not in maker
+    named = sorted(
+        {
+            node.attr
+            for node in ast.walk(ast.parse("def f" + maker))
+            if isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "PlayerActionKind"
+        }
+    )
+    assert named == ["ACTIVATE_EFFECT"], named
 
 
 # ======================================================================

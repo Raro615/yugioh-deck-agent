@@ -459,23 +459,64 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
         #:                     (``test_02``)
         "triggers",
         "consumed_events",
+        #: 🔴 **Phase 6-AA 가 칸 하나를 더했다** — ``timing_floor``.
+        #:
+        #: 이것도 "기억" 이지만 **다른 것을 기억한다**: ``consumed_events``
+        #: 는 "이 기회를 썼다" 이고 ``timing_floor`` 는 "이번 페이즈가 어디
+        #: 서부터인가" 다. 후자는 과거를 조회하는 기억이 아니라 **지금의
+        #: 자리**이고, 그래서 §10 이 말하는 "처리했다는 기록" 과 성질이
+        #: 다르다 — 그 사실도 ``test_02`` 가 센다 (``_activation_actions``
+        #: 는 둘 중 어느 것도 읽지 않는다).
+        "timing_floor",
     }
 
-    #: 🔴 ``journal`` 이 적법성 판정에 쓰이지 않는다 (Phase 6-B).
-    #: 쓰기 시작하면 "역사가 후보를 지운다" 가 되고, 그것은 이 테스트가
-    #: 아니라고 말하는 바로 그 구조다.
+    #: 🔴 ``journal`` 이 **보통의 발동 후보** 판정에 쓰이지 않는다
+    #: (Phase 6-B). 쓰기 시작하면 "역사가 후보를 지운다" 가 되고, 그것이
+    #: 이 테스트가 아니라고 말하는 구조다.
+    #:
+    #: 🔴 **범위를 함수로 좁혔다** (Phase 6-AA). 6-B 때는 ``duel.py`` 전체가
+    #: ``journal`` 을 한 번도 읽지 않았고, 그래서 파일 전수가 곧 그 주장
+    #: 이었다. 6-Z 부터 **유발 후보는 기록된 사건에서 나오므로** (그것이
+    #: 그 기능의 전부다) 유발 경로는 기록을 읽는다 — 파일 전수로 재면
+    #: 그 기능 자체가 위반이 된다.
+    #:
+    #: 그래서 **어느 함수가 읽는지**를 센다. 읽는 자리마다 왜 읽는지가
+    #: 분명해야 하고, **보통의 발동 후보 경로는 하나도 읽지 않아야 한다** —
+    #: 그것이 §10 이 지키려던 것이다.
     duel_source = pathlib.Path(
         pathlib.Path(__file__).resolve().parents[1] / "engine/duel.py"
     ).read_text(encoding="utf-8")
     tree = ast.parse(duel_source)
-    reads = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Attribute)
-        and node.attr == "journal"
-        and isinstance(node.ctx, ast.Load)
-    ]
-    assert reads == [], f"duel.py 가 journal 을 읽는다: {len(reads)}곳"
+    readers: dict[str, int] = {}
+    for function in ast.walk(tree):
+        if not isinstance(function, ast.FunctionDef):
+            continue
+        count = sum(
+            1
+            for node in ast.walk(function)
+            if isinstance(node, ast.Attribute)
+            and node.attr == "journal"
+            and isinstance(node.ctx, ast.Load)
+        )
+        if count:
+            readers[function.name] = count
+
+    #: 🔴 읽는 자리는 **둘뿐이고 둘 다 유발 · 흐름 쪽**이다.
+    #:
+    #:   ``_trigger_actions``   기록이 없는 사본인지 본다 (보류에 적으려고)
+    #:   ``_apply_end_phase``   페이즈가 바뀔 때 시점의 바닥을 올린다
+    assert sorted(readers) == ["_apply_end_phase", "_trigger_actions"], readers
+
+    #: 🔴 **보통의 후보 경로는 하나도 읽지 않는다** — §10 의 본체다.
+    for name in (
+        "_activation_actions",
+        "_attack_actions",
+        "_activation_sources",
+        "_activation_gate",
+        "_withheld_board_actions",
+        "legal_actions",
+    ):
+        assert name not in readers, name
 
 
 def test_09_the_board_deliberately_refuses_to_store_history():

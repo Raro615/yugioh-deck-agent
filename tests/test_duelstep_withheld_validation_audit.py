@@ -282,7 +282,7 @@ def test_08_the_accepted_flag_compresses_three_validities_into_two_values():
         assert CODE_VALIDITY[ValidationCode[name]] is ActionValidity.UNKNOWN
 
 
-def test_09_the_three_withheld_sites_fill_missing_from_three_different_sources():
+def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     """
     **F-3 (§8): 같은 칸이 자리마다 다른 출처에서 채워진다.**
 
@@ -293,6 +293,8 @@ def test_09_the_three_withheld_sites_fill_missing_from_three_different_sources()
     ``_flow_actions``     ``plan.unresolved_rules`` (verdict 의 것이 **아니다**)
     ``_withheld_board_``  ``verdict.missing_rule``
     ``_flow_actions``     🔴 **채우지 않는다** (Phase 6-S) — 아래 참조
+    ``_trigger_actions``  🔴 **모듈 상수** ×2 (Phase 6-AA) — 네 번째 종류
+    ``_flow_actions``     🔴 **채우지 않는다** (Phase 6-AA, 강제 유발)
     ====================  ===============================================
 
     고치지 않고 적어 둔다 — 자리마다 같은 칸에 다른 종류의 값을 넣는다는
@@ -318,7 +320,6 @@ def test_09_the_three_withheld_sites_fill_missing_from_three_different_sources()
     ``tests/engine/test_legal_action_candidate_consistency.py`` 의 ``F`` 절.
     """
     sites = constructions("WithheldAction")
-    assert len(sites) == 4
     assert all(site.startswith("engine/duel.py:") for site in sites)
 
     source = source_of("engine/duel.py")
@@ -326,7 +327,23 @@ def test_09_the_three_withheld_sites_fill_missing_from_three_different_sources()
     assert 'missing="; ".join(plan.unresolved_rules) or None' in source
     assert "missing=verdict.missing_rule" in source
 
-    #: 🔴 넷째 자리는 ``missing`` 을 **주지 않는다** — 출처는 셋 그대로다.
+    #: 🔴 **Phase 6-AA 가 느슨함을 하나 더 늘렸다 — 넷째 출처.**
+    #:
+    #: 자리 수를 세는 대신 **출처의 종류**를 센다 (그것이 이 시험의 주장이고,
+    #: 자리 수는 그 대리 지표였다). 6-AA 가 보류 자리 둘을 더했고 둘 다
+    #: **모듈 상수**에서 ``missing`` 을 채운다 — 손으로 쓴 문자열도,
+    #: 계획의 미해결 규칙도, verdict 의 것도 아닌 **네 번째 종류**다.
+    #:
+    #: ==========================  ====================================
+    #: 손으로 쓴 문자열              ``_flow_actions`` (우선권)
+    #: ``plan.unresolved_rules``   ``_flow_actions`` (페이즈 전환)
+    #: ``verdict.missing_rule``    ``_withheld_board_actions``
+    #: **모듈 상수** (6-AA)         ``_trigger_actions`` 둘
+    #: ==========================  ====================================
+    #:
+    #: 🔴 **고치지 않고 적어 둔다** — 이 시험이 처음부터 그렇게 했다. 자리마다
+    #: 같은 칸에 다른 종류의 값을 넣는다는 사실이 경계의 계약이 느슨하다는
+    #: 증거이고, 6-AA 는 그 증거를 **늘렸다.** 숨기지 않는다.
     tree = ast.parse(source)
     calls = [
         node
@@ -335,13 +352,36 @@ def test_09_the_three_withheld_sites_fill_missing_from_three_different_sources()
         and isinstance(node.func, ast.Name)
         and node.func.id == "WithheldAction"
     ]
-    assert len(calls) == 4
-    with_missing = [
-        node
+    assert len(calls) == len(sites)
+    filled = [
+        next(kw for kw in node.keywords if kw.arg == "missing")
         for node in calls
-        if any(keyword.arg == "missing" for keyword in node.keywords)
+        if any(kw.arg == "missing" for kw in node.keywords)
     ]
-    assert len(with_missing) == 3, len(with_missing)
+    #: 채우는 자리가 셋 → **다섯**이 되었다.
+    assert len(filled) == 5, len(filled)
+
+    def source_kind(keyword) -> str:
+        value = keyword.value
+        if isinstance(value, ast.Constant):
+            return "손으로 쓴 문자열"
+        if isinstance(value, ast.Name):
+            return "모듈 상수"
+        if isinstance(value, ast.Attribute):
+            return f"{ast.unparse(value.value)} 의 칸"
+        return ast.unparse(value)
+
+    kinds = sorted({source_kind(keyword) for keyword in filled})
+    #: 🔴 **네 종류다** — 셋이 아니다.
+    assert len(kinds) == 4, kinds
+    assert "손으로 쓴 문자열" in kinds
+    assert "모듈 상수" in kinds
+    assert "verdict 의 칸" in kinds
+
+    #: 🔴 그리고 **비우는 자리도 여전히 있다** — 없는 것을 빈 값으로 채우지
+    #: 않는 규율은 6-AA 도 지켰다 (``_flow_actions`` 의 두 자리).
+    empty = len(calls) - len(filled)
+    assert empty == 2, empty
 
 
 # ======================================================================

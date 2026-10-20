@@ -249,7 +249,16 @@ PROSE_OCCURRENCES = {
     # 같은 결).
     #
     # 🔴 **그 자리가 다시 910 → 1100 으로 밀렸다** (Phase 6-Z — 위의 표).
-    ("engine/duel.py", 1100),
+    #
+    # 🔴 **그리고 1100 → 1267 로 또 밀렸다** (Phase 6-AA, +167). 그 Phase 가
+    # ``timing_floor`` · ``consumed_events`` 의 설명(+45) 과
+    # ``_mandatory_offers`` · ``_opportunity_is_open`` · ``_consumption_key``
+    # (+55) 와 ``_trigger_actions`` 의 세 갈래(+40) 와 ``_flow_actions`` 의
+    # 강제 유발 분기(+20) 를 이 자리보다 **위**에 넣었다.
+    #
+    # **문자열 88 · 코드 73 · 산문 15 · 위반 13 · 적합 19 는 전부 그대로다**
+    # — 바뀐 것이 줄 번호뿐이라는 것이 그 증거다.
+    ("engine/duel.py", 1267),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
