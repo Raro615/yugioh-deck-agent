@@ -294,7 +294,10 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     ``_withheld_board_``  ``verdict.missing_rule``
     ``_flow_actions``     🔴 **채우지 않는다** (Phase 6-S) — 아래 참조
     ``_trigger_actions``  🔴 **모듈 상수** ×2 (Phase 6-AA) — 네 번째 종류
-    ``_flow_actions``     🔴 **채우지 않는다** (Phase 6-AA, 강제 유발)
+    ``_trigger_actions``  🔴 **모듈 상수** (6-AB, 「때 / 경우」 모름)
+    ``_trigger_actions``  🔴 **채우지 않는다** (6-AB, 「때」 를 놓쳤다)
+    ``_enforce_mandat``   🔴 **모듈 상수** (6-AB, 발동 불가 강제)
+    ``_enforce_mandat``   🔴 **채우지 않는다** ×2 (6-AB, 규칙의 결과 · 순서)
     ====================  ===============================================
 
     고치지 않고 적어 둔다 — 자리마다 같은 칸에 다른 종류의 값을 넣는다는
@@ -358,8 +361,18 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
         for node in calls
         if any(kw.arg == "missing" for kw in node.keywords)
     ]
-    #: 채우는 자리가 셋 → **다섯**이 되었다.
-    assert len(filled) == 5, len(filled)
+    #: 🔴 **Phase 6-AB 가 그 느슨함을 또 늘렸다 — 모듈 상수 둘 → 넷.**
+    #:
+    #: 늘어난 둘: ``_trigger_actions`` 의 「때 / 경우」 판정 불가
+    #: (``TRIGGER_WORDING_MISSING``) 와 ``_enforce_mandatory`` 의 발동 불가
+    #: 강제 (``MANDATORY_TRIGGER_UNPLAYABLE``). 둘 다 네 번째 종류다.
+    #:
+    #: 🔴 **출처의 종류는 여전히 넷이다** — 그것이 이 시험의 주장이고, 6-AB
+    #: 는 새 종류를 만들지 않았다. 늘어난 것은 **그 종류를 쓰는 자리의 수**다.
+    #: 숨기지 않고 적는다 (6-AA 가 세 번째 → 네 번째를 적었듯이).
+    #:
+    #: 채우는 자리가 셋 → 다섯 → **일곱**이 되었다.
+    assert len(filled) == 7, len(filled)
 
     def source_kind(keyword) -> str:
         value = keyword.value
@@ -378,10 +391,20 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     assert "모듈 상수" in kinds
     assert "verdict 의 칸" in kinds
 
-    #: 🔴 그리고 **비우는 자리도 여전히 있다** — 없는 것을 빈 값으로 채우지
-    #: 않는 규율은 6-AA 도 지켰다 (``_flow_actions`` 의 두 자리).
+    #: 🔴 그리고 **비우는 자리가 둘 → 넷으로 늘었다** — 없는 것을 빈 값으로
+    #: 채우지 않는 규율은 6-AA 도 6-AB 도 지켰고, 6-AB 는 그 규율을 쓰는
+    #: 자리를 **늘렸다**:
+    #:
+    #:   ``_flow_actions``      창은 열렸고 상대 차례다 (6-S)
+    #:   ``_trigger_actions``   「때」 타이밍을 놓쳤다 — 규칙이 답했다 (6-AB)
+    #:   ``_enforce_mandatory`` 강제를 먼저 처리해야 한다 — 규칙의 결과다
+    #:   ``_enforce_mandatory`` 지금 고르는 자리가 아니다 — 순서다 (6-AB)
+    #:
+    #: 🔴 6-AA 가 ``_flow_actions`` 에 둔 강제 유발 분기는 **없어졌다** —
+    #: 6-AB 가 그 판정을 ``_enforce_mandatory`` 한 자리로 모았다. 그래서 둘이
+    #: 빠지고 넷이 들어와 둘 → 넷이다.
     empty = len(calls) - len(filled)
-    assert empty == 2, empty
+    assert empty == 4, empty
 
 
 # ======================================================================

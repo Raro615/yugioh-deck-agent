@@ -467,20 +467,26 @@ tests/engine/test_trigger_duel_integration.py              26 passed  (6-I)
 #### ③ 관련 엔진 · Agent · Discord
 
 ```
-tests/engine (104 파일)                3,718 passed · 3 failed   381s
-tests/agent + rules + rulings           525 passed · 3 failed · 1 skipped  212s
-tests/engine(유발·흐름·기록) + tests/agent
-  + opening · combo · discord           670 passed · 1 failed    272s
+                                        1차 (고치기 전)        확인 (고친 뒤)
+tests/engine (104 파일)            3,718 p · 3 f   381s   3,722 p · 0 f   373s
+tests/agent + rules + rulings        525 p · 3 f · 1 s          —
+tests/engine(유발·흐름·기록)
+  + tests/agent + opening
+  + combo + discord                      —            670 p · 1 f   272s
 ```
 
 #### ④ 공유 계약 루트 감사
 
 ```
-tests/test_*.py 앞 46 파일            §9.2-결과 참조
-tests/test_*.py 뒤 46 파일            1,072 passed · 8 failed · 8 skipped  1,086s
+                                        1차 (고치기 전)        확인 (고친 뒤)
+tests/test_*.py 앞 46 파일        1,237 p · 6 f · 1 s   진행 중 (§9.4)
+tests/test_*.py 뒤 46 파일        1,072 p · 8 f · 8 s   1,076 p · 4 f · 8 s
 ```
 
-#### 신규 회귀 — **전부 고쳤다**
+🔴 **뒤 46 파일의 확인 실행에서 남은 4건은 전부 선행 실패**(한국어 오버레이)
+다 — 6-AB 가 만든 회귀 넷이 사라졌다.
+
+#### 신규 회귀 여덟 — **전부 고쳤다**
 
 | 시험 | 원인 | 고친 곳 |
 |---|---|---|
@@ -491,8 +497,16 @@ tests/test_*.py 뒤 46 파일            1,072 passed · 8 failed · 8 skipped  
 | `test_trigger_lifetime_audit::test_08` | `journal` 읽는 함수 둘 → 셋 | **시험** — 새 자리를 적고 **금지 목록을 넓혔다** (`820bf22`) |
 | `test_rule_not_implemented_code_audit::test_02` · `test_05` | 줄 번호 (+19 · +231) | **시험** — 번호만. 불변량 88·73·15·13·19 실측 확인 (`820bf22`) |
 | `test_result_actor_provenance_design_audit::test_09` | 🔴 사본이 `EventJournal` 을 **직접 만들었다** | **코드** — `duel_components(seed_events=…)` 로 되돌렸다 (`1709f46`) |
+| `test_duelstep_withheld_validation_audit::test_09` | 보류 출처를 쓰는 자리가 5 → 7 · 비우는 자리가 2 → 4 | **시험** — **출처의 종류는 여전히 넷**이고 새 종류를 만들지 않았다. 늘어난 자리 수를 숨기지 않고 적었다 (아래) |
 
-🔴 **마지막 줄이 이 Phase 에서 감사가 가장 잘 일한 자리다.** "듀얼 하나에
+🔴 **``test_duelstep_withheld_validation_audit::test_09`` 은 처음부터
+"경계의 계약이 느슨하다" 는 증거를 세는 시험이고, 6-AB 가 그 증거를
+**늘렸다** — 모듈 상수에서 ``missing`` 을 채우는 자리가 둘에서 넷이 됐다.
+고치지 않고 적었다 (6-AA 가 세 번째 → 네 번째 종류를 적었듯이). 비우는
+자리도 둘 → 넷으로 늘었는데, 그쪽은 **규율을 지키는 자리가 늘어난 것**이다.
+
+🔴 **``test_result_actor_provenance_design_audit::test_09`` 이 이 Phase 에서
+감사가 가장 잘 일한 자리다.** "듀얼 하나에
 기록 하나" 를 production 전수로 세는 감사가 내가 만든 두 번째 생성 자리를
 **설계대로** 잡았다. 시험을 넓히지 않고 코드를 되돌렸다.
 
@@ -510,7 +524,16 @@ tests/rulings/test_data_audit.py::test_every_repository_card_can_reach_a_cid
 
 한국어 오버레이 데이터와 재정 캐시에 걸린 별개 문제다. 🔴 **같다고 가정하지
 않고** 기준 커밋 `48d6921` 의 워크트리에서 대조했다 — 예: `test_07` 은 그
-커밋에서도 같은 자리(`:308`)에서 실패한다 (실측).
+커밋에서도 같은 자리(`:308`)에서 실패한다 (실측). 반대로 §9.2 의 회귀 여덟은
+그 워크트리에서 **전부 통과**한다 (실측) — 그것이 선행 실패가 아니라는 증거다.
+
+### 9.4 확인 실행 하나가 남았다
+
+루트 감사 **앞 46 파일**의 확인 실행(31분)이 이 보고서를 쓰는 시점에 돌고
+있다. 그 묶음의 1차 실행에서 나온 6건 중 **4건을 개별로 다시 돌려 확인했고**
+(3건 통과 · 1건은 `test_duelstep_withheld_validation_audit::test_09` — 위
+표의 마지막 줄로 고쳤다), 나머지 2건은 선행 실패다. 🔴 **묶음 전체의 확인
+값은 아직 없다** — 있는 것처럼 적지 않는다.
 
 
 ### 9.3 삭제 · skip · assertion 완화
