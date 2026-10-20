@@ -649,7 +649,68 @@ def test_c05_synthetic_my_duty_does_not_close_the_other_seat(repository):
     assert duel._mandatory_offers(THEIRS) == ()
 
 
-def test_c06_the_duty_is_enforced_in_one_place():
+@requires_official_db
+def test_c06_synthetic_a_duty_outside_my_turn_is_not_a_missing_rule(repository):
+    """
+    🔴 **지금 고르는 자리가 아니면 "관문이 막았다" 고 적지 않는다** (합성).
+
+    상대가 강제 기회를 들고 있는 동안 ``legal_actions(상대)`` 를 물으면
+    허가가 비어 있다. 그 이유는 **순서**다 — 우선권이 그 자리에 없다. 그런데
+    6-AB 가 처음 쓴 ``_enforce_mandatory`` 는 거기에
+    :data:`~engine.duel.MANDATORY_TRIGGER_UNPLAYABLE` 을 달았고, 그 보류는
+    "규칙이 요구하는데 발동 절차를 보장할 근거가 없다" 는 뜻이므로 **거짓**
+    이었다 (실측으로 찾았다).
+
+    🔴 지금은 ``missing`` 을 **비우고** 순서라고 적는다 — 6-S 가
+    ``_flow_actions`` 에서 세운 기준과 같다. 조용히 넘기지도 않는다: 의무가
+    그 자리에 열려 있다는 사실은 적힌다.
+
+    합성 방법: 어느 자리로 물어도 **0번 자리의 제안**을 돌려주는 원천을
+    꽂는다. 실제 ``TriggerSource`` 는 ``controller`` 로 걸러 주므로, 자리가
+    어긋난 상태를 실제 카드로는 만들 수 없다.
+    """
+
+    class _BothSeats:
+        def __init__(self, repo):
+            self._inner = TriggerSource(repo)
+
+        def offers(self, duel, seat: int):
+            return tuple(
+                dataclasses.replace(
+                    offer, requirement=TriggerRequirement.MANDATORY
+                )
+                for offer in self._inner.offers(duel, MINE)
+            )
+
+    setup, _ = _board(repository, selector=FirstPermittedChoice())
+    _summon(setup.duel)
+    duel = dataclasses.replace(setup.duel, triggers=_BothSeats(repository))
+
+    assert duel.to_act == MINE
+    assert duel._mandatory_offers(THEIRS), "합성이 어긋난 자리를 못 만들면 빈다"
+
+    theirs = duel.legal_actions(THEIRS)
+    assert theirs.allowed == (), "차례가 아니므로 고를 것이 없다"
+    #: 🔴 **거짓 보류가 없다.**
+    assert _withheld_for(duel, THEIRS, MANDATORY_TRIGGER_UNPLAYABLE) == []
+    #: 🔴 **그런데 조용히 넘기지도 않았다.**
+    ordering = [
+        w
+        for w in theirs.withheld
+        if "행동을 고르는 자리가 아닙니다" in w.reason
+    ]
+    assert len(ordering) == 1
+    assert ordering[0].missing is None
+
+    #: 🔴 **내 자리는 그대로 좁혀진다** — 순서 판정이 보장을 끄지 않았다.
+    mine = duel.legal_actions(MINE)
+    assert mine.allowed
+    assert all(
+        a.kind is PlayerActionKind.ACTIVATE_EFFECT for a in mine.allowed
+    )
+
+
+def test_c07_the_duty_is_enforced_in_one_place():
     """
     🔴 **``END_PHASE`` 전용 블록이 사라졌다** — 한 자리에서 본다.
 

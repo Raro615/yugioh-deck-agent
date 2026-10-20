@@ -231,24 +231,32 @@ class Simulator:
             self.duel,
             state=self.duel.state.clone(),
             **duel_components(
-                journal=self._forked_journal(),
+                **self._forked_journal(),
                 chooser=self._forked_chooser(),
             ),
         )
 
-    def _forked_journal(self):
+    def _forked_journal(self) -> dict:
         """
-        부모의 사건을 **씨앗으로 받은 새 기록** (Phase 6-AB).
+        ``duel_components`` 에게 **기록을 어떻게 만들라** 고 하는 말 (6-AB).
+
+        부모의 사건을 씨앗으로 넘긴다 — ``seed_events`` 가 그것으로 **새
+        ``EventJournal``** 을 만든다.
+
+        🔴 **여기서 ``EventJournal`` 을 만들지 않는다.** "듀얼 하나에 기록
+        하나" 를 지키려면 기록을 만드는 자리가 하나여야 하고 (production
+        전수로 세는 감사가 있다:
+        ``tests/test_result_actor_provenance_design_audit.py::test_09``), 그
+        자리는 ``engine.spell_activation.duel_components`` 다. 처음에는 이
+        함수가 직접 만들었고, 그 감사가 **설계대로 잡았다.**
 
         부모가 기록하지 않는 듀얼이면 (``journal is None``) 사본도 기록하지
         않는다 — 없는 역사를 지어내지 않는다.
         """
-        from engine.effect.journal import EventJournal
-
         parent = self.duel.journal
         if parent is None:
-            return False
-        return EventJournal(tuple(parent))
+            return {"journal": False}
+        return {"seed_events": tuple(parent)}
 
     def _forked_chooser(self):
         """

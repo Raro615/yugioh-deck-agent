@@ -654,9 +654,29 @@ class Duel:
         강제 기회가 내 행동을 막지 않는다 — 막으면 상대가 처리할 수 없는
         기회로 내 턴이 멈춘다. 우선권이 누구에게 있는지는 ``_flow_actions``
         가 이미 본다.
+
+        🔴 **그 자리가 행동할 차례가 아니면 보장할 것도 없다** — 그때
+        "관문이 허가하지 않았다" 고 적으면 **거짓**이다: 허가가 비어 있는
+        이유가 빠진 규칙이 아니라 **순서**이기 때문이다. 실측한 증상 — 상대가
+        강제 기회를 들고 있는 동안 ``legal_actions(상대)`` 가
+        :data:`MANDATORY_TRIGGER_UNPLAYABLE` 을 달았다. 그래서 그 자리는
+        ``missing`` 을 **비우고** 순서라고 적는다 (6-S 의 규율).
         """
         forced = self._mandatory_offers(seat)
         if not forced:
+            return LegalActions(seat, tuple(allowed), tuple(withheld))
+
+        if self.to_act != seat:
+            # 의무는 열려 있지만 **지금 고르는 자리가 아니다.** 빠진 규칙이
+            # 아니라 순서이므로 ``missing`` 을 비운다.
+            withheld.append(
+                WithheldAction(
+                    PlayerActionKind.ACTIVATE_EFFECT,
+                    f"강제 유발 {len(forced)}건이 이 자리에 열려 있지만 지금 "
+                    "행동을 고르는 자리가 아닙니다 — 차례가 오면 그 처리가 "
+                    "먼저입니다.",
+                )
+            )
             return LegalActions(seat, tuple(allowed), tuple(withheld))
 
         duties = [
@@ -1307,8 +1327,11 @@ class Duel:
         if self.priority.is_open and self.priority.holds(seat):
             allowed.append(PlayerAction.passing(actor=seat))
         elif self.priority.is_open:
-            # 🔴 **창은 열려 있다** — 다만 상대가 쥐고 있다. ``missing`` 이
-            # 없는 유일한 보류 자리다: 빠진 규칙이 아니라 **순서**다.
+            # 🔴 **창은 열려 있다** — 다만 상대가 쥐고 있다. ``missing`` 을
+            # 비운다: 빠진 규칙이 아니라 **순서**다. (6-S 가 이 자리를 세울
+            # 때는 그런 자리가 여기 하나뿐이었다. 지금은 같은 이유로 비우는
+            # 자리가 `_enforce_mandatory` 와 `_trigger_actions` 에도 있다 —
+            # 기준이 같고, `test_i03` 이 자리마다 그 기준을 센다.)
             holder = self.priority.holder.seat
             withheld.append(
                 WithheldAction(

@@ -1670,6 +1670,9 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     ==========================================  ===========  ==============
     자리                                          ``missing``  왜
     ==========================================  ===========  ==============
+    ``_enforce_mandatory`` 지금 고르는 자리가 아니다 **없다**    순서다 (6-AB) —
+                                                             허가가 빈 이유가
+                                                             빠진 규칙이 아니다
     ``_enforce_mandatory`` 강제인데 관문이 막았다   **있다**     규칙이 요구하는데
                                                              절차를 보장할 근거가
                                                              없다 (6-AB)
@@ -1737,11 +1740,11 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     flow = filled("_flow_actions")
     assert len(flow) == 3, flow
     assert flow.count(True) == 2 and flow.count(False) == 1, flow
-    #: 🔴 **강제 쪽 둘은 하나씩이다** — 보장할 근거가 없는 쪽은 채우고,
-    #: 규칙이 **있어서** 막는 쪽은 비운다 (6-AB).
+    #: 🔴 **강제 쪽 셋 중 하나만 채운다** — 보장할 근거가 없는 자리 하나만
+    #: 채우고, 규칙이 **있어서** 막는 자리와 **순서** 자리는 비운다 (6-AB).
     forced = filled("_enforce_mandatory")
-    assert len(forced) == 2, forced
-    assert forced.count(True) == 1 and forced.count(False) == 1, forced
+    assert len(forced) == 3, forced
+    assert forced.count(True) == 1 and forced.count(False) == 2, forced
 
     #: 🔴 **비운 자리가 왜 비었는지 코드가 적는다.** 빈 칸을 설명 없이 두면
     #: 다음 사람이 "빠뜨렸다" 로 읽고 아무 값이나 채운다. 자리마다 **그 함수
@@ -1751,7 +1754,9 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
         return body[: body.index("\n    def ")]
 
     assert "빠진 규칙이 아니라 **순서**다" in function_body("_flow_actions")
-    assert "규칙이 요구한 처리를" in function_body("_enforce_mandatory")
+    forced_body = function_body("_enforce_mandatory")
+    assert "규칙이 요구한 처리를" in forced_body
+    assert "빠진 규칙이 아니라 **순서**이기 때문이다" in forced_body
     assert "그렇게 정했으므로 ``missing`` 을 비운다" in function_body(
         "_trigger_actions"
     )

@@ -521,7 +521,7 @@ def duel_resolver(journal=None, chooser=None):
     )
 
 
-def duel_components(journal=None, chooser=None) -> dict:
+def duel_components(journal=None, chooser=None, seed_events=None) -> dict:
     """
     journal **하나를 공유하는** 실행기·발동기·해결기 한 벌 (Phase 6-B).
 
@@ -543,17 +543,37 @@ def duel_components(journal=None, chooser=None) -> dict:
     객체도 **값으로만** 넘어간다 (``journal`` 과 같은 자리다).
 
     ``journal`` 을 주지 않으면 새로 만든다. 🔴 명시적으로 ``False`` 를
-    주면 **기록하지 않는 한 벌**이 나온다 — 탐색 사본이 쓰는 쪽이다
-    (:meth:`agent.simulation.DuelSimulator._fork`). ``None`` 과 ``False``
-    를 가른 이유: "안 줬다" 와 "끄겠다" 는 다른 뜻이다.
+    주면 **기록하지 않는 한 벌**이 나온다. ``None`` 과 ``False`` 를 가른
+    이유: "안 줬다" 와 "끄겠다" 는 다른 뜻이다.
+
+    ``seed_events`` (Phase 6-AB) 는 **그 사건들을 씨앗으로 받은 새 기록**을
+    만든다 — 탐색 사본이 쓰는 쪽이다
+    (:meth:`agent.simulation.Simulator._fork`). 왜 사본이 ``EventJournal``
+    을 직접 만들지 않는가: **듀얼 하나에 기록 하나**를 지키려면 기록을 만드는
+    자리가 하나여야 하고 (``test_09_production_now_records_the_journal_events
+    _through_the_duel`` 가 production 전수로 센다), 그 자리가 여기다. 사본이
+    자기 기록을 갖는 것은 그 규율을 **지키는** 일이지만, 만드는 코드가 두
+    군데가 되면 다음 사람이 세 번째를 만든다.
+
+    🔴 ``journal`` 과 함께 줄 수 없다 — "이 객체를 써라" 와 "이 사건들로
+    새로 만들어라" 는 다른 요구이고, 둘을 함께 받으면 어느 쪽이 이기는지
+    말할 수 없다.
     """
     from engine.effect.journal import EventJournal
     from engine.summon import duel_executor
 
+    if seed_events is not None and journal is not None:
+        raise ValueError(
+            "journal 과 seed_events 를 함께 줄 수 없습니다 — "
+            "'이 객체를 써라' 와 '이 사건들로 새로 만들어라' 는 다른 "
+            "요구입니다."
+        )
     if journal is False:
         shared = None
     elif journal is None:
-        shared = EventJournal()
+        # 🔴 **기록을 만드는 자리는 이 한 줄이다.** 빈 기록과 씨앗 받은
+        # 기록이 같은 생성자를 지나므로, 둘이 다른 모양이 될 수 없다.
+        shared = EventJournal(tuple(seed_events or ()))
     else:
         shared = journal
     return {
