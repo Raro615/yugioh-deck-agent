@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | 시작 커밋 | `3472901` (Phase 6-Z 최종) |
-| 최종 커밋 | *§8 에서 채운다* |
+| 최종 커밋 | `0bf6a65` (이 보고서) · 그 앞이 `bff3e6a` |
 | 브랜치 | `claude/pensive-goodall-te1egy` |
 
 🔴 **엔진 수정과 출력 수정을 따로 커밋했다** (요청대로).
@@ -32,11 +32,19 @@
 | `tests/test_combo_output_consistency.py` | +230 (새) | 9개 |
 | `tests/test_opening_duel_integration.py` | +16/−2 | 기존 시험 하나 정정 |
 
-### 그 뒤 (구조 감사 정정)
+### `3daab7d` — 엔진 회귀 정정 + 보고서
 
 | 파일 | 무엇을 |
 |---|---|
 | `tests/engine/test_legal_action_candidate_consistency.py` | `test_i03` 을 **수 세기에서 기준 세기로** 옮겼다 (§9.2) |
+| `docs/phase6aa-…md` | 이 보고서 |
+
+### `bff3e6a` — 루트 감사 넷 정정 (§9.2)
+
+`tests/test_trigger_lifetime_audit.py` ·
+`tests/test_duelstep_withheld_validation_audit.py` ·
+`tests/test_trigger_connectivity_audit.py` ·
+`tests/test_rule_not_implemented_code_audit.py`
 
 ---
 
@@ -344,13 +352,82 @@ chain_links_after` 는 걸음이 끝난 **뒤 남은** 링크 수이고 체인�
 
 ## 8. 테스트 — 명령 · 범위 · 결과
 
-*§9 와 함께 채운다.*
+### 8.1 왜 묶음으로 쪼갰는가
+
+루트 감사 하나를 통째로 돌리면 50분이 걸리고, 그동안 컨테이너가 재시작되면
+**아무 결과도 남지 않는다.** 이 Phase 에서 실제로 두 번 재시작됐다. 묶음마다
+파일에 쓰게 해 두면 절반이 끊겨도 절반은 남는다 — 두 번째 재시작 때
+`tests/engine` 과 루트 1/4 · 2/4 의 결과가 그렇게 살아남았고, 잃은 세 묶음만
+다시 돌렸다.
+
+### 8.2 명령과 결과 (전부 `-p no:randomly --tb=no -rf`)
+
+| # | 명령 | 통과 | skip | 실패 | 시간 | 종료 코드 |
+|---|---|---|---|---|---|---|
+| 1 | `pytest tests/engine` | **3,694** | 0 | 0 | 5분 30초 | **0** |
+| 2 | `pytest <루트 1/4·24파일>` | **585** | 0 | 0 | 16분 41초 | **0** |
+| 3 | `pytest <루트 2/4·24파일>` | 656 | 1 | **2** | 8분 04초 | 1 |
+| 4 | `pytest <루트 3/4·24파일>` | 610 | 8 | **4** | 11분 17초 | 1 |
+| 5 | `pytest <루트 4/4·21파일>` | **466** | 0 | 0 | 6분 30초 | **0** |
+| 6 | `pytest tests/agent tests/rules tests/rulings` | 526 | 1 | **2** | 3분 17초 | 1 |
+| | **합계** | **6,537** | **10** | **8** | **51분 20초** | |
+
+🔴 **실패 8건이 선행 실패 8건과 정확히 같다.** 신규 회귀 **0건**이다.
+
+### 8.3 단계 순서 (타깃 → 통합 → 엔진 · Agent 회귀)
+
+| 단계 | 범위 | 결과 |
+|---|---|---|
+| ① 타깃 | 새 시험 둘 (`test_trigger_requirement_and_opportunity.py` 21 · `test_combo_output_consistency.py` 9) | 30 passed |
+| ② 관련 통합 | 유발 · 전개 · Discord 7파일 | 347 passed (중 `test_opening_duel_integration::test_e04` 하나를 고쳤다) |
+| ③ 엔진 | `tests/engine` | 3,693 → **1 failed** → 고친 뒤 **3,694 passed** |
+| ④ 루트 감사 + Agent + Discord | `tests/` 전수 | 2,843 passed · 10 skipped · **12 failed** → 신규 4건 고친 뒤 **2,843 passed · 8 failed (전부 선행)** |
+
+긴 회귀를 돌리기 전에 범위와 예상 시간을 적고 (§8.1), 불필요한 반복을 피했다
+— 재시작으로 유실된 세 묶음만 다시 돌렸고 살아남은 셋은 다시 돌리지 않았다.
 
 ---
 
 ## 9. 기존 실패 · 신규 회귀 · BLOCKER
 
-*일부는 §8 과 함께 채운다.*
+### 9.1 선행 실패 8건 — 6-AA 가 손대지 않았다
+
+```
+tests/test_effect_type_quick_audit.py::test_29_…
+tests/test_event_free_chain_semantic_audit.py::test_27_…
+tests/test_korean_overlay_unapplied_audit.py::test_01_… · test_13_… · test_21_… · test_25_…
+tests/agent/test_opponent_resource_weighting_audit.py::test_07_…
+tests/rulings/test_data_audit.py::test_every_repository_card_can_reach_a_cid
+```
+
+🔴 **6-Z 가 기준 커밋 `e429146` 워크트리에서 같은 8건을 확인해 두었고**
+(그 보고서 §9.4), 6-AA 는 이 여덟 자리의 어느 파일도 건드리지 않았다 — 재정
+캐시와 한국어 오버레이 데이터에 걸린 별개 문제다. **같다고 가정하지 않고**
+목록을 대조했다.
+
+### 9.2 신규 회귀 4건 — 전부 census 이고 전부 고쳤다
+
+🔴 **수를 고치지 않고 재는 것을 고쳤다.** 넷 다 "이름 · 문자열 통과" 가
+아니라 **원래 책임 경계가 유지됨**을 증명하도록 바꿨다.
+
+| 시험 | 무엇이 깨졌는가 | 어떻게 고쳤는가 |
+|---|---|---|
+| `test_trigger_lifetime_audit::test_08` | ① `Duel` 의 칸에 `timing_floor` 가 늘었다 ② 🔴 `duel.py` 가 `journal` 을 읽기 시작했다 (3곳) | **범위를 함수로 좁혔다.** 6-B 때는 파일 전수가 곧 주장이었지만, 6-Z 부터 **유발 후보는 기록된 사건에서 나오므로** 파일 전수로 재면 그 기능 자체가 위반이 된다. 읽는 함수가 둘(`_trigger_actions` · `_apply_end_phase`)뿐이고 **보통의 후보 경로 여섯은 하나도 읽지 않음**을 센다 — §10 이 지키려던 것을 그 경로에 **직접** 센다 |
+| `test_duelstep_withheld_validation_audit::test_09` | 보류 자리가 4 → 7 | **자리 수에서 출처의 종류로.** 그것이 이 시험의 주장이고 (`같은 칸이 자리마다 다른 출처에서 채워진다`) 자리 수는 대리 지표였다. 🔴 **6-AA 가 그 느슨함을 늘렸다 — 모듈 상수가 네 번째 종류다.** 숨기지 않고 표에 적었다 |
+| `test_trigger_connectivity_audit::test_12` | `_trigger_actions` 에 `PlayerActionKind` 라는 낱말이 들어왔다 | 🔴 **6-Z 의 내 단정이 틀린 방법이었다** — "새 종류를 만들지 않는다" 를 낱말 금지로 쟀다. 그 자리가 이름하는 종류를 전부 모아 `ACTIVATE_EFFECT` 하나뿐임을 센다 |
+| `test_rule_not_implemented_code_audit::test_02` | `engine/duel.py` 산문 자리 1100 → 1267 | 줄 번호만 고쳤다 — **문자열 88 · 코드 73 · 산문 15 · 위반 13 · 적합 19 는 전부 그대로**이고, 바뀐 것이 번호뿐이라는 것이 그 증거다 |
+
+그 앞 단계(③)에서 고친 하나:
+
+| 시험 | 어떻게 |
+|---|---|
+| `test_legal_action_candidate_consistency::test_i03` | 같은 가족이다. **수 세기에서 기준 세기로** — 보류를 만드는 함수가 셋뿐인가, 자리마다 `missing` 을 채우는 기준이 같은가 (근거가 생겨야 풀리는 자리는 채우고, 규칙이 **있어서** 막는 자리는 비운다), 비운 자리가 왜 비었는지 코드가 적는가 |
+
+### 9.3 삭제 · skip · assertion 완화
+
+**0건.** 고친 시험 여섯 전부 단정이 같거나 **더 좁아졌다.**
+
+### BLOCKER-6AA-1 — 사본이 사건 기록을 물려받지 않는다
 
 ### BLOCKER-6AA-1 — 사본이 사건 기록을 물려받지 않는다
 
