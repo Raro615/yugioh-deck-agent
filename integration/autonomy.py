@@ -77,7 +77,13 @@ from engine.effect.semantics import declared_gate_question
 from engine.effect.targeting import TargetResolver
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
-from engine.trigger import TimingEvent, TriggerRequirement, TriggerStatus, timing_events
+from engine.trigger import (
+    TimingEvent,
+    TriggerRequirement,
+    TriggerStatus,
+    TriggerWording,
+    timing_events,
+)
 from engine.validation import ValidationCode
 from engine.trigger_chain import TriggerChainIntegrator
 
@@ -158,6 +164,13 @@ class TriggerOffer:
     controller: int
     requirement: TriggerRequirement
     reason: str
+    wording: TriggerWording = TriggerWording.UNKNOWN
+    """
+    발동 시점의 어휘 — 「때」인가 「경우」인가 (Phase 6-AB).
+
+    놓친 타이밍이 **있는 쪽과 없는 쪽**이 다르므로, 기회가 언제 닫히는가를
+    가르는 데 쓴다. 판정은 ``Duel`` 이 한다 — 이 계층은 옮기기만 한다.
+    """
     event_sequence: int = -1
     """
     이 사건이 기록된 **번호** (Phase 6-AA). ``EventJournal`` 이 identity 로
@@ -182,6 +195,27 @@ class TriggerOffer:
     def is_mandatory(self) -> bool:
         """근거 있는 **강제** 유발인가 (Phase 6-AA)."""
         return self.requirement is TriggerRequirement.MANDATORY
+
+    @property
+    def misses_timing(self) -> "bool | None":
+        """
+        이 유발이 **타이밍을 놓칠 수 있는가** (Phase 6-AB). 모르면 ``None``.
+
+        ========  ==========================================================
+        ``True``    「때」 — 그 사건이 **마지막에 일어난 일**이어야 한다
+        ``False``   「경우」 — 사이에 다른 일이 와도 기회가 남는다
+        ``None``    어휘를 판정할 수 없다. 🔴 **어느 쪽으로도 바꾸지 않는다**
+        ========  ==========================================================
+
+        🔴 **``None`` 을 ``False`` 로 접지 말 것.** 접으면 「때」 효과가
+        지나간 뒤에도 발동 후보가 되고, 그것은 모름을 허가로 바꾸는 일이다.
+        읽는 쪽은 ``is True`` · ``is False`` · ``is None`` 셋을 따로 본다.
+        """
+        if self.wording is TriggerWording.WHEN:
+            return True
+        if self.wording is TriggerWording.IF:
+            return False
+        return None
 
     @property
     def event_key(self) -> TimingEvent:
@@ -309,6 +343,7 @@ def trigger_offers(duel, repository, seat: int) -> tuple[TriggerOffer, ...]:
                         controller=candidate.controller,
                         requirement=candidate.requirement,
                         reason=_gate_summary(eligibility),
+                        wording=candidate.wording,
                         event_sequence=recorded.sequence,
                     )
                 )

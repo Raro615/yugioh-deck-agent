@@ -114,8 +114,23 @@ Lua 의 사본이 아니라 ``StateDelta`` / ``JournalEvent`` 에서 파생된 �
        ├ 텍스트 혼재      766   ← 붙이는 방법에 따라 답이 달라진다
        └ 둘이 어긋남       79   ← 3-F-26 이 센 반례 그대로
 
-:attr:`~engine.trigger.TriggerWording.UNKNOWN` (때 / 경우) 은 **그대로
-둔다** — 그것은 놓친 타이밍의 축이고 타이밍 윈도우가 있어야 쓸 수 있다.
+🔴 **Phase 6-AB 가 「때 / 경우」 축도 채운다** (:func:`wording_from`). 6-AA
+가 그 축을 "타이밍 윈도우가 있어야 쓸 수 있다" 며 비워 두었는데, **그 판단이
+틀렸다** — 윈도우 계층 없이도 공식 재정이 말하는 것을 그대로 물을 수 있다:
+*그 사건이 마지막에 일어난 일인가.* 기록(``EventJournal``)이 그 질문에
+답한다.
+
+    「…했을 **때**에 발동」   놓친 타이밍이 **있다** — 사건이 마지막이어야 한다
+    「…했을 **경우**에 발동」  놓친 타이밍이 **없다** — 사이에 다른 일이 와도 된다
+
+출처 (룰북에 없어 밖에서 확인했다):
+``core.card_model.Card.activation_wording_text`` 의 설명이 링크를 적는다.
+
+실측 (같은 8,052 블록)::
+
+    if        3,192   때/경우 중 「경우」만
+    when        688   「때」만
+    unknown   4,172   둘 다 없거나 둘 다 있다 (조건의 「경우」와 섞인 것 포함)
 """
 
 from __future__ import annotations
@@ -131,6 +146,7 @@ from engine.trigger import (
     TriggerRequirement,
     TriggerSpec,
     TriggerSubject,
+    TriggerWording,
 )
 from engine.vocabulary import Zone
 
@@ -170,6 +186,32 @@ MANDATORY_DECLARATION_TYPE = "TRIGGER_F"
 #: 받는 것이 그 경계를 지키는 방법이고, 6-D 부터의 규율이다.
 TEXT_OPTIONAL = "optional"
 TEXT_MANDATORY = "mandatory"
+
+#: 카드 텍스트가 말하는 발동 시점의 어휘
+#: (``core.card_model.activation_wording_text``). 같은 이유로 문자열이다.
+TEXT_WHEN = "when"
+TEXT_IF = "if"
+
+
+def wording_from(text_wording: "str | None") -> TriggerWording:
+    """
+    이 블록의 발동 시점이 「때」인가 「경우」인가 (Phase 6-AB). 모르면
+    ``UNKNOWN``.
+
+    🔴 **근거가 하나뿐이다 — 카드 텍스트.** 강제 · 임의와 달리 Lua 선언에
+    이 축이 **없다** (``TRIGGER_O`` · ``TRIGGER_F`` 는 강제/임의 쪽 이름이고,
+    어휘를 적는 선언은 어디에도 없다). 그래서 어긋남을 볼 상대가 없고,
+    텍스트가 한쪽만 말할 때 그대로 받는다.
+
+    🔴 **그래서 ``UNKNOWN`` 이 더 많다** (4,172 / 8,052). 섞였거나 없으면
+    판정하지 않고, 받는 쪽은 그 모름을 **허가로 바꾸지 않는다**
+    (``Duel._trigger_actions`` 가 보류로 돌린다).
+    """
+    if text_wording == TEXT_WHEN:
+        return TriggerWording.WHEN
+    if text_wording == TEXT_IF:
+        return TriggerWording.IF
+    return TriggerWording.UNKNOWN
 
 
 def requirement_from(
@@ -545,6 +587,7 @@ def compile_trigger_spec(
     ranges: Sequence[str] = (),
     event_subject_claim: str | None = None,
     text_permission: "str | None" = None,
+    text_wording: "str | None" = None,
 ) -> TriggerCompilation | None:
     """
     효과 블록 하나의 등록 정보를 :class:`~engine.trigger.TriggerSpec` 으로.
@@ -555,9 +598,11 @@ def compile_trigger_spec(
     같은 값이 되면 안 된다.
 
     ``text_permission`` (Phase 6-AA) 은 **카드 텍스트가 말하는 허가/수행**
-    이다 (``core.card_model.Card.activation_permission_text``). 주지 않으면
-    :attr:`~engine.trigger.TriggerRequirement.UNKNOWN` 이고, 그것이 6-AA
-    이전의 동작 그대로다 — 없는 것을 기본값으로 메꾸지 않는다 (ADR-006).
+    이다 (``core.card_model.Card.activation_permission_text``).
+    ``text_wording`` (Phase 6-AB) 은 **발동 시점의 어휘**다
+    (``…activation_wording_text``). 둘 다 주지 않으면 각각 ``UNKNOWN`` 이고,
+    그것이 그 Phase 이전의 동작 그대로다 — 없는 것을 기본값으로 메꾸지
+    않는다 (ADR-006).
     """
     if not isinstance(effect_ref, EffectRef):
         raise TypeError(f"EffectRef 가 필요합니다: {type(effect_ref).__name__}")
@@ -635,6 +680,7 @@ def compile_trigger_spec(
         subject=subject,
         activates_from=activates_from,
         requirement=requirement_from(kinds, text_permission),
+        wording=wording_from(text_wording),
     )
     return TriggerCompilation(
         status=TriggerCompilationStatus.COMPILED,
@@ -653,10 +699,13 @@ __all__ = [
     "FLIP_DECLARATION_TYPE",
     "MANDATORY_DECLARATION_TYPE",
     "OPTIONAL_DECLARATION_TYPE",
+    "TEXT_IF",
     "TEXT_MANDATORY",
     "TEXT_OPTIONAL",
+    "TEXT_WHEN",
     "TRIGGER_DECLARATION_TYPES",
     "requirement_from",
+    "wording_from",
     "EVENT_TIMING",
     "TriggerCompilationStatus",
     "TriggerCompilation",

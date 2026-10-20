@@ -345,6 +345,18 @@ ACTIVATION_OPTIONAL_PHRASE: str = "발동할 수 있다"
 #: 섞이지 않는다 — 실측으로 확인했다 (보고서 §3).
 ACTIVATION_MANDATORY_PHRASE: str = "발동한다"
 
+#: 🔴 **카드가 발동 시점을 「때」로 적은 문구** (Phase 6-AB).
+#:
+#: 「…했을 **때**에 발동」 은 공식 재정에서 **놓친 타이밍이 있는** 쪽이다 —
+#: 그 사건이 *마지막에 일어난 일*이어야 발동할 수 있다.
+ACTIVATION_WHEN_PHRASES: tuple[str, ...] = ("때에 발동", "때 발동")
+
+#: 카드가 발동 시점을 「경우」로 적은 문구.
+#:
+#: 「…했을 **경우**에 발동」 은 놓친 타이밍이 **없는** 쪽이다 — 사이에 다른
+#: 일이 일어나도 그 기회가 사라지지 않는다.
+ACTIVATION_IF_PHRASES: tuple[str, ...] = ("경우에 발동", "경우 발동")
+
 
 @dataclass(slots=True)
 class Card:
@@ -664,6 +676,58 @@ class Card:
             return "optional"
         if mandatory and not optional:
             return "mandatory"
+        return None
+
+    @property
+    def activation_wording_text(self) -> "str | None":
+        """
+        이 카드 **자신의 텍스트**가 발동 시점을 「때」로 적었는가 「경우」로
+        적었는가 (Phase 6-AB). 셋 중 하나다.
+
+        ===========  ====================================================
+        ``"when"``     「…때에 발동」만 있다 — **놓친 타이밍이 있다**
+        ``"if"``       「…경우에 발동」만 있다 — 놓친 타이밍이 **없다**
+        ``None``       **말할 수 없다.** 둘 다 없거나 둘 다 있다
+        ===========  ====================================================
+
+        🔴 **왜 이 구분이 필요한가.** 공식 재정이 둘을 **다르게** 다룬다 —
+        「때」 효과는 그 사건이 *마지막에 일어난 일*이어야 발동할 수 있고
+        (사이에 다른 일이 일어나면 타이밍을 놓친다), 「경우」 효과는 그렇지
+        않다. 둘을 한 규칙으로 묶으면 한쪽이 반드시 틀린다 — 「경우」를
+        만료시키면 **적법한 발동을 금지**하고, 「때」를 만료시키지 않으면
+        **지나간 발동을 허가**한다.
+
+        출처 (저장소 데이터에 이 구분이 없어 밖에서 확인했다):
+
+        - Yugipedia, *Optional Trigger Effect* — "Optional effects that use
+          the word 'When' can miss the timing. Optional effects that use
+          other timing words, such as 'If', cannot."
+          https://yugipedia.com/wiki/Optional_Trigger_Effect
+        - Yu-Gi-Oh! Wiki, *Simultaneous Effects Go On Chain* — 체인 처리
+          중에 시점을 만난 효과는 그 체인이 완전히 해결된 **뒤**에 발동한다.
+          https://yugioh.fandom.com/wiki/Simultaneous_Effects_Go_On_Chain
+
+        🔴 **룰북(이 저장소의 ``data/rules``)에는 없다.** SD 룰북은 유발
+        효과를 *"activated at specific times"* 로만 적는다. 그래서 근거는
+        위의 공식 · 위키 자료와 **카드 텍스트**이고, 그 사실을 숨기지 않는다.
+
+        🔴 **카드 단위이면서 효과 단위 판정에 쓸 수 있는 이유**는
+        :attr:`activation_permission_text` 와 같다 — 모든 발동 문장이 같은
+        쪽을 말할 때만 판정하므로, 문장과 블록을 잇지 못해도 답이 하나다.
+
+        🔴 **조건의 「경우」와 섞일 수 있다.** 「자신 필드에 몬스터가
+        존재하지 않을 **경우에** 발동할 수 있다」 의 「경우」는 시점이 아니라
+        **조건**이다. 둘을 가르는 계층이 없으므로, 한 카드에 시점-「때」와
+        조건-「경우」가 함께 있으면 ``None`` 이 된다 — 섞였을 때 판정하지
+        않는 규율이 그 경우도 덮는다.
+        """
+        text = self.desc or ""
+        when = any(phrase in text for phrase in ACTIVATION_WHEN_PHRASES)
+        if_ = any(phrase in text for phrase in ACTIVATION_IF_PHRASES)
+        if when and not if_:
+            return "when"
+        if if_ and not when:
+            return "if"
         return None
 
     @property

@@ -131,6 +131,9 @@ def compiled_triggers(
             #: 넘긴다. 6-K 가 발동 분류를, 6-Z 가 사건 목록을 넘긴 것과
             #: 같은 자리다.
             text_permission=card.activation_permission_text,
+            #: 🔴 **발동 시점의 어휘도 같은 자리에서 넘긴다** (6-AB) —
+            #: 「때」와 「경우」는 놓친 타이밍이 다르다.
+            text_wording=card.activation_wording_text,
         )
         if compilation is None:
             #: 트리거 등록이 **아니다** (``TRIGGER_O`` · ``TRIGGER_F`` 없음).
