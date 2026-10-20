@@ -95,15 +95,43 @@ TRIGGER_REQUIREMENT_MISSING = (
     "카드 텍스트도 한쪽으로 모이지 않았다)"
 )
 
-#: 🔴 **사본이 사건 기록을 들고 있지 않을 때 빠진 것** (Phase 6-AA).
+#: 🔴 **듀얼이 사건 기록을 들고 있지 않을 때 빠진 것** (Phase 6-AA · 6-AB).
 #:
-#: ``agent.simulation`` 의 ``_fork`` 는 기록하지 않는 한 벌로 바꿔 끼운다
-#: (Phase 6-B — 사본의 전개가 진짜 기록에 남지 않게). 그 사본은 **과거
-#: 사건을 모르므로** 유발 후보를 만들 수 없다. 사본에 부모의 기록을
-#: 물려주면 풀리지만 그것은 탐색의 깊이와 점수를 바꾸는 변경이므로
-#: ``BLOCKER-6AA-1`` 로 적는다.
+#: 유발 후보는 **기록된 사건**에서 나오므로 (Phase 6-Z) 기록이 없으면 꺼낼
+#: 것이 없다. 그런데 그것을 조용히 "유발 0건" 으로 두면 읽는 쪽이 "유발이
+#: 없다" 로 읽는다 — 둘은 다른 사실이다.
+#:
+#: 🔴 **6-AA 가 이것을 ``BLOCKER-6AA-1`` 로 적은 자리는 6-AB 가 닫았다.**
+#: 그때는 ``agent.simulation`` 의 ``_fork`` 가 기록하지 않는 한 벌로 바꿔
+#: 끼웠고 (``journal=False``), 그래서 **모든 사본**이 이 자리를 밟았다.
+#: 6-AB 는 사본에 부모의 사건을 씨앗으로 받은 **새 ``EventJournal``** 을
+#: 준다 (``_forked_journal``) — 사본의 전개가 진짜 기록에 남지 않는다는
+#: 6-B 의 요구는 그대로 지키면서 역사는 물려받는다.
+#:
+#: 그래서 이 보류가 남는 자리는 **처음부터 기록 없이 만든 듀얼** 하나다.
+#: 없는 역사를 지어내지 않으므로 그 사본도 기록이 없고, 그 사실을 적는다.
 TRIGGER_HISTORY_MISSING = (
-    "사본이 물려받은 사건 기록 (Phase 6-AA — BLOCKER-6AA-1)"
+    "이 듀얼의 사건 기록 (Phase 6-Z — 유발 후보는 기록된 사건에서 나온다)"
+)
+
+#: 🔴 **「때 / 경우」 를 판정할 수 없을 때 빠진 것** (Phase 6-AB).
+#:
+#: 공식 재정이 둘을 다르게 다루는데 (「때」 는 놓친 타이밍이 있고 「경우」 는
+#: 없다) 카드 텍스트로 어느 쪽인지 모이지 않은 경우다. 판이 바뀌어도 풀리지
+#: 않고 **근거가 생겨야** 풀리므로 보류의 ``missing`` 에 적는다.
+TRIGGER_WORDING_MISSING = (
+    "유발의 「때 / 경우」 판정 근거 (Phase 6-AB — 룰북에 그 구분이 없고 "
+    "카드 텍스트도 한쪽으로 모이지 않았다)"
+)
+
+#: 🔴 **강제 유발을 발동할 수 없을 때 빠진 것** (Phase 6-AB).
+#:
+#: 규칙이 그 처리를 요구하는데 관문이 그 발동을 허가하지 않는다 (조건 ·
+#: 비용 · 구현 중 하나). 그때 흐름을 막으면 **영구 대기**가 되므로 막지
+#: 않고, 진행의 합법성을 보장하지 못한다는 사실을 적는다.
+MANDATORY_TRIGGER_UNPLAYABLE = (
+    "강제 유발의 발동 절차 (Phase 6-AB — 규칙이 요구하는데 관문이 허가하지 "
+    "않아 이 진행이 규칙대로인지 보장할 수 없다)"
 )
 
 #: 전투가 일어나는 존들. 공격자와 대상 모두 여기 있는 카드다.
@@ -352,10 +380,16 @@ class Duel:
     그리고 다음 턴의 DRAW · STANDBY 에서까지 관문을 **통과했다**
     (``gate=valid/ok``, 보고서 §4 의 실측).
 
-    🔴 **페이즈 안에서의 만료는 이것으로 판정하지 않는다.** 같은 페이즈
-    안에서 "그 사건의 시점이 이미 지났는가" 를 묻는 것은 타이밍 윈도우
-    계층의 일이고 이 엔진에 그 계층이 없다. 근거 없는 일괄 규칙("다음
-    행동이면 만료") 을 만들지 않고 ``BLOCKER-6AA-2`` 로 적는다.
+    🔴 **페이즈 안에서의 만료는 이것으로 판정하지 않는다.** 그것은
+    :meth:`_timing_is_current` 의 일이고, 근거는 **어휘**다 — 「때」 효과는
+    그 사건이 *마지막에 일어난 일*이어야 하고 「경우」 효과는 그렇지 않다
+    (Phase 6-AB). 그래서 이 바닥은 **페이즈 경계**만 본다: 둘은 다른 축이고,
+    어느 한쪽으로 다른 쪽을 흉내 내면 「경우」 의 적법한 기회를 닫거나
+    「때」 의 지나간 기회를 연다.
+
+    🔴 6-AA 가 이 자리를 ``BLOCKER-6AA-2`` 로 적으며 **근거 없는 일괄
+    규칙**("다음 행동이면 만료") 을 만들지 않은 것은 옳았다. 그 규칙을
+    세웠다면 「경우」 효과의 적법한 기회를 닫았을 것이다.
     """
     consumed_events: frozenset = frozenset()
     """
@@ -584,7 +618,82 @@ class Duel:
         withheld.extend(held)
 
         withheld.extend(self._withheld_board_actions(seat, validator))
-        return LegalActions(seat, tuple(allowed), tuple(withheld))
+
+        # 🔴 **강제 유발이 열려 있으면 그 발동 말고는 고를 수 없다**
+        # (Phase 6-AB). 6-AA 는 ``END_PHASE`` 하나만 막았고, 그래서 세트 ·
+        # 소환 · 공격 · 패스로 필수 처리를 **미룰 수 있었다** (실측: 세트가
+        # 허용되고, 세트 뒤에도 강제 기회가 그대로 열려 있었다).
+        #
+        # 규칙이 요구한 처리를 "다른 것을 먼저 하겠다" 로 넘기는 길을 막는
+        # 것이 강제가 임의와 다른 전부다.
+        return self._enforce_mandatory(seat, allowed, withheld)
+
+    def _enforce_mandatory(
+        self,
+        seat: int,
+        allowed: "list[PlayerAction]",
+        withheld: "list[WithheldAction]",
+    ) -> LegalActions:
+        """
+        **강제 유발이 열려 있으면 그 발동만 남긴다** (Phase 6-AB).
+
+        🔴 **대신 발동해 주지는 않는다.** 엔진이 대신 고르면 해결 중의
+        선택(어느 카드인가)까지 엔진이 정하게 되고, 그것은 6-Z 가 세운
+        경계를 무너뜨린다. 그래서 **다른 길을 닫고 후보를 남긴다** — 고르는
+        쪽에게 남은 길은 그 발동을 집는 것이고, 그 안의 선택은 여전히
+        고르는 쪽의 것이다 (``ResolutionChooser``).
+
+        🔴 **영구 대기를 만들지 않는다.** 강제 기회가 있는데 그 발동이
+        후보에 **하나도 없으면** (조건 · 비용 · 구현이 막았다) 닫지 않는다 —
+        닫으면 고를 것이 없어 듀얼이 그 자리에서 멈춘다. 대신 진행의
+        합법성을 보장하지 못한다는 사실을 보류에 적는다
+        (:data:`MANDATORY_TRIGGER_UNPLAYABLE`). 그것이 "완료 · 정상 종료" 와
+        구별되는 **미지원 결과**다.
+
+        🔴 **자리마다 따로 본다.** 강제 기회는 그 자리의 것이고, 상대의
+        강제 기회가 내 행동을 막지 않는다 — 막으면 상대가 처리할 수 없는
+        기회로 내 턴이 멈춘다. 우선권이 누구에게 있는지는 ``_flow_actions``
+        가 이미 본다.
+        """
+        forced = self._mandatory_offers(seat)
+        if not forced:
+            return LegalActions(seat, tuple(allowed), tuple(withheld))
+
+        duties = [
+            action
+            for action in allowed
+            if action.kind is PlayerActionKind.ACTIVATE_EFFECT
+            and any(
+                action.source == offer.source
+                and action.effect_ref == offer.effect_ref
+                for offer in forced
+            )
+        ]
+        if not duties:
+            # 규칙이 요구하는데 발동할 수 없다 — **막지 않고 적는다.**
+            withheld.append(
+                WithheldAction(
+                    PlayerActionKind.ACTIVATE_EFFECT,
+                    f"강제 유발 {len(forced)}건이 열려 있는데 발동 관문을 "
+                    "지나지 못했습니다 — 이 진행이 규칙대로인지 보장할 수 "
+                    "없습니다 (흐름은 막지 않습니다: 막으면 고를 것이 없어 "
+                    "듀얼이 멈춥니다).",
+                    missing=MANDATORY_TRIGGER_UNPLAYABLE,
+                )
+            )
+            return LegalActions(seat, tuple(allowed), tuple(withheld))
+
+        for action in allowed:
+            if action in duties:
+                continue
+            withheld.append(
+                WithheldAction(
+                    action.kind,
+                    f"강제 유발 {len(forced)}건을 먼저 처리해야 합니다 — "
+                    "규칙이 요구한 처리를 넘기고 다른 것을 할 수 없습니다.",
+                )
+            )
+        return LegalActions(seat, tuple(duties), tuple(withheld))
 
     def _attack_actions(self, seat: int, validator: ActionValidator):
         """
@@ -740,10 +849,78 @@ class Duel:
         return ActionValidator(
             self.view(seat),
             definitions=self._activator.definitions,
+            #: 🔴 **내놓을 수 있는 제안만 관문을 연다** (Phase 6-AB).
+            #:
+            #: 6-AA 는 제안 **전부**로 이 집합을 만들고, 모름 · 지나간 기회를
+            #: ``legal_actions`` 에서만 걸렀다. 그래서 관문 자신은
+            #: ``valid/ok`` 를 돌려주었고 (실측), 막는 것은 ``apply`` 앞의
+            #: "후보 목록에 있는가" 검사 **하나뿐**이었다 — 후보 목록에
+            #: 없다는 이유만으로 안전한 구조였다.
+            #:
+            #: 지금은 **같은 판정이 관문 안에 있다.** 후보 생성과 직접 실행이
+            #: 이 함수를 함께 쓰므로 (``legal_actions`` · ``_apply_activation``
+            #: · 보고 계층) 세 자리가 같은 답을 본다.
             event_backed=frozenset(
-                (offer.source, offer.effect_ref) for offer in offers
+                (offer.source, offer.effect_ref)
+                for offer in offers
+                if self._offer_is_activatable(offer)
             ),
         )
+
+    def _offer_is_activatable(self, offer) -> bool:
+        """
+        이 제안을 **지금 발동할 수 있는 기회로 열어도 되는가** (Phase 6-AB).
+
+        🔴 **후보 생성과 직접 실행이 공유하는 판정이다.**
+        :meth:`activation_validator` 가 이것으로 ``event_backed`` 를 만들고,
+        그 검증기를 ``legal_actions`` 와 :meth:`_apply_activation` 이 함께
+        쓴다. 그래서 "목록에 없으니 안전하다" 에 기대지 않는다.
+
+        둘을 본다.
+
+        1. **근거 있는 강제 또는 임의인가.** 모름은 열지 않는다 (6-AA) —
+           모름을 열면 정책의 거절과 규칙이 허락한 포기가 구별되지 않는다.
+        2. **아직 그 시점인가.** 「때」 효과는 그 사건이 **마지막에 일어난
+           일**이어야 한다 (6-AB). 「경우」 는 그렇지 않다. 어휘를 모르면
+           열지 않는다 — 모름을 허가로 바꾸지 않는다.
+
+        지나간 페이즈와 이미 쓴 기회는 :meth:`_trigger_offers` 가 **앞에서**
+        걸러 내므로 여기 오지 않는다.
+        """
+        if not (offer.is_optional or offer.is_mandatory):
+            return False
+        return self._timing_is_current(offer) is True
+
+    def _timing_is_current(self, offer) -> "bool | None":
+        """
+        이 제안의 **시점이 아직 지금인가** (Phase 6-AB). 모르면 ``None``.
+
+        공식 재정이 어휘로 가른다 — 「때」 효과는 그 사건이 *마지막에 일어난
+        일*이어야 하고, 「경우」 효과는 그렇지 않다 (출처는
+        ``core.card_model.Card.activation_wording_text`` 의 설명).
+
+        ``EventJournal`` 이 그 질문에 그대로 답한다: 이 사건의 번호가 기록의
+        **마지막 번호**인가. 새 상태를 만들지 않는다.
+
+        🔴 **체인이 열려 있으면 만료시키지 않는다.** 체인 처리 중에 시점을
+        만난 효과는 그 체인이 완전히 해결된 **뒤**에 발동한다 (SEGOC) —
+        해결이 남기는 기록 때문에 그 효과를 "지나갔다" 로 읽으면 규칙이
+        허락한 발동을 금지한다. 그래서 체인이 비어 있을 때만 묻는다.
+        """
+        misses = getattr(offer, "misses_timing", None)
+        if misses is False:
+            # 「경우」 — 놓친 타이밍이 없다. 페이즈 안에서는 늘 지금이다.
+            return True
+        if not self.chain.is_empty:
+            # 체인이 처리 중이다 — 보존한다 (SEGOC).
+            return True
+        last = (len(self.journal) - 1) if self.journal is not None else -1
+        is_last = getattr(offer, "event_sequence", -1) == last
+        if misses is True:
+            return is_last
+        #: 🔴 어휘를 모른다. 사건이 아직 마지막이면 어느 어휘든 지금이므로
+        #: 참이고, 그 뒤에는 **말할 수 없다** (``None``).
+        return True if is_last else None
 
     def _trigger_offers(self, seat: int):
         """
@@ -780,14 +957,29 @@ class Duel:
 
     def _mandatory_offers(self, seat: int) -> tuple:
         """
-        이 자리에 **근거 있는 강제 유발**이 열려 있는가 (Phase 6-AA).
+        이 자리에 **근거 있는 강제 유발**이 열려 있는가 (Phase 6-AA · 6-AB).
 
         🔴 **읽기만 한다** — :meth:`_trigger_offers` 와 같은 함수를 부르므로
         후보 목록과 흐름 판정이 **같은 답**을 본다. 모름(``UNKNOWN``)은 여기
         들어오지 않는다: 모르는 것을 강제로 바꾸면 흐름이 영영 막힌다.
+
+        🔴 **지나간 「때」 는 의무가 아니다** (6-AB). 강제 유발도 「때」 라면
+        타이밍을 놓친다 — 그 사건이 더 이상 마지막에 일어난 일이 아니면
+        규칙이 그 처리를 **더 요구하지 않는다.** 그것을 의무로 세어 두면
+        :meth:`_enforce_mandatory` 가 "규칙이 요구하는데 발동할 수 없다" 고
+        적게 되고, 그 보류는 **거짓**이다 — 규칙은 이미 답했다.
+
+        🔴 **모르는 어휘는 그대로 센다.** 「때」 였다면 끝났고 「경우」 였다면
+        남아 있는데 어느 쪽인지 모르므로, 의무가 끝났다고 **단정하지
+        않는다.** 그러면 발동할 수 없는 의무로 남아
+        :data:`MANDATORY_TRIGGER_UNPLAYABLE` 이 붙는다 — 그것이 "모른다" 의
+        정직한 결과다.
         """
         return tuple(
-            offer for offer in self._trigger_offers(seat) if offer.is_mandatory
+            offer
+            for offer in self._trigger_offers(seat)
+            if offer.is_mandatory
+            and self._timing_is_current(offer) is not False
         )
 
     def _opportunity_is_open(self, offer) -> bool:
@@ -890,6 +1082,34 @@ class Duel:
                         "임의로 바꾸면 규칙이 요구한 처리가 조용히 생략될 "
                         "수 있습니다.",
                         missing=TRIGGER_REQUIREMENT_MISSING,
+                    )
+                )
+                continue
+            current = self._timing_is_current(offer)
+            if current is None:
+                # 🔴 **어휘를 몰라 기회가 아직 열려 있는지 말할 수 없다**
+                # (Phase 6-AB). 「때」 였다면 지나갔고 「경우」 였다면 남아
+                # 있는데, 어느 쪽인지 판정할 근거가 모이지 않았다. 모름을
+                # 허가로 바꾸지 않고 **무엇을 모르는지** 적는다.
+                withheld.append(
+                    WithheldAction(
+                        PlayerActionKind.ACTIVATE_EFFECT,
+                        "이 사건 뒤에 다른 일이 일어났고, 이 유발이 「때」 "
+                        "인지 「경우」 인지 판정할 수 없어 기회가 아직 열려 "
+                        "있는지 말할 수 없습니다.",
+                        missing=TRIGGER_WORDING_MISSING,
+                    )
+                )
+                continue
+            if current is False:
+                # 🔴 **지나간 시점이다** — 「때」 효과이고 그 사건이 더 이상
+                # 마지막에 일어난 일이 아니다. 빠진 규칙이 **없다**: 규칙이
+                # 그렇게 정했으므로 ``missing`` 을 비운다 (6-S 의 규율).
+                withheld.append(
+                    WithheldAction(
+                        PlayerActionKind.ACTIVATE_EFFECT,
+                        "그 사건 뒤에 다른 일이 일어나 「때」 유발의 타이밍을 "
+                        "놓쳤습니다.",
                     )
                 )
                 continue
@@ -1106,25 +1326,13 @@ class Duel:
             )
 
         if seat == self.turn_player and not self.priority.is_open:
-            # 🔴 **강제 유발이 열려 있으면 페이즈를 넘길 수 없다**
-            # (Phase 6-AA). 규칙이 요구한 처리를 "다른 것을 하겠다" 로
-            # 생략하는 길을 막는다 — 그것이 강제가 임의와 다른 전부다.
+            # 🔴 **강제 유발은 여기서 보지 않는다** (Phase 6-AB 가 옮겼다).
             #
-            # 🔴 **대신 발동해 주지는 않는다.** 엔진이 대신 고르면 해결 중의
-            # 선택(어느 카드인가)까지 엔진이 정하게 되고, 그것은 6-Z 가 세운
-            # 경계를 무너뜨린다. 그래서 **흐름을 막고 후보를 남긴다** —
-            # 고르는 쪽이 그 발동을 집는 것 말고는 나아갈 길이 없다.
-            forced = self._mandatory_offers(seat)
-            if forced:
-                withheld.append(
-                    WithheldAction(
-                        PlayerActionKind.END_PHASE,
-                        f"강제 유발 {len(forced)}건이 열려 있습니다 — "
-                        "규칙이 요구한 처리를 넘기고 페이즈를 끝낼 수 "
-                        "없습니다.",
-                    )
-                )
-                return allowed, withheld
+            # 6-AA 는 이 자리에서 ``END_PHASE`` 하나를 막았고, 그래서 세트 ·
+            # 소환 · 공격 · 패스로 필수 처리를 미룰 수 있었다 (실측). 막아야
+            # 하는 것은 **그 자리의 모든 다른 행동**이므로, 판정을 후보
+            # 목록이 다 만들어진 뒤로 옮겼다 (:meth:`_enforce_mandatory`).
+            # 한 자리에서 보면 ``END_PHASE`` 도 함께 닫힌다.
             plan = TurnProgressor().plan(self.state)
             if plan.permits_transition:
                 allowed.append(PlayerAction.end_phase(actor=seat))
