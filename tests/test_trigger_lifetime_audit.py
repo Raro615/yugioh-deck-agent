@@ -501,11 +501,18 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
         if count:
             readers[function.name] = count
 
-    #: 🔴 읽는 자리는 **둘뿐이고 둘 다 유발 · 흐름 쪽**이다.
+    #: 🔴 읽는 자리는 **셋뿐이고 셋 다 유발 · 흐름 쪽**이다.
     #:
-    #:   ``_trigger_actions``   기록이 없는 사본인지 본다 (보류에 적으려고)
-    #:   ``_apply_end_phase``   페이즈가 바뀔 때 시점의 바닥을 올린다
-    assert sorted(readers) == ["_apply_end_phase", "_trigger_actions"], readers
+    #:   ``_trigger_actions``    기록이 없는 듀얼인지 본다 (보류에 적으려고)
+    #:   ``_apply_end_phase``    페이즈가 바뀔 때 시점의 바닥을 올린다
+    #:   ``_timing_is_current``  🔴 **Phase 6-AB** — 이 사건이 기록의
+    #:                           마지막인가 (「때」 의 놓친 타이밍). 새 상태를
+    #:                           만들지 않으려고 기록에 묻는다
+    assert sorted(readers) == [
+        "_apply_end_phase",
+        "_timing_is_current",
+        "_trigger_actions",
+    ], readers
 
     #: 🔴 **보통의 후보 경로는 하나도 읽지 않는다** — §10 의 본체다.
     for name in (
@@ -515,6 +522,13 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
         "_activation_gate",
         "_withheld_board_actions",
         "legal_actions",
+        #: 🔴 6-AB 가 더한 흐름 판정도 기록을 읽지 않는다 — 그것은
+        #: ``_timing_is_current`` 를 **거쳐** 읽으므로, 읽는 자리가 하나로
+        #: 남는다 (판정이 두 군데로 갈라지지 않는다).
+        "_enforce_mandatory",
+        "_offer_is_activatable",
+        "_mandatory_offers",
+        "activation_validator",
     ):
         assert name not in readers, name
 

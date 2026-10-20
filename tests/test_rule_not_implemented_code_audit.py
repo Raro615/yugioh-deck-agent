@@ -178,7 +178,7 @@ PROSE_OCCURRENCES = {
     #     제외(+12) · ``legal_actions`` 의 사건 읽기(+9) 가 전부 위에 있다.
     ("engine/activation.py", 640),      # M2: 코드도 표에서 가져온다
     ("engine/activation.py", 678),      # M1: 확실한 거부이고 미구현이 아니다
-    ("engine/effect/executor.py", 1117),# M2: 이 근거로는 절대 실행하지 않는다
+    ("engine/effect/executor.py", 1136),# M2: 이 근거로는 절대 실행하지 않는다
     ("engine/special_summon.py", 77),
     # 🔴 **``engine/trigger.py`` 의 다섯 자리가 Phase 6-F 에서 전부
     # 움직였다.** 그 Phase 가 ``TriggerSubject`` · ``subject_relation`` ·
@@ -256,9 +256,17 @@ PROSE_OCCURRENCES = {
     # (+55) 와 ``_trigger_actions`` 의 세 갈래(+40) 와 ``_flow_actions`` 의
     # 강제 유발 분기(+20) 를 이 자리보다 **위**에 넣었다.
     #
+    # 🔴 **그리고 1267 → 1498 로 또 밀렸다** (Phase 6-AB, +231). 그 Phase 가
+    # ``TRIGGER_WORDING_MISSING`` · ``MANDATORY_TRIGGER_UNPLAYABLE`` 상수(+20)
+    # 와 ``_enforce_mandatory``(+90) 와 ``_offer_is_activatable`` ·
+    # ``_timing_is_current``(+65) 와 ``activation_validator`` 의 설명(+25) 과
+    # ``_trigger_actions`` 의 어휘 두 갈래(+31) 를 이 자리보다 **위**에
+    # 넣었다. ``effect/executor.py`` 쪽은 1117 → **1136** (+19 —
+    # ``EffectExecutor.chooser``).
+    #
     # **문자열 88 · 코드 73 · 산문 15 · 위반 13 · 적합 19 는 전부 그대로다**
     # — 바뀐 것이 줄 번호뿐이라는 것이 그 증거다.
-    ("engine/duel.py", 1267),
+    ("engine/duel.py", 1498),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
@@ -349,14 +357,25 @@ CONTRACT_VIOLATIONS = {
     #   ``effect/executor.py``  520 → 576 (+56 · 프로토콜과 요청 모양)
     #                           662 → 724 · 675 → 737 · 798 → 860 (+62)
     #                           897 → 1060 · 1173 → 1336 · 1511 → 1674 (+163)
+    # 🔴 **Phase 6-AB 에서 ``effect/executor.py`` 의 일곱 자리가 전부 +19
+    # 밀렸다** (576 → 595 · 724 → 743 · 737 → 756 · 860 → 879 ·
+    # 1060 → 1079 · 1336 → 1355 · 1674 → 1693).
+    #
+    # 원인 하나다 — ``EffectExecutor.chooser`` (읽기 전용 칸, +19줄) 가
+    # ``journal`` 칸 바로 아래, 즉 이 자리들보다 **위**에 들어갔다. 사본이
+    # 부모의 고르는 사람을 물려받으려면 그것을 꺼낼 수 있어야 한다.
+    #
+    # **위반 13 · 적합 19 는 그대로다** — 자리의 성격도 개수도 짝지은 상태도
+    # 바뀌지 않았고, 바뀐 것이 줄 번호뿐이라는 것이 그 증거다 (3-F-17 ·
+    # 6-L · 6-Z 와 같은 결).
     ("engine/activation.py", 555, "ActivationStatus.INVALID_ACTION"),
     ("engine/activation.py", 587, "ActivationStatus.CHAIN_REFUSED"),
-    ("engine/effect/executor.py", 576, "ResolutionStatus.EXECUTION_ERROR"),
-    ("engine/effect/executor.py", 724, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 737, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 860, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1060, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1336, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 595, "ResolutionStatus.EXECUTION_ERROR"),
+    ("engine/effect/executor.py", 743, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 756, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 879, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1079, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1355, "ResolutionStatus.INVALID_CONTEXT"),
     # 🔴 **한 자리가 밀렸다** (Phase 6-L). ``engine/effect/executor.py``
     # 1336 → **1390**. 6-L 이 그 위에 ``_target_spec_of`` ·
     # ``_resolve_self_reference`` (+45) 와 ``_plan_card_operation`` 의
@@ -366,7 +385,7 @@ CONTRACT_VIOLATIONS = {
     # 더한 거절 자리(``_resolve_self_reference``)는 이 목록에 들어오지
     # 않는다: 그쪽은 ``INFORMATION_UNAVAILABLE`` 을 쓴다 — "규칙을 아직
     # 옮기지 않았다" 가 아니라 "이 문맥에 그 카드가 없다" 이기 때문이다.
-    ("engine/effect/executor.py", 1674, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1693, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/resolution.py", 520, "ResolutionStatus.FORBIDDEN"),
     ("engine/payment.py", 402, "PaymentStatus.EXECUTION_ERROR"),
     ("engine/response.py", 476, "ResponseOutcome.REFUSED"),
