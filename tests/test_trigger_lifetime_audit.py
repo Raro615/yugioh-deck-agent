@@ -468,6 +468,27 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
         #: 다르다 — 그 사실도 ``test_02`` 가 센다 (``_activation_actions``
         #: 는 둘 중 어느 것도 읽지 않는다).
         "timing_floor",
+        #: 🔴 **Phase 6-AB 보완이 칸 하나를 더했다** — ``declined_events``.
+        #:
+        #: 이 칸은 §10 이 경계한 "처리했다는 기록" 과 **가장 가깝다.** 숨기지
+        #: 않고 적는다: 담는 것은 "그 자리가 그 기회를 **적법하게
+        #: 포기했다**" 이고, 그것은 과거 판정의 **캐시가 아니라 규칙상의
+        #: 사실**이다. 공식 Fast Effect Timing 도표가 유발을 확인하는 자리를
+        #: 둘로 정했고 (체인 아닌 행위 뒤 · 체인 해결 뒤), 그 자리에서 유발
+        #: 대신 다른 일을 골랐다면 그 창은 닫힌다. 그 "닫혔다" 를 어딘가는
+        #: 들고 있어야 하고, 판(``GameState``)은 역사를 담지 않기로 이미
+        #: 결정되어 있다 (``test_09``).
+        #:
+        #: 🔴 §10 이 금지하려던 것은 **후보 판정을 다시 하지 않으려고 과거
+        #: 답을 저장하는 것**이다. 이 칸은 그것이 아니다 — 후보 판정은 매번
+        #: 다시 하고 (``_trigger_offers`` 가 기록을 다시 펼친다), 이 칸은
+        #: 그 판정의 **입력** 하나다. ``consumed_events`` 와 같은 성질이고
+        #: 같은 축이다 (``(사건, 효과, 개체)`` + 자리).
+        #:
+        #: 그리고 **보통의 후보 경로는 이 칸을 읽지 않는다** — ``test_02``
+        #: 가 세는 그 성질이 ``consumed_events`` · ``timing_floor`` 와 같이
+        #: 이 칸에도 적용된다.
+        "declined_events",
     }
 
     #: 🔴 ``journal`` 이 **보통의 발동 후보** 판정에 쓰이지 않는다
@@ -505,12 +526,14 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
     #:
     #:   ``_trigger_actions``    기록이 없는 듀얼인지 본다 (보류에 적으려고)
     #:   ``_apply_end_phase``    페이즈가 바뀔 때 시점의 바닥을 올린다
-    #:   ``_timing_is_current``  🔴 **Phase 6-AB** — 이 사건이 기록의
-    #:                           마지막인가 (「때」 의 놓친 타이밍). 새 상태를
-    #:                           만들지 않으려고 기록에 묻는다
+    #:   ``_missed_timing``      🔴 **Phase 6-AB** (보완이 이름을 바꿨다 —
+    #:                           ``_timing_is_current`` 가 세 질문에 하나로
+    #:                           답했으므로 셋으로 갈랐다) — 이 사건이 기록의
+    #:                           마지막인가. 새 상태를 만들지 않으려고 기록에
+    #:                           묻는다
     assert sorted(readers) == [
         "_apply_end_phase",
-        "_timing_is_current",
+        "_missed_timing",
         "_trigger_actions",
     ], readers
 
@@ -522,13 +545,16 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
         "_activation_gate",
         "_withheld_board_actions",
         "legal_actions",
-        #: 🔴 6-AB 가 더한 흐름 판정도 기록을 읽지 않는다 — 그것은
-        #: ``_timing_is_current`` 를 **거쳐** 읽으므로, 읽는 자리가 하나로
+        #: 🔴 6-AB 와 보완이 더한 흐름 판정도 기록을 **직접** 읽지 않는다 —
+        #: 전부 ``_missed_timing`` 을 **거쳐** 읽으므로 읽는 자리가 하나로
         #: 남는다 (판정이 두 군데로 갈라지지 않는다).
         "_enforce_mandatory",
         "_offer_is_activatable",
         "_mandatory_offers",
         "activation_validator",
+        "_window_admits",
+        "_duty_seat",
+        "_decline_open_offers",
     ):
         assert name not in readers, name
 

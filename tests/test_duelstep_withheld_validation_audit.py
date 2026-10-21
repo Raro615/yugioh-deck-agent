@@ -391,20 +391,26 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     assert "모듈 상수" in kinds
     assert "verdict 의 칸" in kinds
 
-    #: 🔴 그리고 **비우는 자리가 둘 → 넷으로 늘었다** — 없는 것을 빈 값으로
-    #: 채우지 않는 규율은 6-AA 도 6-AB 도 지켰고, 6-AB 는 그 규율을 쓰는
-    #: 자리를 **늘렸다**:
+    #: 🔴 그리고 **비우는 자리가 둘 → 넷 → 일곱으로 늘었다** — 없는 것을 빈
+    #: 값으로 채우지 않는 규율은 6-AA · 6-AB · 보완 전부 지켰고, 그 규율을
+    #: **쓰는 자리**가 늘었다. 일곱은 전부 "규칙이 답했다" 쪽이다:
     #:
     #:   ``_flow_actions``      창은 열렸고 상대 차례다 (6-S)
+    #:   ``_trigger_actions``   체인이 처리 중이다 — 기회는 남고 발동은 뒤다
+    #:   ``_trigger_actions``   그 기회를 적법하게 포기했다 (보완)
     #:   ``_trigger_actions``   「때」 타이밍을 놓쳤다 — 규칙이 답했다 (6-AB)
-    #:   ``_enforce_mandatory`` 강제를 먼저 처리해야 한다 — 규칙의 결과다
+    #:   ``_enforce_mandatory`` 다른 자리가 먼저다 — 순서다 (보완)
     #:   ``_enforce_mandatory`` 지금 고르는 자리가 아니다 — 순서다 (6-AB)
+    #:   ``_enforce_mandatory`` 강제를 먼저 처리해야 한다 — 규칙의 결과다
     #:
     #: 🔴 6-AA 가 ``_flow_actions`` 에 둔 강제 유발 분기는 **없어졌다** —
-    #: 6-AB 가 그 판정을 ``_enforce_mandatory`` 한 자리로 모았다. 그래서 둘이
-    #: 빠지고 넷이 들어와 둘 → 넷이다.
+    #: 6-AB 가 그 판정을 ``_enforce_mandatory`` 한 자리로 모았다.
+    #:
+    #: 🔴 **채우는 자리는 일곱 그대로다** (바로 위의 단정). 보완이 더한 것은
+    #: 비우는 쪽 셋이고, 그것은 느슨함이 아니라 **규율이 적용된 자리**다 —
+    #: 이 시험이 지적하는 느슨함(같은 칸을 네 종류가 채운다)은 늘지 않았다.
     empty = len(calls) - len(filled)
-    assert empty == 4, empty
+    assert empty == 7, empty
 
 
 # ======================================================================

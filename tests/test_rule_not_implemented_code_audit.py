@@ -264,9 +264,16 @@ PROSE_OCCURRENCES = {
     # 넣었다. ``effect/executor.py`` 쪽은 1117 → **1136** (+19 —
     # ``EffectExecutor.chooser``).
     #
+    # 🔴 **그리고 1498 → 1794 로 또 밀렸다** (Phase 6-AB 보완, +296). 그
+    # 보완이 ``declined_events`` 의 설명(+45) 과 ``to_act`` · ``_duty_seat``
+    # (+50) 와 ``_enforce_mandatory`` 의 양측 판정(+35) 과
+    # ``_window_admits`` · ``_missed_timing`` (+105) 과
+    # ``_decline_open_offers`` · ``_decline_key`` (+45) 와
+    # ``legal_actions`` 의 유발 하위 이동(+16) 을 이 자리보다 **위**에 넣었다.
+    #
     # **문자열 88 · 코드 73 · 산문 15 · 위반 13 · 적합 19 는 전부 그대로다**
-    # — 바뀐 것이 줄 번호뿐이라는 것이 그 증거다.
-    ("engine/duel.py", 1498),
+    # — 바뀐 것이 줄 번호뿐이라는 것이 그 증거다 (실측으로 확인했다).
+    ("engine/duel.py", 1794),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
