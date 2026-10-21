@@ -316,9 +316,11 @@ pytest tests/engine/test_archetype_condition.py             48 passed    0
 
 ```
 묶음                                 1차 (고치기 전)         확인 (고친 뒤)
-tests/engine                    3,731 p · 2 f · 332s    (§7.5 의 정정 뒤 0 f)
-tests/agent + rules + rulings      526 p · 2 f · 1 s · 178s   선행 2건뿐
+tests/engine                    3,731 p · 2 f · 332s    → 3,733 p · 0 f
+tests/agent + rules + rulings      526 p · 2 f · 1 s · 178s → 526 p · 2 f (선행)
 ```
+
+확인 실행의 최종 값은 §7.6a 의 표에 있다.
 
 ### 7.5 신규 회귀 — 셋, 전부 고쳤다
 
@@ -334,16 +336,48 @@ tests/agent + rules + rulings      526 p · 2 f · 1 s · 178s   선행 2건뿐
 
 ### 7.6 공유 계약 루트 감사
 
-🔴 **이 절은 아직 비어 있다 — 두 묶음(앞 46 파일 31분 · 뒤 46 파일 18분)이
-이 커밋 시점에 돌고 있다.** 6-AB 에서 이 자리를 성급히 "전부 고쳤다" 로
-적었다가 틀렸으므로 (그 보고서 §9.4), 묶음 전체의 값이 나오기 전에는 적지
-않는다. **개별 재실행은 회귀를 찾는 도구이고 없음을 증명하는 도구가
-아니다.**
+🔴 **예상한 자리 셋이 그대로 나왔고, 그 밖에는 없었다.** 이 절을 쓸 때
+비워 두고 "`engine/duel.py` 의 줄 번호와 이름을 세는 census 들이 예상된다" 고
+적었는데 (`test_rule_not_implemented_code_audit` ·
+`test_trigger_lifetime_audit` · `test_duelstep_withheld_validation_audit`),
+실측 결과가 **정확히 그 셋**이었다.
 
-예상되는 자리는 `engine/duel.py` 의 줄 번호와 이름을 세는 census 들이다
-(`test_rule_not_implemented_code_audit` · `test_trigger_lifetime_audit` ·
-`test_duelstep_withheld_validation_audit`) — 이번 변경이 그 파일에 +452줄을
-더했고 함수 둘을 새로 만들었다.
+| 시험 | 원인 | 고친 곳 |
+|---|---|---|
+| `test_trigger_lifetime_audit::test_08` | ① `Duel` 의 칸에 `declined_events` 가 늘었다 ② `journal` 읽는 함수 이름이 바뀌었다 | **시험** — 새 칸이 §10 이 경계한 "처리했다는 기록" 과 **가장 가까우므로** 왜 그것이 아닌지 적고, 금지 목록을 **넓혔다** (`fc9dbd7`) |
+| `test_duelstep_withheld_validation_audit::test_09` | 비우는 자리가 넷 → 일곱 | **시험** — 🔴 **채우는 자리는 일곱 그대로**이므로 이 시험이 지적하는 느슨함은 늘지 않았다. 늘어난 셋은 **규율이 적용된 자리**다 (`fc9dbd7`) |
+| `test_rule_not_implemented_code_audit::test_02` | `engine/duel.py` 산문 1498 → 1794 | **시험** — 번호 한 줄만. 불변량 88·73·15·13·19 실측 확인 (`fc9dbd7`) |
+
+### 7.6a 네 묶음 확인 실행 — 최종
+
+🔴 **네 묶음 전부 고친 뒤 다시 돌렸다.** 1차 값은 회귀를 **찾은** 근거이고,
+검증값은 확인 실행 쪽이다.
+
+| 묶음 | 1차 (고치기 전) | **확인 (고친 뒤)** | 남은 실패 |
+|---|---|---|---|
+| `tests/engine` | 3,731 p · 2 f · 332s | **3,733 p · 0 f** · 333s | — |
+| `tests/agent` + `rules` + `rulings` | 526 p · 2 f · 1 s · 178s | **526 p · 2 f · 1 s** · 173s | 선행 2 |
+| 루트 `test_*.py` 앞 46 파일 | 1,240 p · 3 f · 1 s · 1,627s | **1,241 p · 2 f · 1 s** · 1,571s | 선행 2 |
+| 루트 `test_*.py` 뒤 46 파일 | 1,074 p · 6 f · 8 s · 954s | **1,076 p · 4 f · 8 s** · 915s | 선행 4 |
+| **합** | | **6,576 passed · 8 failed · 10 skipped** | **선행 8** |
+
+🔴 **신규 회귀 0 · 선행 실패 8.** 종료 코드는 네 묶음 모두 0 이다 (pytest 가
+실패를 요약으로 보고하고 wrapper 가 0 으로 끝낸다 — 판단은 위의 수로 한다).
+
+🔴 **선행 보고값과의 차이도 설명된다** — 6,565 → **6,576** passed (+11) 이고,
+그 11 이 이번에 더한 시험 수와 **정확히 같다** (새 시험 파일 28 → 39).
+skipped 10 과 선행 실패 8 은 그대로다.
+
+### 7.6b 신규 회귀 여섯 — 전부 처리했고 **둘은 코드를 고쳤다**
+
+| | 시험 | 고친 곳 |
+|---|---|---|
+| 1 | `test_i03` (보류 기준) | 시험 (`22db9af`) |
+| 2 | `test_archetype_condition::test_j` | 🔴 **코드** — 씨앗 재현성 (`22db9af`) |
+| 3 | `test_trigger_lifetime_audit::test_08` | 시험 (`fc9dbd7`) |
+| 4 | `test_duelstep_withheld_validation_audit::test_09` | 시험 (`fc9dbd7`) |
+| 5 | `test_rule_not_implemented_code_audit::test_02` | 시험 (`fc9dbd7`) |
+| 6 | 포기 단위가 효과·개체를 가르지 않았다 | 🔴 **코드** — 실측으로 찾았다 (`4f50f2f`) |
 
 ### 7.7 삭제 · skip · assertion 완화
 
@@ -470,9 +504,10 @@ multiple cards are activated simultaneously). 🔴 **그 뒤(임의 효과들의
 | | |
 |---|---|
 | 브랜치 | `claude/pensive-goodall-te1egy` |
-| 커밋 | `72b6b2c` → `4f50f2f` → `17f9851` → `22db9af` → 이 보고서 |
+| 커밋 | `72b6b2c` → `4f50f2f` → `17f9851` → `22db9af` → `57e0ff4` → `fc9dbd7` → 이 커밋 |
 | 원격 | 전부 반영됨 |
-| 루트 감사 | §7.6 — 아직 돌고 있다 |
+| 작업 트리 | 깨끗 |
+| 회귀 | **신규 0 · 선행 8** (§7.6a) |
 
 ### 달성 여부 — **부분 완료**
 
