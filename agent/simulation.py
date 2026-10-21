@@ -274,13 +274,22 @@ class Simulator:
         🔴 **고르는 사람을 지어내지 않는다.** 부모에게 없으면 사본도 없다 —
         그 듀얼에서는 아직 정해지지 않은 선택이 실제로 거절되는 것이 맞다.
 
-        🔴 **기록은 물려주지 않는다.** 고르는 사람이 ``forked()`` 를 주면
-        그것을 쓴다 (:meth:`integration.autonomy.PolicyChooser.forked` 가 같은
-        정책 · 빈 기록을 돌려준다) — 사본에서 물은 것이 실제 듀얼의 선택
-        기록에 섞이면 그 기록은 증거가 아니게 된다. 주지 않는 고르는 사람은
-        그대로 쓴다: 모양이 ``choose(request)`` 하나뿐이므로
-        (:class:`~engine.effect.executor.ResolutionChooser`) 기록을 가졌는지
-        이쪽에서 알 방법이 없고, 없는 메서드를 요구하면 계약이 넓어진다.
+        🔴 **고르는 사람이 ``forked()`` 를 주지 않으면 쓰지 않는다**
+        (6-AB 보완이 고친 자리). 6-AB 는 그런 고르는 사람을 **그대로
+        공유했고**, 그 근거는 "모양이 ``choose(request)`` 하나뿐이니 기록을
+        가졌는지 알 방법이 없다" 였다. 🔴 **그 추론이 거꾸로였다** — 알 수
+        없으면 공유가 아니라 **보류**가 안전한 쪽이다. 실측한 증상: 상태
+        있는 정책으로 ``simulate`` 를 한 번 돌리자 부모 정책의 호출 수가
+        0 → 1 이 됐다. 사본이 미래를 **재기만** 해야 하는데 부모를 밀었다.
+
+        그래서 지금은:
+
+        - ``forked()`` 가 있으면 그것이 준 것을 쓴다
+          (:meth:`integration.autonomy.PolicyChooser.forked` — 같은 정책 ·
+          빈 기록. 그쪽도 정책이 ``forked()`` 를 주지 않으면 ``None`` 이다).
+        - 없거나 ``None`` 을 주면 **사본에 고르는 사람이 없다.** 그러면 아직
+          정해지지 않은 선택이 사본 안에서 거절되고, 그 거절은 결과에 보인다.
+          조용히 오염시키는 것보다 보이는 거절이 낫다.
         """
         resolver = self.duel._resolver
         executor = getattr(resolver, "executor", None)
@@ -288,7 +297,9 @@ class Simulator:
         if chooser is None:
             return None
         forked = getattr(chooser, "forked", None)
-        return forked() if callable(forked) else chooser
+        if not callable(forked):
+            return None
+        return forked()
 
     @staticmethod
     def _settle_forced_passes(fork: Duel) -> "DuelStep | None":

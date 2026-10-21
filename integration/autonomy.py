@@ -500,22 +500,35 @@ class PolicyChooser:
         )
         return chosen
 
-    def forked(self) -> "PolicyChooser":
+    def forked(self) -> "PolicyChooser | None":
         """
-        **같은 정책 · 빈 기록**인 사본 (Phase 6-AB).
+        사본용 — **같은 정책 · 빈 기록.** 못 만들면 ``None`` (6-AB 보완).
 
         탐색 사본은 해결 시점 선택을 **해야** 한다 — 그러지 않으면 사본이
         원본보다 못 해결하고, 미래의 값이 규칙이 아니라 배선 때문에 달라진다
         (``EffectExecutor.chooser`` 의 설명).
 
-        🔴 그런데 사본의 선택이 :attr:`records` 에 섞이면 그 목록은 더 이상
-        "실제 듀얼에서 **해결 중에** 무엇을 물었는가" 의 증거가 아니다 —
-        일어나지 않은 선택이 섞인다. 그래서 기록만 새로 받는다.
+        🔴 **기록은 물려주지 않는다.** 사본의 선택이 :attr:`records` 에 섞이면
+        그 목록은 더 이상 "실제 듀얼에서 **해결 중에** 무엇을 물었는가" 의
+        증거가 아니다 — 일어나지 않은 선택이 섞인다.
 
-        정책(:attr:`selector`)은 **그대로 공유한다.** 사본이 다른 정책으로
-        고르면 재는 미래가 실제로 밟을 미래가 아니다.
+        🔴 **정책을 그냥 공유하지 않는다** (6-AB 가 그렇게 했고 그것이
+        결함이었다). 정책이 상태를 들고 있으면 (``RandomChoice`` 의 난수원)
+        사본의 물음이 **진짜 듀얼의 정책을 앞으로 민다** — 실측: 상태 있는
+        정책으로 ``simulate`` 한 번에 부모의 호출 수가 0 → 1.
+
+        그래서 정책에게 묻는다 (:class:`~agent.choice.ForkablePolicy`):
+
+        - ``forked()`` 가 있으면 그것이 준 정책을 쓴다. 무상태 정책은
+          ``self`` 를 주고, 상태 있는 정책은 사본용 사본을 준다.
+        - **없으면 ``None`` 을 돌려준다.** 그러면 사본에 고르는 사람이 없고,
+          아직 정해지지 않은 선택은 사본 안에서 **거절된다.** 조용히
+          공유하는 것보다 이것이 낫다 — 거절은 보이고, 오염은 보이지 않는다.
         """
-        return PolicyChooser(self.selector)
+        split = getattr(self.selector, "forked", None)
+        if not callable(split):
+            return None
+        return PolicyChooser(split())
 
     def __repr__(self) -> str:  # pragma: no cover - 표시용
         name = getattr(self.selector, "name", type(self.selector).__name__)

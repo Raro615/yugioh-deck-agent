@@ -69,6 +69,31 @@ class ChoicePolicy(Protocol):
         ...  # pragma: no cover - 프로토콜
 
 
+@runtime_checkable
+class ForkablePolicy(Protocol):
+    """
+    **탐색 사본에서 써도 안전한** 정책 (Phase 6-AB 보완).
+
+    왜 따로 두는가 — 사본은 미래를 재려고 정책에게 묻는다. 정책이 상태를
+    들고 있으면 (:class:`RandomChoice` 의 난수원 · 센 횟수) 그 물음이
+    **진짜 듀얼의 정책을 앞으로 밀어 버린다.** 실측한 증상: 상태 있는
+    정책으로 ``Simulator.simulate`` 를 한 번 돌리자 부모 정책의 호출 수가
+    0 → 1 이 됐다. 그러면 같은 자리에서 다시 두었을 때 다른 답이 나온다.
+
+    🔴 **"상태가 없으니 공유해도 된다" 를 사본 쪽에서 추측하지 않는다.**
+    모양이 ``accept_offer`` · ``choose_cards`` 둘뿐이면 상태가 있는지 알
+    방법이 없다. 그래서 **정책이 직접 말하게** 한다: :meth:`forked` 가
+    있으면 사본용 정책을 받아 쓰고, 없으면 사본은 그 정책을 쓰지 않는다.
+
+    무상태 정책은 ``self`` 를 돌려주면 된다 (:class:`FirstPermittedChoice` ·
+    :class:`DeclineChoice`). 상태 있는 정책은 사본용 사본을 만들어야 한다
+    (:class:`RandomChoice` 가 씨앗을 갈라 쓴다).
+    """
+
+    def forked(self) -> "ChoicePolicy":
+        ...  # pragma: no cover - 프로토콜
+
+
 def _take(offer, instances) -> "tuple[InstanceId, ...]":
     """
     정확히 ``minimum`` 장만 집는다.
@@ -103,6 +128,16 @@ class FirstPermittedChoice:
     def choose_cards(self, offer) -> "tuple[InstanceId, ...]":
         return _take(offer, [c.instance for c in offer.permitted])
 
+    def forked(self) -> "FirstPermittedChoice":
+        """
+        **자기 자신**이다 — 이 정책은 상태를 들고 있지 않다 (``__slots__``
+        가 이름 하나뿐이고, 두 답이 모두 제안만 보고 나온다).
+
+        🔴 그 사실을 **정책이 말한다.** 사본 쪽에서 "무상태인 것 같다" 고
+        추측하지 않는다 (:class:`ForkablePolicy` 의 설명).
+        """
+        return self
+
     def __repr__(self) -> str:  # pragma: no cover - 표시용
         return f"<{self.name}>"
 
@@ -125,6 +160,10 @@ class DeclineChoice:
 
     def choose_cards(self, offer) -> "tuple[InstanceId, ...]":
         return ()
+
+    def forked(self) -> "DeclineChoice":
+        """**자기 자신**이다 — 상태가 없다 (``FirstPermittedChoice`` 와 같다)."""
+        return self
 
     def __repr__(self) -> str:  # pragma: no cover - 표시용
         return f"<{self.name}>"
@@ -166,6 +205,26 @@ class RandomChoice:
         self._rng.shuffle(order)
         return _take(offer, order)
 
+    def forked(self) -> "RandomChoice":
+        """
+        🔴 **사본용 난수원을 따로 만든다** (Phase 6-AB 보완).
+
+        이 정책은 상태를 들고 있다 — 난수원과 센 횟수. 공유하면 사본이 미래를
+        재려고 뽑은 난수가 **진짜 듀얼의 다음 선택을 바꾼다.**
+
+        씨앗은 **지금까지 뽑은 횟수에서** 만든다. 그래서
+        (1) 같은 자리에서 포크하면 같은 사본 정책이 나오고 (재현된다),
+        (2) 다른 자리에서 포크하면 다른 사본 정책이 나오고,
+        (3) 부모의 ``draws`` 는 **변하지 않는다.**
+
+        🔴 부모의 난수원을 뽑아서 씨앗을 만들지 않는다 — 뽑는 순간 부모가
+        앞으로 밀린다. 그것이 고치려는 결함이다.
+        """
+        return RandomChoice(
+            seed=hash((self.name, self._draws)) & 0xFFFF_FFFF,
+            name=f"{self.name}-fork",
+        )
+
     def __repr__(self) -> str:  # pragma: no cover - 표시용
         return f"<{self.name} draws={self._draws}>"
 
@@ -173,6 +232,7 @@ class RandomChoice:
 __all__ = [
     "ChoiceError",
     "ChoicePolicy",
+    "ForkablePolicy",
     "FirstPermittedChoice",
     "DeclineChoice",
     "RandomChoice",
