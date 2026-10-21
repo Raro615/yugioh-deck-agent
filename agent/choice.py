@@ -94,6 +94,13 @@ class ForkablePolicy(Protocol):
         ...  # pragma: no cover - 프로토콜
 
 
+#: 사본용 씨앗을 만들 때 부모의 씨앗에 곱하는 수 (Phase 6-AB 보완).
+#:
+#: 소수를 쓰는 이유는 하나다 — 부모 씨앗과 뽑은 횟수의 조합이 서로 겹치지
+#: 않게 하는 것. 전략적 의미는 없고, 난수의 품질을 주장하지도 않는다.
+_FORK_SEED_STRIDE = 1_000_003
+
+
 def _take(offer, instances) -> "tuple[InstanceId, ...]":
     """
     정확히 ``minimum`` 장만 집는다.
@@ -178,7 +185,7 @@ class RandomChoice:
     생각했다는 이유로 덱 셔플이 달라진다.
     """
 
-    __slots__ = ("name", "_rng", "_draws")
+    __slots__ = ("name", "_rng", "_draws", "_seed")
 
     def __init__(self, seed: int, name: str = "random-choice"):
         if not isinstance(seed, int) or isinstance(seed, bool):
@@ -186,6 +193,15 @@ class RandomChoice:
         self.name = name
         self._rng = random.Random(seed)
         self._draws = 0
+        #: 🔴 **씨앗을 들고 있는다** (Phase 6-AB 보완). :meth:`forked` 가
+        #: 사본용 씨앗을 이것에서 **산술로** 만든다 — 그래야 다른 프로세스
+        #: 에서도 같은 값이 나온다 (아래 설명).
+        self._seed = seed
+
+    @property
+    def seed(self) -> int:
+        """이 정책이 받은 씨앗. 재현의 좌표다."""
+        return self._seed
 
     @property
     def draws(self) -> int:
@@ -212,16 +228,22 @@ class RandomChoice:
         이 정책은 상태를 들고 있다 — 난수원과 센 횟수. 공유하면 사본이 미래를
         재려고 뽑은 난수가 **진짜 듀얼의 다음 선택을 바꾼다.**
 
-        씨앗은 **지금까지 뽑은 횟수에서** 만든다. 그래서
+        씨앗은 **받은 씨앗과 지금까지 뽑은 횟수에서 산술로** 만든다. 그래서
         (1) 같은 자리에서 포크하면 같은 사본 정책이 나오고 (재현된다),
         (2) 다른 자리에서 포크하면 다른 사본 정책이 나오고,
         (3) 부모의 ``draws`` 는 **변하지 않는다.**
 
         🔴 부모의 난수원을 뽑아서 씨앗을 만들지 않는다 — 뽑는 순간 부모가
         앞으로 밀린다. 그것이 고치려는 결함이다.
+
+        🔴 **``hash()`` 를 쓰지 않는다.** 처음에는
+        ``hash((self.name, self._draws))`` 로 만들었는데, 파이썬은 문자열
+        해시에 **프로세스마다 다른 소금**을 넣는다 (``PYTHONHASHSEED``).
+        그러면 같은 자리에서 포크해도 **실행마다 다른 사본**이 나와, 바로
+        위에서 약속한 재현이 깨진다. 산술이면 깨지지 않는다.
         """
         return RandomChoice(
-            seed=hash((self.name, self._draws)) & 0xFFFF_FFFF,
+            seed=self._seed * _FORK_SEED_STRIDE + self._draws + 1,
             name=f"{self.name}-fork",
         )
 
