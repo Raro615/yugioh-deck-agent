@@ -42,10 +42,11 @@ D. 사본             사본이 원본과 같은 후보를 보고, 새지 않는
 from __future__ import annotations
 
 import dataclasses
+import types
 
 import pytest
 
-from agent.choice import DeclineChoice, FirstPermittedChoice
+from agent.choice import DeclineChoice, FirstPermittedChoice, RandomChoice
 from agent.simulation import Simulator, SimulationStatus
 from engine.action import PlayerAction, PlayerActionKind
 from engine.action_validation import ActionValidity
@@ -58,7 +59,7 @@ from engine.duel import (
 from engine.ids import EffectRef
 from engine.trigger import TriggerRequirement, TriggerWording
 from engine.trigger_compiler import TEXT_IF, TEXT_WHEN, wording_from
-from engine.vocabulary import Phase
+from engine.vocabulary import Phase, Zone
 
 from integration.autonomy import PolicyChooser, TriggerSource
 from tests.conftest import requires_official_db
@@ -328,64 +329,192 @@ def test_b01_the_only_registered_trigger_is_an_optional_if(repository):
 
 
 @requires_official_db
-def test_b02_an_if_trigger_survives_an_intervening_action(repository):
+def test_b02_an_if_trigger_does_not_miss_timing_but_its_window_still_closes(
+    repository,
+):
     """
-    🔴 **「경우」 는 타이밍을 놓치지 않는다** — 6-AA ``test_c05`` 를 **설명**한다.
+    🔴 **두 사실을 가른다** — 6-AB 보완이 고친 해석이다.
 
-    6-AA 는 같은 동작을 ``BLOCKER-6AA-2`` 로 적었다 ("실제 규칙에서는 그
-    시점이 지나면 기회가 사라진다"). 그 읽기가 **틀렸다**: 기르수는 「경우」
-    이므로 그 사건 뒤에 다른 일이 일어나도 기회가 **남는 것이 규칙대로**다.
+    6-AB 는 이 시험을 ``test_b02_an_if_trigger_survives_an_intervening_action``
+    이라 부르고 *"「경우」 이므로 그 사건 뒤에 다른 일이 일어나도 기회가
+    남는다"* 를 단정했다. **그 해석이 틀렸다.**
 
-    그래서 이 시험은 6-AA 와 **같은 결과**를 재지만, 한계가 아니라 근거로
-    잠근다.
+    *"타이밍을 놓치지 않는다"* 는 *"같은 페이즈에서 나중에 마음대로 발동할
+    수 있다"* 는 뜻이 **아니다.** 둘은 다른 질문이다:
+
+    ====================================  ==============================
+    「경우」 는 타이밍을 놓치는가            **아니다** (``_missed_timing``)
+    그 기회가 아직 열려 있는가              그 자리에서 무엇을 했는가에 달렸다
+    ====================================  ==============================
+
+    근거는 공식 Fast Effect Timing 도표다 — 유발은 체인을 시작하지 않는 행위
+    뒤와 체인 해결 뒤에 확인되고, 그 자리에서 양쪽이 패스하면 판은 **open
+    state** 로 돌아간다. 그 확인 자리에서 유발 대신 **다른 일을 골랐다면**
+    그 자리의 기회는 지나간 것이다.
+    (https://www.yugioh-card.com/en/play/fast-effect-timing/)
+
+    실측한 6-AB 의 증상: 기르수 소환 뒤 일반 행동을 **세 걸음** 하고도 그
+    유발이 후보에 남았다.
     """
     setup, _ = _board(repository, selector=DeclineChoice())
     duel = setup.duel
     _summon(duel)
-    assert len(duel._trigger_offers(MINE)) == 1
+    offers = duel._trigger_offers(MINE)
+    assert len(offers) == 1
+
+    #: 🔴 **「경우」 는 타이밍을 놓치지 않는다** — 그 사실은 그대로다.
+    assert offers[0].misses_timing is False
+    assert duel._missed_timing(offers[0]) is False
+    #: 그리고 지금은 발동할 수 있다.
+    assert _trigger_action(duel) is not None
 
     other = _other_action(duel)
     assert other is not None, "끼워 넣을 행동이 없으면 아무것도 재지 않는다"
     assert duel.apply(other).accepted is True
     assert duel.state.turn.phase is Phase.MAIN1
 
-    #: 🔴 **열려 있다 — 규칙이 그렇게 정했다.**
-    offers = duel._trigger_offers(MINE)
-    assert len(offers) == 1
-    assert offers[0].misses_timing is False
-    assert _trigger_action(duel) is not None
+    #: 🔴 **기회는 닫혔다** — 그 자리에서 다른 것을 골랐다.
+    assert _trigger_action(duel) is None
+    #: 🔴 **그런데 타이밍을 놓친 것이 아니다** — 두 사실이 따로 남아 있다.
+    offers_after = duel._trigger_offers(MINE)
+    assert len(offers_after) == 1, "제안 자체는 남는다 — 닫힌 것은 창이다"
+    assert duel._missed_timing(offers_after[0]) is False
+    assert duel._window_admits(offers_after[0], MINE) is False
+
+    #: 🔴 **포기로 적혀 있다** — 그리고 빠진 규칙이 아니므로 ``missing`` 은 없다.
+    declined = [
+        w
+        for w in duel.legal_actions(MINE).withheld
+        if "포기했습니다" in w.reason
+    ]
+    assert len(declined) == 1
+    assert declined[0].missing is None
 
 
 @requires_official_db
-def test_b03_synthetic_a_when_trigger_closes_after_another_action(repository):
+def test_b02b_the_closed_window_does_not_reopen_in_the_same_phase(repository):
     """
-    🔴 **「때」 는 그 사건이 마지막일 때만 열린다** (합성).
+    🔴 **종료된 기회는 같은 페이즈에서도 다시 나타나지 않는다.**
 
-    어휘만 ``WHEN`` 으로 바꿔 끼운다. 사건 번호는 실제 값이므로, 기록의
-    마지막이 아니게 되는 순간 ``misses_timing`` 이 참이 된다.
+    6-AB 까지는 나타났다 (``test_b02`` 의 실측). 걸음을 더 밟아도 닫힌 채로
+    있어야 한다 — "한 걸음만 닫힌다" 가 되면 그것도 결함이다.
+    """
+    setup, _ = _board(repository, selector=DeclineChoice())
+    duel = setup.duel
+    _summon(duel)
+    assert _trigger_action(duel) is not None
 
-    🔴 **보류에 ``missing`` 을 적지 않는다** — 빠진 규칙이 없다. 규칙이
-    그렇게 정했을 뿐이다 (6-S 의 규율).
+    steps = 0
+    while steps < 4:
+        #: 🔴 페이즈를 넘기지 않는다 — 넘기면 ``timing_floor`` 가 닫으므로
+        #: 이 시험이 재려는 것(**같은 페이즈 안에서** 닫힌 채로 있는가)이
+        #: 바뀐다.
+        other = next(
+            (
+                a
+                for a in duel.legal_actions(MINE).allowed
+                if a.kind
+                not in (
+                    PlayerActionKind.ACTIVATE_EFFECT,
+                    PlayerActionKind.PASS,
+                    PlayerActionKind.END_PHASE,
+                )
+            ),
+            None,
+        )
+        if other is None:
+            break
+        assert duel.apply(other).accepted is True
+        steps += 1
+        #: 🔴 걸음마다 닫힌 채로 있다.
+        assert _trigger_action(duel) is None, steps
+    assert steps >= 1, "행동을 한 걸음도 못 했으면 아무것도 재지 않는다"
+    assert duel.state.turn.phase is Phase.MAIN1
+
+
+@requires_official_db
+def test_b03_synthetic_the_wording_decides_missed_timing_not_the_window(
+    repository,
+):
+    """
+    🔴 **어휘는 "놓쳤는가" 에만 답한다** (합성 · 6-AB 보완이 고친 자리).
+
+    6-AB 의 이 시험은 합성 「때」 유발이 일반 행동 뒤에 **"놓쳤습니다"** 로
+    보류되는 것을 쟀다. 지금은 그 자리에서 **포기**가 먼저 적힌다 — 그
+    자리가 유발을 받고 다른 것을 골랐으니 그것이 더 앞선 사실이다.
+
+    그래서 재는 것을 옮긴다: 어휘가 가르는 값(:meth:`Duel._missed_timing`)을
+    **직접** 센다. 「때」 와 「경우」 의 구분은 그대로 살아 있고, 창이 닫히는
+    일과 **섞이지 않는다** — 그 섞임이 6-AB 의 결함이었다.
     """
     setup, _ = _board(repository, selector=DeclineChoice())
     _summon(setup.duel)
-    duel = _wired(setup.duel, repository, wording=TriggerWording.WHEN)
 
-    #: 사건 직후 — 아직 마지막이다.
-    assert _trigger_action(duel) is not None
-    other = _other_action(duel)
+    base = setup.duel._trigger_offers(MINE)
+    assert len(base) == 1
+
+    #: 사건이 **마지막일 때** — 어느 어휘든 놓치지 않았다.
+    for wording in (TriggerWording.IF, TriggerWording.WHEN):
+        duel = _wired(setup.duel, repository, wording=wording)
+        offer = duel._trigger_offers(MINE)[0]
+        assert duel._missed_timing(offer) is False, wording
+        assert duel._window_admits(offer, MINE) is True, wording
+
+    #: 끼워 넣을 행동을 **좁혀지지 않은 판**에서 꺼내 적용한다.
+    other = _other_action(setup.duel)
     assert other is not None
-    assert duel.apply(other).accepted is True
+    assert setup.duel.apply(other).accepted is True
 
-    #: 🔴 지나갔다.
-    assert _trigger_action(duel) is None
-    missed = [
-        w
-        for w in duel.legal_actions(MINE).withheld
-        if "놓쳤습니다" in w.reason
-    ]
-    assert len(missed) == 1
-    assert missed[0].missing is None
+    #: 🔴 사건이 **마지막이 아닐 때** — 여기서 어휘가 갈린다.
+    if_duel = _wired(setup.duel, repository, wording=TriggerWording.IF)
+    when_duel = _wired(setup.duel, repository, wording=TriggerWording.WHEN)
+    assert if_duel._missed_timing(if_duel._trigger_offers(MINE)[0]) is False
+    assert when_duel._missed_timing(when_duel._trigger_offers(MINE)[0]) is True
+
+    #: 🔴 **둘 다 창은 닫혀 있다** — 포기했으므로. 어휘와 무관하다.
+    for duel in (if_duel, when_duel):
+        offer = duel._trigger_offers(MINE)[0]
+        assert duel._window_admits(offer, MINE) is False
+
+
+@requires_official_db
+def test_b03b_synthetic_a_mandatory_when_is_not_expired_by_the_wording(
+    repository,
+):
+    """
+    🔴 **강제 「때」 를 어휘만으로 만료시키지 않는다** (합성 · BLOCKER 재현).
+
+    6-AB 의 실측 증상: ``MANDATORY`` + ``WHEN`` 이고 사건이 마지막이 아니면
+    ``_mandatory_offers`` 가 **0** 을 돌려주었다 — 규칙이 처리를 요구하는
+    효과가 **조용히 사라졌다.**
+
+    🔴 **근거의 상태를 정직하게 적는다.** 룰북(``data/rules/``)에 「때 /
+    경우」 구분이 없으므로 *"강제는 타이밍을 놓치지 않는다"* 를 **공식
+    문서로 확인하지 못했다.** 2차 자료는 그렇게 말하지만 공식 재정이 아니다.
+    그래서 이 엔진은 그 조합을 **모름**(``None``)으로 두고, 의무를 지우지도
+    발동을 허가하지도 않는다 (:meth:`Duel._missed_timing` 의 설명).
+    """
+    setup, _ = _board(repository, selector=FirstPermittedChoice())
+    _summon(setup.duel)
+    other = _other_action(setup.duel)
+    assert other is not None
+    assert setup.duel.apply(other).accepted is True
+
+    optional = _wired(setup.duel, repository, wording=TriggerWording.WHEN)
+    forced = _wired(
+        setup.duel,
+        repository,
+        wording=TriggerWording.WHEN,
+        requirement=TriggerRequirement.MANDATORY,
+    )
+
+    #: 🔴 임의 「때」 는 놓쳤다 — 의무가 아니다.
+    assert optional._missed_timing(optional._trigger_offers(MINE)[0]) is True
+    assert optional._mandatory_offers(MINE) == ()
+
+    #: 🔴 강제 「때」 는 **모른다** — 그래서 의무로 남는다.
+    assert forced._missed_timing(forced._trigger_offers(MINE)[0]) is None
+    assert len(forced._mandatory_offers(MINE)) == 1
 
 
 @requires_official_db
@@ -395,54 +524,203 @@ def test_b04_synthetic_an_unknown_wording_is_withheld_with_its_reason(
     """
     🔴 **어휘를 모르면 허가하지 않고, 무엇을 모르는지 적는다** (합성).
 
-    「때」 였다면 지나갔고 「경우」 였다면 남아 있다 — 둘 중 어느 쪽인지
-    모르므로 **기회가 열려 있는지 말할 수 없다.** 모름을 허가로 바꾸지 않고,
-    조용히 넘어가지도 않는다.
+    6-AB 는 이 상황을 "내 자리가 행동한 뒤" 로 만들었는데, 지금 그 자리에는
+    **포기**가 먼저 적힌다 (``test_b03`` 의 설명). 그래서 포기가 끼지 않는
+    자리로 옮긴다 — **상대 자리**의 제안이다. 포기는 자리마다 따로 적히므로
+    (``declined_events``) 내가 행동해도 상대의 기회는 포기되지 않는다. 그
+    사이에 기록은 늘었으므로 상대의 사건은 더 이상 마지막이 아니다.
+
+    「때」 였다면 지나갔고 「경우」 였다면 남아 있다 — 어느 쪽인지 모르므로
+    **기회가 열려 있는지 말할 수 없다.** 모름을 허가로 바꾸지 않고, 조용히
+    넘어가지도 않는다.
     """
-    setup, _ = _board(repository, selector=DeclineChoice())
+
+    class _TheirUnknownWording:
+        """상대 자리에만, 어휘를 모르는 제안을 내놓는다."""
+
+        def __init__(self, repo):
+            self._inner = TriggerSource(repo)
+
+        def offers(self, duel, seat: int):
+            if seat != THEIRS:
+                return ()
+            return tuple(
+                dataclasses.replace(
+                    offer, wording=TriggerWording.UNKNOWN, controller=THEIRS
+                )
+                for offer in self._inner.offers(duel, MINE)
+            )
+
+    setup, _ = _board(repository, selector=FirstPermittedChoice())
     _summon(setup.duel)
-    duel = _wired(setup.duel, repository, wording=TriggerWording.UNKNOWN)
-
-    #: 사건 직후에는 어휘를 몰라도 답이 하나다 — 마지막이므로 둘 다 열린다.
-    assert _trigger_action(duel) is not None
-    other = _other_action(duel)
+    other = _other_action(setup.duel)
     assert other is not None
-    assert duel.apply(other).accepted is True
+    assert setup.duel.apply(other).accepted is True
 
-    #: 🔴 이제 어휘가 답을 가른다 — 그래서 보류한다.
-    assert _trigger_action(duel) is None
-    assert len(_withheld_for(duel, MINE, TRIGGER_WORDING_MISSING)) == 1
+    duel = dataclasses.replace(
+        setup.duel, triggers=_TheirUnknownWording(repository)
+    )
+    offers = duel._trigger_offers(THEIRS)
+    assert len(offers) == 1, "합성이 상대 제안을 못 만들면 아무것도 재지 않는다"
+    #: 내가 행동했지만 **상대는 포기하지 않았다.**
+    assert duel._decline_key(offers[0], THEIRS) not in duel.declined_events
+    #: 🔴 그래서 어휘가 답을 가르는 자리에 왔다.
+    assert duel._missed_timing(offers[0]) is None
+    assert len(_withheld_for(duel, THEIRS, TRIGGER_WORDING_MISSING)) == 1
 
 
 @requires_official_db
-def test_b05_synthetic_a_when_trigger_is_preserved_while_a_chain_is_open(
+def test_b05_synthetic_a_chain_preserves_the_opportunity_without_admitting_it(
     repository,
 ):
     """
-    🔴 **체인 처리 중에 생긴 사건은 만료시키지 않는다** (SEGOC · 합성).
+    🔴 **체인 처리 중의 기회는 보존되지만 발동은 열리지 않는다** (합성).
 
-    공식 재정: 체인 처리 중에 시점을 만난 효과는 그 체인이 **완전히 해결된
-    뒤**에 발동한다. 그래서 체인이 열려 있는 동안은 "마지막에 일어난 일" 로
-    재지 않는다 — 재면 체인 안의 기록이 기회를 먹어 버린다.
+    두 사실을 가른다 — 그것이 이 시험의 전부다:
 
-    🔴 **순서를 임의로 적법화하지 않는다.** SEGOC 의 순서 결정도 WHEN/IF 의
-    완전한 구현도 이 Phase 의 범위가 아니다 (``UNRESOLVED_ORDER_RULES``).
-    여기서 재는 것은 **보존**뿐이다.
+    ==========================  ==================================
+    기회가 남아 있는가            **그렇다** (``_opportunity_is_open``)
+    지금 발동할 수 있는가         **아니다** (``_window_admits``)
+    ==========================  ==================================
+
+    공식 재정 (OCG 카드 데이터베이스, 聖鳥クレイン ``cid=5883`` 의
+    2021-07-01 보충): *특수 소환이 체인 처리 중에 행해진 경우 등, 특수 소환
+    직후에 다른 처리가 행해지는 경우에는 **그 체인이 모두 해결된 후에**
+    발동한다.*
+
+    🔴 6-AB 는 이것을 거꾸로 했다 — 체인이 비어 있지 않으면 ``True`` 를
+    돌려주어 **체인 도중에 발동을 허가했다** (실측: ``_offer_is_activatable``
+    → ``True``). 보존해야 한다는 사실을 "지금 발동해도 된다" 로 읽은 것이다.
+
+    🔴 **그리고 6-AB 의 이 시험은 빈 목록을 순회했다** (리뷰 지적 E · 실측:
+    발동 뒤 ``_trigger_offers`` 가 **0건**). ``for`` 몸통이 한 번도 돌지
+    않으므로 무엇도 재지 않고 통과했다. 그래서 지금은 **미소비 기회가 실제로
+    있는지 먼저 단정한다.**
+
+    기회를 남기는 방법: 기르수의 **②번 효과**로 제안을 하나 만든다. 카드
+    텍스트에 실제로 있는 효과이고 (``②：자신 필드에 다른 몬스터가 존재하지
+    않을 경우에 발동할 수 있다``), ``_consumption_key`` 가 효과를 가르므로
+    (6-AA) ①번의 발동이 ②번의 기회를 쓰지 않는다. 바꿔 끼우는 것은
+    ``effect_ref`` 하나뿐이다.
     """
-    setup, _ = _board(repository, selector=FirstPermittedChoice())
-    _summon(setup.duel)
-    duel = _wired(setup.duel, repository, wording=TriggerWording.WHEN)
 
+    class _SecondEffect:
+        """같은 사건 · 같은 개체 · **다른 효과**의 제안 하나."""
+
+        def __init__(self, repo, wording):
+            self._inner = TriggerSource(repo)
+            self._wording = wording
+
+        def offers(self, duel, seat: int):
+            return tuple(
+                dataclasses.replace(
+                    offer,
+                    effect_ref=EffectRef(GIRSU, 1),
+                    wording=self._wording,
+                )
+                for offer in self._inner.offers(duel, seat)
+            )
+
+    setup, _ = _board(repository, selector=FirstPermittedChoice())
+    duel = setup.duel
+    _summon(duel)
     action = _trigger_action(duel)
     assert action is not None
     assert duel.apply(action).accepted is True
     #: 체인이 열려 있다 — 응답 창이다.
     assert duel.chain.is_empty is False
 
-    offers = duel._trigger_offers(MINE)
-    for offer in offers:
-        #: 🔴 체인이 열려 있으므로 "지금" 으로 센다.
-        assert duel._timing_is_current(offer) is True
+    for wording in (TriggerWording.WHEN, TriggerWording.IF):
+        chained = dataclasses.replace(
+            duel, triggers=_SecondEffect(repository, wording)
+        )
+        offers = chained._trigger_offers(MINE)
+        #: 🔴 **빈 목록으로 통과할 수 없다.**
+        assert len(offers) == 1, (wording, len(offers))
+        offer = offers[0]
+        #: 🔴 미소비다 — ①번의 발동이 ②번의 기회를 쓰지 않았다 (6-AA).
+        assert chained._consumption_key(offer) not in chained.consumed_events
+        assert chained._opportunity_is_open(offer) is True
+
+        #: 🔴 **그런데 발동은 열리지 않는다** — 체인이 먼저다.
+        assert chained._window_admits(offer, MINE) is False
+        assert chained._offer_is_activatable(offer, MINE) is False
+
+        #: 🔴 그리고 그 이유가 적혀 있다. 빠진 규칙이 아니라 **순서**이므로
+        #: ``missing`` 은 비어 있다.
+        deferred = [
+            w
+            for w in chained.legal_actions(MINE).withheld
+            if "체인이 처리 중입니다" in w.reason
+        ]
+        assert len(deferred) == 1, wording
+        assert deferred[0].missing is None
+        assert "기회는 남아" in deferred[0].reason
+
+
+@requires_official_db
+def test_b05b_synthetic_the_opportunity_returns_after_the_chain_resolves(
+    repository,
+):
+    """
+    🔴 **체인이 해결된 뒤에 그 기회가 다시 열린다** (합성).
+
+    ``test_b05`` 가 "체인 도중에는 닫혀 있다" 를 쟀다. 그것만으로는 **영구히
+    닫혔는지** 알 수 없다 — 그러면 보존이 아니라 **분실**이다. 그래서 체인을
+    끝까지 풀고 같은 질문을 다시 한다.
+
+    근거는 같은 재정이다: *그 체인이 모두 해결된 **후에** 발동한다.*
+
+    🔴 「경우」 로만 잰다. 체인이 해결되면 기록이 늘어 그 사건은 더 이상
+    마지막이 아니므로, 「때」 는 그 자리에서 타이밍을 놓친 것으로 판정된다 —
+    그것이 BLOCKER 로 남은 부분이고 (보고서 §8) 여기서 흉내 내지 않는다.
+    """
+
+    class _SecondEffect:
+        def __init__(self, repo):
+            self._inner = TriggerSource(repo)
+
+        def offers(self, duel, seat: int):
+            return tuple(
+                dataclasses.replace(
+                    offer,
+                    effect_ref=EffectRef(GIRSU, 1),
+                    wording=TriggerWording.IF,
+                )
+                for offer in self._inner.offers(duel, seat)
+            )
+
+    setup, _ = _board(repository, selector=FirstPermittedChoice())
+    duel = setup.duel
+    _summon(duel)
+
+    #: 체인 **전** — 열려 있다.
+    before = dataclasses.replace(duel, triggers=_SecondEffect(repository))
+    opened = before._trigger_offers(MINE)
+    assert len(opened) == 1
+    assert before._window_admits(opened[0], MINE) is True
+
+    #: 체인을 세운다 (실제 ①번 발동).
+    action = _trigger_action(duel)
+    assert action is not None
+    assert duel.apply(action).accepted is True
+    assert duel.chain.is_empty is False
+
+    #: 체인 **중** — 닫혀 있다.
+    during = dataclasses.replace(duel, triggers=_SecondEffect(repository))
+    held = during._trigger_offers(MINE)
+    assert len(held) == 1
+    assert during._window_admits(held[0], MINE) is False
+
+    #: 🔴 체인을 끝까지 푼다.
+    _settle(duel)
+    assert duel.chain.is_empty is True
+
+    #: 🔴 **다시 열렸다** — 보존이지 분실이 아니다.
+    after = dataclasses.replace(duel, triggers=_SecondEffect(repository))
+    reopened = after._trigger_offers(MINE)
+    assert len(reopened) == 1
+    assert after._window_admits(reopened[0], MINE) is True
 
 
 @requires_official_db
@@ -650,27 +928,34 @@ def test_c05_synthetic_my_duty_does_not_close_the_other_seat(repository):
 
 
 @requires_official_db
-def test_c06_synthetic_a_duty_outside_my_turn_is_not_a_missing_rule(repository):
+def test_c06_synthetic_the_duty_seat_goes_first_and_that_is_ordering(
+    repository,
+):
     """
-    🔴 **지금 고르는 자리가 아니면 "관문이 막았다" 고 적지 않는다** (합성).
+    🔴 **의무를 든 자리가 먼저 간다** (합성 · 6-AB 보완이 고친 자리).
 
-    상대가 강제 기회를 들고 있는 동안 ``legal_actions(상대)`` 를 물으면
-    허가가 비어 있다. 그 이유는 **순서**다 — 우선권이 그 자리에 없다. 그런데
-    6-AB 가 처음 쓴 ``_enforce_mandatory`` 는 거기에
-    :data:`~engine.duel.MANDATORY_TRIGGER_UNPLAYABLE` 을 달았고, 그 보류는
-    "규칙이 요구하는데 발동 절차를 보장할 근거가 없다" 는 뜻이므로 **거짓**
-    이었다 (실측으로 찾았다).
+    6-AB 의 이 시험은 *"차례가 아닌 자리에는 거짓 보류를 달지 않는다"* 를
+    쟀다. 그 단정은 **당시의 구조**에 맞았지만 구조 자체가 틀렸다 — 그때는
+    상대의 강제 의무를 **아무도 묻지 않았고**, 내 ``END_PHASE`` 가 수락되어
+    ``timing_floor`` 가 그 의무를 지웠다 (실측: 상대 의무 1 → 0).
 
-    🔴 지금은 ``missing`` 을 **비우고** 순서라고 적는다 — 6-S 가
-    ``_flow_actions`` 에서 세운 기준과 같다. 조용히 넘기지도 않는다: 의무가
-    그 자리에 열려 있다는 사실은 적힌다.
+    근거는 룰북 ``TURN PLAYER'S PRIORITY`` 다: *"...except for effects that
+    activate automatically, like Trigger or Flip effects."* 유발 효과는 턴
+    플레이어 우선권의 **명시된 예외**이므로, 상대가 강제 유발을 들고 있으면
+    내 턴이라도 그 처리가 먼저다.
 
-    합성 방법: 어느 자리로 물어도 **0번 자리의 제안**을 돌려주는 원천을
-    꽂는다. 실제 ``TriggerSource`` 는 ``controller`` 로 걸러 주므로, 자리가
-    어긋난 상태를 실제 카드로는 만들 수 없다.
+    그래서 지금 재는 것은 둘이다 — :attr:`Duel.to_act` 가 의무를 든 자리를
+    가리키는가, 그리고 다른 자리가 막힐 때 그 이유가 **순서**로 적히는가
+    (``missing`` 을 비운다 — 빠진 규칙이 아니다).
+
+    🔴 **영구 대기가 아니다.** 막는 조건이 :meth:`Duel._duty_seat` 에 묶여
+    있고 그 함수는 **발동할 수 있는** 의무만 가리키므로, 막힌 자리가 생기면
+    가리켜진 자리에는 반드시 고를 것이 있다. 아래에서 그것도 센다.
     """
 
     class _BothSeats:
+        """어느 자리로 물어도 턴 플레이어의 제안을 강제로 돌려준다."""
+
         def __init__(self, repo):
             self._inner = TriggerSource(repo)
 
@@ -686,28 +971,75 @@ def test_c06_synthetic_a_duty_outside_my_turn_is_not_a_missing_rule(repository):
     _summon(setup.duel)
     duel = dataclasses.replace(setup.duel, triggers=_BothSeats(repository))
 
+    #: 🔴 의무를 든 자리를 가리킨다 — 턴 플레이어가 먼저다 (룰북
+    #: §*When multiple cards are activated simultaneously*).
+    assert duel._duty_seat() == MINE
     assert duel.to_act == MINE
-    assert duel._mandatory_offers(THEIRS), "합성이 어긋난 자리를 못 만들면 빈다"
 
-    theirs = duel.legal_actions(THEIRS)
-    assert theirs.allowed == (), "차례가 아니므로 고를 것이 없다"
-    #: 🔴 **거짓 보류가 없다.**
-    assert _withheld_for(duel, THEIRS, MANDATORY_TRIGGER_UNPLAYABLE) == []
-    #: 🔴 **그런데 조용히 넘기지도 않았다.**
-    ordering = [
-        w
-        for w in theirs.withheld
-        if "행동을 고르는 자리가 아닙니다" in w.reason
-    ]
-    assert len(ordering) == 1
-    assert ordering[0].missing is None
-
-    #: 🔴 **내 자리는 그대로 좁혀진다** — 순서 판정이 보장을 끄지 않았다.
+    #: 🔴 그 자리에는 **고를 것이 있다** — 영구 대기가 아니다.
     mine = duel.legal_actions(MINE)
     assert mine.allowed
     assert all(
         a.kind is PlayerActionKind.ACTIVATE_EFFECT for a in mine.allowed
     )
+
+    #: 🔴 다른 자리는 막히고, 이유는 **순서**다.
+    theirs = duel.legal_actions(THEIRS)
+    assert theirs.allowed == ()
+    ordering = [
+        w for w in theirs.withheld if "처리가 먼저입니다" in w.reason
+    ]
+    assert ordering, [w.reason for w in theirs.withheld]
+    assert all(w.missing is None for w in ordering)
+    #: 🔴 **거짓 보류가 없다** — 보장할 근거가 없는 것이 아니라 순서다.
+    assert _withheld_for(duel, THEIRS, MANDATORY_TRIGGER_UNPLAYABLE) == []
+
+
+@requires_official_db
+def test_c06b_synthetic_the_opponents_duty_blocks_my_phase_change(repository):
+    """
+    🔴 **상대의 강제 의무를 ``END_PHASE`` 로 지나칠 수 없다** (합성).
+
+    6-AB 의 실측 증상: 상대 의무가 1건 열려 있는데 내 ``END_PHASE`` 가
+    **수락되고**, 페이즈가 넘어가면서 ``timing_floor`` 가 그 의무를 **0 으로
+    지웠다.** 규칙이 요구한 처리가 조용히 사라진 것이다.
+    """
+
+    class _TheirDuty:
+        """상대 자리에만 강제 의무를 내놓는다."""
+
+        def __init__(self, repo):
+            self._inner = TriggerSource(repo)
+
+        def offers(self, duel, seat: int):
+            if seat != THEIRS:
+                return ()
+            return tuple(
+                dataclasses.replace(
+                    offer,
+                    requirement=TriggerRequirement.MANDATORY,
+                    controller=THEIRS,
+                )
+                for offer in self._inner.offers(duel, MINE)
+            )
+
+    setup, _ = _board(repository, selector=FirstPermittedChoice())
+    _summon(setup.duel)
+    duel = dataclasses.replace(setup.duel, triggers=_TheirDuty(repository))
+
+    assert len(duel._mandatory_offers(THEIRS)) == 1
+    assert duel._mandatory_offers(MINE) == ()
+    #: 🔴 상대가 간다 — 내 턴인데도.
+    assert duel.to_act == THEIRS
+    assert duel.turn_player == MINE
+
+    #: 🔴 내 ``END_PHASE`` 가 거절된다.
+    before_phase = duel.state.turn.phase
+    step = duel.apply(PlayerAction.end_phase(actor=MINE))
+    assert step.accepted is False
+    assert duel.state.turn.phase is before_phase
+    #: 🔴 그래서 의무가 살아 있다.
+    assert len(duel._mandatory_offers(THEIRS)) == 1
 
 
 def test_c07_the_duty_is_enforced_in_one_place():
@@ -924,3 +1256,237 @@ def test_d08_the_state_hash_is_not_used_to_merge_states():
         source = _source(path)
         for banned in ("state_hash()] =", "seen.add(", "_cache[", "visited"):
             assert banned not in source, (path, banned)
+
+
+# ======================================================================
+# E. 정책 격리 — 사본이 부모의 정책을 밀지 않는가 (6-AB 보완)
+# ======================================================================
+
+
+class _StatefulNoFork:
+    """
+    상태를 들고 있으면서 ``forked()`` 를 **주지 않는** 정책.
+
+    6-AB 는 이런 정책을 사본에 **그대로 공유했고**, 그 근거는 "모양이
+    ``choose(request)`` 하나뿐이니 기록을 가졌는지 알 방법이 없다" 였다.
+    🔴 그 추론이 거꾸로였다 — 알 수 없으면 공유가 아니라 **보류**가 안전한
+    쪽이다.
+    """
+
+    name = "stateful-no-fork"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def accept_offer(self, offer) -> bool:
+        self.calls += 1
+        return True
+
+    def choose_cards(self, offer):
+        self.calls += 1
+        return (offer.candidates[0].instance,) if offer.candidates else ()
+
+
+@requires_official_db
+def test_e01_a_fork_does_not_advance_a_stateful_policy(repository):
+    """
+    🔴 **사본이 부모의 정책 상태를 밀지 않는다** (리뷰 지적 F · 실측).
+
+    6-AB 의 증상: 상태 있는 정책으로 ``Simulator.simulate`` 를 한 번 돌리자
+    부모 정책의 호출 수가 **0 → 1** 이 됐다. 사본은 미래를 **재기만** 해야
+    하는데 부모를 앞으로 밀었고, 그러면 같은 자리에서 실제로 두었을 때 다른
+    답이 나온다.
+    """
+    selector = _StatefulNoFork()
+    setup, chooser = _board(repository, selector=selector)
+    duel = setup.duel
+    _summon(duel)
+    action = _trigger_action(duel)
+    assert action is not None
+    assert selector.calls == 0
+
+    result = Simulator(duel).simulate(action, viewer=MINE)
+    assert result.status is SimulationStatus.SUPPORTED
+
+    #: 🔴 부모의 정책이 그대로다.
+    assert selector.calls == 0
+    assert chooser.records == ()
+
+
+@requires_official_db
+def test_e02_a_non_forkable_chooser_is_refused_not_shared(repository):
+    """
+    🔴 **``forked()`` 를 주지 않는 정책은 사본이 쓰지 않는다** — 그리고 그
+    거절이 **결과에 보인다.**
+
+    조용히 공유하면 오염이 보이지 않는다. 거절은 보인다. 그래서 사본은
+    고르는 사람 없이 돌고, 아직 정해지지 않은 선택이 거절된다.
+    """
+    setup, _ = _board(repository, selector=_StatefulNoFork())
+    duel = setup.duel
+    _summon(duel)
+    action = _trigger_action(duel)
+    assert action is not None
+
+    assert Simulator(duel)._forked_chooser() is None
+    result = Simulator(duel).simulate(action, viewer=MINE)
+    #: 🔴 발동은 되고 **해결이 거절된다** — 그 사실이 이유에 적힌다.
+    assert result.status is SimulationStatus.SUPPORTED
+    assert "아직 고르지 않은" in (result.reason or "")
+
+
+@requires_official_db
+def test_e03_a_forkable_policy_lets_the_fork_resolve(repository):
+    """
+    🔴 **무상태 정책은 ``forked()`` 로 그 사실을 말하고, 사본은 해결까지 간다.**
+
+    프로덕션 배선이 쓰는 정책이 이쪽이다 (``app.main.opening_wiring`` 의
+    :class:`~agent.choice.FirstPermittedChoice`). 그래서 6-AB 가 고친
+    "사본이 원본보다 못 해결한다" 는 **그대로 고쳐져 있다.**
+    """
+    setup, chooser = _board(repository, selector=FirstPermittedChoice())
+    duel = setup.duel
+    _summon(duel)
+    action = _trigger_action(duel)
+    assert action is not None
+
+    forked = chooser.forked()
+    assert forked is not None
+    assert forked is not chooser
+    assert forked.records == ()
+
+    result = Simulator(duel).simulate(action, viewer=MINE)
+    assert result.status is SimulationStatus.SUPPORTED
+    assert "해결했습니다" in (result.reason or "")
+    #: 🔴 사본이 물었는데도 부모의 기록은 비어 있다.
+    assert chooser.records == ()
+
+
+def test_e04_the_random_policy_forks_without_moving_its_parent():
+    """
+    🔴 **상태 있는 정책은 사본용 사본을 만든다** — 부모의 난수원을 뽑지 않는다.
+
+    부모의 난수원에서 씨앗을 뽑으면 **뽑는 순간** 부모가 앞으로 밀린다.
+    그것이 고치려는 결함이므로, 씨앗은 *지금까지 뽑은 횟수*에서 만든다.
+    """
+    parent = RandomChoice(seed=11)
+    first, second = parent.forked(), parent.forked()
+
+    #: 🔴 부모가 움직이지 않았다.
+    assert parent.draws == 0
+    #: 다른 객체이고, 같은 자리에서는 같은 사본이 나온다 (재현된다).
+    assert first is not second
+    assert first.name == second.name
+
+    empty = types.SimpleNamespace(permitted=(), candidates=(), minimum=0)
+    first.accept_offer(empty)
+    assert first.draws == 1
+    #: 🔴 사본이 뽑아도 부모는 그대로다.
+    assert parent.draws == 0
+
+
+@requires_official_db
+def test_e05_sibling_forks_do_not_share_declined_opportunities(repository):
+    """
+    🔴 **포기 상태도 형제 분기를 넘지 않는다** (6-AB 보완의 새 칸).
+
+    :attr:`~engine.duel.Duel.declined_events` 는 ``frozenset`` 이므로
+    ``dataclasses.replace`` 가 값으로 가져간다 — ``consumed_events`` 와 같은
+    규율이다 (6-AA ``test_d04``). 새 칸이 그 규율을 따르는지 센다.
+    """
+    setup, _ = _board(repository, selector=DeclineChoice())
+    duel = setup.duel
+    _summon(duel)
+    assert duel.declined_events == frozenset()
+
+    sim = Simulator(duel)
+    left, right = sim._fork(), sim._fork()
+
+    other = _other_action(left)
+    assert other is not None
+    assert left.apply(other).accepted is True
+
+    #: 🔴 한쪽만 포기했다.
+    assert len(left.declined_events) == 1
+    assert right.declined_events == frozenset()
+    assert duel.declined_events == frozenset()
+    #: 🔴 그래서 형제는 아직 발동할 수 있고 부모도 그렇다.
+    assert _trigger_action(left) is None
+    assert _trigger_action(right) is not None
+    assert _trigger_action(duel) is not None
+
+
+# ======================================================================
+# F. 실제 카드 · 정상 경로 — 합성이 아니다
+# ======================================================================
+
+
+@requires_official_db
+def test_f01_the_real_card_path_still_resolves_deck_to_grave(repository):
+    """
+    🔴 **실제 카드 · 정상 경로가 그대로 돈다** — 이번 수정이 깨뜨리지 않았다.
+
+    기르수 소환 → 유발 발동 (``legal_actions`` → ``apply``) → 해결 중
+    ``PolicyChooser`` 가 카드를 고름 → 덱에서 묘지로.
+
+    🔴 **합성이 아니다.** 바꿔 끼운 값이 하나도 없고, 행동은 모두
+    ``legal_actions`` 을 지난다.
+    """
+    setup, chooser = _board(repository, selector=FirstPermittedChoice())
+    duel = setup.duel
+    grave_before = len(duel.state.player(MINE).zone(Zone.GRAVE))
+    deck_before = len(duel.state.player(MINE).zone(Zone.DECK))
+
+    _summon(duel)
+    action = _trigger_action(duel)
+    assert action is not None
+    assert duel.apply(action).accepted is True
+    _settle(duel)
+
+    #: 🔴 **고른 것은 정책이다** — 엔진이 대신 고르지 않았다.
+    assert len(chooser.records) == 1
+    chosen = chooser.records[0].chosen
+    assert len(chosen) == 1
+
+    #: 🔴 그리고 그 카드가 실제로 덱에서 묘지로 갔다.
+    assert len(duel.state.player(MINE).zone(Zone.GRAVE)) == grave_before + 1
+    assert len(duel.state.player(MINE).zone(Zone.DECK)) == deck_before - 1
+    grave = duel.state.player(MINE).zone(Zone.GRAVE)
+    assert [c.instance_id for c in grave] == list(chosen)
+
+
+@requires_official_db
+def test_f02_the_real_card_opportunity_opens_once_and_closes(repository):
+    """
+    🔴 **실제 카드로 수명 전체를 밟는다** — 사건 → 기회 → 발동 → 종료 → 진행.
+
+    발동으로 닫는 쪽이다 (포기로 닫는 쪽은 ``test_b02`` · ``test_c05``).
+    """
+    setup, _ = _board(repository, selector=FirstPermittedChoice())
+    duel = setup.duel
+
+    #: ① 사건 전 — 기회가 없다.
+    assert duel._trigger_offers(MINE) == ()
+
+    #: ② 사건 → 기회 개시.
+    _summon(duel)
+    assert len(duel._trigger_offers(MINE)) == 1
+    assert _trigger_action(duel) is not None
+
+    #: ③ 발동.
+    action = _trigger_action(duel)
+    assert duel.apply(action).accepted is True
+    #: 체인 처리 중에는 발동이 열리지 않는다.
+    assert duel.chain.is_empty is False
+    _settle(duel)
+
+    #: ④ 기회 종료 — 소비로 닫혔다 (포기가 아니다).
+    assert len(duel.consumed_events) == 1
+    assert duel.declined_events == frozenset()
+    assert _trigger_action(duel) is None
+
+    #: ⑤ 다음 진행 — 흐름이 돌아왔다.
+    resumed = duel.legal_actions(MINE)
+    assert any(
+        a.kind is not PlayerActionKind.ACTIVATE_EFFECT for a in resumed.allowed
+    )

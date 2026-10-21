@@ -583,31 +583,42 @@ def test_c04_a_rejected_illegal_action_spends_no_opportunity(repository):
 
 @pytest.mark.real_card
 @requires_official_db
-def test_c05_declining_leaves_the_offer_open_within_the_phase(repository):
+def test_c05_declining_closes_the_offer_within_the_phase(repository):
     """
-    같은 페이즈 안에서 발동하지 않기로 한 임의 유발은 **다시 제안된다.**
+    🔴 **같은 페이즈 안에서 발동하지 않기로 한 임의 유발은 다시 제안되지
+    않는다** — 이름과 단정이 **두 번** 바뀐 자리다. 그 이력을 남긴다.
 
-    🔴 **6-AA 는 이것을 ``BLOCKER-6AA-2`` 로 적었고, 그 읽기가 틀렸다.**
-    그때의 글은 "실제 규칙에서는 그 시점이 지나면 기회가 사라지지만 그것을
-    판정하려면 타이밍 윈도우 계층이 필요하다" 였다. Phase 6-AB 가 공식
-    재정을 찾아 보니 **어휘가 가른다** — 「때」 효과는 그 사건이 *마지막에
-    일어난 일*이어야 하고, 「경우」 효과는 그렇지 않다 (출처는
-    ``core.card_model.Card.activation_wording_text`` 의 설명).
+    ====  ==================================  ============================
+    6-AA  ``…leaves_the_offer_open…``         한계로 기록 (``BLOCKER-6AA-2``)
+    6-AB  같은 단정, 설명만 고침               「경우」 이므로 **규칙대로**라고
+                                             읽었다
+    보완  ``…closes_the_offer…``              🔴 **단정 자체가 틀렸다**
+    ====  ==================================  ============================
 
-    기르수의 텍스트는 「경우에 발동」 이다 (실측:
-    ``tests/engine/test_trigger_execution_and_timing.py::test_b01``). 그래서
-    **이 동작은 결함이 아니라 규칙대로**다. 아래 단정들은 6-AA 그대로 두고
-    (같은 사실을 재므로) 읽는 법만 고쳤다. 어휘로 닫히는 쪽은
-    ``test_b03_synthetic_a_when_trigger_closes_after_another_action`` 이
-    합성으로 센다.
+    6-AB 의 해석은 *"기르수는 「경우에 발동」 이므로 그 사건 뒤에 다른 일이
+    일어나도 기회가 남는 것이 규칙대로다"* 였다. **「경우」 에 대한 사실은
+    맞지만 결론이 틀렸다** — *"타이밍을 놓치지 않는다"* 는 *"같은 페이즈에서
+    나중에 마음대로 발동할 수 있다"* 는 뜻이 아니다.
 
-    🔴 그때 **근거 없는 일괄 규칙을 만들지 않은 것**("다음 행동이면 만료")은
-    옳았다. 그 규칙을 세웠다면 「경우」 효과의 적법한 기회를 닫았을 것이다.
+    근거는 공식 Fast Effect Timing 도표다: 유발은 체인을 시작하지 않는 행위
+    뒤와 체인 해결 뒤에 확인되고, 그 자리에서 양쪽이 패스하면 판은 **open
+    state** 로 돌아간다. 그 확인 자리에서 유발 대신 다른 일을 골랐다면 그
+    자리의 기회는 지나간 것이다.
+    (https://www.yugioh-card.com/en/play/fast-effect-timing/)
+
+    🔴 **그래도 6-AA 가 일괄 규칙을 만들지 않은 판단은 옳았다.** 지금 닫는
+    것은 "다음 행동" 이 아니라 **그 자리가 실제로 받은 기회**다
+    (``Duel.declined_events`` 가 조건 셋을 적는다).
+
+    「때 / 경우」 의 구분이 사라진 것도 아니다 — 그것은 ``_missed_timing``
+    이 따로 답하고, ``tests/engine/test_trigger_execution_and_timing.py``
+    의 ``test_b02`` · ``test_b03`` 이 두 사실을 갈라서 센다.
     """
     setup, _ = _board(repository, selector=DeclineChoice())
     duel = setup.duel
     _summon(duel)
     assert len(duel._trigger_offers(MINE)) == 1
+    assert _trigger_action(duel) is not None, "받지 못한 기회는 포기가 아니다"
 
     #: 다른 행동을 한다 — 같은 페이즈 안이다.
     sets = [
@@ -619,9 +630,18 @@ def test_c05_declining_leaves_the_offer_open_within_the_phase(repository):
     assert duel.apply(sets[0]).accepted is True
     assert duel.state.turn.phase is Phase.MAIN1
 
-    #: 🔴 **아직 열려 있다** — 「경우」 이므로 규칙이 그렇게 정했다 (6-AB).
+    #: 🔴 **닫혔다.** 제안 자체는 남아 있고 (사건은 지워지지 않는다) 닫힌
+    #: 것은 **그 자리의 창**이다 — 둘을 가르는 것이 이번 수정의 요점이다.
     assert len(duel._trigger_offers(MINE)) == 1
-    assert _trigger_action(duel) is not None
+    assert _trigger_action(duel) is None
+    declined = [
+        w
+        for w in duel.legal_actions(MINE).withheld
+        if "포기했습니다" in w.reason
+    ]
+    assert len(declined) == 1
+    #: 빠진 규칙이 아니다 — 규칙이 그렇게 정했다.
+    assert declined[0].missing is None
 
 
 # ======================================================================
