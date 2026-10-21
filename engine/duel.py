@@ -380,16 +380,62 @@ class Duel:
     그리고 다음 턴의 DRAW · STANDBY 에서까지 관문을 **통과했다**
     (``gate=valid/ok``, 보고서 §4 의 실측).
 
-    🔴 **페이즈 안에서의 만료는 이것으로 판정하지 않는다.** 그것은
-    :meth:`_timing_is_current` 의 일이고, 근거는 **어휘**다 — 「때」 효과는
-    그 사건이 *마지막에 일어난 일*이어야 하고 「경우」 효과는 그렇지 않다
-    (Phase 6-AB). 그래서 이 바닥은 **페이즈 경계**만 본다: 둘은 다른 축이고,
-    어느 한쪽으로 다른 쪽을 흉내 내면 「경우」 의 적법한 기회를 닫거나
-    「때」 의 지나간 기회를 연다.
+    🔴 **페이즈 안에서의 만료는 이것으로 판정하지 않는다** — 그것이
+    :attr:`declined_events` 와 :meth:`_window_admits` 의 일이다. 이 바닥은
+    **페이즈 경계**만 본다: 둘은 다른 축이고, 어느 한쪽으로 다른 쪽을 흉내
+    내면 적법한 기회를 닫거나 지나간 기회를 연다.
 
     🔴 6-AA 가 이 자리를 ``BLOCKER-6AA-2`` 로 적으며 **근거 없는 일괄
     규칙**("다음 행동이면 만료") 을 만들지 않은 것은 옳았다. 그 규칙을
-    세웠다면 「경우」 효과의 적법한 기회를 닫았을 것이다.
+    세웠다면 「경우」 효과의 적법한 기회를 닫았을 것이다. 6-AB 보완이 그
+    자리를 **일괄 규칙이 아닌 방식**으로 채웠다 — :attr:`declined_events` 는
+    그 자리가 **실제로 기회를 받고 다른 것을 한** 경우만 닫는다.
+    """
+    declined_events: frozenset = frozenset()
+    """
+    **그 자리가 적법하게 포기한 기회들** (Phase 6-AB 보완).
+
+    담는 것은 ``(event_key, effect_ref, source, seat)`` **네 짝**이다 —
+    :meth:`_consumption_key` 의 세 짝에 자리를 더한 것이다.
+
+    🔴 **왜 세 짝으로는 모자라는가.** 처음에는 ``(event_key, seat)`` 두
+    짝으로 적었고, 그러면 한 효과를 포기한 것이 **같은 사건의 다른 효과 ·
+    다른 개체**의 기회까지 닫았다 (실측: 임의 유발을 포기한 뒤 같은 사건의
+    합성 강제 유발이 "포기했습니다" 로 보류됐다). 6-AA 가 ``consumed_events``
+    에서 같은 결함을 고쳤고 (``EffectRef`` 는 개체를 가르지 않는다), 같은
+    근거가 여기에도 그대로 적용된다.
+
+    🔴 **자리가 들어간 이유.** 기회는 자리마다 따로 열리므로 (룰북
+    ``TURN PLAYER'S PRIORITY``) 한 자리의 포기가 다른 자리의 기회를 닫지
+    않는다.
+
+    🔴 **왜 필요한가 — 실측한 결함이다.** 6-AB 까지 「경우」 유발은 같은
+    페이즈 안에서 **영원히** 후보였다. 실측: 기르수 소환 뒤 일반 행동을 세
+    걸음 하고도 그 유발이 후보에 남았다 (``_timing_is_current`` → ``True``).
+    그런데 *"타이밍을 놓치지 않는다"* 는 *"같은 페이즈에서 나중에 마음대로
+    발동할 수 있다"* 는 뜻이 **아니다.**
+
+    🔴 **근거.** 공식 Fast Effect Timing 도표는 유발을 **두 자리에서만**
+    확인한다 — 체인을 시작하지 않는 행위 뒤, 그리고 체인이 해결된 뒤. 그
+    확인 자리에서 양쪽이 패스하면 판은 **open state** 로 돌아가고, 그때
+    열려 있던 창은 닫힌다. 그 자리에서 유발을 집는 대신 **다른 일을 했다면**
+    그 자리의 기회는 지나간 것이다.
+    (https://www.yugioh-card.com/en/play/fast-effect-timing/)
+
+    🔴 **"다음 행동이면 무조건 만료" 가 아니다.** 셋이 모두 참일 때만 적는다:
+
+    1. 그 자리가 그 사건의 유발을 **실제로 후보로 받았고** (받지 못한
+       기회를 포기했다고 적으면 거짓이다),
+    2. 그 유발이 **임의**이고 (강제는 포기할 수 없다 — 규칙이 처리를
+       요구한다),
+    3. 그 자리가 **그 자리에서** 유발이 아닌 다른 행위를 골랐다.
+
+    🔴 **묻는 것은 포기가 아니다.** :meth:`legal_actions` 를 몇 번 불러도
+    이 칸은 변하지 않는다. 거절된 불법 행동도 적지 않는다 — 고른 것이
+    받아들여지지 않았으면 그 자리는 아직 그 자리다.
+
+    ``frozenset`` 이므로 ``dataclasses.replace`` 가 값으로 가져간다 —
+    탐색 사본의 포기가 부모의 목록을 늘리지 않는다.
     """
     consumed_events: frozenset = frozenset()
     """
@@ -516,9 +562,59 @@ class Duel:
         **지금 행위를 고를 사람.**
 
         우선권이 열려 있으면 그것을 쥔 사람이고, 아니면 턴 플레이어다.
+
+        🔴 **강제 유발의 처리가 열려 있으면 그 자리다** (6-AB 보완).
+
+        근거는 룰북의 ``TURN PLAYER'S PRIORITY`` 다: *"As long as the turn
+        player has Priority, the opponent cannot activate cards or effects,
+        **except for effects that activate automatically, like Trigger or
+        Flip effects.**"* 유발 효과는 턴 플레이어 우선권의 **명시된 예외**
+        이므로, 상대가 강제 유발을 들고 있으면 내 턴이라도 그 처리가 먼저다.
+
+        🔴 **왜 이 자리에서 고치는가 — 실측한 결함이다.** 6-AB 는
+        :meth:`_enforce_mandatory` 가 **자기 자리만** 보았고, 부르는 쪽
+        (``DuelRunner`` · ``Simulator``)은 이 칸을 보고 누구에게 물을지
+        정한다. 그래서 상대의 강제 의무가 **아무에게도 안 물어지고**
+        ``END_PHASE`` 가 수락되어 ``timing_floor`` 가 그것을 지웠다 (실측:
+        상대 의무 1 → 페이즈 이동 뒤 0).
+
+        순서는 룰북 §*When multiple cards are activated simultaneously* 다 —
+        **턴 플레이어의 강제 효과부터.** 그래서 양쪽이 의무를 들고 있으면
+        턴 플레이어를 먼저 돌려준다.
+
+        🔴 **고를 것이 없는 자리를 가리키지 않는다.** 그 자리의 의무가
+        관문을 지나지 못하면 (조건 · 비용 · 구현) 그 자리를 가리켜도
+        고를 것이 없고, 그러면 듀얼이 멈춘다. 그때는 가리키지 않고
+        :meth:`_enforce_mandatory` 가 미지원으로 적는다.
         """
         seat = self.priority.holder.seat
-        return seat if seat is not None else self.turn_player
+        ordinary = seat if seat is not None else self.turn_player
+        duty = self._duty_seat()
+        return ordinary if duty is None else duty
+
+    def _duty_seat(self) -> "int | None":
+        """
+        **강제 유발을 지금 발동할 수 있는 자리** (6-AB 보완). 없으면 ``None``.
+
+        턴 플레이어를 먼저 본다 (룰북 §*When multiple cards are activated
+        simultaneously* — 특수 체인을 턴 플레이어의 강제 효과부터 쌓는다).
+
+        🔴 **읽기만 한다.** :meth:`_mandatory_offers` 와
+        :meth:`_offer_is_activatable` 둘 다 조회이고, :meth:`legal_actions`
+        를 부르지 않는다 — 부르면 그쪽이 이 칸을 읽으므로 되돌이가 된다.
+
+        🔴 **발동할 수 있는 의무만** 센다. 관문을 지나지 못하는 의무로 자리를
+        옮기면 그 자리에 고를 것이 없어 듀얼이 멈춘다.
+        """
+        if self.triggers is None or not self.chain.is_empty:
+            # 체인 처리 중에는 그 체인이 먼저다 (聖鳥クレイン 재정) — 의무는
+            # 보존되고, 체인이 비면 이 자리가 다시 답한다.
+            return None
+        for seat in (self.turn_player, 1 - self.turn_player):
+            for offer in self._mandatory_offers(seat):
+                if self._offer_is_activatable(offer, seat):
+                    return seat
+        return None
 
     @property
     def is_over(self) -> bool:
@@ -582,11 +678,30 @@ class Duel:
         #
         # 창이 닫혀 있으면 아래 조건이 늘 참이므로 **기존 후보가 한 건도
         # 변하지 않는다.**
+        # 🔴 **유발은 두 갈래 밖에서 본다** (6-AB 보완).
+        #
+        # 6-AB 까지 유발 후보는 아래 두 갈래 **안에** 있었다 — 창을 쥔
+        # 자리이거나, 창이 닫혀 있고 턴 플레이어인 자리. 그래서 **턴
+        # 플레이어가 아니고 창도 쥐지 않은 자리의 유발은 아무 데도 오르지
+        # 않았다** (후보에도, 보류에도). 실측: 상대 자리에 제안이 1건
+        # 있는데 ``legal_actions(상대)`` 의 보류가 우선권 이야기 하나뿐이었다.
+        #
+        # 근거는 룰북 ``TURN PLAYER'S PRIORITY`` 다: *"As long as the turn
+        # player has Priority, the opponent cannot activate cards or
+        # effects, **except for effects that activate automatically, like
+        # Trigger or Flip effects.**"* 유발 효과는 턴 플레이어 우선권의
+        # **명시된 예외**이므로, 우선권을 쥐었는지와 **따로** 본다.
+        #
+        # 체인이 쌓여 있는 동안은 ``_window_admits`` 가 발동을 열지 않으므로
+        # (聖鳥クレイン 재정) 이 자리를 밖으로 옮겨도 체인 도중에 끼어드는
+        # 후보가 생기지 않는다 — 대신 "기회는 남았고 발동은 체인 뒤" 가
+        # 보류에 적힌다.
+        opened, held = self._trigger_actions(seat, validator, offers)
+        allowed.extend(opened)
+        withheld.extend(held)
+
         if self.priority.is_open and self.priority.holds(seat):
             allowed.extend(self._activation_actions(seat, validator))
-            opened, held = self._trigger_actions(seat, validator, offers)
-            allowed.extend(opened)
-            withheld.extend(held)
         elif seat == self.turn_player and not self.priority.is_open:
             for card in self.state.player(seat).hand:
                 # 패의 한 장이 **여러 후보**가 된다 — 소환 · 몬스터 세트 ·
@@ -606,9 +721,6 @@ class Duel:
                         allowed.append(candidate)
             allowed.extend(self._attack_actions(seat, validator))
             allowed.extend(self._activation_actions(seat, validator))
-            opened, held = self._trigger_actions(seat, validator, offers)
-            allowed.extend(opened)
-            withheld.extend(held)
 
         # 흐름을 움직이는 둘은 **검증기가 아니라 흐름 계층**이 답한다.
         # 검증기는 ``GameStateView`` 만 보는데, 우선권과 진행은 판 밖에
@@ -650,18 +762,47 @@ class Duel:
         (:data:`MANDATORY_TRIGGER_UNPLAYABLE`). 그것이 "완료 · 정상 종료" 와
         구별되는 **미지원 결과**다.
 
-        🔴 **자리마다 따로 본다.** 강제 기회는 그 자리의 것이고, 상대의
-        강제 기회가 내 행동을 막지 않는다 — 막으면 상대가 처리할 수 없는
-        기회로 내 턴이 멈춘다. 우선권이 누구에게 있는지는 ``_flow_actions``
-        가 이미 본다.
+        🔴 **양쪽의 의무를 본다** (6-AB 보완이 고친 자리). 6-AB 는 **자기
+        자리만** 보았고, 그래서 상대가 강제 의무를 들고 있는데 내
+        ``END_PHASE`` 가 수락되었다 — 그리고 ``timing_floor`` 가 그 의무를
+        지웠다 (실측: 상대 의무 1 → 페이즈 이동 뒤 0). 그때 적은 근거는
+        "막으면 상대가 처리할 수 없는 기회로 내 턴이 멈춘다" 였는데, **멈추지
+        않는다**: :attr:`to_act` 가 이제 의무를 든 자리를 가리키므로 그 자리가
+        물어진다 (룰북 ``TURN PLAYER'S PRIORITY`` — 유발 효과는 턴 플레이어
+        우선권의 명시된 예외다).
 
-        🔴 **그 자리가 행동할 차례가 아니면 보장할 것도 없다** — 그때
-        "관문이 허가하지 않았다" 고 적으면 **거짓**이다: 허가가 비어 있는
-        이유가 빠진 규칙이 아니라 **순서**이기 때문이다. 실측한 증상 — 상대가
-        강제 기회를 들고 있는 동안 ``legal_actions(상대)`` 가
-        :data:`MANDATORY_TRIGGER_UNPLAYABLE` 을 달았다. 그래서 그 자리는
-        ``missing`` 을 **비우고** 순서라고 적는다 (6-S 의 규율).
+        🔴 **그래도 영구 대기는 만들지 않는다.** 막는 조건을
+        :meth:`_duty_seat` 에 묶었고, 그 함수는 **발동할 수 있는** 의무만
+        가리킨다. 관문을 지나지 못하는 의무로는 아무 자리도 막히지 않고,
+        대신 그 자리에 :data:`MANDATORY_TRIGGER_UNPLAYABLE` 이 붙는다.
+
+        🔴 **막는 쪽의 ``missing`` 은 비운다** — 빠진 규칙이 아니라
+        **순서**이기 때문이다 (6-S 의 규율).
         """
+        duty_seat = self._duty_seat()
+        if duty_seat is not None and duty_seat != seat:
+            # 🔴 **다른 자리가 먼저 처리해야 한다.** 그 자리는 실제로 그
+            # 발동을 고를 수 있으므로 (``_duty_seat`` 이 보증한다) 여기서
+            # 막아도 듀얼이 멈추지 않는다.
+            # 🔴 **한 줄은 언제나 적는다.** 허가가 이미 비어 있을 수도
+            # 있는데 (턴 플레이어도 아니고 창도 쥐지 않은 자리), 그때
+            # 아무것도 적지 않으면 "왜 비었는가" 가 우선권 이야기 하나로만
+            # 남아 **의무가 보이지 않는다** — 그것이 6-AB 의 결함이었다.
+            kinds = {action.kind for action in allowed} or {
+                PlayerActionKind.ACTIVATE_EFFECT
+            }
+            for kind in sorted(kinds, key=lambda k: k.value):
+                withheld.append(
+                    WithheldAction(
+                        kind,
+                        f"P{duty_seat} 의 강제 유발 처리가 먼저입니다 — "
+                        "유발 효과는 턴 플레이어 우선권의 예외이므로 "
+                        "(룰북 TURN PLAYER'S PRIORITY) 그 처리를 넘기고 "
+                        "진행할 수 없습니다.",
+                    )
+                )
+            return LegalActions(seat, (), tuple(withheld))
+
         forced = self._mandatory_offers(seat)
         if not forced:
             return LegalActions(seat, tuple(allowed), tuple(withheld))
@@ -883,11 +1024,11 @@ class Duel:
             event_backed=frozenset(
                 (offer.source, offer.effect_ref)
                 for offer in offers
-                if self._offer_is_activatable(offer)
+                if self._offer_is_activatable(offer, seat)
             ),
         )
 
-    def _offer_is_activatable(self, offer) -> bool:
+    def _offer_is_activatable(self, offer, seat: int) -> bool:
         """
         이 제안을 **지금 발동할 수 있는 기회로 열어도 되는가** (Phase 6-AB).
 
@@ -900,47 +1041,121 @@ class Duel:
 
         1. **근거 있는 강제 또는 임의인가.** 모름은 열지 않는다 (6-AA) —
            모름을 열면 정책의 거절과 규칙이 허락한 포기가 구별되지 않는다.
-        2. **아직 그 시점인가.** 「때」 효과는 그 사건이 **마지막에 일어난
-           일**이어야 한다 (6-AB). 「경우」 는 그렇지 않다. 어휘를 모르면
-           열지 않는다 — 모름을 허가로 바꾸지 않는다.
+        2. **이 창이 그 발동을 받아들이는가** (:meth:`_window_admits`) —
+           체인이 쌓여 있지 않고, 그 자리가 포기하지 않았고, 타이밍을 놓치지
+           않았는가. 모르면 열지 않는다 — 모름을 허가로 바꾸지 않는다.
 
         지나간 페이즈와 이미 쓴 기회는 :meth:`_trigger_offers` 가 **앞에서**
         걸러 내므로 여기 오지 않는다.
+
+        🔴 ``seat`` 를 받는다 (6-AB 보완). 포기는 자리마다 따로이므로
+        (:attr:`declined_events`) 자리를 모르면 답할 수 없다.
         """
         if not (offer.is_optional or offer.is_mandatory):
             return False
-        return self._timing_is_current(offer) is True
+        return self._window_admits(offer, seat) is True
 
-    def _timing_is_current(self, offer) -> "bool | None":
+    def _window_admits(self, offer, seat: int) -> "bool | None":
         """
-        이 제안의 **시점이 아직 지금인가** (Phase 6-AB). 모르면 ``None``.
+        이 제안을 **지금 이 자리에서 발동할 수 있는가.** 모르면 ``None``.
 
-        공식 재정이 어휘로 가른다 — 「때」 효과는 그 사건이 *마지막에 일어난
-        일*이어야 하고, 「경우」 효과는 그렇지 않다 (출처는
-        ``core.card_model.Card.activation_wording_text`` 의 설명).
+        🔴 **6-AB 의 ``_timing_is_current`` 를 대체한다.** 그 함수는 세 질문을
+        하나로 섞었고, 그래서 셋 다 틀렸다 (6-AB 보완 §2 가 실측을 적는다):
 
-        ``EventJournal`` 이 그 질문에 그대로 답한다: 이 사건의 번호가 기록의
-        **마지막 번호**인가. 새 상태를 만들지 않는다.
+        ======================================  =============================
+        섞여 있던 질문                            지금 어디서 답하는가
+        ======================================  =============================
+        이 사건의 기회가 아직 남아 있는가           :meth:`_opportunity_is_open`
+        지금 이 자리에서 발동해도 되는가            여기
+        어휘를 판정할 수 있는가                    여기 (``None``)
+        ======================================  =============================
 
-        🔴 **체인이 열려 있으면 만료시키지 않는다.** 체인 처리 중에 시점을
-        만난 효과는 그 체인이 완전히 해결된 **뒤**에 발동한다 (SEGOC) —
-        해결이 남기는 기록 때문에 그 효과를 "지나갔다" 로 읽으면 규칙이
-        허락한 발동을 금지한다. 그래서 체인이 비어 있을 때만 묻는다.
+        여기서 보는 것은 **둘**이다.
+
+        ① **체인이 쌓여 있으면 발동을 열지 않는다.**
+
+        공식 재정 (OCG 카드 데이터베이스, 聖鳥クレイン cid=5883 의 2021-07-01
+        보충): *특수 소환이 체인 처리 중에 행해진 경우 등, 특수 소환 직후에
+        다른 처리가 행해지는 경우에는 **그 체인이 모두 해결된 후에**
+        발동한다.* 즉 체인 도중의 사건은 **보존**되지만 그 체인에 끼워
+        발동되지는 **않는다.**
+
+        🔴 6-AB 는 이것을 거꾸로 했다 — 체인이 비어 있지 않으면 ``True`` 를
+        돌려주어 **체인 도중에 발동을 허가했다** (실측:
+        ``_offer_is_activatable`` → ``True``). 보존해야 한다는 사실을 지금
+        발동해도 된다는 뜻으로 읽은 것이고, 그 둘은 다른 질문이다. 보존은
+        :meth:`_opportunity_is_open` 이 맡는다 (체인은 ``timing_floor`` 를
+        올리지 않으므로 기회는 그대로 남는다).
+
+        ② **그 자리가 그 기회를 아직 안 썼고 포기하지도 않았는가.**
+
+        포기는 :attr:`declined_events` 가 적는다. 이것이 *"타이밍을 놓치지
+        않는다"* 와 *"같은 페이즈에서 나중에 마음대로"* 를 가르는 자리다.
+
+        🔴 **어휘는 여기서 쓰지 않는다.** 「때 / 경우」 는 **포기 없이 지나간**
+        기회를 어떻게 볼지의 문제이고, 그것은 :meth:`_missed_timing` 이
+        따로 답한다 — 거기서만 강제 · 임의를 함께 본다.
+        """
+        if not self.chain.is_empty:
+            # 체인이 쌓여 있다 — 보존하되 **열지 않는다** (위 ① 의 재정).
+            return False
+        if self._decline_key(offer, seat) in self.declined_events:
+            return False
+        return self._missed_timing(offer) is not True
+
+    def _missed_timing(self, offer) -> "bool | None":
+        """
+        이 유발이 **타이밍을 놓쳤는가.** 모르면 ``None`` (6-AB 보완).
+
+        어휘만으로 답하지 않는다 — **강제 · 임의를 함께** 본다.
+
+        ====================  ========  =====================================
+        어휘                   허가       답
+        ====================  ========  =====================================
+        「경우」                어느 쪽    **놓치지 않는다** (``False``)
+        「때」                  임의       그 사건이 마지막이 아니면 놓쳤다
+        「때」                  **강제**   🔴 **모른다** (``None``) — 아래
+        모름                   어느 쪽    사건이 마지막이면 ``False``, 아니면
+                                        모른다 (``None``)
+        ====================  ========  =====================================
+
+        🔴 **강제 「때」 를 어휘만으로 만료시키지 않는다.** 6-AB 는 그렇게
+        했고 (실측: ``MANDATORY`` + ``WHEN`` + 사건이 마지막 아님 →
+        ``_mandatory_offers`` 가 **0**), 그러면 규칙이 처리를 요구하는 효과가
+        **조용히 사라진다.**
+
+        근거의 상태를 정직하게 적는다:
+
+        - 룰북(``data/rules/``)에 「때 / 경우」 구분이 **없다.** 따라서
+          "강제는 타이밍을 놓치지 않는다" 를 **공식 문서로 확인하지
+          못했다.**
+        - 저장소의 공식 자료 중 가장 가까운 것은 룰북 §*When multiple cards
+          are activated simultaneously* 다: 특수 체인을 **턴 플레이어의 강제
+          효과부터** 쌓는다. 규칙이 강제 효과를 "먼저 처리해야 하는 것" 으로
+          다루는 것은 보이지만, 그것이 곧 "놓치지 않는다" 는 아니다.
+        - 2차 자료(팬 위키 · 해설 글)는 "강제 효과는 타이밍을 놓치지
+          않는다" 로 일치하지만 **공식 재정이 아니므로 근거로 쓰지 않는다.**
+
+        그래서 ``None`` 이다 — 모름을 ``False``(아직 유효)로도 ``True``(만료)로도
+        바꾸지 않는다. 받는 쪽은 그 모름을 **보류로** 적고 (무엇을 모르는지
+        함께), 흐름은 막지 않는다.
         """
         misses = getattr(offer, "misses_timing", None)
         if misses is False:
-            # 「경우」 — 놓친 타이밍이 없다. 페이즈 안에서는 늘 지금이다.
-            return True
-        if not self.chain.is_empty:
-            # 체인이 처리 중이다 — 보존한다 (SEGOC).
-            return True
+            return False
+        if misses is True and getattr(offer, "is_mandatory", False):
+            # 🔴 강제 「때」 — 어휘로는 만료인데 그것을 적용할 공식 근거가
+            # 없다. 모름으로 둔다 (위 설명).
+            return None
         last = (len(self.journal) - 1) if self.journal is not None else -1
         is_last = getattr(offer, "event_sequence", -1) == last
+        if is_last:
+            # 사건이 아직 마지막이다 — 어느 어휘든 놓치지 않았다.
+            return False
         if misses is True:
-            return is_last
-        #: 🔴 어휘를 모른다. 사건이 아직 마지막이면 어느 어휘든 지금이므로
-        #: 참이고, 그 뒤에는 **말할 수 없다** (``None``).
-        return True if is_last else None
+            return True
+        # 어휘를 모르고 사건도 마지막이 아니다 — 말할 수 없다.
+        return None
 
     def _trigger_offers(self, seat: int):
         """
@@ -983,23 +1198,24 @@ class Duel:
         후보 목록과 흐름 판정이 **같은 답**을 본다. 모름(``UNKNOWN``)은 여기
         들어오지 않는다: 모르는 것을 강제로 바꾸면 흐름이 영영 막힌다.
 
-        🔴 **지나간 「때」 는 의무가 아니다** (6-AB). 강제 유발도 「때」 라면
-        타이밍을 놓친다 — 그 사건이 더 이상 마지막에 일어난 일이 아니면
-        규칙이 그 처리를 **더 요구하지 않는다.** 그것을 의무로 세어 두면
-        :meth:`_enforce_mandatory` 가 "규칙이 요구하는데 발동할 수 없다" 고
-        적게 되고, 그 보류는 **거짓**이다 — 규칙은 이미 답했다.
+        🔴 **놓친 것이 확실한 것만 뺀다** (:meth:`_missed_timing` 이 ``True``).
+        6-AB 는 어휘가 「때」 이면 강제까지 빼 버렸고 (실측: ``MANDATORY`` +
+        ``WHEN`` → 의무 **0**), 그러면 규칙이 처리를 요구하는 효과가 **조용히
+        사라진다.** 지금은 강제 「때」 가 ``None``(모름)으로 와서 **의무로
+        남고**, 발동할 수 없으면 :data:`MANDATORY_TRIGGER_UNPLAYABLE` 이
+        붙는다 — 그것이 "모른다" 의 정직한 결과다.
 
-        🔴 **모르는 어휘는 그대로 센다.** 「때」 였다면 끝났고 「경우」 였다면
-        남아 있는데 어느 쪽인지 모르므로, 의무가 끝났다고 **단정하지
-        않는다.** 그러면 발동할 수 없는 의무로 남아
-        :data:`MANDATORY_TRIGGER_UNPLAYABLE` 이 붙는다 — 그것이 "모른다" 의
-        정직한 결과다.
+        🔴 **체인이 쌓여 있어도 의무는 남는다.** 체인 도중에는 발동을 열지
+        않지만 (:meth:`_window_admits`) 그 의무가 **사라지는 것은 아니다** —
+        체인이 해결된 뒤에 처리해야 한다 (聖鳥クレイン 재정). 그래서 여기서
+        체인을 보지 않는다.
+
+        🔴 **포기도 보지 않는다.** 강제는 포기할 수 없다.
         """
         return tuple(
             offer
             for offer in self._trigger_offers(seat)
-            if offer.is_mandatory
-            and self._timing_is_current(offer) is not False
+            if offer.is_mandatory and self._missed_timing(offer) is not True
         )
 
     def _opportunity_is_open(self, offer) -> bool:
@@ -1105,26 +1321,51 @@ class Duel:
                     )
                 )
                 continue
-            current = self._timing_is_current(offer)
-            if current is None:
-                # 🔴 **어휘를 몰라 기회가 아직 열려 있는지 말할 수 없다**
-                # (Phase 6-AB). 「때」 였다면 지나갔고 「경우」 였다면 남아
-                # 있는데, 어느 쪽인지 판정할 근거가 모이지 않았다. 모름을
-                # 허가로 바꾸지 않고 **무엇을 모르는지** 적는다.
+            # 🔴 **세 이유를 따로 적는다** (6-AB 보완). 6-AB 는 셋을 한
+            # 함수(``_timing_is_current``)로 섞어서 "체인 도중" 과 "포기했다"
+            # 와 "어휘를 모른다" 가 같은 답으로 나왔다.
+            if not self.chain.is_empty:
+                # 체인이 쌓여 있다 — 기회는 **보존되지만** 이 체인에 끼워
+                # 발동하지는 않는다 (聖鳥クレイン 재정 · ``_window_admits``).
+                # 빠진 규칙이 아니라 **순서**이므로 ``missing`` 을 비운다.
                 withheld.append(
                     WithheldAction(
                         PlayerActionKind.ACTIVATE_EFFECT,
-                        "이 사건 뒤에 다른 일이 일어났고, 이 유발이 「때」 "
-                        "인지 「경우」 인지 판정할 수 없어 기회가 아직 열려 "
-                        "있는지 말할 수 없습니다.",
+                        "체인이 처리 중입니다 — 이 유발의 기회는 남아 "
+                        "있지만, 발동은 그 체인이 모두 해결된 뒤입니다.",
+                    )
+                )
+                continue
+            if self._decline_key(offer, seat) in self.declined_events:
+                # 그 자리가 이 기회를 **적법하게 포기했다.** 빠진 규칙이
+                # 없다 — 규칙이 그렇게 정했으므로 ``missing`` 을 비운다.
+                withheld.append(
+                    WithheldAction(
+                        PlayerActionKind.ACTIVATE_EFFECT,
+                        "그 사건의 유발 처리 기회에서 다른 행동을 골라 이 "
+                        "발동을 포기했습니다 — 그 기회는 끝났습니다.",
+                    )
+                )
+                continue
+            missed = self._missed_timing(offer)
+            if missed is None:
+                # 🔴 **판정 근거가 없다.** 무엇을 모르는지 적는다 — 모름을
+                # 허가로도 만료로도 바꾸지 않는다 (``_missed_timing``).
+                withheld.append(
+                    WithheldAction(
+                        PlayerActionKind.ACTIVATE_EFFECT,
+                        "이 사건 뒤에 다른 일이 일어났고, 이 유발이 "
+                        "타이밍을 놓쳤는지 판정할 근거가 없습니다 "
+                        f"(강제={offer.is_mandatory} · 어휘 판정="
+                        f"{offer.misses_timing}).",
                         missing=TRIGGER_WORDING_MISSING,
                     )
                 )
                 continue
-            if current is False:
-                # 🔴 **지나간 시점이다** — 「때」 효과이고 그 사건이 더 이상
-                # 마지막에 일어난 일이 아니다. 빠진 규칙이 **없다**: 규칙이
-                # 그렇게 정했으므로 ``missing`` 을 비운다 (6-S 의 규율).
+            if missed is True:
+                # 🔴 **놓쳤다** — 임의 「때」 이고 그 사건이 더 이상 마지막에
+                # 일어난 일이 아니다. 규칙이 그렇게 정했으므로 ``missing``
+                # 을 비운다 (6-S 의 규율).
                 withheld.append(
                     WithheldAction(
                         PlayerActionKind.ACTIVATE_EFFECT,
@@ -1427,7 +1668,62 @@ class Duel:
             # (STRUCTURAL-55). 발동의 결과물은 ``StateDelta`` 만이 아니라
             # ``Chain`` 이기도 하므로 ``ActionHandler`` 에 끼울 수 없다.
             return self._apply_activation(action)
-        return self._apply_board(action)
+        step = self._apply_board(action)
+        if step.accepted:
+            # 🔴 **판을 바꾸는 행위를 골랐다 — 열려 있던 임의 유발 기회는
+            # 그 자리에서 포기한 것이다** (6-AB 보완 · ``declined_events``).
+            #
+            # 수락된 뒤에만 적는다: 거절된 행동은 그 자리를 떠나지 않았으므로
+            # 기회를 쓰지 않는다 (``test_b07`` 이 재는 것이고, 그 성질을
+            # 지키려고 이 자리가 ``accepted`` 안에 있다).
+            self._decline_open_offers(action.actor, legal)
+        return step
+
+    def _decline_open_offers(self, seat: int, legal: LegalActions) -> None:
+        """
+        그 자리가 **받았던** 임의 유발 기회를 포기로 적는다 (6-AB 보완).
+
+        🔴 **"다음 행동이면 무조건 만료" 가 아니다.** 적는 대상은 방금 그
+        자리의 ``legal_actions`` 에 **실제로 올라 있던** 발동들이다 — 받지
+        못한 기회를 포기했다고 적으면 거짓이고, 그러면 나중에 적법하게 열릴
+        기회까지 닫힌다. 그래서 ``legal`` 을 인자로 받는다: 같은 걸음에서
+        이미 만든 그 목록이고, 다시 묻지 않는다 (다시 물으면 판이 바뀐 뒤의
+        답이 온다).
+
+        🔴 **강제는 적지 않는다.** 규칙이 처리를 요구하는 것을 "포기" 로
+        적을 수는 없다. 강제가 열려 있으면 애초에 다른 행동이 허가되지
+        않는다 (:meth:`_enforce_mandatory`) — 그래서 이 자리에 오는 강제는
+        발동할 수 없는 것뿐이고, 그것은 포기가 아니라 미지원이다.
+
+        근거: 공식 Fast Effect Timing 도표는 유발을 체인을 시작하지 않는
+        행위 뒤와 체인 해결 뒤에 확인한다. 그 확인 자리에서 유발이 아닌
+        것을 골랐으면 판은 **open state** 로 돌아가고, 그 창은 닫힌다.
+        """
+        offered = {
+            (action.source, action.effect_ref)
+            for action in legal.allowed
+            if action.kind is PlayerActionKind.ACTIVATE_EFFECT
+        }
+        if not offered:
+            return
+        giving_up = {
+            self._decline_key(offer, seat)
+            for offer in self._trigger_offers(seat)
+            if offer.is_optional
+            and (offer.source, offer.effect_ref) in offered
+        }
+        if giving_up:
+            self.declined_events = self.declined_events | giving_up
+
+    @staticmethod
+    def _decline_key(offer, seat: int) -> tuple:
+        """
+        포기한 기회를 가리키는 **네 짝** — 사건 · 효과 · 개체 · 자리.
+
+        :meth:`_consumption_key` 와 **같은 축**에 자리를 더한 것이다. 둘이
+        같은 축이어야 "썼다" 와 "포기했다" 가 같은 단위로 세어진다.
+        """
+        return (offer.event_key, offer.effect_ref, offer.source, seat)
 
     def _apply_pass(self, action: PlayerAction) -> DuelStep:
         """
