@@ -1845,9 +1845,16 @@ class Duel:
         #     그 기회에서 쓰지 않은 임의 유발은 다시 나오지 않는다.
         #   · 체인 **도중에** 생긴 사건(번호 >= ``chain_floor``)은 **남는다** —
         #     그 체인이 모두 해결된 뒤에 발동한다 (聖鳥クレイン 재정).
-        if self.chain_floor >= 0:
-            self.window_floor = self.chain_floor
-            self.chain_floor = -1
+        #
+        # 🔴 **분기 없이 쓴다.** ``if self.chain_floor >= 0:`` 로 쓰면
+        # ``_resolve_chain`` 의 분기가 둘이 되고, 이 함수는 **불발 분기
+        # 하나만** 가져야 한다 (``test_s04_the_fizzle_branch_returns_
+        # accepted_true_with_a_non_ok_code`` 가 AST 로 고정한다 — 돌려주는
+        # 값을 가르는 자리가 하나임이 그 시험의 주장이다). ``max`` 면 체인이
+        # 기록되지 않았을 때(``-1``) 창이 **뒤로 가지 않는다** — 바닥은
+        # 오르기만 한다.
+        self.window_floor = max(self.window_floor, self.chain_floor)
+        self.chain_floor = -1
 
         # **해결됐든 아니든 놓인 마법은 필드를 떠난다** (RULE-SPELLTRAP-002).
         self._retire_pending()

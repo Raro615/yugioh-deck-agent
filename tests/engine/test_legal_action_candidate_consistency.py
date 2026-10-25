@@ -1663,9 +1663,15 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     보류가 ``_flow_actions`` (``END_PHASE`` 한 자리) 에서
     ``_enforce_mandatory`` (흐름 전체) 로 갔다.
 
-    🔴 **6-AB 보완이 열넷으로 늘렸다** — 발동 기회의 **수명**을 표현하면서
-    보류의 이유가 세분됐다. **기준은 그대로**이므로 표만 고친다 — 그것이 이
-    시험이 수 대신 기준을 세게 된 이유다.
+    🔴 **6-AB 보완이 열넷, 추가 보완이 열일곱으로 늘렸다** — 발동 기회의
+    **수명**과 체인 **단계**를 표현하면서, 그리고 조용히 사라지던 자리 셋을
+    보류로 바꾸면서 이유가 세분됐다. **기준은 그대로**이므로 표만 고친다 —
+    그것이 이 시험이 수 대신 기준을 세게 된 이유다.
+
+    🔴 추가 보완이 더한 셋은 **원래 침묵이던 자리**다 (실행 구현 없음 ·
+    대상 환전 실패 · 관문 거절). 그 전에는 후보도 보류도 남기지 않아
+    "유발이 없다" 와 "유발이 있는데 처리할 수 없다" 가 구별되지 않았다 —
+    보류가 늘어난 것이 **느슨해진 것이 아니라 정직해진 것**이다.
 
     기준 하나: ``missing`` 은 **근거가 생겨야 풀리는 자리**에만 찬다. 규칙이
     **있어서** 막는 자리는 비운다 — 없는 것을 빈 값으로 채우지 않는다.
@@ -1687,15 +1693,22 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
                                                              판정된다
     ``_trigger_actions`` 강제 · 임의 판정 불가      **있다**     근거가 생겨야
                                                              풀린다 (6-AA)
+    ``_trigger_actions`` 그 기회가 이미 끝났다       **없다**     순서다 (추가) —
+                                                             판이 open state 로
+                                                             돌아갔다
     ``_trigger_actions`` 체인이 처리 중이다         **없다**     순서다 (보완) —
                                                              기회는 남고 발동은
                                                              체인 뒤다
-    ``_trigger_actions`` 그 기회를 포기했다         **없다**     규칙이 그렇게
-                                                             정했다 (보완)
     ``_trigger_actions`` 타이밍 판정 근거가 없다     **있다**     근거가 생겨야
                                                              풀린다 (보완)
     ``_trigger_actions`` 「때」 타이밍을 놓쳤다      **없다**     규칙이 그렇게
                                                              정했다 (6-AB)
+    ``_trigger_actions`` 실행 구현이 없다            **있다**     구현이 생겨야
+                                                             풀린다 (추가)
+    ``_trigger_actions`` 대상 환전이 안 됐다         **있다**     같은 결 (추가)
+    ``_trigger_actions`` 관문이 거절했다             **관문을     관문이 모른다고
+                                                   따른다**    하면 채우고 규칙이
+                                                             금지하면 비운다 (추가)
     ``_flow_actions``   창은 열렸고 상대 차례다     **없다**     순서다 (6-S)
     ``_flow_actions``   우선권이 열리지 않았다      **있다**     여는 규칙이 없다
     ``_flow_actions``   페이즈 전환이 거절됐다      **있다**     진행 규칙이 댄다
@@ -1739,12 +1752,40 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
             for node in by_function[name]
         ]
 
-    #: 🔴 **유발 쪽 여섯 중 셋은 채우고 셋은 비운다.** 채우는 셋은 "근거가
-    #: 생겨야 풀린다" (기록 없음 · 강제·임의 모름 · 타이밍 근거 없음) 이고,
-    #: 비우는 셋은 **규칙이 답했다** (체인이 먼저 · 포기했다 · 놓쳤다).
+    #: 🔴 **유발 쪽 아홉 중 여섯은 채우고 셋은 비운다.**
+    #:
+    #: 채우는 여섯 — 기록 없음 · 강제·임의 모름 · 타이밍 근거 없음 · 실행
+    #: 구현 없음 · 대상 환전 실패 · 관문 거절. 전부 "무엇이 생겨야 풀리는가"
+    #: 를 답할 수 있는 자리다.
+    #:
+    #: 비우는 셋 — 기회가 끝났다 · 체인이 먼저다 · 타이밍을 놓쳤다. 전부
+    #: **규칙이 답한** 자리다.
+    #:
+    #: 🔴 **마지막 하나(관문 거절)는 조건부다.** 관문이 ``UNKNOWN`` 이라고
+    #: 하면 그것이 말한 ``missing_rule`` 을 싣고, 규칙이 금지한다고 하면
+    #: ``None`` 을 싣는다. AST 로는 "칸이 있다" 로 세어지므로 그 사실을
+    #: 아래에서 따로 확인한다 — 수만 세면 "언제나 채운다" 로 읽힌다.
     trigger = filled("_trigger_actions")
-    assert len(trigger) == 6, trigger
-    assert trigger.count(True) == 3 and trigger.count(False) == 3, trigger
+    assert len(trigger) == 9, trigger
+    assert trigger.count(True) == 6 and trigger.count(False) == 3, trigger
+
+    #: 🔴 관문 거절 자리의 ``missing`` 은 **관문의 답을 그대로 따른다.**
+    gate_site = [
+        node
+        for node in by_function["_trigger_actions"]
+        if any(
+            isinstance(kw.value, ast.IfExp)
+            for kw in node.keywords
+            if kw.arg == "missing"
+        )
+    ]
+    assert len(gate_site) == 1, len(gate_site)
+    conditional = next(
+        kw.value for kw in gate_site[0].keywords if kw.arg == "missing"
+    )
+    #: 조건은 "관문이 모른다고 했는가" 이고, 그렇지 않으면 ``None`` 이다.
+    assert "UNKNOWN" in ast.unparse(conditional.test)
+    assert ast.unparse(conditional.orelse) == "None"
     #: 🔴 **판 쪽 하나는 채운다** — 발동 규칙이 이유를 댄다.
     assert filled("_withheld_board_actions") == [True], filled(
         "_withheld_board_actions"
@@ -1780,4 +1821,7 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     assert "그렇게 정했으므로 ``missing`` 을 비운다" in trigger_body
     #: 🔴 보완이 더한 두 자리도 그 함수 안에서 왜 비는지 적는다.
     assert "빠진 규칙이 아니라 **순서**이므로 ``missing`` 을 비운다" in trigger_body
-    assert "빠진 규칙이 없다" in trigger_body
+    #: 🔴 채우는 쪽도 **무엇이 생겨야 풀리는가**를 그 함수 안에서 적는다 —
+    #: 추가 보완이 더한 자리들이 그 규율을 따르는지 센다.
+    assert "근거가 생겨야 풀리는 자리이므로 ``missing`` 을 채운다" in trigger_body
+    assert "관문이 말한 것을 따른다" in trigger_body

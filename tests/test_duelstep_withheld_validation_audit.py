@@ -367,12 +367,20 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     #: (``TRIGGER_WORDING_MISSING``) 와 ``_enforce_mandatory`` 의 발동 불가
     #: 강제 (``MANDATORY_TRIGGER_UNPLAYABLE``). 둘 다 네 번째 종류다.
     #:
-    #: 🔴 **출처의 종류는 여전히 넷이다** — 그것이 이 시험의 주장이고, 6-AB
-    #: 는 새 종류를 만들지 않았다. 늘어난 것은 **그 종류를 쓰는 자리의 수**다.
-    #: 숨기지 않고 적는다 (6-AA 가 세 번째 → 네 번째를 적었듯이).
+    #: 🔴 **그리고 6-AB 추가 보완이 다섯 번째 종류를 만들었다** —
+    #: ``_trigger_actions`` 의 관문 거절 자리가 ``gate.missing_rule`` 을
+    #: **조건부로** 싣는다 (관문이 ``UNKNOWN`` 이면 그것을, 규칙이 금지하면
+    #: ``None`` 을). 이 시험의 주장이 늘어난 것이므로 **숨기지 않고 적는다.**
     #:
-    #: 채우는 자리가 셋 → 다섯 → **일곱**이 되었다.
-    assert len(filled) == 7, len(filled)
+    #: 🔴 다만 성질이 다르다 — 앞의 넷은 이 자리가 **값을 고르는** 것이고,
+    #: 이것은 판정한 계층의 답을 **그대로 옮기는** 것이다. 느슨함을 줄이려면
+    #: 나머지 넷을 이 모양으로 모으는 쪽이 방향이다. 그 판단은 적어만 두고
+    #: 이 Phase 에서 하지 않는다 (경계 재설계는 범위 밖이다).
+    #:
+    #: 채우는 자리가 셋 → 다섯 → 일곱 → **열**이 되었다. 추가 보완이 더한
+    #: 셋은 **원래 침묵이던 자리**다 (실행 구현 없음 · 대상 환전 실패 ·
+    #: 관문 거절) — 보류가 늘어난 것이 느슨해진 것이 아니라 정직해진 것이다.
+    assert len(filled) == 10, len(filled)
 
     def source_kind(keyword) -> str:
         value = keyword.value
@@ -385,13 +393,19 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
         return ast.unparse(value)
 
     kinds = sorted({source_kind(keyword) for keyword in filled})
-    #: 🔴 **네 종류다** — 셋이 아니다.
-    assert len(kinds) == 4, kinds
+    #: 🔴 **다섯 종류다** — 셋도 넷도 아니다.
+    assert len(kinds) == 5, kinds
     assert "손으로 쓴 문자열" in kinds
     assert "모듈 상수" in kinds
     assert "verdict 의 칸" in kinds
+    #: 다섯째 — 판정한 계층의 답을 조건부로 옮기는 자리 (추가 보완).
+    forwarded = [k for k in kinds if "gate.missing_rule" in k]
+    assert len(forwarded) == 1, kinds
+    assert "UNKNOWN" in forwarded[0]
 
-    #: 🔴 그리고 **비우는 자리가 둘 → 넷 → 일곱으로 늘었다** — 없는 것을 빈
+    #: 🔴 그리고 **비우는 자리가 둘 → 넷 → 일곱으로 늘었다** (추가 보완이
+    #: ``_trigger_actions`` 의 "기회가 끝났다" 를 더해 일곱을 유지한다 —
+    #: 6-AB 보완의 "포기했다" 자리를 그것이 대체했다) — 없는 것을 빈
     #: 값으로 채우지 않는 규율은 6-AA · 6-AB · 보완 전부 지켰고, 그 규율을
     #: **쓰는 자리**가 늘었다. 일곱은 전부 "규칙이 답했다" 쪽이다:
     #:
