@@ -607,8 +607,9 @@ def test_c05_declining_closes_the_offer_within_the_phase(repository):
     (https://www.yugioh-card.com/en/play/fast-effect-timing/)
 
     🔴 **그래도 6-AA 가 일괄 규칙을 만들지 않은 판단은 옳았다.** 지금 닫는
-    것은 "다음 행동" 이 아니라 **그 자리가 실제로 받은 기회**다
-    (``Duel.declined_events`` 가 조건 셋을 적는다).
+    것은 "다음 행동" 이 아니라 **판이 open state 로 돌아갔다**는 사실이다
+    (``Duel.window_floor`` — 6-AB 추가 보완이 ``declined_events`` 를 이것으로
+    바꿨다. 행동 종류를 열거하지 않는다).
 
     「때 / 경우」 의 구분이 사라진 것도 아니다 — 그것은 ``_missed_timing``
     이 따로 답하고, ``tests/engine/test_trigger_execution_and_timing.py``
@@ -637,7 +638,7 @@ def test_c05_declining_closes_the_offer_within_the_phase(repository):
     declined = [
         w
         for w in duel.legal_actions(MINE).withheld
-        if "포기했습니다" in w.reason
+        if "기회는 이미 끝났습니다" in w.reason
     ]
     assert len(declined) == 1
     #: 빠진 규칙이 아니다 — 규칙이 그렇게 정했다.

@@ -47,6 +47,8 @@ import types
 import pytest
 
 from agent.choice import DeclineChoice, FirstPermittedChoice, RandomChoice
+from agent.heuristic import rule_based_policy
+from agent.runner import DuelRunner
 from agent.simulation import Simulator, SimulationStatus
 from engine.action import PlayerAction, PlayerActionKind
 from engine.action_validation import ActionValidity
@@ -100,6 +102,24 @@ class _Replaced:
             dataclasses.replace(offer, **self._replacements)
             for offer in self._inner.offers(duel, seat)
         )
+
+
+class _FixedOffers:
+    """
+    🔴 **합성 — 주어진 제안 그대로를 내놓는다.**
+
+    판정 함수(``_window_admits``)를 직접 재는 것으로는 ``legal_actions`` 가
+    그 판정을 **어떻게 적는지**(보류의 이유와 ``missing``)를 볼 수 없다.
+    그래서 제안 하나를 고정해 놓고 그 출력을 본다. 허가 · 비용 · 최종 상태를
+    주입하는 것이 아니다 — 내놓는 제안은 실제 ``TriggerSource`` 가 만든
+    것이고, 바꾼 것은 사건 번호뿐이다.
+    """
+
+    def __init__(self, offers):
+        self._offers = tuple(offers)
+
+    def offers(self, duel, seat: int):
+        return tuple(o for o in self._offers if o.controller == seat)
 
 
 def _wired(duel, repository, **replacements):
@@ -373,22 +393,25 @@ def test_b02_an_if_trigger_does_not_miss_timing_but_its_window_still_closes(
     assert duel.apply(other).accepted is True
     assert duel.state.turn.phase is Phase.MAIN1
 
-    #: 🔴 **기회는 닫혔다** — 그 자리에서 다른 것을 골랐다.
+    #: 🔴 **기회는 닫혔다** — 그 자리에서 다른 것을 골랐으니 판은 **open
+    #: state** 로 돌아갔고 새 창이 열렸다 (``Duel.window_floor``).
     assert _trigger_action(duel) is None
+    assert duel.window_floor > offers[0].event_sequence
     #: 🔴 **그런데 타이밍을 놓친 것이 아니다** — 두 사실이 따로 남아 있다.
     offers_after = duel._trigger_offers(MINE)
     assert len(offers_after) == 1, "제안 자체는 남는다 — 닫힌 것은 창이다"
     assert duel._missed_timing(offers_after[0]) is False
     assert duel._window_admits(offers_after[0], MINE) is False
 
-    #: 🔴 **포기로 적혀 있다** — 그리고 빠진 규칙이 아니므로 ``missing`` 은 없다.
-    declined = [
+    #: 🔴 **기회가 끝났다고 적혀 있다** — 빠진 규칙이 아니므로 ``missing`` 은
+    #: 없다.
+    closed = [
         w
         for w in duel.legal_actions(MINE).withheld
-        if "포기했습니다" in w.reason
+        if "기회는 이미 끝났습니다" in w.reason
     ]
-    assert len(declined) == 1
-    assert declined[0].missing is None
+    assert len(closed) == 1
+    assert closed[0].missing is None
 
 
 @requires_official_db
@@ -518,209 +541,240 @@ def test_b03b_synthetic_a_mandatory_when_is_not_expired_by_the_wording(
 
 
 @requires_official_db
-def test_b04_synthetic_an_unknown_wording_is_withheld_with_its_reason(
-    repository,
-):
+def test_b04_synthetic_an_unknown_wording_admits_nothing(repository):
     """
-    🔴 **어휘를 모르면 허가하지 않고, 무엇을 모르는지 적는다** (합성).
+    🔴 **어휘를 모르면 어느 관문도 열지 않는다** (합성 · 리뷰 A).
 
-    6-AB 는 이 상황을 "내 자리가 행동한 뒤" 로 만들었는데, 지금 그 자리에는
-    **포기**가 먼저 적힌다 (``test_b03`` 의 설명). 그래서 포기가 끼지 않는
-    자리로 옮긴다 — **상대 자리**의 제안이다. 포기는 자리마다 따로 적히므로
-    (``declined_events``) 내가 행동해도 상대의 기회는 포기되지 않는다. 그
-    사이에 기록은 늘었으므로 상대의 사건은 더 이상 마지막이 아니다.
+    6-AB 보완의 ``_window_admits`` 는 마지막 줄이
+    ``return self._missed_timing(offer) is not True`` 였다. 그래서
+    ``None``(판정 근거 없음)이 **``True``** 가 됐다 — 실측:
 
-    「때」 였다면 지나갔고 「경우」 였다면 남아 있다 — 어느 쪽인지 모르므로
-    **기회가 열려 있는지 말할 수 없다.** 모름을 허가로 바꾸지 않고, 조용히
-    넘어가지도 않는다.
+    =========================  =======
+    ``_missed_timing``           ``None``
+    ``_window_admits``           ``True``   🔴
+    ``_offer_is_activatable``    ``True``   🔴
+    ``event_backed`` 에 포함      **예**     🔴
+    ``legal_actions`` 후보        아니오
+    =========================  =======
+
+    막는 것은 후보 목록의 보류 **하나뿐**이었고, 내부 관문은 열려 있었다.
+    🔴 **다만 직접 ``apply`` 는 그때도 거절됐다** (후보 검사에서) — 그래서
+    이것은 **내부 판정 불일치**이고 실행 우회가 재현된 것은 **아니다.**
+
+    지금은 ``None`` 이 그대로 ``None`` 이고, :meth:`Duel._offer_is_activatable`
+    이 ``is True`` 만 통과시키므로 넷이 모두 닫힌다.
     """
-
-    class _TheirUnknownWording:
-        """상대 자리에만, 어휘를 모르는 제안을 내놓는다."""
-
-        def __init__(self, repo):
-            self._inner = TriggerSource(repo)
-
-        def offers(self, duel, seat: int):
-            if seat != THEIRS:
-                return ()
-            return tuple(
-                dataclasses.replace(
-                    offer, wording=TriggerWording.UNKNOWN, controller=THEIRS
-                )
-                for offer in self._inner.offers(duel, MINE)
-            )
-
     setup, _ = _board(repository, selector=FirstPermittedChoice())
     _summon(setup.duel)
-    other = _other_action(setup.duel)
-    assert other is not None
-    assert setup.duel.apply(other).accepted is True
+    duel = setup.duel
 
-    duel = dataclasses.replace(
-        setup.duel, triggers=_TheirUnknownWording(repository)
+    base = duel._trigger_offers(MINE)
+    assert len(base) == 1, "제안이 없으면 이 시험은 아무것도 재지 않는다"
+
+    #: 🔴 **합성 — 사건 번호를 현재 창 안이면서 마지막이 아닌 자리로 둔다.**
+    #: 그 자리가 어휘로 답이 갈리는 **유일한** 자리이고, 실제 실행 경로에서는
+    #: 아직 도달하지 않는다 (``test_b04b`` 가 그 사실을 실측으로 잠근다).
+    floor = max(duel.timing_floor, duel.window_floor)
+    last = len(duel.journal) - 1
+    unknown = dataclasses.replace(
+        base[0], wording=TriggerWording.UNKNOWN, event_sequence=floor
     )
-    offers = duel._trigger_offers(THEIRS)
-    assert len(offers) == 1, "합성이 상대 제안을 못 만들면 아무것도 재지 않는다"
-    #: 내가 행동했지만 **상대는 포기하지 않았다.**
-    assert duel._decline_key(offers[0], THEIRS) not in duel.declined_events
-    #: 🔴 그래서 어휘가 답을 가르는 자리에 왔다.
-    assert duel._missed_timing(offers[0]) is None
-    assert len(_withheld_for(duel, THEIRS, TRIGGER_WORDING_MISSING)) == 1
+    assert floor <= unknown.event_sequence, "창 밖이면 어휘가 쓰이지 않는다"
+
+    #: 사건이 **마지막일 때**는 어휘를 몰라도 답이 하나다 — 열린다.
+    if unknown.event_sequence == last:
+        assert duel._missed_timing(unknown) is False
+        assert duel._window_admits(unknown, MINE) is True
+        #: 그래서 모름이 답을 가르는 자리를 만들려면 기록이 더 자라야 한다.
+        unknown = dataclasses.replace(unknown, event_sequence=floor)
+
+    #: 🔴 기록을 늘려 **마지막이 아니게** 만든다 — 창은 그대로 둔다.
+    grown = dataclasses.replace(duel, timing_floor=0, window_floor=0)
+    other = _other_action(grown)
+    assert other is not None
+    assert grown.apply(other).accepted is True
+    grown = dataclasses.replace(grown, window_floor=0)
+    assert len(grown.journal) - 1 > unknown.event_sequence, "기록이 안 자랐다"
+
+    #: 🔴 **넷이 모두 닫힌다.**
+    assert grown._missed_timing(unknown) is None
+    assert grown._window_admits(unknown, MINE) is None
+    assert grown._offer_is_activatable(unknown, MINE) is False
+    wired = _wired(grown, repository, wording=TriggerWording.UNKNOWN)
+    backed = wired.activation_validator(MINE).event_backed or frozenset()
+    assert (unknown.source, unknown.effect_ref) not in backed
 
 
 @requires_official_db
-def test_b05_synthetic_a_chain_preserves_the_opportunity_without_admitting_it(
-    repository,
-):
+def test_b04b_a_window_never_holds_more_than_one_event_yet(repository):
     """
-    🔴 **체인 처리 중의 기회는 보존되지만 발동은 열리지 않는다** (합성).
+    🔴 **실측 — 지금 창에는 사건이 하나뿐이다.** 그래서 어휘 판정이 실제
+    실행 경로에서 **답을 가르지 않는다.**
 
-    두 사실을 가른다 — 그것이 이 시험의 전부다:
+    듀얼 한 판을 끝까지 돌리며 ``legal_actions`` 가 불릴 때마다
+    ``(기록의 마지막 번호) − (창의 바닥)`` 을 쟀다. 실측 분포는
+    ``{-1, 0}`` 이고 **1 이상이 한 번도 없었다** (호출 142회).
 
-    ==========================  ==================================
-    기회가 남아 있는가            **그렇다** (``_opportunity_is_open``)
-    지금 발동할 수 있는가         **아니다** (``_window_admits``)
-    ==========================  ==================================
+    뜻: 창이 열릴 때마다 그 안의 사건은 **하나**이므로 "사건이 창 안에
+    있지만 마지막은 아니다" 라는 자리에 도달하지 않는다. 「때 / 경우」 가
+    답을 가르는 자리가 바로 그곳이므로, 어휘 판정은 **지금은 쓰이지 않는다.**
 
-    공식 재정 (OCG 카드 데이터베이스, 聖鳥クレイン ``cid=5883`` 의
-    2021-07-01 보충): *특수 소환이 체인 처리 중에 행해진 경우 등, 특수 소환
-    직후에 다른 처리가 행해지는 경우에는 **그 체인이 모두 해결된 후에**
-    발동한다.*
-
-    🔴 6-AB 는 이것을 거꾸로 했다 — 체인이 비어 있지 않으면 ``True`` 를
-    돌려주어 **체인 도중에 발동을 허가했다** (실측: ``_offer_is_activatable``
-    → ``True``). 보존해야 한다는 사실을 "지금 발동해도 된다" 로 읽은 것이다.
-
-    🔴 **그리고 6-AB 의 이 시험은 빈 목록을 순회했다** (리뷰 지적 E · 실측:
-    발동 뒤 ``_trigger_offers`` 가 **0건**). ``for`` 몸통이 한 번도 돌지
-    않으므로 무엇도 재지 않고 통과했다. 그래서 지금은 **미소비 기회가 실제로
-    있는지 먼저 단정한다.**
-
-    기회를 남기는 방법: 기르수의 **②번 효과**로 제안을 하나 만든다. 카드
-    텍스트에 실제로 있는 효과이고 (``②：자신 필드에 다른 몬스터가 존재하지
-    않을 경우에 발동할 수 있다``), ``_consumption_key`` 가 효과를 가르므로
-    (6-AA) ①번의 발동이 ②번의 기회를 쓰지 않는다. 바꿔 끼우는 것은
-    ``effect_ref`` 하나뿐이다.
+    🔴 **그래서 ``test_b04`` 는 합성이다** — 그 사실을 숨기지 않고, 어휘
+    판정을 지운 것도 아니다. 사건을 여럿 낳는 효과나 여러 걸음으로 해결되는
+    효과가 들어오면 이 시험이 **먼저 깨지고**, 그때 어휘 판정이 실제로
+    쓰이기 시작한다. 보고서 §8 에 BLOCKER 로 적었다.
     """
+    import engine.duel as duel_module
 
-    class _SecondEffect:
-        """같은 사건 · 같은 개체 · **다른 효과**의 제안 하나."""
+    gaps: list[int] = []
+    original = duel_module.Duel.legal_actions
 
-        def __init__(self, repo, wording):
-            self._inner = TriggerSource(repo)
-            self._wording = wording
-
-        def offers(self, duel, seat: int):
-            return tuple(
-                dataclasses.replace(
-                    offer,
-                    effect_ref=EffectRef(GIRSU, 1),
-                    wording=self._wording,
-                )
-                for offer in self._inner.offers(duel, seat)
-            )
+    def traced(self, seat=None):
+        journal = len(self.journal) if self.journal is not None else 0
+        floor = max(self.timing_floor, self.window_floor)
+        gaps.append(journal - 1 - floor)
+        return original(self, seat)
 
     setup, _ = _board(repository, selector=FirstPermittedChoice())
     duel = setup.duel
-    _summon(duel)
-    action = _trigger_action(duel)
-    assert action is not None
-    assert duel.apply(action).accepted is True
-    #: 체인이 열려 있다 — 응답 창이다.
-    assert duel.chain.is_empty is False
+    runner = DuelRunner(
+        duel, (rule_based_policy(name="p0"), rule_based_policy(name="p1"))
+    )
+    duel_module.Duel.legal_actions = traced
+    try:
+        for _ in range(600):
+            runner.step()
+            if duel.is_over:
+                break
+    finally:
+        duel_module.Duel.legal_actions = original
 
-    for wording in (TriggerWording.WHEN, TriggerWording.IF):
-        chained = dataclasses.replace(
-            duel, triggers=_SecondEffect(repository, wording)
-        )
-        offers = chained._trigger_offers(MINE)
-        #: 🔴 **빈 목록으로 통과할 수 없다.**
-        assert len(offers) == 1, (wording, len(offers))
-        offer = offers[0]
-        #: 🔴 미소비다 — ①번의 발동이 ②번의 기회를 쓰지 않았다 (6-AA).
-        assert chained._consumption_key(offer) not in chained.consumed_events
-        assert chained._opportunity_is_open(offer) is True
-
-        #: 🔴 **그런데 발동은 열리지 않는다** — 체인이 먼저다.
-        assert chained._window_admits(offer, MINE) is False
-        assert chained._offer_is_activatable(offer, MINE) is False
-
-        #: 🔴 그리고 그 이유가 적혀 있다. 빠진 규칙이 아니라 **순서**이므로
-        #: ``missing`` 은 비어 있다.
-        deferred = [
-            w
-            for w in chained.legal_actions(MINE).withheld
-            if "체인이 처리 중입니다" in w.reason
-        ]
-        assert len(deferred) == 1, wording
-        assert deferred[0].missing is None
-        assert "기회는 남아" in deferred[0].reason
+    assert duel.is_over, "듀얼이 끝나지 않으면 표본이 한쪽으로 치우친다"
+    assert len(gaps) > 50, len(gaps)
+    #: 🔴 **창에 사건이 둘 이상 들어간 적이 없다.**
+    assert max(gaps) <= 0, (max(gaps), sorted(set(gaps)))
 
 
 @requires_official_db
-def test_b05b_synthetic_the_opportunity_returns_after_the_chain_resolves(
+def test_b05_synthetic_a_chain_separates_this_window_from_new_events(
     repository,
 ):
     """
-    🔴 **체인이 해결된 뒤에 그 기회가 다시 열린다** (합성).
+    🔴 **체인이 쌓이는 동안 세 갈래를 가른다** (합성 · 리뷰 C).
 
-    ``test_b05`` 가 "체인 도중에는 닫혀 있다" 를 쟀다. 그것만으로는 **영구히
-    닫혔는지** 알 수 없다 — 그러면 보존이 아니라 **분실**이다. 그래서 체인을
-    끝까지 풀고 같은 질문을 다시 한다.
+    6-AB 보완은 ``chain.is_empty`` **하나**로 판정해서 체인이 쌓이면
+    **모든** 유발을 막았다. 그래서 한 사건이 유발 둘을 여는 경우 — 룰북이
+    **같은 특수 체인**에 쌓는다고 적는 그 경우 (§*When multiple cards are
+    activated simultaneously*) — 첫 발동 뒤 둘째가 후보에서 사라졌다
+    (실측: 후보 1건 → 발동 뒤 0건, 보류도 없었다).
 
-    근거는 같은 재정이다: *그 체인이 모두 해결된 **후에** 발동한다.*
+    지금은 :attr:`~engine.duel.Duel.chain_floor` 가 **같은 기회의 유발**과
+    **체인 도중에 생긴 사건**을 가른다.
 
-    🔴 「경우」 로만 잰다. 체인이 해결되면 기록이 늘어 그 사건은 더 이상
-    마지막이 아니므로, 「때」 는 그 자리에서 타이밍을 놓친 것으로 판정된다 —
-    그것이 BLOCKER 로 남은 부분이고 (보고서 §8) 여기서 흉내 내지 않는다.
+    ===================================  ==========================
+    ``window_floor <= seq < chain_floor``  같은 기회 → 같은 체인에 쌓는다
+    ``seq >= chain_floor``                 체인 도중 → 보존하고 기다린다
+    ``seq < window_floor``                 지나간 창 → 끝났다
+    ===================================  ==========================
+
+    🔴 **빈 목록으로 통과할 수 없다** — 제안이 실제로 있는지, 체인이 실제로
+    쌓였는지 먼저 단정한다 (6-AB 보완의 이 시험은 빈 ``for`` 를 돌았다).
     """
-
-    class _SecondEffect:
-        def __init__(self, repo):
-            self._inner = TriggerSource(repo)
-
-        def offers(self, duel, seat: int):
-            return tuple(
-                dataclasses.replace(
-                    offer,
-                    effect_ref=EffectRef(GIRSU, 1),
-                    wording=TriggerWording.IF,
-                )
-                for offer in self._inner.offers(duel, seat)
-            )
-
     setup, _ = _board(repository, selector=FirstPermittedChoice())
     duel = setup.duel
     _summon(duel)
+    base = duel._trigger_offers(MINE)
+    assert len(base) == 1
 
-    #: 체인 **전** — 열려 있다.
-    before = dataclasses.replace(duel, triggers=_SecondEffect(repository))
-    opened = before._trigger_offers(MINE)
-    assert len(opened) == 1
-    assert before._window_admits(opened[0], MINE) is True
-
-    #: 체인을 세운다 (실제 ①번 발동).
     action = _trigger_action(duel)
     assert action is not None
     assert duel.apply(action).accepted is True
+    #: 🔴 체인이 **실제로** 쌓였다.
     assert duel.chain.is_empty is False
+    assert len(duel.chain) == 1
+    assert duel.chain_floor >= 0
 
-    #: 체인 **중** — 닫혀 있다.
-    during = dataclasses.replace(duel, triggers=_SecondEffect(repository))
-    held = during._trigger_offers(MINE)
-    assert len(held) == 1
-    assert during._window_admits(held[0], MINE) is False
+    same_window = dataclasses.replace(
+        base[0], event_sequence=duel.chain_floor - 1
+    )
+    during_chain = dataclasses.replace(
+        base[0], event_sequence=duel.chain_floor
+    )
+    past_window = dataclasses.replace(base[0], event_sequence=-1)
 
-    #: 🔴 체인을 끝까지 푼다.
+    #: 🔴 같은 기회의 유발 — **쌓을 수 있다.**
+    assert duel._window_admits(same_window, MINE) is True
+    assert duel._offer_is_activatable(same_window, MINE) is True
+    #: 🔴 체인 도중의 사건 — **기다린다.**
+    assert duel._window_admits(during_chain, MINE) is False
+    #: 🔴 지나간 창 — **끝났다.**
+    assert duel._window_admits(past_window, MINE) is False
+
+    #: 그리고 체인 도중의 사건에는 그 이유가 적힌다. 빠진 규칙이 아니라
+    #: **순서**이므로 ``missing`` 은 비어 있다.
+    #:
+    #: 🔴 **아직 쓰지 않은 기회로 물어야 한다.** 방금 발동한 효과의 기회는
+    #: ``consumed_events`` 에 들어갔으므로 ``_trigger_offers`` 가 **아예
+    #: 내놓지 않는다** — 그 제안으로 물으면 보류가 비어 통과한다 (처음에
+    #: 그렇게 썼고 바로 드러났다). 그래서 **다른 효과 번호**로 바꾼다.
+    unspent = dataclasses.replace(
+        during_chain, effect_ref=EffectRef(GIRSU, 1)
+    )
+    waiting = dataclasses.replace(duel, triggers=_FixedOffers((unspent,)))
+    assert len(waiting._trigger_offers(MINE)) == 1, "제안이 비면 아무것도 재지 않는다"
+    deferred = [
+        w
+        for w in waiting.legal_actions(MINE).withheld
+        if "체인이 처리 중입니다" in w.reason
+    ]
+    assert len(deferred) == 1
+    assert deferred[0].missing is None
+    assert "기회는 남아" in deferred[0].reason
+
+
+@requires_official_db
+def test_b05b_the_window_moves_to_the_chain_start_when_it_resolves(repository):
+    """
+    🔴 **체인이 해결되면 창이 그 체인의 시작점으로 옮겨간다** (리뷰 B · C).
+
+    그 한 걸음이 둘을 동시에 만든다:
+
+    · 체인을 **연** 기회의 사건은 **끝난다** — 그 기회에서 쓰지 않은 임의
+      유발이 다시 나오지 않는다 (리뷰 B 가 가리킨 결함).
+    · 체인 **도중에** 생긴 사건은 **남는다** — 그 체인이 모두 해결된 뒤에
+      발동한다 (聖鳥クレイン 재정).
+
+    🔴 실제 카드로 밟는다 — 소환 → 유발 발동 → 체인 해결. 바꿔 끼운 값이
+    없다. 두 사건의 판정만 합성 번호로 확인한다 (``test_b04b`` 가 적은
+    이유로, 체인 도중에 실제로 유발을 낳는 사건이 아직 없다).
+    """
+    setup, _ = _board(repository, selector=FirstPermittedChoice())
+    duel = setup.duel
+    _summon(duel)
+    base = duel._trigger_offers(MINE)
+    assert len(base) == 1
+    opened = max(duel.timing_floor, duel.window_floor)
+
+    action = _trigger_action(duel)
+    assert action is not None
+    assert duel.apply(action).accepted is True
+    chain_start = duel.chain_floor
+    assert chain_start >= 0
+
+    opener = dataclasses.replace(base[0], event_sequence=chain_start - 1)
+    during = dataclasses.replace(base[0], event_sequence=chain_start)
+    assert opener.event_sequence >= opened
+
     _settle(duel)
+    #: 🔴 체인이 끝났고 창이 그 시작점으로 옮겨갔다.
     assert duel.chain.is_empty is True
+    assert duel.chain_floor == -1
+    assert duel.window_floor == chain_start
 
-    #: 🔴 **다시 열렸다** — 보존이지 분실이 아니다.
-    after = dataclasses.replace(duel, triggers=_SecondEffect(repository))
-    reopened = after._trigger_offers(MINE)
-    assert len(reopened) == 1
-    assert after._window_admits(reopened[0], MINE) is True
+    #: 🔴 체인을 연 기회는 끝났다.
+    assert duel._window_admits(opener, MINE) is False
+    #: 🔴 체인 도중의 사건은 살아 있다 — 분실이 아니다.
+    assert duel._window_admits(during, MINE) is True
 
 
 @requires_official_db
@@ -1388,16 +1442,17 @@ def test_e04_the_random_policy_forks_without_moving_its_parent():
 @requires_official_db
 def test_e05_sibling_forks_do_not_share_declined_opportunities(repository):
     """
-    🔴 **포기 상태도 형제 분기를 넘지 않는다** (6-AB 보완의 새 칸).
+    🔴 **창 상태도 형제 분기를 넘지 않는다** (6-AB 추가 보완의 새 칸).
 
-    :attr:`~engine.duel.Duel.declined_events` 는 ``frozenset`` 이므로
-    ``dataclasses.replace`` 가 값으로 가져간다 — ``consumed_events`` 와 같은
-    규율이다 (6-AA ``test_d04``). 새 칸이 그 규율을 따르는지 센다.
+    :attr:`~engine.duel.Duel.window_floor` · :attr:`~engine.duel.Duel.chain_floor`
+    는 ``int`` 이므로 ``dataclasses.replace`` 가 값으로 가져간다 —
+    ``consumed_events`` 와 같은 규율이다 (6-AA ``test_d04``). 6-AB 보완의
+    ``declined_events`` 를 대체한 칸들이 그 규율을 따르는지 센다.
     """
     setup, _ = _board(repository, selector=DeclineChoice())
     duel = setup.duel
     _summon(duel)
-    assert duel.declined_events == frozenset()
+    opened = duel.window_floor
 
     sim = Simulator(duel)
     left, right = sim._fork(), sim._fork()
@@ -1406,10 +1461,10 @@ def test_e05_sibling_forks_do_not_share_declined_opportunities(repository):
     assert other is not None
     assert left.apply(other).accepted is True
 
-    #: 🔴 한쪽만 포기했다.
-    assert len(left.declined_events) == 1
-    assert right.declined_events == frozenset()
-    assert duel.declined_events == frozenset()
+    #: 🔴 한쪽만 창이 옮겨갔다.
+    assert left.window_floor > opened
+    assert right.window_floor == opened
+    assert duel.window_floor == opened
     #: 🔴 그래서 형제는 아직 발동할 수 있고 부모도 그렇다.
     assert _trigger_action(left) is None
     assert _trigger_action(right) is not None
@@ -1480,9 +1535,10 @@ def test_f02_the_real_card_opportunity_opens_once_and_closes(repository):
     assert duel.chain.is_empty is False
     _settle(duel)
 
-    #: ④ 기회 종료 — 소비로 닫혔다 (포기가 아니다).
+    #: ④ 기회 종료 — 소비로 닫혔고, 체인이 해결돼 창도 옮겨갔다.
     assert len(duel.consumed_events) == 1
-    assert duel.declined_events == frozenset()
+    assert duel.chain_floor == -1
+    assert duel.window_floor >= 1
     assert _trigger_action(duel) is None
 
     #: ⑤ 다음 진행 — 흐름이 돌아왔다.
