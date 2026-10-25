@@ -782,8 +782,28 @@ def test_23b_nothing_writes_the_report_into_the_board(repository):
         for target in targets:
             if isinstance(target, ast.Attribute):
                 written.add(ast.unparse(target))
-    #: 바꾸는 것은 ``Duel`` 자신의 칸 둘뿐이다 — 판도 journal 도 아니다.
-    assert written == {"self.chain", "self.priority"}, written
+    #: 바꾸는 것은 ``Duel`` **자신의 칸**뿐이다 — 판도 journal 도 아니다.
+    #:
+    #: 🔴 **열거에서 기준으로 옮겼다** (Phase 6-AB 추가 보완). 예전에는
+    #: ``{"self.chain", "self.priority"}`` 를 그대로 고정했고, 그래서 이
+    #: 함수가 ``Duel`` 의 **다른 칸**을 건드릴 때마다 — 지키려는 성질이
+    #: 그대로인데도 — 깨졌다. 그 Phase 가 체인이 끝난 자리에서 발동 기회의
+    #: 창을 옮기면서 (``window_floor`` · ``chain_floor``) 그렇게 됐다.
+    #:
+    #: 이 시험의 주장은 "``_resolve_chain`` 이 **판과 journal 에 쓰지
+    #: 않는다**" 이고, 그것은 아래 세 단정이 **직접** 센다. 그래서 칸
+    #: 목록은 "``self.<이름>`` 한 칸짜리인가" 로만 센다 — 약해지지 않는다:
+    #: ``self.state.…`` 나 ``self.journal`` 에 쓰면 여전히 깨진다.
+    for name in sorted(written):
+        head, _, rest = name.partition(".")
+        assert head == "self", name
+        #: 🔴 한 단 더 들어가는 자리(``self.state.x``)는 금지다 — 그것이
+        #: 판에 쓰는 모양이다.
+        assert "." not in rest, name
+        assert rest not in {"state", "journal"}, name
+    #: 체인과 우선권은 **여전히** 이 함수가 바꾸는 자리다 (그 둘이 사라지면
+    #: 체인을 끝내는 코드가 옮겨 간 것이므로 그것도 신호다).
+    assert {"self.chain", "self.priority"} <= written, written
 
     #: 그리고 ``self.state`` 에 **메서드를 불러 쓰는** 자리도 없다.
     mutations = [
