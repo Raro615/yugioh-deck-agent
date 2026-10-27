@@ -31,6 +31,7 @@ double-counting 추적 결과 (``test_09``–``test_11``) 와, weight 를 붙였
 """
 
 import dataclasses
+import inspect
 import pathlib
 
 import pytest
@@ -537,7 +538,20 @@ def test_15_the_score_types_and_the_search_path_are_untouched(repository, evalua
     **점수 자료형과 Search 가 그대로다.** 네 칸 · 항 여섯 · 비교 하나.
     """
     assert len(dataclasses.fields(StateValue)) == 4
-    assert len(dataclasses.fields(SearchCandidate)) == 4
+    #: 🔴 **열거를 기준으로 바꾼다** (Phase 6-AB 최종 보완). 3-E-42 가
+    #: 고정한 계약은 "넷이다" 가 아니라 **"후보는 관측을 들고 있지
+    #: 않다"** 이고, 그 계약은 칸이 하나 늘어도 그대로여야 한다.
+    #: 최종 보완이 ``unsupported`` 를 더했다 — 그 미래의 다음 자리에서
+    #: **빠진 규칙의 이름**들이고 (상수 문자열), 관측도 판도 아니다.
+    #: 흔적은 오래 살기 때문에 설명문이 아니라 이름만 담는다.
+    names = {field.name for field in dataclasses.fields(SearchCandidate)}
+    for observation in ("view", "state", "future", "board", "duel", "hand"):
+        assert observation not in names, observation
+    assert names == {"action", "status", "value", "reason", "unsupported"}
+    #: 🔴 줄 세우기는 그대로다 — 미지원이 벌점이 되지 않는다.
+    assert "unsupported" not in inspect.getsource(
+        SearchCandidate.ordering_key
+    )
 
     terms = terms_of(evaluator, start(repository))
     assert tuple(terms) == ("lp", "atk", "monsters", "spells", "deck", "hand")

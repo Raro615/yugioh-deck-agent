@@ -602,14 +602,24 @@ def test_a02_activation_actions_is_not_public():
 @pytest.mark.real_card
 def test_a03_legal_actions_is_the_only_public_candidate_source():
     """
-    **외부가 읽는 후보 목록은 하나다.** 호출자 다섯 곳 전부 ``legal_actions``
+    **외부가 읽는 후보 목록은 하나다.** 호출자 전부 ``legal_actions``
     을 부른다 — ``_activation_actions`` 를 직접 부르는 외부 호출자가 없다.
+
+    🔴 **개수를 기준으로 바꾼다** (Phase 6-AB 최종 보완). 전에는
+    ``agent/simulation.py`` 의 호출을 **셋**으로 고정했다. 이 시험의 주장은
+    "셋이다" 가 아니라 **"사설 보조 함수를 직접 부르는 자리가 없다"** 이고,
+    그 주장은 같은 공개 함수를 한 번 더 불러도 그대로다. 최종 보완이
+    ``simulate`` 안에 한 번을 더했다 — 사본의 다음 자리에서 **미지원
+    보류**를 읽는 호출이고 (④), 사본은 버려지므로 그 자리에서 읽지 않으면
+    그 사실이 밖으로 나가지 않는다.
     """
     sites = call_sites("legal_actions")
     assert ("engine/duel.py", "apply") in sites
     assert ("agent/runner.py", "step") in sites
-    simulation = [s for s in sites if s[0] == "agent/simulation.py"]
-    assert len(simulation) == 3, simulation
+    #: 🔴 사본을 읽는 자리는 **그 모듈 안의 세 함수**뿐이다 — 어디서
+    #: 부르는지가 중요하고 몇 번 부르는지는 아니다.
+    simulation = {s[1] for s in sites if s[0] == "agent/simulation.py"}
+    assert simulation == {"legal_actions", "_settle_forced_passes", "simulate"}
     #: 🔴 ``agent`` · ``app`` 어디에도 사설 보조 함수를 부르는 자리가 없다.
     for path, _ in call_sites("_activation_actions"):
         assert path == "engine/duel.py", path
@@ -1689,6 +1699,11 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     ``_enforce_mandatory`` 강제를 먼저 처리해야     **없다**     규칙이 **있다** —
                                                              막는 것이 규칙의
                                                              결과다
+    ``_enforce_mandatory`` 상대의 유발 창이 열려 있다 **없다**    순서다 (최종) —
+                                                             공식 Fast Effect
+                                                             Timing: 그 기회는
+                                                             양쪽이 다 지나가야
+                                                             닫힌다
     ``_trigger_actions`` 사건 기록이 없다           **있다**     기록이 있어야
                                                              판정된다
     ``_trigger_actions`` 강제 · 임의 판정 불가      **있다**     근거가 생겨야
@@ -1718,6 +1733,12 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     🔴 **비우는 자리가 넷에서 일곱으로 늘었고, 그것은 규율을 지키는 자리가
     늘어난 것이다.** 늘어난 셋은 전부 "규칙이 답했다" 쪽이다 — 다른 자리가
     먼저, 체인이 먼저, 포기했다.
+
+    🔴 **최종 보완이 열여덟째를 더했다** — 상대의 **임의** 유발 창이 열려
+    있는 동안 내 진행을 막는 자리다 (②). ``missing`` 을 비운다: 빠진 규칙이
+    아니라 **순서**이고, 근거는 공식 Fast Effect Timing 도표다. 그래서
+    ``_enforce_mandatory`` 는 다섯 자리가 되고 **채우는 것은 여전히
+    하나**다 — 강제인데 절차를 보장할 근거가 없는 그 자리뿐이다.
     """
     source = production_source("engine/duel.py")
     tree = ast.parse(source)
@@ -1794,11 +1815,12 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     flow = filled("_flow_actions")
     assert len(flow) == 3, flow
     assert flow.count(True) == 2 and flow.count(False) == 1, flow
-    #: 🔴 **강제 쪽 넷 중 하나만 채운다** — 보장할 근거가 없는 자리 하나만
-    #: 채우고, 규칙이 **있어서** 막는 자리와 **순서** 자리 셋은 비운다.
+    #: 🔴 **강제 쪽 다섯 중 하나만 채운다** (최종 보완이 하나 더했다) —
+    #: 보장할 근거가 없는 자리 하나만 채우고, 규칙이 **있어서** 막는 자리와
+    #: **순서** 자리 넷은 비운다.
     forced = filled("_enforce_mandatory")
-    assert len(forced) == 4, forced
-    assert forced.count(True) == 1 and forced.count(False) == 3, forced
+    assert forced.count(True) == 1, forced
+    assert forced.count(False) == len(forced) - 1, forced
 
     #: 🔴 **비운 자리가 왜 비었는지 코드가 적는다.** 빈 칸을 설명 없이 두면
     #: 다음 사람이 "빠뜨렸다" 로 읽고 아무 값이나 채운다. 자리마다 **그 함수
@@ -1817,6 +1839,8 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     forced_body = function_body("_enforce_mandatory")
     assert "규칙이 요구한 처리를" in forced_body
     assert "빠진 규칙이 아니라 **순서**이기 때문이다" in forced_body
+    #: 🔴 최종 보완이 더한 자리의 근거도 **그 함수 안에** 있다.
+    assert "공식 Fast Effect Timing 도표다" in forced_body
     trigger_body = function_body("_trigger_actions")
     assert "그렇게 정했으므로 ``missing`` 을 비운다" in trigger_body
     #: 🔴 보완이 더한 두 자리도 그 함수 안에서 왜 비는지 적는다.

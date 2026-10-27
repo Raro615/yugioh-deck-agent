@@ -771,12 +771,35 @@ def test_f_the_context_stores_nothing_twice():
 
     즉 이 시험이 지키는 주장은 "세 개다" 가 아니라 **"관측과 겹치지
     않는다"** 였고, 아래 두 번째 단정이 그것을 그대로 잰다.
+
+    **다섯 번째 값이 늘었다** (Phase 6-AB 최종 보완)
+    ------------------------------------------------
+    ``simultaneous`` 는 "이 발동이 **같은 기회에서 동시에** 쌓이는 묶음의
+    하나인가" 다. 그것도 관측에 없는 사실이다 — 같은 창의 사건이 몇 건인지,
+    그 체인이 어느 사건에서 시작했는지는 ``Duel`` 의 수명 상태
+    (``chain_floor``) 이고 ``GameStateView`` 에 없다. 그래서 체인 · 우선권 ·
+    ``set_this_turn`` 과 **같은 이유로** 판을 든 쪽이 값으로 넘긴다.
+
+    🔴 **열거를 기준으로 바꾼다.** 전에는 ``fields == {네 이름}`` 이었다.
+    그 단정은 이 시험이 지키려는 주장("관측과 겹치지 않는다")보다 **좁고**,
+    관측에 없는 사실이 하나 늘 때마다 깨진다 — 이미 3-E-15 가 한 번
+    그랬다. 그래서 세는 것을 주장으로 되돌린다: 관측이 들고 있는 이름은
+    여기 **없고**, 여기 있는 이름은 모두 **관측에 없는 사실**이다.
     """
     fields = set(ActivationTiming.__dataclass_fields__)
 
-    assert fields == {"chain", "priority", "point", "set_this_turn"}
+    #: 🔴 관측에 있는 것을 다시 담지 않는다 — 이것이 이 시험의 주장이다.
     for copied in ("phase", "turn_player", "holder", "actor"):
         assert copied not in fields
+    #: 🔴 그리고 **판을 든 쪽만이 답할 수 있는 것들**이다.
+    assert fields <= {
+        "chain",
+        "priority",
+        "point",
+        "set_this_turn",
+        "simultaneous",
+    }
+    assert {"chain", "priority"} <= fields
 
 
 @requires_official_db

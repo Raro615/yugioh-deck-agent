@@ -912,9 +912,29 @@ def test_18b_a_simulation_result_carries_no_board():
 
     담으면 "시뮬레이션을 갖고 있다" 는 이유로 정책이 모든 것을 읽을 수
     있게 된다. 실패한 시뮬레이션이 미래를 들고 있지도 않다.
+
+    🔴 **열거를 기준으로 바꾼다** (Phase 6-AB 최종 보완). 전에는
+    ``names == {여섯 이름}`` 이었다. 이 시험의 주장은 "여섯 개다" 가 아니라
+    **"판을 담는 칸이 없다"** 이고, 그 주장은 칸이 하나 늘어도 그대로여야
+    한다. 6-AB 최종 보완이 ``unsupported`` 를 더했다 — 그 미래의 다음
+    자리에서 **지원하지 않아 후보가 되지 못한 것들**이고, 판이 아니라
+    보류의 요약 문자열이다 (사본은 버려지므로 그 자리에서 읽지 않으면
+    사실이 밖으로 나가지 않는다).
     """
     names = {field.name for field in dataclasses.fields(SimulationResult)}
-    assert names == {"action", "status", "viewer", "reason", "code", "future"}
+    #: 🔴 판을 담는 칸이 없다 — 관측(``future``) 하나뿐이고 그것도 실패한
+    #: 시뮬레이션에는 없다.
+    for board in ("state", "duel", "fork", "board", "chain", "journal"):
+        assert board not in names
+    assert "future" in names
+    #: 🔴 그리고 들고 있는 것은 **문자열 · 열거 · 관측** 뿐이다.
+    annotations = {
+        field.name: str(field.type)
+        for field in dataclasses.fields(SimulationResult)
+    }
+    assert "GameState" not in annotations.get("future", "").replace(
+        "GameStateView", ""
+    )
 
     with pytest.raises(SimulationError, match="꾸며 내지 않습니다"):
         SimulationResult(
