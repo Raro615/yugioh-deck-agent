@@ -845,6 +845,14 @@ def test_f_greedy_is_not_the_best_play(repository):
     "순위 로직이 바뀌었다" 가 아니라 **"고를 수 있는 수가 늘었다"** 이고,
     규칙 기반 쪽이 한 점도 안 움직인 것이 그 증거다.
 
+    Phase 6-AB 보완5 에서 무작위 쪽이 13,300 → **12,000** 으로 또 움직였다.
+    판을 바꾸는 행위 뒤마다 빠른 효과 기회를 지나는 ``PASS`` 둘이 필수
+    절차로 끼어들었고 (공식 Fast Effect Timing — box B · C), 무작위는 그
+    걸음마다 아무 것이나 고르므로 궤적이 또 갈라졌다. **규칙 기반의
+    70,700 은 이번에도 한 점도 바뀌지 않았고** 붕괴 씨앗도 10 · 15
+    그대로다 — 세 번째로 같은 모양이고, 그것이 이 숫자의 움직임이 순위
+    로직과 무관하다는 증거다.
+
     그래서 증거를 **씨앗 비교에서 절대적인 사실로** 바꾼다. 규칙 기반도
     씨앗 10 · 15 에서 **몬스터 하나 없이 LP 0 으로 진다** — 한 수도 내다보지
     않는 규칙으로는 이것을 고칠 수 없고, 다음 단계가 탐색인 이유가 그대로
@@ -865,7 +873,7 @@ def test_f_greedy_is_not_the_best_play(repository):
         for seed in COMPARISON_SEEDS
     ]
     assert sum(rules) == 70700, sum(rules)
-    assert sum(chance) == 13300, sum(chance)
+    assert sum(chance) == 12000, sum(chance)
     assert all(r >= c for r, c in zip(rules, chance)), list(zip(rules, chance))
 
     # 그런데도 탐욕은 정답이 아니다 — **스스로 무너지는 씨앗이 있다.**

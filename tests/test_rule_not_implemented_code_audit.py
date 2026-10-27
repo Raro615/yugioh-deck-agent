@@ -134,7 +134,13 @@ MINE = 0
 #: 를 ``UNKNOWN`` 으로 돌려주는 관문이다. 그 사이의 이동을 이 계층이 읽지
 #: 못하므로 **코드가 생겨야 풀리는 모름**이고, 그래서 ``CODE_OCCURRENCES``
 #: 도 함께 72 → 73 이다 (산문 15는 그대로).
-STRING_OCCURRENCES = 88
+#: 🔴 88 → **89** (Phase 6-AB 보완5 가 실측해 정정). 늘어난 하나도
+#: ``_zone_from_summon`` 과 **같은 결의 코드 자리**다 —
+#: ``TriggerEligibilityJudge._zone_from_grave`` 가 "이동 사건은 묘지를
+#: 적었는데 지금 자리가 다르다" 를 ``UNKNOWN`` 으로 돌려주는 관문이다.
+#: 그 사이의 이동을 이 계층이 읽지 못하므로 **코드가 생겨야 풀리는 모름**
+#: 이고, 그래서 ``CODE_OCCURRENCES`` 도 함께 73 → 74 다 (산문 15는 그대로).
+STRING_OCCURRENCES = 89
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -159,6 +165,14 @@ STRING_OCCURRENCES = 88
 #:    ``movement_player`` (+32줄) 를 넣어서 아래가 같은 만큼 밀렸다.
 #:    **산문 14 는 하나도 바뀌지 않았다** — 6-M 이 더한 둘은 코드 자리이고
 #:    (``CODE_OCCURRENCES`` 70 → 72), 그래서 문자열이 84 → 86 이다.
+#: 🔴 **보완5 에서 일곱 자리가 밀렸다** — 성격도 개수(15)도 그대로이고
+#: 바뀐 것이 **줄 번호뿐**이라는 것이 그 증거다.
+#:
+#:   ``trigger.py``  +36 (775→811 · 803→839 · 1369→1405 ·
+#:                   1741→1778 · 1747→1784 · 1770→1807)
+#:                   원인: ``graveyard_zone_for`` 와 ``_zone_from_grave``
+#:   ``duel.py``     +38 (2300→2338)
+#:                   원인: ``_apply_pass`` 의 빈 체인 가지
 PROSE_OCCURRENCES = {
     # 🔴 **Phase 6-Z 에서 세 파일의 자리가 밀렸다** (문자열 88 · 코드 73 ·
     # 산문 15 는 **하나도 바뀌지 않았다** — 바뀐 것이 줄 번호뿐이라는 것이
@@ -219,14 +233,14 @@ PROSE_OCCURRENCES = {
     #
     # **산문은 15 그대로다.** 6-V 가 더한 ``RULE_NOT_IMPLEMENTED`` 는
     # 코드 자리이므로 ``CODE_OCCURRENCES`` 가 72 → 73 으로 받는다.
-    ("engine/trigger.py", 775),
-    ("engine/trigger.py", 803),
-    ("engine/trigger.py", 1369),
+    ("engine/trigger.py", 811),
+    ("engine/trigger.py", 839),
+    ("engine/trigger.py", 1405),
     # 3-E-45: ``_event_relation`` 이 왜 세 갈래인가를 적은 docstring 셋
     # (6-F 가 네 갈래로 늘렸고, 그 설명도 같은 자리에 있다).
-    ("engine/trigger.py", 1741),
-    ("engine/trigger.py", 1747),
-    ("engine/trigger.py", 1770),
+    ("engine/trigger.py", 1778),
+    ("engine/trigger.py", 1784),
+    ("engine/trigger.py", 1807),
     # 🔴 **Phase 6-Y 가 두 자리를 밀었다** (553 → 607 · 569 → 623).
     # ``plan`` 의 ``selections`` 통로와 그 설명이 위에 들어가 +54 줄이다.
     # **문자열 88 · 코드 73 · 산문 15 는 그대로다** — 늘어난 것은 설명이고
@@ -304,7 +318,7 @@ PROSE_OCCURRENCES = {
     # **위**에 넣은 것들이다: ``_window_group`` · ``_window_can_act`` ·
     # ``_resolving_other_window`` 와 각자의 설명, ``_window_actor`` 의 네 묶음
     # 순서, ``_enforce_mandatory`` 의 등재 좁히기, ``_response_priority``.
-    ("engine/duel.py", 2300),
+    ("engine/duel.py", 2338),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
@@ -335,7 +349,9 @@ PROSE_OCCURRENCES = {
 #: ``TriggerEligibilityJudge._zone_from_summon`` 의 관문 하나다 — 소환
 #: 사건이 적은 도착지와 지금 관측된 자리가 다를 때 **그 사이의 이동을
 #: 읽지 못한다**고 적는다. 판이 아니라 코드가 생겨야 풀리는 모름이다.
-CODE_OCCURRENCES = 73
+#: 🔴 73 → **74** (보완5) — ``_zone_from_grave`` 의 관문 하나.
+#: ``STRING_OCCURRENCES`` 의 설명과 같은 자리다.
+CODE_OCCURRENCES = 74
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {
@@ -386,6 +402,13 @@ CONTRACT_VIOLATIONS = {
     # 설명(+23줄)을 더해 **그 아래가 밀렸다** (316 → 339). 거부 자리와
     # 짝지은 상태는 그대로다.
     ("engine/action_execution.py", 339, "ActionStatus.EXECUTION_ERROR"),
+    # 🔴 **Phase 6-AB 보완5 에서 ``response.py`` 의 한 자리가 +9 밀렸다**
+    # (476 → 485). 원인 하나다 — :data:`AFTER_FAST_WINDOW_RULE` 과 그
+    # 설명(+9줄)이 이 자리보다 **위**에 들어갔다. 빈 체인의 빠른 효과
+    # 기회를 닫는 이유를 응답 계층이 들고 있어야 하기 때문이다.
+    #
+    # **위반 13 · 적합 19 는 그대로다** — 자리의 성격도 개수도 짝지은
+    # 상태도 바뀌지 않았고, 바뀐 것이 줄 번호뿐이라는 것이 그 증거다.
     # 🔴 **Phase 6-Z 에서 아홉 자리가 밀렸다** — 위반 13 · 적합 19 는
     # **그대로다.** 자리의 성격도 개수도 바뀌지 않았고, 바뀐 것이 줄
     # 번호뿐이라는 것이 그 증거다 (``PROSE_OCCURRENCES`` 의 표와 같은
@@ -437,7 +460,7 @@ CONTRACT_VIOLATIONS = {
     ("engine/effect/executor.py", 1704, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/resolution.py", 520, "ResolutionStatus.FORBIDDEN"),
     ("engine/payment.py", 402, "PaymentStatus.EXECUTION_ERROR"),
-    ("engine/response.py", 476, "ResponseOutcome.REFUSED"),
+    ("engine/response.py", 485, "ResponseOutcome.REFUSED"),
 }
 
 #: 같은 주사에서 **올바른** 자리 (모른다 쪽 상태와 짝지었다).

@@ -58,12 +58,16 @@ from engine.action import PlayerAction, PlayerActionKind
 from engine.action_execution import ActionExecutor
 from engine.action_validation import ActionValidator, ActionValidity
 from engine.duel import Duel, LegalActions, TurnStep, WithheldAction
+from engine.priority import ResponseWindow
 from engine.game_state_view import GameStateView
 from engine.summon import duel_executor
 from engine.validation import ValidationCode
+from engine.ids import EffectRef
+from engine.activation_timing import ActivationTiming, ActivationTimingChecker
 from engine.vocabulary import Phase, Zone
 
 from tests.conftest import requires_official_db
+from tests.engine.window_helpers import pass_fast_window
 
 pytestmark = requires_official_db
 
@@ -404,7 +408,17 @@ def test_03_everything_offered_is_actually_executed(repository):
     assert step.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE, step.code
     assert "발동 조건이 거짓입니다" in step.reason, step.reason
     assert "허가된 행위가 아닙니다" not in step.reason, step.reason
-    #: ③ 행위는 실제로 일어났다 — 응답 기회가 닫혔고 듀얼이 계속된다.
+    #: ③ 행위는 실제로 일어났다 — 듀얼이 계속된다.
+    #:
+    #: 🔴 **정정 (보완5).** 보완5 전까지 이 줄은 해결 **직후** 응답 기회가
+    #: 닫혔을 것을 요구했다. 공식 Fast Effect Timing 도표는 체인 해결 뒤에도
+    #: 빠른 효과 기회를 거치게 하므로, 지금 열려 있는 것은 **다른 기회**다
+    #: (체인은 비어 있다 — 바로 아래 ④가 센다).
+    assert duel.priority.is_open, duel.priority
+    assert duel.priority.window is ResponseWindow.RESPONSE
+    assert duel.chain.is_empty
+    #: 지나가면 닫히고 듀얼이 계속된다.
+    pass_fast_window(duel)
     assert not duel.priority.is_open, duel.priority
     assert duel.legal_actions(duel.to_act).allowed or duel.is_over
 
@@ -414,24 +428,48 @@ def test_03_everything_offered_is_actually_executed(repository):
     assert len(duel.chain.links) == 0
     assert duel.chain.resolved_count == 0
 
-    #: 그리고 **스펠 스피드 1 발동이 다시 가능하다** — 잠금이 사라졌다.
-    turn_before = duel.state.turn.turn_number
-    activations = 0
-    for _ in range(60):
-        if duel.is_over or duel.state.turn.turn_number > turn_before + 2:
-            break
-        if duel.advance() is not None:
-            continue
-        nxt = duel.legal_actions(duel.to_act)
-        if not nxt.allowed:
-            break
-        activations += sum(
-            1
-            for a in nxt.allowed
-            if a.kind is PlayerActionKind.ACTIVATE_EFFECT
-        )
-        duel.apply(nxt.allowed[0])
-    assert activations > 0, "체인이 남아 있으면 이 수가 0 이 된다"
+    #: 그리고 **스펠 스피드 1 발동의 잠금이 사라졌다.**
+    #:
+    #: 🔴 **정정 (보완5): 간접 지표를 직접 측정으로 바꾼다.**
+    #:
+    #: 6-R 은 이것을 *"다음 두 턴 안에 발동 후보가 한 번이라도 오른다"*
+    #: 로 쟀다. 보완5 가 판을 바꾸는 행위 뒤마다 빠른 효과 기회를 열면서
+    #: 이 산책이 **밟는 수의 순서가 달라졌고**, 그 궤적에서는 두 턴 안에
+    #: 발동할 수 있는 자리에 닿기 전에 **덱이 비어 듀얼이 끝난다** (실측:
+    #: seed 305 · 턴 7 에서 시작해 턴 8 에 종료 · 발동 후보 0건).
+    #:
+    #: 🔴 **상한 때문이 아니다.** 그 가설을 세우고 60 → 240 으로 올려
+    #: 측정했고 **같은 0 이 나왔다.** 멈춘 이유는 ``over=True`` 였다.
+    #:
+    #: 그래서 간접 지표를 버리고 **잠금 자체**를 잰다. 잠긴다는 것은
+    #: ``ActivationTiming.chain_is_open`` 이 참으로 고정되어
+    #: ``_activation_gate`` 의 둘째 관문이 모든 스펠 스피드 1 발동에
+    #: ``SPELL_SPEED_TOO_LOW`` 를 돌려주는 것이다 (위 설명). 그 둘을 직접
+    #: 본다 — 궤적에 기대지 않으므로 더 강한 주장이다.
+    #: 🔴 **이 셋은 관문 단위 측정이고 통합 검증이 아니다** — 재는 것은
+    #: ``Duel.apply`` 가 쓰는 것과 **같은** 관문이지만, 산책을 거쳐 판이
+    #: 바뀌는 것을 보는 것이 아니다.
+    timing = ActivationTiming(duel.chain, duel.priority)
+    assert timing.chain_is_open is False, timing
+
+    #: 그 관문에 **스펠 스피드 1 발동**을 넣어 본다. 잠겨 있었다면 여기서
+    #: ``SPELL_SPEED_TOO_LOW`` 가 나온다.
+    added = duel.state.create_instance(
+        POT_OF_GREED, owner=duel.to_act, zone=Zone.HAND
+    )
+    verdict = ActivationTimingChecker(duel.view(duel.to_act)).check(
+        timing,
+        PlayerAction.activate_effect(
+            actor=duel.to_act,
+            source=added.instance_id,
+            effect_ref=EffectRef(POT_OF_GREED, 0),
+        ),
+    )
+    assert verdict.validity is ActionValidity.VALID, verdict
+    assert verdict.code is ValidationCode.OK, verdict
+    #: 🔴 관문이 **그 이유를 말로** 적는다 — 빈 결과로 통과하지 않는다.
+    assert "체인이 비어 있어" in verdict.reason, verdict.reason
+    assert "스펠 스피드 제약이 걸리지 않습니다" in verdict.reason, verdict.reason
 
 
 def test_04_legal_actions_does_offer_activation(repository):
@@ -1133,5 +1171,11 @@ def test_30_the_search_ranking_digest_is_unchanged(repository):
     #: 탐색이 고를 수 있는 수가 늘고 체인 응답(``pass``)이 생긴다 —
     #: 실측 611 → 689 결정, ``pass`` 73건 · ``activate_effect`` 60건.
     #: 의도한 변화이므로 핀을 갱신했다 (근거: docs/phase6q-…md §18).
-    assert decisions == 689
+    #: 🔴 **보완5 가 이 수와 digest 를 다시 바꿨다: 689 → 979.** 판을 바꾸는
+    #: 행위 뒤마다 빠른 효과 기회를 지나는 ``PASS`` 둘이 **필수 절차**로
+    #: 끼어든다 (공식 Fast Effect Timing — box B · C). 그래서 탐색이 내리는
+    #: 결정의 수가 늘고 (``pass`` 442건 · 전체 979), 궤적이 갈라져 digest 도
+    #: 바뀐다. 🔴 **순위 로직은 한 줄도 바뀌지 않았다** — 늘어난 것은
+    #: 거쳐야 하는 절차다. 두 번 돌려 같은 값이 나오는 것을 확인했다.
+    assert decisions == 979
     assert digest.hexdigest() == expected

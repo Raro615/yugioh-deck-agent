@@ -1035,5 +1035,11 @@ def test_30_the_search_ranking_digest_is_unchanged(repository):
     #: 탐색이 고를 수 있는 수가 늘고 체인 응답(``pass``)이 생긴다 —
     #: 실측 611 → 689 결정, ``pass`` 73건 · ``activate_effect`` 60건.
     #: 의도한 변화이므로 핀을 갱신했다 (근거: docs/phase6q-…md §18).
-    assert decisions == 689
+    #: 🔴 **보완5 가 이 수와 digest 를 다시 바꿨다: 689 → 979.** 판을 바꾸는
+    #: 행위 뒤마다 빠른 효과 기회를 지나는 ``PASS`` 둘이 **필수 절차**로
+    #: 끼어든다 (공식 Fast Effect Timing — box B · C). 그래서 탐색이 내리는
+    #: 결정의 수가 늘고 (``pass`` 442건 · 전체 979), 궤적이 갈라져 digest 도
+    #: 바뀐다. 🔴 **순위 로직은 한 줄도 바뀌지 않았다** — 늘어난 것은
+    #: 거쳐야 하는 절차다. 두 번 돌려 같은 값이 나오는 것을 확인했다.
+    assert decisions == 979
     assert digest.hexdigest() == expected

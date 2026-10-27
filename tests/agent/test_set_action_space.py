@@ -54,6 +54,7 @@ from engine.state.rule_usage import RuleActionKind
 from engine.vocabulary import Phase, Position, Zone
 
 from tests.conftest import requires_official_db
+from tests.engine.window_helpers import pass_fast_window
 
 pytestmark = requires_official_db
 
@@ -243,6 +244,11 @@ def test_05_the_set_candidates_vanish_when_the_right_is_spent(repository):
     duel = staged(repository, hand=(LUSTER_DRAGON, BATTLE_OX, DARK_HOLE))
     first = of_kind(duel, PlayerActionKind.SET_MONSTER)[0]
     assert duel.apply(first).accepted
+    #: 🔴 **빠른 효과 기회를 지나 판을 다시 연다** (보완5). 이 시험이 재는
+    #: 것은 *"소환권을 쓰면 몬스터 세트가 사라지고 마법 세트는 남는다"*
+    #: 이고, 그 비교는 **열린 판**에서만 뜻이 있다 — 빠른 효과 기회에서는
+    #: 둘 다 규칙대로 후보가 아니다 (공식 Fast Effect Timing — box A).
+    pass_fast_window(duel)
 
     assert of_kind(duel, PlayerActionKind.SET_MONSTER) == []
     assert of_kind(duel, PlayerActionKind.NORMAL_SUMMON) == []
