@@ -563,13 +563,23 @@ def _settle_chain(duel) -> "tuple[object | None, bool]":
     """
     열린 응답 창을 **기존 절차로** 닫는다 — 양쪽이 패스한다.
 
-    돌려주는 것: ``(마지막 걸음, 끝까지 풀렸는가)``. 체인이 열리지 않았으면
+    돌려주는 것: ``(해결 걸음, 끝까지 풀렸는가)``. 체인이 열리지 않았으면
     ``(None, True)`` 다.
+
+    🔴 **마지막 걸음이 아니라 해결 걸음이다** (보완5).
+
+    보완5 가 빈 체인의 빠른 효과 기회를 실었으므로 체인이 풀린 **뒤에도**
+    양측이 지나가야 판이 열린다. 그래서 이 반복의 마지막 걸음은 *"양쪽이
+    빠른 효과 기회를 지나갔습니다"* 가 되고, 그것을 돌려주면 **걸음마다의
+    이유가 전부 그 한 문장으로 덮인다** — 실측으로 ``/combo`` 의 2~5 걸음이
+    자기 결과 대신 그 문장을 적었다. 그리고 ``resolved`` 도 거짓이 된다:
+    불발한 링크의 ``code`` 대신 패스의 ``OK`` 를 읽기 때문이다.
     """
     from engine.action import PlayerActionKind
     from engine.validation import ValidationCode
 
     last = None
+    resolution = None
     for _ in range(MAX_CHAIN_PASSES):
         if not duel.priority.is_open:
             break
@@ -578,12 +588,23 @@ def _settle_chain(duel) -> "tuple[object | None, bool]":
                    if a.kind is PlayerActionKind.PASS]
         if not passing:
             return last, False
+        had_chain = not duel.chain.is_empty
         last = duel.apply(passing[0])
-    if last is None:
+        if had_chain and duel.chain.is_empty:
+            resolution = last
+    if resolution is None:
+        #: 🔴 **풀린 체인이 없으면 돌려줄 "해결 걸음" 이 없다** (보완5).
+        #: 판을 바꾸는 행위(세트 · 소환)는 발동이 아니므로 체인을 세우지
+        #: 않는데, 보완5 는 그 뒤에도 빠른 효과 기회를 연다. 그 기회를
+        #: 지나간 걸음을 돌려주면 **그 행위의 결과 대신 절차 문장이**
+        #: 보고에 적힌다 — 실측으로 ``/combo`` 의 세트 걸음 셋이 그랬다.
+        #:
+        #: ``None`` 을 돌려주면 부르는 쪽의 ``settled or step`` 이 그 행위의
+        #: 걸음을 그대로 쓴다.
         return None, True
     #: 🔴 ``accepted`` 로 해결 여부를 읽지 않는다 (6-R). 적법한 패스는 링크가
     #: 불발되어도 수락이고, 불발은 ``code`` 가 들고 온다.
-    return last, last.code is ValidationCode.OK
+    return resolution, resolution.code is ValidationCode.OK
 
 
 def execute_opening(
