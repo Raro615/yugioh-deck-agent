@@ -61,7 +61,7 @@ from engine.duel import (
 from engine.ids import EffectRef
 from engine.trigger import TriggerRequirement, TriggerWording
 from engine.trigger_compiler import TEXT_IF, TEXT_WHEN, wording_from
-from engine.vocabulary import Phase, Zone
+from engine.vocabulary import Phase, Position, Zone
 
 from integration.autonomy import PolicyChooser, TriggerSource
 from tests.conftest import requires_official_db
@@ -127,6 +127,43 @@ def _wired(duel, repository, **replacements):
     return dataclasses.replace(
         duel, triggers=_Replaced(repository, **replacements)
     )
+
+
+def _decline_window(duel, *, seat: int = MINE) -> int:
+    """
+    열린 **임의** 유발 처리 기회를 ``PASS`` 로 지난다 (Phase 6-AB 보완4).
+
+    돌려주는 것은 밟은 걸음 수다. 열린 기회가 없으면 0 이다.
+
+    🔴 **왜 이 도구가 생겼는가.** 보완4 가 공식 Fast Effect Timing 도표를
+    근거로 *"유발 기회가 열린 자리에서는 판이 열린 상태에서만 할 수 있는
+    행동(통상 소환 · 세트 · 페이즈 이동)을 할 수 없다"* 를 구현했다 —
+    *"Many actions can ONLY be performed when the game state is open (when
+    you're in box A)."* 그래서 이 파일이 **다른 행동을 끼워 넣어** 창을
+    지나던 방식이 성립하지 않고, 지나는 방법은 ``PASS`` 다.
+
+    🔴 **강제 묶음은 지나갈 수 없다** — 그 자리에는 ``PASS`` 가 오르지
+    않으므로 0 을 돌려준다. 그것이 ``test_c01`` · ``test_c02`` 가 재는
+    구분이다.
+
+    🔴 **창을 옮기지는 않는다.** 포기는 :attr:`Duel.window_passed` 에만
+    적히고 :attr:`Duel.window_floor` 는 그대로다 — 창을 옮기는 것은 여전히
+    판을 바꾸는 행동이다. 그래서 "창이 옮겨 갔는가" 를 재는 시험은 포기
+    **뒤에** 그 행동을 한다.
+    """
+    steps = 0
+    while steps < 4:
+        legal = duel.legal_actions(duel.to_act)
+        passing = [
+            action
+            for action in legal.allowed
+            if action.kind is PlayerActionKind.PASS
+        ]
+        if not passing or duel.priority.is_open:
+            break
+        assert duel.apply(passing[0]).accepted is True
+        steps += 1
+    return steps
 
 
 def _other_action(duel, *, seat: int = MINE):
@@ -388,13 +425,18 @@ def test_b02_an_if_trigger_does_not_miss_timing_but_its_window_still_closes(
     #: 그리고 지금은 발동할 수 있다.
     assert _trigger_action(duel) is not None
 
+    #: 🔴 **먼저 그 기회를 지난다** (보완4). 판이 열린 상태가 아니면
+    #: 끼워 넣을 행동 자체가 후보로 오르지 않는다 (``_decline_window``).
+    assert _decline_window(duel) >= 1
+    assert _trigger_action(duel) is None, "포기한 기회는 다시 오르지 않는다"
+
     other = _other_action(duel)
     assert other is not None, "끼워 넣을 행동이 없으면 아무것도 재지 않는다"
     assert duel.apply(other).accepted is True
     assert duel.state.turn.phase is Phase.MAIN1
 
-    #: 🔴 **기회는 닫혔다** — 그 자리에서 다른 것을 골랐으니 판은 **open
-    #: state** 로 돌아갔고 새 창이 열렸다 (``Duel.window_floor``).
+    #: 🔴 **기회는 닫혔다** — 양쪽이 지나갔고 그 뒤 판을 바꾸는 행동이
+    #: 새 창을 열었다 (``Duel.window_floor``).
     assert _trigger_action(duel) is None
     assert duel.window_floor > offers[0].event_sequence
     #: 🔴 **그런데 타이밍을 놓친 것이 아니다** — 두 사실이 따로 남아 있다.
@@ -421,11 +463,16 @@ def test_b02b_the_closed_window_does_not_reopen_in_the_same_phase(repository):
 
     6-AB 까지는 나타났다 (``test_b02`` 의 실측). 걸음을 더 밟아도 닫힌 채로
     있어야 한다 — "한 걸음만 닫힌다" 가 되면 그것도 결함이다.
+
+    🔴 **보완4: 기회를 지나는 방법이 ``PASS`` 가 되었다** (``_decline_window``
+    의 설명). 단정은 그대로다 — 닫힌 뒤에는 걸음을 더 밟아도 열리지 않는다.
     """
     setup, _ = _board(repository, selector=DeclineChoice())
     duel = setup.duel
     _summon(duel)
     assert _trigger_action(duel) is not None
+    assert _decline_window(duel) >= 1
+    assert _trigger_action(duel) is None
 
     steps = 0
     while steps < 4:
@@ -483,7 +530,11 @@ def test_b03_synthetic_the_wording_decides_missed_timing_not_the_window(
         assert duel._missed_timing(offer) is False, wording
         assert duel._window_admits(offer, MINE) is True, wording
 
-    #: 끼워 넣을 행동을 **좁혀지지 않은 판**에서 꺼내 적용한다.
+    #: 🔴 **포기한 뒤에** 끼워 넣을 행동을 적용한다 (보완4). 판이 열린
+    #: 상태가 아니면 그 행동이 후보로 오르지 않는다 (``_decline_window``).
+    #: 포기는 ``window_passed`` 에만 적히고, 기록을 늘려 **사건을 마지막이
+    #: 아니게** 만드는 것은 판을 바꾸는 그 행동이다.
+    assert _decline_window(setup.duel) >= 1
     other = _other_action(setup.duel)
     assert other is not None
     assert setup.duel.apply(other).accepted is True
@@ -494,7 +545,9 @@ def test_b03_synthetic_the_wording_decides_missed_timing_not_the_window(
     assert if_duel._missed_timing(if_duel._trigger_offers(MINE)[0]) is False
     assert when_duel._missed_timing(when_duel._trigger_offers(MINE)[0]) is True
 
-    #: 🔴 **둘 다 창은 닫혀 있다** — 포기했으므로. 어휘와 무관하다.
+    #: 🔴 **둘 다 창은 닫혀 있다** — 어휘와 무관하다. 닫은 근거는 둘이고
+    #: (포기했고, 그 뒤 판을 바꾸는 행동이 창을 옮겼다) 둘 중 하나로도
+    #: 닫힌다 — 어휘 판정은 그것과 **다른 사실**이라는 것이 요점이다.
     for duel in (if_duel, when_duel):
         offer = duel._trigger_offers(MINE)[0]
         assert duel._window_admits(offer, MINE) is False
@@ -519,6 +572,8 @@ def test_b03b_synthetic_a_mandatory_when_is_not_expired_by_the_wording(
     """
     setup, _ = _board(repository, selector=FirstPermittedChoice())
     _summon(setup.duel)
+    #: 🔴 **포기한 뒤에** 끼워 넣는다 (보완4 — ``_decline_window``).
+    assert _decline_window(setup.duel) >= 1
     other = _other_action(setup.duel)
     assert other is not None
     assert setup.duel.apply(other).accepted is True
@@ -589,11 +644,20 @@ def test_b04_synthetic_an_unknown_wording_admits_nothing(repository):
         unknown = dataclasses.replace(unknown, event_sequence=floor)
 
     #: 🔴 기록을 늘려 **마지막이 아니게** 만든다 — 창은 그대로 둔다.
+    #:
+    #: 🔴 **보완4: 끼워 넣기 전에 기회를 지난다** (판이 열린 상태가 아니면
+    #: 그 행동이 후보로 오르지 않는다). 그리고 창을 **되돌린다** —
+    #: ``window_floor`` 를 0 으로 두는 것과 같은 이유다: 이 시험이 재려는
+    #: 것은 **어휘 판정** 하나이고, 창이 닫혔다는 사실로 가려지면 그 판정에
+    #: 도달하지 않는다.
     grown = dataclasses.replace(duel, timing_floor=0, window_floor=0)
+    assert _decline_window(grown) >= 1
     other = _other_action(grown)
     assert other is not None
     assert grown.apply(other).accepted is True
-    grown = dataclasses.replace(grown, window_floor=0)
+    grown = dataclasses.replace(
+        grown, window_floor=0, window_passed=frozenset()
+    )
     assert len(grown.journal) - 1 > unknown.event_sequence, "기록이 안 자랐다"
 
     #: 🔴 **넷이 모두 닫힌다.**
@@ -871,7 +935,15 @@ def test_c02_synthetic_a_mandatory_trigger_cannot_be_passed_over(repository):
     """
     setup, _ = _board(repository, selector=FirstPermittedChoice())
     _summon(setup.duel)
-    before = _other_action(setup.duel)
+
+    #: 🔴 **막을 행동을 사본에서 꺼낸다** (보완4). 원본에서는 유발 기회가
+    #: 열려 있어 그 행동이 후보로 오르지 않고 (판이 열린 상태가 아니다),
+    #: 원본에서 기회를 지나면 이 시험이 재려는 **강제 의무**가 사라진다.
+    #: 사본은 판을 ``clone()`` 하므로 개체 번호가 같고, 그래서 거기서 꺼낸
+    #: 행동을 원본에 그대로 제출할 수 있다.
+    probe = Simulator(duel=setup.duel)._fork()
+    assert _decline_window(probe) >= 1
+    before = _other_action(probe)
     assert before is not None, "막을 일반 행동이 없으면 아무것도 재지 않는다"
 
     duel = _wired(
@@ -943,6 +1015,10 @@ def test_c04_synthetic_an_unplayable_mandatory_trigger_does_not_deadlock(
     _summon(setup.duel)
     #: 🔴 좁혀지지 **않은** 판에서 끼워 넣을 행동을 꺼낸다 — 강제를 꽂은 뒤에는
     #: 그 행동이 이미 보류로 밀려 있어 꺼낼 수 없다 (``test_c01``).
+    #: 🔴 **포기한 뒤에** 끼워 넣는다 (보완4 — ``_decline_window``).
+    #: ``_mandatory_offers`` 는 포기를 보지 않으므로 (강제는 포기할 수
+    #: 없다) 아래의 의무 단정은 그대로다.
+    assert _decline_window(setup.duel) >= 1
     other = _other_action(setup.duel)
     assert other is not None, "끼워 넣을 행동이 없으면 아무것도 재지 않는다"
     assert setup.duel.apply(other).accepted is True
@@ -1057,10 +1133,32 @@ def test_c06b_synthetic_the_opponents_duty_blocks_my_phase_change(repository):
     6-AB 의 실측 증상: 상대 의무가 1건 열려 있는데 내 ``END_PHASE`` 가
     **수락되고**, 페이즈가 넘어가면서 ``timing_floor`` 가 그 의무를 **0 으로
     지웠다.** 규칙이 요구한 처리가 조용히 사라진 것이다.
+
+    🔴 **보완4가 이 시험의 합성을 고쳤다.** 전에는 상대의 제안이
+    ``controller`` 만 바꾼 것이어서 **카드는 내 것**이었고, 그래서 발동
+    관문이 *"자신이 쥐고 있는 카드가 아닙니다"* 로 거절했다 — 그 의무는
+    처리할 수 **없는** 의무였다. 보완4 가 ``_window_can_act`` 로 "처리할 수
+    있는 의무만 자리를 옮긴다" 를 구현하자 그 사실이 드러났다 (처리할 수
+    없는 의무로 막으면 양쪽 모두 고를 것이 없어 듀얼이 멈춘다).
+
+    그래서 이제 **상대 자리에 실제 카드 개체를 놓는다** — 상대의 덱에서
+    기르수 한 장을 자기 몬스터 존으로 옮기고, 그 개체를 제안의 ``source``
+    로 쓴다. 바꾸는 것은 **보드 배치와 제안의 자리 · 필수 여부**이고,
+    허가 · 체인 링크 · 최종 상태는 엔진이 만든다.
     """
+    setup, _ = _board(repository, selector=FirstPermittedChoice())
+    _summon(setup.duel)
+    theirs = next(
+        card
+        for card in setup.duel.state.player(THEIRS).zone(Zone.DECK)
+        if card is not None and card.card_id == GIRSU
+    )
+    setup.duel.state.move(
+        theirs, Zone.MZONE, to_player=THEIRS, position=Position.FACEUP_ATTACK
+    )
 
     class _TheirDuty:
-        """상대 자리에만 강제 의무를 내놓는다."""
+        """상대 자리에만, **상대의 카드로** 강제 의무를 내놓는다."""
 
         def __init__(self, repo):
             self._inner = TriggerSource(repo)
@@ -1073,13 +1171,14 @@ def test_c06b_synthetic_the_opponents_duty_blocks_my_phase_change(repository):
                     offer,
                     requirement=TriggerRequirement.MANDATORY,
                     controller=THEIRS,
+                    source=theirs.instance_id,
                 )
                 for offer in self._inner.offers(duel, MINE)
             )
 
-    setup, _ = _board(repository, selector=FirstPermittedChoice())
-    _summon(setup.duel)
     duel = dataclasses.replace(setup.duel, triggers=_TheirDuty(repository))
+    #: 🔴 그 의무는 **처리할 수 있다** — 그러지 않으면 막을 근거가 없다.
+    assert duel._window_can_act(THEIRS) is True
 
     assert len(duel._mandatory_offers(THEIRS)) == 1
     assert duel._mandatory_offers(MINE) == ()
@@ -1457,6 +1556,10 @@ def test_e05_sibling_forks_do_not_share_declined_opportunities(repository):
     sim = Simulator(duel)
     left, right = sim._fork(), sim._fork()
 
+    #: 🔴 **포기도 창 상태다** (보완4가 더한 ``window_passed``). 한쪽에서
+    #: 포기하고 판을 바꾸는 행동까지 밟는다 — 포기는 ``window_passed`` 에,
+    #: 그 행동은 ``window_floor`` 에 적히므로 **두 칸을 함께** 센다.
+    assert _decline_window(left) >= 1
     other = _other_action(left)
     assert other is not None
     assert left.apply(other).accepted is True
@@ -1465,6 +1568,9 @@ def test_e05_sibling_forks_do_not_share_declined_opportunities(repository):
     assert left.window_floor > opened
     assert right.window_floor == opened
     assert duel.window_floor == opened
+    #: 🔴 포기 기록도 넘지 않았다 — ``frozenset`` 을 갈아 끼우므로.
+    assert right.window_passed == frozenset()
+    assert duel.window_passed == frozenset()
     #: 🔴 그래서 형제는 아직 발동할 수 있고 부모도 그렇다.
     assert _trigger_action(left) is None
     assert _trigger_action(right) is not None

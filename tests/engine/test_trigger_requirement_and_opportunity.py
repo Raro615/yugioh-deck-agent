@@ -102,6 +102,37 @@ def _wired(setup, repository, requirement: TriggerRequirement):
     )
 
 
+def _decline_window(duel, seat: int = MINE):
+    """
+    열린 **임의** 유발 처리 기회를 ``PASS`` 한 걸음으로 지난다 (보완4).
+
+    돌려주는 것은 밟은 걸음 수다. 열린 기회가 없으면 0 이다.
+
+    🔴 **왜 이 도구가 생겼는가.** Phase 6-AB 보완4 가 공식 Fast Effect
+    Timing 도표를 근거로 *"유발 기회가 열린 자리에서는 통상 행동 · 페이즈
+    이동을 할 수 없다"* 를 구현했다 (*"Many actions can ONLY be performed
+    when the game state is open"*). 그래서 **다른 행동으로 기회를 지나는**
+    방식이 더 이상 성립하지 않고, 지나는 방법은 ``PASS`` 다. 판이 다시
+    열리는 조건도 그 도표가 적는다 — 양쪽이 넘기고 체인이 없을 때다.
+
+    🔴 **강제 묶음은 지나갈 수 없다** — 그 자리에는 ``PASS`` 가 오르지
+    않으므로 이 함수가 0 을 돌려준다. 그것이 ``test_b03`` 이 재는 구분이다.
+    """
+    steps = 0
+    while steps < 4:
+        legal = duel.legal_actions(duel.to_act)
+        passing = [
+            action
+            for action in legal.allowed
+            if action.kind is PlayerActionKind.PASS
+        ]
+        if not passing or duel.priority.is_open:
+            break
+        assert duel.apply(passing[0]).accepted is True
+        steps += 1
+    return steps
+
+
 def _end_phase(duel):
     """``END_PHASE`` 를 ``legal_actions`` 를 지나 적용한다. 없으면 ``None``."""
     legal = duel.legal_actions(duel.to_act)
@@ -291,8 +322,31 @@ def test_b01_an_optional_trigger_can_be_taken_or_given_up(repository):
     🔴 **근거 있는 임의** — 발동도 포기도 고르는 쪽의 것이다.
 
     같은 판에서 둘을 모두 밟는다: 집으면 카드가 움직이고, 집지 않으면
-    움직이지 않는다. 포기는 **적법한 다른 행동**으로 한다 — 엔진이 포기를
-    강요하지도, 발동을 강요하지도 않는다.
+    움직이지 않는다. 엔진이 포기를 강요하지도, 발동을 강요하지도 않는다.
+
+    🔴 **Phase 6-AB 보완4가 "포기하는 방법" 을 정정했다**
+    -----------------------------------------------------
+    전에는 *"포기는 **적법한 다른 행동**으로 한다"* 였고, 그래서 이 시험이
+    유발 기회가 열린 자리에서 ``END_PHASE`` 가 후보로 오르는 것을
+    단정했다 (*"임의 유발은 페이즈 전환을 막지 않는다"*).
+
+    **그 단정이 틀렸다.** 공식 Fast Effect Timing 도표는 둘을 적는다 —
+    *"Many actions can ONLY be performed when the game state is open (when
+    you're in box A)."* 와 *"Whenever either player performs an action, the
+    game state is no longer open."* 유발 처리 기회는 box A 가 **아니므로**
+    그 자리에서 통상 소환 · 세트 · 페이즈 이동을 할 수 없다. 판이 다시
+    열리는 조건도 그 도표가 적는다 — 턴 플레이어가 넘기고, 상대가 되돌려
+    넘기고, 체인이 없을 때다.
+
+    🔴 **이 시험이 지키려던 구분은 그대로 살아 있다.** 임의 유발은
+    controller 를 **강제하지 않는다** — 그래서 그 자리에 ``PASS`` 가 함께
+    오르고 **한 걸음으로 포기할 수 있다.** 강제 유발이면 ``PASS`` 가 오르지
+    않는다 (``test_b03``). 바뀐 것은 "포기를 어떻게 적는가" 이고, "포기할
+    수 있는가" 가 아니다.
+
+    실측한 결함: 전 해석 아래에서는 내 일반 행동 하나가 **상대의 미처리
+    기회까지** 닫았다 (6-AB 최종 보완의 BLOCKER-F3-1 — 내 세트 수락 →
+    상대 claims 1 → 0 → 내 ``END_PHASE`` 수락).
     """
     setup, chooser = _board(repository, selector=FirstPermittedChoice())
     duel = setup.duel
@@ -305,15 +359,26 @@ def test_b01_an_optional_trigger_can_be_taken_or_given_up(repository):
     _settle(duel)
     assert len(duel.state.player(MINE).zone(Zone.GRAVE)) == 1
 
-    #: ② 다른 판에서 집지 않는다 — 움직이지 않고, **흐름이 열려 있다.**
+    #: ② 다른 판에서 집지 않는다 — 움직이지 않는다.
     setup2, _ = _board(repository, selector=DeclineChoice())
     other = setup2.duel
     _summon(other)
     assert _trigger_action(other) is not None
+
+    #: 🔴 **포기는 ``PASS`` 한 걸음이다** — 임의이므로 그것이 오른다.
     legal = other.legal_actions(MINE)
-    assert [a for a in legal.allowed if a.kind is PlayerActionKind.END_PHASE], (
-        "임의 유발은 페이즈 전환을 막지 않는다"
-    )
+    passing = [a for a in legal.allowed if a.kind is PlayerActionKind.PASS]
+    assert passing, "임의 유발은 한 걸음으로 포기할 수 있다"
+    #: 🔴 그리고 그 자리에서 **페이즈 이동은 오르지 않는다** — 판이 열린
+    #: 상태가 아니다 (공식 Fast Effect Timing — box A 에서만 할 수 있다).
+    assert not [
+        a for a in legal.allowed if a.kind is PlayerActionKind.END_PHASE
+    ]
+
+    #: 🔴 포기하면 기회가 닫히고 **흐름이 다시 열린다.**
+    step = other.apply(passing[0])
+    assert step.accepted is True
+    assert _trigger_action(other) is None
     assert _end_phase(other) is not None
     assert len(other.state.player(MINE).zone(Zone.GRAVE)) == 0
 
@@ -470,6 +535,10 @@ def test_c01_the_opportunity_closes_when_the_phase_ends(repository):
     assert len(duel._trigger_offers(MINE)) == 1
     assert _trigger_action(duel) is not None
 
+    #: 🔴 **먼저 그 기회를 지난다** (보완4). 판이 열린 상태가 아니면
+    #: ``END_PHASE`` 가 후보로 오르지 않는다 (``_decline_window`` 의 설명).
+    assert _decline_window(duel) >= 1
+
     seen = []
     for _ in range(5):
         if _end_phase(duel) is None:
@@ -504,6 +573,12 @@ def test_c02_the_floor_moves_with_the_phase(repository):
     assert recorded >= 1
     #: 소환 사건은 바닥보다 뒤에 있다 — 그래서 열려 있다.
     assert duel._trigger_offers(MINE)[0].event_sequence >= duel.timing_floor
+
+    #: 🔴 **기회를 지난 뒤에 페이즈를 넘긴다** (보완4 — 판이 열린 상태가
+    #: 아니면 ``END_PHASE`` 가 오르지 않는다). 바닥을 올리는 것은 여전히
+    #: **페이즈 전환**이고, 포기는 ``window_passed`` 만 적는다.
+    assert _decline_window(duel) >= 1
+    assert duel.timing_floor == 0, "포기는 시점의 바닥을 올리지 않는다"
 
     _end_phase(duel)
     #: 🔴 페이즈가 바뀌며 바닥이 기록 끝으로 올라갔다.
@@ -620,6 +695,17 @@ def test_c05_declining_closes_the_offer_within_the_phase(repository):
     _summon(duel)
     assert len(duel._trigger_offers(MINE)) == 1
     assert _trigger_action(duel) is not None, "받지 못한 기회는 포기가 아니다"
+
+    #: 🔴 **포기는 ``PASS`` 한 걸음이다** (보완4가 정정한 자리). 전에는 이
+    #: 자리에서 곧바로 세트를 했고, 그것이 "포기" 였다. 공식 Fast Effect
+    #: Timing 도표는 그 행동을 **판이 열린 상태에서만** 허용하므로
+    #: (*"Many actions can ONLY be performed when the game state is
+    #: open"*) 포기를 먼저 적고 그 다음에 세트를 한다.
+    #:
+    #: 🔴 **이 시험의 단정은 그대로다** — 포기한 임의 유발은 같은 페이즈
+    #: 안에서 다시 제안되지 않는다. 바뀐 것은 포기를 어떻게 적는가다.
+    assert _decline_window(duel) >= 1
+    assert _trigger_action(duel) is None, "포기한 기회는 다시 오르지 않는다"
 
     #: 다른 행동을 한다 — 같은 페이즈 안이다.
     sets = [

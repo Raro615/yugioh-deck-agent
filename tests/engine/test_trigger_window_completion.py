@@ -1092,36 +1092,102 @@ def test_e03_a_fork_keeps_the_window_state_across_an_open_chain(repository):
 
 
 @requires_official_db
-def test_e04_synthetic_a_fork_rebuilds_the_production_registry(repository):
+def test_e04_synthetic_a_fork_keeps_the_parents_effect_definitions(repository):
     """
-    🔴 **사본은 프로덕션 등록부로 돌아간다 — 그래서 합성 효과가 사라진다.**
+    🔴 **사본이 원본의 효과 정의와 실행 계약을 그대로 쓴다** (보완4 ③).
 
-    ``Simulator._fork`` 는 ``duel_components()`` 로 수행기 한 벌을 **새로**
-    만든다. 그 등록부는 프로덕션의 것이므로, 이 파일이 꽂은 합성 둘째
-    효과는 사본에 없다.
+    최종 보완까지 이 시험의 이름은
+    ``test_e04_synthetic_a_fork_rebuilds_the_production_registry`` 였고,
+    사본이 프로덕션 등록부로 **다시 만들어** 원본에 꽂힌 정의를 잃는 것을
+    *"올바른 설계"* 로 적었다 — 사라지는 **방식**(미지원 보류로 적힌다)만
+    쟀다.
 
-    🔴 **그것을 결함으로 적지 않는다** — 사본이 진짜와 다른 규칙으로
-    돌지 않게 하는 설계이고 (``_fork`` 의 설명), 합성 효과는 이 시험
-    파일의 것이다. 여기서 재는 것은 **사라지는 방식**이다: 조용히 허가로
-    바뀌지 않고 **빠진 규칙의 이름이 붙은 보류**로 적힌다 (④).
+    🔴 **그 단정이 틀렸다.** 사본이 원본보다 **못 해결하면** 미래의 값이
+    규칙이 아니라 **배선** 때문에 달라진다. 그것은 ``_forked_journal`` ·
+    ``_forked_chooser`` 가 이미 고친 것과 같은 결의 결함이고 (6-AB ·
+    최종 보완), 같은 이유로 고쳐야 했다. 실측::
 
-    🔴 **그래서 C 군은 사본 경로를 주장하지 않는다.** ③의 완료 범위는
-    실제 ``Duel`` 경로이고, 탐색 사본에서 같은 링크 둘을 쌓는 일은 실제
-    카드 둘이 등재된 뒤의 일이다.
+        원본 후보 ['69811710:e[0]', '69811710:e[1]']
+        🔴 사본 후보 ['69811710:e[0]']
+        🔴 사본의 정의 등재 = False
+
+    지금은 ``Simulator._forked_definitions`` 가 원본의 정의 · 구현 목록을
+    ``duel_components`` 에 넘기고, 그쪽이 **같은 내용의 새 등록부**를
+    만든다 — 담긴 ``EffectDefinition`` 은 frozen 이므로 공유해도 안전하고,
+    격리해야 하는 것은 ``register()`` 로 바뀌는 **목록**이다.
     """
     duel, _ = _paired_board(repository)
-    assert {a.effect_ref for a in _activations(duel)} == {SYNTH_REF, REAL_REF}
-
     fork = Simulator(duel=duel)._fork()
-    assert {a.effect_ref for a in _activations(fork)} == {REAL_REF}
-    missing = [
+
+    #: 🔴 같은 후보 · 같은 정의.
+    assert {a.effect_ref for a in _activations(fork)} == {SYNTH_REF, REAL_REF}
+    for ref in (SYNTH_REF, REAL_REF):
+        assert fork._activator.definitions.definition_for(ref) is not None
+        assert fork._activator.lookup.has_implementation(ref)
+
+    #: 🔴 **그래서 미지원 보류가 없다** — 정의가 없어서 오르지 못한 후보가
+    #: 하나도 없다 (이 시험이 전에 세던 것이 바로 그 보류다).
+    assert not [
         held
         for held in fork.legal_actions(MINE).withheld
         if held.missing == TRIGGER_IMPLEMENTATION_MISSING
     ]
-    assert missing, [w.reason for w in fork.legal_actions(MINE).withheld]
-    #: 🔴 그 보류는 **미지원으로 세어진다** — 밖까지 가는 목록에 들어간다.
-    assert set(missing) <= set(fork.legal_actions(MINE).unsupported())
+
+    #: 🔴 **등록부는 같은 객체가 아니다** — 한 분기의 등록이 다른 분기와
+    #: 부모에 보이면 안 된다.
+    assert fork._activator.definitions is not duel._activator.definitions
+    assert fork._activator.lookup is not duel._activator.lookup
+    assert fork._resolver is not duel._resolver
+
+
+@requires_official_db
+def test_e05_synthetic_a_fork_resolves_the_two_link_chain_like_the_original(
+    repository,
+):
+    """
+    🔴 **사본이 양쪽 시나리오를 원본과 **같이** 해결한다** (보완4 ③).
+
+    ``test_e04`` 가 "같은 후보" 를 쟀고, 이 시험이 **같은 결과**를 센다 —
+    후보만 같고 해결이 다르면 미래의 값이 여전히 배선을 잰다.
+
+    🔴 **원본은 움직이지 않는다** — 사본의 전개가 부모의 기록에 남지 않고
+    (``_forked_journal``) 판도 그대로다.
+    """
+    duel, _ = _paired_board(repository)
+    before = _snapshot(duel)
+    fork = Simulator(duel=duel)._fork()
+
+    synthetic = next(a for a in _activations(fork) if a.effect_ref == SYNTH_REF)
+    assert fork.apply(synthetic).accepted is True
+    real = next(a for a in _activations(fork) if a.effect_ref == REAL_REF)
+    assert fork.apply(real).accepted is True
+    assert [(link.sequence, link.effect_ref) for link in fork.chain] == [
+        (0, SYNTH_REF),
+        (1, REAL_REF),
+    ]
+    for step in _settle(fork):
+        assert step.accepted is True
+
+    #: 🔴 **역순 해결과 결과가 원본 경로와 같다** (``test_c01`` 의 값).
+    applied = [
+        event.effect_ref
+        for event in fork.journal
+        if isinstance(event, EffectEvent)
+    ]
+    assert applied == [REAL_REF, SYNTH_REF]
+    grave, deck, hand = _snapshot(fork)
+    assert (grave, deck, hand) == (
+        before[0] + 1,
+        before[1] - 2,
+        before[2] + 1,
+    )
+
+    #: 🔴 부모는 그대로다.
+    assert duel.chain.is_empty
+    assert _snapshot(duel) == before
+    assert not [
+        event for event in duel.journal if isinstance(event, EffectEvent)
+    ]
 
 
 # ======================================================================
