@@ -126,7 +126,10 @@ CODE_MEMBER_COUNT = 48
 #: 🔴 72 → 73 (Phase 6-V). ``_zone_from_summon`` 한 자리가 더해졌다 —
 #: 거부 생성(``REJECTION_PRODUCTIONS``)도 같이 하나 늘었으므로 아래
 #: "차이가 13" 은 그대로다.
-CODE_OCCURRENCES = 73
+#: 🔴 73 → 74 (Phase 6-AB 보완5). ``_zone_from_grave`` 한 자리가 더해졌다 —
+#: 거부 생성(``REJECTION_PRODUCTIONS``)도 같이 하나 늘었으므로 아래
+#: "차이가 13" 은 그대로다 (6-V 와 같은 결).
+CODE_OCCURRENCES = 74
 
 #: 그중 **거부를 만드는** 자리.
 #:
@@ -172,7 +175,10 @@ CODE_OCCURRENCES = 73
 #: 옮긴 **아는 규칙**이므로 ``SOURCE_WRONG_ZONE`` 이다.
 #: 🔴 59 → 60 (Phase 6-V). ``_zone_from_summon`` 의 "사건의 도착지와 지금
 #: 자리가 다르다" 갈래가 거부 생성 한 자리를 더했다.
-REJECTION_PRODUCTIONS = 60
+#: 🔴 60 → 61 (Phase 6-AB 보완5). ``_zone_from_grave`` 의 "이동 사건의
+#: 도착지와 지금 자리가 다르다" 갈래가 거부 생성 한 자리를 더했다 —
+#: ``_zone_from_summon`` 의 같은 갈래(바로 위)와 **같은 결**이다.
+REJECTION_PRODUCTIONS = 61
 
 #: enum 이 **섹션 주석으로 선언한** 묶음 → 멤버 수.
 DECLARED_SECTIONS = {

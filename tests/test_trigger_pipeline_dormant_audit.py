@@ -200,7 +200,14 @@ def test_01_the_three_part_modules_exist_and_are_large():
         # 말해 준 자리에서만 열고, 후보를 모으는 자리를 늘리지 않았다.
         # ``TriggerRegistry`` 를 만드는 production 자리는 여전히 0곳이다
         # (``test_13``).
-        "engine/trigger.py": 2199,
+        # 🔴 2199 → **2309** (Phase 6-AB 보완5). ``graveyard_zone_for`` ·
+        # ``_zone_from_grave`` · ``_activation_zone`` 의 설명이고, 6-V 와
+        # **같은 결의 증가**다 (그 핀의 설명 참고).
+        # **dormant 를 깨지 않는다** — 늘어난 코드는 관문 하나를 사건이
+        # 말해 준 자리(묘지 도착)에서만 열고, 후보를 모으는 자리를 늘리지
+        # 않았다. ``TriggerRegistry`` 를 만드는 production 자리는 여전히
+        # 0곳이다 (``test_13``).
+        "engine/trigger.py": 2309,
         #: 🔴 594 → **648** (Phase 6-Y). ``plan`` 이 밖에서 정해진 대상
         #: 선택을 받는 통로 하나다 (``selections=None`` 기본값).
         #:
@@ -227,7 +234,10 @@ def test_01_the_three_part_modules_exist_and_are_large():
     #: 축 하나에만 닿았다는 증거다.
     #: 🔴 3,096 → **3,236** (Phase 6-V). "크다" 는 요지는 그대로다.
     #: 🔴 3,236 → **3,290** (Phase 6-Y: ``trigger_chain`` +54).
-    assert sum(sizes.values()) == 3290
+    #: 🔴 3,290 → **3,400** (보완5: ``trigger.py`` +110). 나머지 두 모듈은
+    #: **한 줄도 바뀌지 않았다** — 이번 변경이 축 하나(묘지 도착의 발동
+    #: 자리)에만 닿았다는 증거다.
+    assert sum(sizes.values()) == 3400
 
 
 def test_02_the_two_assembly_modules_exist():
@@ -973,7 +983,14 @@ def test_25_this_phase_changed_no_production_file():
         # 말해 준 자리에서만 열고, 후보를 모으는 자리를 늘리지 않았다.
         # ``TriggerRegistry`` 를 만드는 production 자리는 여전히 0곳이다
         # (``test_13``).
-        "engine/trigger.py": 2199,
+        # 🔴 2199 → **2309** (Phase 6-AB 보완5). ``graveyard_zone_for`` ·
+        # ``_zone_from_grave`` · ``_activation_zone`` 의 설명이고, 6-V 와
+        # **같은 결의 증가**다 (그 핀의 설명 참고).
+        # **dormant 를 깨지 않는다** — 늘어난 코드는 관문 하나를 사건이
+        # 말해 준 자리(묘지 도착)에서만 열고, 후보를 모으는 자리를 늘리지
+        # 않았다. ``TriggerRegistry`` 를 만드는 production 자리는 여전히
+        # 0곳이다 (``test_13``).
+        "engine/trigger.py": 2309,
         #: 🔴 594 → **648** (Phase 6-Y). ``plan`` 이 밖에서 정해진 대상
         #: 선택을 받는 통로 하나다 (``selections=None`` 기본값).
         #:
@@ -1053,7 +1070,17 @@ def test_25_this_phase_changed_no_production_file():
         #: ``_zone_from_summon`` 의 갈래들이다. 이 핀이 그 사실을 정확히
         #: 잡는다. 늘어난 코드가 하는 일은 **관문 하나의 답**을 바꾸는
         #: 것이고, dormant 모듈을 부르는 자리는 하나도 더하지 않았다.
-        "engine/trigger.py": 840,
+        # 🔴 840 → **868** (보완5). **실행 코드 28줄이다** —
+        # ``graveyard_zone_for`` 의 본문 일곱 줄, ``_zone_from_grave`` 의
+        # 세 거름과 세 판정, ``_activation_zone`` 의 둘째 분기 두 줄,
+        # 관문 호출의 ``moved_to=`` 한 줄, ``__all__`` 한 줄.
+        #
+        # **dormant 를 깨지 않는다** — 늘어난 코드는 관문 하나가 **사건이
+        # 말해 준 자리**를 읽게 하는 것이고, 후보를 모으는 자리를 늘리지
+        # 않았다. ``duel.py`` 는 여전히 "trigger" 라는 말을 쓰지 않고
+        # (``test_12``) ``TriggerRegistry`` 를 만드는 production 자리도
+        # 여전히 0곳이다 (``test_13``).
+        "engine/trigger.py": 868,
         #: 🔴 257 → **268** (Phase 6-Y). 문자열을 벗긴 줄 수가 **11줄**
         #: 늘었다 — ``plan`` 의 키워드 인자와 ``decided`` 사전, ``_entry`` 의
         #: 인자 하나, ``_missing_execution_inputs`` 의 ``answered`` ·

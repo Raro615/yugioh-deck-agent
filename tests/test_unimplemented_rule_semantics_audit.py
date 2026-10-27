@@ -195,7 +195,11 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: 🔴 87 → 88 (Phase 6-V). ``_zone_from_summon`` 이 "사건의 도착지와 지금
 #: 자리가 다르다" 를 ``RULE_NOT_IMPLEMENTED`` 로 적는다 — 그 사이의 이동을
 #: 읽는 계층이 없다는 뜻이고, 모름을 허가로 바꾸지 않는 그 정책 그대로다.
-RULE_NOT_IMPLEMENTED_MENTIONS = 88
+#: 🔴 88 → 89 (Phase 6-AB 보완5). ``_zone_from_grave`` 의 관문 하나이고
+#: ``_zone_from_summon`` 과 같은 결이다 — "사건이 적은 도착지와 지금
+#: 자리가 다르면 그 사이의 이동을 읽지 못한다" 는 **코드가 생겨야 풀리는
+#: 모름**이다.
+RULE_NOT_IMPLEMENTED_MENTIONS = 89
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.

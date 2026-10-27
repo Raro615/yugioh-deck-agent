@@ -1257,7 +1257,15 @@ def test_30_r3_is_fixed_and_no_gate_production_contradicts_the_unknown_policy():
     #: 🔴 **여기서도 짝을 리터럴로 적었다.** 6-F 가 전달 한 줄로 줄였다가
     #: 이 감사에 걸려 되돌린 그 모양을 그대로 따랐다 — 아래
     #: ``conditional`` 이 **하나도 늘지 않았다**는 것이 그 증거다.
-    assert len(literal) + len(conditional) == 25
+    #: 🔴 25 → **28** (Phase 6-AB 보완5). ``_zone_from_grave`` 가 ``_gate``
+    #: 세 자리를 더했다 — 관측에 안 보임(``HIDDEN_CARD``) · 이동 사건의
+    #: 도착지와 지금 자리가 다름(``UNKNOWN``) · 통과(``VALID``). 6-V 의
+    #: ``_zone_from_summon`` 과 **자리 수까지 같다** (바로 위 설명).
+    #:
+    #: 🔴 **여기서도 짝을 리터럴로 적었다** — 전달 한 줄로 줄이면 이 감사가
+    #: 짝을 구문으로 읽을 수 없게 된다. 그 증거가 아래 ``conditional`` 과
+    #: ``event_gate`` 가 **하나도 늘지 않았다**는 것이다.
+    assert len(literal) + len(conditional) == 28
     assert len(conditional) == 1  # _trigger_condition 의 UNKNOWN 분기
 
     disagreements = [row for row in literal if row["policy"] is not row["declared"]]
