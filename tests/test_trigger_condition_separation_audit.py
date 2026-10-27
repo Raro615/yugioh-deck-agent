@@ -710,8 +710,15 @@ def test_16_unimplemented_is_not_the_absence_of_an_event():
 
 def test_17_this_phase_changed_no_production_file():
     """
-    **AUDIT-ONLY.** Evaluation · Search · 발동 경로 · 가중치가 그대로다.
+    **AUDIT-ONLY.** Evaluation · 가중치 · 발동 경로가 그대로다.
     3-F-3 의 결론(weight 를 붙이지 않았다) 도 그대로다.
+
+    🔴 **``SearchCandidate`` 의 칸 수 고정을 기준으로 바꿨다**
+    (Phase 6-AB 최종 보완). 그 Phase 가 ``unsupported`` 를 더했다 — 그
+    미래의 다음 자리에서 **빠진 규칙의 이름**들이다 (④). 이 시험의
+    주장은 "칸이 넷이다" 가 아니라 **"이 Phase 가 유발 어휘와 상대 자원을
+    Search 에 들이지 않았다"** 이고, 그 주장은 아래 두 단정이 그대로
+    센다. 가중치 상수와 ``StateValue`` 는 손대지 않았다.
     """
     from agent.evaluation import (
         DECK_CARD_IN_LP,
@@ -723,7 +730,12 @@ def test_17_this_phase_changed_no_production_file():
 
     assert (DECK_CARD_IN_LP, HAND_CARD_IN_LP, MONSTER_IN_LP) == (300, 200, 500)
     assert len(dataclasses.fields(StateValue)) == 4
-    assert len(dataclasses.fields(SearchCandidate)) == 4
+    #: 🔴 점수 자료형은 그대로이고, 후보에 들어온 칸은 **유발 어휘도 상대
+    #: 자원도 아니다** — 아래가 그것을 센다.
+    candidate = {f.name for f in dataclasses.fields(SearchCandidate)}
+    assert {"action", "status", "value", "reason"} <= candidate
+    for absent in ("trigger", "timing", "opponent", "drawn"):
+        assert not any(absent in name for name in candidate), absent
 
     evaluation = source_of("agent/evaluation.py")
     for absent in ("OPPONENT_RESOURCE_IN_LP", "OPPONENT_DRAW_IN_LP", "TimingPoint"):

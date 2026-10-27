@@ -770,16 +770,51 @@ def test_e04_the_stop_reason_separates_finished_from_blocked(repository):
 
     세 가지를 가르는 요구는 그대로이고, 이 시험이 그것을 **더 좁게** 센다:
     범위에 대한 한정이 있는가, 그리고 "막혔다" 를 여전히 부정하는가.
+
+    🔴 **Phase 6-AB 최종 보완이 넷째를 더했다 — "미지원" 이다** (④).
+    6-AA 까지 이 자리는 **같은 자리의 보류를 보지 않고** 위 문장을 적었다.
+    실측: 이 판이 멈춘 자리에는 `['end_phase']` 만 남아 있었고 **같은
+    자리에 미지원 보류가 1건** 있었다 (``activate_card`` 의 남은 적법성을
+    판정할 규칙 계층이 없다). 즉 *"이 저장소의 현재 지원 범위에서 더 고를
+    것이 없다"* 는 한정은 **참이지만 불충분했다** — 지원하지 않아 **후보가
+    되지 못한 것이 있다**는 사실을 말하지 않았고, 읽는 쪽은 그것을 정상
+    전개 종료로 읽을 수 있었다.
+
+    그래서 기대값을 고친다. 변경 전 기대값(`"판을 바꿀 후보가 더
+    없습니다"`)이 **틀렸던 것은 아니고 그 자리에 더 이상 해당하지
+    않는다**: 그 문장은 미지원 보류가 **없는** 자리의 문장이 되었고
+    (``stopped_kind == "flow_only"``), 이 판은 ``"unsupported"`` 다.
+    세 가지를 가르는 요구는 그대로 센다 — 이름이 한 낱말로 생겼으므로
+    **더 좁게** 센다.
     """
     setup = opened(repository)
     run = execute_opening(setup, repository)
     assert run.stopped_reason
-    assert "판을 바꿀 후보가 더 없습니다" in run.stopped_reason
+    #: 🔴 **한 낱말로 갈린다** — 네 가지가 같은 문장으로 나오지 않는다.
+    assert run.stopped_kind == "unsupported", (
+        run.stopped_kind, run.stopped_reason
+    )
+    assert run.unsupported, "미지원이 없으면 이 분기를 밟을 수 없다"
     #: 🔴 **막혔다고 적지 않는다** — 그 요구는 그대로다.
-    assert "엔진이 막았다는 뜻도 아닙니다" in run.stopped_reason
+    assert "엔진이 막았다" not in run.stopped_reason
+    assert "엔진이 그 수단을 모르는 자리" in run.stopped_reason
     #: 🔴 **그리고 끝났다고 단정하지도 않는다** (6-AA 가 더한 한정).
-    assert "현재 지원 범위" in run.stopped_reason
-    assert "전개가 끝났다는 뜻이 아니고" in run.stopped_reason
+    assert "전개가 끝난 것이 아니라" in run.stopped_reason
+    #: 🔴 **지원하지 않아 후보가 되지 못한 것을 센다** (6-AB 최종 보완).
+    assert "지원하지 않아 후보가 되지" in run.stopped_reason
+
+    #: 🔴 **미지원이 없는 자리의 문장은 따로 살아 있다** — 그 자리는
+    #: ``flow_only`` 이고 "현재 지원 범위" 한정을 그대로 든다 (6-AA).
+    #: 지금 이 판으로는 밟을 수 없으므로 분기 자체를 확인한다.
+    import inspect
+
+    import deck.opening as opening_module
+
+    body = inspect.getsource(opening_module.execute_opening)
+    assert '"flow_only" if flow_only' in body
+    assert "판을 바꿀 후보가 더 없습니다" in body
+    assert "현재 지원 범위" in body
+    assert "엔진이 막았다는 뜻도 아닙니다" in body
 
     #: 상한에 닿으면 **다른** 이유가 적힌다.
     tight = opened(repository)

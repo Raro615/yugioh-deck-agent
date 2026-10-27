@@ -490,6 +490,23 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
         #: 그리고 **보통의 후보 경로는 이 둘을 읽지 않는다** — ``test_02``
         #: 가 세는 그 성질이 여기에도 적용된다.
         "window_floor",
+        #: 🔴 **Phase 6-AB 최종 보완이 칸 하나를 더했다** — ``window_passed``.
+        #:
+        #: 담는 것은 **이 창에서 유발 선택을 마친 자리들**(seat 정수)이다.
+        #: 공식 Fast Effect Timing 도표에서 유발 처리 기회는 **양쪽이 다
+        #: 지나가야** 닫히므로, 그 사실을 들지 않으면 상대의 기회가
+        #: 확인되기 전에 내 다음 행동으로 닫힌다 (실측 BLOCKER-F2-1).
+        #:
+        #: 🔴 **§10 이 경계한 "처리했다는 기록" 인가 — 아니다.** 기억하는
+        #: 것은 *과거에 무엇을 발동했는가* 가 아니라 *지금 열려 있는 이
+        #: 창에서 누가 선택을 마쳤는가* 이고, 창이 옮겨 가면 **비워진다**
+        #: (``apply`` · ``_resolve_chain`` · ``_apply_end_phase`` 세 자리).
+        #: ``window_floor`` · ``chain_floor`` · ``timing_floor`` 와 같은
+        #: 성질 — **지금의 자리**다.
+        #:
+        #: 그리고 **보통의 후보 경로는 읽지 않는다** — ``test_02`` 가 세는
+        #: 그 성질이 여기에도 적용된다.
+        "window_passed",
         "chain_floor",
     }
 
@@ -531,13 +548,20 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
     #:   ``_missed_timing``      🔴 **Phase 6-AB** (보완이 이름을 바꿨다 —
     #:                           ``_timing_is_current`` 가 세 질문에 하나로
     #:                           답했으므로 셋으로 갈랐다) — 이 사건이 기록의
-    #:                           마지막인가. 새 상태를 만들지 않으려고 기록에
-    #:                           묻는다
+    #:                           마지막인가. 🔴 **최종 보완이 그 기록 읽기를
+    #:                           ``_window_horizon`` 으로 떼어 냈으므로 이제
+    #:                           직접 읽지 않는다** (아래 목록에서 빠졌다)
     #:   ``apply``               🔴 **추가 보완** — 판을 바꾸는 행위가 수락되면
     #:                           새 창이 열리므로, 그 **전**의 기록 길이를
     #:                           창의 바닥으로 적는다
     #:   ``_apply_activation``   🔴 **추가 보완** — 체인이 시작되면 그 번호를
     #:                           적는다 (``chain_floor``)
+    #:
+    #:   ``_window_horizon``     🔴 **Phase 6-AB 최종 보완** — "이 창에서
+    #:                           마지막에 일어난 일" 의 번호를 돌려준다.
+    #:                           ``_missed_timing`` 이 직접 세던 것을 함수로
+    #:                           떼어 낸 것이고, 체인이 열려 있으면 비교
+    #:                           지점을 체인 시작 **직전**에 고정한다
     #:
     #: 🔴 **다섯 다 "읽어서 바닥을 적는" 쪽이거나 "바닥과 비교하는" 쪽이다.**
     #: ``_apply_end_phase`` 가 ``timing_floor`` 에 대해 하는 일과 같은 성질
@@ -547,8 +571,8 @@ def test_08_nothing_remembers_that_a_candidate_was_already_handled(repository):
     assert sorted(readers) == [
         "_apply_activation",
         "_apply_end_phase",
-        "_missed_timing",
         "_trigger_actions",
+        "_window_horizon",
         "apply",
     ], readers
 

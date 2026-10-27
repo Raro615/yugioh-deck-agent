@@ -475,9 +475,15 @@ def test_16_the_simulation_result_has_no_score_notes_or_state_hash():
     ``score`` · ``value`` · ``notes`` · ``ordering_key`` · ``state_hash`` 는
     ``SimulationResult`` 에 **없다.** 점수와 순위는 ``SearchCandidate`` 의
     일이고 ``state_hash`` 는 ``SearchDecision`` 의 일이다. 계층을 섞지 않는다.
+
+    🔴 **열거를 기준으로 바꾼다** (Phase 6-AB 최종 보완). 이 시험의 주장은
+    "칸이 N개다" 가 아니라 **"없어야 하는 칸이 없다"** 이고, 그 주장은 칸이
+    하나 늘어도 그대로여야 한다. 최종 보완이 ``unsupported`` 를 더했다 —
+    그 미래의 다음 자리에서 **지원하지 않아 후보가 되지 못한 것들**이고
+    점수도 순위도 지문도 아니다.
     """
     fields = {f.name for f in dataclasses.fields(SimulationResult)}
-    assert fields == {"action", "status", "viewer", "reason", "code", "future"}
+    assert {"action", "status", "viewer", "reason", "code", "future"} <= fields
     for absent in ("score", "value", "notes", "ordering_key", "state_hash"):
         assert absent not in fields, absent
 
@@ -496,7 +502,10 @@ def test_17_the_code_is_dropped_when_a_candidate_is_built():
        **쓰이지 않는 정보**다. 쓰려면 칸을 만들어야 한다는 사실만 기록한다.
     """
     fields = {f.name for f in dataclasses.fields(SearchCandidate)}
-    assert fields == {"action", "status", "value", "reason"}
+    #: 🔴 **열거를 기준으로 바꾼다** (6-AB 최종 보완). 주장은 "``code`` 칸이
+    #: 없다" 이고, 최종 보완이 더한 ``unsupported`` 는 코드가 아니라 **빠진
+    #: 규칙의 이름**이다 (기계가 읽을 ``ValidationCode`` 가 아니다).
+    assert {"action", "status", "value", "reason"} <= fields
     assert "code" not in fields
 
     source = source_of("agent/search.py")
@@ -672,6 +681,13 @@ def test_26_is_usable_does_not_exist_anywhere_in_the_repository():
     이름을 잘못 적은 것이 결론을 바꾸지는 않았다 (두 자리 모두 ``SUPPORTED``
     만 보므로 ``UNKNOWN``/``REFUSED`` 를 가르지 않는다). 그래도 **측정한
     이름으로** 고쳐 적는다.
+
+    🔴 **사용처 개수를 기준으로 바꾼다** (Phase 6-AB 최종 보완). 전에는
+    ``len(users) == 2`` 였다. 이 시험의 주장은 "둘이다" 가 아니라
+    **"``is_usable`` 이라는 이름이 없고, 실제로 보는 자리는 ``agent``
+    층뿐이다"** 이고, 그 주장은 같은 property 를 한 번 더 읽어도 그대로다.
+    최종 보완이 ``SimulationResult.fully_supported`` 와 불변식 하나를
+    더했다 — 둘 다 같은 property 를 읽는다.
     """
     for _rel, path in production_files():
         assert "is_usable" not in path.read_text(encoding="utf-8")
@@ -683,7 +699,7 @@ def test_26_is_usable_does_not_exist_anywhere_in_the_repository():
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
         if isinstance(node, ast.Attribute) and node.attr == "gives_a_future"
     ]
-    assert len(users) == 2, users
+    assert users, "읽는 자리가 하나도 없으면 이 시험은 아무것도 재지 않는다"
     assert all(u.startswith("agent/simulation.py:") for u in users)
 
 

@@ -989,7 +989,15 @@ def test_25_this_phase_changed_no_production_file():
         "engine/trigger_order.py": 443,
         "engine/timing.py": 436,
         "engine/event_pipeline.py": 500,
-        "engine/activation_timing.py": 570,
+        #: 🔴 570 → **618** (Phase 6-AB 최종 보완). ``ActivationTiming`` 에
+        #: ``simultaneous`` 칸과 그 타입 검사, ``ActivationTimingChecker`` 의
+        #: 이른 통과 하나, 그리고 그 둘의 설명이다.
+        #:
+        #: 🔴 **이 모듈은 dormant 가 아니다** — ``LIVE_TIMING`` 으로 따로
+        #: 둔 이유가 그것이고, ``Duel._activation_gate`` 가 실제로 쓴다.
+        #: 이 핀이 재는 것은 "얼마나 바뀌었는가" 이고, 아래의 문자열에
+        #: 둔감한 핀이 **실행 코드가 움직였다**는 사실을 따로 잡는다.
+        "engine/activation_timing.py": 618,
     }
 
     #: 🔴 주석 · docstring 에 둔감한 핀 (Phase 3-F-26 이 더했다).
@@ -1059,7 +1067,16 @@ def test_25_this_phase_changed_no_production_file():
         "engine/trigger_order.py": 194,
         "engine/timing.py": 194,
         "engine/event_pipeline.py": 227,
-        "engine/activation_timing.py": 227,
+        #: 🔴 227 → **233** (Phase 6-AB 최종 보완). **실행 코드 6줄**이다 —
+        #: ``simultaneous`` 칸 선언 한 줄, ``__post_init__`` 의 타입 검사
+        #: 두 줄, ``ActivationTimingChecker`` 의 이른 통과 세 줄.
+        #:
+        #: 🔴 **스펠 스피드 제약을 없앤 것이 아니다.** 늘어난 분기는
+        #: "같은 기회에서 동시에 쌓이는 묶음" 에만 통과를 내고, 그 사실은
+        #: 판을 든 쪽(``Duel._is_simultaneous``)이 ``chain_floor`` 와 제안의
+        #: 사건 번호로 답한다. 근거는 룰북 §When multiple cards are
+        #: activated simultaneously 다.
+        "engine/activation_timing.py": 233,
     }
 
 

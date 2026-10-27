@@ -278,7 +278,19 @@ PROSE_OCCURRENCES = {
     #
     # **문자열 88 · 코드 73 · 산문 15 · 위반 13 · 적합 19 는 전부 그대로다**
     # — 바뀐 것이 줄 번호뿐이라는 것이 그 증거다 (실측으로 확인했다).
-    ("engine/duel.py", 1832),
+    #
+    # 🔴 **Phase 6-AB 최종 보완에서 1832 → 2090 으로 밀렸다** (+258).
+    # 그 보완이 이 자리보다 **위**에 넣은 것들이다:
+    # ``LegalActions.unsupported()`` (+15) · ``window_passed`` 칸의 설명
+    # (+29) · ``to_act`` 의 창 분기 (+6) · ``_enforce_mandatory`` 의 창
+    # 블록 (+50) · ``_window_admits`` 의 재정렬과 설명 (+40) ·
+    # ``_window_claims`` · ``_window_actor`` · ``_is_simultaneous`` 와
+    # 각자의 설명.
+    #
+    # **문자열 · 코드 · 산문 개수는 또 전부 그대로다** — 이 Phase 는
+    # ``RULE_NOT_IMPLEMENTED`` 를 새로 쓰지도 지우지도 않았고, 바뀐 것이
+    # 줄 번호뿐이라는 것이 그 증거다.
+    ("engine/duel.py", 2090),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)

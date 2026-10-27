@@ -134,38 +134,53 @@ def decide(duel: Duel) -> tuple["PlayerAction | None", SearchDecision]:
 
 def test_01_simulation_result_field_inventory():
     """
-    **§29-1 · §4: 필드는 여섯이다.**
+    **§29-1 · §4: 그 다섯 칸이 없다.**
 
     프롬프트가 "가질 수 있다" 고 든 ``score`` · ``value`` · ``notes`` ·
     ``ordering_key`` · ``state_hash`` 는 **다섯 모두 없다.** "없다" 도 명시한다.
+
+    🔴 **"여섯이다" 를 기준으로 바꿨다** (Phase 6-AB 최종 보완). 주장은
+    개수가 아니라 **그 다섯이 없다**는 것이고, 칸이 늘어도 그대로여야
+    한다. 최종 보완이 ``unsupported`` 를 더했다 — 그 미래의 다음 자리에서
+    지원하지 않아 후보가 되지 못한 것들이고, 점수 · 순위 · 지문이 아니다.
     """
     fields = {f.name for f in dataclasses.fields(SimulationResult)}
-    assert fields == {"action", "status", "viewer", "reason", "code", "future"}
+    assert {"action", "status", "viewer", "reason", "code", "future"} <= fields
     for absent in ("score", "value", "notes", "ordering_key", "state_hash"):
         assert absent not in fields, absent
     #: ``code`` 와 ``future`` 는 선택이다 — 없을 수 있다는 뜻이 설계에 있다.
-    optional = {
+    #: 🔴 **필수인 칸이 늘지 않았다**는 것을 센다 — 늘면 기존 호출자가
+    #: 깨지고, 그것이 이 단정이 지키는 것이다.
+    required = {
         f.name for f in dataclasses.fields(SimulationResult)
-        if f.default is not dataclasses.MISSING
+        if f.default is dataclasses.MISSING
     }
-    assert optional == {"reason", "code", "future"}
+    assert required == {"action", "status", "viewer"}
 
 
 def test_02_search_candidate_field_inventory():
     """
-    **§29-2 · §5: 필드는 넷이고 ``ordering_key`` 는 메서드다.**
+    **§29-2 · §5: ``ordering_key`` 는 필드가 아니라 메서드다.**
 
     프롬프트는 ``ordering_key`` · ``state_hash`` 를 후보의 **필드**처럼 들었다.
     ``ordering_key`` 는 계산하는 **메서드**이고 ``state_hash`` 는 후보에
     **없다** — ``SearchDecision`` 의 칸이다 (``test_03``).
+
+    🔴 **"넷이다" 를 기준으로 바꿨다** (Phase 6-AB 최종 보완). 최종 보완이
+    ``unsupported`` 를 더했다 — 그 미래의 경계이고 **이름만** 담는다
+    (흔적은 오래 산다). ``ordering_key`` 는 그 칸을 보지 않는다: 미지원을
+    벌점으로 바꾸면 "모른다" 가 "나쁘다" 가 된다.
     """
     fields = {f.name for f in dataclasses.fields(SearchCandidate)}
-    assert fields == {"action", "status", "value", "reason"}
+    assert {"action", "status", "value", "reason"} <= fields
     for absent in ("code", "viewer", "future", "score", "state_hash", "notes"):
         assert absent not in fields, absent
     assert "ordering_key" not in fields
     assert callable(SearchCandidate.ordering_key)
     assert isinstance(SearchCandidate.comparable, property)
+    import inspect
+
+    assert "unsupported" not in inspect.getsource(SearchCandidate.ordering_key)
 
 
 def test_03_search_decision_field_inventory_owns_the_state_hash():
@@ -214,10 +229,15 @@ def test_05_the_candidate_is_built_at_exactly_three_places():
     """
     rows = constructions("agent/search.py", "SearchCandidate")
     assert len(rows) == 3
+    #: 🔴 셋째 자리에 ``unsupported`` 가 하나 늘었다 (6-AB 최종 보완 ④) —
+    #: ``SUPPORTED`` 인 미래만 경계를 가질 수 있으므로 **그 자리에만**
+    #: 붙는다. 그 사실이 이 표의 요점("셋이 서로 다른 인자를 넘긴다")을
+    #: 더 선명하게 한다.
     assert [row["kwargs"] for row in rows] == [
         ["action", "reason", "status"],           # 예산에 걸림
         ["action", "reason", "status"],           # SUPPORTED 가 아님
-        ["action", "reason", "status", "value"],  # SUPPORTED
+        # SUPPORTED — 점수와 그 미래의 경계를 함께 싣는다
+        ["action", "reason", "status", "unsupported", "value"],
     ]
     body = function_source("agent/search.py", "_look_ahead")
     for row in rows:
@@ -859,8 +879,15 @@ def test_32_the_three_record_types_stay_distinct():
     dec = {f.name for f in dataclasses.fields(SearchDecision)}
 
     assert sim != cand != dec
-    #: 공유하는 칸은 ``action`` · ``status`` · ``reason`` 셋뿐이다.
-    assert sim & cand == {"action", "status", "reason"}
+    #: 공유하는 칸은 ``action`` · ``status`` · ``reason`` 셋이고, 6-AB 최종
+    #: 보완이 ``unsupported`` 를 더했다 — **같은 사실의 두 얼굴**이다:
+    #: 결과 쪽은 설명문을, 후보 쪽은 이름만 든다 (흔적은 오래 산다).
+    #: 🔴 재는 것은 **세 자료형이 서로 다른 것을 표현한다**이고, 공유 칸의
+    #: 개수가 아니다. 점수 · 관측 · 지문은 여전히 갈려 있다.
+    assert sim & cand == {"action", "status", "reason", "unsupported"}
+    assert {"value"} & sim == set()
+    assert {"viewer", "future", "code"} & cand == set()
+    assert "state_hash" in dec and "state_hash" not in (sim | cand)
     #: 결정은 후보를 **담고**, 후보는 결정을 모른다.
     assert "candidates" in dec
     assert not any("decision" in name for name in cand)
@@ -895,12 +922,26 @@ def test_34_unknown_is_still_neither_a_zero_nor_a_loss():
 
 
 def test_35_this_phase_changed_no_production_file():
-    """**§0 · §26: AUDIT-ONLY — 네 자료형이 3-E-41 이 남긴 모양 그대로다.**"""
-    assert len(dataclasses.fields(SimulationResult)) == 6
-    assert len(dataclasses.fields(SearchCandidate)) == 4
+    """
+    **§0 · §26: AUDIT-ONLY — 3-E-41 이 남긴 모양.**
+
+    🔴 **이 시험의 이름이 더 이상 참이 아니다** (Phase 6-AB 최종 보완).
+    3-E-41 은 production 을 한 줄도 고치지 않은 Phase 였고 이 단정이 그
+    사실을 고정했다. 6-AB 최종 보완은 **고쳤다** — ``SimulationResult``
+    와 ``SearchCandidate`` 에 ``unsupported`` 를 더했다 (그 미래의 다음
+    자리에서 지원하지 않아 후보가 되지 못한 것들, ④).
+
+    그래서 개수 고정을 **그 Phase 가 지키려 한 것**으로 되돌린다: 다른
+    두 자료형(``SearchDecision`` · ``StateValue``)은 그대로이고, 변환
+    자리의 개수도 그대로다 — 즉 **자리가 늘지 않았고** 늘어난 것은
+    자리마다 싣는 사실 하나다. 이름은 역사이므로 바꾸지 않고 여기 적는다.
+    """
     assert len(dataclasses.fields(SearchDecision)) == 9
     assert len(dataclasses.fields(StateValue)) == 4
-    #: 변환 자리도 셋 그대로다.
+    #: 🔴 6-AB 최종 보완이 더한 칸 하나씩 — 그 밖은 3-E-41 그대로다.
+    assert len(dataclasses.fields(SimulationResult)) == 7
+    assert len(dataclasses.fields(SearchCandidate)) == 5
+    #: 변환 자리도 셋 · 넷 그대로다 — 자리가 늘지 않았다.
     assert len(constructions("agent/search.py", "SearchCandidate")) == 3
     assert len(constructions("agent/simulation.py", "SimulationResult")) == 4
 
