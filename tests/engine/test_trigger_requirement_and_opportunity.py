@@ -55,6 +55,7 @@ from engine.vocabulary import Phase, Zone
 
 from integration.autonomy import PolicyChooser, TriggerSource, trigger_offers
 from tests.conftest import requires_official_db
+from tests.engine.window_helpers import pass_fast_window
 from tests.engine.test_trigger_normal_path_integration import (
     GIRSU,
     GROWTH,
@@ -130,6 +131,13 @@ def _decline_window(duel, seat: int = MINE):
             break
         assert duel.apply(passing[0]).accepted is True
         steps += 1
+    #: 🔴 **그 뒤의 빠른 효과 기회까지 지나간다** (보완5). 유발 처리 기회가
+    #: 닫히면 공식 도표의 상자 B 가 열리고, 양측이 지나가야 판이 다시
+    #: 열린다. 그러지 않으면 "끼워 넣을 행동" 자체가 후보로 오르지 않는다.
+    #:
+    #: 🔴 **돌려주는 수는 그대로 유발 쪽 걸음 수다** — 두 PASS 는 뜻이
+    #: 다르므로 한 수로 세지 않는다 (``test_c03`` 이 그 구분을 센다).
+    pass_fast_window(duel)
     return steps
 
 
@@ -375,10 +383,20 @@ def test_b01_an_optional_trigger_can_be_taken_or_given_up(repository):
         a for a in legal.allowed if a.kind is PlayerActionKind.END_PHASE
     ]
 
-    #: 🔴 포기하면 기회가 닫히고 **흐름이 다시 열린다.**
+    #: 🔴 포기하면 기회가 닫힌다 — **그러나 판이 곧바로 열리지는 않는다**
+    #: (보완5 정정). 보완5 전까지 이 줄은 포기 **직후** ``END_PHASE`` 를
+    #: 요구했고, 그 기대값이 공식 Fast Effect Timing 도표와 충돌한다:
+    #: *"If there is no effect that can be triggered."* 는 턴 플레이어를
+    #: **상자 B** 로 보내고, 판이 다시 열리려면 턴 플레이어가 지나가고
+    #: 상대가 되돌려 지나가야 한다.
     step = other.apply(passing[0])
     assert step.accepted is True
     assert _trigger_action(other) is None
+    #: 그 자리는 **빠른 효과 기회**이므로 아직 페이즈를 넘길 수 없다.
+    assert _end_phase(other) is None
+    assert other.priority.is_open
+    #: 양측이 지나가면 흐름이 다시 열린다.
+    pass_fast_window(other)
     assert _end_phase(other) is not None
     assert len(other.state.player(MINE).zone(Zone.GRAVE)) == 0
 
@@ -501,7 +519,17 @@ def test_b05_synthetic_unknown_never_blocks_the_flow(repository):
     _summon(duel)
     assert duel._mandatory_offers(MINE) == ()
     legal = duel.legal_actions(MINE)
-    assert [a for a in legal.allowed if a.kind is PlayerActionKind.END_PHASE]
+    #: 🔴 **"막지 않는다" 의 뜻을 정정한다** (보완5). 보완5 전까지 이 줄은
+    #: 그 자리에서 ``END_PHASE`` 가 **바로** 오를 것을 요구했다. 지금 그
+    #: 자리는 빠른 효과 기회이므로 오르는 것은 ``PASS`` 다 — 그리고 이
+    #: 시험이 재려는 것은 *"영영 막히지 않는다"* 이고, **그것은 그대로
+    #: 참이다.** 막힌다면 지나갈 ``PASS`` 조차 없었을 것이다.
+    assert [a for a in legal.allowed if a.kind is PlayerActionKind.PASS]
+    assert not [
+        a for a in legal.allowed if a.kind is PlayerActionKind.END_PHASE
+    ]
+    #: 지나가면 흐름이 열리고 페이즈가 넘어간다 — 모름이 듀얼을 멈추지 않는다.
+    pass_fast_window(duel)
     assert _end_phase(duel) is not None
 
 

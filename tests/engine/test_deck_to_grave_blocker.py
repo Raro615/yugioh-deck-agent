@@ -76,6 +76,7 @@ from engine.vocabulary import Zone
 from deck.opening import build_opening
 from deck.recipe import parse_recipe
 from tests.conftest import requires_official_db
+from tests.engine.window_helpers import pass_fast_window
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 MINE = 0
@@ -831,6 +832,10 @@ def test_g03_the_deck_never_reaches_the_action(repository):
     combinations = list(target_combinations(duel.state, MINE, definition, source))
     assert combinations == [()]
 
+    #: 🔴 **빠른 효과 기회를 먼저 지난다** (보완5). 해결 뒤에도 양측이
+    #: 지나가야 판이 열린다 (공식 Fast Effect Timing — box B · C). 보완5
+    #: 전까지 이 줄은 해결 직후에 ``end_phase`` 가 올라 있을 것을 요구했다.
+    pass_fast_window(duel)
     offered = {a.kind.value for a in duel.legal_actions(MINE).allowed}
     #: 이 판에는 사건 원천이 꽂혀 있지 않으므로 유발이 오르지 않는다.
     assert duel.triggers is None

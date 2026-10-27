@@ -45,6 +45,7 @@ from engine.action import PlayerAction, PlayerActionKind
 from engine.condition import ConditionResult
 from engine.effect.journal import EventJournal
 from engine.ids import EffectRef
+from engine.priority import ResponseWindow
 from engine.validation import ValidationCode
 from engine.vocabulary import ActivationKind, Zone
 
@@ -159,16 +160,42 @@ def _trigger_action(duel, *, seat: int = MINE, card_id: int = GIRSU):
     )
 
 
+class _Steps(list):
+    """
+    패스로 지난 걸음들. ``resolution`` 은 **체인을 푼** 걸음이다.
+
+    🔴 **마지막 걸음이 해결 걸음이 아니다** (보완5). 보완5 가 빈 체인의 빠른
+    효과 기회를 실었으므로, 체인이 풀린 뒤에도 양측이 지나가야 판이 열린다.
+    그래서 ``[-1]`` 은 *"양쪽이 빠른 효과 기회를 지나갔습니다"* 가 되고,
+    그것은 **절차를 지났다는 말이고 결과가 아니다.**
+
+    그 구분을 호출자가 매번 다시 하지 않도록 여기서 들고 있는다. 체인이
+    서지 않았으면 ``None`` 이다.
+    """
+
+    resolution = None
+
+
 def _settle(duel):
-    """응답 창을 **패스로** 지난다. 패스도 ``legal_actions`` 를 지난다."""
-    steps = []
-    while duel.priority.is_open:
+    """
+    응답 창과 **빠른 효과 기회**를 패스로 지난다. 패스도 ``legal_actions``
+    를 지난다.
+
+    돌려주는 것은 :class:`_Steps` 다 — 걸음 목록이면서 ``resolution`` 을
+    따로 들고 있다.
+    """
+    steps = _Steps()
+    #: 🔴 상한을 2 에서 6 으로 올렸다 (보완5) — 1 링크 체인도 네 걸음이
+    #: 필요하다 (응답 둘 + 빠른 효과 기회 둘). 2 로 두면 빠른 효과 기회가
+    #: 열린 채 남아 호출자가 **체인 도중인지 기회 중인지** 알 수 없다.
+    while duel.priority.is_open and len(steps) < 6:
         holder = duel.priority.holder.seat
         passing = PlayerAction.passing(actor=holder)
         assert passing in duel.legal_actions(holder).allowed
+        had_chain = not duel.chain.is_empty
         steps.append(duel.apply(passing))
-        if len(steps) > 4:  # pragma: no cover - 두 번이면 끝난다
-            break
+        if had_chain and duel.chain.is_empty:
+            steps.resolution = steps[-1]
     return steps
 
 
@@ -313,6 +340,16 @@ def test_a03_the_opponent_gets_the_response_window(repository):
     assert final.accepted is True
     assert final.code is ValidationCode.OK, final.reason
     assert len(duel.chain) == 0
+    #: 🔴 **해결 뒤에도 기회가 하나 남는다** (보완5 정정). 보완5 전까지 이
+    #: 줄은 해결 **직후** 우선권이 닫힐 것을 요구했다. 공식 Fast Effect
+    #: Timing 도표는 체인 해결 뒤에도 유발 확인과 빠른 효과 기회를 거치게
+    #: 하고, 판이 다시 열리려면 양측이 지나가야 한다.
+    assert duel.priority.is_open is True
+    assert duel.priority.window is ResponseWindow.RESPONSE
+    assert duel.priority.holder.seat == duel.turn_player
+    #: 양측이 지나가면 닫힌다.
+    duel.apply(PlayerAction.passing(actor=MINE))
+    duel.apply(PlayerAction.passing(actor=THEIRS))
     assert duel.priority.is_open is False
 
 
@@ -516,7 +553,12 @@ def test_b03_without_a_chooser_the_resolution_is_refused(repository):
     duel.apply(_trigger_action(duel))
     steps = _settle(duel)
 
-    last = steps[-1]
+    #: 🔴 **마지막 걸음이 아니라 해결 걸음을 읽는다** (보완5 정정). 보완5
+    #: 전까지 이 줄은 ``steps[-1]`` 을 읽었고, 지금 그 자리는 빠른 효과
+    #: 기회를 닫는 PASS 다 — *"양쪽이 빠른 효과 기회를 지나갔습니다"* 는
+    #: 절차를 지났다는 말이고 **링크의 결과가 아니다.**
+    last = steps.resolution
+    assert last is not None, [st.reason for st in steps]
     #: 패스는 일어났다 (Phase 6-R) — 불발은 **링크의 결과**다.
     assert last.accepted is True
     assert last.code is ValidationCode.TOO_FEW_SELECTED, last.code
@@ -545,7 +587,9 @@ def test_b04_choosing_outside_the_candidate_list_is_refused(repository):
     duel2.apply(_trigger_action(duel2))
     steps = _settle(duel2)
 
-    last = steps[-1]
+    #: 🔴 해결 걸음을 읽는다 (보완5 정정 — ``test_b03`` 의 설명과 같다).
+    last = steps.resolution
+    assert last is not None, [st.reason for st in steps]
     assert last.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE, last.code
     assert "후보가 아닌 카드가 들어왔습니다" in last.reason, last.reason
     assert len(duel2.state.player(MINE).zone(Zone.GRAVE)) == 0
@@ -563,7 +607,7 @@ def test_b05_choosing_too_few_is_refused(repository):
     duel = setup.duel
     _summon(duel)
     duel.apply(_trigger_action(duel))
-    last = _settle(duel)[-1]
+    last = _settle(duel).resolution
 
     assert last.code is ValidationCode.TOO_FEW_SELECTED, last.code
     assert "최소 1장" in last.reason, last.reason
@@ -578,7 +622,7 @@ def test_b06_choosing_too_many_is_refused(repository):
     duel = setup.duel
     _summon(duel)
     duel.apply(_trigger_action(duel))
-    last = _settle(duel)[-1]
+    last = _settle(duel).resolution
 
     assert last.code is ValidationCode.TOO_MANY_SELECTED, last.code
     assert "최대 1장" in last.reason, last.reason
@@ -599,7 +643,7 @@ def test_b07_an_unknown_candidate_is_refused_by_the_ruling_gate(repository):
     duel = setup.duel
     _summon(duel)
     duel.apply(_trigger_action(duel))
-    last = _settle(duel)[-1]
+    last = _settle(duel).resolution
 
     assert "판정할 수 없는 것을 허가로 바꾸지 않습니다" in last.reason, last.reason
     assert len(duel.state.player(MINE).zone(Zone.GRAVE)) == 0

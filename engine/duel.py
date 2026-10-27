@@ -2195,6 +2195,9 @@ class Duel:
             self.window_floor = opening
             # 새 창이므로 **지나간 자리 기록을 비운다** (최종 보완).
             self.window_passed = frozenset()
+            # 🔴 **그리고 다음 단계를 연다** (보완5) — 유발 등재가 있으면
+            # 그 단계, 없으면 빠른 효과 기회다 (``_after_window_moved``).
+            self._after_window_moved()
         return step
 
     def _apply_pass(self, action: PlayerAction) -> DuelStep:
@@ -2257,6 +2260,41 @@ class Duel:
             )
 
         self.priority = self.priority.passed()
+
+        if self.chain.is_empty:
+            # 🔴 **빈 체인의 빠른 효과 기회다** (보완5) — 풀 링크가 없으므로
+            # ``ready_to_resolve`` 는 ``CHAIN_EMPTY`` 를 돌려준다
+            # (*"풀 링크가 없습니다"*). 그 자리를 여기서 끝낸다: 양쪽이
+            # 연속으로 패스하면 **기회를 닫고** 판이 다시 열린다.
+            #
+            # 근거는 공식 Fast Effect Timing 도표다 — 판이 열리는 조건이
+            # *"the turn player … passes, the opponent passes back, and no
+            # Chain is forming"* 셋이다.
+            #
+            # 🔴 **체인 해결 PASS 와 다른 일이다.** 여기서는 아무것도
+            # 해결하지 않고, 이유 문장도 다르다. 그리고 페이즈 이동 동의도
+            # 아니다 — 페이즈를 넘기는 것은 ``END_PHASE`` 가 하고, 그것은
+            # 판이 열린 뒤에만 후보가 된다.
+            if self.priority.both_passed:
+                #: 🔴 **닫는 일은 응답 계층이 한다** — 닫는 이유를 그쪽이
+                #: 들고 있다 (:data:`~engine.response.AFTER_FAST_WINDOW_RULE`).
+                #: 흐름을 두 곳에서 닫으면 둘이 갈라진다.
+                self.priority = self._response_loop.close_fast_window(
+                    self._response_state()
+                ).priority
+                return DuelStep(
+                    action,
+                    True,
+                    ValidationCode.OK,
+                    "양쪽이 빠른 효과 기회를 지나갔습니다 — 판이 다시 "
+                    "열렸습니다.",
+                )
+            return DuelStep(
+                action,
+                True,
+                ValidationCode.OK,
+                "빠른 효과 기회를 넘겼습니다 — 상대의 차례입니다.",
+            )
 
         loop = self._response_loop
         response = self._response_state()
@@ -2325,6 +2363,11 @@ class Duel:
         self.chain_floor = -1
         # 새 창이므로 **지나간 자리 기록을 비운다** (최종 보완).
         self.window_passed = frozenset()
+        # 🔴 **체인 해결 뒤에도 유발 확인과 빠른 효과 기회를 거친다**
+        # (보완5). 공식 도표가 체인 해결 직후를 같은 두 갈래로 적는다 —
+        # 유발이 있으면 box D, 없으면 box B. 해결 중에 생긴 사건이 유발을
+        # 낳았으면 등재 단계가 먼저이고, 그것이 ``_after_window_moved`` 다.
+        self._after_window_moved()
 
         # **해결됐든 아니든 놓인 마법은 필드를 떠난다** (RULE-SPELLTRAP-002).
         self._retire_pending()
@@ -2653,26 +2696,74 @@ class Duel:
 
     def _response_priority(self):
         """
-        등재가 끝난 뒤 **응답 단계를 여는** 우선권 (6-AB 보완4).
+        등재가 끝난 뒤 **응답 단계를 여는** 우선권 (6-AB 보완4 · 보완5).
 
-        쥐는 자리는 **마지막으로 발동한 자리의 상대**다 — RULE-CHAIN-001
-        ("the opponent is **always** given a chance to respond") 이 그 자리를
-        정하고, 묶음이 여럿 쌓인 뒤에도 같다 (체인의 마지막 링크를 올린
-        자리의 상대).
+        두 경우가 있고 **둘 다 기회를 연다.**
 
-        체인이 비어 있으면 열 것이 없다 — 아무도 발동하지 않은 기회이므로
-        그대로 ``priority`` 를 둔다.
+        ==================  ==================================================
+        체인이 쌓였다          쥐는 자리는 **마지막으로 발동한 자리의 상대**다 —
+                            RULE-CHAIN-001 (*"the opponent is **always**
+                            given a chance to respond"*). 공식 Fast Effect
+                            Timing 도표의 box D 다
+        체인이 비었다          쥐는 자리는 **턴 플레이어**다 — 그 도표가 적는
+                            box B 이고, 거기서 *"They can also choose to
+                            activate a fast effect, if they wish."*
+        ==================  ==================================================
+
+        🔴 **보완4 는 빈 체인에서 ``self.priority`` 를 그대로 돌려주었다.**
+        그래서 유발을 모두 포기하면 **빠른 효과 기회를 건너뛰고** 곧바로
+        열린 상태로 돌아갔다 (실측: 양쪽 포기 직후 ``END_PHASE`` 수락 True ·
+        상대 허가 ``[]``). 공식 도표는 그 자리를 box B 로 적고, 판이 다시
+        열리는 조건을 *"the turn player … passes, the opponent passes back,
+        and no Chain is forming"* 로 적는다 — **두 번의 패스가 필요하다.**
+
+        🔴 **체인이 없으므로 "해결" 로 이어지지 않는다.** 양쪽이 패스하면
+        ``ResponseLoop.ready_to_resolve`` 가 ``CHAIN_EMPTY`` 를 돌려주고
+        (*"풀 링크가 없습니다"*), :meth:`_apply_pass` 가 그때 기회를
+        **닫는다.** 그 구분은 ``PriorityState.both_passed`` 의 설명이 이미
+        적어 두었다 — *"체인이 있으면 체인이 끝난다는 뜻이고, 없으면 다른
+        뜻이다."*
         """
+        #: 🔴 **여는 자리는 하나다.** 쥘 자리와 이유만 두 경우에서 갈라지고,
+        #: 기회를 여는 호출은 아래 한 곳뿐이다
+        #: (``test_priority_response_audit.test_02`` 가 그 수를 센다).
         if self.chain.is_empty:
-            return self.priority
-        last = self.chain.links[-1]
+            holder = self.turn_player
+            reason = "빠른 효과 기회 (공식 Fast Effect Timing — box B)"
+        else:
+            holder = 1 - self.chain.links[-1].actor
+            reason = "발동에 응답 (RULE-CHAIN-001)"
         return ResponseLoop.opened(
             self.chain,
-            1 - last.actor,
+            holder,
             turn_player=self.state.turn.turn_player,
             phase=self.state.turn.phase,
-            reason="발동에 응답 (RULE-CHAIN-001)",
+            reason=reason,
         ).priority
+
+    def _after_window_moved(self) -> None:
+        """
+        창이 옮겨 간 뒤 **다음 단계를 연다** (보완5).
+
+        공식 Fast Effect Timing 도표의 두 갈래를 그대로 적는다.
+
+        * 등재할 유발이 있으면 → **등재 단계**가 먼저다 (우선권은 닫힌 채로
+          두고 :meth:`_window_actor` 가 자리를 가리킨다). 도표의
+          *"If there is an effect that is triggered"* 쪽이다.
+        * 없으면 → **빠른 효과 기회**를 연다. 도표의 *"If there is no effect
+          that can be triggered."* → **Turn Player (box B)** 다.
+
+        🔴 **부르는 자리는 둘이다** — 판을 바꾸는 행위가 수락된 뒤
+        (:meth:`apply`) 와 체인이 풀린 뒤 (:meth:`_resolve_chain`). 둘 다
+        "창이 옮겨 갔다" 는 같은 사건이고, 그래서 같은 함수를 부른다.
+
+        🔴 **페이즈 전환은 부르지 않는다.** 도표가 *"This is where each Phase
+        and Step starts"* 를 **box A** 로 적는다 — 새 페이즈는 열린 상태에서
+        시작한다.
+        """
+        if self._registration_is_open():
+            return
+        self.priority = self._response_priority()
 
     # ------------------------------------------------------------------
     # 규칙이 하는 일 — 고르는 것이 아니다

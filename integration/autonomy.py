@@ -323,7 +323,14 @@ def trigger_offers(duel, repository, seat: int) -> tuple[TriggerOffer, ...]:
         return ()
     view = duel.view(seat)
     build = registry_for_view(view, repository)
-    integrator = _integrator(view, build.registry)
+    #: 🔴 **그 판의 등록부로 판정한다** (보완5 — :func:`_duel_registries`).
+    definitions, implementations = _duel_registries(duel)
+    integrator = _integrator(
+        view,
+        build.registry,
+        definitions=definitions,
+        implementations=implementations,
+    )
 
     offers: list[TriggerOffer] = []
     for recorded in duel.journal:
@@ -635,19 +642,37 @@ def run_trigger(
     # ④ **응답 기회를 지난다.** 둘 다 패스해야 풀린다 (RULE-CHAIN-001).
     #    패스도 ``legal_actions`` 를 지나 ``apply`` 로 넣는다 — 손으로
     #    우선권을 돌리지 않는다.
+    #: 🔴 **마지막 걸음이 아니라 해결 걸음을 읽는다** (보완5).
+    #:
+    #: 보완5 가 빈 체인의 빠른 효과 기회를 실었으므로 체인이 풀린 **뒤에도**
+    #: 양측이 지나가야 판이 열린다. 그래서 이 반복의 마지막 걸음은
+    #: *"양쪽이 빠른 효과 기회를 지나갔습니다"* 가 되고, 그것을 읽으면
+    #: ``resolution_reason`` 과 ``refused`` 가 **그 유발이 어떻게 됐는지를
+    #: 말하지 않는다** (실측: 대상 초과 · 후보 아님 · 빈 덱이 전부 같은
+    #: 문장으로 덮이고 ``refused`` 가 ``None`` 이 되었다).
+    #:
+    #: 그 문장은 절차를 지났다는 뜻이고 **결과가 아니다.** 체인이 비어 가는
+    #: 걸음 — 해결 또는 불발을 적은 걸음 — 을 따로 기억한다. 체인이
+    #: 서지 않았으면 발동 걸음 그대로다.
     last = step
+    resolution = None
     passes = 0
-    while duel.priority.is_open and passes < 4:
+    while duel.priority.is_open and passes < 6:
         holder = duel.priority.holder.seat
         passing = PlayerAction.passing(actor=holder)
         if passing not in duel.legal_actions(holder).allowed:  # pragma: no cover
             notes.append(f"P{holder} 의 패스가 허가되지 않았다")
             break
+        had_chain = not duel.chain.is_empty
         last = duel.apply(passing)
         passes += 1
         notes.append(f"P{holder} 가 패스했다")
+        if had_chain and duel.chain.is_empty:
+            resolution = last
         if not last.accepted:  # pragma: no cover
             break
+    if resolution is not None:
+        last = resolution
 
     record = None if chooser is None else next(
         (r for r in reversed(chooser.records) if r.effect_ref == offer.effect_ref),
@@ -730,8 +755,47 @@ def _gate_summary(eligibility) -> str:
     )
 
 
-def _integrator(view, registry) -> TriggerChainIntegrator:
-    return TriggerChainIntegrator(view, registry, _definitions(), _implementations())
+def _integrator(
+    view, registry, *, definitions=None, implementations=None
+) -> TriggerChainIntegrator:
+    """
+    후보 판정기. ``definitions`` · ``implementations`` 를 주면 **그 등록부**로
+    판정한다.
+
+    🔴 기본값은 프로덕션 등록부다 — 주지 않으면 아무것도 달라지지 않는다.
+    인자는 :func:`_definition` 과 **같은 이유**로 있다 (그 설명을 보라).
+    """
+    return TriggerChainIntegrator(
+        view,
+        registry,
+        _definitions() if definitions is None else definitions,
+        _implementations() if implementations is None else implementations,
+    )
+
+
+def _duel_registries(duel):
+    """
+    그 판이 들고 있는 정의 · 구현 등록부. 없으면 ``(None, None)``.
+
+    🔴 **후보를 세는 쪽과 발동 · 해결하는 쪽이 같은 등록부를 보아야 한다**
+    (보완5). 보완5 전까지 :func:`trigger_offers` 는 프로덕션 등록부로만
+    판정했고, 그래서 **다른 등록부를 꽂은 판에서는 후보 판정과 발동 판정이
+    갈라졌다** — 발동기는 그 효과를 알고 해결기는 실행할 수 있는데, 후보
+    판정만 "정의가 등록되어 있지 않아 조건을 확인할 수 없습니다" 로
+    ``UNDETERMINED`` 를 돌려주었다 (실측). ``trigger_offers`` 는
+    ``ELIGIBLE`` 만 돌려주므로 그 효과는 **후보에 아예 오르지 않는다.**
+
+    이것은 보완4 가 ``Simulator._fork`` 에서 고친 것과 **같은 병**이다 —
+    판마다 등록부가 다를 수 있는데 한쪽이 프로덕션을 되묻는다. 조립 층의
+    일은 **전달과 변환**이므로, 판이 들고 있는 것을 가져다 넘긴다.
+
+    🔴 **읽기만 한다.** 등록부를 새로 만들지도, 고치지도 않는다.
+    """
+    activator = getattr(duel, "_activator", None)
+    return (
+        getattr(activator, "definitions", None),
+        getattr(activator, "lookup", None),
+    )
 
 
 def _definitions():

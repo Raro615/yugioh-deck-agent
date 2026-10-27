@@ -72,12 +72,24 @@ def settle_chain(duel):
     없었기 때문이고, 그것이 STRUCTURAL-34 였다. 지금은 해결 **결과**를 보려면
     이 걸음을 거쳐야 한다.
 
-    마지막 패스의 :class:`DuelStep` 을 돌려준다 — 그것이 해결의 결과다.
-    열린 창이 없으면 ``None`` 이다.
+    🔴 **해결 걸음을 돌려준다 — 마지막 걸음이 아니다** (Phase 6-AB 보완5).
+
+    보완5 전까지 이 함수는 *"마지막 패스의 걸음이 해결의 결과다"* 라고 적고
+    그대로 돌려주었다. 보완5 가 빈 체인의 빠른 효과 기회를 실었으므로 (공식
+    Fast Effect Timing — box B · C) 체인이 풀린 **뒤에도** 양측이 지나가야
+    판이 열리고, 그래서 마지막 걸음은 *"양쪽이 빠른 효과 기회를
+    지나갔습니다"* 가 된다. 그 문장은 **절차를 지났다는 말이고 해결의
+    결과가 아니다** — 불발 · 대상 미선택 · 후보 아님이 전부 그 하나로
+    덮인다 (실측).
+
+    그래서 체인이 비어 가는 걸음 — 해결(또는 불발)을 적은 걸음 — 을
+    돌려준다. 체인이 서지 않았으면 마지막 걸음 그대로이고, 열린 창이
+    없으면 ``None`` 이다.
     """
     from engine.action import PlayerActionKind
 
     last = None
+    resolution = None
     guard = 0
     while duel.priority.is_open and guard < 8:
         guard += 1
@@ -85,8 +97,11 @@ def settle_chain(duel):
         passing = [a for a in legal.allowed if a.kind is PlayerActionKind.PASS]
         if not passing:
             break
+        had_chain = not duel.chain.is_empty
         last = duel.apply(passing[0])
-    return last
+        if had_chain and duel.chain.is_empty:
+            resolution = last
+    return resolution if resolution is not None else last
 
 
 def activate_and_settle(duel, action):

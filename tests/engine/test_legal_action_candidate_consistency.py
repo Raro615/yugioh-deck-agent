@@ -99,6 +99,8 @@ from engine.validation import ActionValidity, ValidationCode
 from engine.vocabulary import Phase, Position, Zone
 
 from tests.conftest import requires_official_db
+from tests.engine.window_helpers import pass_fast_window
+from tests.engine.window_helpers import settle as window_settle
 
 pytestmark = requires_official_db
 
@@ -458,6 +460,12 @@ def all_states(repository):
             PlayerAction.normal_summon(actor=P0, source=fresh_hands[P0][0])
         )
         assert step.accepted, step.reason
+        #: 🔴 **빠른 효과 기회를 지나 판을 다시 연다** (보완5). 이 상태의
+        #: 이름이 *"소환권 사용 뒤"* 이고, 재려는 것은 **열린 판**에서
+        #: 후보가 빠지지 않는가다. 보완5 가 소환 뒤에 상자 B 를 열었으므로,
+        #: 지나가지 않으면 이 상태는 "열린 판" 이 아니라 "빠른 효과 기회"
+        #: 이고 — 그 자리에서는 세트가 **규칙대로** 후보가 아니다.
+        pass_fast_window(fresh)
         out.append((label, fresh, seat))
 
     # B 마법 카드 발동
@@ -1272,17 +1280,12 @@ def test_g01_a_candidate_goes_all_the_way_to_a_state_change(repository):
     assert len(duel.state.player(P0).zone(Zone.DECK)) == deck_before
 
     # ⑤ RESOLVED — 양쪽 패스
-    last = None
-    guard = 0
-    while duel.priority.is_open and guard < 8:
-        guard += 1
-        passing = [
-            a
-            for a in duel.legal_actions().allowed
-            if a.kind is PlayerActionKind.PASS
-        ]
-        assert passing, duel.legal_actions().allowed
-        last = duel.apply(passing[0])
+    #: 🔴 **해결 걸음을 읽는다 — 마지막 걸음이 아니다** (보완5). 체인이
+    #: 풀린 뒤에도 빠른 효과 기회를 양측이 지나가야 판이 열리므로,
+    #: 마지막 걸음은 *"양쪽이 빠른 효과 기회를 지나갔습니다"* 다.
+    steps = window_settle(duel)
+    assert steps, duel.legal_actions().allowed
+    last = steps.resolution if steps.resolution is not None else steps[-1]
     assert (last.accepted, last.code) == (True, ValidationCode.OK)
     assert "해결했습니다" in last.reason
     assert duel.chain.is_empty  # Phase 6-R
@@ -1351,22 +1354,18 @@ def test_g03_every_candidate_in_every_state_is_accepted_by_apply(repository):
 
 
 def resolve(duel, action):
-    """후보 하나를 끝까지 — 발동, 패스, 해결. 해결의 걸음을 돌려준다."""
+    """
+    후보 하나를 끝까지 — 발동, 패스, 해결. **해결의 걸음**을 돌려준다.
+
+    🔴 마지막 걸음이 아니다 (보완5) — 체인이 풀린 뒤에도 빠른 효과 기회를
+    지나야 판이 열리고, 그 걸음은 해결의 결과가 아니다.
+    """
     step = duel.apply(action)
     assert step.accepted, step.reason
-    last = step
-    guard = 0
-    while duel.priority.is_open and guard < 8:
-        guard += 1
-        passing = [
-            a
-            for a in duel.legal_actions().allowed
-            if a.kind is PlayerActionKind.PASS
-        ]
-        if not passing:
-            break
-        last = duel.apply(passing[0])
-    return last
+    steps = window_settle(duel)
+    if steps.resolution is not None:
+        return steps.resolution
+    return steps[-1] if steps else step
 
 
 def offered(duel, seat, card_id):
@@ -1478,17 +1477,12 @@ def test_h05_the_phase_6q_chain_two_response_still_runs(repository):
     assert (second.accepted, second.code) == (True, ValidationCode.OK)
     assert len(duel.chain.links) == 2
 
-    last = None
-    guard = 0
-    while duel.priority.is_open and guard < 8:
-        guard += 1
-        passing = [
-            a
-            for a in duel.legal_actions().allowed
-            if a.kind is PlayerActionKind.PASS
-        ]
-        assert passing, duel.legal_actions().allowed
-        last = duel.apply(passing[0])
+    #: 🔴 **해결 걸음을 읽는다 — 마지막 걸음이 아니다** (보완5). 체인이
+    #: 풀린 뒤에도 빠른 효과 기회를 양측이 지나가야 판이 열리므로,
+    #: 마지막 걸음은 *"양쪽이 빠른 효과 기회를 지나갔습니다"* 다.
+    steps = window_settle(duel)
+    assert steps, duel.legal_actions().allowed
+    last = steps.resolution if steps.resolution is not None else steps[-1]
     assert (last.accepted, last.code) == (True, ValidationCode.OK)
     #: 역순 — 체인 2 가 먼저다.
     assert [str(e.effect_ref) for e in journal if e.kind.name == "EFFECT"] == [
@@ -1511,17 +1505,10 @@ def test_h06_the_phase_6r_chain_teardown_still_holds(repository):
     duel.apply(activation(P0, pot, POT))
     duel.apply(offered(duel, P1, GIFT)[0])
 
-    last = None
-    guard = 0
-    while duel.priority.is_open and guard < 8:
-        guard += 1
-        passing = [
-            a
-            for a in duel.legal_actions().allowed
-            if a.kind is PlayerActionKind.PASS
-        ]
-        assert passing
-        last = duel.apply(passing[0])
+    #: 🔴 **해결 걸음을 읽는다** (보완5 — ``resolve`` 의 설명과 같다).
+    steps = window_settle(duel)
+    assert steps
+    last = steps.resolution if steps.resolution is not None else steps[-1]
 
     assert last.accepted is True
     assert last.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE

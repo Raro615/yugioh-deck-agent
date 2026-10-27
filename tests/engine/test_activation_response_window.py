@@ -36,6 +36,7 @@ from engine.state.game_state import GameState
 from engine.vocabulary import Phase, Position, Zone
 
 from tests.conftest import requires_official_db, settle_chain
+from tests.engine.window_helpers import pass_fast_window
 
 pytestmark = requires_official_db
 
@@ -156,6 +157,10 @@ def test_c_two_passes_resolve_the_chain(repository):
     assert second.accepted
     assert "해결했습니다" in second.reason
     assert len(duel.chain) == 0
+    #: 🔴 **정정 (보완5).** 해결 뒤에도 빠른 효과 기회를 거친다 — 그
+    #: 기회까지 지나가야 창이 닫힌다.
+    assert duel.priority.window is ResponseWindow.RESPONSE
+    pass_fast_window(duel)
     assert duel.priority.window is ResponseWindow.NONE
     assert duel.pending_spells == ()
 
@@ -294,15 +299,25 @@ def test_h_the_normal_action_space_is_untouched_without_a_window(repository):
         "SET_MONSTER",
         "SET_SPELL_TRAP",
     ]
-    # 소환은 응답 기회를 열지 않는다 (RULE-CHAIN-011).
+    # 소환은 **체인** 응답 기회를 열지 않는다 (RULE-CHAIN-011).
     summon = next(
         a
         for a in duel.legal_actions(P0).allowed
         if a.kind is PlayerActionKind.NORMAL_SUMMON
     )
     assert duel.apply(summon).accepted
-    assert duel.priority.window is ResponseWindow.NONE
+    #: 🔴 **정정 (보완5).** 열리는 것은 체인 응답 창이 아니라 **빠른 효과
+    #: 기회**다 (공식 Fast Effect Timing — box B). ``RULE-CHAIN-011`` 이
+    #: 금지하는 "소환에 체인으로 응답" 은 그대로 불가능하다 — 체인이 비어
+    #: 있고, 거기서 발동하는 것은 응답이 아니라 체인 1 이다.
+    assert duel.chain.is_empty
+    assert duel.priority.window is ResponseWindow.RESPONSE
     assert kinds(duel, P1) == []
+    #: 양쪽이 지나가면 창이 닫히고 일반 행동이 돌아온다.
+    pass_fast_window(duel)
+    assert duel.priority.window is ResponseWindow.NONE
+    assert "NORMAL_SUMMON" not in kinds(duel, P0)  # 소환권을 썼다
+    assert "END_PHASE" in kinds(duel, P0)
 
 
 @pytest.mark.real_card

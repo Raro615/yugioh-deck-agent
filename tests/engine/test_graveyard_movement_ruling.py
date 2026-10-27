@@ -69,6 +69,7 @@ from core.card_model import SELF_GRAVE_TRIGGER_EVENT, SELF_GRAVE_TRIGGER_SCOPE
 from deck.opening import build_opening
 from deck.recipe import parse_recipe
 from tests.conftest import requires_official_db
+from tests.engine.window_helpers import pass_fast_window
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 MINE, THEIRS = 0, 1
@@ -596,6 +597,10 @@ def test_d03_the_duel_keeps_going_after_the_resolution(repository):
     )
     assert resolved.result.status.name == "RESOLVED"
 
+    #: 🔴 **빠른 효과 기회를 먼저 지난다** (보완5). 해결 뒤에도 양측이
+    #: 지나가야 판이 열린다 (공식 Fast Effect Timing — box B · C). 보완5
+    #: 전까지 이 줄은 해결 직후에 ``end_phase`` 가 올라 있을 것을 요구했다.
+    pass_fast_window(duel)
     offered = {a.kind.value for a in duel.legal_actions(MINE).allowed}
     assert "end_phase" in offered, offered
     #: 일반 소환권은 이미 썼다 — 판 상태가 유지된다.

@@ -89,6 +89,7 @@ from agent.simulation import Simulator
 from engine.action import PlayerAction, PlayerActionKind
 from engine.effect.journal import EffectEvent
 from engine.ids import EffectRef
+from engine.priority import ResponseWindow
 from engine.trigger import TriggerRequirement
 from engine.vocabulary import Position, Zone
 
@@ -256,7 +257,33 @@ def test_a02_both_decline_and_the_flow_comes_back(repository):
     assert duel.window_passed == frozenset({MINE, THEIRS})
     assert duel._window_actor() is None
     assert duel.chain.is_empty
-    #: 🔴 체인이 없으므로 응답 단계도 열리지 않았다.
+
+    #: 🔴 **정정 (보완5).** 보완4 는 이 자리에 두 줄을 적었다 —
+    #:
+    #:     assert duel.priority.is_open is False   # "체인이 없으므로 …"
+    #:     assert "end_phase" in _kinds(duel, MINE)
+    #:
+    #: 그래서 **유발 포기가 곧 판이 열린 상태**라고 적혀 있었다. 같은 도표를
+    #: 근거로 들면서 그 도표의 가운데를 건너뛴 것이다:
+    #:
+    #: * *"If there is no effect that can be triggered."* → 턴 플레이어는
+    #:   **상자 B** 로 간다 (열린 상태가 아니다).
+    #: * *"If the Turn Player passes."* → 상대가 **상자 C** 로 간다.
+    #: * 다시 열리는 조건은 **셋**이다 — 턴 플레이어가 넘기고, 상대가
+    #:   되돌려 넘기고, 체인이 없다.
+    #:
+    #: 즉 "체인이 없다" 는 셋 중 **하나**이고, 유발 기회를 지난 것은 그
+    #: 셋에 들지 않는다. 지금은 빠른 효과 기회가 열려 있다.
+    assert duel.priority.is_open is True
+    assert duel.priority.window is ResponseWindow.RESPONSE
+    assert duel.priority.holder.seat == duel.turn_player
+    assert _kinds(duel, MINE) == ["pass"]
+    assert duel.apply(PlayerAction.end_phase(actor=MINE)).accepted is False
+
+    #: 🔴 **양쪽이 그 기회를 지나가면** 비로소 판이 열린다.
+    assert duel.apply(PlayerAction.passing(actor=MINE)).accepted is True
+    assert duel.priority.holder.seat == THEIRS
+    assert duel.apply(PlayerAction.passing(actor=THEIRS)).accepted is True
     assert duel.priority.is_open is False
 
     #: 🔴 이제 판이 열려 있다 — 통상 행동과 페이즈 이동이 돌아온다.
@@ -282,8 +309,25 @@ def test_a03_one_sided_chance_needs_no_waiting(repository):
     assert duel._window_claims(THEIRS) == ()
 
     assert duel.apply(PlayerAction.passing(actor=MINE)).accepted is True
-    #: 🔴 한 걸음으로 끝났다.
+    #: 🔴 **유발 기회**는 한 걸음으로 끝났다 — 그 사실은 그대로다.
     assert duel._window_actor() is None
+    assert duel.window_passed == frozenset({MINE})
+
+    #: 🔴 **정정 (보완5).** 보완4 는 여기서 곧바로 ``end_phase`` 를
+    #: 요구했고, 그래서 *"한쪽만 기회를 가지면 … 상대에게 묻지 않는다"* 가
+    #: **빠른 효과 기회까지** 묻지 않는다는 뜻으로 적혀 있었다.
+    #:
+    #: 묻지 않는 것은 **유발 쪽**이다 (상대에게 claim 이 없으므로 물을 것이
+    #: 없다). 빠른 효과는 다른 질문이고, 그쪽은 상대에게도 기회가 있다 —
+    #: 유발할 효과가 없어도 함정과 속공 마법은 발동할 수 있기 때문이다.
+    #: 유발 포기를 빠른 효과 포기로 간주하지 않는다 (보완5 §2).
+    assert duel.to_act == MINE
+    assert _kinds(duel, MINE) == ["pass"]
+    assert duel.apply(PlayerAction.passing(actor=MINE)).accepted is True
+    assert duel.to_act == THEIRS
+    assert _kinds(duel, THEIRS) == ["pass"]
+    assert duel.apply(PlayerAction.passing(actor=THEIRS)).accepted is True
+
     assert duel.to_act == MINE
     assert "end_phase" in _kinds(duel, MINE)
 

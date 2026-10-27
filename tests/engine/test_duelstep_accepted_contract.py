@@ -96,6 +96,8 @@ from engine.validation import ValidationCode
 from engine.vocabulary import Phase, Position, Zone
 
 from tests.conftest import requires_official_db
+from tests.engine.window_helpers import settle as window_settle
+from tests.engine.window_helpers import pass_fast_window
 
 pytestmark = requires_official_db
 
@@ -202,16 +204,25 @@ def passes(duel):
 
 
 def settle(duel):
-    """창이 닫힐 때까지 패스한다. **걸음을 전부** 돌려준다 (§6)."""
-    steps = []
-    guard = 0
-    while duel.priority.is_open and guard < 8:
-        guard += 1
-        available = passes(duel)
-        if not available:
-            break
-        steps.append(duel.apply(available[0]))
-    return steps
+    """
+    창이 닫힐 때까지 패스한다. **걸음을 전부** 돌려준다 (§6).
+
+    🔴 공용 도구에 맡긴다 (보완5) — 보완5 가 빈 체인의 빠른 효과 기회를
+    실었으므로 "마지막 걸음" 과 "해결 걸음" 이 달라졌고, 그 구분을 파일마다
+    따로 적으면 갈라진다 (:mod:`tests.engine.window_helpers`).
+    """
+    return window_settle(duel)
+
+
+def _resolution(steps):
+    """
+    **해결 걸음.** 없으면 그 사실과 함께 실패한다 (보완5).
+
+    보완5 전까지 이 파일은 ``settle(duel)[-1]`` 을 읽었고, 지금 그 자리는
+    빠른 효과 기회를 닫는 PASS 다 — 링크의 결과가 아니다.
+    """
+    assert steps.resolution is not None, [st.reason for st in steps]
+    return steps.resolution
 
 
 def effect_refs(journal):
@@ -324,8 +335,13 @@ def test_b01_a_non_chain_action_is_accepted_with_ok(repository):
         PlayerAction.set_spell_trap(actor=P0, source=hands[P0][0])
     )
     assert (step.accepted, step.code) == (True, ValidationCode.OK)
-    #: 체인은 비어 있고 우선권 창도 열리지 않았다.
+    #: 체인은 비어 있다 — 세트는 발동이 아니다 (RULE-CHAIN-011).
     assert duel.chain.is_empty
+    #: 🔴 **정정 (보완5).** 그러나 판은 열려 있지 않다 — 판을 바꾸는 행위
+    #: 뒤에는 빠른 효과 기회가 열린다 (공식 Fast Effect Timing — box B).
+    #: 체인이 비어 있다는 사실과 판이 열렸다는 사실은 **다른 것**이다.
+    assert duel.priority.is_open
+    pass_fast_window(duel)
     assert not duel.priority.is_open
     #: 판은 바뀌었고, 기록에는 **행위 사건**만 남는다 (효과가 아니다).
     assert [event.kind.name for event in journal] == ["ACTION"]
@@ -501,8 +517,12 @@ def test_f01_the_two_kinds_of_pass_are_both_accepted(repository):
     ``reason`` 과 체인 상태다 — ``accepted`` 가 아니다.
     """
     duel, pot, gift, _, _, settled = fizzling_chain(repository, my_deck=5)
-    assert len(settled) == 2, [s.reason for s in settled]
-    first, last = settled
+    #: 🔴 **정정 (보완5) — 패스의 종류가 둘에서 셋으로 늘었다.** 체인을
+    #: 푼 뒤에도 빠른 효과 기회를 양측이 지나가야 판이 열리고, 그 두 걸음은
+    #: 기회를 넘기지도 체인을 풀지도 않는 **세 번째 뜻**이다. 셋 다 수락이고
+    #: 셋을 가르는 것은 여전히 ``reason`` 과 체인 상태다.
+    assert len(settled) == 4, [s.reason for s in settled]
+    first, last, handed_over, reopened = settled
 
     assert first.accepted is True
     assert first.code is ValidationCode.OK
@@ -513,6 +533,14 @@ def test_f01_the_two_kinds_of_pass_are_both_accepted(repository):
     assert "해결했습니다" in last.reason
     #: 체인을 푼 쪽에서만 체인이 비워진다.
     assert duel.chain.is_empty
+
+    #: ③ 빠른 효과 기회를 지나는 패스 — 아무것도 풀지 않는다.
+    assert handed_over.accepted is True
+    assert handed_over.code is ValidationCode.OK
+    assert "빠른 효과 기회를 넘겼습니다" in handed_over.reason
+    assert "해결" not in handed_over.reason
+    assert reopened.accepted is True
+    assert "판이 다시 열렸습니다" in reopened.reason
     assert not duel.priority.is_open
 
 
@@ -585,7 +613,8 @@ def test_h01_a_fizzling_link_does_not_refuse_the_pass(repository):
     assert (step1.accepted, step1.code) == (True, ValidationCode.OK)
     assert (step2.accepted, step2.code) == (True, ValidationCode.OK)
 
-    last = settled[-1]
+    #: 🔴 해결 걸음을 읽는다 (보완5 — ``_resolution`` 의 설명).
+    last = _resolution(settled)
     #: ① 패스는 수락되었다.
     assert last.accepted is True
     assert last.action.kind is PlayerActionKind.PASS
@@ -919,7 +948,7 @@ def test_l01_a_normal_spell_still_resolves_alone(repository):
     deck = len(duel.state.player(P0).zone(Zone.DECK))
     step = duel.apply(activation(P0, hands[P0][0], POT_OF_GREED))
     assert step.accepted
-    last = settle(duel)[-1]
+    last = _resolution(settle(duel))
     assert (last.accepted, last.code) == (True, ValidationCode.OK)
     assert "해결했습니다" in last.reason
     assert len(duel.state.player(P0).zone(Zone.DECK)) == deck - 2
@@ -948,7 +977,7 @@ def test_m01_a_set_normal_trap_still_activates_and_resolves(repository):
     their_hand = len(duel.state.player(P1).zone(Zone.HAND))
     step = duel.apply(activation(P0, trap, GIFT_OF_GREED))
     assert (step.accepted, step.code) == (True, ValidationCode.OK)
-    last = settle(duel)[-1]
+    last = _resolution(settle(duel))
     assert (last.accepted, last.code) == (True, ValidationCode.OK)
     assert len(duel.state.player(P1).zone(Zone.HAND)) == their_hand + 2
     assert effect_refs(journal) == [f"{GIFT_OF_GREED}:e[0]"]
@@ -990,7 +1019,7 @@ def test_n01_the_honest_ignition_effect_still_executes(repository):
     honest = placed[P0][0]
     step = duel.apply(activation(P0, honest, HONEST))
     assert (step.accepted, step.code) == (True, ValidationCode.OK)
-    last = settle(duel)[-1]
+    last = _resolution(settle(duel))
     assert (last.accepted, last.code) == (True, ValidationCode.OK)
     assert zone_ids(duel, P0, Zone.HAND) == [HONEST]
     assert zone_ids(duel, P0, Zone.MZONE) == []
@@ -1032,7 +1061,7 @@ def test_o01_the_two_card_discard_still_resolves(repository):
     hand_before = len(duel.state.player(P0).zone(Zone.HAND))
     step = duel.apply(offered[0])
     assert (step.accepted, step.code) == (True, ValidationCode.OK)
-    last = settle(duel)[-1]
+    last = _resolution(settle(duel))
     assert (last.accepted, last.code) == (True, ValidationCode.OK)
     assert "@primary" in last.reason
     #: 버린 2장 + 떠난 함정.
@@ -1137,7 +1166,7 @@ def test_p04_an_activation_preferring_walk_refuses_nothing(repository):
     """
     digest = [LUSTER_DRAGON] * 12 + [POT_OF_GREED] * 4 + [GIFT_OF_GREED] * 4
     refused: collections.Counter = collections.Counter()
-    accepted = fizzles = leftover = 0
+    accepted = fizzles = leftover = finished = 0
     for seed in (303, 304, 305):
         duel = Duel.start(
             repository, decks=(list(digest), list(digest)), seed=seed
@@ -1166,12 +1195,29 @@ def test_p04_an_activation_preferring_walk_refuses_nothing(repository):
             if "해결하지 못했습니다" in step.reason:
                 fizzles += 1
         leftover += len(duel.chain.links)
+        #: 🔴 산책이 **상한이 아니라 듀얼의 끝**에서 멈췄는가.
+        finished += 1 if duel.is_over else 0
 
     assert accepted > 0
-    #: ① 거부가 **하나도** 없다.
+    #: ① 거부가 **하나도** 없다. **이것이 이 시험의 지표다.**
     assert dict(refused) == {}
     #: ② 불발은 여전히 일어나고 **숨기지 않는다** — 재어서 남긴다.
-    assert fizzles == 3, fizzles
+    #:
+    #: 🔴 **정정 (보완5): 3 → 1.** 보완5 가 판을 바꾸는 행위 뒤마다 빠른
+    #: 효과 기회를 열었으므로 (공식 Fast Effect Timing — box B · C) 이
+    #: 산책이 **밟는 수의 순서 자체가 달라졌다.** 같은 씨앗에서 다른 판이
+    #: 나오므로 불발이 나는 횟수도 달라진다.
+    #:
+    #: 🔴 **상한 때문이 아니다.** 그 가설을 먼저 세웠고 측정이 **부정했다**:
+    #: 상한을 400 · 1200 · 4000 으로 바꾸어도 셋 다 같은 값이 나오고, 세
+    #: 씨앗 모두 155 · 155 · 161 걸음에서 **덱이 비어 듀얼이 끝난다**
+    #: (8턴). 즉 산책은 상한에 닿지 않고 판을 끝까지 덮는다. ③이 그 사실을
+    #: 센다 — 산책이 중간에 멈췄다면 이 시험은 아무것도 재지 않는다.
+    assert fizzles == 1, fizzles
+    #: ③ 그리고 **덮은 범위가 줄지 않았다** — 세 판 모두 끝까지 갔다.
+    assert accepted == 450, accepted
+    assert leftover == 0, leftover
+    assert finished == 3, finished
     #: ③ 🔴 끝까지 간 뒤 남은 체인이 **0** 이다 (예전엔 3 이 남았다).
     assert leftover == 0
 

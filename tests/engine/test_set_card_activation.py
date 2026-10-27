@@ -67,6 +67,7 @@ from engine.validation import ActionValidity, ValidationCode
 from engine.vocabulary import Phase, Position, Zone
 
 from tests.conftest import requires_official_db, settle_chain
+from tests.engine.window_helpers import pass_fast_window
 
 pytestmark = requires_official_db
 
@@ -112,6 +113,12 @@ def set_down(duel, seat, card_id):
     card = next(c for c in duel.state.player(seat).hand if c.card_id == card_id)
     step = duel.apply(PlayerAction.set_spell_trap(actor=seat, source=card.instance_id))
     assert step.accepted, step.reason
+    #: 🔴 **세트 뒤에는 빠른 효과 기회가 끼어든다** (보완5) — 공식 Fast
+    #: Effect Timing 도표의 상자 B · C 다. 그래서 세트 하나 뒤에 곧바로 다음
+    #: 열린 상태 전용 행동을 넣을 수 없고, 양측이 **실제 PASS 로** 지나가야
+    #: 판이 다시 열린다. 이 도구가 그 필수 절차를 지나간다 —
+    #: :mod:`tests.engine.window_helpers` 가 어떻게 지나가는지 적어 두었다.
+    pass_fast_window(duel)
     return card.instance_id
 
 

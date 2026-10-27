@@ -532,10 +532,18 @@ def test_b02_synthetic_a_pass_is_a_decline_and_the_turn_comes_back(
     assert duel._window_actor() is None
     assert duel.to_act == MINE
 
-    #: 🔴 내 행동이 수락된다.
+    #: 🔴 **정정 (보완5).** 보완4 는 여기서 곧바로 ``end_phase`` 를
+    #: 요구했고, 그래서 *"포기는 거절이고 차례가 돌아온다"* 가 **판이 열린
+    #: 상태로 돌아온다**는 뜻으로 적혀 있었다. 차례는 돌아온다 — 그러나
+    #: 돌아온 자리는 **빠른 효과 기회**다 (공식 도표의 상자 B).
     mine = duel.legal_actions(MINE)
     assert mine.allowed
+    assert sorted({a.kind.value for a in mine.allowed}) == ["pass"]
     before = duel.state.turn.phase
+    assert duel.apply(PlayerAction.end_phase(actor=MINE)).accepted is False
+    #: 양측이 그 기회를 지나가면 흐름이 돌아온다.
+    assert duel.apply(PlayerAction.passing(actor=MINE)).accepted is True
+    assert duel.apply(PlayerAction.passing(actor=THEIRS)).accepted is True
     assert duel.apply(PlayerAction.end_phase(actor=MINE)).accepted is True
     assert duel.state.turn.phase is not before
 

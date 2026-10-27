@@ -646,6 +646,30 @@ def execute_opening(
             break
         action = picker(duel, legal)
         if action is None:
+            kinds_now = {a.kind.value for a in legal.allowed}
+            if kinds_now == {"pass"}:
+                #: 🔴 **``PASS`` 하나만 남은 것은 전개의 끝이 아니다**
+                #: (보완5 §5). 엔진이 그 자리에서 ``PASS`` 만 허가한 것은
+                #: **거쳐야 하는 절차가 남았다**는 뜻이다 — 유발 처리 기회를
+                #: 지나가는 ``PASS``, 빠른 효과 기회를 지나가는 ``PASS``,
+                #: 체인을 푸는 ``PASS``. 셋 다 지나가야 판이 다시 열린다.
+                #:
+                #: 보완5 전까지 이 자리는 "남은 후보는 흐름뿐" 으로 읽고
+                #: **멈췄다.** 그러면 필수 절차 앞에서 실행이 끝나고, 그
+                #: 뒤에 올 수 있었던 전개는 아예 시도되지 않는다.
+                #:
+                #: 🔴 **``END_PHASE`` 는 여기에 들지 않는다.** 그것은 절차가
+                #: 아니라 **전개를 끝내는 선택**이고, 이 단계가 보려는 것이
+                #: 전개다 (:func:`first_meaningful` 의 설명).
+                #:
+                #: 🔴 **걸음으로 적는다.** 아래 기록 경로를 그대로 지나므로
+                #: 보고서에 ``pass`` 걸음이 보이고, 실행 걸음 수가 늘어난다.
+                #: 조용히 넘기면 "몇 걸음이었나" 가 사실과 달라진다.
+                action = next(
+                    a for a in legal.allowed
+                    if a.kind is PlayerActionKind.PASS
+                )
+        if action is None:
             #: 🔴 **세 가지를 가른다** — "검증용 선택 방식이 고르지
             #: 않았다" · "남은 후보가 흐름뿐이다" · "그 자리에 지원하지
             #: 않아 오르지 못한 후보가 있다". 흐름뿐이라는 사실 하나로는

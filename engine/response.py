@@ -376,6 +376,15 @@ RESPONDABLE: frozenset[PlayerActionKind] = frozenset(
 #: 체인이 끝난 뒤의 우선권 규칙이 없다는 사실. 기회를 닫을 때 남긴다.
 AFTER_CHAIN_RULE = "체인 해결 뒤 우선권 규칙 (STRUCTURAL-34)"
 
+#: 빈 체인의 빠른 효과 기회를 양쪽이 지나간 뒤 — **판이 다시 열린다**
+#: (Phase 6-AB 보완5). 공식 Fast Effect Timing 도표가 그 조건을 셋으로
+#: 적는다: 턴 플레이어가 넘기고, 상대가 되돌려 넘기고, 체인이 없다.
+#:
+#: 🔴 :data:`AFTER_CHAIN_RULE` 과 **다른 사실**이다. 그쪽은 "체인이 끝난 뒤
+#: 누구에게 우선권이 가는지 규칙을 모른다" 이고, 이쪽은 **아는 것**이다 —
+#: 도표가 그려 두었다. 같은 문장으로 적으면 아는 것과 모르는 것이 섞인다.
+AFTER_FAST_WINDOW_RULE = "양쪽이 빠른 효과 기회를 지나갔습니다"
+
 
 class ResponseLoop:
     """
@@ -659,6 +668,34 @@ class ResponseLoop:
             steps,
         )
 
+    def close_fast_window(self, response: ResponseState) -> ResponseState:
+        """
+        **빈 체인의 빠른 효과 기회를 닫는다** (Phase 6-AB 보완5).
+
+        🔴 **왜 이 자리에 있는가.** 기회를 닫는 일은 응답 계층이 한다 —
+        닫는 **이유**를 이 계층이 들고 있기 때문이다
+        (:meth:`resolve` 가 :data:`AFTER_CHAIN_RULE` 로 닫는 것과 같은
+        이유다). ``Duel`` 이 직접 닫으면 흐름을 닫는 자리가 둘이 되고 둘이
+        갈라진다 — ``test_priority_response_audit.test_02`` 가 그것을 센다.
+
+        🔴 **푸는 것이 아니다.** 여기서는 아무것도 해결하지 않는다 — 풀
+        링크가 없다 (:meth:`ready_to_resolve` 가 ``CHAIN_EMPTY`` 를
+        돌려준다). 체인이 서 있으면 이 일이 아니므로 거절한다.
+        """
+        if not isinstance(response, ResponseState):
+            raise TypeError(
+                f"ResponseState 가 필요합니다: {type(response).__name__}"
+            )
+        if not response.chain.is_empty:
+            raise ResponseError(
+                "체인이 서 있으면 빠른 효과 기회를 닫는 일이 아닙니다 "
+                f"(링크 {len(response.chain)}개). 체인은 resolve 가 풉니다."
+            )
+        return ResponseState(
+            response.chain,
+            response.priority.closed(AFTER_FAST_WINDOW_RULE),
+        )
+
     def __repr__(self) -> str:  # pragma: no cover - 표시용
         return f"<ResponseLoop {self._activator!r}>"
 
@@ -673,4 +710,5 @@ __all__ = [
     "ResponseLoop",
     "RESPONDABLE",
     "AFTER_CHAIN_RULE",
+    "AFTER_FAST_WINDOW_RULE",
 ]

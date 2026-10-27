@@ -65,6 +65,7 @@ from engine.vocabulary import Phase, Position, Zone
 
 from integration.autonomy import PolicyChooser, TriggerSource
 from tests.conftest import requires_official_db
+from tests.engine.window_helpers import pass_fast_window
 from tests.engine.test_trigger_normal_path_integration import (
     GIRSU,
     MINE,
@@ -163,6 +164,13 @@ def _decline_window(duel, *, seat: int = MINE) -> int:
             break
         assert duel.apply(passing[0]).accepted is True
         steps += 1
+    #: 🔴 **그 뒤의 빠른 효과 기회까지 지나간다** (보완5). 유발 처리 기회가
+    #: 닫히면 공식 도표의 상자 B 가 열리고, 양측이 지나가야 판이 다시
+    #: 열린다. 그러지 않으면 "끼워 넣을 행동" 자체가 후보로 오르지 않는다.
+    #:
+    #: 🔴 **돌려주는 수는 그대로 유발 쪽 걸음 수다** — 두 PASS 는 뜻이
+    #: 다르므로 한 수로 세지 않는다 (``test_c03`` 이 그 구분을 센다).
+    pass_fast_window(duel)
     return steps
 
 

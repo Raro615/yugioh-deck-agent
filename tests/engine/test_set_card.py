@@ -868,7 +868,16 @@ def _drive_to(duel: Duel, *, want, seat: int, limit: int = 400):
     **실제 후보 목록에서만** 골라 가며 원하는 행위를 찾는다.
 
     ``want(action)`` 이 참인 후보가 나오면 그것을 적용하고 멈춘다. 그때까지는
-    ``END_PHASE`` 로 흘려보낸다 — 판을 손으로 고치지 않는다.
+    흐름 행위로 흘려보낸다 — 판을 손으로 고치지 않는다.
+
+    🔴 **흐름은 둘이다** (보완5). 보완5 전까지 이 산책은 ``END_PHASE`` 만
+    밟았고, 그래서 **빠른 효과 기회에서 멈췄다** — 그 자리에는 ``PASS`` 만
+    오르고 (공식 Fast Effect Timing — box B · C) ``END_PHASE`` 는 판이
+    열린 뒤에만 후보가 된다. 실측: 상대가 소환할 자리에 닿지 못했다.
+
+    🔴 **``PASS`` 를 먼저 밟는다.** ``PASS`` 는 **필수 절차**이고
+    ``END_PHASE`` 는 **페이즈를 끝내는 선택**이므로, 순서를 뒤집으면 지나야
+    할 기회 대신 페이즈를 넘긴다.
     """
     for _ in range(limit):
         if duel.is_over:
@@ -883,12 +892,14 @@ def _drive_to(duel: Duel, *, want, seat: int, limit: int = 400):
             if found:
                 assert duel.apply(found[0]).accepted
                 return True
-        passing = [
+        flow = [
+            a for a in legal.allowed if a.kind is PlayerActionKind.PASS
+        ] or [
             a for a in legal.allowed if a.kind is PlayerActionKind.END_PHASE
         ]
-        if not passing:
+        if not flow:
             return False
-        duel.apply(passing[0])
+        duel.apply(flow[0])
     return False
 
 

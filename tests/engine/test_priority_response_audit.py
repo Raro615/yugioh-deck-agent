@@ -381,6 +381,15 @@ def test_07_the_chain_now_stays_up_while_the_opponent_may_respond(repository):
     assert duel.apply(duel.legal_actions(P1).allowed[0]).accepted
     assert duel.apply(duel.legal_actions(P0).allowed[0]).accepted
     assert len(duel.chain) == 0
+    #: 🔴 **정정 (보완5).** 해결 직후의 창은 ``NONE`` 이 아니다 — 공식 Fast
+    #: Effect Timing 도표가 체인 해결 뒤에도 빠른 효과 기회를 거치게 한다.
+    #: 이 시험이 재는 것은 *"결정 시점이 아닌 자리에서는 체인이 비어
+    #: 있다"* 이고, **그것은 그대로 참이다** (위의 반복이 센다).
+    assert duel.priority.window is ResponseWindow.RESPONSE
+    assert duel.chain.is_empty
+    #: 양쪽이 그 기회를 지나가면 창이 닫힌다.
+    assert duel.apply(duel.legal_actions(P0).allowed[0]).accepted
+    assert duel.apply(duel.legal_actions(P1).allowed[0]).accepted
     assert duel.priority.window is ResponseWindow.NONE
 
 
@@ -443,7 +452,22 @@ def test_09_a_summon_correctly_opens_no_window(repository):
         if a.kind is PlayerActionKind.NORMAL_SUMMON
     )
     assert duel.apply(summon).accepted
-    assert duel.priority.window is ResponseWindow.NONE
+    #: 🔴 **정정 (보완5) — 그러나 이 시험이 지키는 것은 그대로다.**
+    #:
+    #: 보완5 전까지 이 줄은 ``window is NONE`` 을 요구했고, 그 기대값은
+    #: "소환 뒤에는 아무 창도 열리지 않는다" 였다. 지금 열리는 것은 **체인
+    #: 응답 창이 아니라 빠른 효과 기회**다 (도표의 box B).
+    #:
+    #: ``RULE-CHAIN-011`` 이 금지하는 것은 **소환에 체인으로 응답하는 것**
+    #: 이고, 그 금지는 깨지지 않았다 — 체인은 **비어 있다.** 그 자리에서
+    #: 무엇을 발동하면 그것은 소환에 대한 응답이 아니라 **체인 1** 이다.
+    assert duel.chain.is_empty
+    assert duel.priority.window is ResponseWindow.RESPONSE
+    #: 풀 링크가 없다 — "응답" 할 대상이 없다는 말을 규칙 계층이 한다.
+    assert not duel._response_loop.ready_to_resolve(
+        duel._response_state()
+    ).permits_execution
+    #: 그리고 상대 차례도 아니다 — 턴 플레이어가 box B 를 쥐고 있다.
     assert duel.legal_actions(P1).allowed == ()
 
 

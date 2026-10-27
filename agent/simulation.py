@@ -383,8 +383,21 @@ class Simulator:
         이것을 하지 않으면 깊이 1 의 미래가 **체인 도중**의 위치가 된다.
         그 위치는 아무도 고르는 자리가 아니고, 그것을 재면 대상이 다른 두
         발동이 같은 점수를 받는다 (Phase 3-E-4 가 세운 구분이 사라진다).
+
+        🔴 **마지막 걸음이 아니라 해결 걸음을 돌려준다** (보완5).
+
+        보완5 가 빈 체인의 빠른 효과 기회를 실었다 — 체인이 풀린 **뒤에도**
+        양측이 지나가야 판이 열린다. 그래서 이 반복의 마지막 걸음은
+        *"양쪽이 빠른 효과 기회를 지나갔습니다"* 가 되고, 그것을 돌려주면
+        :attr:`SimulationResult.reason` 이 **그 발동이 어떻게 됐는지를 말하지
+        않는다** (실측: 해결 · 불발 · 대상 미선택이 전부 같은 문장이 되었다).
+
+        그 문장은 절차를 지났다는 뜻이고 **결과가 아니다.** 그래서 체인이
+        비어 가는 그 걸음 — 해결(또는 불발)을 적은 걸음 — 을 기억해
+        돌려준다. 체인이 서지 않았으면 마지막 걸음 그대로다.
         """
         last: "DuelStep | None" = None
+        resolution: "DuelStep | None" = None
         guard = 0
         while fork.priority.is_open and guard < 8:
             guard += 1
@@ -395,10 +408,13 @@ class Simulator:
             if not passes or len(passes) != len(legal.allowed):
                 # 고를 것이 있다 — 그것은 결정이므로 여기서 멈춘다.
                 break
+            had_chain = not fork.chain.is_empty
             last = fork.apply(passes[0])
+            if had_chain and fork.chain.is_empty:
+                resolution = last
             if not last.accepted:
                 break
-        return last
+        return resolution if resolution is not None else last
 
     def simulate(self, action: PlayerAction, *, viewer: int) -> SimulationResult:
         """
