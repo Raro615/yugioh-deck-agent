@@ -339,6 +339,17 @@ class EffectActivator:
 
     @property
     def lookup(self) -> EffectImplementationLookup:
+        """
+        실행 구현이 등록되어 있는지 답하는 것 (Phase 6-AB 보완4).
+
+        🔴 **읽기 전용이다.** 탐색 사본이 **원본과 같은 실행 계약**으로
+        돌아야 하므로 (``Simulator._fork``) 그 목록을 꺼낼 자리가 필요하고,
+        꺼낸 뒤 **새 등록부로 복사**하는 것은 사본을 만드는 쪽의 일이다.
+        """
+        return self._lookup
+
+    @property
+    def lookup(self) -> EffectImplementationLookup:
         return self._lookup
 
     @property

@@ -454,7 +454,7 @@ class NormalSpellPlacement:
 # ``test_e_the_duel_makes_no_rules_of_its_own`` 이 지키는 불변식이 깨진다.
 
 
-def duel_activator(journal=None):
+def duel_activator(journal=None, definitions=None, implementations=None):
     """
     듀얼이 쓰는 **발동기**. ``EFFECT_LIBRARY`` 의 구현 목록을 그대로 쓴다.
 
@@ -465,6 +465,11 @@ def duel_activator(journal=None):
     ``duel_executor`` 와 같은 모양이고 이유도 같다 — 등록은 **손으로** 한다
     (ADR-006). 목록에 없는 효과는 발동되지 않고, 그것이 기본 상태다.
 
+    ``definitions`` · ``implementations`` 를 주면 **그것을 쓴다** (Phase
+    6-AB 보완4). 주지 않으면 프로덕션 목록으로 만든다 — 평소에는 아무것도
+    달라지지 않는다. 이 인자가 있는 이유는 탐색 사본이다
+    (:func:`duel_components` 의 설명).
+
     ``engine.effect.library`` 를 **함수 안에서** 읽는다. 모듈 위에서 읽으면
     효과 계층이 이 모듈을 쓸 때 import 고리가 생긴다 (``duel_executor`` 가
     ``engine.normal_summon`` 을 그렇게 읽는 것과 같은 자리다).
@@ -474,13 +479,14 @@ def duel_activator(journal=None):
     from engine.payment import CostPayer
 
     return EffectActivator(
-        definition_registry(),
-        implementation_registry(),
+        definition_registry() if definitions is None else definitions,
+        implementation_registry() if implementations is None else implementations,
         payer=CostPayer(journal=journal),
     )
 
 
-def duel_resolver(journal=None, chooser=None):
+def duel_resolver(journal=None, chooser=None, definitions=None,
+                  implementations=None):
     """
     듀얼이 쓰는 **해결기**. 기존 ``ChainResolver`` 를 그대로 쓴다.
 
@@ -513,15 +519,27 @@ def duel_resolver(journal=None, chooser=None):
     # 🔴 **고르는 사람도 여기서 넘긴다** (Phase 6-Z). ``rulings`` 와 같은
     # 자리이고 같은 이유다 — 부르는 쪽이 고르고, 주지 않으면 아직 정해지지
     # 않은 선택은 거절된다.
+    # 🔴 **정의와 구현 목록도 받는다** (Phase 6-AB 보완4) — ``rulings`` ·
+    # ``chooser`` 와 같은 자리이고 같은 이유다. 주지 않으면 프로덕션 목록이고,
+    # 주면 그것이 **발동기와 해결기 양쪽에 같은 것**으로 들어간다.
     return ChainResolver(
         build_executor(
-            journal=journal, rulings=OPERATION_RULINGS, chooser=chooser
+            journal=journal,
+            rulings=OPERATION_RULINGS,
+            chooser=chooser,
+            implementations=implementations,
         ),
-        definition_registry(),
+        definition_registry() if definitions is None else definitions,
     )
 
 
-def duel_components(journal=None, chooser=None, seed_events=None) -> dict:
+def duel_components(
+    journal=None,
+    chooser=None,
+    seed_events=None,
+    definitions=None,
+    implementations=None,
+) -> dict:
     """
     journal **하나를 공유하는** 실행기·발동기·해결기 한 벌 (Phase 6-B).
 
@@ -558,7 +576,30 @@ def duel_components(journal=None, chooser=None, seed_events=None) -> dict:
     🔴 ``journal`` 과 함께 줄 수 없다 — "이 객체를 써라" 와 "이 사건들로
     새로 만들어라" 는 다른 요구이고, 둘을 함께 받으면 어느 쪽이 이기는지
     말할 수 없다.
+
+    ``definitions`` · ``implementations`` (Phase 6-AB 보완4)
+    --------------------------------------------------------
+    원본 듀얼의 **효과 정의와 실행 계약**을 그대로 물려주는 자리다. 주지
+    않으면 프로덕션 목록으로 만들고, 평소에는 아무것도 달라지지 않는다.
+
+    🔴 **왜 필요한가 — 실측한 결함이다.** ``Simulator._fork`` 가 이 함수로
+    수행기 한 벌을 **새로** 만들므로, 원본에 꽂힌 정의가 사본에서 사라졌다::
+
+        원본 후보 ['69811710:e[0]', '69811710:e[1]']
+        🔴 사본 후보 ['69811710:e[0]']
+        🔴 사본의 정의 등재 = False
+
+    그러면 사본이 원본보다 **못 해결하고**, 미래의 값이 규칙이 아니라
+    배선 때문에 달라진다.
+
+    🔴 **받은 등록부를 그대로 쓰지 않고 같은 내용의 새 등록부를 만든다.**
+    두 등록부 모두 ``register()`` 를 가진 **변경 가능한** 것이므로, 공유하면
+    한 분기의 등록이 다른 분기와 부모에 보인다. :class:`EffectDefinition`
+    자신은 frozen 이고 ``EffectRef`` 는 값이므로 **담긴 것은 공유해도
+    안전하다** — 격리해야 하는 것은 "무엇이 등록되어 있는가" 라는 목록이다.
     """
+    from engine.effect.definition import EffectDefinitionRegistry
+    from engine.effect.executor import EffectImplementationRegistry
     from engine.effect.journal import EventJournal
     from engine.summon import duel_executor
 
@@ -576,11 +617,25 @@ def duel_components(journal=None, chooser=None, seed_events=None) -> dict:
         shared = EventJournal(tuple(seed_events or ()))
     else:
         shared = journal
+    if definitions is not None:
+        # 같은 내용 · 다른 객체. 읽는 자리는 ``definitions()`` 하나다.
+        definitions = EffectDefinitionRegistry(definitions.definitions())
+    if implementations is not None:
+        implementations = EffectImplementationRegistry(implementations.refs())
     return {
         "journal": shared,
         "_executor": duel_executor(journal=shared),
-        "_activator": duel_activator(journal=shared),
-        "_resolver": duel_resolver(journal=shared, chooser=chooser),
+        "_activator": duel_activator(
+            journal=shared,
+            definitions=definitions,
+            implementations=implementations,
+        ),
+        "_resolver": duel_resolver(
+            journal=shared,
+            chooser=chooser,
+            definitions=definitions,
+            implementations=implementations,
+        ),
         "_placement": NormalSpellPlacement(journal=shared),
     }
 

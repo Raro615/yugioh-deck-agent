@@ -679,15 +679,38 @@ class Duel:
         🔴 **발동할 수 있는 의무만** 센다. 관문을 지나지 못하는 의무로 자리를
         옮기면 그 자리에 고를 것이 없어 듀얼이 멈춘다.
         """
-        if self.triggers is None or not self.chain.is_empty:
-            # 체인 처리 중에는 그 체인이 먼저다 (聖鳥クレイン 재정) — 의무는
-            # 보존되고, 체인이 비면 이 자리가 다시 답한다.
+        if self._resolving_other_window():
+            # 이전 창에서 시작한 체인을 처리 중이다 — 그 체인이 먼저이고
+            # (聖鳥クレイン 재정) 의무는 보존된다.
             return None
         for seat in (self.turn_player, 1 - self.turn_player):
-            for offer in self._mandatory_offers(seat):
-                if self._offer_is_activatable(offer, seat):
-                    return seat
+            if self._window_group(
+                seat, mandatory=True
+            ) and self._window_can_act(seat):
+                # 🔴 **처리할 수 있는 의무만** 가리킨다 (6-AB 보완4가
+                # ``_window_can_act`` 로 좁혔다). 관문이 막은 의무로 자리를
+                # 옮기면 그 자리에 고를 것이 없어 듀얼이 멈춘다 — 그 사실은
+                # ``_enforce_mandatory`` 가 ``MANDATORY_TRIGGER_UNPLAYABLE``
+                # 로 적고 흐름은 막지 않는다.
+                return seat
         return None
+
+    def _resolving_other_window(self) -> bool:
+        """
+        **이 창이 아닌 체인을 처리 중인가** (6-AB 보완4).
+
+        유발 등재 중에는 체인이 이미 비어 있지 않다 — 첫 링크가 올라가
+        있다. 그래서 "체인이 비었는가" 로 창의 생존을 물으면 **같은 기회의
+        둘째 유발이 영원히 등재되지 않는다** (실측: 첫 등재 뒤
+        ``_window_actor()`` 가 ``None`` 이 되고 ``to_act`` 가 상대로 넘어가
+        남은 내 유발을 아무도 묻지 않았다).
+
+        가르는 것은 :attr:`chain_floor` 다 — 0 이상이면 **이 창에서 시작한**
+        체인이고, ``-1`` 인데 체인이 있으면 이전 창의 것이다.
+        """
+        if self.triggers is None:
+            return True
+        return not self.chain.is_empty and self.chain_floor < 0
 
     @property
     def is_over(self) -> bool:
@@ -925,8 +948,98 @@ class Duel:
                 )
             return LegalActions(seat, (), tuple(withheld))
 
+        if claimant == seat:
+            # 🔴 **판이 열린 상태가 아니다** (6-AB 보완4, 목표 ①).
+            #
+            # 공식 Fast Effect Timing 도표: *"Many actions can ONLY be
+            # performed when the game state is open (when you're in box
+            # A)."* · *"Whenever either player performs an action, the game
+            # state is no longer open."* 유발 처리 기회는 box A 가 아니므로,
+            # 그 기회가 닫히기 전에는 통상 소환 · 세트 · 기동 효과 · 페이즈
+            # 이동을 할 수 없다. 판이 다시 열리는 조건도 그 도표가 적는다 —
+            # 턴 플레이어가 넘기고, 상대가 되돌려 넘기고, 체인이 없을 때다.
+            #
+            # 🔴 **최종 보완이 이 자리를 비워 두었고 그것이 BLOCKER-F3-1
+            # 이었다.** 그때의 근거는 "임의 유발은 controller 를 강제하지
+            # 않는다" 였는데, 그 문장은 **발동을 강제하지 않는다**는 뜻이고
+            # "그 기회를 열어 둔 채 다른 일을 해도 된다"는 뜻이 아니다. 둘을
+            # 섞으면 내 일반 행동 하나가 상대의 미처리 기회까지 닫는다
+            # (실측: 내 세트 수락 → 상대 claims 1 → 0 → 내 END_PHASE 수락).
+            #
+            # 강제 · 임의의 구분은 **그대로 남는다**: 임의 묶음이면 ``PASS``
+            # 가 함께 오르고 (``_flow_actions``) 한 걸음으로 포기할 수 있다.
+            # 강제 묶음이면 ``PASS`` 가 오르지 않는다.
+            duty_claims = self._window_group(seat, mandatory=True)
+            claims = duty_claims or self._window_group(seat, mandatory=False)
+            keep = [
+                action
+                for action in allowed
+                if action.kind is PlayerActionKind.PASS
+                or (
+                    action.kind is PlayerActionKind.ACTIVATE_EFFECT
+                    and any(
+                        action.source == offer.source
+                        and action.effect_ref == offer.effect_ref
+                        for offer in claims
+                    )
+                )
+            ]
+            if keep:
+                # 🔴 **비어 있으면 닫지 않는다** — 관문이 그 묶음을 전부
+                # 막았고 ``PASS`` 도 오르지 않은 자리다. 닫으면 고를 것이
+                # 없어 듀얼이 멈추므로, 아래 의무 블록이 그 사실을
+                # ``MANDATORY_TRIGGER_UNPLAYABLE`` 로 적게 둔다.
+                # 🔴 **막는 근거가 더 강한 쪽을 적는다.** 강제 묶음이면
+                # "규칙이 요구한 처리" 가 이유이고, 임의 묶음이면 "판이
+                # 열린 상태가 아니다" 가 이유다. 둘을 한 문장으로 적으면
+                # 읽는 쪽이 강제와 임의를 가를 수 없다 (6-AA 의 구분).
+                reason = (
+                    f"강제 유발 {len(duty_claims)}건을 먼저 처리해야 "
+                    "합니다 — 규칙이 요구한 처리를 넘기고 다른 것을 할 수 "
+                    "없습니다."
+                    if duty_claims
+                    else (
+                        "유발 처리 기회가 열려 있습니다 — 판이 열린 상태가 "
+                        "아니므로 그 기회를 처리한 뒤에 진행합니다 (공식 "
+                        "Fast Effect Timing — box A 에서만 할 수 있는 "
+                        "행동입니다)."
+                    )
+                )
+                for action in allowed:
+                    if action in keep:
+                        continue
+                    withheld.append(WithheldAction(action.kind, reason))
+                allowed = keep
+
         forced = self._mandatory_offers(seat)
         if not forced:
+            return LegalActions(seat, tuple(allowed), tuple(withheld))
+
+        if not self._window_can_act(seat) and self._window_group(
+            seat, mandatory=True
+        ):
+            # 🔴 **처리할 수 없는 의무를 들고 있다** (6-AB 보완4가 이 검사를
+            # ``to_act`` 비교보다 **앞으로** 옮겼다).
+            #
+            # 전에는 ``to_act != seat`` 가 먼저여서, 이 자리가 처리할 수 없는
+            # 의무를 들고 있으면 ``_window_actor`` 가 그 자리를 건너뛰고
+            # (``_window_can_act`` 가 거짓이므로) 보류가 "지금 고르는 자리가
+            # 아닙니다" 로 적혔다 — **미지원 사유가 사라졌다.** 규칙이 요구한
+            # 처리를 보장할 수 없다는 사실이 가장 중요한 정보이므로 순서를
+            # 바꿨다.
+            #
+            # 🔴 **흐름은 막지 않는다** (6-AB 의 규율 그대로): 막으면 양쪽
+            # 모두 고를 것이 없어 듀얼이 그 자리에서 멈춘다.
+            withheld.append(
+                WithheldAction(
+                    PlayerActionKind.ACTIVATE_EFFECT,
+                    f"강제 유발 {len(forced)}건이 열려 있는데 발동 관문을 "
+                    "지나지 못했습니다 — 이 진행이 규칙대로인지 보장할 수 "
+                    "없습니다 (흐름은 막지 않습니다: 막으면 고를 것이 없어 "
+                    "듀얼이 멈춥니다).",
+                    missing=MANDATORY_TRIGGER_UNPLAYABLE,
+                )
+            )
             return LegalActions(seat, tuple(allowed), tuple(withheld))
 
         if self.to_act != seat:
@@ -1280,29 +1393,114 @@ class Duel:
             if self._offer_is_activatable(offer, seat)
         )
 
+    def _window_group(self, seat: int, *, mandatory: bool) -> tuple:
+        """
+        그 자리의 이 창 claims 가운데 **SEGOC 한 묶음** (6-AB 보완4).
+
+        룰북 §*When multiple cards are activated simultaneously* 가 묶음을
+        넷으로 적는다 — *"the turn player builds the Chain starting with
+        their mandatory effects, in any order. Then the opponent continues
+        the Chain with their mandatory effects in any order. Afterwards, the
+        turn player adds their optional effects in any order, and finally
+        the opponent adds their optional effects in any order."*
+
+        이 함수는 **(자리 × 강제 여부)** 한 칸을 돌려주고, 묶음 사이의
+        순서는 :meth:`_window_actor` 가 정한다. 묶음 **안**의 순서는
+        고르는 쪽의 것이다 (*"in any order"*).
+        """
+        return tuple(
+            offer
+            for offer in self._window_claims(seat)
+            if offer.is_mandatory is mandatory
+        )
+
+    def _window_can_act(self, seat: int) -> bool:
+        """
+        그 자리가 이 창에서 **실제로 고를 것이 있는가** (6-AB 보완4).
+
+        🔴 **관문까지 본다.** :meth:`_window_claims` 는 창과 강제 · 임의만
+        보므로 (``_offer_is_activatable``) 관문이 거절할 제안도 claim 으로
+        센다 — 예: 그 카드를 쥐고 있지 않은 자리 (BLOCKER-F3-5). 그 자리를
+        가리키면서 다른 자리를 막으면 **양쪽 다 고를 것이 없어 듀얼이
+        멈춘다** (실측: 상대의 강제 claim 이 관문에 막혀 양쪽 허가가 전부
+        빈 목록이 되었다).
+
+        🔴 **임의 묶음이면 묻지 않는다** — ``PASS`` 가 함께 오르므로
+        (:meth:`_flow_actions`) 고를 것이 반드시 있다. 관문을 다시 돌리는
+        비용은 **강제 묶음일 때만** 치른다.
+
+        🔴 **되돌이가 없다.** :meth:`activation_validator` ·
+        :meth:`_trigger_actions` · :meth:`_activation_gate` 는 ``to_act`` 도
+        ``legal_actions`` 도 부르지 않는다 (AST 로 확인했다).
+        """
+        mandatory = self._window_group(seat, mandatory=True)
+        if not mandatory:
+            return bool(self._window_group(seat, mandatory=False))
+        offers = self._trigger_offers(seat)
+        opened, _withheld = self._trigger_actions(
+            seat,
+            self.activation_validator(seat, offers),
+            tuple(
+                offer
+                for offer in offers
+                if self._offer_is_activatable(offer, seat)
+            ),
+        )
+        return any(
+            any(
+                action.source == offer.source
+                and action.effect_ref == offer.effect_ref
+                for offer in mandatory
+            )
+            for action in opened
+        )
+
     def _window_actor(self) -> "int | None":
         """
-        이 유발 처리 기회에서 **지금 고를 자리** (최종 보완). 없으면 ``None``.
+        이 유발 처리 기회의 **등재 단계에서 지금 쌓을 자리**. 없으면 ``None``.
 
-        순서는 룰북 §*When multiple cards are activated simultaneously* 다 —
-        **턴 플레이어가 먼저**, 그 다음 상대. 강제가 임의보다 앞선다는 것도
-        같은 조항이고, 강제 쪽은 :meth:`_duty_seat` 가 따로 답한다.
+        순서는 룰북 §*When multiple cards are activated simultaneously* 의
+        **네 묶음**이다 (:meth:`_window_group` 의 인용):
 
-        🔴 **체인이 열려 있으면 답하지 않는다.** 그때는 우선권이 누가 고르는지
-        정하고 (``priority``), 이 함수가 끼어들면 응답 순서를 두 곳이 정하게
-        된다 — 같은 책임의 두 번째 규칙이 된다.
+        ============  =========================================
+        1             턴 플레이어의 **강제** 유발
+        2             상대의 **강제** 유발
+        3             턴 플레이어의 **임의** 유발
+        4             상대의 **임의** 유발
+        ============  =========================================
 
-        🔴 **고를 것이 있는 자리만 가리킨다.** 그 자리에는 발동 후보와
-        ``PASS`` 가 함께 오르므로 (:meth:`_flow_actions`) 멈추지 않는다.
+        🔴 **보완4가 고친 것이 이 순서다.** 최종 보완은 자리만 보고
+        (``for seat in (turn_player, 1 - turn_player)``) 강제 · 임의를 섞었고,
+        체인이 열리면 아예 답하지 않았다. 그래서 둘이 틀렸다 — 턴 플레이어의
+        임의가 상대의 **강제**보다 먼저 물어질 수 있었고, 첫 유발이 등재되면
+        남은 유발을 아무도 묻지 않았다 (실측: 첫 등재 뒤 ``to_act`` 가
+        상대로 넘어가 그 자리의 허가가 ``['pass']`` 하나였다).
+
+        🔴 **응답 단계가 시작되면 답하지 않는다** (``priority.is_open``).
+        등재가 끝난 뒤에 빠른 효과 응답이 열리고, 그 뒤에 과거 유발을 다시
+        끼워 넣지 않는다 (룰북 §6 의 *"이 단계에는 다른 효과가 끼어들 수
+        없다"* 의 뒷면이다 — 반대로 응답이 시작된 뒤 등재로 돌아가지도
+        않는다).
+
+        🔴 **고를 것이 있는 자리만 가리킨다.** 그 자리에는 그 묶음의 발동
+        후보가 오르고, 임의 묶음이면 ``PASS`` 도 함께 오른다
+        (:meth:`_flow_actions`) — 그래서 멈추지 않는다.
         """
-        if self.triggers is None or not self.chain.is_empty:
+        if self._resolving_other_window():
             return None
         if self.priority.is_open:
             return None
-        for seat in (self.turn_player, 1 - self.turn_player):
-            if self._window_claims(seat):
-                return seat
+        for mandatory in (True, False):
+            for seat in (self.turn_player, 1 - self.turn_player):
+                if self._window_group(
+                    seat, mandatory=mandatory
+                ) and self._window_can_act(seat):
+                    return seat
         return None
+
+    def _registration_is_open(self) -> bool:
+        """유발 등재 단계가 아직 열려 있는가 (6-AB 보완4)."""
+        return self._window_actor() is not None
 
     def _is_simultaneous(self, action: PlayerAction) -> bool:
         """
@@ -1880,7 +2078,9 @@ class Duel:
 
         if self.priority.is_open and self.priority.holds(seat):
             allowed.append(PlayerAction.passing(actor=seat))
-        elif self._window_claims(seat) and self._window_actor() == seat:
+        elif self._window_actor() == seat and not self._window_group(
+            seat, mandatory=True
+        ):
             # 🔴 **유발 처리 기회에서의 ``PASS`` 는 "그 발동을 포기한다"** 다
             # (최종 보완). 체인 응답의 패스도, 체인을 풀기 위한 패스도 아니다 —
             # 같은 행위가 단계마다 다른 뜻이고, 그 단계는 ``priority`` 가
@@ -1888,6 +2088,12 @@ class Duel:
             #
             # 이 자리가 없으면 상대의 기회를 **물을 수 없다**: 발동 말고
             # 고를 것이 없으면 그 자리에서 듀얼이 멈춘다.
+            #
+            # 🔴 **강제 묶음에는 올리지 않는다** (6-AB 보완4). 강제 유발은
+            # 포기할 수 없으므로 (룰북 — 그 처리를 넘기고 진행할 수 없다)
+            # 이 자리의 ``PASS`` 는 **임의 묶음일 때만** 뜻을 갖는다. 강제가
+            # 남아 있는데 ``PASS`` 를 올리면 그것이 규칙이 요구한 처리를
+            # 생략하는 길이 된다.
             allowed.append(PlayerAction.passing(actor=seat))
         elif self.priority.is_open:
             # 🔴 **창은 열려 있다** — 다만 상대가 쥐고 있다. ``missing`` 을
@@ -2039,11 +2245,30 @@ class Duel:
             # 체인을 건드리지 않는다. 양쪽이 다 지나가면 창이 닫히고
             # (``_enforce_window``) 그때 일반 행동이 다시 오른다.
             self.window_passed = self.window_passed | {action.actor}
+            if self._registration_is_open():
+                return DuelStep(
+                    action,
+                    True,
+                    ValidationCode.OK,
+                    "이 유발 처리 기회에서 발동하지 않기로 했습니다 — "
+                    "남은 묶음의 등재를 계속합니다.",
+                )
+            # 🔴 **등재가 끝났다** (6-AB 보완4, 목표 ②). 쌓인 것이 있으면
+            # 이제 빠른 효과 응답 단계를 연다 — 등재 **도중**이 아니라
+            # 등재가 끝난 자리다 (룰북 §동시 발동: 네 묶음을 다 쌓은 뒤에야
+            # 다른 효과가 끼어들 수 있다). 쌓인 것이 없으면 아무도 발동하지
+            # 않은 기회이므로 그대로 판이 열린 상태로 돌아간다.
+            self.priority = self._response_priority()
             return DuelStep(
                 action,
                 True,
                 ValidationCode.OK,
-                "이 유발 처리 기회에서 발동하지 않기로 했습니다.",
+                "이 유발 처리 기회에서 발동하지 않기로 했습니다."
+                + (
+                    " 쌓인 체인에 대한 응답 기회가 열렸습니다."
+                    if not self.chain.is_empty
+                    else ""
+                ),
             )
 
         self.priority = self.priority.passed()
@@ -2406,19 +2631,63 @@ class Duel:
         # 배치가 없는 발동이고, 그 카드는 해결 뒤 묘지로 가지 않는다.
         if placed is not None:
             self.pending_spells = self.pending_spells + (placed,)
-        self.priority = ResponseLoop.opened(
-            self.chain,
-            1 - action.actor,
-            turn_player=self.state.turn.turn_player,
-            phase=self.state.turn.phase,
-            reason="발동에 응답 (RULE-CHAIN-001)",
-        ).priority
+
+        # 🔴 **등재 단계에서는 우선권이 넘어가지 않는다** (6-AB 보완4, 목표 ②).
+        #
+        # 룰북 §*When multiple cards are activated simultaneously* 는 그 특수
+        # 체인을 **네 묶음 순서대로 쌓는다**고 적는다 (강제 TP → 강제 NTP →
+        # 임의 TP → 임의 NTP). 쌓는 도중에 응답이 열리면 남은 묶음이 등재될
+        # 자리가 없어진다 — 실측: 첫 유발을 등재한 뒤 ``priority.is_open``
+        # 이 참이 되고 ``to_act`` 가 상대로 넘어가 그 자리의 허가가
+        # ``['pass']`` 하나였고, 남은 내 유발은 아무도 묻지 않았다.
+        #
+        # 그래서 **등재가 남아 있으면 우선권을 열지 않는다.** 등재가 끝난
+        # 뒤에 열고, 그때 쥐는 자리는 **마지막으로 발동한 자리의 상대**다 —
+        # RULE-CHAIN-001 ("the opponent is always given a chance to
+        # respond") 과 같은 자리이고, 묶음이 여럿일 때도 같은 규칙이다.
+        #
+        # 🔴 **체인 응답 자체를 미루는 것이 아니다.** 등재는 같은 기회의
+        # 유발만 쌓으므로 (``_window_actor`` 가 그 창의 claims 만 본다)
+        # 등재가 끝나는 자리는 언제나 있고, 그 직후 응답이 열린다.
+        if self._registration_is_open():
+            return DuelStep(
+                action,
+                True,
+                ValidationCode.OK,
+                f"{activated.reason} 같은 기회의 유발 등재를 계속합니다 "
+                f"(룰북 — 동시 발동은 하나의 특수 체인에 네 묶음 순서로 "
+                f"쌓입니다).",
+            )
+        self.priority = self._response_priority()
         return DuelStep(
             action,
             True,
             ValidationCode.OK,
             f"{activated.reason} 상대의 응답을 기다립니다.",
         )
+
+    def _response_priority(self):
+        """
+        등재가 끝난 뒤 **응답 단계를 여는** 우선권 (6-AB 보완4).
+
+        쥐는 자리는 **마지막으로 발동한 자리의 상대**다 — RULE-CHAIN-001
+        ("the opponent is **always** given a chance to respond") 이 그 자리를
+        정하고, 묶음이 여럿 쌓인 뒤에도 같다 (체인의 마지막 링크를 올린
+        자리의 상대).
+
+        체인이 비어 있으면 열 것이 없다 — 아무도 발동하지 않은 기회이므로
+        그대로 ``priority`` 를 둔다.
+        """
+        if self.chain.is_empty:
+            return self.priority
+        last = self.chain.links[-1]
+        return ResponseLoop.opened(
+            self.chain,
+            1 - last.actor,
+            turn_player=self.state.turn.turn_player,
+            phase=self.state.turn.phase,
+            reason="발동에 응답 (RULE-CHAIN-001)",
+        ).priority
 
     # ------------------------------------------------------------------
     # 규칙이 하는 일 — 고르는 것이 아니다

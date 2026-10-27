@@ -822,6 +822,24 @@ class EffectDefinitionRegistry:
     def definition_for(self, effect_ref: EffectRef) -> "EffectDefinition | None":
         return self._definitions.get(effect_ref)
 
+    def definitions(self) -> "tuple[EffectDefinition, ...]":
+        """
+        등록된 정의 전부, ``EffectRef`` 순으로 (Phase 6-AB 보완4).
+
+        🔴 **사본을 만들 수 있게 하려고 둔다.** 이 등록부는
+        :meth:`register` 를 가진 **변경 가능한** 것이므로 탐색 사본과
+        그대로 공유하면 한쪽의 등록이 다른 쪽에 보인다. 사본을 만드는
+        자리(``engine.spell_activation.duel_components``)가 이 목록을 읽어
+        **새 등록부**를 만든다.
+
+        돌려주는 것은 불변 묶음이고, :class:`EffectDefinition` 자신은
+        frozen 이므로 **정의 객체는 공유해도 안전하다** — 격리해야 하는
+        것은 "무엇이 등록되어 있는가" 라는 목록이다.
+        """
+        return tuple(
+            self._definitions[ref] for ref in sorted(self._definitions, key=str)
+        )
+
     def __len__(self) -> int:
         return len(self._definitions)
 

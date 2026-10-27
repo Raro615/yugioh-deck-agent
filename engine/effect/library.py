@@ -1496,6 +1496,7 @@ def build_executor(
     movement: MovementRuling | None = None,
     rulings: "OperationRulingRegistry | None" = None,
     chooser: object | None = None,
+    implementations: "EffectImplementationRegistry | None" = None,
 ) -> EffectExecutor:
     """
     이 목록의 구현을 아는 실행기.
@@ -1523,11 +1524,21 @@ def build_executor(
     ``movement`` 와 같은 규율이다 (ADR-006): 없는 것을 기본값으로 메꾸지
     않는다. 엔진이 전략적으로 좋은 카드를 대신 고르지 않는다.
 
+    ``implementations`` 를 주면 ``entries`` 에서 목록을 **다시 만들지 않고**
+    그것을 그대로 쓴다 (Phase 6-AB 보완4). 탐색 사본이 원본과 **같은 실행
+    계약**으로 돌아야 하는데 사본은 ``entries`` 를 들고 있지 않고 (판이
+    들고 있는 것은 만들어진 등록부다) 프로덕션 목록으로 다시 만들면 원본에
+    꽂힌 정의가 사라진다 (실측: 원본 후보 2 · 사본 후보 1).
+
     체인 해결기는 만들어 주지 않는다 — :class:`~engine.chain.ChainResolver`
     는 이 실행기와 정의 저장소를 받아 **부르는 쪽이** 만든다.
     """
     return EffectExecutor(
-        lookup=implementation_registry(entries),
+        lookup=(
+            implementation_registry(entries)
+            if implementations is None
+            else implementations
+        ),
         journal=journal,
         destruction=destruction,
         movement=movement,

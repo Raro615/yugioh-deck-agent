@@ -404,6 +404,17 @@ class EffectImplementationRegistry:
     def has_implementation(self, effect_ref: EffectRef) -> bool:
         return effect_ref in self._refs
 
+    def refs(self) -> "tuple[EffectRef, ...]":
+        """
+        등록된 참조 전부, 정렬된 묶음으로 (Phase 6-AB 보완4).
+
+        🔴 **사본을 만들 수 있게 하려고 둔다** —
+        :class:`~engine.effect.definition.EffectDefinitionRegistry.definitions`
+        와 같은 이유다. 이 목록은 :meth:`register` 로 바뀌므로 탐색 사본과
+        공유하면 한쪽의 등록이 다른 쪽에 보인다.
+        """
+        return tuple(sorted(self._refs, key=str))
+
     def __len__(self) -> int:
         return len(self._refs)
 

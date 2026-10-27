@@ -262,9 +262,45 @@ class Simulator:
             state=self.duel.state.clone(),
             **duel_components(
                 **self._forked_journal(),
+                **self._forked_definitions(),
                 chooser=self._forked_chooser(),
             ),
         )
+
+    def _forked_definitions(self) -> dict:
+        """
+        원본의 **효과 정의와 실행 계약**을 사본에 물려준다 (6-AB 보완4).
+
+        🔴 **왜 필요한가 — 실측한 결함이다.** :func:`duel_components` 는
+        수행기 한 벌을 **새로** 만들고, 그 등록부는 프로덕션 목록에서
+        나온다. 그래서 원본 듀얼이 자기 등록부를 들고 있으면 (판마다 다른
+        효과가 꽂힌 경우) 사본이 그것을 잃었다::
+
+            원본 후보 ['69811710:e[0]', '69811710:e[1]']
+            🔴 사본 후보 ['69811710:e[0]']
+
+        그러면 사본이 원본보다 **못 해결하고**, 미래의 값이 규칙이 아니라
+        배선 때문에 달라진다 — ``_forked_journal`` 이 고친 것과 같은 결의
+        결함이다.
+
+        🔴 **격리는 ``duel_components`` 가 한다.** 두 등록부 모두
+        ``register()`` 를 가진 변경 가능한 것이므로 그쪽이 **같은 내용의 새
+        등록부**를 만든다. 이 함수는 꺼내 주기만 한다 — ``agent`` 가
+        ``engine.effect`` 를 직접 import 하지 않는다.
+
+        🔴 **없으면 주지 않는다.** 원본에 발동기가 없는 판(수행기를 꽂지
+        않은 듀얼)이면 빈 사전이고, 그때 ``duel_components`` 는 예전처럼
+        프로덕션 목록으로 만든다.
+        """
+        activator = getattr(self.duel, "_activator", None)
+        definitions = getattr(activator, "definitions", None)
+        lookup = getattr(activator, "lookup", None)
+        given: dict = {}
+        if definitions is not None and hasattr(definitions, "definitions"):
+            given["definitions"] = definitions
+        if lookup is not None and hasattr(lookup, "refs"):
+            given["implementations"] = lookup
+        return given
 
     def _forked_journal(self) -> dict:
         """
