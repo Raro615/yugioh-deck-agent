@@ -409,6 +409,14 @@ class ExecutedStep:
     """이 걸음에서 **새로 적힌** ``EffectEvent`` 의 효과 참조."""
     next_candidates: int
     note: str = ""
+    unsupported: tuple[str, ...] = ()
+    """
+    이 걸음 **뒤의 자리**에서 지원하지 않아 후보가 되지 못한 것들.
+
+    ``LegalActions.unsupported()`` 가 고른다 — 빠진 규칙의 이름이 붙은
+    보류만이다. 🔴 **규칙이 막은 것은 여기 없다.** 그것은 규칙의 답이고,
+    이 칸이 말하는 것은 "이 저장소에 그 규칙이 없어 오르지 못했다" 다.
+    """
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         mark = "✔" if self.accepted and self.resolved else (
@@ -425,6 +433,32 @@ class OpeningRun:
     steps: list[ExecutedStep] = field(default_factory=list)
     stopped_reason: str | None = None
     """왜 멈췄는가. 🔴 "더 할 수 없다" 와 "상한에 닿았다" 를 가른다."""
+    stopped_kind: str = ""
+    """
+    멈춘 **종류** (Phase 6-AB 최종 보완 ④). 문장이 아니라 한 낱말이다.
+
+    =================  ==============================================
+    ``"not_run"``        입력 검증을 통과하지 못해 돌리지 않았다
+    ``"duel_over"``      듀얼이 끝났다
+    ``"no_candidates"``  허가된 후보가 **하나도** 없다
+    ``"unsupported"``    판을 바꿀 후보가 없는데 **미지원 보류가 있다**
+    ``"flow_only"``      남은 후보가 흐름뿐이고 미지원 보류가 없다
+    ``"not_chosen"``     후보는 있는데 **검증용 선택 방식**이 고르지 않았다
+    ``"rejected"``       행동이 거절되었다
+    ``"limit"``          이 단계가 선언한 상한에 닿았다
+    =================  ==============================================
+
+    🔴 **"흐름뿐" 과 "미지원" 을 가르는 것이 이 칸을 만든 이유다.** 6-AB
+    추가 보완까지 둘이 같은 문장으로 나왔고, 그래서 읽는 쪽이 "지원하지
+    않아 오르지 못한 후보가 있다" 를 "정상 전개 종료" 로 읽을 수 있었다.
+    """
+    unsupported: list[str] = field(default_factory=list)
+    """
+    실행 중에 만난 **미지원 사유**, 처음 본 순서대로 한 번씩.
+
+    Simulator 와 ``/combo`` 까지 가는 것이 이것이다 — 걸음별로도 남고
+    (:attr:`ExecutedStep.unsupported`) 여기 모인다.
+    """
 
     @property
     def executed(self) -> int:
@@ -477,6 +511,20 @@ def _describe_action(action, repository) -> "tuple[int | None, str, str | None, 
     ref = str(action.effect_ref) if action.effect_ref is not None else None
     targets = tuple(str(t.instance_id) for t in action.targets)
     return card_id, name, ref, targets
+
+
+def unsupported_reasons(legal) -> tuple[str, ...]:
+    """
+    그 자리의 보류 가운데 **미지원 사유**만, 읽을 수 있는 한 줄씩.
+
+    🔴 **판정을 새로 하지 않는다.** ``LegalActions.unsupported()`` 가
+    고른 것을 옮기기만 한다 — 어느 보류가 "규칙이 없다" 인지는 엔진이
+    정한다 (``WithheldAction.missing``).
+    """
+    return tuple(
+        f"{held.kind.value} [{held.missing}]: {held.reason}"
+        for held in legal.unsupported()
+    )
 
 
 def _gate_code(duel, action, repository) -> str:
@@ -560,6 +608,7 @@ def execute_opening(
 
     run = OpeningRun(setup=setup)
     if not setup.can_run:
+        run.stopped_kind = "not_run"
         run.stopped_reason = (
             "입력 검증을 통과하지 못해 실행하지 않았습니다"
             if setup.blockers else "듀얼을 만들지 못했습니다"
@@ -571,26 +620,55 @@ def execute_opening(
     picker = choose or first_meaningful
     seen_events = len(list(journal)) if journal is not None else 0
 
+    def note_unsupported(legal) -> "tuple[str, ...]":
+        """이 자리의 미지원 사유를 걸음에 붙이고 전체 목록에도 모은다."""
+        found = unsupported_reasons(legal)
+        for line in found:
+            if line not in run.unsupported:
+                run.unsupported.append(line)
+        return found
+
     for order in range(1, max_actions + 1):
         if duel.is_over:
+            run.stopped_kind = "duel_over"
             run.stopped_reason = f"듀얼이 끝났습니다: {duel.result.reason}"
             break
         duel.advance()
         legal = duel.legal_actions(duel.to_act)
+        missing_here = note_unsupported(legal)
         if not legal.allowed:
             held = "; ".join(f"{w.kind.value}: {w.reason}"
                              for w in legal.withheld)
+            run.stopped_kind = "no_candidates"
             run.stopped_reason = (
                 f"P{duel.to_act} 의 후보가 없습니다 ({held or '보류 이유 없음'})"
             )
             break
         action = picker(duel, legal)
         if action is None:
-            #: 🔴 **"더 할 것이 없다" 와 "엔진이 막았다" 를 가른다.** 흐름만
-            #: 남은 것은 전개가 끝난 것이고, 그것은 실패가 아니다.
+            #: 🔴 **세 가지를 가른다** — "검증용 선택 방식이 고르지
+            #: 않았다" · "남은 후보가 흐름뿐이다" · "그 자리에 지원하지
+            #: 않아 오르지 못한 후보가 있다". 흐름뿐이라는 사실 하나로는
+            #: 어느 것인지 말할 수 없다 (6-AB 최종 보완 ④).
             kinds = sorted({a.kind.value for a in legal.allowed})
             flow_only = {"end_phase", "pass"} >= set(kinds)
+            #: 🔴 **"후보가 흐름뿐" 만으로 정상 종료라고 적지 않는다**
+            #: (Phase 6-AB 최종 보완 ④). 같은 자리에 **지원하지 않아 오르지
+            #: 못한 후보**가 보류로 남아 있을 수 있고, 그때의 "흐름뿐" 은
+            #: 전개가 끝난 것이 아니라 **엔진이 그 수단을 모르는** 것이다.
+            #: 보류를 보지 않으면 두 사실이 같은 문장으로 나온다.
+            run.stopped_kind = (
+                "unsupported" if flow_only and missing_here
+                else "flow_only" if flow_only else "not_chosen"
+            )
             run.stopped_reason = (
+                f"판을 바꿀 후보가 없고 남은 후보는 흐름뿐이지만"
+                f" ({kinds}), 🔴 이 자리에 **지원하지 않아 후보가 되지"
+                f" 못한 것이 {len(missing_here)}건** 있습니다:"
+                f" {'; '.join(missing_here)}."
+                f" 그래서 이것은 전개가 끝난 것이 아니라 **엔진이 그 수단을"
+                f" 모르는 자리**입니다."
+                if flow_only and missing_here else
                 #: 🔴 **단정하지 않는다** (Phase 6-AA — 사용자 실험 ③).
                 #:
                 #: 6-T 는 이 자리를 "전개가 여기서 끝났다" 로 적었다. 그
@@ -652,11 +730,14 @@ def execute_opening(
             next_candidates=len(duel.legal_actions(duel.to_act).allowed),
             note=("체인이 끝까지 풀리지 않았습니다" if step.accepted
                   and not resolved else ""),
+            unsupported=note_unsupported(duel.legal_actions(duel.to_act)),
         ))
         if not step.accepted:
+            run.stopped_kind = "rejected"
             run.stopped_reason = f"행동이 거절되었습니다: {step.reason}"
             break
     else:
+        run.stopped_kind = "limit"
         run.stopped_reason = (
             f"이 단계가 선언한 상한 {max_actions}걸음에 닿았습니다"
             " (전개가 끝났다는 뜻이 아닙니다 — Phase 6-U 가 넓힙니다)"

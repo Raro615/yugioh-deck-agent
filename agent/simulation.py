@@ -116,6 +116,29 @@ class SimulationResult:
     reason: str = ""
     code: "ValidationCode | None" = None
     future: "GameStateView | None" = None
+    unsupported: tuple[str, ...] = ()
+    """
+    그 미래의 **다음 자리**에서 지원하지 않아 후보가 되지 못한 것들
+    (Phase 6-AB 최종 보완 ④).
+
+    🔴 **이것이 비어 있지 않으면 그 미래는 끝까지 검증된 것이 아니다.**
+    :attr:`SimulationStatus.SUPPORTED` 는 "엔진이 이 행동을 적용했다" 는
+    뜻이고 "그 뒤에 할 수 있는 것을 다 안다" 는 뜻이 아니다. 두 사실을
+    한 칸으로 들고 있으면 탐색이 **지원 범위의 경계를 판의 사실로**
+    읽는다 — 미지원 때문에 후보가 적은 미래가 "조용한 판" 으로 보인다.
+
+    규칙이 막은 보류는 여기 오지 않는다 (``LegalActions.unsupported()``).
+    """
+
+    @property
+    def fully_supported(self) -> bool:
+        """
+        미래가 있고 **그 자리에 미지원 보류가 없는가.**
+
+        🔴 점수를 매기는 쪽이 "완전히 검증된 미래" 를 말하려면 이 칸을
+        봐야 한다. :attr:`status` 만 보면 경계를 못 본다.
+        """
+        return self.status.gives_a_future and not self.unsupported
 
     def __post_init__(self) -> None:
         if self.status.gives_a_future and self.future is None:
@@ -126,6 +149,13 @@ class SimulationResult:
             raise SimulationError(
                 f"{self.status.value} 인데 미래 관측이 있습니다 — "
                 "실패한 시뮬레이션의 미래를 꾸며 내지 않습니다."
+            )
+        if self.unsupported and not self.status.gives_a_future:
+            #: 🔴 미래가 없으면 "그 미래의 다음 자리" 도 없다. 이 칸이
+            #: 채워져 있다면 어디선가 다른 자리의 보류를 옮겨 적은 것이다.
+            raise SimulationError(
+                f"{self.status.value} 인데 미래의 미지원 사유가 있습니다 — "
+                "없는 미래의 경계를 적지 않습니다."
             )
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
@@ -375,6 +405,10 @@ class Simulator:
 
         if step.accepted:
             settled = self._settle_forced_passes(fork)
+            #: 🔴 **그 미래의 경계를 함께 돌려준다** (6-AB 최종 보완 ④).
+            #: 사본의 다음 자리에서 **지원하지 않아 오르지 못한** 후보가
+            #: 있으면 그 미래는 끝까지 검증된 것이 아니다. 사본은 버려지므로
+            #: 지금 읽지 않으면 그 사실이 영영 밖으로 나가지 않는다.
             return SimulationResult(
                 action=action,
                 status=SimulationStatus.SUPPORTED,
@@ -383,6 +417,10 @@ class Simulator:
                 code=step.code,
                 # 사본은 여기서 버려진다. 넘어가는 것은 관측뿐이다.
                 future=fork.view(viewer),
+                unsupported=tuple(
+                    f"{held.kind.value} [{held.missing}]: {held.reason}"
+                    for held in fork.legal_actions(fork.to_act).unsupported()
+                ),
             )
 
         status = (

@@ -233,6 +233,13 @@ def render_opening_run(run) -> str:
         if step.note:
             lines.append(f"      🔴 {step.note}")
         lines.append(f"      이 뒤의 행동 후보 {step.next_candidates}건")
+        if step.unsupported:
+            #: 🔴 **이 걸음 뒤에 "지원하지 않아 오르지 못한 후보" 가 있었다**
+            #: (6-AB 최종 보완 ④). 규칙이 막은 것과 섞지 않는다 — 여기 오는
+            #: 것은 빠진 규칙의 이름이 붙은 보류뿐이다.
+            lines.append(f"      🔴 이 뒤에 지원하지 않아 후보가 되지 못한 것"
+                         f" {len(step.unsupported)}건:")
+            lines.extend(f"         - {item}" for item in step.unsupported)
     lines.append("")
     #: 🔴 **"해결" 의 뜻을 적는다** (Phase 6-AA — 사용자 실험 ④).
     #:
@@ -247,7 +254,23 @@ def render_opening_run(run) -> str:
     lines.append(f"  그중 **효과가 실제로 해결된 걸음** {run.effects_resolved}걸음"
                  f" (기록에 EffectEvent 가 남은 걸음)")
     if run.stopped_reason:
-        lines.append(f"  멈춘 이유: {run.stopped_reason}")
+        lines.append(f"  멈춘 이유: {run.stopped_reason}"
+                     + (f" [{run.stopped_kind}]" if run.stopped_kind else ""))
+    if run.unsupported:
+        #: 🔴 **실행에 영향을 준 미지원 사유를 전개 요약 안에 둔다** (6-AB
+        #: 최종 보완 ④). 걸음별로 흩어 두면 읽는 쪽이 "이 전개는 끝까지
+        #: 지원되었다" 로 읽는다 — 이 목록이 비어 있을 때만 그 말을 할 수
+        #: 있다.
+        lines.append("")
+        lines.append(f"  🔴 이 전개 중에 만난 **미지원 사유**"
+                     f" {len(run.unsupported)}건 — 엔진이 그 수단을 몰라"
+                     f" 후보가 되지 못한 것들입니다 (규칙이 막은 것이"
+                     f" 아닙니다):")
+        lines.extend(f"    - {item}" for item in run.unsupported)
+    else:
+        lines.append("")
+        lines.append("  이 전개 중에 **미지원으로 보류된 후보는 없었습니다**"
+                     " (빠진 규칙 이름이 붙은 보류가 없습니다).")
     return "\n".join(lines)
 
 

@@ -99,11 +99,32 @@ class SearchCandidate:
     status: "SimulationStatus | None"
     value: "StateValue | None" = None
     reason: str = ""
+    unsupported: tuple[str, ...] = ()
+    """
+    그 미래의 다음 자리에서 **빠진 규칙의 이름**들 (Phase 6-AB 최종 보완 ④).
+
+    🔴 **이름만 남긴다.** 보류의 설명문은 카드를 가리킬 수 있고 흔적은
+    오래 살므로 (이 클래스 설명의 §31) 상수 이름만 옮긴다 — 설명은
+    ``SimulationResult.unsupported`` 가 그 자리에서 들고 있다.
+
+    비어 있지 않으면 :attr:`value` 는 **경계가 있는 미래**의 점수다.
+    """
 
     @property
     def comparable(self) -> bool:
         """점수가 있어 다른 후보와 **견줄 수 있는가.**"""
         return self.value is not None
+
+    @property
+    def fully_verified(self) -> bool:
+        """
+        점수가 있고 **그 미래에 미지원 경계가 없는가** (6-AB 최종 보완 ④).
+
+        🔴 :meth:`ordering_key` 는 이 칸을 보지 않는다 — 미지원을 벌점으로
+        바꾸면 "모른다" 가 "나쁘다" 가 된다 (§17 · §28 이 금지한 것).
+        가르는 것은 **보고**이고, 줄 세우기는 그대로다.
+        """
+        return self.value is not None and not self.unsupported
 
     def ordering_key(self) -> tuple:
         """
@@ -122,10 +143,12 @@ class SearchCandidate:
         return (0, -terminal, -heuristic, self.action.canonical_state())
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        edge = (f" 🔴 미지원 경계 {len(self.unsupported)}건"
+                f" ({', '.join(self.unsupported)})" if self.unsupported else "")
         if self.value is None:
             label = self.status.value if self.status is not None else "미실행"
-            return f"{self.action} → {label} (점수 없음: {self.reason})"
-        return f"{self.action} → {self.value.describe_ko()}"
+            return f"{self.action} → {label} (점수 없음: {self.reason}){edge}"
+        return f"{self.action} → {self.value.describe_ko()}{edge}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -318,12 +341,21 @@ class SearchPolicy:
                 )
                 continue
 
+            #: 🔴 **그 미래의 경계를 흔적에 남긴다** (6-AB 최종 보완 ④).
+            #: 점수는 그대로 매긴다 — 미지원은 벌점이 아니다. 남기지
+            #: 않으면 보고가 "이 미래는 끝까지 검증되었다" 로 읽힌다.
+            edges = tuple(sorted({
+                line.split("[", 1)[1].split("]", 1)[0]
+                for line in result.unsupported if "[" in line
+            }))
+
             candidates.append(
                 SearchCandidate(
                     action=action,
                     status=result.status,
                     value=self.evaluator.evaluate(result.future),
                     reason=result.reason,
+                    unsupported=edges,
                 )
             )
         return tuple(candidates), simulations, skipped
