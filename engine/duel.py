@@ -1015,21 +1015,30 @@ class Duel:
         if not forced:
             return LegalActions(seat, tuple(allowed), tuple(withheld))
 
-        if not self._window_can_act(seat) and self._window_group(
-            seat, mandatory=True
-        ):
-            # 🔴 **처리할 수 없는 의무를 들고 있다** (6-AB 보완4가 이 검사를
-            # ``to_act`` 비교보다 **앞으로** 옮겼다).
+        # 🔴 **처리할 수 없는 의무를 먼저 본다** (6-AB 보완4가 이 검사를
+        # ``to_act`` 비교보다 **앞으로** 옮겼다).
+        #
+        # 전에는 ``to_act != seat`` 가 먼저여서, 이 자리가 처리할 수 없는
+        # 의무를 들고 있으면 ``_window_actor`` 가 그 자리를 건너뛰고
+        # (``_window_can_act`` 가 거짓이므로) 보류가 "지금 고르는 자리가
+        # 아닙니다" 로 적혔다 — **미지원 사유가 사라졌다.** 규칙이 요구한
+        # 처리를 보장할 수 없다는 사실이 가장 중요한 정보이므로 순서를
+        # 바꿨다. 🔴 **자리는 그대로 하나다** — 이유를 두 곳에서 적지 않는다.
+        duties = [
+            action
+            for action in allowed
+            if action.kind is PlayerActionKind.ACTIVATE_EFFECT
+            and any(
+                action.source == offer.source
+                and action.effect_ref == offer.effect_ref
+                for offer in forced
+            )
+        ]
+        if not duties:
+            # 규칙이 요구하는데 발동할 수 없다 — **막지 않고 적는다.**
             #
-            # 전에는 ``to_act != seat`` 가 먼저여서, 이 자리가 처리할 수 없는
-            # 의무를 들고 있으면 ``_window_actor`` 가 그 자리를 건너뛰고
-            # (``_window_can_act`` 가 거짓이므로) 보류가 "지금 고르는 자리가
-            # 아닙니다" 로 적혔다 — **미지원 사유가 사라졌다.** 규칙이 요구한
-            # 처리를 보장할 수 없다는 사실이 가장 중요한 정보이므로 순서를
-            # 바꿨다.
-            #
-            # 🔴 **흐름은 막지 않는다** (6-AB 의 규율 그대로): 막으면 양쪽
-            # 모두 고를 것이 없어 듀얼이 그 자리에서 멈춘다.
+            # 🔴 **흐름은 막지 않는다**: 막으면 양쪽 모두 고를 것이 없어
+            # 듀얼이 그 자리에서 멈춘다.
             withheld.append(
                 WithheldAction(
                     PlayerActionKind.ACTIVATE_EFFECT,
@@ -1051,30 +1060,6 @@ class Duel:
                     f"강제 유발 {len(forced)}건이 이 자리에 열려 있지만 지금 "
                     "행동을 고르는 자리가 아닙니다 — 차례가 오면 그 처리가 "
                     "먼저입니다.",
-                )
-            )
-            return LegalActions(seat, tuple(allowed), tuple(withheld))
-
-        duties = [
-            action
-            for action in allowed
-            if action.kind is PlayerActionKind.ACTIVATE_EFFECT
-            and any(
-                action.source == offer.source
-                and action.effect_ref == offer.effect_ref
-                for offer in forced
-            )
-        ]
-        if not duties:
-            # 규칙이 요구하는데 발동할 수 없다 — **막지 않고 적는다.**
-            withheld.append(
-                WithheldAction(
-                    PlayerActionKind.ACTIVATE_EFFECT,
-                    f"강제 유발 {len(forced)}건이 열려 있는데 발동 관문을 "
-                    "지나지 못했습니다 — 이 진행이 규칙대로인지 보장할 수 "
-                    "없습니다 (흐름은 막지 않습니다: 막으면 고를 것이 없어 "
-                    "듀얼이 멈춥니다).",
-                    missing=MANDATORY_TRIGGER_UNPLAYABLE,
                 )
             )
             return LegalActions(seat, tuple(allowed), tuple(withheld))

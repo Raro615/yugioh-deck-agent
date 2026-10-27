@@ -1238,7 +1238,16 @@ def test_n05_both_production_call_sites_pass_the_definition_source():
         "event_backed",
     ], ast.unparse(calls[0])
 
-    #: 그리고 **세 자리가 그 공장을 부른다** — 후보 생성 · 재검증 · 보고.
+    #: 그리고 **쓰는 자리는 모두 그 공장을 부른다** — 후보 생성 · 재검증 ·
+    #: 보고, 그리고 6-AB 보완4 가 더한 창 판정.
+    #:
+    #: 🔴 **열거를 기준으로 바꿨다** (보완4). 전에는
+    #: ``== ["_apply_activation", "legal_actions"]`` 였다. 이 시험의 주장은
+    #: "두 자리다" 가 아니라 **"검증기를 만드는 자리가 하나이고, 쓰는 자리는
+    #: 모두 그것을 부른다"** 이고 (바로 위의 ``len(calls) == 1``), 그 주장은
+    #: 부르는 자리가 늘어도 그대로다. 보완4 가 ``_window_can_act`` 를
+    #: 더했다 — 그 자리가 **관문까지** 보아야 "처리할 수 있는 의무" 를 가릴
+    #: 수 있고, 손으로 검증기를 만들면 바로 그 어긋남이 생긴다.
     factory_users = sorted(
         {
             node.name
@@ -1251,7 +1260,10 @@ def test_n05_both_production_call_sites_pass_the_definition_source():
             )
         }
     )
-    assert factory_users == ["_apply_activation", "legal_actions"], factory_users
+    assert {"_apply_activation", "legal_actions"} <= set(factory_users)
+    #: 🔴 부르는 자리는 **그 하나의 공장**을 쓴다 — 제 검증기를 만들지
+    #: 않는다 (위의 ``len(calls) == 1`` 이 그것을 센다).
+    assert "activation_validator" in duel_source
     reporting = (PROJECT_ROOT / "deck" / "opening.py").read_text(encoding="utf-8")
     assert "duel.activation_validator(" in reporting
     assert "ActionValidator(" not in reporting, "보고가 제 검증기를 만들면 갈라진다"
