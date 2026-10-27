@@ -45,6 +45,7 @@ from engine.effect.library import definition_registry
 from engine.effect.operation import OperationKind
 from engine.ids import EffectRef, InstanceId
 from engine.trigger import (
+    graveyard_zone_for,
     EligibilityGate,
     TimingEvent,
     TimingPoint,
@@ -434,15 +435,57 @@ def test_05_the_false_negative_is_gone_on_a_real_board(repository):
     assert relation.validity is ActionValidity.VALID
     assert candidate.status is TriggerStatus.ELIGIBLE
 
-    #: 🔴 자리 관문은 **거부가 아니라 모름**이다.
-    assert gate.validity is ActionValidity.UNKNOWN
-    assert gate.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    #: 🔴 **자리 관문은 거부가 아니다** — 6-G 가 고친 것이 그것이고, 그
+    #: 사실은 그대로다.
     assert gate.validity is not ActionValidity.INVALID
+    assert gate.code is not ValidationCode.SOURCE_WRONG_ZONE
 
-    #: 🔴 그래도 발동 가능이 아니다.
+    #: 🔴 **정정 (보완5): 모름에서 허가로.** 6-G 는 여기서 ``UNKNOWN`` 을
+    #: 요구했고 **그때는 그것이 맞았다** — 자리를 말해 주는 것이 아무것도
+    #: 없었기 때문이다. 보완5 가 그 읽는 자리를 만들었다
+    #: (:func:`~engine.trigger.graveyard_zone_for`).
+    #:
+    #: 🔴 **이 카드가 그 근거를 가장 잘 보여 준다.** 드로우 개구리의 Lua 는
+    #: ``SetRange(LOCATION_MZONE)`` + ``SetCode(EVENT_TO_GRAVE)`` 다 —
+    #: ``_activation_zone`` 의 설명이 *"그쪽에 MZONE 을 채우면 드로우
+    #: 개구리(56840658)에서 이미 재현된 잘못된 확신이 된다"* 고 적어 둔 그
+    #: 카드다. 그 말이 맞다: 묘지로 보내진 순간 이 카드는 필드에 없다.
+    #:
+    #: 그런데 **어디에 있는지는 사건이 말한다** — 도착지가 묘지다. 그리고
+    #: 룰북 *Trigger Effect* 절이 드는 예가 바로 그 모양이다 (*"When this
+    #: card is destroyed by battle and sent to the Graveyard: …"*). 즉
+    #: 채우는 값이 ``MZONE`` 이 아니라 **사건이 적은 도착지**이고, 그것은
+    #: 모름을 승격한 것이 아니라 **빠져 있던 읽기**다.
+    assert gate.validity is ActionValidity.VALID
+    assert gate.code is ValidationCode.OK
+    assert "GRAVE 에서 발동할 수 있습니다" in gate.result.reason
+    assert "이동 사건이" in gate.result.reason
+    #: 🔴 **그런데 그것만으로는 발동 가능이 아니다.** 관문 하나가 답을
+    #: 얻었을 뿐이고, 이 판정기는 정의 등록부를 받지 않았으므로 다른 관문이
+    #: 아직 모른다. 보완5 가 **허가를 만든 것이 아니라는** 증거다.
     assert eligibility.status is TriggerStatus.UNKNOWN
     assert eligibility.may_activate is False
     assert eligibility.fully_checked is False
+
+    #: 🔴 **그러나 묘지만이다.** 도착지가 다르면 읽는 쪽이 **아무것도
+    #: 돌려주지 않고**, 그러면 관문은 원래의 ``UNKNOWN`` 을 낸다 — 거기서
+    #: 발동할 수 있다는 공식 근거를 찾지 못했다.
+    #:
+    #: 🔴 그 경계를 **읽는 자리에서** 센다. 이 카드의 선언은
+    #: ``to_zones={GRAVE}`` 이므로 도착지가 다른 사건은 ``TriggerCollector``
+    #: 가 **후보로조차 올리지 않는다** (``judge_at`` 이 후보 1건을
+    #: 요구하므로 그 길로는 닿지 않는다) — 관문보다 앞선 경계이고, 그것도
+    #: 사실이다. 그래서 두 경계를 **둘 다** 적는다.
+    for elsewhere in (Zone.DECK, Zone.HAND, Zone.REMOVED):
+        other_event = move_event(here, Zone.MZONE, elsewhere)
+        #: ① 선언이 먼저 막는다 — 후보가 없다.
+        assert TriggerCollector(
+            duel.view(MINE), TriggerRegistry((spec,))
+        ).collect(other_event).candidates == (), elsewhere
+        #: ② 그리고 읽는 쪽도 자리를 말하지 않는다.
+        assert graveyard_zone_for(other_event, here) is None, elsewhere
+    #: 묘지 도착만 말한다.
+    assert graveyard_zone_for(event, here) is Zone.GRAVE
 
 
 def test_06_the_split_only_ever_turns_a_refusal_into_a_doubt():

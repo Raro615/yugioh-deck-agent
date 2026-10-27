@@ -453,6 +453,42 @@ def summoned_zone_for(
     return delta.to_zone
 
 
+def graveyard_zone_for(
+    event: "TimingEvent | None", source: "InstanceId | None"
+) -> "Zone | None":
+    """
+    그 사건이 **이 카드**를 묘지에 보냈는가. 아니면 ``None``.
+
+    :func:`summoned_zone_for` 와 **같은 자리이고 같은 이유**다 (그 설명을
+    보라) — 읽기이고 판단이 아니며, 관문에 가는 것은 ``Zone`` 하나다.
+
+    🔴 **묘지만 돌려준다** (보완5). ``ZoneMoved`` 의 도착지는 덱 · 패 ·
+    제외도 될 수 있는데, 그쪽에서 발동할 수 있다는 **공식 근거를 찾지
+    못했다.** 묘지만 근거가 있다 — 룰북 *Trigger Effect* 절이 드는 예가
+    그것이다:
+
+        *"When this card is destroyed by battle and sent to the Graveyard:
+        Target 1 card on the field; destroy that target."*
+
+    공식 자료가 **발동할 수 있는 유발 효과의 예로** 그 문장을 들고 있고,
+    그 순간 카드가 있는 자리는 묘지다. 그래서 묘지 도착은 "사건이 자리를
+    말한다" 에 든다. 다른 도착지는 ``None`` 으로 두어 원래의 ``UNKNOWN``
+    이 그대로 나가게 한다 — 모르는 것을 허가로 바꾸지 않는다.
+
+    ``None`` 인 경우가 넷이고 **넷 다 "자리를 모른다" 가 아니다**: 사건이
+    없다 · 이동 사건이 아니다 · 그 이동이 **다른 카드**의 것이다 · 도착지가
+    묘지가 아니다.
+    """
+    delta = event.delta if event is not None else None
+    if not isinstance(delta, ZoneMoved):
+        return None
+    if source is None or delta.card != source:
+        return None
+    if delta.destination_zone is not Zone.GRAVE:
+        return None
+    return delta.destination_zone
+
+
 def timing_for(delta: StateDelta) -> TimingEvent:
     """
     변화 하나를 시점으로. **옮길 이름이 없으면 그 사실을 사건으로 남긴다.**
@@ -1688,6 +1724,7 @@ class TriggerEligibilityJudge:
                 candidate,
                 spec,
                 summoned_to=summoned_zone_for(event, candidate.source),
+                moved_to=graveyard_zone_for(event, candidate.source),
             ),
             self._trigger_condition(candidate, spec, definition),
             self._execution_authority(spec, definition),
@@ -1863,6 +1900,7 @@ class TriggerEligibilityJudge:
         candidate: TriggerCandidate,
         spec: TriggerSpec,
         summoned_to: "Zone | None" = None,
+        moved_to: "Zone | None" = None,
     ) -> GateVerdict:
         """
         지금 있는 자리에서 발동할 수 있는가.
@@ -1870,7 +1908,8 @@ class TriggerEligibilityJudge:
         선언하지 않았으면 ``UNKNOWN`` 이다 — **적지 않은 것을 "어디서든
         발동 가능" 으로 읽지 않는다.**
 
-        🔴 **예외가 하나다: 소환 사건이 자리를 직접 말한다** (Phase 6-V).
+        🔴 **예외가 둘이다: 사건이 자리를 직접 말하는 경우**
+        (소환 — Phase 6-V · 묘지 도착 — 보완5).
 
         ``EFFECT_TYPE_SINGLE`` 트리거 등록은 ``SetRange`` 를 적지 않는다 —
         실측으로 SINGLE 트리거 5,304건 중 **5,204건**이 그렇다. 그 등록에서
@@ -1902,12 +1941,25 @@ class TriggerEligibilityJudge:
         현재 자리가 **둘 다** 맞아야 통과한다 — 해결 중에 그 카드가 다시
         움직였으면 관측 쪽이 달라지므로 통과하지 않는다.
 
-        🔴 **사건을 받지 않는다.** 받는 것은 :func:`summoned_zone_for` 가
-        읽어 준 ``Zone`` 하나다 — 관문이 사건과 후보를 함께 들고 있으면
-        3-F-5 가 계층 경계로 적어 둔 census 가 깨진다.
+        🔴 **사건을 받지 않는다.** 받는 것은 :func:`summoned_zone_for` ·
+        :func:`graveyard_zone_for` 가 읽어 준 ``Zone`` 하나씩이다 — 관문이
+        사건과 후보를 함께 들고 있으면 3-F-5 가 계층 경계로 적어 둔 census
+        가 깨진다.
+
+        **묘지 도착 쪽** (보완5)
+            바로 위가 "그쪽에 ``MZONE`` 을 채우면 잘못된 확신이 된다" 고
+            적어 두었고 **그 말이 맞다** — 채우는 자리가 ``MZONE`` 이면.
+            보완5 가 채우는 것은 ``MZONE`` 이 아니라 **사건이 적은
+            도착지**이고, 그 도착지가 묘지일 때만이다. 근거는
+            :func:`graveyard_zone_for` 에 적었다 (룰북 *Trigger Effect*).
+
+            덱 · 패 · 제외 도착은 **그대로 ``UNKNOWN``** 이다 — 거기서
+            발동할 수 있다는 공식 근거를 찾지 못했다.
         """
         if spec.activates_from is None:
             licensed = self._zone_from_summon(candidate, spec, summoned_to)
+            if licensed is None:
+                licensed = self._zone_from_grave(candidate, spec, moved_to)
             if licensed is not None:
                 return licensed
             return _gate(
@@ -1991,6 +2043,63 @@ class TriggerEligibilityJudge:
             f"{card.zone.value} 에서 발동할 수 있습니다 — 소환 사건이 이 "
             f"카드의 자리를 적었습니다 ({summoned_to.value}).",
             notes=("자리의 근거는 소환 사건이다",),
+        )
+
+    def _zone_from_grave(
+        self,
+        candidate: TriggerCandidate,
+        spec: TriggerSpec,
+        moved_to: "Zone | None",
+    ) -> "GateVerdict | None":
+        """
+        묘지 도착이 **발동 자리를 직접 말하는가.** 말하지 않으면 ``None``.
+
+        :meth:`_zone_from_summon` 과 **같은 모양이고 같은 보호장치**다 —
+        ``None`` 은 "모른다" 가 아니라 "이 사건은 자리를 말하지 않는다" 이고,
+        사건이 적은 도착지와 관측이 보는 현재 자리가 **둘 다** 맞아야
+        통과한다.
+
+        적용 조건은 셋이고 **데이터만 본다** (카드별 분기가 없다):
+
+        1. 시점이 :attr:`TimingPoint.CARD_MOVED` 다
+        2. 주체가 :attr:`TriggerSubject.SELF` 다 — 그때만 사건의 도착지가
+           **이 카드**의 것이다
+        3. :func:`graveyard_zone_for` 가 묘지를 돌려주었다 (그 이동이 이
+           카드의 것이고 도착지가 묘지다)
+        """
+        if moved_to is None:
+            return None
+        if spec.point is not TimingPoint.CARD_MOVED:
+            return None
+        if spec.subject is not TriggerSubject.SELF:
+            return None
+
+        card = self._view.find(candidate.source)
+        if card is None:
+            # 묘지로 갔다는데 관측에 안 보인다 — **확인할 수 없다.**
+            return _gate(
+                EligibilityGate.ACTIVATION_ZONE,
+                ActionValidity.UNKNOWN,
+                ValidationCode.HIDDEN_CARD,
+                f"{candidate.source} 가 관측에 보이지 않아 자리를 확인할 수 "
+                "없습니다.",
+            )
+        if card.zone is not moved_to:
+            return _gate(
+                EligibilityGate.ACTIVATION_ZONE,
+                ActionValidity.UNKNOWN,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"이동 사건은 {moved_to.value} 를 적었는데 지금 자리는 "
+                f"{card.zone.value} 입니다 — 그 사이의 이동을 읽지 못합니다.",
+                notes=("activates_from 미선언", "묘지 도착 후 이동"),
+            )
+        return _gate(
+            EligibilityGate.ACTIVATION_ZONE,
+            ActionValidity.VALID,
+            ValidationCode.OK,
+            f"{card.zone.value} 에서 발동할 수 있습니다 — 이동 사건이 이 "
+            f"카드의 자리를 적었습니다 ({moved_to.value}).",
+            notes=("자리의 근거는 묘지 도착 사건이다",),
         )
 
     def _trigger_condition(
@@ -2177,6 +2286,7 @@ def _sorted_values(values) -> tuple:
 
 
 __all__ = [
+    "graveyard_zone_for",
     "summoned_zone_for",
     "TriggerError",
     "TimingPoint",
