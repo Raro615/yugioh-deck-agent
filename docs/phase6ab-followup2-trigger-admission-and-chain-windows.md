@@ -170,6 +170,22 @@ legal_actions   _apply_activation      deck/opening.py
 모름은 **내부 관문도, 후보 목록도, 직접 `apply` 도** 열지 않는다. 그래서
 "후보 목록에서만 추가로 차단" 하는 구조가 사라졌다 (§5.1 이 센다).
 
+> 🔴 **정정 (Phase 6-AB 최종 보완).** 바로 위 문장과 이 절의 다이어그램은
+> **체인이 닫힌 경로에 대해서만 참이었다.** 이 커밋의 `_window_admits` 는
+> 체인이 열리면 `return sequence < self.chain_floor` 로 끝나고, 그 분기는
+> `_missed_timing` 을 **부르지 않으므로** `None` 을 낼 수 없다 — 즉
+> 다이어그램이 그리는 흐름을 **밟지 않는 경로가 있었다.**
+>
+> 막는 효과 자체는 그대로였다 (그 분기의 답은 `True` / `False` 중
+> 하나이고 `_offer_is_activatable` 이 `is True` 만 통과시킨다). 그래서
+> 이것은 **설명의 결함**이다. 다만 그 분기는 자격을 묻지 않으므로
+> `floor ≤ sequence ≤ chain_floor - 2` 구간에서는 판정되지 않은 제안에
+> `True` 를 줄 수 있었다 — 그 구간이 지금 데이터에서 **비어 있어**
+> 실행 경로에서는 재현되지 않았다.
+>
+> 고친 자리와 측정값: `docs/phase6ab-followup3-trigger-window-completion.md`
+> §2.1 · §11.1.
+
 🔴 **"판정할 수 없다" 와 "규칙이 금지한다" 를 가른다.** 전자는 `missing` 을
 채우고 후자는 비운다 — 자리마다의 표는
 `tests/engine/test_legal_action_candidate_consistency.py::test_i03` 에 있다.
@@ -460,6 +476,14 @@ Phase 가 기준 커밋 워크트리에서 대조해 두었다.
 ---
 
 ## 8. 미지원 범위와 남은 BLOCKER
+
+> 🔴 **후속 (Phase 6-AB 최종 보완).** 아래 BLOCKER 다섯 가운데 F2-1 은
+> **상대 자리에 대해 해소**되었고 (양쪽이 같은 사건에 기회를 들 때는
+> 남았다 → BLOCKER-F3-1), F2-2 는 **엔진 통합 경로가 합성 효과로
+> 해소**되었다 (실제 카드 지원은 남았다 → BLOCKER-F3-2). F2-3 · F2-4 ·
+> F2-5 는 그대로다. 측정값은
+> `docs/phase6ab-followup3-trigger-window-completion.md` §9 · §11.2 에
+> 있다.
 
 ### BLOCKER-F2-1 — 창이 **자리별로** 나뉘지 않는다
 
