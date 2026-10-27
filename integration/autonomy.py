@@ -350,18 +350,22 @@ def trigger_offers(duel, repository, seat: int) -> tuple[TriggerOffer, ...]:
     return tuple(offers)
 
 
-def choice_offer(duel, seat: int, offer: TriggerOffer) -> "ChoiceOffer | None":
+def choice_offer(
+    duel, seat: int, offer: TriggerOffer, definitions=None
+) -> "ChoiceOffer | None":
     """
     그 유발의 **해결 시점 선택**에 대해 정책에게 줄 것. 선택이 없으면 ``None``.
 
     :func:`choice_offer_for` 를 그대로 부른다 — 유발이든 카드 발동이든
     고르는 자리는 같은 모양이므로 세는 코드를 두 벌로 갈라 두지 않는다.
     """
-    return choice_offer_for(duel.state, seat, offer.effect_ref, offer.source)
+    return choice_offer_for(
+        duel.state, seat, offer.effect_ref, offer.source, definitions
+    )
 
 
 def choice_offer_for(
-    state, seat: int, effect_ref: EffectRef, source: InstanceId
+    state, seat: int, effect_ref: EffectRef, source: InstanceId, definitions=None
 ) -> "ChoiceOffer | None":
     """
     **해결 시점 선택** 하나에 대해 정책에게 줄 것. 선택이 없으면 ``None``.
@@ -372,7 +376,7 @@ def choice_offer_for(
     만들고, 움직일 수 있는지는 :class:`~engine.effect.ruling.BoardRuling` 이
     답한다. 둘 다 이미 있는 것을 그대로 부른다.
     """
-    definition = _definition(effect_ref)
+    definition = _definition(effect_ref, definitions)
     if not definition.targets:
         return None
     binding = definition.targets[0]
@@ -399,7 +403,7 @@ def choice_offer_for(
     )
 
 
-def choice_offer_from_request(request) -> ChoiceOffer:
+def choice_offer_from_request(request, definitions=None) -> ChoiceOffer:
     """
     **엔진이 해결 중에 보낸 요청**을 정책이 읽는 모양으로 옮긴다 (Phase 6-Z).
 
@@ -417,7 +421,7 @@ def choice_offer_from_request(request) -> ChoiceOffer:
                           그것이 **실제 해결 시점**이다
     ==================  ===========================================
     """
-    definition = _definition(request.effect_ref)
+    definition = _definition(request.effect_ref, definitions)
     return ChoiceOffer(
         effect_ref=request.effect_ref,
         target_ref=request.target_ref,
@@ -471,15 +475,16 @@ class PolicyChooser:
     중에** 일어났다" 는 증거이고, 재현의 좌표다.
     """
 
-    __slots__ = ("selector", "_records")
+    __slots__ = ("selector", "definitions", "_records")
 
-    def __init__(self, selector: ChoiceSelector):
+    def __init__(self, selector: ChoiceSelector, definitions=None):
         if not hasattr(selector, "choose_cards"):
             raise AutonomyError(
                 "choose_cards(offer) 를 가진 정책이 필요합니다: "
                 f"{type(selector).__name__}"
             )
         self.selector = selector
+        self.definitions = definitions
         self._records: list[ChoiceRecord] = []
 
     @property
@@ -488,7 +493,7 @@ class PolicyChooser:
         return tuple(self._records)
 
     def choose(self, request) -> "tuple[InstanceId, ...]":
-        offer = choice_offer_from_request(request)
+        offer = choice_offer_from_request(request, self.definitions)
         chosen = tuple(self.selector.choose_cards(offer))
         self._records.append(
             ChoiceRecord(
@@ -528,7 +533,7 @@ class PolicyChooser:
         split = getattr(self.selector, "forked", None)
         if not callable(split):
             return None
-        return PolicyChooser(split())
+        return PolicyChooser(split(), self.definitions)
 
     def __repr__(self) -> str:  # pragma: no cover - 표시용
         name = getattr(self.selector, "name", type(self.selector).__name__)
@@ -747,8 +752,18 @@ def _rulings():
     return OPERATION_RULINGS
 
 
-def _definition(effect_ref: EffectRef):
-    definition = _definitions().definition_for(effect_ref)
+def _definition(effect_ref: EffectRef, definitions=None):
+    """
+    그 효과의 정의. ``definitions`` 를 주면 **그 등록부**에서 찾는다.
+
+    🔴 기본값은 프로덕션 등록부다 — 평소에는 아무것도 달라지지 않는다.
+    인자는 **듀얼이 자기 등록부를 들고 있는 경우**를 위한 것이다
+    (``Duel._activator`` · ``_resolver`` 에 다른 등록부를 꽂은 판).
+    그 판의 해결 시점 선택을 프로덕션 등록부로 되묻으면 "정의가 없습니다"
+    로 끝난다 — 엔진은 그 효과를 **이미 해결하는 중**인데.
+    """
+    registry = _definitions() if definitions is None else definitions
+    definition = registry.definition_for(effect_ref)
     if definition is None:
         raise AutonomyError(f"{effect_ref} 의 정의가 없습니다.")
     return definition
