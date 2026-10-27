@@ -234,6 +234,21 @@ class LegalActions:
     def kinds(self) -> frozenset[PlayerActionKind]:
         return frozenset(action.kind for action in self.allowed)
 
+    def unsupported(self) -> tuple[WithheldAction, ...]:
+        """
+        보류 가운데 **빠진 규칙의 이름이 붙은 것**들 (Phase 6-AB 최종 보완).
+
+        🔴 "규칙이 막았다" 와 "이 저장소에 그 규칙이 없다" 를 가른다.
+        ``missing`` 이 붙은 보류만 둘째다 — 그 이름이 **무엇이 없어서**
+        후보가 오르지 못했는지 말한다 (``TRIGGER_IMPLEMENTATION_MISSING``
+        등). 이름이 없는 보류는 규칙이 답한 것이고, 그것은 미지원이 아니다.
+
+        읽는 쪽이 이 구분을 못 하면 "후보가 흐름뿐" 이라는 사실이 "전개가
+        끝났다" 로 읽힌다 — 실제로는 **지원하지 않아 오르지 못한 후보**가
+        있는 자리인데도. 그 혼동이 6-AB 최종 보완의 ④ 다.
+        """
+        return tuple(held for held in self.withheld if held.missing)
+
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         return f"P{self.seat}: 허가 {len(self.allowed)}건 · 보류 {len(self.withheld)}건"
 
@@ -434,6 +449,35 @@ class Duel:
     ``int`` 이므로 ``dataclasses.replace`` 가 값으로 가져간다 — 탐색 사본의
     창 이동이 부모를 건드리지 않는다.
     """
+    window_passed: frozenset = frozenset()
+    """
+    **이 창에서 유발 선택을 마친 자리들** (최종 보완).
+
+    담는 것은 ``seat`` 정수다. 공식 Fast Effect Timing 도표에서 유발 처리
+    기회는 **양쪽이 다 지나가야** 닫힌다 — 턴 플레이어가 먼저 고르고, 그
+    다음 상대가 고르고, 둘 다 더 할 것이 없으면 판이 **open state** 로
+    돌아간다.
+
+    🔴 **왜 필요한가 — 실측한 결함이다** (BLOCKER-F2-1). 6-AB 추가 보완의
+    ``window_floor`` 는 값 **하나**여서 자리를 가르지 않았다. 그래서 내가
+    세트를 하자 상대의 임의 유발 기회가 **확인되기 전에 닫혔다**:
+
+        상대 제안 1 · 창 판정 True
+        내 세트 수락 True
+        🔴 상대 제안 1 · 창 판정 False · 상대 후보 False
+        🔴 END_PHASE 수락 True
+
+    🔴 **창을 자리별로 나누는 것만으로는 끝나지 않는다.** 상대가 **실제로
+    고를 기회를 받아야** 하므로 :attr:`to_act` 가 그 자리를 가리키고
+    (:meth:`_window_actor`), 그 자리에는 발동과 **포기**(``PASS``)가 함께
+    오른다. 포기가 없으면 고를 것이 없어 멈춘다.
+
+    🔴 **묻는 것도, 거절된 행동도 여기 적히지 않는다** — 수락된 ``PASS``
+    하나만 적는다. 창이 옮겨가면 비워진다.
+
+    ``frozenset`` 이므로 ``dataclasses.replace`` 가 값으로 가져간다 — 한
+    분기의 포기가 다른 분기의 기회를 닫지 않는다.
+    """
     chain_floor: int = -1
     """
     **지금 쌓이고 있는 체인이 시작된 기록 번호.** 체인이 없으면 ``-1``.
@@ -613,7 +657,13 @@ class Duel:
         seat = self.priority.holder.seat
         ordinary = seat if seat is not None else self.turn_player
         duty = self._duty_seat()
-        return ordinary if duty is None else duty
+        if duty is not None:
+            return duty
+        # 🔴 **임의 유발도 자리를 가리킨다** (최종 보완). 그러지 않으면
+        # 상대의 기회가 아무에게도 물어지지 않고, 내 다음 행동이 그것을
+        # 닫는다 (:attr:`window_passed` 의 실측).
+        claimant = self._window_actor()
+        return ordinary if claimant is None else claimant
 
     def _duty_seat(self) -> "int | None":
         """
@@ -822,6 +872,55 @@ class Duel:
                         "유발 효과는 턴 플레이어 우선권의 예외이므로 "
                         "(룰북 TURN PLAYER'S PRIORITY) 그 처리를 넘기고 "
                         "진행할 수 없습니다.",
+                    )
+                )
+            return LegalActions(seat, (), tuple(withheld))
+
+        # 🔴 **다른 자리의 임의 유발 창도 닫히기 전에는 지나갈 수 없다**
+        # (최종 보완 ②, BLOCKER-F2-1).
+        #
+        # 6-AB 추가 보완은 **강제만** 보았다 (위 블록). 그래서 상대가 임의
+        # 유발 기회를 들고 있으면 내 다음 행동이 그것을 **확인되기 전에**
+        # 닫았다. 실측::
+        #
+        #     상대 제안 1 · 창 판정 True
+        #     내 세트 수락 True
+        #     🔴 상대 제안 1 · 창 판정 False · 상대 후보 False
+        #     🔴 END_PHASE 수락 True
+        #
+        # 근거는 공식 Fast Effect Timing 도표다 — 그 확인 자리는 **양쪽이
+        # 다 지나가야** 닫히고, 그 다음에 판이 open state 로 돌아간다.
+        #
+        # 🔴 **내 창이 내 행동을 좁히지는 않는다.** 임의 유발은 그 controller
+        # 를 강제하지 않는다 — 6-AA 가 세운 강제 · 임의의 구분이고
+        # ``test_b01`` 이 그것을 센다 (*"임의 유발은 페이즈 전환을 막지
+        # 않는다"*). 그 자리에서 다른 일을 고르는 것이 **그 자리의 포기**
+        # 이고, 그때 창은 :attr:`window_floor` 로 옮겨 간다 (``test_b02``).
+        # 이 블록을 한 번 그렇게(내 창도 내 행동을 좁히도록) 썼고, 그것이
+        # 그 구분을 지웠다 — 실측으로 ``END_PHASE`` 가 임의 유발에 막혔다.
+        #
+        # 🔴 **그래서 남는 구멍을 적어 둔다**: 두 자리가 **같은 사건**에
+        # 기회를 들고 있으면 턴 플레이어가 다른 일을 골라 상대의 기회까지
+        # 함께 닫을 수 있다. 실제 데이터로는 밟을 수 없다 — 실행 등재된
+        # 유발은 한 카드의 효과 하나이므로 두 자리가 같은 사건에 기회를
+        # 드는 일이 없다. 보고서에 **부분 완료**로 적는다.
+        #
+        # 🔴 **멈추지 않는다**: 가리켜진 자리에는 발동 후보와 ``PASS`` 가
+        # 함께 오르므로 (``_flow_actions``) 고를 것이 반드시 있다.
+        claimant = self._window_actor()
+        if claimant is not None and claimant != seat:
+            for kind in sorted(
+                {action.kind for action in allowed}
+                or {PlayerActionKind.ACTIVATE_EFFECT},
+                key=lambda kind: kind.value,
+            ):
+                withheld.append(
+                    WithheldAction(
+                        kind,
+                        f"P{claimant} 의 유발 처리 기회가 아직 열려 있습니다 "
+                        "— 그 자리가 발동하거나 포기하기 전에는 진행할 수 "
+                        "없습니다 (공식 Fast Effect Timing — 그 기회는 양쪽이 "
+                        "다 지나가야 닫힙니다).",
                     )
                 )
             return LegalActions(seat, (), tuple(withheld))
@@ -1089,11 +1188,33 @@ class Duel:
         =====================================  =============================
         단계                                     답
         =====================================  =============================
-        체인 없음 · 사건이 지나간 창             ``False`` — 그 기회는 끝났다
-        체인 없음 · 사건이 현재 창 안            :meth:`_missed_timing` 에 맡긴다
-        체인 구성·응답 중 · 그 기회의 사건        ``True`` — 같은 체인에 쌓는다
+        사건이 지나간 창                        ``False`` — 그 기회는 끝났다
         체인 구성·응답 중 · 체인 도중의 사건      ``False`` — 보존하고 기다린다
+        그 밖                                   :meth:`_missed_timing` 에 맡긴다
         =====================================  =============================
+
+        🔴 **마지막 줄이 ①이 고친 자리다** (6-AB 최종 보완). 6-AB 추가
+        보완은 체인이 열려 있으면 ``return sequence < self.chain_floor`` 로
+        **끝냈다** — 그 식은 "이 창의 사건인가" 만 묻고 **자격을 묻지
+        않는다.** 그래서 같은 창의 사건이기만 하면 어휘를 읽지 못한 제안도
+        ``True`` 를 받을 수 있었다. 지금은 그 분기가 ``False`` 만 돌려주고,
+        나머지는 **자격 검사로 떨어진다** — 체인이 열려 있든 없든 같은
+        함수가 답한다.
+
+        🔴 **실측: 그 구멍을 지금 데이터로는 밟을 수 없다.** 그 식이
+        ``True`` 를 잘못 주는 구간은 ``floor ≤ sequence ≤ chain_floor - 2``
+        인데, 이 저장소의 실제 경로에서 창은 사건 **하나**만 들고
+        (``test_b04b``) ``chain_floor`` 는 언제나 그 사건 번호 + 1 이므로 그
+        구간이 **비어 있다.** 즉 ①은 **구조적 결함**이고 실행 우회가
+        재현된 것은 아니다 — 창이 사건 둘을 들게 되는 날 작동하는 보호다.
+        그 구별을 보고서에도 그대로 적는다.
+
+        🔴 **체인 분기가 자격보다 앞에 있는 이유.** 체인 **도중에** 생긴
+        사건은 그 체인이 풀린 뒤의 창에서 처리하므로 (聖鳥クレイン 재정),
+        "마지막에 일어난 일인가" 를 **지금** 묻는 것 자체가 틀린 질문이다.
+        그래서 그 경우는 자격을 묻지 않고 보존한다 — 그렇게 두지 않으면
+        체인 도중의 「때」 사건이 "타이밍을 놓쳤다" 로 적히고, 그것은
+        :meth:`_trigger_actions` 가 적는 보존 이유와 **어긋난다.**
 
         🔴 **``None`` 을 ``True`` 로 접지 않는다** (리뷰 A). 6-AB 보완은
         마지막 줄이 ``return self._missed_timing(offer) is not True`` 였고,
@@ -1114,23 +1235,131 @@ class Duel:
         if sequence < floor:
             # 지나간 창의 사건이다 — 제안은 보존되지만 발동은 열리지 않는다.
             return False
+
+        if seat in self.window_passed:
+            # 🔴 **그 자리가 이 창에서 발동하지 않기로 했다** (최종 보완).
+            # 포기가 후보를 실제로 닫지 않으면 ``PASS`` 는 아무 일도 하지
+            # 않은 것이고, 상대의 기회를 "물었다" 고 말할 수 없다.
+            # 제안은 보존된다 — 닫힌 것은 **이 창에서의 그 자리**다.
+            return False
+
         if self.chain_floor >= 0 and not self.chain.is_empty:
-            # 체인이 쌓이고 있다. 이 사건이 **그 체인을 연 기회**의 것이면
-            # 같은 체인에 쌓을 수 있고 (룰북 §When multiple cards are
-            # activated simultaneously), 체인 **도중에** 생긴 것이면
-            # 기다린다 (聖鳥クレイン 재정).
-            return sequence < self.chain_floor
-        # 🔴 **극성을 뒤집어서 돌려준다.** :meth:`_missed_timing` 의 ``True``
-        # 는 "놓쳤다" 이고 이 함수의 ``True`` 는 "발동할 수 있다" 이므로 그대로
-        # 돌려주면 뜻이 거꾸로다 (이 보완을 쓰다가 실제로 그렇게 썼고, 소환
-        # 직후의 유발이 후보에서 사라지는 것으로 바로 드러났다).
+            if sequence >= self.chain_floor:
+                # 체인 **도중에** 생긴 사건이다 — 기회는 보존되지만 이 체인에
+                # 끼워 발동하지 않는다 (聖鳥クレイン 재정). 여기서 자격을
+                # 묻지 않는 이유는 위 설명의 마지막 항목이다.
+                return False
+            # 같은 기회의 다른 유발이다 — 같은 체인에 쌓을 수 있다 (룰북
+            # §When multiple cards are activated simultaneously). 🔴 여기서
+            # **끝내지 않는다** — 자격 검사로 떨어진다 (①).
+
+        # 🔴 **① 자격은 체인 유무와 무관하게 이 한 자리가 답한다.**
         #
-        # ``None``(판정 근거 없음)은 **그대로** ``None`` 이다 — 그것이 리뷰 A
-        # 가 가리킨 자리이고, 모름을 허가로도 금지로도 바꾸지 않는다.
+        # ``_missed_timing`` 의 ``True`` 는 "놓쳤다" 이고 이 함수의 ``True``
+        # 는 "발동할 수 있다" 이므로 **극성을 뒤집어서** 쓴다.
         missed = self._missed_timing(offer)
         if missed is None:
+            # 판정 근거가 없다 — 허가로도 금지로도 바꾸지 않는다.
             return None
         return not missed
+
+    def _window_claims(self, seat: int) -> tuple:
+        """
+        이 자리가 **이 창에서 아직 고를 수 있는** 유발 제안들 (최종 보완).
+
+        🔴 **자격이 확인된 것만**이다 (:meth:`_offer_is_activatable`) — 판정
+        불가는 들어오지 않는다. 그래야 "모른다" 가 흐름을 막지 않는다.
+
+        🔴 **이미 지나간 자리는 빈 짝**이다 (:attr:`window_passed`).
+        """
+        if seat in self.window_passed:
+            return ()
+        return tuple(
+            offer
+            for offer in self._trigger_offers(seat)
+            if self._offer_is_activatable(offer, seat)
+        )
+
+    def _window_actor(self) -> "int | None":
+        """
+        이 유발 처리 기회에서 **지금 고를 자리** (최종 보완). 없으면 ``None``.
+
+        순서는 룰북 §*When multiple cards are activated simultaneously* 다 —
+        **턴 플레이어가 먼저**, 그 다음 상대. 강제가 임의보다 앞선다는 것도
+        같은 조항이고, 강제 쪽은 :meth:`_duty_seat` 가 따로 답한다.
+
+        🔴 **체인이 열려 있으면 답하지 않는다.** 그때는 우선권이 누가 고르는지
+        정하고 (``priority``), 이 함수가 끼어들면 응답 순서를 두 곳이 정하게
+        된다 — 같은 책임의 두 번째 규칙이 된다.
+
+        🔴 **고를 것이 있는 자리만 가리킨다.** 그 자리에는 발동 후보와
+        ``PASS`` 가 함께 오르므로 (:meth:`_flow_actions`) 멈추지 않는다.
+        """
+        if self.triggers is None or not self.chain.is_empty:
+            return None
+        if self.priority.is_open:
+            return None
+        for seat in (self.turn_player, 1 - self.turn_player):
+            if self._window_claims(seat):
+                return seat
+        return None
+
+    def _is_simultaneous(self, action: PlayerAction) -> bool:
+        """
+        이 발동이 **이 체인을 연 기회**의 것인가 (최종 보완).
+
+        룰북 §*When multiple cards are activated simultaneously* 가 그
+        묶음을 하나의 특수 체인에 쌓는다. 그래서 그 묶음의 발동은 **응수가
+        아니고** 스펠 스피드 제약이 걸리지 않는다
+        (:attr:`~engine.activation_timing.ActivationTiming.simultaneous`).
+
+        판정은 :attr:`chain_floor` 하나로 한다 — 그 사건이 체인이 열리기
+        **전**의 것이면 같은 기회이고, 체인 **도중**의 것이면 아니다. 같은
+        비교를 :meth:`_window_admits` 가 쓰므로 두 자리가 갈라지지 않는다.
+
+        🔴 **체인이 없으면 거짓**이다 — 그때는 애초에 응수가 아니므로 이
+        값이 쓰이지 않는다 (관문이 먼저 통과시킨다).
+
+        🔴 **유발이 아닌 발동에는 거짓**이다. 동시 발동 묶음은 유발 효과의
+        것이고 (룰북이 *"like Trigger Effects"* 로 적는다), 기동 효과나
+        카드 발동을 이 길로 넣으면 스펠 스피드 제약을 **면제해 주는** 구멍이
+        된다.
+        """
+        if self.chain_floor < 0 or self.chain.is_empty:
+            return False
+        if action.kind is not PlayerActionKind.ACTIVATE_EFFECT:
+            return False
+        for offer in self._trigger_offers(action.actor):
+            if (
+                offer.source == action.source
+                and offer.effect_ref == action.effect_ref
+            ):
+                return getattr(offer, "event_sequence", -1) < self.chain_floor
+        return False
+
+    def _window_horizon(self) -> int:
+        """
+        이 창에서 **"마지막에 일어난 일"** 을 재는 기준 번호 (최종 보완).
+
+        🔴 **체인이 쌓이는 동안은 체인이 열리기 직전으로 고정한다.**
+
+        왜 — 체인을 쌓는 일과 그것을 해결하는 일은 **기록을 남긴다.** 그
+        기록을 기준으로 재면, 같은 기회에서 **적법하게 자격을 확인한 둘째
+        유발**이 "그 사건은 더 이상 마지막이 아니다" 로 **만료된다.** 첫째
+        유발을 등록했다는 사실이 둘째를 지우는 것이고, 룰북은 그 둘을 **같은
+        특수 체인**에 쌓는다고 적는다 (§*When multiple cards are activated
+        simultaneously*).
+
+        🔴 **관리용 기록과 규칙상 처리 순서를 같다고 가정하지 않는다** —
+        그것이 이 함수가 있는 이유다. ``JournalEvent.sequence`` 는 기록의
+        순번이고, 창 안에서 "무엇이 마지막으로 일어났는가" 는 **그 창이
+        열릴 때** 정해진다.
+
+        체인이 없으면 기록의 마지막 번호다 (그때는 둘이 같다).
+        """
+        if self.chain_floor >= 0 and not self.chain.is_empty:
+            return self.chain_floor - 1
+        return (len(self.journal) - 1) if self.journal is not None else -1
 
     def _missed_timing(self, offer) -> "bool | None":
         """
@@ -1176,8 +1405,7 @@ class Duel:
             # 🔴 강제 「때」 — 어휘로는 만료인데 그것을 적용할 공식 근거가
             # 없다. 모름으로 둔다 (위 설명).
             return None
-        last = (len(self.journal) - 1) if self.journal is not None else -1
-        is_last = getattr(offer, "event_sequence", -1) == last
+        is_last = getattr(offer, "event_sequence", -1) == self._window_horizon()
         if is_last:
             # 사건이 아직 마지막이다 — 어느 어휘든 놓치지 않았다.
             return False
@@ -1597,6 +1825,10 @@ class Duel:
                 self.chain,
                 self.priority,
                 set_this_turn=self._set_this_turn(action),
+                # 🔴 **이 발동이 동시 발동 묶음의 것인가** (최종 보완).
+                # 관측에 없는 사실이므로 판을 들고 있는 이 자리가 읽어서
+                # 값으로 넘긴다 (``point`` · ``set_this_turn`` 과 같은 자리).
+                simultaneous=self._is_simultaneous(action),
             ),
             action,
         )
@@ -1647,6 +1879,15 @@ class Duel:
         withheld: list[WithheldAction] = []
 
         if self.priority.is_open and self.priority.holds(seat):
+            allowed.append(PlayerAction.passing(actor=seat))
+        elif self._window_claims(seat) and self._window_actor() == seat:
+            # 🔴 **유발 처리 기회에서의 ``PASS`` 는 "그 발동을 포기한다"** 다
+            # (최종 보완). 체인 응답의 패스도, 체인을 풀기 위한 패스도 아니다 —
+            # 같은 행위가 단계마다 다른 뜻이고, 그 단계는 ``priority`` 가
+            # 열려 있는지와 창에 고를 것이 있는지로 갈린다.
+            #
+            # 이 자리가 없으면 상대의 기회를 **물을 수 없다**: 발동 말고
+            # 고를 것이 없으면 그 자리에서 듀얼이 멈춘다.
             allowed.append(PlayerAction.passing(actor=seat))
         elif self.priority.is_open:
             # 🔴 **창은 열려 있다** — 다만 상대가 쥐고 있다. ``missing`` 을
@@ -1761,6 +2002,8 @@ class Duel:
         step = self._apply_board(action)
         if step.accepted:
             self.window_floor = opening
+            # 새 창이므로 **지나간 자리 기록을 비운다** (최종 보완).
+            self.window_passed = frozenset()
         return step
 
     def _apply_pass(self, action: PlayerAction) -> DuelStep:
@@ -1788,6 +2031,21 @@ class Duel:
         이 들고 가고, 무엇이 실제로 적용되었는지는 ``EventJournal`` 이 말한다
         (:attr:`DuelStep.accepted` 의 설명 참고).
         """
+        if not self.priority.is_open:
+            # 🔴 **유발 처리 기회의 포기다** (최종 보완). 우선권이 열려 있지
+            # 않으므로 체인 응답도 체인 해결도 아니다 — 이 자리가 이 창에서
+            # 더 고르지 않겠다고 말한 것이다.
+            #
+            # 체인을 건드리지 않는다. 양쪽이 다 지나가면 창이 닫히고
+            # (``_enforce_window``) 그때 일반 행동이 다시 오른다.
+            self.window_passed = self.window_passed | {action.actor}
+            return DuelStep(
+                action,
+                True,
+                ValidationCode.OK,
+                "이 유발 처리 기회에서 발동하지 않기로 했습니다.",
+            )
+
         self.priority = self.priority.passed()
 
         loop = self._response_loop
@@ -1855,6 +2113,8 @@ class Duel:
         # 오르기만 한다.
         self.window_floor = max(self.window_floor, self.chain_floor)
         self.chain_floor = -1
+        # 새 창이므로 **지나간 자리 기록을 비운다** (최종 보완).
+        self.window_passed = frozenset()
 
         # **해결됐든 아니든 놓인 마법은 필드를 떠난다** (RULE-SPELLTRAP-002).
         self._retire_pending()
@@ -1944,6 +2204,7 @@ class Duel:
         # 축이지만 (페이즈 경계 · 기회 경계) 페이즈 전환은 둘 다 넘는다.
         self.window_floor = self.timing_floor
         self.chain_floor = -1
+        self.window_passed = frozenset()
         if self.state.turn.phase is Phase.DRAW:
             self.step = TurnStep.DRAW_PENDING
         return DuelStep(

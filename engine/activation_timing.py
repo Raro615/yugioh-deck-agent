@@ -298,7 +298,37 @@ class ActivationTiming:
     넘긴다 (ADR-007).
     """
 
+    simultaneous: bool = False
+    """
+    이 발동이 **같은 기회에서 동시에 발동하는 것**인가 (최종 보완).
+
+    룰북 §*When multiple cards are activated simultaneously* 가 그 경우를
+    따로 적는다 — 동시에 발동 조건을 만족한 **스펠 스피드 1** 유발 효과들은
+    **하나의 특수 체인**에 함께 쌓이고, 턴 플레이어의 강제 → 상대의 강제 →
+    턴 플레이어의 임의 → 상대의 임의 순서로 올라간다.
+
+    🔴 **그것은 응수가 아니다.** 그래서 스펠 스피드 제약이 걸리지 않는다 —
+    걸면 "스펠 스피드 1 은 어떤 효과에도 응수할 수 없습니다" 로 **룰북이
+    같은 체인에 쌓는다고 적은 둘째 유발이 거절된다.** 실측한 증상:
+
+        첫 발동 수락 · 체인 길이 1
+        🔴 둘째 후보 [] — "발동하려는 카드의 스펠 스피드를 판정할 수 없습니다
+           (몬스터 효과)"
+
+    🔴 **값으로 받는다.** "이 발동이 동시 발동 묶음의 것인가" 는 관측에
+    없고, 그 사건이 이 체인을 연 기회의 것인지를 아는 것은 **판을 들고 있는
+    쪽**이다 (:attr:`~engine.duel.Duel.chain_floor`). ``point`` ·
+    ``set_this_turn`` 과 같은 자리이고 같은 이유다 (ADR-007).
+
+    🔴 **기본값은 거짓**이다 — 주지 않으면 응수로 본다. 이것이 허가를 넓히는
+    값이므로, 모르는 쪽이 **좁은** 답을 받아야 한다.
+    """
+
     def __post_init__(self) -> None:
+        if not isinstance(self.simultaneous, bool):
+            raise TypeError(
+                f"simultaneous 는 bool 입니다: {self.simultaneous!r}"
+            )
         if not isinstance(self.chain, Chain):
             raise TypeError(f"Chain 이 필요합니다: {type(self.chain).__name__}")
         if not isinstance(self.priority, PriorityState):
@@ -435,6 +465,24 @@ class ActivationTimingChecker:
             # 이 될 수 있다 (RULE-CHAIN-004 의 "Chain Link 2 이상" 제약).
             return self._passed(
                 "체인이 비어 있어 스펠 스피드 제약이 걸리지 않습니다."
+            )
+
+        if timing.simultaneous:
+            # 🔴 **동시 발동은 응수가 아니다** (최종 보완).
+            #
+            #     "If effects of Spell Speed 1 cards (like Trigger Effects)
+            #      are activated at the same time, they will be resolved in
+            #      a special Chain."
+            #     — 룰북 §When multiple cards are activated simultaneously
+            #
+            # 그 묶음은 서로에게 응수하는 것이 **아니라** 한 체인에 함께
+            # 올라간다. 스펠 스피드 제약을 걸면 룰북이 같이 쌓는다고 적은
+            # 둘째 유발이 거절된다 (``ActivationTiming.simultaneous`` 의
+            # 실측).
+            return self._passed(
+                "같은 기회에서 동시에 발동하는 묶음이므로 스펠 스피드 "
+                "제약이 걸리지 않습니다 (룰북 — 동시 발동은 하나의 특수 "
+                "체인에 함께 쌓입니다).",
             )
 
         mine = self.spell_speed(action.source)
