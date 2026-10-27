@@ -313,6 +313,13 @@ def test_01_the_effect_result_has_exactly_one_production_producer():
     #: 기본값으로 메꾸지 않으므로 (ADR-006) **부르는 쪽이 고른다.** 자리의
     #: 수는 여전히 하나이고, 그것이 이 테스트의 사실이다.
     #:
+    #: 🔴 **Phase 6-AB 보완4 가 같은 자리에 인자를 하나 더 넘긴다**
+    #: (``implementations=implementations`` — 탐색 사본이 원본의 **실행
+    #: 계약**을 물려받는 자리다). 같은 이유다: ``build_executor`` 가
+    #: ``entries`` 에서 목록을 다시 만들면 원본에 꽂힌 정의가 사라지므로
+    #: (실측: 원본 후보 2 · 사본 후보 1) **부르는 쪽이 고른다.** 자리의 수는
+    #: 여전히 하나이고, 그것이 이 테스트의 사실이다.
+    #:
     #: 호출이 여러 줄로 나뉘었으므로 한 줄 지문 대신 **인자 이름**을 센다 —
     #: 지문이 줄바꿈을 고정하면 재는 것이 자리의 수가 아니라 서식이 된다.
     import ast as _ast
@@ -328,6 +335,7 @@ def test_01_the_effect_result_has_exactly_one_production_producer():
     )
     assert sorted(kw.arg for kw in call.keywords) == [
         "chooser",
+        "implementations",
         "journal",
         "rulings",
     ], _ast.unparse(call)

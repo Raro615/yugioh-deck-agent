@@ -176,9 +176,18 @@ PROSE_OCCURRENCES = {
     #     ``activation_validator`` · ``_trigger_offers`` ·
     #     ``_trigger_actions`` (+119) · ``_activation_actions`` 의 유발
     #     제외(+12) · ``legal_actions`` 의 사건 읽기(+9) 가 전부 위에 있다.
-    ("engine/activation.py", 640),      # M2: 코드도 표에서 가져온다
-    ("engine/activation.py", 678),      # M1: 확실한 거부이고 미구현이 아니다
-    ("engine/effect/executor.py", 1136),# M2: 이 근거로는 절대 실행하지 않는다
+    # 🔴 **Phase 6-AB 보완4 에서 세 파일의 자리가 또 밀렸다** (문자열 · 코드 ·
+    # 산문 개수는 **하나도 바뀌지 않았다** — 바뀐 것이 줄 번호뿐이라는 것이
+    # 그 증거다). 밀린 이유는 전부 **읽기 전용 접근자**다:
+    #
+    #   ``activation.py``       640 → 651 · 678 → 689 (+11)
+    #     ``EffectActivator.lookup`` 프로퍼티가 ``definitions`` 바로 뒤에
+    #     들어갔다 — 탐색 사본이 원본의 실행 계약을 물려받는 자리다 (③).
+    #   ``effect/executor.py``  1136 → 1147 (+11)
+    #     ``EffectImplementationRegistry.refs()`` 가 위에 들어갔다.
+    ("engine/activation.py", 651),      # M2: 코드도 표에서 가져온다
+    ("engine/activation.py", 689),      # M1: 확실한 거부이고 미구현이 아니다
+    ("engine/effect/executor.py", 1147),# M2: 이 근거로는 절대 실행하지 않는다
     ("engine/special_summon.py", 77),
     # 🔴 **``engine/trigger.py`` 의 다섯 자리가 Phase 6-F 에서 전부
     # 움직였다.** 그 Phase 가 ``TriggerSubject`` · ``subject_relation`` ·
@@ -290,7 +299,12 @@ PROSE_OCCURRENCES = {
     # **문자열 · 코드 · 산문 개수는 또 전부 그대로다** — 이 Phase 는
     # ``RULE_NOT_IMPLEMENTED`` 를 새로 쓰지도 지우지도 않았고, 바뀐 것이
     # 줄 번호뿐이라는 것이 그 증거다.
-    ("engine/duel.py", 2090),
+    #
+    # 🔴 **보완4 에서 2090 → 2300 으로 밀렸다** (+210). 그 보완이 이 자리보다
+    # **위**에 넣은 것들이다: ``_window_group`` · ``_window_can_act`` ·
+    # ``_resolving_other_window`` 와 각자의 설명, ``_window_actor`` 의 네 묶음
+    # 순서, ``_enforce_mandatory`` 의 등재 좁히기, ``_response_priority``.
+    ("engine/duel.py", 2300),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
@@ -392,14 +406,25 @@ CONTRACT_VIOLATIONS = {
     # **위반 13 · 적합 19 는 그대로다** — 자리의 성격도 개수도 짝지은 상태도
     # 바뀌지 않았고, 바뀐 것이 줄 번호뿐이라는 것이 그 증거다 (3-F-17 ·
     # 6-L · 6-Z 와 같은 결).
-    ("engine/activation.py", 555, "ActivationStatus.INVALID_ACTION"),
-    ("engine/activation.py", 587, "ActivationStatus.CHAIN_REFUSED"),
-    ("engine/effect/executor.py", 595, "ResolutionStatus.EXECUTION_ERROR"),
-    ("engine/effect/executor.py", 743, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 756, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 879, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1079, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1355, "ResolutionStatus.INVALID_CONTEXT"),
+    # 🔴 **Phase 6-AB 보완4 에서 아홉 자리가 전부 +11 밀렸다**
+    # (``activation.py`` 555 → 566 · 587 → 598,
+    #  ``effect/executor.py`` 595 → 606 · 743 → 754 · 756 → 767 ·
+    #  879 → 890 · 1079 → 1090 · 1355 → 1366 · 1693 → 1704).
+    #
+    # 원인은 **읽기 전용 접근자 둘**이다 — ``EffectActivator.lookup`` 과
+    # ``EffectImplementationRegistry.refs()``. 탐색 사본이 원본의 실행
+    # 계약을 물려받으려면 그것을 꺼낼 수 있어야 한다 (보완4 ③).
+    #
+    # **위반 13 · 적합 19 는 그대로다** — 실측으로 확인했다. 자리의 성격도
+    # 개수도 짝지은 상태도 바뀌지 않았고, 바뀐 것이 줄 번호뿐이다.
+    ("engine/activation.py", 566, "ActivationStatus.INVALID_ACTION"),
+    ("engine/activation.py", 598, "ActivationStatus.CHAIN_REFUSED"),
+    ("engine/effect/executor.py", 606, "ResolutionStatus.EXECUTION_ERROR"),
+    ("engine/effect/executor.py", 754, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 767, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 890, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1090, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1366, "ResolutionStatus.INVALID_CONTEXT"),
     # 🔴 **한 자리가 밀렸다** (Phase 6-L). ``engine/effect/executor.py``
     # 1336 → **1390**. 6-L 이 그 위에 ``_target_spec_of`` ·
     # ``_resolve_self_reference`` (+45) 와 ``_plan_card_operation`` 의
@@ -409,7 +434,7 @@ CONTRACT_VIOLATIONS = {
     # 더한 거절 자리(``_resolve_self_reference``)는 이 목록에 들어오지
     # 않는다: 그쪽은 ``INFORMATION_UNAVAILABLE`` 을 쓴다 — "규칙을 아직
     # 옮기지 않았다" 가 아니라 "이 문맥에 그 카드가 없다" 이기 때문이다.
-    ("engine/effect/executor.py", 1693, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1704, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/resolution.py", 520, "ResolutionStatus.FORBIDDEN"),
     ("engine/payment.py", 402, "PaymentStatus.EXECUTION_ERROR"),
     ("engine/response.py", 476, "ResponseOutcome.REFUSED"),
