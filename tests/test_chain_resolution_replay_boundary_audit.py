@@ -659,7 +659,13 @@ def test_20_the_search_fork_re_executes_without_any_report(repository):
     🟢 §5 · §11 — **재실행 구조는 이미 있고, 보고를 쓰지 않는다.**
 
     ``Simulator`` 는 판을 ``clone()`` 해서 행위를 다시 적용한다. 돌려주는
-    ``SimulationResult`` 에는 ``action``/``status``/``future`` 만 있다.
+    ``SimulationResult`` 에는 **보고로 가는 칸이 없다.**
+
+    🔴 **열거를 기준으로 바꾼다** (Phase 6-AB 최종 보완). 이 시험의 주장은
+    "칸이 여섯이다" 가 아니라 **"해결 보고가 그 자리로 새지 않는다"** 이고,
+    아래 ``absent`` 목록이 그것을 센다. 최종 보완이 ``unsupported`` 를
+    더했다 — 그 미래의 다음 자리에서 **지원하지 않아 후보가 되지 못한
+    것들**이고 (④), 체인 링크도 해결 단계도 담지 않는다.
     """
     duel = live_duel(repository)
     duel.advance()
@@ -668,7 +674,7 @@ def test_20_the_search_fork_re_executes_without_any_report(repository):
 
     assert isinstance(outcome, SimulationResult)
     names = {f.name for f in dataclasses.fields(SimulationResult)}
-    assert names == {"action", "status", "viewer", "reason", "code", "future"}
+    assert {"action", "status", "viewer", "reason", "code", "future"} <= names
     #: 🔴 보고로 가는 칸이 없다.
     for absent in ("resolution", "result", "steps", "link"):
         assert absent not in names, absent

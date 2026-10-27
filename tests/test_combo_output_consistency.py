@@ -183,14 +183,35 @@ def test_06_the_stop_reason_is_scoped_to_what_this_repo_supports(repository):
 
     "전개가 끝났다" 는 이 저장소가 모든 전개 수단을 안다고 가정한다 —
     실행 구현이 등재된 효과는 15개이고 유발은 하나다.
+
+    🔴 **Phase 6-AB 최종 보완이 이 자리를 더 좁혔다** (④). 6-AA 의 한정은
+    **참이지만 불충분했다** — 같은 자리의 보류를 보지 않았다. 실측: 사용자가
+    보낸 이 패의 전개는 `['end_phase']` 만 남은 자리에서 멈췄고 **같은
+    자리에 미지원 보류가 1건** 있었다 (``activate_card`` 의 남은 적법성을
+    판정할 규칙 계층이 없다). 즉 "이 범위에서 고를 것이 없다" 는
+    *"지원하지 않아 **후보가 되지 못한 것이 있다**"* 를 말하지 않았고,
+    읽는 쪽은 그것을 정상 전개 종료로 읽을 수 있었다.
+
+    그래서 기대 문장이 바뀐다 — ``"현재 지원 범위"`` 한정은 **미지원
+    보류가 없는** 자리의 문장이 되었고 (``stopped_kind == "flow_only"``),
+    이 패는 ``"unsupported"`` 다. 재는 요구는 그대로이고 **더 좁게** 센다.
     """
     setup = _opened(repository, [69811710, 703897, 2930675, 12989604, 93920420])
     run = execute_opening(setup, repository)
     assert run.stopped_reason
     assert "end_phase" in run.stopped_reason
-    assert "현재 지원 범위" in run.stopped_reason
-    assert "전개가 끝났다는 뜻이 아니고" in run.stopped_reason
-    assert "엔진이 막았다는 뜻도 아닙니다" in run.stopped_reason
+    #: 🔴 한 낱말로 갈린다 — 네 가지가 같은 문장으로 나오지 않는다.
+    assert run.stopped_kind == "unsupported", (
+        run.stopped_kind, run.stopped_reason
+    )
+    assert run.unsupported
+    #: 🔴 **끝났다고 단정하지 않는다** — 그 요구는 그대로다.
+    assert "전개가 끝난 것이 아니라" in run.stopped_reason
+    #: 🔴 **막혔다고 적지도 않는다** — 그 요구도 그대로다.
+    assert "엔진이 막았다" not in run.stopped_reason
+    assert "엔진이 그 수단을 모르는 자리" in run.stopped_reason
+    #: 🔴 그리고 **지원하지 않아 후보가 되지 못한 것**을 적는다 (6-AB 최종).
+    assert "지원하지 않아 후보가 되지" in run.stopped_reason
 
 
 # ======================================================================

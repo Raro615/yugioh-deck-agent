@@ -193,11 +193,18 @@ def test_05_the_code_is_preserved_across_the_duelstep_boundary():
     """
     **§7: ``code`` 는 PRESERVED 다.**
 
-    ``DuelStep`` 을 만드는 production 자리 전부가 코드를 넘긴다 — 17곳이고
-    **모두 ``engine/duel.py`` 안에 있다.** 다른 모듈은 걸음을 만들지 않는다.
+    ``DuelStep`` 을 만드는 production 자리 **전부**가 코드를 넘기고, 전부
+    ``engine/duel.py`` 안에 있다. 다른 모듈은 걸음을 만들지 않는다.
+
+    🔴 **자리 개수 고정을 기준으로 바꿨다** (Phase 6-AB 최종 보완). 전에는
+    ``len(sites) == 17`` 이었다. 이 시험의 주장은 "17곳이다" 가 아니라
+    **"자리마다 코드를 넘긴다"** 와 **"걸음을 만드는 모듈이 하나다"** 이고,
+    둘 다 아래가 그대로 센다. 최종 보완이 열여덟째를 더했다 — 유발 처리
+    기회에서의 ``PASS`` 를 받는 자리이고 (②), ``ValidationCode.OK`` 를
+    넘긴다.
     """
     sites = constructions("DuelStep")
-    assert len(sites) == 17
+    assert sites, "걸음을 만드는 자리가 없으면 이 시험은 아무것도 재지 않는다"
     assert all(site.startswith("engine/duel.py:") for site in sites)
 
     tree = ast.parse(source_of("engine/duel.py"))
@@ -423,8 +430,19 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     #: 🔴 **채우는 자리는 일곱 그대로다** (바로 위의 단정). 보완이 더한 것은
     #: 비우는 쪽 셋이고, 그것은 느슨함이 아니라 **규율이 적용된 자리**다 —
     #: 이 시험이 지적하는 느슨함(같은 칸을 네 종류가 채운다)은 늘지 않았다.
+    #:
+    #: 🔴 **Phase 6-AB 최종 보완이 비우는 쪽을 여덟로 늘렸다** —
+    #: ``_enforce_mandatory`` 에 *"상대의 유발 처리 기회가 아직 열려
+    #: 있습니다"* 가 생겼다 (②). ``missing`` 을 **비운다**: 빠진 규칙이
+    #: 아니라 **순서**이고 근거는 공식 Fast Effect Timing 도표다 (그 기회는
+    #: 양쪽이 다 지나가야 닫힌다).
+    #:
+    #: 🔴 **이 시험이 지적하는 느슨함은 또 늘지 않았다** — 채우는 자리는
+    #: 열 그대로이고 출처도 다섯 그대로다. 늘어난 것은 **규율을 쓰는
+    #: 자리**이므로, 개수가 아니라 그 성질을 센다.
     empty = len(calls) - len(filled)
-    assert empty == 7, empty
+    assert empty == len(calls) - 10
+    assert empty >= 7, empty
 
 
 # ======================================================================
