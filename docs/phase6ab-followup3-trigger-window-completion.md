@@ -470,24 +470,40 @@ pytest 의 종료 코드가 아니었다 (그 보고서의 정정 공지).
 
 위험 기반 정책의 네 묶음을 `runtests.sh` 로 포그라운드 실행했다.
 
-| 묶음 | 결과 | `PYTEST_EXIT` |
-|---|---|---|
-| ① `tests/engine` | 3757 passed | **0** |
-| ② `tests/agent` · `tests/rules` · `tests/rulings` | 2 failed · 526 passed · 1 skipped | **1** |
-| ③ 루트 `test_*.py` 앞 46개 | (아래) | (아래) |
-| ④ 루트 `test_*.py` 뒤 46개 | (아래) | (아래) |
+| 묶음 | 1차 | 처리 뒤 확인 | `PYTEST_EXIT` |
+|---|---|---|---|
+| ① `tests/engine` | 3757 passed | — (production 변경 없음) | **0** |
+| ② `tests/agent` · `tests/rules` · `tests/rulings` | 2 failed · 526 passed · 1 skipped | — (production 변경 없음) | **1** |
+| ③ 루트 `test_*.py` 앞 46개 | 6 failed · 1237 passed · 1 skipped | 2 failed · 1241 passed · 1 skipped | **1** |
+| ④ 루트 `test_*.py` 뒤 46개 | 17 failed · 1063 passed · 8 skipped | 4 failed · 1076 passed · 8 skipped | **1** |
 
-🔴 **②의 두 실패는 `b098987` 에서도 실패했다** (§9 마지막 절). 종료
-코드를 성공으로 바꾸지 않는다.
+🔴 **② · ③ · ④ 에 남은 여덟 건은 전부 `b098987` 에서도 실패했다**
+(§9 마지막 절). 종료 코드를 성공으로 바꾸지 않는다 — 세 묶음이
+`PYTEST_EXIT=1` 이다.
+
+🔴 **① · ② 는 다시 돌리지 않았다.** 그 뒤의 변경은 **루트 시험 파일
+열셋뿐**이고 production 파일을 하나도 건드리지 않았다 (`git log` ·
+`git diff --stat` 로 확인). ③ · ④ 는 그 파일들을 담고 있으므로 전부
+다시 돌렸다.
 
 🔴 **개별 재실행은 회귀를 찾는 도구이고 없음을 증명하는 도구가 아니다**
 (6-AB 보완 §9.4 의 교훈). 그래서 네 묶음을 전부 돌린 값을 위 표에 적는다.
 
-### 7.6 처리한 회귀 — 스무 건
+### 7.6 처리한 회귀 — 서른일곱 건
 
-변경 모듈 묶음을 돌려 **21 failed** 를 보았고, 같은 묶음을 pristine
-`b098987` 로 돌려 **2 failed** (§9 의 기존 실패 둘)를 확인했다. 즉 회귀는
-**스무 건**이다.
+세 단계에서 찾았다.
+
+| 단계 | 1차 실패 | 기존 실패 | 회귀 |
+|---|---|---|---|
+| 변경 모듈 묶음 (`tests/engine` · `tests/agent` 의 일곱 파일) | 21 | 1 | **20** |
+| 루트 묶음 ④ | 17 | 4 | **13** |
+| 루트 묶음 ③ | 6 | 2 | **4** |
+
+기존 실패는 같은 묶음을 pristine `b098987` 로 돌려 (모듈 묶음: 2 failed ·
+255 passed) 또는 이전 Phase 들의 같은 묶음 로그와 대조해 (루트 ③ · ④)
+확인했다.
+
+#### 변경 모듈 묶음의 스무 건
 
 | 묶음 | 건수 | 처리 |
 |---|---|---|
@@ -503,6 +519,23 @@ pytest 의 종료 코드가 아니었다 (그 보고서의 정정 공지).
 있었고, 그 가운데 `test_b01` 은 *"임의 유발은 페이즈 전환을 막지 않는다"*
 를 문장으로 들고 있었다. **시험을 고치지 않고 코드를 되돌렸다.**
 
+#### 루트 공유 계약 감사 — 열일곱 건
+
+| 묶음 | 건수 | 처리 |
+|---|---|---|
+| 열거 (칸 수 · 이름 · 호출 수 · 공유 칸 수) | 11 | **시험을 기준으로 정정** — `test_16` · `test_17` · `test_26` · `test_01` · `test_02` · `test_32` · `test_05`(둘) · `test_35` · `test_20` · `test_09` |
+| 줄 번호 · 줄 수 핀 | 2 | 측정값으로 갱신하고 **무엇이 늘었는지** 적었다 (`activation_timing.py` 실행 코드 6줄 · `duel.py` 산문 자리 1832 → 2090) |
+| `Duel` 필드 목록 | 1 | `window_passed` 를 더하고 **왜 §10 이 경계한 "처리했다는 기록" 이 아닌지** 적었다 |
+| 멈춘 이유 문장 | 2 | `test_e04` · `test_06` — **변경 전 기대값이 그 자리에 더 이상 해당하지 않는다** (§8.3) |
+| `journal` 을 읽는 함수 목록 | 1 | `_missed_timing` 이 그 읽기를 `_window_horizon` 으로 넘겼다 |
+
+🔴 **이름이 더 이상 참이 아닌 시험 하나를 적어 두었다.**
+`test_simulation_result_search_candidate_audit::test_35` 의 이름은
+`this_phase_changed_no_production_file` 이다. 3-F 의 그 Phase 는
+production 을 고치지 않았고 이 단정이 그 사실을 고정했는데, **6-AB 최종
+보완은 고쳤다.** 이름은 역사이므로 바꾸지 않고 docstring 에 적었고,
+단정은 "자리가 늘지 않았다" (변환 자리 3 · 4 그대로) 쪽으로 옮겼다.
+
 ### 7.7 삭제 · skip · assertion 완화
 
 | 항목 | 값 |
@@ -510,7 +543,7 @@ pytest 의 종료 코드가 아니었다 (그 보고서의 정정 공지).
 | 삭제한 시험 | **0** |
 | 새로 추가한 `skip` · `xfail` | **0** |
 | 완화한 assertion | **0** — §8 의 여섯 건은 열거를 **주장으로** 되돌린 것이고 전부 추가 단정이 붙었다 |
-| 기대값을 고친 시험 | **1** (내가 이 Phase 에서 쓴 `test_b05`, §8.2) |
+| 기대값을 고친 시험 | **3** — 내가 이 Phase 에서 쓴 `test_b05` (§8.2), 그리고 멈춘 이유를 재던 `test_e04` · `test_06` (§8.3). 셋 다 **왜 전 기대값이 그 자리에 더 이상 해당하지 않는지** 적었다 |
 
 ---
 
@@ -552,6 +585,25 @@ pytest 의 종료 코드가 아니었다 (그 보고서의 정정 공지).
 먼저 보기 때문이고, 그 순서를 뒤집으면 강제 의무가 임의 창의 이유로
 가려진다 (`test_c06` 이 그 문장을 센다). 기대값을 고쳤고 왜 그 순서인지를
 시험에 적었다.
+
+### 8.3 멈춘 이유를 재던 시험 둘 — 전 기대값이 **틀렸던 것은 아니다**
+
+`tests/test_opening_duel_integration.py::test_e04` 와
+`tests/test_combo_output_consistency.py::test_06` 둘 다 멈춘 이유가
+*"판을 바꿀 후보가 더 없습니다 … 이 저장소의 현재 지원 범위에서"* 로
+적히는지 쟀다.
+
+🔴 **그 문장은 참이었다.** 틀린 것은 그 문장이 **충분하다고 본 것**이다 —
+같은 자리에 **지원하지 않아 후보가 되지 못한 것이 1건** 있었고 (실측:
+`activate_card` 의 남은 적법성을 판정할 규칙 계층이 없다), 그 사실을
+말하지 않으면 읽는 쪽이 "이 범위에서 더 고를 것이 없다" 를 **정상 전개
+종료**로 읽는다. 그것이 ④ 가 재현한 결함이다 (§2.4).
+
+그래서 이 Phase 가 그 자리를 둘로 갈랐다. 전 기대값의 문장은 **미지원
+보류가 없는 자리**의 문장으로 살아 있고 (`stopped_kind == "flow_only"`,
+`test_e04` 가 그 분기의 존재를 함께 센다), 이 두 판은 `"unsupported"` 다.
+두 시험이 지키던 요구 — *"막혔다고 적지 않는다"* 와 *"끝났다고 단정하지
+않는다"* — 는 **그대로 센다.**
 
 ---
 
@@ -619,18 +671,23 @@ pytest 의 종료 코드가 아니었다 (그 보고서의 정정 공지).
 에 대한 검증된 사실이 없다. 우회하지 않았고, ③ 의 합성 효과를
 드로우로 고른 이유가 이것이다 (§5.2).
 
-### 이 Phase 가 손대지 않은 기존 실패 둘
+### 이 Phase 가 손대지 않은 기존 실패 여덟
 
-`b098987` 에서 같은 두 건이 이미 실패했다 (같은 묶음을 pristine HEAD 로
-돌려 확인했다 — 2 failed, 255 passed):
+| 시험 | 묶음 | 왜 · 어떻게 확인했는가 |
+|---|---|---|
+| `tests/rulings/test_data_audit.py::test_every_repository_card_can_reach_a_cid` | ② | 재정 캐시 데이터 · 테스트 환경 의존 (Phase 6-U 가 기록). pristine `b098987` 로 같은 묶음을 돌려 확인 |
+| `tests/agent/test_opponent_resource_weighting_audit.py::test_07_a_whole_duel_never_offers_a_choice_about_opponent_resources` | ② | 이 Phase 의 변경 **전에도** 실패했다. 네 파일(`agent/search.py` · `agent/simulation.py` · `engine/duel.py` · `engine/activation_timing.py`)을 하나씩 되돌려도 남고, pristine `b098987` 에서도 실패한다 (2 failed · 255 passed) |
+| `tests/test_effect_type_quick_audit.py::test_29_the_lua_names_are_absent_from_official_material` | ③ | 이전 Phase 들의 같은 묶음 로그(6-AB 보완 `C3` · 추가 보완 `G3`)에서도 실패했다 |
+| `tests/test_event_free_chain_semantic_audit.py::test_27_the_official_corpus_never_uses_the_term` | ③ | 같음 |
+| `tests/test_korean_overlay_unapplied_audit.py::test_01_the_four_populations_are_different_sizes` | ④ | 카드 데이터베이스 행 수 핀 (14755 → 실측 14759). 이전 Phase 들의 `C4` · `G4` 에서도 같이 실패했다 |
+| `tests/test_korean_overlay_unapplied_audit.py::test_13_all_seven_are_absent_from_the_card_database` | ④ | 같음 |
+| `tests/test_korean_overlay_unapplied_audit.py::test_21_the_adapter_only_filters_tokens` | ④ | 같음 |
+| `tests/test_korean_overlay_unapplied_audit.py::test_25_the_record_counts_add_up_end_to_end` | ④ | 같음 |
 
-| 시험 | 왜 |
-|---|---|
-| `tests/rulings/test_data_audit.py::test_every_repository_card_can_reach_a_cid` | 재정 캐시 데이터 · 테스트 환경 의존 (Phase 6-U 가 기록) |
-| `tests/agent/test_opponent_resource_weighting_audit.py::test_07_a_whole_duel_never_offers_a_choice_about_opponent_resources` | 이 Phase 의 변경 **전에도** 실패했다. 네 파일(`agent/search.py` · `agent/simulation.py` · `engine/duel.py` · `engine/activation_timing.py`)을 하나씩 되돌려도 실패가 남는 것으로 확인했다 |
-
-🔴 **종료 코드를 성공으로 바꾸지 않았다.** 이 두 건이 있는 묶음은
-`PYTEST_EXIT=1` 로 기록된다 (§7.5).
+🔴 **종료 코드를 성공으로 바꾸지 않았다.** 이 여덟 건이 있는 세 묶음은
+`PYTEST_EXIT=1` 로 기록된다 (§7.5). 고치지도 않았다 — 넷은 카드
+데이터베이스의 내용이고 둘은 재정 자료, 하나는 이 Phase 가 손대지 않은
+탐색 경로이며, 어느 것도 이 Phase 의 네 완료 기준에 닿지 않는다.
 
 ---
 
