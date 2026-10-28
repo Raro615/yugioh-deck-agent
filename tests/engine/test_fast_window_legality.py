@@ -84,6 +84,12 @@ HONEST = 37742478
 HONEST_REF = EffectRef(HONEST, 0)
 POT_REF = EffectRef(POT_OF_GREED, 0)
 
+#: 실제 속공 마법 — 리로드. ``EFFECT_LIBRARY`` 의 속공 마법 셋 중
+#: 조건 없이 패에서 발동되는 것이고 (``5318639`` 는 필드의 마법·함정을
+#: 대상으로 하고 ``15103313`` 은 필드의 몬스터를 요구한다), 스펠 스피드
+#: 2 이므로 빠른 효과 기회에서 **허용되어야** 한다.
+RELOAD = 22589918
+
 
 # ======================================================================
 # 공용 도구
@@ -530,6 +536,43 @@ def test_d05_the_same_limit_holds_after_a_chain_resolves(repository):
     pass_fast_window(duel)
     assert duel._activation_stage() is ActivationStage.OPEN
     assert _activations(duel, P0, POT_OF_GREED)
+
+
+def test_d06_a_real_quick_play_spell_still_works_in_the_fast_window(repository):
+    """
+    🔴 **속공 마법도 그대로 허용된다** — 사용자 ③의 "적법한 함정 · 속공
+    마법 등 기존 빠른 효과" 중 둘째 종류다.
+
+    실제 카드 리로드(``22589918``)를 **패에서** 발동한다. 스펠 스피드 2
+    이므로 ``_by_stage`` 의 ``FAST_WINDOW`` 갈래가 통과를 내고, 체인이
+    서고 해결되어 판이 바뀐다 (패 3 → 2).
+
+    🔴 **이 카드는 열린 상태에서도 후보다.** 즉 이 측정은 "원래 후보가
+    없었다" 와 구별된다 — 보완6 이 좁힌 것은 스펠 스피드 1 뿐이다.
+    """
+    duel, sources, _ = staged(repository, mine=[RELOAD], fodder=3)
+
+    #: ① 열린 상태에서 후보다.
+    assert _activations(duel, P0, RELOAD)
+
+    #: ② 빠른 효과 기회에서도 후보다 — 통상 마법과 **다르다**.
+    _into_fast_window(duel)
+    offered = _activations(duel, P0, RELOAD)
+    assert offered, duel.legal_actions(P0).withheld
+    assert _kinds(duel, P0) == ["activate_effect", "pass"]
+
+    #: ③ 관문도 통과를 낸다 (후보 목록만 보고 끝내지 않는다).
+    verdict = _gate(duel, offered[0])
+    assert verdict.validity is ActionValidity.VALID, verdict.reason
+
+    #: ④ 실제로 발동 · 해결되어 판을 바꾼다.
+    hand = len([c for c in duel.state.player(P0).hand if c])
+    assert duel.apply(offered[0]).accepted
+    assert len(duel.chain) == 1
+    duel.apply(PlayerAction.passing(actor=P1))
+    resolved = duel.apply(PlayerAction.passing(actor=P0))
+    assert "해결" in resolved.reason
+    assert len([c for c in duel.state.player(P0).hand if c]) == hand - 1
 
 
 # ======================================================================

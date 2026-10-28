@@ -199,7 +199,19 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: ``_zone_from_summon`` 과 같은 결이다 — "사건이 적은 도착지와 지금
 #: 자리가 다르면 그 사이의 이동을 읽지 못한다" 는 **코드가 생겨야 풀리는
 #: 모름**이다.
-RULE_NOT_IMPLEMENTED_MENTIONS = 89
+#: 🔴 89 → **91** (Phase 6-AB 보완6). 늘어난 둘은 **전부 산문**이다 —
+#: ``Duel._refusal`` 의 docstring 이 "이 자리가 규칙이 막은 행동도
+#: ``RULE_NOT_IMPLEMENTED`` 로 보고하고 있었다" 는 실측을 인용하면서 그
+#: 코드 이름을 두 번 적고, ``_resolve_chain`` 의 주석 하나가 같은 사실을
+#: 적던 자리에서 사라졌다 (3 - 1 = 2).
+#:
+#: 🔴 **이 파일이 지키는 구분이 또 한 번 실제로 쓰인 자리다** — 보완6 이
+#: 고친 것이 바로 그 혼동이고 (``RULE_NOT_IMPLEMENTED`` 가
+#: ``UnimplementedRule`` 과 무관하게, 그리고 **거짓으로** 만들어지던 자리),
+#: 산문이 늘어난 이유도 그것을 적었기 때문이다. 보완6 도
+#: ``UnimplementedRule`` 을 **하나도 만들지 않았다** (위 ``production``
+#: 자리 수는 그대로다).
+RULE_NOT_IMPLEMENTED_MENTIONS = 91
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
