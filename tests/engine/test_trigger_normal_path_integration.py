@@ -677,8 +677,20 @@ def test_b08_an_activation_without_an_event_is_refused(repository):
             actor=MINE, source=girsu, effect_ref=EffectRef(GIRSU, 0)
         )
     )
+    #: 🔴 **정정 (보완6).** 전에는 거절 문장이 *"activate_effect 는 지금
+    #: 허가된 행위가 아닙니다"* 였다. 보완6 은 후보를 만든 **그 관문**의
+    #: 판정을 그대로 옮기므로 (규칙이 막은 것을 "엔진 미지원" 으로 적지
+    #: 않기 위해서다), 지금은 관문의 말이 나온다.
+    #:
+    #: 🔴 그 말이 *"아직 구현하지 않은 규칙이 걸려 있습니다"* 인 것은
+    #: **좋지 않다** — 사건 없는 발동은 **아는 규칙**이 막는 것이다. 다만
+    #: 그 문장은 보완6 이 만든 것이 아니라 검증기가 전부터 쓰던 것이고,
+    #: 고치는 일은 이 Phase 의 범위가 아니다 (보고서 BLOCKER-F6-2).
+    #:
+    #: 이 시험이 지키는 것("사건 없는 발동은 거절된다")은 ``accepted`` 가
+    #: 그대로 센다.
     assert step.accepted is False
-    assert "허가된 행위가 아닙니다" in step.reason
+    assert "구현하지 않은 규칙" in step.reason, step.reason
     assert len(duel.chain) == 0
 
     #: ② **다른 인스턴스로는 열리지 않는다.** 사건은 짝으로 묻는다.
@@ -693,7 +705,11 @@ def test_b08_an_activation_without_an_event_is_refused(repository):
         )
     )
     assert wrong.accepted is False
-    assert "허가된 행위가 아닙니다" in wrong.reason
+    #: 🔴 **정정 (보완6): 거절이 무엇이 틀렸는지 말한다.** 전에는 *"지금
+    #: 허가된 행위가 아닙니다"* 였고, 지금은 관문의 말이 그대로 나온다 —
+    #: 이 시험이 재려는 **바로 그 사실**이다.
+    assert "다릅니다" in wrong.reason, wrong.reason
+    assert str(GIRSU) in wrong.reason
 
 
 @pytest.mark.real_card

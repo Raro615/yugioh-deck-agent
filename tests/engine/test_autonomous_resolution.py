@@ -875,8 +875,20 @@ def test_g01_the_duel_loop_now_offers_the_trigger_but_only_with_an_event(
             actor=MINE, source=in_hand, effect_ref=EffectRef(GIRSU, 0)
         )
     )
+    #: 🔴 **정정 (보완6).** 전에는 거절 문장이 *"activate_effect 는 지금
+    #: 허가된 행위가 아닙니다"* 였다. 보완6 은 후보를 만든 **그 관문**의
+    #: 판정을 그대로 옮기므로 (규칙이 막은 것을 "엔진 미지원" 으로 적지
+    #: 않기 위해서다), 지금은 관문의 말이 나온다.
+    #:
+    #: 🔴 그 말이 *"아직 구현하지 않은 규칙이 걸려 있습니다"* 인 것은
+    #: **좋지 않다** — 사건 없는 발동은 **아는 규칙**이 막는 것이다. 다만
+    #: 그 문장은 보완6 이 만든 것이 아니라 검증기가 전부터 쓰던 것이고,
+    #: 고치는 일은 이 Phase 의 범위가 아니다 (보고서 BLOCKER-F6-2).
+    #:
+    #: 이 시험이 지키는 것("사건 없는 발동은 거절된다")은 ``accepted`` 가
+    #: 그대로 센다.
     assert refused.accepted is False
-    assert "허가된 행위가 아닙니다" in refused.reason
+    assert "구현하지 않은 규칙" in refused.reason, refused.reason
 
     #: ② **사건이 생긴 뒤.** 같은 효과 · 같은 카드인데 이번에는 오른다.
     entry = _agent_summons(duel)

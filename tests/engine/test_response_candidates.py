@@ -38,6 +38,7 @@ import pytest
 from engine.action import PlayerAction, PlayerActionKind
 from engine.action_validation import ActionValidator
 from engine.activation_timing import (
+    ActivationStage,
     ActivationTiming,
     ActivationTimingChecker,
     SpellSpeed,
@@ -213,9 +214,14 @@ def test_05_the_normal_window_candidates_are_unchanged(repository):
     **§21-4 · §20 — 창이 닫혀 있으면 기존 후보가 그대로다.**
 
     ``legal_actions`` 에 더한 분기는 "창이 열려 있고 이 자리가 그것을 쥐고
-    있으면" 이고, 닫혀 있으면 기존 경로로 떨어진다. 그리고 체인이 비어 있을
-    때 타이밍 관문은 **아무것도 거르지 않는다** — checker 가 "체인이 비어 있어
-    스펠 스피드 제약이 걸리지 않습니다" 로 통과시킨다.
+    있으면" 이고, 닫혀 있으면 기존 경로로 떨어진다.
+
+    🔴 **정정 (보완6).** 이 설명은 *"체인이 비어 있을 때 타이밍 관문은
+    아무것도 거르지 않는다"* 로 적고 있었다. 보완6 이 그 말을 좁혔다 —
+    체인이 비어 있을 때의 답은 **단계**가 정한다. 이 판은 판이 열린 자리
+    (``priority.is_open`` 이 거짓이고 체인도 비었다) 이므로 ``OPEN`` 이고,
+    그때는 예전처럼 통과한다. 단계를 **주지 않으면** 통과가 아니라
+    ``UNKNOWN`` 이다 — 아래가 둘을 함께 센다.
     """
     duel = duel_at(repository, mine=(LUSTER_DRAGON, POT_OF_GREED))
     assert not duel.priority.is_open
@@ -228,14 +234,23 @@ def test_05_the_normal_window_candidates_are_unchanged(repository):
     ]
     assert duel.legal_actions(P1).allowed == ()
 
-    # 체인이 비어 있을 때 관문이 통과시키는 것을 직접 확인한다.
+    # 판이 열린 자리에서 관문이 통과시키는 것을 직접 확인한다.
     checker = ActivationTimingChecker(duel.view(P0))
+    action = activations(duel, P0, POT_OF_GREED)[0]
+    assert duel._activation_stage() is ActivationStage.OPEN
     verdict = checker.check(
-        ActivationTiming(duel.chain, duel.priority),
-        activations(duel, P0, POT_OF_GREED)[0],
+        ActivationTiming(
+            duel.chain, duel.priority, stage=ActivationStage.OPEN
+        ),
+        action,
     )
     assert verdict.validity is ActionValidity.VALID
-    assert "체인이 비어 있어" in verdict.reason
+    assert "판이 열려 있어" in verdict.reason
+
+    #: 🔴 그리고 **단계를 주지 않으면 통과가 아니다** (보완6). 체인이 비어
+    #: 있다는 사실만으로는 판정할 수 없다.
+    silent = checker.check(ActivationTiming(duel.chain, duel.priority), action)
+    assert silent.validity is ActionValidity.UNKNOWN
 
 
 # ======================================================================
@@ -473,9 +488,20 @@ def test_11_a_candidate_can_still_be_refused_when_its_condition_reads_its_own_zo
     )
 
     # ① 바깥 문 — 후보에 없으므로 발동 경로에 닿지 않는다.
+    #
+    # 🔴 **정정 (보완6).** 전에는 거절 문장이 *"activate_effect 는 지금
+    # 허가된 행위가 아닙니다"* 였다. 그 문장에 붙는 코드가
+    # ``RULE_NOT_IMPLEMENTED``("이 저장소에 그 규칙이 없다") 였고, 그래서
+    # **규칙이 분명히 막은 발동도 "엔진 미지원" 으로 보고되었다.**
+    #
+    # 보완6 은 후보를 만든 **그 관문**의 판정을 그대로 옮긴다 — 그래서
+    # 지금 이 자리는 왜 막혔는지를 말한다. 이 시험이 지키는 것("후보가
+    # 아니면 발동 경로에 닿지 않는다")은 ``accepted`` 가 그대로 센다.
     outer = duel.apply(forced)
     assert not outer.accepted
-    assert "허가된 행위가 아닙니다" in outer.reason, outer.reason
+    assert "발동 조건이 거짓입니다" in outer.reason, outer.reason
+    #: 🔴 그리고 판을 바꾸지 않았다 — 그것이 "닿지 않았다" 의 뜻이다.
+    assert duel.chain.is_empty
 
     # ② 안쪽 관문 — 바깥 문을 건너뛰어도 **같은 판에서 스스로** 거절한다.
     inner = duel._apply_activation(forced)

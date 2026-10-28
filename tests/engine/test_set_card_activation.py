@@ -243,7 +243,14 @@ def test_03_the_timing_gate_now_reads_the_set_turn_it_is_given(repository):
     # 스펠 스피드 1 — 세트한 턴 제약이 걸리지 않는다 (RULE-SPELLTRAP-012).
     for given in (None, True, False):
         verdict = checker_for(duel, P0).check(
-            ActivationTiming(duel.chain, duel.priority, set_this_turn=given),
+            #: 🔴 단계는 **판에서 읽는다** (보완6) — 가정으로 넣는 것은
+            #: ``set_this_turn`` 하나다.
+            ActivationTiming(
+                duel.chain,
+                duel.priority,
+                set_this_turn=given,
+                stage=duel._activation_stage(),
+            ),
             hand_made(P0, instances[POT_OF_GREED], POT_OF_GREED),
         )
         assert verdict.validity is ActionValidity.VALID, (given, verdict.reason)
@@ -253,19 +260,34 @@ def test_03_the_timing_gate_now_reads_the_set_turn_it_is_given(repository):
     for card_id in (RELOAD, GIFT_OF_GREED):
         action = hand_made(P0, instances[card_id], card_id)
         unknown = checker_for(duel, P0).check(
-            ActivationTiming(duel.chain, duel.priority), action
+            ActivationTiming(
+                duel.chain, duel.priority, stage=duel._activation_stage()
+            ),
+            action,
         )
         assert unknown.validity is ActionValidity.UNKNOWN, card_id
         assert "set-turn" in (unknown.missing_rule or ""), card_id
 
         refused = checker_for(duel, P0).check(
-            ActivationTiming(duel.chain, duel.priority, set_this_turn=True), action
+            ActivationTiming(
+                duel.chain,
+                duel.priority,
+                set_this_turn=True,
+                stage=duel._activation_stage(),
+            ),
+            action,
         )
         assert refused.validity is ActionValidity.INVALID, card_id
         assert refused.code is ValidationCode.SET_THIS_TURN, card_id
 
         allowed = checker_for(duel, P0).check(
-            ActivationTiming(duel.chain, duel.priority, set_this_turn=False), action
+            ActivationTiming(
+                duel.chain,
+                duel.priority,
+                set_this_turn=False,
+                stage=duel._activation_stage(),
+            ),
+            action,
         )
         assert allowed.validity is ActionValidity.VALID, (card_id, allowed.reason)
 

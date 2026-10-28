@@ -311,7 +311,15 @@ def gate_of(duel, action, validator):
         return "1 ActionValidator", first
     timed = ActivationTimingChecker(validator.view).check(
         ActivationTiming(
-            duel.chain, duel.priority, set_this_turn=duel._set_this_turn(action)
+            duel.chain,
+            duel.priority,
+            set_this_turn=duel._set_this_turn(action),
+            #: 🔴 **``_activation_gate`` 가 넘기는 것을 그대로 넘긴다**
+            #: (보완6). 이 도구는 그 함수를 베끼지 않고 셋을 따로 묻지만,
+            #: **넣는 입력은 같아야 한다** — 다르면 "어느 관문이 막았는가"
+            #: 의 답이 실제 경로와 갈라진다 (실측: 단계를 주지 않아 2번
+            #: 관문이 ``UNKNOWN`` 을 내고 3번이 막던 자리를 가로챘다).
+            stage=duel._activation_stage(),
         ),
         action,
     )
@@ -654,9 +662,14 @@ def test_b01_the_gate_is_shared_by_generation_and_execution():
     판을 읽는 어긋남).
     """
     sites = sorted(call_sites("_activation_gate"))
+    #: 🔴 ``_refusal_verdict`` 가 늘었다 (보완6). 후보가 아닌 행위의
+    #: **거절 이유**를 같은 관문에서 가져오는 자리이고, 그래서 이 시험이
+    #: 지키는 주장("생성과 실행이 같은 관문을 쓴다")이 **더 넓어졌다** —
+    #: 거절의 이유까지 그 관문의 것이다.
     assert sites == [
         ("engine/duel.py", "_activation_actions"),
         ("engine/duel.py", "_apply_activation"),
+        ("engine/duel.py", "_refusal_verdict"),
         ("engine/duel.py", "_trigger_actions"),
     ], sites
 
@@ -1305,6 +1318,15 @@ def test_g02_apply_refuses_anything_not_in_the_candidate_list(repository):
 
     ``apply`` 의 첫 관문이 ``action not in legal.allowed`` 다. 관문 2·3 이
     막은 발동을 직접 넣어도 판이 움직이지 않는다.
+
+    🔴 **정정 (보완6): 거절의 코드가 규칙이 되었다.** 전에는 그 자리가
+    ``RULE_NOT_IMPLEMENTED`` ("이 저장소에 그 규칙이 없다") 하나로 답했고,
+    그래서 **규칙이 분명히 막은 발동도 "엔진 미지원" 으로** 보고되었다.
+    지금은 후보를 만든 관문의 판정을 그대로 옮긴다 — 세트한 턴의 함정이므로
+    ``SET_THIS_TURN`` (RULE-SPELLTRAP-009) 이다.
+
+    이 시험이 지키는 것("거절되면 상태가 안 바뀐다")은 마지막 줄이 그대로
+    센다.
     """
     duel, hands, _ = board(repository, my_hand=(GIFT,))
     trap = hands[P0][0]
@@ -1314,8 +1336,8 @@ def test_g02_apply_refuses_anything_not_in_the_candidate_list(repository):
     step = duel.apply(activation(P0, trap, GIFT))  # 세트한 턴이다
 
     assert step.accepted is False
-    assert step.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert "허가된 행위가 아닙니다" in step.reason
+    assert step.code is ValidationCode.SET_THIS_TURN
+    assert "세트한 턴" in step.reason, step.reason
     assert (duel.state.state_hash(), len(duel.chain.links)) == before
 
 

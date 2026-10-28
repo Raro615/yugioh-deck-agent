@@ -57,7 +57,11 @@ from engine.action import PlayerAction, PlayerActionKind
 from engine.action_execution import ActionExecutor, ActionStatus
 from engine.action_target import ActionTarget
 from engine.action_validation import ActionValidator
-from engine.activation_timing import ActivationTiming, ActivationTimingChecker
+from engine.activation_timing import (
+    ActivationStage,
+    ActivationTiming,
+    ActivationTimingChecker,
+)
 from engine.chain import Chain
 from engine.game_state_view import GameStateView
 from engine.priority import PriorityState
@@ -1487,6 +1491,63 @@ class Duel:
         """유발 등재 단계가 아직 열려 있는가 (6-AB 보완4)."""
         return self._window_actor() is not None
 
+    def _activation_stage(self) -> ActivationStage:
+        """
+        **흐름의 어느 단계인가** (Phase 6-AB 보완6).
+
+        이 값을 아는 것은 판을 들고 있는 이 자리다 — 관측에도 없고 체인만
+        으로도 갈리지 않는다. 그래서 읽어서
+        :attr:`~engine.activation_timing.ActivationTiming.stage` 로 **값으로**
+        넘긴다 (``point`` · ``set_this_turn`` · ``simultaneous`` 와 같은
+        자리이고 같은 이유다 — ADR-007).
+
+        🔴 **새 사실을 만들지 않는다.** 네 갈래가 전부 이미 들고 있는
+        값에서 나온다.
+
+        ======================  ============================================
+        체인이 쌓여 있다          ``CHAIN_RESPONSE``
+        우선권 기회가 열려 있다    ``FAST_WINDOW`` — 보완5 가 실은 상자 B · C
+        유발 claim 이 남아 있다    ``TRIGGER_REGISTRATION``
+                                (:meth:`_window_claims` — 관문을 지나지 않는다)
+        그 밖                    ``OPEN`` — 상자 A
+        ======================  ============================================
+
+        🔴 **등재 단계를 ``_registration_is_open`` 으로 묻지 않는다.** 그쪽은
+        :meth:`_window_actor` → :meth:`_window_can_act` → 관문을 지나고, 이
+        함수의 답은 **그 관문이 쓰는 값**이다. 실측으로 재귀가 났다:
+
+            _activation_gate → _activation_stage → _registration_is_open
+            → _window_actor → _window_can_act → _trigger_actions
+            → _activation_gate → …
+            RecursionError: maximum recursion depth exceeded
+
+        그래서 **관문을 지나지 않는 값**으로 묻는다 —
+        :meth:`_window_claims` 는 창 · 강제/임의 · 자격만 보고
+        (:meth:`_offer_is_activatable`) 관문을 돌리지 않는다. 그 결과
+        "관문이 거절할 claim 만 남은 자리" 도 등재 단계로 세는데, **그것이
+        맞다** — 기회는 열려 있고 고를 것이 없을 뿐이다. 그 자리에서
+        고를 것이 없다는 판정은 :meth:`_window_can_act` 가 따로 한다.
+
+        🔴 **우선권 기회를 등재보다 먼저 본다.** 빠른 효과 기회가 열린 뒤에는
+        상자 B · C 이고, 남은 claim 이 있더라도 그 사실이 바뀌지 않는다.
+        보완5 의 :meth:`_after_window_moved` 가 **등재가 끝난 뒤에만** 그
+        기회를 열므로 두 갈래가 어긋나지 않는다.
+
+        🔴 **페이즈 전환 창은 이 자리에 오지 않는다.** 이 모듈은 그 창을
+        열지 않고, ``test_priority_response_audit.test_02`` 가 그 사실을
+        **이 파일의 본문에서** 센다 — 그래서 그 창의 이름을 여기 적지
+        않는다. 열게 되면 상자 A 가 아니므로 그때 갈래를 따로 적어야 한다.
+        """
+        if not self.chain.is_empty:
+            return ActivationStage.CHAIN_RESPONSE
+        if self.priority.is_open:
+            return ActivationStage.FAST_WINDOW
+        if self._window_claims(self.turn_player) or self._window_claims(
+            1 - self.turn_player
+        ):
+            return ActivationStage.TRIGGER_REGISTRATION
+        return ActivationStage.OPEN
+
     def _is_simultaneous(self, action: PlayerAction) -> bool:
         """
         이 발동이 **이 체인을 연 기회**의 것인가 (최종 보완).
@@ -2008,6 +2069,9 @@ class Duel:
                 self.chain,
                 self.priority,
                 set_this_turn=self._set_this_turn(action),
+                # 🔴 **흐름의 단계** (보완6). 체인이 비어 있어도 판이 열려
+                # 있는지는 체인으로 갈리지 않는다 (:meth:`_activation_stage`).
+                stage=self._activation_stage(),
                 # 🔴 **이 발동이 동시 발동 묶음의 것인가** (최종 보완).
                 # 관측에 없는 사실이므로 판을 들고 있는 이 자리가 읽어서
                 # 값으로 넘긴다 (``point`` · ``set_this_turn`` 과 같은 자리).
@@ -2165,12 +2229,7 @@ class Duel:
 
         legal = self.legal_actions(action.actor)
         if action not in legal.allowed:
-            return DuelStep(
-                action,
-                False,
-                ValidationCode.RULE_NOT_IMPLEMENTED,
-                f"{action.kind.value} 는 지금 허가된 행위가 아닙니다.",
-            )
+            return self._refusal(action, legal)
 
         if action.kind is PlayerActionKind.PASS:
             return self._apply_pass(action)
@@ -2199,6 +2258,94 @@ class Duel:
             # 그 단계, 없으면 빠른 효과 기회다 (``_after_window_moved``).
             self._after_window_moved()
         return step
+
+    def _refusal(self, action: PlayerAction, legal: LegalActions) -> DuelStep:
+        """
+        허가가 나지 않은 행위의 **거절 이유** (Phase 6-AB 보완6).
+
+        🔴 **왜 이 자리가 생겼는가.** 여기는 *"{종류} 는 지금 허가된 행위가
+        아닙니다"* 에 ``RULE_NOT_IMPLEMENTED`` 를 붙여 돌려주고 있었다. 그
+        코드가 뜻하는 것은 **"이 저장소에 그 규칙이 없다"** 이고, 그래서
+        **규칙이 분명히 막은 행동도 "엔진 미지원" 으로 보고되었다.** 실측
+        (보완6 §2):
+
+            빠른 효과 기회에서 통상 마법 발동
+            → accepted=False code=RULE_NOT_IMPLEMENTED
+              "activate_effect 는 지금 허가된 행위가 아닙니다."
+
+        규칙상 불가능한 것과 판정 근거가 없는 것은 **다른 사실**이다. 섞어
+        적으면 ``/combo`` 가 규칙이 막은 발동을 "엔진이 그 수단을 모른다" 로
+        적고 (``deck.opening`` 의 ``unsupported`` 경로), 사람은 그것을
+        고쳐야 할 공백으로 읽는다.
+
+        🔴 **그래서 후보를 만든 그 관문에게 다시 묻는다** — 판정을 새로
+        세우지 않는다. 발동이면 :meth:`_activation_gate` 가 이미 낸 판정이
+        있고, 그 판정의 ``code`` · ``reason`` · ``missing_rule`` 을 그대로
+        옮긴다. 후보 생성과 ``apply`` 가 **같은 판정**을 쓴다는 것이 이
+        Phase 가 지키려는 것이다 (STRUCTURAL-134 와 같은 결).
+
+        🔴 **좁히지도 넓히지도 않는다.** 돌려주는 ``accepted`` 는 여전히
+        거짓이다. 바뀌는 것은 **왜 거절됐는지**뿐이다.
+
+        🔴 **관문이 아무 말도 하지 않으면 예전 문장 그대로**다 — 그 자리는
+        우선권 · 차례 · 필수 처리처럼 흐름 계층이 막은 경우이고, 그쪽의
+        이유는 보류 목록에 있다.
+        """
+        verdict = self._refusal_verdict(action)
+        if verdict is not None:
+            return DuelStep(
+                action,
+                False,
+                verdict.code,
+                verdict.reason,
+            )
+        return DuelStep(
+            action,
+            False,
+            ValidationCode.RULE_NOT_IMPLEMENTED,
+            f"{action.kind.value} 는 지금 허가된 행위가 아닙니다.",
+        )
+
+    def _refusal_verdict(
+        self, action: PlayerAction
+    ) -> "ValidationResult | None":
+        """
+        그 행위를 **관문이** 거절했는가. 관문의 자리가 아니면 ``None``.
+
+        지금 답하는 것은 효과 발동 하나다 — 그 관문
+        (:meth:`_activation_gate`) 이 후보 생성과 ``apply`` 양쪽이 쓰는
+        **단 하나의 관문**이기 때문이다. 다른 종류는 흐름 계층이 막으므로
+        여기서 지어내지 않는다.
+        """
+        if action.kind is not PlayerActionKind.ACTIVATE_EFFECT:
+            return None
+        if action.effect_ref is None:
+            return None
+        definition = self._activator.definitions.definition_for(
+            action.effect_ref
+        )
+        if definition is None:
+            # 정의를 모르면 관문도 물을 수 없다 — 지어내지 않는다.
+            return None
+        try:
+            # 🔴 **``_apply_activation`` 과 같은 환전**을 쓴다. 날 ``targets``
+            # 를 관문에 넣으면 모양이 맞지 않는다 (실측: ``AttributeError``).
+            selections = selections_for(definition, action)
+        except TargetBridgeError as error:
+            # 대상의 모양이 맞지 않는다 — 그것이 거절의 이유다.
+            return ValidationResult.invalid(
+                ValidationCode.TARGET_COUNT_MISMATCH, str(error)
+            )
+        offers = self._trigger_offers(action.actor)
+        validator = self.activation_validator(action.actor, offers)
+        verdict = self._activation_gate(
+            action, validator=validator, selections=selections
+        )
+        if verdict.validity is ActionValidity.VALID:
+            # 관문은 통과했는데 후보가 아니다 — 막은 것은 흐름 계층이다
+            # (우선권 · 차례 · 필수 처리). 그쪽 이유를 지어내지 않는다.
+            return None
+        return verdict
 
     def _apply_pass(self, action: PlayerAction) -> DuelStep:
         """

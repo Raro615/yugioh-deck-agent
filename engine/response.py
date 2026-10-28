@@ -63,7 +63,11 @@ from enum import Enum
 
 from engine.action import PlayerAction, PlayerActionKind
 from engine.activation import ActivationResult, ActivationStatus, EffectActivator
-from engine.activation_timing import ActivationTiming, ActivationTimingChecker
+from engine.activation_timing import (
+    ActivationStage,
+    ActivationTiming,
+    ActivationTimingChecker,
+)
 from engine.chain import Chain, ChainResolution, ChainResolver
 from engine.cost import CostPayment
 from engine.effect.delta import StateDelta
@@ -449,6 +453,8 @@ class ResponseLoop:
         selections: tuple[TargetSelection, ...] = (),
         cost_selections: tuple[CostSelection, ...] = (),
         authorization: ValidationResult | None = None,
+        *,
+        stage: "ActivationStage | None" = None,
     ) -> ResponseResult:
         """
         지금 차례인 사람의 행위 하나를 처리한다.
@@ -495,11 +501,22 @@ class ResponseLoop:
         if action.kind is PlayerActionKind.PASS:
             return self._pass(action, response)
         return self._activate(
-            state, response, action, selections, cost_selections, authorization
+            state,
+            response,
+            action,
+            selections,
+            cost_selections,
+            authorization,
+            stage=stage,
         )
 
     def check_timing(
-        self, state: GameState, response: ResponseState, action: PlayerAction
+        self,
+        state: GameState,
+        response: ResponseState,
+        action: PlayerAction,
+        *,
+        stage: "ActivationStage | None" = None,
     ) -> ValidationResult:
         """
         스펠 스피드가 이 발동을 막는가. **판을 읽기만 한다.**
@@ -507,10 +524,24 @@ class ResponseLoop:
         판정은 :class:`~engine.activation_timing.ActivationTimingChecker`
         하나가 한다 — 여기서 스펠 스피드 표를 다시 만들면 두 벌이 갈린다.
         관측은 **행위자의 시점**으로 만든다.
+
+        ``stage`` (Phase 6-AB 보완6)
+            흐름의 어느 단계인가. **이 계층이 스스로 알 수 없는 값**이다 —
+            체인이 비어 있을 때 판이 열렸는지, 유발을 등재하는 중인지,
+            빠른 효과 기회인지는 ``window_passed`` 와 등재 자리를 들고 있는
+            쪽만 안다 (:meth:`~engine.duel.Duel._activation_stage`).
+
+            🔴 **체인이 쌓여 있으면 주지 않아도 된다** — 그때 단계는 체인
+            하나로 정해지고 이 값은 쓰이지 않는다. 그것이 이 응답 루프의
+            평소 자리다.
+
+            🔴 **체인이 비어 있는데 주지 않으면 ``UNKNOWN``** 이다. 모르는
+            것을 허가로 바꾸지 않는다 (:class:`ActivationStage`).
         """
         view = GameStateView.from_state(state, viewer=action.actor)
         return ActivationTimingChecker(view).check(
-            ActivationTiming(response.chain, response.priority), action
+            ActivationTiming(response.chain, response.priority, stage=stage),
+            action,
         )
 
     def may_act(
@@ -553,6 +584,8 @@ class ResponseLoop:
         selections: tuple[TargetSelection, ...],
         cost_selections: tuple[CostSelection, ...],
         authorization: ValidationResult | None,
+        *,
+        stage: "ActivationStage | None" = None,
     ) -> ResponseResult:
         """
         **관문이 둘이다.** 스펠 스피드(Phase 2-S)를 먼저 보고, 그 다음에
@@ -565,7 +598,15 @@ class ResponseLoop:
         성공하면 우선권이 **상대에게** 간다 — 그것이 응답 루프의 모양이다.
         연속 패스는 끊긴다 (:meth:`~engine.priority.PriorityState.acted`).
         """
-        allowed = self.check_timing(state, response, action)
+        #: 🔴 **단계를 그대로 넘긴다** (보완6).
+        #:
+        #: 처음에는 *"이 길은 체인이 쌓여 있는 자리다"* 로 적고 넘기지
+        #: 않았다. **그 전제가 틀렸다** — 이 루프는 **체인 1 을 여는 데도**
+        #: 쓰인다 (실측: 빈 체인에서 ``respond`` 가 ``REFUSED`` ·
+        #: ``missing='activation-stage …'``). 체인이 비어 있을 때 무엇이
+        #: 발동될 수 있는지는 이 계층이 알 수 없으므로, 아는 쪽이 주고
+        #: 주지 않으면 ``UNKNOWN`` 이다 (:meth:`check_timing`).
+        allowed = self.check_timing(state, response, action, stage=stage)
         if not allowed.permits_execution:
             # **비용을 치르기 전에** 멈춘다. 발동 계층을 부르지도 않는다.
             return ResponseResult(

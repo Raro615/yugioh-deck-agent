@@ -27,6 +27,7 @@ import pytest
 
 from engine.action import PlayerAction
 from engine.activation import ActivationStatus, EffectActivator
+from engine.activation_timing import ActivationStage
 from engine.chain import Chain, ChainResolutionStatus, ChainResolver
 from engine.condition import ConditionResult, IsMonster
 from engine.cost import CandidateSource, ChoiceSpec, CostGroup, Selection
@@ -632,6 +633,11 @@ def test_e_a_response_loop_summon_goes_through_the_same_door(state):
         ),
         (TargetSelection(PRIMARY, Selection.of(target)),),
         authorization=GRANTED,
+        #: 🔴 **단계를 말해 준다** (보완6). 체인이 비어 있을 때 무엇이
+        #: 발동될 수 있는지는 ``ResponseLoop`` 이 알 수 없다 — 여기서
+        #: 재는 것은 판이 열린 자리에서 체인 1 을 여는 것이므로 ``OPEN``
+        #: 이다 (:class:`~engine.activation_timing.ActivationStage`).
+        stage=ActivationStage.OPEN,
     )
 
     assert result.outcome is ResponseOutcome.LINK_ADDED

@@ -820,7 +820,13 @@ def test_21_a_target_on_an_effect_that_wants_none_is_refused(repository):
     이고, 거기까지 가는 길을 따로 확인한다.
 
     이 시험을 처음 쓸 때 ``apply`` 가 ``TARGET_COUNT_MISMATCH`` 를 돌려줄
-    것으로 적었는데, 그것이 잘못된 가정이었다 — 후보 재확인이 더 앞이다.
+    것으로 적었는데, 그것이 **그때는** 잘못된 가정이었다 — 후보 재확인이
+    더 앞이고, 그 자리가 ``RULE_NOT_IMPLEMENTED`` 하나로 답했기 때문이다.
+
+    🔴 **정정 (보완6): 처음의 가정이 맞았다.** 보완6 이 후보 재확인의 거절을
+    **관문의 판정**으로 바꾸었고 (규칙이 막은 것을 "엔진 미지원" 으로 적지
+    않기 위해서다), 그래서 이 자리도 모양이 맞지 않는다는 **그 사실**을
+    말한다. 아래 두 단정이 같은 거절을 두 층에서 센다.
     """
     duel, (spell, pot), placed = staged(
         repository, hand=(RUTHLESS_DENIAL, POT_OF_GREED), mine=(LUSTER_DRAGON,)
@@ -837,7 +843,8 @@ def test_21_a_target_on_an_effect_that_wants_none_is_refused(repository):
     assert action not in duel.legal_actions(MINE).allowed
     step = duel.apply(action)
     assert not step.accepted
-    assert step.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert step.code is ValidationCode.TARGET_COUNT_MISMATCH
+    assert "고를 대상이 없는데" in step.reason, step.reason
     assert board(duel) == before
 
     # 두 번째 방어: 다리에 직접 주면 모양으로 거절한다.

@@ -44,6 +44,7 @@ from engine.action_validation import (
     activation_is_monster_ignition,
 )
 from engine.activation import ActivationStatus
+from engine.activation_timing import ActivationStage
 from engine.activation_timing import (
     ActivationTiming,
     ActivationTimingChecker,
@@ -793,10 +794,18 @@ def test_j01_the_spell_speed_gate_is_untouched(repository):
     checker = ActivationTimingChecker(duel.view(MINE))
 
     empty = checker.check(
-        ActivationTiming(Chain(), duel.priority, set_this_turn=None), action
+        #: 🔴 **단계를 말해 준다** (보완6). "체인이 비어 있다" 만으로는
+        #: 판정할 수 없다 — 판이 열린 자리를 재려는 것이므로 ``OPEN`` 이다.
+        ActivationTiming(
+            Chain(),
+            duel.priority,
+            set_this_turn=None,
+            stage=ActivationStage.OPEN,
+        ),
+        action,
     )
     assert empty.validity is ActionValidity.VALID
-    assert "체인이 비어 있어" in empty.reason
+    assert "판이 열려 있어" in empty.reason
 
     opened = Chain().push(
         ChainLink(sequence=0, actor=THEIRS, effect_ref=EffectRef(POT_OF_GREED, 0))

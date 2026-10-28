@@ -28,6 +28,7 @@ import pytest
 
 from engine.action import PlayerAction, PlayerActionKind
 from engine.activation import ActivationStatus, EffectActivator
+from engine.activation_timing import ActivationStage
 from engine.chain import Chain, ChainLink, ChainResolutionStatus, ChainResolver
 from engine.condition import Always, IsMonster
 from engine.cost import CandidateSource, ChoiceSpec, CostGroup, LifeCost, Selection
@@ -308,9 +309,14 @@ def test_b_the_whole_response_loop_runs_and_resolves_lifo(state):
     first = machine.act(
         state,
         response,
+        #: 🔴 **단계를 말해 준다** (보완6). 체인이 비어 있을 때 무엇이
+        #: 발동될 수 있는지는 ``ResponseLoop`` 이 알 수 없다 — 여기서
+        #: 재는 것은 *"판이 열린 자리에서 A 가 체인 1 을 연다"* 이므로
+        #: ``OPEN`` 이다 (:class:`ActivationStage`).
         activate(A_SEAT, a_card(state), EFFECT_X),
         picked(target_of_x),
         authorization=GRANTED,
+        stage=ActivationStage.OPEN,
     )
     assert first.outcome is ResponseOutcome.LINK_ADDED
     assert len(first.chain) == 1
@@ -368,6 +374,7 @@ def test_b_the_link_order_is_activation_order_not_resolution_order(state):
         activate(A_SEAT, a_card(state), EFFECT_X),
         picked(b_monster(state)),
         authorization=GRANTED,
+        stage=ActivationStage.OPEN,
     )
     second = machine.act(
         state,
@@ -556,6 +563,7 @@ def test_e_the_earlier_link_is_untouched_by_the_response(state):
         activate(A_SEAT, a_card(state), EFFECT_X),
         picked(b_monster(state)),
         authorization=GRANTED,
+        stage=ActivationStage.OPEN,
     )
     original = first.chain[0]
     snapshot = original.canonical_state()
@@ -592,6 +600,8 @@ def test_e_the_chain_is_never_mutated_in_place(state):
         activate(A_SEAT, a_card(state), EFFECT_X),
         picked(b_monster(state)),
         authorization=GRANTED,
+        #: 🔴 단계를 말해 준다 (보완6 — ``test_b`` 의 설명과 같다).
+        stage=ActivationStage.OPEN,
     )
 
     assert len(chain) == 0

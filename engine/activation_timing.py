@@ -115,6 +115,90 @@ class SpellSpeed(int, Enum):
         return f"스펠 스피드 {self.value}"
 
 
+class ActivationStage(str, Enum):
+    """
+    **흐름의 어느 단계인가** (Phase 6-AB 보완6).
+
+    🔴 **왜 이 값이 생겼는가.** 보완5 까지 이 계층은 *"체인이 비어 있으면
+    스펠 스피드 제약이 걸리지 않는다"* 로 판정했다. 그 말은 **그때까지는
+    맞았다** — 체인이 비어 있다는 것이 곧 판이 열려 있다는 뜻이었기
+    때문이다.
+
+    보완5 가 그 등식을 깼다. 공식 Fast Effect Timing 도표의 상자 B · C 를
+    실으면서 **체인이 비어 있는데도 판이 열리지 않은 자리**가 생겼다. 그
+    자리에서 스펠 스피드 1 이 통과했다 — 실측 (보완6 §2):
+
+        몬스터 세트 accepted=True → win=response holder=0 chain=0
+        🔴 욕망의 항아리(55144522, 통상 마법) 후보 1건
+        🔴 Duel.apply accepted=True code=OK → 체인 링크 1개
+        🔴 어니스트(37742478:e[0], 기동 효과)도 같다
+
+    도표가 그것을 금지한다: *"Many actions can ONLY be performed when the
+    game state is open (when you're in box A)."* 상자 B · C 에서 발동할 수
+    있는 것은 **스펠 스피드 2 이상**이다.
+
+    🔴 **그래서 "체인이 비었다" 로는 판정할 수 없다.** 체인이 비어 있는
+    자리가 **셋**이고 셋의 답이 다르다.
+
+    ====================  ============================================
+    :attr:`OPEN`          상자 A — 스펠 스피드 1 도 발동할 수 있다
+    :attr:`TRIGGER_       그 기회의 적법한 유발을 등재한다. 유발 효과는
+    REGISTRATION`         대개 스펠 스피드 1 이므로 **막으면 안 된다**
+    :attr:`FAST_WINDOW`   상자 B · C — **스펠 스피드 2 이상만**
+    ====================  ============================================
+
+    :attr:`CHAIN_RESPONSE` 는 체인이 쌓여 있는 자리이고, 그쪽의 판정은
+    보완6 이 **한 줄도 바꾸지 않았다** (기존 스펠 스피드 비교 그대로).
+
+    🔴 **값으로 받는다.** 단계는 관측(``GameStateView``)에 없고 체인만으로도
+    갈리지 않는다 — 아는 것은 **판을 들고 있는 쪽**이다
+    (:meth:`~engine.duel.Duel._activation_stage`). ``point`` ·
+    ``set_this_turn`` · ``simultaneous`` 와 **같은 자리이고 같은 이유**다
+    (ADR-007).
+
+    🔴 **주지 않으면 ``None`` 이고 그것은 "모른다" 다.** 체인이 비어 있는
+    발동에 단계를 주지 않으면 이 계층은 ``UNKNOWN`` 을 돌려준다 — 허가가
+    아니다. 규칙이 막는 것(``INVALID``)과 판정 근거가 없는 것(``UNKNOWN``)을
+    섞지 않기 위해서다.
+    """
+
+    OPEN = "open"
+    """상자 A — 판이 열려 있다."""
+
+    TRIGGER_REGISTRATION = "trigger_registration"
+    """유발 처리 기회가 열려 그 기회의 유발을 등재하는 중이다."""
+
+    FAST_WINDOW = "fast_window"
+    """상자 B · C — 체인은 비어 있지만 판은 열려 있지 않다."""
+
+    CHAIN_RESPONSE = "chain_response"
+    """체인이 쌓여 있어 응수하는 중이다."""
+
+    def describe_ko(self) -> str:
+        return _STAGE_KO[self]
+
+
+_STAGE_KO: dict[ActivationStage, str] = {
+    ActivationStage.OPEN: "열린 상태",
+    ActivationStage.TRIGGER_REGISTRATION: "유발 등재 단계",
+    ActivationStage.FAST_WINDOW: "빠른 효과 기회",
+    ActivationStage.CHAIN_RESPONSE: "체인 응답 단계",
+}
+
+#: 단계를 **부르는 쪽이 알려주지 않았을** 때 모자란 것.
+#:
+#: :data:`SET_TURN_MISSING` 과 같은 결이다 — 이 계층은 판을 읽지 않으므로
+#: (``GameStateView`` 만 받는다) "지금이 흐름의 어느 단계인가" 를 스스로 알
+#: 수 없다.
+STAGE_MISSING = (
+    "activation-stage (지금이 흐름의 어느 단계인지 — "
+    "ActivationTiming.stage)"
+)
+
+#: 상자 B · C 에서 스펠 스피드 1 을 막는 근거.
+FAST_WINDOW_RULES: tuple[str, ...] = ("RULE-CHAIN-004", "RULE-CHAIN-003")
+
+
 #: 속도별로 응수할 수 있는 상대 속도. **룰북에서 옮긴 표**다.
 #:
 #: ``sd-rulebook-en-v10.json`` 의 ``chain.spell_speeds[*].can_respond_to``
@@ -324,7 +408,24 @@ class ActivationTiming:
     값이므로, 모르는 쪽이 **좁은** 답을 받아야 한다.
     """
 
+    stage: "ActivationStage | None" = None
+    """
+    흐름의 어느 단계인가 (보완6). 근거와 갈래는 :class:`ActivationStage` 에
+    적었다.
+
+    ``None`` 은 **"모른다"** 이지 "단계가 없다" 가 아니다 — ``point`` ·
+    ``set_this_turn`` 과 같은 자리다. 체인이 비어 있는 발동에 이것이 없으면
+    이 계층은 ``UNKNOWN`` 을 돌려준다.
+
+    🔴 **체인이 쌓여 있으면 쓰이지 않는다.** 그때 단계는 체인 하나로
+    정해지므로 (``CHAIN_RESPONSE``) 기존 판정이 그대로 간다.
+    """
+
     def __post_init__(self) -> None:
+        if self.stage is not None and not isinstance(self.stage, ActivationStage):
+            raise TypeError(
+                f"stage 는 ActivationStage 또는 None 입니다: {self.stage!r}"
+            )
         if not isinstance(self.simultaneous, bool):
             raise TypeError(
                 f"simultaneous 는 bool 입니다: {self.simultaneous!r}"
@@ -356,6 +457,7 @@ class ActivationTiming:
             self.priority.canonical_state(),
             self.point.value if self.point is not None else None,
             self.set_this_turn,
+            self.stage.value if self.stage is not None else None,
         )
 
     def to_dict(self) -> dict:
@@ -368,11 +470,16 @@ class ActivationTiming:
             data["point"] = self.point.value
         if self.set_this_turn is not None:
             data["set_this_turn"] = self.set_this_turn
+        if self.stage is not None:
+            data["stage"] = self.stage.value
         return data
 
     def describe_ko(self) -> str:
         where = "체인 위" if self.chain_is_open else "체인 없음"
-        return f"{where} · {self.priority.describe_ko()}"
+        stage = (
+            self.stage.describe_ko() if self.stage is not None else "단계 모름"
+        )
+        return f"{where} · {stage} · {self.priority.describe_ko()}"
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
         return self.describe_ko()
@@ -461,11 +568,13 @@ class ActivationTimingChecker:
             return on_set_turn
 
         if not timing.chain_is_open:
-            # 체인이 비어 있으면 **응수가 아니다.** 스펠 스피드 1 도 체인 1
+            # 체인이 비어 있으면 **응수가 아니다** — 스펠 스피드 1 도 체인 1
             # 이 될 수 있다 (RULE-CHAIN-004 의 "Chain Link 2 이상" 제약).
-            return self._passed(
-                "체인이 비어 있어 스펠 스피드 제약이 걸리지 않습니다."
-            )
+            #
+            # 🔴 **그러나 "응수가 아니다" 가 "무엇이든 된다" 는 아니다**
+            # (보완6). 체인이 비어 있는 자리가 셋이고 셋의 답이 다르다 —
+            # 어느 자리인지는 :class:`ActivationStage` 가 들고 있다.
+            return self._by_stage(timing, action)
 
         if timing.simultaneous:
             # 🔴 **동시 발동은 응수가 아니다** (최종 보완).
@@ -515,6 +624,80 @@ class ActivationTimingChecker:
                 if mine.speed is SpellSpeed.NORMAL
                 else "."
             ),
+        )
+
+    # ------------------------------------------------------------------
+    def _by_stage(
+        self, timing: ActivationTiming, action: PlayerAction
+    ) -> ValidationResult:
+        """
+        **체인이 비어 있을 때** 무엇이 발동될 수 있는가 (보완6).
+
+        근거는 공식 Fast Effect Timing 도표다.
+
+        ==========================  ==========================================
+        :attr:`~ActivationStage.    상자 A — *"Many actions can ONLY be
+        OPEN`                       performed when the game state is open."*
+                                    스펠 스피드 1 도 발동할 수 있다
+        :attr:`~ActivationStage.    그 기회의 유발을 등재한다. 유발 효과는
+        TRIGGER_REGISTRATION`       대개 스펠 스피드 1 이므로 여기서 막으면
+                                    **유발 자체가 발동되지 않는다**
+        :attr:`~ActivationStage.    상자 B · C — 스펠 스피드 **2 이상만**.
+        FAST_WINDOW`                도표가 그 상자에서 할 수 있는 일을
+                                    *"activate a fast effect"* 로 적는다
+        ==========================  ==========================================
+
+        🔴 **거절은 ``INVALID`` 다 — ``UNKNOWN`` 이 아니다.** 규칙이 막는
+        것이므로 "이 저장소가 그 규칙을 모른다" 가 아니다. 그 둘을 섞으면
+        ``/combo`` 가 **규칙상 불가능한 발동을 "엔진 미지원"** 으로 적는다.
+
+        🔴 **단계를 받지 못하면 ``UNKNOWN`` 이다** — 판정 근거가 없다.
+        허가로 바꾸지 않는다.
+        """
+        stage = timing.stage
+        if stage is None:
+            return self._unknown(
+                "체인이 비어 있을 때 발동할 수 있는지는 흐름의 단계에 "
+                "달렸는데, 그 단계를 받지 못했습니다.",
+                STAGE_MISSING,
+            )
+        if stage is ActivationStage.OPEN:
+            return self._passed(
+                "판이 열려 있어 스펠 스피드 제약이 걸리지 않습니다."
+            )
+        if stage is ActivationStage.TRIGGER_REGISTRATION:
+            return self._passed(
+                "유발 처리 기회의 등재이므로 스펠 스피드 제약이 걸리지 "
+                "않습니다 (유발 효과는 대개 스펠 스피드 1 입니다)."
+            )
+        if stage is ActivationStage.CHAIN_RESPONSE:
+            # 체인이 비어 있는데 응답 단계라고 한다 — 둘 중 하나가 틀렸다.
+            # **지어내지 않는다.**
+            return self._unknown(
+                "체인이 비어 있는데 체인 응답 단계라고 알려 왔습니다 — "
+                "어느 쪽이 맞는지 알 수 없습니다.",
+                STAGE_MISSING,
+            )
+
+        assert stage is ActivationStage.FAST_WINDOW
+        mine = self.spell_speed(action.source)
+        if not mine.is_known:
+            return self._unknown(
+                f"발동하려는 카드의 스펠 스피드를 판정할 수 없습니다 "
+                f"({mine.basis}).",
+                mine.missing,
+            )
+        if mine.speed is SpellSpeed.NORMAL:
+            return ValidationResult.invalid(
+                ValidationCode.SPELL_SPEED_TOO_LOW,
+                "판이 열려 있지 않아 스펠 스피드 1 은 발동할 수 없습니다 "
+                "(공식 Fast Effect Timing — 상자 A 에서만 할 수 있는 "
+                "행동입니다). 양쪽이 이 기회를 지나가면 판이 다시 열립니다.",
+            )
+        return self._passed(
+            f"{mine.speed} 이므로 판이 열려 있지 않아도 발동할 수 "
+            f"있습니다 (빠른 효과).",
+            rules=FAST_WINDOW_RULES,
         )
 
     # ------------------------------------------------------------------
@@ -606,6 +789,9 @@ class ActivationTimingChecker:
 
 
 __all__ = [
+    "ActivationStage",
+    "FAST_WINDOW_RULES",
+    "STAGE_MISSING",
     "SpellSpeed",
     "RESPONSE_TABLE",
     "SPEED_RULES",

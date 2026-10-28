@@ -48,6 +48,7 @@ from engine.action_validation import (
     ActionValidator,
 )
 from engine.activation_timing import (
+    ActivationStage,
     ActivationTiming,
     ActivationTimingChecker,
     SpellSpeed,
@@ -350,7 +351,16 @@ def test_04_only_the_validator_blocks_a_set_trap(repository, card_id):
     # ② 타이밍 관문 — 통과한다. 세트한 턴도 알고 있다.
     assert duel._set_this_turn(action) is False
     timed = ActivationTimingChecker(duel.view(P0)).check(
-        ActivationTiming(duel.chain, duel.priority, set_this_turn=False), action
+        #: 🔴 **그 판의 단계를 그대로 묻는다** (보완6). 체인이 비어 있을 때
+        #: 무엇이 발동될 수 있는지는 단계가 정하므로, 가정으로 넣는 것은
+        #: ``set_this_turn`` 하나이고 단계는 **판에서 읽는다.**
+        ActivationTiming(
+            duel.chain,
+            duel.priority,
+            set_this_turn=False,
+            stage=duel._activation_stage(),
+        ),
+        action,
     )
     assert timed.validity is ActionValidity.VALID, timed.reason
 
@@ -841,11 +851,22 @@ def test_14_ignoring_the_set_turn_must_break_the_two_turn_distinction(repository
 
     checker = ActivationTimingChecker(same.view(P0))
     refused = checker.check(
-        ActivationTiming(same.chain, same.priority, set_this_turn=True),
+        #: 🔴 단계는 **판에서 읽는다** (보완6) — 가정은 ``set_this_turn`` 뿐.
+        ActivationTiming(
+            same.chain,
+            same.priority,
+            set_this_turn=True,
+            stage=same._activation_stage(),
+        ),
         made(P0, same_instance, GIFT_OF_GREED),
     )
     allowed = ActivationTimingChecker(later.view(P0)).check(
-        ActivationTiming(later.chain, later.priority, set_this_turn=False),
+        ActivationTiming(
+            later.chain,
+            later.priority,
+            set_this_turn=False,
+            stage=later._activation_stage(),
+        ),
         made(P0, later_instance, GIFT_OF_GREED),
     )
     assert (refused.validity, allowed.validity) == (

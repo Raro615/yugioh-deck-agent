@@ -30,7 +30,9 @@ from engine.activation_timing import (
     MONSTER_CLASSIFICATION_MISSING,
     RESPONSE_TABLE,
     SPEED_RULES,
+    STAGE_MISSING,
     UNRESOLVED_TIMING_RULES,
+    ActivationStage,
     ActivationTiming,
     ActivationTimingChecker,
     SpellSpeed,
@@ -168,12 +170,26 @@ def checker(state: GameState, seat: int = B_SEAT) -> ActivationTimingChecker:
     return ActivationTimingChecker(GameStateView.from_state(state, viewer=seat))
 
 
-def timing(chain: Chain = Chain(), holder: int = B_SEAT) -> ActivationTiming:
+def timing(
+    chain: Chain = Chain(),
+    holder: int = B_SEAT,
+    *,
+    stage: "ActivationStage | None" = None,
+) -> ActivationTiming:
+    """
+    판정에 넣을 **흐름의 위치**.
+
+    ``stage`` (보완6) — 체인이 비어 있을 때 **무엇이 발동될 수 있는지는
+    단계가 정한다** (:class:`ActivationStage`). 주지 않으면 ``None`` 이고,
+    그것은 "모른다" 이므로 체인이 빈 발동은 ``UNKNOWN`` 이 된다. 체인이
+    쌓여 있으면 쓰이지 않는다.
+    """
     return ActivationTiming(
         chain,
         PriorityState.opened(
             ResponseWindow.RESPONSE, holder, turn_player=A_SEAT, phase=Phase.MAIN1
         ),
+        stage=stage,
     )
 
 
@@ -375,14 +391,59 @@ def test_b_the_owner_can_read_their_own_face_down_card(state):
 
 
 @requires_official_db
-def test_c_scenario_a_an_empty_chain_puts_no_speed_constraint(state):
-    """A — 체인이 없으면 응수가 아니므로 스펠 스피드가 걸리지 않는다."""
-    verdict = checker(state, A_SEAT).check(
-        timing(Chain(), A_SEAT), activation(A_SEAT, a_pot(state))
-    )
+def test_c_scenario_a_an_empty_chain_is_not_enough_to_pass(state):
+    """
+    A — 체인이 없으면 **응수가 아니다**. 그러나 그것만으로는 통과가 아니다.
 
-    assert verdict.validity is ActionValidity.VALID
-    assert verdict.code is ValidationCode.OK
+    🔴 **정정 (보완6).** 이 시험의 이름과 주장은
+    ``test_c_scenario_a_an_empty_chain_puts_no_speed_constraint`` 였고,
+    *"체인이 없으면 스펠 스피드가 걸리지 않는다"* 를 단정했다. 보완5 까지는
+    그 말이 맞았다 — 체인이 비어 있다는 것이 곧 판이 열려 있다는 뜻이었다.
+
+    보완5 가 공식 Fast Effect Timing 도표의 상자 B · C 를 실으면서 그
+    등식이 깨졌다. 체인이 비어 있는데 판이 열리지 않은 자리가 생겼고,
+    거기서 스펠 스피드 1 이 통과했다 (보완6 §2 의 실측 — 통상 마법과 기동
+    효과 둘 다 체인 1 로 수락되었다).
+
+    그래서 체인이 비어 있을 때의 답은 **단계가 정한다**. 셋을 하나씩 센다.
+    """
+    gate = checker(state, A_SEAT)
+    action = activation(A_SEAT, a_pot(state))
+
+    #: ① 단계를 주지 않으면 **모른다** — 허가가 아니다.
+    #:
+    #: 🔴 코드가 ``INFORMATION_UNAVAILABLE`` 이다 —
+    #: ``RULE_NOT_IMPLEMENTED``(규칙이 없다) 도 아니고 ``SPELL_SPEED_TOO_LOW``
+    #: (규칙이 막는다) 도 아니다. **부르는 쪽이 알려주지 않았다**는 뜻이고,
+    #: 세 사실이 서로 다른 코드를 받는 것이 이 Phase 가 지키려는 구분이다.
+    silent = gate.check(timing(Chain(), A_SEAT), action)
+    assert silent.validity is ActionValidity.UNKNOWN
+    assert silent.code is ValidationCode.INFORMATION_UNAVAILABLE
+    assert silent.missing_rule == STAGE_MISSING
+
+    #: ② 판이 열려 있으면 통과한다 — 예전의 주장이 **이 자리에서** 맞다.
+    opened = gate.check(
+        timing(Chain(), A_SEAT, stage=ActivationStage.OPEN), action
+    )
+    assert opened.validity is ActionValidity.VALID
+    assert opened.code is ValidationCode.OK
+
+    #: ③ 유발 등재 단계도 통과한다 — 유발은 대개 스펠 스피드 1 이다.
+    registering = gate.check(
+        timing(Chain(), A_SEAT, stage=ActivationStage.TRIGGER_REGISTRATION),
+        action,
+    )
+    assert registering.validity is ActionValidity.VALID
+
+    #: ④ 🔴 **빠른 효과 기회에서는 막힌다** — 그리고 ``INVALID`` 다.
+    #: "이 저장소가 그 규칙을 모른다"(``UNKNOWN``) 가 아니라 규칙이
+    #: 막는 것이다.
+    fast = gate.check(
+        timing(Chain(), A_SEAT, stage=ActivationStage.FAST_WINDOW), action
+    )
+    assert fast.validity is ActionValidity.INVALID
+    assert fast.code is ValidationCode.SPELL_SPEED_TOO_LOW
+    assert fast.missing_rule is None
 
 
 @requires_official_db
@@ -747,13 +808,29 @@ def test_f_no_second_timing_system_was_built():
         node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
     }
 
+    #: 🔴 ``ActivationStage`` 가 늘었다 (보완6). **새 시스템이 아니라 이
+    #: 모듈이 이미 받던 값들의 어휘 하나**다 — ``SpellSpeed`` 가 "얼마나
+    #: 빠른가" 의 어휘인 것과 같은 자리이고, 판정도 기존
+    #: ``ActivationTimingChecker`` 하나가 한다 (새 검사기를 만들지 않았다).
+    #: 아래 금지 목록이 그 주장을 그대로 지킨다.
     assert defined == {
         "SpellSpeed",
+        "ActivationStage",
         "SpellSpeedClassification",
         "ActivationTiming",
         "ActivationTimingChecker",
     }
-    for forbidden in ("TimingEvent", "TimingWindow", "PriorityState", "Chain"):
+    for forbidden in (
+        "TimingEvent",
+        "TimingWindow",
+        "PriorityState",
+        "Chain",
+        #: 🔴 보완6 이 두 번째 규칙 엔진을 만들지 않았다는 것 —
+        #: 단계를 판정하는 **별도의** 기계가 없다.
+        "StageResolver",
+        "StageMachine",
+        "ActivationStageChecker",
+    ):
         assert forbidden not in defined
 
 
@@ -792,12 +869,18 @@ def test_f_the_context_stores_nothing_twice():
     for copied in ("phase", "turn_player", "holder", "actor"):
         assert copied not in fields
     #: 🔴 그리고 **판을 든 쪽만이 답할 수 있는 것들**이다.
+    #: 🔴 **여섯 번째 값이 늘었다** (보완6). ``stage`` 는 "지금이 흐름의
+    #: 어느 단계인가" 이고, 그것도 관측에 없다 — 체인이 비어 있을 때 판이
+    #: 열렸는지 · 유발을 등재하는 중인지 · 빠른 효과 기회인지는 ``Duel`` 의
+    #: 수명 상태(``window_passed`` · 등재 자리)이고 ``GameStateView`` 에
+    #: 없다. 앞의 셋과 **같은 이유로** 판을 든 쪽이 값으로 넘긴다.
     assert fields <= {
         "chain",
         "priority",
         "point",
         "set_this_turn",
         "simultaneous",
+        "stage",
     }
     assert {"chain", "priority"} <= fields
 

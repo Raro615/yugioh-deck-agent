@@ -782,7 +782,13 @@ def test_h05_the_timing_gate_no_longer_refuses_spell_speed_one(repository):
     action = activation(P0, fresh, POT_OF_GREED)
     view = duel.view(P0)
     timing = ActivationTiming(
-        duel.chain, duel.priority, set_this_turn=duel._set_this_turn(action)
+        duel.chain,
+        duel.priority,
+        set_this_turn=duel._set_this_turn(action),
+        #: 🔴 **단계를 판에서 읽어 넘긴다** (보완6). 체인이 비어 있다는
+        #: 사실만으로는 판정할 수 없다 — 아래 ``_activation_gate`` 가
+        #: 넘기는 것과 **같은 값**이어야 두 판정이 갈라지지 않는다.
+        stage=duel._activation_stage(),
     )
     #: 🔴 남은 체인이 없으므로 창이 닫혀 있다.
     assert timing.chain_is_open is False
@@ -1215,7 +1221,10 @@ def test_p04_an_activation_preferring_walk_refuses_nothing(repository):
     #: 센다 — 산책이 중간에 멈췄다면 이 시험은 아무것도 재지 않는다.
     assert fizzles == 1, fizzles
     #: ③ 그리고 **덮은 범위가 줄지 않았다** — 세 판 모두 끝까지 갔다.
-    assert accepted == 450, accepted
+    #: 🔴 **정정 (보완6): 450 → 466.** 보완6 이 빠른 효과 기회에서 스펠
+    #: 스피드 1 을 막았으므로 이 산책이 **밟는 수의 순서가 달라졌다** —
+    #: 같은 씨앗에서 다른 판이 나온다. ① 의 지표(거부 0건)는 그대로다.
+    assert accepted == 466, accepted
     assert leftover == 0, leftover
     assert finished == 3, finished
     #: ③ 🔴 끝까지 간 뒤 남은 체인이 **0** 이다 (예전엔 3 이 남았다).
