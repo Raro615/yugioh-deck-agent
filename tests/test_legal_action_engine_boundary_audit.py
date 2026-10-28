@@ -63,7 +63,7 @@ from engine.game_state_view import GameStateView
 from engine.summon import duel_executor
 from engine.validation import ValidationCode
 from engine.ids import EffectRef
-from engine.activation_timing import ActivationTiming, ActivationTimingChecker
+from engine.activation_timing import ActivationStage, ActivationTiming, ActivationTimingChecker
 from engine.vocabulary import Phase, Zone
 
 from tests.conftest import requires_official_db
@@ -449,8 +449,15 @@ def test_03_everything_offered_is_actually_executed(repository):
     #: 🔴 **이 셋은 관문 단위 측정이고 통합 검증이 아니다** — 재는 것은
     #: ``Duel.apply`` 가 쓰는 것과 **같은** 관문이지만, 산책을 거쳐 판이
     #: 바뀌는 것을 보는 것이 아니다.
-    timing = ActivationTiming(duel.chain, duel.priority)
+    #: 🔴 **단계를 판에서 읽어 넘긴다** (보완6). 체인이 비어 있다는 사실만
+    #: 으로는 발동 가능 여부를 판정할 수 없다 — 여기서 재려는 것은 "남은
+    #: 체인이 잠금을 걸고 있지 않다" 이고, 그 자리는 양측이 기회를 지나간
+    #: **열린 판**이다.
+    timing = ActivationTiming(
+        duel.chain, duel.priority, stage=duel._activation_stage()
+    )
     assert timing.chain_is_open is False, timing
+    assert timing.stage is ActivationStage.OPEN, timing
 
     #: 그 관문에 **스펠 스피드 1 발동**을 넣어 본다. 잠겨 있었다면 여기서
     #: ``SPELL_SPEED_TOO_LOW`` 가 나온다.
@@ -468,7 +475,7 @@ def test_03_everything_offered_is_actually_executed(repository):
     assert verdict.validity is ActionValidity.VALID, verdict
     assert verdict.code is ValidationCode.OK, verdict
     #: 🔴 관문이 **그 이유를 말로** 적는다 — 빈 결과로 통과하지 않는다.
-    assert "체인이 비어 있어" in verdict.reason, verdict.reason
+    assert "판이 열려 있어" in verdict.reason, verdict.reason
     assert "스펠 스피드 제약이 걸리지 않습니다" in verdict.reason, verdict.reason
 
 
@@ -1177,5 +1184,13 @@ def test_30_the_search_ranking_digest_is_unchanged(repository):
     #: 결정의 수가 늘고 (``pass`` 442건 · 전체 979), 궤적이 갈라져 digest 도
     #: 바뀐다. 🔴 **순위 로직은 한 줄도 바뀌지 않았다** — 늘어난 것은
     #: 거쳐야 하는 절차다. 두 번 돌려 같은 값이 나오는 것을 확인했다.
-    assert decisions == 979
+    #: 🔴 **보완6 가 이 수와 digest 를 다시 바꿨다: 979 → 1065.** 빠른 효과
+    #: 기회에서 스펠 스피드 1 발동을 막았으므로 (공식 Fast Effect Timing —
+    #: 상자 A 에서만 할 수 있는 행동이다) 탐색이 그 자리에서 고를 수 있는
+    #: 수가 줄고, 대신 판이 열린 뒤로 밀려 **궤적이 달라진다.**
+    #: 실측 종류별: pass 459 · end_phase 378 · set_spell_trap 71 ·
+    #: normal_summon 66 · attack 60 · activate_effect 31.
+    #: 🔴 **순위 로직은 한 줄도 바뀌지 않았다.** 두 번 돌려 같은 값이
+    #: 나오는 것을 확인했다.
+    assert decisions == 1065
     assert digest.hexdigest() == expected

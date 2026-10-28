@@ -1014,7 +1014,11 @@ def test_25_this_phase_changed_no_production_file():
         #: 둔 이유가 그것이고, ``Duel._activation_gate`` 가 실제로 쓴다.
         #: 이 핀이 재는 것은 "얼마나 바뀌었는가" 이고, 아래의 문자열에
         #: 둔감한 핀이 **실행 코드가 움직였다**는 사실을 따로 잡는다.
-        "engine/activation_timing.py": 618,
+        #:
+        #: 🔴 618 → **804** (Phase 6-AB 보완6). ``ActivationStage`` 와
+        #: ``_by_stage`` 그리고 그 둘의 설명이다. 아래의 문자열에 둔감한
+        #: 핀이 실행 코드 43줄을 따로 잡는다 — 나머지 143줄은 설명이다.
+        "engine/activation_timing.py": 804,
     }
 
     #: 🔴 주석 · docstring 에 둔감한 핀 (Phase 3-F-26 이 더했다).
@@ -1103,7 +1107,20 @@ def test_25_this_phase_changed_no_production_file():
         #: 판을 든 쪽(``Duel._is_simultaneous``)이 ``chain_floor`` 와 제안의
         #: 사건 번호로 답한다. 근거는 룰북 §When multiple cards are
         #: activated simultaneously 다.
-        "engine/activation_timing.py": 233,
+        #:
+        #: 🔴 233 → **276** (Phase 6-AB 보완6). **실행 코드 43줄**이다 —
+        #: ``ActivationStage`` 열거(네 멤버 · ``describe_ko``)와 ``_STAGE_KO``
+        #: 표, ``STAGE_MISSING`` · ``FAST_WINDOW_RULES`` 상수,
+        #: ``ActivationTiming.stage`` 칸과 그 타입 검사,
+        #: ``canonical_state`` · ``to_dict`` · ``describe_ko`` 의 단계 항목,
+        #: 그리고 빈 체인을 단계별로 가르는 ``_by_stage`` 다.
+        #:
+        #: 🔴 **스펠 스피드 1 을 무조건 금지한 것이 아니다.** 늘어난 분기는
+        #: ``FAST_WINDOW`` 에서만 거부를 내고, ``OPEN`` 과
+        #: ``TRIGGER_REGISTRATION`` 은 그대로 통과한다. 단계를 말해 주지
+        #: 않으면 ``UNKNOWN`` 이다 — 추측하지 않는다. 근거는 공식 Fast
+        #: Effect Timing 의 상자 A 설명이다.
+        "engine/activation_timing.py": 276,
     }
 
 

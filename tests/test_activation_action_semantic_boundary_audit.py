@@ -1041,5 +1041,13 @@ def test_30_the_search_ranking_digest_is_unchanged(repository):
     #: 결정의 수가 늘고 (``pass`` 442건 · 전체 979), 궤적이 갈라져 digest 도
     #: 바뀐다. 🔴 **순위 로직은 한 줄도 바뀌지 않았다** — 늘어난 것은
     #: 거쳐야 하는 절차다. 두 번 돌려 같은 값이 나오는 것을 확인했다.
-    assert decisions == 979
+    #: 🔴 **보완6 가 이 수와 digest 를 다시 바꿨다: 979 → 1065.** 빠른 효과
+    #: 기회에서 스펠 스피드 1 발동을 막았으므로 (공식 Fast Effect Timing —
+    #: 상자 A 에서만 할 수 있는 행동이다) 탐색이 그 자리에서 고를 수 있는
+    #: 수가 줄고, 대신 판이 열린 뒤로 밀려 **궤적이 달라진다.**
+    #: 실측 종류별: pass 459 · end_phase 378 · set_spell_trap 71 ·
+    #: normal_summon 66 · attack 60 · activate_effect 31.
+    #: 🔴 **순위 로직은 한 줄도 바뀌지 않았다.** 두 번 돌려 같은 값이
+    #: 나오는 것을 확인했다.
+    assert decisions == 1065
     assert digest.hexdigest() == expected

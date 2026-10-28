@@ -140,7 +140,12 @@ MINE = 0
 #: 적었는데 지금 자리가 다르다" 를 ``UNKNOWN`` 으로 돌려주는 관문이다.
 #: 그 사이의 이동을 이 계층이 읽지 못하므로 **코드가 생겨야 풀리는 모름**
 #: 이고, 그래서 ``CODE_OCCURRENCES`` 도 함께 73 → 74 다 (산문 15는 그대로).
-STRING_OCCURRENCES = 89
+#: 🔴 89 → **91** (Phase 6-AB 보완6). 🔴 **늘어난 둘은 코드가 아니라
+#: 산문이다** — ``CODE_OCCURRENCES`` 는 74 그대로다. ``Duel._refusal`` ·
+#: ``_refusal_verdict`` 의 설명이 **그 코드가 왜 그 자리에서 틀렸는지**를
+#: 적는다 (규칙이 막은 것을 "엔진 미지원" 으로 보고하고 있었다). 즉 이
+#: 코드의 **사용**이 하나 줄고 그것을 설명하는 글이 늘었다.
+STRING_OCCURRENCES = 91
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -318,7 +323,9 @@ PROSE_OCCURRENCES = {
     # **위**에 넣은 것들이다: ``_window_group`` · ``_window_can_act`` ·
     # ``_resolving_other_window`` 와 각자의 설명, ``_window_actor`` 의 네 묶음
     # 순서, ``_enforce_mandatory`` 의 등재 좁히기, ``_response_priority``.
-    ("engine/duel.py", 2338),
+    ("engine/duel.py", 2267),
+    ("engine/duel.py", 2273),
+    ("engine/duel.py", 2485),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
@@ -351,6 +358,7 @@ PROSE_OCCURRENCES = {
 #: 읽지 못한다**고 적는다. 판이 아니라 코드가 생겨야 풀리는 모름이다.
 #: 🔴 73 → **74** (보완5) — ``_zone_from_grave`` 의 관문 하나.
 #: ``STRING_OCCURRENCES`` 의 설명과 같은 자리다.
+#: 🔴 보완6 에서 **바뀌지 않았다** — 늘어난 둘은 산문이다.
 CODE_OCCURRENCES = 74
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
@@ -460,7 +468,10 @@ CONTRACT_VIOLATIONS = {
     ("engine/effect/executor.py", 1704, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/resolution.py", 520, "ResolutionStatus.FORBIDDEN"),
     ("engine/payment.py", 402, "PaymentStatus.EXECUTION_ERROR"),
-    ("engine/response.py", 485, "ResponseOutcome.REFUSED"),
+    # 🔴 보완6 에서 +6 밀렸다 (485 → 491) — ``act`` 가 ``stage`` 를
+    # 키워드로 받게 되면서 그 자리보다 **위**에 줄이 늘었다. 위반 13 ·
+    # 적합 19 는 그대로다.
+    ("engine/response.py", 491, "ResponseOutcome.REFUSED"),
 }
 
 #: 같은 주사에서 **올바른** 자리 (모른다 쪽 상태와 짝지었다).
@@ -713,7 +724,9 @@ def test_02_the_string_count_is_79_but_the_code_count_is_67():
 
     sites = code_sites()
     assert len(sites) == CODE_OCCURRENCES
-    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 15
+    #: 🔴 15 → **17** (보완6) — 늘어난 둘은 산문이다 (``_refusal`` ·
+    #: ``_refusal_verdict`` 의 설명).
+    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 17
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()
