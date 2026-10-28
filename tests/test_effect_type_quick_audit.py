@@ -695,7 +695,25 @@ def test_12_the_missing_reason_names_an_effect_level_classification():
     **효과 단위** 분류를 가리킨다.
 
     *"monster effect classification (기동 · 유발 · 플립 vs 유발즉시)"* —
-    카드가 아니라 **효과**다. 그런데 그 값을 쓰는 함수는 카드를 받는다.
+    카드가 아니라 **효과**다.
+
+    .. warning::
+       🔴 **Phase 6-AB 보완7 이 이 테스트가 못 박고 있던 어긋남을 고쳤다.**
+
+       원래 마지막 줄이 ``list(signature.parameters) == ["definition"]`` 이고,
+       그 주석이 *"받는 인자는 카드 정의 하나다 — effect_ref 를 받지
+       않는다"* 였다. 즉 이 테스트는 **입도 불일치 자체를 고정**하고 있었다
+       — 사유는 효과를 가리키는데 함수는 카드만 받는다는 사실이다.
+
+       보완7 이 그 자리를 메웠다: ``activation_kind`` 를 **키워드로** 받고,
+       그 값은 손으로 적어 검증한
+       :attr:`~engine.effect.definition.EffectDefinition.activation_kind`
+       에서 온다 (ADR-006). 그래서 지금은 **사유와 함수의 입도가 같다.**
+
+       🔴 **느슨하게 하지 않고 바꿔 못 박는다** — 새 인자가 ``None`` 기본값의
+       **키워드 전용**임을 세고(주지 않으면 전과 같은 ``UNKNOWN`` 이다),
+       ``effect_ref`` · 카드 ID · ``EffectSpec`` 을 받지 않는다는 원래
+       주장은 그대로 센다.
     """
     assert "monster effect classification" in MONSTER_CLASSIFICATION_MISSING
     assert "유발즉시" in MONSTER_CLASSIFICATION_MISSING
@@ -705,9 +723,28 @@ def test_12_the_missing_reason_names_an_effect_level_classification():
     assert body.count("MONSTER_CLASSIFICATION_MISSING") == 1
     assert "is_monster" in body
 
-    #: 받는 인자는 **카드 정의** 하나다 — effect_ref 를 받지 않는다.
     signature = inspect.signature(classify_spell_speed)
-    assert list(signature.parameters) == ["definition"]
+    #: 🔴 두 인자뿐이다 — 카드 정의와 **그 효과의 분류**.
+    assert list(signature.parameters) == ["definition", "activation_kind"]
+
+    #: ``definition`` 은 그대로 위치 인자이고 기본값이 없다.
+    card = signature.parameters["definition"]
+    assert card.default is inspect.Parameter.empty
+
+    #: 🔴 ``activation_kind`` 는 **키워드 전용 · 기본값 None** 이다.
+    #: 그래서 주지 않으면 몬스터 효과는 전과 같이 ``UNKNOWN`` 이고,
+    #: 모르는 쪽이 **좁은** 답을 받는다 (조용한 허가가 되지 않는다).
+    kind = signature.parameters["activation_kind"]
+    assert kind.kind is inspect.Parameter.KEYWORD_ONLY
+    assert kind.default is None
+
+    #: 🔴 **여전히 ``effect_ref`` 도 카드 ID 도 ``EffectSpec`` 도 받지
+    #: 않는다.** 받는 것은 분류 하나이고, 어느 효과의 분류인지 고르는 일은
+    #: 등록부를 든 쪽이 한다 (``engine.effect.definition.
+    #: verified_activation_kind``).
+    assert "effect_ref" not in signature.parameters
+    assert "card_id" not in signature.parameters
+    assert "EffectSpec" not in body
 
 
 def test_13_official_quick_effect_is_defined_as_spell_speed_two():
