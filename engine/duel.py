@@ -86,7 +86,12 @@ from engine.spell_activation import (
 )
 from engine.summon import duel_executor
 from engine.turn_progression import ProgressionStatus, TurnProgressor
-from engine.validation import ActionValidity, ValidationCode, ValidationResult
+from engine.validation import (
+    CODE_VALIDITY,
+    ActionValidity,
+    ValidationCode,
+    ValidationResult,
+)
 from engine.vocabulary import ActivationKind, Phase, Zone
 
 
@@ -150,6 +155,34 @@ MANDATORY_TRIGGER_UNPLAYABLE = (
     "않아 이 진행이 규칙대로인지 보장할 수 없다)"
 )
 
+#: **판이 열린 상태(box A)에서만 할 수 있는 행동들** (Phase 6-AB 보완8).
+#:
+#: 근거는 공식 Fast Effect Timing 도표의 두 문장이다 — *"Many actions can
+#: ONLY be performed when the game state is open (when you're in box A)."* ·
+#: *"Whenever either player performs an action, the game state is no longer
+#: open."* 그래서 유발 처리 기회 · 빠른 효과 기회 · 체인 응답 단계에서는
+#: 이 다섯을 할 수 없다.
+#:
+#: 🔴 **``ACTIVATE_EFFECT`` 와 ``PASS`` 는 여기 없다.** 발동은 그 단계들에서도
+#: 할 수 있고 (적법성은 스펠 스피드 관문이 정한다), ``PASS`` 는 그 기회를
+#: 지나가는 수단이다.
+#:
+#: 🔴 **목록이 한 벌이다.** 전에는 "유발 등재 단계가 닫는 것" 을
+#: :meth:`Duel._enforce_mandatory` 가 허가 목록에서 거르는 방식으로만 적었고,
+#: 빠른 효과 기회 쪽은 후보를 **아예 만들지 않아** 이유가 남지 않았다
+#: (실측: 보완8 §2 A5 · A6 — ``apply`` 가 "지금 허가된 행위가 아닙니다" 로
+#: ``RULE_NOT_IMPLEMENTED`` 를 돌려주었다).
+OPEN_STATE_ONLY_KINDS: tuple[PlayerActionKind, ...] = (
+    PlayerActionKind.NORMAL_SUMMON,
+    PlayerActionKind.SPECIAL_SUMMON,
+    PlayerActionKind.SET_MONSTER,
+    PlayerActionKind.SET_SPELL_TRAP,
+    PlayerActionKind.CHANGE_POSITION,
+    PlayerActionKind.ATTACK,
+    PlayerActionKind.CHANGE_PHASE,
+    PlayerActionKind.END_PHASE,
+)
+
 #: 전투가 일어나는 존들. 공격자와 대상 모두 여기 있는 카드다.
 BATTLE_TARGET_ZONES: tuple[Zone, ...] = (Zone.MZONE, Zone.EMZONE)
 
@@ -211,11 +244,66 @@ class WithheldAction:
 
     빈 목록은 "할 것이 없다" 로 읽힌다. 적어 두면 "아직" 으로 읽힌다 —
     이 프로젝트가 빈 칸을 남기지 않는 다른 모든 자리와 같다.
+
+    ``code`` (Phase 6-AB 보완8)
+    --------------------------
+    **어느 종류의 거절인가**를 구조로 적는다. 전에는 ``missing`` 이 비었는지로
+    읽는 쪽이 짐작해야 했고, 그래서 ``deck/opening.py`` 는 그 규칙을 손으로
+    한 번 더 적었다. 지금은 :data:`~engine.validation.CODE_VALIDITY` 가
+    코드마다 ``INVALID`` / ``UNKNOWN`` 을 말하므로 **읽는 쪽이 문장을 파싱할
+    필요가 없다** (사용자 요구 ③-6).
+
+    ``missing`` 과 **어긋나지 못한다** — 아래 ``__post_init__`` 가 둘의
+    일치를 강제한다. 확정 거부에 "무엇이 없어서" 를 붙이면 규칙이 막은 것이
+    미지원으로 집계되고 (보완6 이 고친 바로 그 혼동), 모름에서 그것을 빼면
+    무엇을 고쳐야 하는지가 사라진다.
+
+    🔴 **식별자는 여전히 들고 있지 않다** (Phase 3-E-41 의 invariant).
+    ``source`` · ``action`` · ``instance_id`` 를 더하지 않았다 —
+    ``HIDDEN_CARD`` 처럼 **가려진 것을 가리키는** 판정에서 식별자가 함께
+    새어 나갈 길이 열리기 때문이다. 어느 효과인지가 필요한 자리는
+    ``reason`` 안에 ``EffectRef`` 를 적는다 (``_trigger_actions`` 가 이미
+    쓰는 방식이고, ``EffectRef`` 는 그 자리가 들고 있는 자기 카드의 것이다).
     """
 
     kind: PlayerActionKind
     reason: str
+    code: ValidationCode
     missing: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.code, ValidationCode):
+            raise TypeError(
+                f"code 는 ValidationCode 입니다: {self.code!r}"
+            )
+        validity = CODE_VALIDITY[self.code]
+        if validity is ActionValidity.INVALID and self.missing:
+            raise ValueError(
+                f"{self.code.value} 는 규칙이 금지한다는 뜻인데 없는 것이 "
+                f"적혀 있습니다: {self.missing!r}. 확정 거부를 미지원으로 "
+                "집계하게 됩니다."
+            )
+        if validity is ActionValidity.UNKNOWN and not self.missing:
+            raise ValueError(
+                f"{self.code.value} 는 판정하지 못했다는 뜻인데 **무엇이 "
+                "없어서인지** 적지 않았습니다. 그러면 고칠 자리를 알 수 "
+                "없습니다."
+            )
+        if validity is ActionValidity.VALID:
+            raise ValueError(
+                f"{self.code.value} 는 통과를 뜻하므로 보류의 이유가 될 수 "
+                "없습니다."
+            )
+
+    @property
+    def validity(self) -> ActionValidity:
+        """이 거절이 **규칙 거절인가 모름인가.** 코드에서 파생된다."""
+        return CODE_VALIDITY[self.code]
+
+    @property
+    def is_rule_refusal(self) -> bool:
+        """확인된 규칙이 막았는가 (``INVALID``)."""
+        return self.validity is ActionValidity.INVALID
 
 
 @dataclass(frozen=True, slots=True)
@@ -803,7 +891,9 @@ class Duel:
         withheld.extend(held)
 
         if self.priority.is_open and self.priority.holds(seat):
-            allowed.extend(self._activation_actions(seat, validator))
+            opened, held = self._activation_actions(seat, validator)
+            allowed.extend(opened)
+            withheld.extend(held)
         elif seat == self.turn_player and not self.priority.is_open:
             for card in self.state.player(seat).hand:
                 # 패의 한 장이 **여러 후보**가 된다 — 소환 · 몬스터 세트 ·
@@ -822,7 +912,17 @@ class Duel:
                     ):
                         allowed.append(candidate)
             allowed.extend(self._attack_actions(seat, validator))
-            allowed.extend(self._activation_actions(seat, validator))
+            opened, held = self._activation_actions(seat, validator)
+            allowed.extend(opened)
+            withheld.extend(held)
+
+        # 🔴 **판이 열려 있지 않으면 그 사실을 적는다** (보완8).
+        #
+        # 위 두 갈래는 열린 상태 전용 행동의 후보를 **아예 만들지 않는다** —
+        # 그래서 이유도 남지 않았고, ``apply`` 는 "지금 허가된 행위가
+        # 아닙니다" 에 ``RULE_NOT_IMPLEMENTED`` 를 붙여 돌려주었다. 규칙이
+        # 막은 것을 **엔진 미지원**으로 적는 바로 그 혼동이다.
+        withheld.extend(self._stage_closed_actions(seat))
 
         # 흐름을 움직이는 둘은 **검증기가 아니라 흐름 계층**이 답한다.
         # 검증기는 ``GameStateView`` 만 보는데, 우선권과 진행은 판 밖에
@@ -901,6 +1001,7 @@ class Duel:
                         "유발 효과는 턴 플레이어 우선권의 예외이므로 "
                         "(룰북 TURN PLAYER'S PRIORITY) 그 처리를 넘기고 "
                         "진행할 수 없습니다.",
+                        ValidationCode.MANDATORY_TRIGGER_PENDING,
                     )
                 )
             return LegalActions(seat, (), tuple(withheld))
@@ -950,6 +1051,7 @@ class Duel:
                         "— 그 자리가 발동하거나 포기하기 전에는 진행할 수 "
                         "없습니다 (공식 Fast Effect Timing — 그 기회는 양쪽이 "
                         "다 지나가야 닫힙니다).",
+                        ValidationCode.STAGE_FORBIDS_ACTION,
                     )
                 )
             return LegalActions(seat, (), tuple(withheld))
@@ -1011,10 +1113,24 @@ class Duel:
                         "행동입니다)."
                     )
                 )
-                for action in allowed:
-                    if action in keep:
-                        continue
-                    withheld.append(WithheldAction(action.kind, reason))
+                # 🔴 **코드도 이유와 함께 갈린다** (보완8). 강제면 "규칙이
+                # 요구한 처리가 남았다", 임의면 "이 단계가 금지한다" 이고,
+                # 둘 다 **확정 거부**다 — 전에는 둘 다 ``missing`` 없는
+                # 보류였고 ``apply`` 는 그것을 읽지 않아
+                # ``RULE_NOT_IMPLEMENTED`` 로 보고했다 (실측: 보완8 §2 B2).
+                code = (
+                    ValidationCode.MANDATORY_TRIGGER_PENDING
+                    if duty_claims
+                    else ValidationCode.STAGE_FORBIDS_ACTION
+                )
+                # 🔴 **종류별로 하나만 적는다** (사용자 요구 ③-8). 전에는
+                # 허가 목록을 돌며 후보마다 적었고, 그래서 패에 세울 카드가
+                # 셋이면 같은 문장이 세 번 나왔다 (실측: 보완8 §2 B2).
+                for kind in sorted(
+                    {action.kind for action in allowed if action not in keep},
+                    key=lambda k: k.value,
+                ):
+                    withheld.append(WithheldAction(kind, reason, code))
                 allowed = keep
 
         forced = self._mandatory_offers(seat)
@@ -1052,6 +1168,7 @@ class Duel:
                     "지나지 못했습니다 — 이 진행이 규칙대로인지 보장할 수 "
                     "없습니다 (흐름은 막지 않습니다: 막으면 고를 것이 없어 "
                     "듀얼이 멈춥니다).",
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
                     missing=MANDATORY_TRIGGER_UNPLAYABLE,
                 )
             )
@@ -1066,6 +1183,7 @@ class Duel:
                     f"강제 유발 {len(forced)}건이 이 자리에 열려 있지만 지금 "
                     "행동을 고르는 자리가 아닙니다 — 차례가 오면 그 처리가 "
                     "먼저입니다.",
+                    ValidationCode.NOT_PRIORITY_HOLDER,
                 )
             )
             return LegalActions(seat, tuple(allowed), tuple(withheld))
@@ -1078,6 +1196,7 @@ class Duel:
                     action.kind,
                     f"강제 유발 {len(forced)}건을 먼저 처리해야 합니다 — "
                     "규칙이 요구한 처리를 넘기고 다른 것을 할 수 없습니다.",
+                    ValidationCode.MANDATORY_TRIGGER_PENDING,
                 )
             )
         return LegalActions(seat, tuple(duties), tuple(withheld))
@@ -1168,12 +1287,32 @@ class Duel:
             않는다 — 비용이 생기는 날 걸리게 **먼저** 둔다.
         """
         allowed: list[PlayerAction] = []
+        # 🔴 **관문이 낸 판정을 버리지 않는다** (Phase 6-AB 보완8).
+        #
+        # 여기는 거절된 후보를 조용히 ``continue`` 했고, 그래서 호출자는 셋을
+        # 가를 수 없었다 — *후보가 애초에 없었다* · *규칙이 막았다* ·
+        # *판정하지 못해 빼놓았다*. 실측 (보완8 §2 A1~A3): 빠른 효과 기회의
+        # 욕망의 항아리 · 어니스트 · 세트한 턴의 함정 셋 모두 ``apply`` 는
+        # 정확한 코드를 돌려주는데 보류는 **0건**이었다.
+        #
+        # 🔴 **같은 이유를 한 번만 적는다** (사용자 요구 ③-8). 대상 조합마다
+        # 적으면 같은 문장이 조합 수만큼 쌓인다. 묶는 열쇠는 (효과 · 코드 ·
+        # 모자란 것) 이고, 효과 식별은 ``reason`` 안에 남는다.
+        #
+        # 🔴 **일부 조합만 거절된 경우를 숨기지 않는다** — 허가 목록은 그대로
+        # 이므로 다른 조합은 후보로 남고, 이 보류는 "그 조합이 왜 안 되는가"
+        # 로 함께 읽힌다 (``allowed`` 와 비교하면 갈린다).
+        refusals: dict[tuple, WithheldAction] = {}
         for card in self._activation_sources(seat):
             for effect_ref in activatable_effects(card.card_id):
                 definition = self._activator.definitions.definition_for(effect_ref)
                 if definition is None:  # pragma: no cover - 목록이 보증한다
                     continue
                 if definition.cost.costs:
+                    # 🔴 **비용 있는 효과는 관문을 지나지 않는다** — 그래서
+                    # 여기서 적을 판정이 없다. 이 자리의 한계는 보고서가
+                    # 적는다 (등재된 효과 전부가 비용이 없으므로 지금은
+                    # 아무것도 걸리지 않는다 — STRUCTURAL-120).
                     continue
                 if definition.activation_kind is ActivationKind.TRIGGER:
                     # **유발은 판에서 만들지 않는다** (Phase 6-Z).
@@ -1202,15 +1341,31 @@ class Duel:
                         selections = selections_for(definition, candidate)
                     except TargetBridgeError:  # pragma: no cover - 위에서 맞춰 만든다
                         continue
-                    if (
-                        self._activation_gate(
-                            candidate, validator=validator, selections=selections
-                        ).validity
-                        is not ActionValidity.VALID
-                    ):
+                    gate = self._activation_gate(
+                        candidate, validator=validator, selections=selections
+                    )
+                    if gate.validity is not ActionValidity.VALID:
+                        # ``missing`` 은 관문이 말한 것을 따른다 — 모른다고
+                        # 하면 채우고, 규칙이 금지한다고 하면 비운다
+                        # (``_trigger_actions`` 와 **같은 기준**이다).
+                        key = (effect_ref, gate.code, gate.missing_rule)
+                        refusals.setdefault(
+                            key,
+                            WithheldAction(
+                                PlayerActionKind.ACTIVATE_EFFECT,
+                                f"{effect_ref} 를 지금 발동할 수 없습니다: "
+                                f"{gate.reason}",
+                                gate.code,
+                                missing=(
+                                    gate.missing_rule
+                                    if gate.validity is ActionValidity.UNKNOWN
+                                    else None
+                                ),
+                            ),
+                        )
                         continue
                     allowed.append(candidate)
-        return allowed
+        return allowed, tuple(refusals.values())
 
     def activation_validator(self, seat: int, offers=None) -> ActionValidator:
         """
@@ -1807,6 +1962,7 @@ class Duel:
                     PlayerActionKind.ACTIVATE_EFFECT,
                     "사건 기록이 없는 사본에서는 유발 후보를 판정할 수 "
                     "없습니다 (유발은 기록된 사건에서 나옵니다).",
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
                     missing=TRIGGER_HISTORY_MISSING,
                 )
             )
@@ -1820,6 +1976,7 @@ class Duel:
                         "여부를 고르는 쪽에 맡기지 않았습니다 — 모름을 "
                         "임의로 바꾸면 규칙이 요구한 처리가 조용히 생략될 "
                         "수 있습니다.",
+                        ValidationCode.RULE_NOT_IMPLEMENTED,
                         missing=TRIGGER_REQUIREMENT_MISSING,
                     )
                 )
@@ -1838,6 +1995,7 @@ class Duel:
                         PlayerActionKind.ACTIVATE_EFFECT,
                         "그 사건의 유발 처리 기회는 이미 끝났습니다 — 그 "
                         "자리에서 다른 절차로 넘어갔습니다.",
+                        ValidationCode.NO_RESPONSE_WINDOW,
                     )
                 )
                 continue
@@ -1851,6 +2009,7 @@ class Duel:
                             PlayerActionKind.ACTIVATE_EFFECT,
                             "체인이 처리 중입니다 — 이 유발의 기회는 남아 "
                             "있지만, 발동은 그 체인이 모두 해결된 뒤입니다.",
+                            ValidationCode.STAGE_FORBIDS_ACTION,
                         )
                     )
                     continue
@@ -1866,6 +2025,7 @@ class Duel:
                         "타이밍을 놓쳤는지 판정할 근거가 없습니다 "
                         f"(강제={offer.is_mandatory} · 어휘 판정="
                         f"{offer.misses_timing}).",
+                        ValidationCode.RULE_NOT_IMPLEMENTED,
                         missing=TRIGGER_WORDING_MISSING,
                     )
                 )
@@ -1879,6 +2039,7 @@ class Duel:
                         PlayerActionKind.ACTIVATE_EFFECT,
                         "그 사건 뒤에 다른 일이 일어나 「때」 유발의 타이밍을 "
                         "놓쳤습니다.",
+                        ValidationCode.TRIGGER_TIMING_MISSED,
                     )
                 )
                 continue
@@ -1907,6 +2068,7 @@ class Duel:
                         f"{offer.effect_ref} 의 발동 기회가 열렸지만 이 "
                         "저장소에 그 효과의 실행 구현이 없습니다 — 이 유발을 "
                         "처리하지 못합니다.",
+                        ValidationCode.RULE_NOT_IMPLEMENTED,
                         missing=TRIGGER_IMPLEMENTATION_MISSING,
                     )
                 )
@@ -1921,6 +2083,7 @@ class Duel:
                         PlayerActionKind.ACTIVATE_EFFECT,
                         f"{offer.effect_ref} 의 대상 지정을 이 계층이 옮기지 "
                         "못했습니다 — 이 유발을 처리하지 못합니다.",
+                        ValidationCode.RULE_NOT_IMPLEMENTED,
                         missing=TRIGGER_IMPLEMENTATION_MISSING,
                     )
                 )
@@ -1942,6 +2105,10 @@ class Duel:
                         PlayerActionKind.ACTIVATE_EFFECT,
                         f"{offer.effect_ref} 의 발동 기회가 열렸지만 발동 "
                         f"관문을 지나지 못했습니다: {gate.reason}",
+                        # 🔴 **관문의 코드를 그대로 옮긴다** (보완8). 전에는
+                        # ``missing`` 만 옮겼고, 그래서 읽는 쪽이 규칙 거절과
+                        # 모름을 "비었는지" 로 짐작해야 했다.
+                        gate.code,
                         missing=(
                             gate.missing_rule
                             if gate.validity is ActionValidity.UNKNOWN
@@ -2213,14 +2380,31 @@ class Duel:
                 WithheldAction(
                     PlayerActionKind.PASS,
                     f"응답 기회가 열려 있지만 지금은 P{holder} 의 차례입니다.",
+                    ValidationCode.NOT_PRIORITY_HOLDER,
                 )
             )
         elif seat != self.turn_player:
+            # 🔴 **보완8 이 이 자리를 모름에서 확정 거부로 옮겼다.**
+            #
+            # 전에는 ``missing="우선권을 여는 규칙 (Phase 2-F)"`` 였고, 그
+            # 문장은 **우선권을 여는 계층이 아직 없다**는 뜻이었다 (2-F 가
+            # 그것을 쓰기 전이다). 지금은 그 계층이 있고 (6-S · 6-AB 계열이
+            # 창을 열고 닫는다), 비턴 플레이어가 그 창 밖에서 지나갈 것이
+            # **없다는 것은 규칙이 답하는 사실**이다 — ``PASS`` 는 기회에
+            # 대한 응답이고, 기회가 없으면 응답할 대상이 없다.
+            #
+            # 근거는 룰북 ``TURN PLAYER'S PRIORITY`` 다: *"As long as the
+            # turn player has Priority, the opponent cannot activate cards
+            # or effects, except for effects that activate automatically."*
+            # 그 예외(유발)는 ``_trigger_actions`` 가 **따로** 본다.
             withheld.append(
                 WithheldAction(
                     PlayerActionKind.PASS,
-                    "우선권이 열려 있지 않습니다.",
-                    missing="우선권을 여는 규칙 (Phase 2-F)",
+                    "지나갈 응답 기회가 열려 있지 않습니다 — 지금은 "
+                    f"P{self.turn_player} 의 열린 상태이고, 비턴 플레이어가 "
+                    "할 수 있는 것은 자동으로 발동하는 유발 효과뿐입니다 "
+                    "(룰북 TURN PLAYER'S PRIORITY).",
+                    ValidationCode.NO_RESPONSE_WINDOW,
                 )
             )
 
@@ -2236,14 +2420,81 @@ class Duel:
             if plan.permits_transition:
                 allowed.append(PlayerAction.end_phase(actor=seat))
             else:
+                # 🔴 **진행 계층이 낸 코드를 그대로 옮긴다** (보완8). 전에는
+                # 이유와 ``missing`` 만 옮기고 코드를 버렸고, 그래서 ``apply``
+                # 가 같은 거절을 ``RULE_NOT_IMPLEMENTED`` 로 다시 적었다.
+                unresolved = "; ".join(plan.unresolved_rules) or None
                 withheld.append(
                     WithheldAction(
                         PlayerActionKind.END_PHASE,
                         plan.verdict.reason,
-                        missing="; ".join(plan.unresolved_rules) or None,
+                        plan.verdict.code,
+                        missing=unresolved,
                     )
                 )
         return allowed, withheld
+
+    def _stage_closed_actions(self, seat: int) -> "tuple[WithheldAction, ...]":
+        """
+        **판이 열린 상태가 아니어서 닫힌 행동들** (Phase 6-AB 보완8).
+
+        열려 있으면 빈 묶음이다 — 그때는 이 다섯(여덟)이 후보로 오르거나
+        각자의 관문이 거절하고, 어느 쪽이든 이유가 따로 남는다.
+
+        🔴 **새 규칙을 만들지 않는다.** 어느 단계인지는
+        :meth:`_activation_stage` 가 이미 답하고, 무엇이 열린 상태 전용인지는
+        :data:`OPEN_STATE_ONLY_KINDS` 한 벌이 적는다. 이 함수가 하는 일은
+        **그 둘을 읽어 문장으로 옮기는 것**뿐이다.
+
+        🔴 **유발 등재 단계는 여기서 적지 않는다.** 그 단계의 거절은
+        :meth:`_enforce_mandatory` 가 허가 목록을 좁히면서 **이미** 적고
+        (강제인지 임의인지까지 갈라서), 여기서 또 적으면 같은 사실이 두 줄이
+        된다.
+
+        🔴 **종류마다 한 줄이다** (사용자 요구 ③-8) — 카드 수와 무관하다.
+        """
+        if self.priority.is_open:
+            stage = self._activation_stage()
+            where = (
+                "체인 응답 단계"
+                if stage is ActivationStage.CHAIN_RESPONSE
+                else "빠른 효과 기회"
+            )
+            reason = (
+                f"{where}이므로 판이 열린 상태가 아닙니다 — 공식 Fast "
+                "Effect Timing 의 상자 A 에서만 할 수 있는 행동입니다. "
+                "양쪽이 이 기회를 지나가면 판이 다시 열립니다."
+            )
+        elif seat != self.turn_player:
+            # 🔴 **판은 열려 있는데 이 자리의 것이 아니다.** 비턴 플레이어가
+            # 할 수 있는 것은 자동으로 발동하는 유발 효과뿐이다 (룰북
+            # ``TURN PLAYER'S PRIORITY``), 그리고 그쪽은
+            # :meth:`_trigger_actions` 가 따로 본다.
+            reason = (
+                f"지금은 P{self.turn_player} 의 열린 상태입니다 — 비턴 "
+                "플레이어는 자동으로 발동하는 유발 효과 외에는 행동할 수 "
+                "없습니다 (룰북 TURN PLAYER'S PRIORITY)."
+            )
+            # 🔴 **여기서는 발동도 함께 적는다** (보완8). 열린 상태의 비턴
+            # 플레이어는 **자동으로 발동하는 유발 외에** 아무것도 발동할 수
+            # 없고, 그 예외는 :meth:`_trigger_actions` 가 따로 열어 허가
+            # 목록에 올린다. 그래서 이 줄은 "그 예외가 아닌 발동" 에 대한
+            # 말이고, 허가 목록과 함께 읽으면 둘이 갈린다.
+            #
+            # 🔴 빠른 효과 기회 쪽에는 이 줄을 **더하지 않는다** — 그 단계의
+            # 발동은 스펠 스피드 2 이상이면 적법하고, 효과별 거절은
+            # :meth:`_activation_actions` 가 효과 이름과 함께 적는다.
+            return tuple(
+                WithheldAction(kind, reason, ValidationCode.NOT_TURN_PLAYER)
+                for kind in OPEN_STATE_ONLY_KINDS
+                + (PlayerActionKind.ACTIVATE_EFFECT,)
+            )
+        else:
+            return ()
+        return tuple(
+            WithheldAction(kind, reason, ValidationCode.STAGE_FORBIDS_ACTION)
+            for kind in OPEN_STATE_ONLY_KINDS
+        )
 
     def _withheld_board_actions(self, seat: int, validator: ActionValidator):
         """
@@ -2261,6 +2512,7 @@ class Duel:
                 WithheldAction(
                     PlayerActionKind.ACTIVATE_CARD,
                     verdict.reason,
+                    verdict.code,
                     missing=verdict.missing_rule,
                 )
             )
@@ -2345,24 +2597,107 @@ class Duel:
         🔴 **좁히지도 넓히지도 않는다.** 돌려주는 ``accepted`` 는 여전히
         거짓이다. 바뀌는 것은 **왜 거절됐는지**뿐이다.
 
-        🔴 **관문이 아무 말도 하지 않으면 예전 문장 그대로**다 — 그 자리는
-        우선권 · 차례 · 필수 처리처럼 흐름 계층이 막은 경우이고, 그쪽의
-        이유는 보류 목록에 있다.
+        🔴 **흐름 계층의 이유도 이제 읽는다** (Phase 6-AB 보완8).
+
+        보완6 은 "관문이 아무 말도 하지 않으면 예전 문장 그대로" 로 두었고,
+        그 자리가 BLOCKER-F6-2 였다. 실측 (보완8 §2 A4~A6 · B1~B3)::
+
+            빠른 효과 기회에서 일반 소환 요청
+            → RULE_NOT_IMPLEMENTED "normal_summon 는 지금 허가된 행위가 아닙니다."
+            유발 등재 중 END_PHASE 요청
+            → RULE_NOT_IMPLEMENTED "end_phase 는 지금 허가된 행위가 아닙니다."
+               🔴 그런데 **보류 목록에는 정확한 이유가 이미 있었다** —
+                  "유발 처리 기회가 열려 있습니다 … (공식 Fast Effect
+                  Timing — box A 에서만 할 수 있는 행동입니다)"
+
+        즉 규칙을 다시 구현할 필요가 없었다. **이미 판정한 계층의 말을
+        옮기기만** 한다.
+
+        판정 우선순위 — 위에서부터 먼저다
+        ---------------------------------
+        ================================  ==================================
+        1. 발동 관문 (``_activation_gate``)  그 **행위 하나**에 대한 판정이다.
+                                           발동에만 있다
+        2. 규칙 검증기 (``ActionValidator``) 그 행위 하나에 대한 규칙 쪽 판정.
+                                           흐름 둘(``PASS`` ·
+                                           ``END_PHASE``)에는 답하지 않는다
+        3. 보류 목록의 같은 종류             흐름 계층(단계 · 차례 · 필수
+                                           처리)이 **종류 단위**로 낸 판정
+        4. 그래도 없으면 예전 문장           남은 자리를 숨기지 않는다
+        ================================  ==================================
+
+        🔴 **행위 단위가 종류 단위보다 먼저다.** 같은 행위에 두 이유가 겹칠
+        때 (예: 빠른 효과 기회에 **가려진 카드**를 가리킨 소환) 더 좁은 쪽이
+        실제 이유이고, 종류 단위의 단계 설명을 앞세우면 *"부수적으로 발견한
+        문제를 실제 제외 이유처럼"* 적는 일이 된다.
+
+        🔴 **좁히지도 넓히지도 않는다.** 돌려주는 ``accepted`` 는 여전히
+        거짓이다. 바뀌는 것은 **왜 거절됐는지**뿐이다.
         """
         verdict = self._refusal_verdict(action)
+        if verdict is None:
+            verdict = self._rule_verdict(action)
         if verdict is not None:
-            return DuelStep(
-                action,
-                False,
-                verdict.code,
-                verdict.reason,
-            )
+            return DuelStep(action, False, verdict.code, verdict.reason)
+
+        held = self._withheld_for(action, legal)
+        if held is not None:
+            return DuelStep(action, False, held.code, held.reason)
+
         return DuelStep(
             action,
             False,
             ValidationCode.RULE_NOT_IMPLEMENTED,
             f"{action.kind.value} 는 지금 허가된 행위가 아닙니다.",
         )
+
+    def _rule_verdict(self, action: PlayerAction) -> "ValidationResult | None":
+        """
+        그 행위를 **규칙 검증기**가 거절했는가 (Phase 6-AB 보완8).
+
+        발동이 아닌 종류의 거절 이유다 — 소환 · 세트 · 공격 · 위치 변경.
+        검증기가 통과시키면 ``None`` 이고, 그러면 막은 것은 흐름 계층이므로
+        :meth:`_withheld_for` 가 그쪽의 말을 찾는다.
+
+        🔴 **흐름 둘은 묻지 않는다.** ``PASS`` 와 ``END_PHASE`` 는 검증기가
+        답하지 않는 종류이고 (``deck/opening.py`` 의 ``_gate_code`` 도 그
+        둘을 ``"FLOW"`` 로 따로 적는다), 물으면 "그 종류를 모른다" 는 답이
+        실제 이유를 덮는다.
+
+        🔴 **판을 바꾸지 않는다** — 검증기는 ``GameStateView`` 만 받는다.
+        """
+        if action.kind in (PlayerActionKind.PASS, PlayerActionKind.END_PHASE):
+            return None
+        if action.kind is PlayerActionKind.ACTIVATE_EFFECT:
+            # 그쪽은 ``_refusal_verdict`` 가 **세 관문 전부**로 답했다.
+            return None
+        verdict = self.activation_validator(action.actor).validate(action)
+        if verdict.validity is ActionValidity.VALID:
+            return None
+        return verdict
+
+    @staticmethod
+    def _withheld_for(
+        action: PlayerAction, legal: LegalActions
+    ) -> "WithheldAction | None":
+        """
+        그 **종류**에 대해 보류 목록이 적어 둔 이유 (Phase 6-AB 보완8).
+
+        🔴 **확정 거부를 먼저 고른다.** 한 종류에 여러 줄이 있을 수 있고
+        (예: 단계가 닫았고 동시에 판정하지 못한 자리도 있다), 그때 *"규칙이
+        금지한다"* 가 *"아직 모른다"* 보다 **더 확실한 사실**이다. 모름을
+        앞세우면 규칙상 불가능한 행동이 미지원으로 집계된다.
+
+        🔴 **지어내지 않는다.** 그 종류에 대한 줄이 없으면 ``None`` 이고,
+        부르는 쪽은 예전 문장을 쓴다.
+        """
+        same = [held for held in legal.withheld if held.kind is action.kind]
+        if not same:
+            return None
+        for held in same:
+            if held.is_rule_refusal:
+                return held
+        return same[0]
 
     def _refusal_verdict(
         self, action: PlayerAction

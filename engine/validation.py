@@ -181,6 +181,58 @@ class ValidationCode(str, Enum):
     것을 위반으로 접지 않는다.
     """
 
+    # --- 흐름의 단계 · 필수 절차 (Phase 6-AB 보완8) ----------------------
+    STAGE_FORBIDS_ACTION = "stage_forbids_action"
+    """
+    **지금 흐름의 단계가 그 행동을 허용하지 않는다** (RULE-CHAIN 계열 ·
+    공식 Fast Effect Timing).
+
+    근거는 도표의 두 문장이다 — *"Many actions can ONLY be performed when
+    the game state is open (when you're in box A)."* · *"Whenever either
+    player performs an action, the game state is no longer open."* 그래서
+    유발 처리 기회와 빠른 효과 기회에서는 통상 소환 · 세트 · 공격 · 페이즈
+    이동을 할 수 없다.
+
+    **셋과 합치지 않는다.**
+
+    ===========================  =====================================
+    ``NOT_PRIORITY_HOLDER``       기회는 열렸는데 **이 자리의 차례가
+                                  아니다** — 단계가 아니라 순서다
+    ``WRONG_PHASE``               게임의 **페이즈**가 아니다 (메인 ·
+                                  배틀) — 흐름의 단계와 다른 축이다
+    ``MANDATORY_TRIGGER_PENDING``  규칙이 **요구한 처리**가 남아 있다 —
+                                  단계가 아니라 의무다
+    ===========================  =====================================
+
+    🔴 ``RULE_NOT_IMPLEMENTED`` 와 **반대쪽**이다. 이 코드는 *"규칙이
+    금지한다"* 이고 그쪽은 *"이 저장소에 그 규칙이 없다"* 다. 섞어 적으면
+    보고 계층이 규칙상 불가능한 행동을 **고쳐야 할 공백**으로 적는다
+    (Phase 6-AB 보완6 · 보완8 이 그 자리를 고쳤다).
+    """
+    MANDATORY_TRIGGER_PENDING = "mandatory_trigger_pending"
+    """
+    **강제 유발 처리가 남아 있다** — 규칙이 요구한 처리를 넘기고 다른 것을
+    할 수 없다 (룰북 ``TURN PLAYER'S PRIORITY`` 의 유발 예외).
+
+    ``STAGE_FORBIDS_ACTION`` 과 가르는 이유: 임의 유발 기회는 **포기할 수
+    있고**(그 자리의 ``PASS``), 강제는 포기할 수 없다. 6-AA 가 세운 강제 ·
+    임의의 구분이 거절 코드에도 남아야 읽는 쪽이 "지나가면 된다" 와 "처리해야
+    한다" 를 가를 수 있다.
+
+    🔴 **처리할 수 없는 강제 유발과도 다르다.** 그쪽은 규칙이 요구했는데
+    엔진이 발동하지 못하는 자리이고 ``RULE_NOT_IMPLEMENTED`` 와
+    ``MANDATORY_TRIGGER_UNPLAYABLE`` 로 적는다 — **모름**이다.
+    """
+    TRIGGER_TIMING_MISSED = "trigger_timing_missed"
+    """
+    **「때」 유발이 타이밍을 놓쳤다** — 그 사건 뒤에 다른 일이 일어났다.
+
+    어휘 판정(「때」 / 「경우」)이 확인된 유발에만 쓴다. 어휘를 판정할 근거가
+    없으면 이 코드가 아니라 ``RULE_NOT_IMPLEMENTED`` 이고
+    ``TRIGGER_WORDING_MISSING`` 이 그 사실을 적는다 — **모름을 위반으로
+    접지 않는다.**
+    """
+
     PRIORITY_STATE_STALE = "priority_state_stale"
     """
     우선권 상태가 지금 판과 맞지 않는다 (턴 플레이어 · 페이즈가 다르다).
@@ -305,6 +357,17 @@ CODE_VALIDITY: "dict[ValidationCode, ActionValidity | None]" = {
     ValidationCode.NORMAL_SUMMON_ALREADY_USED: ActionValidity.INVALID,
     # --- 발동 타이밍 · 스펠 스피드 (Phase 2-S) --------------------------
     ValidationCode.SPELL_SPEED_TOO_LOW: ActionValidity.INVALID,
+    # --- 흐름의 단계 · 필수 절차 (Phase 6-AB 보완8) — 셋 다 확정 거부 ----
+    #:
+    #: 🔴 **셋 다 ``INVALID`` 다.** 보완8 이 이 코드들을 더한 이유가 바로
+    #: 그것이다 — 그 자리들이 ``RULE_NOT_IMPLEMENTED``(모름)으로 보고되어
+    #: 규칙상 불가능한 행동이 **엔진 미지원**으로 집계되고 있었다 (실측:
+    #: 보완8 §2). 확인된 규칙이 금지한 것은 모름이 아니다.
+    ValidationCode.STAGE_FORBIDS_ACTION: ActionValidity.INVALID,
+    ValidationCode.MANDATORY_TRIGGER_PENDING: ActionValidity.INVALID,
+    #: 🔴 어휘를 **판정할 수 없을** 때는 이 코드가 아니다 (설명 참고) —
+    #: 그쪽은 ``RULE_NOT_IMPLEMENTED`` 이고 모름 쪽에 남는다.
+    ValidationCode.TRIGGER_TIMING_MISSED: ActionValidity.INVALID,
     #: 설명이 직접 적는다 — "``INVALID`` 가 아니라 ``UNKNOWN`` 에 쓴다".
     ValidationCode.PRIORITY_STATE_STALE: ActionValidity.UNKNOWN,
 }

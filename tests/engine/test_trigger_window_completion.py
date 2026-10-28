@@ -78,7 +78,7 @@ from engine.ids import EffectRef
 from engine.payment import CostPayer
 from engine.trigger import TriggerRequirement
 from engine.trigger_compiler import TEXT_IF, TEXT_WHEN, wording_from
-from engine.validation import ValidationCode
+from engine.validation import ActionValidity, ValidationCode
 from engine.vocabulary import ActivationKind, Zone
 
 from integration.autonomy import PolicyChooser, TriggerSource
@@ -871,18 +871,35 @@ def test_d01_only_a_named_missing_rule_counts_as_unsupported():
     "규칙이 막았다" 와 "이 저장소에 그 규칙이 없다" 는 다른 사실이다.
     섞으면 읽는 쪽이 규칙의 답을 결함으로 읽거나 그 반대가 된다.
     """
+    #: 🔴 **보완8 이 ``code`` 를 더했다** — 전에는 셋째 인자가 ``missing``
+    #: 이었고, ``missing`` 이 비었는지로 읽는 쪽이 종류를 짐작했다. 지금은
+    #: 코드가 그것을 말하고, 코드와 ``missing`` 의 일치는 자료형이 강제한다
+    #: (확정 거부에 "없는 것" 을 붙이면 생성이 거부된다).
     legal = LegalActions(
         seat=MINE,
         allowed=(),
         withheld=(
-            WithheldAction(PlayerActionKind.END_PHASE, "순서가 아닙니다"),
             WithheldAction(
-                PlayerActionKind.ACTIVATE_EFFECT, "규칙이 없습니다", "rule-x"
+                PlayerActionKind.END_PHASE,
+                "순서가 아닙니다",
+                ValidationCode.STAGE_FORBIDS_ACTION,
+            ),
+            WithheldAction(
+                PlayerActionKind.ACTIVATE_EFFECT,
+                "규칙이 없습니다",
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                missing="rule-x",
             ),
         ),
     )
     assert [held.missing for held in legal.unsupported()] == ["rule-x"]
     assert LegalActions(MINE).unsupported() == ()
+
+    #: 🔴 그리고 그 구분이 **코드에서도** 읽힌다 — 문장을 보지 않는다.
+    assert [held.is_rule_refusal for held in legal.withheld] == [True, False]
+    assert [held.validity for held in legal.unsupported()] == [
+        ActionValidity.UNKNOWN
+    ]
 
 
 def test_d02_a_simulation_result_refuses_an_edge_without_a_future():

@@ -847,16 +847,28 @@ def test_g02_a_rule_refusal_is_not_counted_as_unsupported(repository):
     assert verdict.validity is ActionValidity.INVALID
     assert verdict.missing_rule is None
 
-    #: 🔴 **그리고 이 경로는 보류 자체를 남기지 않는다** — 재어 둔다.
-    #: 비유발 후보 생성은 관문 거절을 조용히 건너뛴다 (``continue``).
-    #: 그래서 "미지원으로 잘못 집계" 가 아니라 "집계에 아예 없다" 가 이
-    #: 자리의 사실이고, 보완7 전에도 그랬다. 남은 한계로 적는다.
+    #: 🔴 **보완8 이 이 자리를 고쳤다 — 보류가 남는다.**
+    #:
+    #: 보완7 은 여기서 ``held == []`` 를 셌고, 그 주석은 *"미지원으로 잘못
+    #: 집계가 아니라 집계에 아예 없다"* 였다. 즉 이 시험이 **BLOCKER-F7-1
+    #: 을 못 박고 있었다.** 보완8 이 ``_activation_actions`` 가 관문 판정을
+    #: 보존하게 했으므로 지금은 한 줄이 남는다.
+    #:
+    #: 🔴 **느슨하게 한 것이 아니라 더 센다**: 그 줄이 (1) 규칙 거절이고
+    #: (2) 코드가 관문의 것과 같고 (3) ``missing`` 이 비어 있어 미지원
+    #: 집계에 들어가지 않고 (4) 어느 효과인지가 문장에 남아 있다.
     held = [
         w
         for w in duel.legal_actions(P0).withheld
         if w.kind is PlayerActionKind.ACTIVATE_EFFECT
     ]
-    assert held == []
+    assert len(held) == 1, held
+    assert held[0].code is ValidationCode.SPELL_SPEED_TOO_LOW
+    assert held[0].is_rule_refusal is True
+    assert held[0].missing is None
+    assert str(HONEST_REF) in held[0].reason
+    #: 그래서 미지원 집계에는 들어가지 않는다 — 규칙이 막은 것이다.
+    assert held[0] not in duel.legal_actions(P0).unsupported()
 
 
 # ======================================================================
