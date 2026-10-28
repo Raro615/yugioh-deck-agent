@@ -1018,7 +1018,12 @@ def test_25_this_phase_changed_no_production_file():
         #: 🔴 618 → **804** (Phase 6-AB 보완6). ``ActivationStage`` 와
         #: ``_by_stage`` 그리고 그 둘의 설명이다. 아래의 문자열에 둔감한
         #: 핀이 실행 코드 43줄을 따로 잡는다 — 나머지 143줄은 설명이다.
-        "engine/activation_timing.py": 804,
+        #:
+        #: 🔴 804 → **952** (Phase 6-AB 보완7). ``KIND_SPEED`` ·
+        #: ``KIND_RULES`` 와 ``ActivationTiming`` 의 칸 둘, 그리고 그것들의
+        #: 설명이다. 아래의 문자열에 둔감한 핀이 실행 코드 18줄을 따로
+        #: 잡는다 — 나머지 130줄은 설명이다.
+        "engine/activation_timing.py": 952,
     }
 
     #: 🔴 주석 · docstring 에 둔감한 핀 (Phase 3-F-26 이 더했다).
@@ -1120,7 +1125,18 @@ def test_25_this_phase_changed_no_production_file():
         #: ``TRIGGER_REGISTRATION`` 은 그대로 통과한다. 단계를 말해 주지
         #: 않으면 ``UNKNOWN`` 이다 — 추측하지 않는다. 근거는 공식 Fast
         #: Effect Timing 의 상자 A 설명이다.
-        "engine/activation_timing.py": 276,
+        #:
+        #: 🔴 276 → **294** (Phase 6-AB 보완7). **실행 코드 18줄**이다 —
+        #: ``KIND_SPEED`` · ``KIND_RULES`` 두 표(각 5줄), ``ActivationTiming``
+        #: 의 칸 둘과 그 타입 검사, ``classify_spell_speed`` 의 몬스터 갈래
+        #: 하나, ``spell_speed`` · ``speed_of_link`` · ``check`` ·
+        #: ``_by_stage`` 가 그 값을 넘기는 자리들.
+        #:
+        #: 🔴 **몬스터 효과에 속도를 일괄 부여한 것이 아니다.** 늘어난
+        #: 갈래는 **분류를 받았을 때만** 답하고, 받지 못하면
+        #: ``MONSTER_CLASSIFICATION_MISSING`` 그대로다 — 추측하지 않는다.
+        #: 근거는 룰북 §effect_types 의 ``spell_speed`` 다.
+        "engine/activation_timing.py": 294,
     }
 
 
