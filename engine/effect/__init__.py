@@ -52,6 +52,7 @@ from engine.effect.definition import (
     EmptyImplementationLookup,
     ExecutionAvailability,
     execution_availability,
+    verified_activation_kind,
 )
 from engine.effect.operation import (
     CARD_OPERATION_KINDS,
@@ -143,6 +144,7 @@ __all__ = [
     "EffectImplementationLookup",
     "EmptyImplementationLookup",
     "execution_availability",
+    "verified_activation_kind",
     # 하는 일
     "Operation",
     "OperationKind",

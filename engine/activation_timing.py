@@ -83,7 +83,7 @@ from engine.ids import InstanceId
 from engine.priority import PriorityState
 from engine.trigger import TimingPoint
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
-from engine.vocabulary import Zone
+from engine.vocabulary import ActivationKind, Zone
 
 
 class SpellSpeed(int, Enum):
@@ -220,6 +220,38 @@ SPEED_RULES: dict[SpellSpeed, tuple[str, ...]] = {
     SpellSpeed.COUNTER: ("RULE-CHAIN-006", "RULE-CHAIN-003"),
 }
 
+#: **효과 분류 하나가 정하는 스펠 스피드.** 룰북에서 옮긴 표다
+#: (Phase 6-AB 보완7).
+#:
+#: ``sd-rulebook-en-v10.json`` 의 ``effect_types[*].spell_speed`` 와 같아야
+#: 하고 테스트가 그것을 대조한다 (``RESPONSE_TABLE`` · ``SPEED_RULES`` 와
+#: **같은 약속**이다 — ``engine`` 은 ``rules`` 를 import 하지 않는다).
+#:
+#: 🔴 **카드가 아니라 효과에 붙는다.** 이것이 이 표를 더한 이유다 — 모듈
+#: 설명의 경고가 적은 입도 불일치("``classify_spell_speed`` 는 카드 하나를
+#: 받는데 공식 분류는 효과 하나에 붙는다")를 메우는 자리이고, 같은 카드의
+#: ``e[0]`` 과 ``e[1]`` 이 다른 답을 받을 수 있다.
+#:
+#: 🔴 **EDOPro 의 ``QUICK_O`` 를 카드 단위로 읽어서 만든 표가 아니다.**
+#: 모듈 설명이 그 방법이 성립하지 않는다고 측정해 두었고 (856장이 1 계열과
+#: 2 계열을 둘 다 가진다), 이 표의 입력은 그것이 아니라 **손으로 적어 검증한**
+#: :attr:`~engine.effect.definition.EffectDefinition.activation_kind` 다
+#: (ADR-006). 적히지 않은 효과는 ``None`` 이고 ``None`` 은 **모른다**다.
+KIND_SPEED: dict[ActivationKind, SpellSpeed] = {
+    ActivationKind.IGNITION: SpellSpeed.NORMAL,
+    ActivationKind.TRIGGER: SpellSpeed.NORMAL,
+    ActivationKind.FLIP: SpellSpeed.NORMAL,
+    ActivationKind.QUICK: SpellSpeed.FAST,
+}
+
+#: 효과 분류별 근거 규칙 번호. 룰북 ``effect_types[*].rules`` 의 첫 번호다.
+KIND_RULES: dict[ActivationKind, tuple[str, ...]] = {
+    ActivationKind.IGNITION: ("RULE-EFFECT-002", "RULE-CHAIN-004"),
+    ActivationKind.TRIGGER: ("RULE-EFFECT-004", "RULE-CHAIN-004"),
+    ActivationKind.FLIP: ("RULE-EFFECT-005", "RULE-CHAIN-004"),
+    ActivationKind.QUICK: ("RULE-EFFECT-003", "RULE-CHAIN-005"),
+}
+
 #: 세트한 턴을 **부르는 쪽이 알려주지 않았을** 때 모자란 것.
 #:
 #: 이 계층은 판을 읽지 않으므로 (``GameStateView`` 만 받는다) "이 카드를 이
@@ -313,12 +345,28 @@ FACE_DOWN = SpellSpeedClassification(
 
 def classify_spell_speed(
     definition: CardDefinitionView | None,
+    *,
+    activation_kind: ActivationKind | None = None,
 ) -> SpellSpeedClassification:
     """
-    카드 정의 하나의 스펠 스피드. **카드 종류만 본다.**
+    카드 정의 하나의 스펠 스피드.
 
-    마법 · 함정은 종류가 속도를 정하지만, 몬스터는 정하지 못한다 — 모듈
-    설명 참고.
+    마법 · 함정은 **카드 종류**가 속도를 정한다 (``activation_kind`` 를 보지
+    않는다 — 그 축에 마법 · 함정의 발동이 없는 이유를
+    :class:`~engine.vocabulary.ActivationKind` 가 적어 두었다).
+
+    ``activation_kind`` (Phase 6-AB 보완7)
+        **이번에 발동하려는 효과 하나**의 분류다. 몬스터 효과는 카드 종류로
+        속도가 정해지지 않으므로 (모듈 설명) 이 값이 있을 때만 정해진다.
+
+        🔴 **``None`` 은 "모른다" 이고 그대로 ``UNKNOWN`` 이다.** 몬스터라는
+        이유로 1 도 2 도 주지 않는다 — 1 로 주면 유발즉시가 영영 응수하지
+        못하고, 2 로 주면 기동 효과가 상대 턴에 발동한다.
+
+        🔴 **출처가 정해져 있다.** 부르는 쪽이 지어낸 값이 아니라 손으로
+        적어 검증한 :attr:`~engine.effect.definition.EffectDefinition.
+        activation_kind` 여야 하고, 그 효과가 **이 카드의 효과**임을 부르는
+        쪽이 먼저 확인한다 (``EffectDefinition.source_card_id``).
     """
     if definition is None:
         return NOT_VISIBLE
@@ -344,8 +392,21 @@ def classify_spell_speed(
             SpellSpeed.NORMAL, "카드 종류: SPELL", SPEED_RULES[SpellSpeed.NORMAL]
         )
     if definition.is_monster:
+        if activation_kind is not None:
+            # 🔴 **이 효과의 분류가 확인됐다** (보완7). 그러면 추측이 아니라
+            # 룰북의 표를 읽는 것이다 — ``KIND_SPEED`` 의 설명 참고.
+            if not isinstance(activation_kind, ActivationKind):
+                raise TypeError(
+                    "activation_kind 는 ActivationKind 또는 None 입니다: "
+                    f"{activation_kind!r}"
+                )
+            return SpellSpeedClassification(
+                KIND_SPEED[activation_kind],
+                f"효과 분류: {activation_kind.value}",
+                KIND_RULES[activation_kind],
+            )
         # **추측하지 않는다.** 이 카드의 어느 효과인지에 따라 1 일 수도
-        # 2 일 수도 있고, 그 분류가 이 엔진에 없다.
+        # 2 일 수도 있고, 분류를 받지 못하면 그것을 알 수 없다.
         return SpellSpeedClassification(
             None, "몬스터 효과", missing=MONSTER_CLASSIFICATION_MISSING
         )
@@ -421,11 +482,52 @@ class ActivationTiming:
     정해지므로 (``CHAIN_RESPONSE``) 기존 판정이 그대로 간다.
     """
 
+    activation_kind: "ActivationKind | None" = None
+    """
+    **이번에 발동하려는 효과**의 분류 (보완7).
+
+    ``point`` · ``set_this_turn`` · ``simultaneous`` · ``stage`` 와 **같은
+    자리**다 — 관측(``GameStateView``)에 없고, 효과 정의 등록부를 들고 있는
+    쪽이 읽어서 값으로 넘긴다 (ADR-007).
+
+    🔴 **카드가 아니라 효과 하나에 붙는다.** 같은 카드가 기동 효과와
+    유발즉시를 함께 가질 수 있으므로 (모듈 설명의 856장) ``action.source`` 로
+    부터 되찾을 수 없다. 그래서 ``EffectRef`` 로 찾은 **그 효과**의 분류를
+    받는다.
+
+    🔴 **``None`` 은 "모른다"** 이지 "분류가 없다" 가 아니다. 마법 · 함정은
+    카드 종류로 속도가 정해지므로 주지 않아도 되고, 몬스터 효과는 주지
+    않으면 ``UNKNOWN`` 이다 — 허가가 아니다.
+    """
+
+    responding_kind: "ActivationKind | None" = None
+    """
+    **응수하려는 링크**의 효과 분류 (보완7).
+
+    :attr:`activation_kind` 와 같은 축이고 보는 대상만 다르다. 체인에 쌓인
+    링크의 속도도 몬스터 효과면 카드 종류로 정해지지 않는다 — 실측(보완7
+    §2): 전 턴에 세운 적법한 함정이 몬스터 효과에 응수하려 할 때
+    *"응수할 링크의 스펠 스피드를 판정할 수 없습니다 (몬스터 효과)"* 로
+    ``RULE_NOT_IMPLEMENTED`` 를 받았다. 규칙은 그 응수를 허락한다
+    (스펠 스피드 2 → 1).
+
+    🔴 **체인이 비어 있으면 쓰이지 않는다.** 응수할 링크가 없으면
+    :attr:`responding_to` 가 ``None`` 이고 이 값도 읽히지 않는다.
+    """
+
     def __post_init__(self) -> None:
         if self.stage is not None and not isinstance(self.stage, ActivationStage):
             raise TypeError(
                 f"stage 는 ActivationStage 또는 None 입니다: {self.stage!r}"
             )
+        for name, kind in (
+            ("activation_kind", self.activation_kind),
+            ("responding_kind", self.responding_kind),
+        ):
+            if kind is not None and not isinstance(kind, ActivationKind):
+                raise TypeError(
+                    f"{name} 는 ActivationKind 또는 None 입니다: {kind!r}"
+                )
         if not isinstance(self.simultaneous, bool):
             raise TypeError(
                 f"simultaneous 는 bool 입니다: {self.simultaneous!r}"
@@ -458,6 +560,8 @@ class ActivationTiming:
             self.point.value if self.point is not None else None,
             self.set_this_turn,
             self.stage.value if self.stage is not None else None,
+            self.activation_kind.value if self.activation_kind is not None else None,
+            self.responding_kind.value if self.responding_kind is not None else None,
         )
 
     def to_dict(self) -> dict:
@@ -472,6 +576,10 @@ class ActivationTiming:
             data["set_this_turn"] = self.set_this_turn
         if self.stage is not None:
             data["stage"] = self.stage.value
+        if self.activation_kind is not None:
+            data["activation_kind"] = self.activation_kind.value
+        if self.responding_kind is not None:
+            data["responding_kind"] = self.responding_kind.value
         return data
 
     def describe_ko(self) -> str:
@@ -479,7 +587,12 @@ class ActivationTiming:
         stage = (
             self.stage.describe_ko() if self.stage is not None else "단계 모름"
         )
-        return f"{where} · {stage} · {self.priority.describe_ko()}"
+        kind = (
+            self.activation_kind.value
+            if self.activation_kind is not None
+            else "효과 분류 모름"
+        )
+        return f"{where} · {stage} · {kind} · {self.priority.describe_ko()}"
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
         return self.describe_ko()
@@ -515,12 +628,24 @@ class ActivationTimingChecker:
     # ==================================================================
     # 분류
     # ==================================================================
-    def spell_speed(self, instance: InstanceId | None) -> SpellSpeedClassification:
+    def spell_speed(
+        self,
+        instance: InstanceId | None,
+        *,
+        activation_kind: "ActivationKind | None" = None,
+    ) -> SpellSpeedClassification:
         """
         판 위의 카드 하나의 스펠 스피드.
 
         관측에 없으면 **"없다" 가 아니라 "못 봤다"** 이고, 뒷면이면 정체를
         모른다. 셋을 같은 답으로 접지 않는다.
+
+        ``activation_kind`` 는 **그 카드의 어느 효과인가**를 말한다 (보완7).
+        몬스터 효과는 그것 없이는 속도가 정해지지 않는다 —
+        :func:`classify_spell_speed` 의 설명 참고.
+
+        🔴 **뒷면 · 미관측이 분류보다 먼저다.** 분류를 받았다는 것이 "그
+        카드가 거기 있고 정체가 공개됐다" 를 대신하지 않는다.
         """
         if instance is None:
             return SpellSpeedClassification(
@@ -531,15 +656,30 @@ class ActivationTimingChecker:
             return NOT_VISIBLE
         if not card.is_identified:
             return FACE_DOWN
-        return classify_spell_speed(card.definition)
+        return classify_spell_speed(
+            card.definition, activation_kind=activation_kind
+        )
 
-    def speed_of_link(self, link: ChainLink | None) -> SpellSpeedClassification:
-        """체인 링크 하나의 스펠 스피드. 발동한 카드를 보고 정한다."""
+    def speed_of_link(
+        self,
+        link: ChainLink | None,
+        *,
+        activation_kind: "ActivationKind | None" = None,
+    ) -> SpellSpeedClassification:
+        """
+        체인 링크 하나의 스펠 스피드. 발동한 카드를 보고 정한다.
+
+        ``activation_kind`` 는 **그 링크의 효과**의 분류다 (보완7). 링크는
+        :attr:`~engine.chain.ChainLink.effect_ref` 를 들고 있지만 이 계층은
+        효과 정의 등록부를 보지 못하므로 (관측만 받는다) 분류는 값으로
+        받는다 — 그것을 버리고 카드만 보던 자리가 모듈 설명이 적어 둔 세
+        번째 경고였다.
+        """
         if link is None:
             return SpellSpeedClassification(
                 None, "응수할 링크가 없음", missing="chain link"
             )
-        return self.spell_speed(link.source)
+        return self.spell_speed(link.source, activation_kind=activation_kind)
 
     # ==================================================================
     # 판정
@@ -594,7 +734,9 @@ class ActivationTimingChecker:
                 "체인에 함께 쌓입니다).",
             )
 
-        mine = self.spell_speed(action.source)
+        mine = self.spell_speed(
+            action.source, activation_kind=timing.activation_kind
+        )
         if not mine.is_known:
             return self._unknown(
                 f"발동하려는 카드의 스펠 스피드를 판정할 수 없습니다 "
@@ -602,7 +744,9 @@ class ActivationTimingChecker:
                 mine.missing,
             )
 
-        theirs = self.speed_of_link(timing.responding_to)
+        theirs = self.speed_of_link(
+            timing.responding_to, activation_kind=timing.responding_kind
+        )
         if not theirs.is_known:
             return self._unknown(
                 f"응수할 링크의 스펠 스피드를 판정할 수 없습니다 "
@@ -680,7 +824,9 @@ class ActivationTimingChecker:
             )
 
         assert stage is ActivationStage.FAST_WINDOW
-        mine = self.spell_speed(action.source)
+        mine = self.spell_speed(
+            action.source, activation_kind=timing.activation_kind
+        )
         if not mine.is_known:
             return self._unknown(
                 f"발동하려는 카드의 스펠 스피드를 판정할 수 없습니다 "
@@ -795,6 +941,8 @@ __all__ = [
     "SpellSpeed",
     "RESPONSE_TABLE",
     "SPEED_RULES",
+    "KIND_SPEED",
+    "KIND_RULES",
     "UNRESOLVED_TIMING_RULES",
     "MONSTER_CLASSIFICATION_MISSING",
     "SpellSpeedClassification",

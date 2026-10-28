@@ -640,6 +640,28 @@ def duel_components(
     }
 
 
+def effect_kind_of(definitions, effect_ref, *, source_card_id):
+    """
+    **그 효과의 발동 분류** — 다리 쪽의 통로 하나 (Phase 6-AB 보완7).
+
+    판정도 검색도 하지 않는다. :func:`~engine.effect.definition.
+    verified_activation_kind` 를 **그대로** 부르는 한 줄이고, 이 자리에
+    둔 이유는 하나다 — :mod:`engine.duel` 은 ``engine.effect`` 를 import
+    하지 않는다 (``test_a_the_duel_module_still_imports_no_effect_layer``
+    가 AST 로 고정한다). ``duel_components`` 가 journal 객체를 여기서
+    만드는 것과 **같은 자리이고 같은 이유**다.
+
+    🔴 **여기에 규칙을 더하지 않는다.** 분류를 신뢰할 조건(등록부 · 정의 ·
+    카드 일치)은 저쪽 함수 하나가 들고 있고, 두 벌이 되면 한쪽만 카드
+    일치를 확인하는 일이 생긴다.
+    """
+    from engine.effect.definition import verified_activation_kind
+
+    return verified_activation_kind(
+        definitions, effect_ref, source_card_id=source_card_id
+    )
+
+
 def activatable_effects(card_id: int):
     """
     그 카드에서 **실행 구현이 등록된** 효과들 (``EffectRef``).
@@ -663,6 +685,7 @@ __all__ = [
     "duel_resolver",
     "duel_components",
     "activatable_effects",
+    "effect_kind_of",
     "SpellActivationError",
     "SpellPlaced",
     "SpellRetired",

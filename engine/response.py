@@ -70,6 +70,7 @@ from engine.activation_timing import (
 )
 from engine.chain import Chain, ChainResolution, ChainResolver
 from engine.cost import CostPayment
+from engine.effect.definition import verified_activation_kind
 from engine.effect.delta import StateDelta
 from engine.effect.target import TargetSelection
 from engine.game_state_view import GameStateView
@@ -539,9 +540,46 @@ class ResponseLoop:
             것을 허가로 바꾸지 않는다 (:class:`ActivationStage`).
         """
         view = GameStateView.from_state(state, viewer=action.actor)
+        link = response.chain.links[-1] if response.chain.links else None
         return ActivationTimingChecker(view).check(
-            ActivationTiming(response.chain, response.priority, stage=stage),
+            ActivationTiming(
+                response.chain,
+                response.priority,
+                stage=stage,
+                # 🔴 **효과 분류는 받지 않고 직접 찾는다** (보완7). 이 루프는
+                # 등록부(``self._activator.definitions``)를 **들고 있으므로**
+                # ``stage`` 처럼 밖에서 받을 필요가 없다. 찾는 방법은
+                # ``Duel._effect_kind`` 와 **같은 함수** 하나다 —
+                # :func:`~engine.effect.definition.verified_activation_kind`.
+                activation_kind=self._effect_kind(
+                    state, action.effect_ref, action.source
+                ),
+                responding_kind=(
+                    None
+                    if link is None
+                    else self._effect_kind(state, link.effect_ref, link.source)
+                ),
+            ),
             action,
+        )
+
+    def _effect_kind(self, state: GameState, effect_ref, instance):
+        """
+        그 발동이 쓰려는 **효과 하나의 분류** (보완7).
+
+        ``Duel._effect_kind`` 와 같은 일을 하고 **같은 함수**를 부른다 —
+        분류표도 찾는 길도 한 벌이다. ``None`` 은 "모른다" 이고 몬스터
+        효과에서는 그대로 ``UNKNOWN`` 이 된다 (허가가 아니다).
+        """
+        if effect_ref is None or instance is None:
+            return None
+        card = state.find_instance(instance)
+        if card is None:
+            return None
+        return verified_activation_kind(
+            self._activator.definitions,
+            effect_ref,
+            source_card_id=card.card_id,
         )
 
     def may_act(

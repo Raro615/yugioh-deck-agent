@@ -211,7 +211,16 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: 산문이 늘어난 이유도 그것을 적었기 때문이다. 보완6 도
 #: ``UnimplementedRule`` 을 **하나도 만들지 않았다** (위 ``production``
 #: 자리 수는 그대로다).
-RULE_NOT_IMPLEMENTED_MENTIONS = 91
+#: 🔴 91 → **93** (Phase 6-AB 보완7). 늘어난 둘도 **전부 산문**이다 —
+#: ``ActivationTiming.responding_kind`` 와 ``verified_activation_kind`` 의
+#: 설명이 각각 *"적법한 함정이 몬스터 효과에 응수할 수 없었다"* ·
+#: *"이미 확인된 사실을 모른다고 답하고 있었다"* 는 실측을 인용하면서 이
+#: 코드 이름을 적는다.
+#:
+#: 🔴 **이 파일이 지키는 구분이 또 한 번 쓰인 자리다** — 보완7 이 고친
+#: 것이 바로 그 혼동이고 (규칙이 막은 발동과 응수가 이 코드로 보고되던
+#: 자리), 보완7 도 ``UnimplementedRule`` 을 **하나도 만들지 않았다.**
+RULE_NOT_IMPLEMENTED_MENTIONS = 93
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.

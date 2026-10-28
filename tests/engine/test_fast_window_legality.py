@@ -56,7 +56,7 @@ import pytest
 
 from agent.simulation import Simulator
 from engine.action import PlayerAction, PlayerActionKind
-from engine.activation_timing import ActivationStage
+from engine.activation_timing import ActivationStage, SpellSpeed
 from engine.duel import Duel, duel_components
 from engine.ids import EffectRef
 from engine.priority import PriorityState
@@ -377,26 +377,30 @@ def test_c01_an_ignition_effect_is_allowed_while_the_board_is_open(repository):
 
 def test_c02_an_ignition_effect_is_blocked_in_the_fast_window(repository):
     """
-    그 기동 효과가 빠른 효과 기회에서는 후보도 아니고 ``apply`` 도 거절이다.
+    그 기동 효과가 빠른 효과 기회에서는 후보도 아니고 ``apply`` 도 거절이고,
+    🔴 **그 거절이 규칙 거절이다** (Phase 6-AB 보완7 이 정정했다).
 
-    🔴 **그러나 거절의 코드가 통상 마법과 다르다 — 그 사실을 적어 둔다.**
+    보완6 이 쟀던 사실
+    ------------------
+    차단은 성립했지만 코드가 통상 마법과 **달랐다** — ``UNKNOWN`` /
+    ``RULE_NOT_IMPLEMENTED`` 이고 이유가 *"발동하려는 카드의 스펠 스피드를
+    판정할 수 없습니다 (몬스터 효과)"* 였다. 즉 이 자리에서 막은 것은
+    *"판이 열려 있지 않다"* 가 아니라 *"이 몬스터 효과가 빠른 효과인지
+    모른다"* 였고, 모름이 허가가 아니라서 결과적으로 막힌 것이다.
+    보고서가 그것을 BLOCKER-F6-1 로 남겼다.
 
-    통상 마법은 ``INVALID`` / ``SPELL_SPEED_TOO_LOW`` 로 막힌다 (``B`` 절).
-    기동 효과는 ``UNKNOWN`` / ``RULE_NOT_IMPLEMENTED`` 로 막힌다. 이유는
-    **스펠 스피드를 판정하지 못하기 때문**이다 — 실측:
+    보완7 이 바꾼 것
+    ----------------
+    그 분류는 **이미 이 저장소에 있었다** — 어니스트 ①의 정의가
+    ``activation_kind=IGNITION`` 을 들고 있다 (손으로 적어 검증한 값,
+    ADR-006). 없던 것은 그 값이 관문까지 가는 길이고, 보완7 이
+    ``ActivationTiming.activation_kind`` 로 그 길을 냈다. 그래서 지금은
+    룰북의 표(``KIND_SPEED`` — Ignition Effect → 스펠 스피드 1,
+    RULE-EFFECT-002)를 읽어 **통상 마법과 같은 코드**로 막는다.
 
-        발동하려는 카드의 스펠 스피드를 판정할 수 없습니다 (몬스터 효과).
-        missing = monster effect classification
-                  (기동 · 유발 · 플립 vs 유발즉시)
-
-    즉 이 자리에서 막는 것은 *"판이 열려 있지 않다"* 가 아니라 *"이 몬스터
-    효과가 빠른 효과인지 모른다"* 이고, **모름은 허가가 아니므로** 결과적으로
-    막힌다. 차단은 성립하고 **코드의 구분은 성립하지 않는다.**
-
-    🔴 **고칠 정보는 이 저장소에 있다** — 그 정의의 ``activation_kind`` 가
-    ``IGNITION`` 이고, 모자란 축의 이름이 바로 그 구분이다. 다만 그 축은
-    ``MONSTER_CLASSIFICATION_MISSING`` 으로 저장소 전체가 쓰는 자리이므로
-    보완6 이 건드리지 않았다 (보고서 BLOCKER-F6-1).
+    🔴 **기대값을 느슨하게 한 것이 아니라 좁혔다.** 전에는
+    ``RULE_NOT_IMPLEMENTED`` 하나만 셌고, 지금은 ``INVALID`` ·
+    ``SPELL_SPEED_TOO_LOW`` · ``missing_rule is None`` 셋을 센다.
     """
     duel, honest = _honest_board(repository)
     action = _activations(duel, P0, HONEST)[0]
@@ -413,20 +417,56 @@ def test_c02_an_ignition_effect_is_blocked_in_the_fast_window(repository):
     assert step.accepted is False
     assert _fingerprint(duel) == before
 
-    #: ③ 🔴 그러나 코드는 규칙 거절이 아니라 **모름**이다.
-    from engine.activation_timing import MONSTER_CLASSIFICATION_MISSING
-
-    assert step.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    #: ③ 🔴 그리고 그 거절은 **규칙 거절**이다 — 미지원이 아니다.
+    assert step.code is ValidationCode.SPELL_SPEED_TOO_LOW
     verdict = _gate(duel, action)
-    assert verdict.validity is ActionValidity.UNKNOWN
-    assert verdict.missing_rule == MONSTER_CLASSIFICATION_MISSING
-    #: 🔴 그리고 그 모름은 **보완6 이 만든 것이 아니다** — 판이 열려 있어도
-    #: 같은 축이 모자라고, 거기서는 다른 관문이 통과시킨다 (``c01``).
+    assert verdict.validity is ActionValidity.INVALID
+    assert verdict.code is ValidationCode.SPELL_SPEED_TOO_LOW
+    assert verdict.missing_rule is None
+    #: 이유 문장도 통상 마법과 **같은 것**이다 — 같은 규칙이 막았으므로.
+    assert "스펠 스피드 1 은 발동할 수 없습니다" in verdict.reason
+    assert verdict.reason == step.reason
 
     #: ④ 지나가면 다시 허용된다 — 막은 것이 단계였음을 그것이 말한다.
     pass_fast_window(duel)
     assert _activations(duel, P0, HONEST)
     assert duel.apply(action).accepted is True
+
+
+def test_c03_the_classification_comes_from_the_effect_not_the_card(repository):
+    """
+    🔴 **카드가 아니라 효과 하나의 분류를 쓴다** (보완7).
+
+    같은 카드에 기동 효과와 유발즉시가 함께 있을 수 있으므로 (모듈 설명의
+    856장) 카드 단위의 답은 존재하지 않는다. 이 시험은 관문이 받는 값이
+    ``EffectRef`` 로 찾은 **그 효과**의 것임을 센다.
+    """
+    from engine.activation_timing import classify_spell_speed
+    from engine.vocabulary import ActivationKind
+
+    duel, honest = _honest_board(repository)
+    definition = duel._activator.definitions.definition_for(HONEST_REF)
+    assert definition is not None
+    assert definition.activation_kind is ActivationKind.IGNITION
+
+    #: ① ``Duel`` 이 넘기는 값이 그 정의의 것이다.
+    assert duel._effect_kind(HONEST_REF, honest) is ActivationKind.IGNITION
+
+    #: ② 카드만 보는 함수는 **여전히 모른다** — 그것이 입도의 차이다.
+    card = duel.view(P0).find(honest)
+    assert classify_spell_speed(card.definition).is_known is False
+
+    #: ③ 분류를 주면 룰북의 표를 읽는다. 같은 카드라도 분류가 다르면
+    #: 답이 다르다 — 그래서 카드 단위로 접을 수 없다.
+    slow = classify_spell_speed(
+        card.definition, activation_kind=ActivationKind.IGNITION
+    )
+    fast = classify_spell_speed(
+        card.definition, activation_kind=ActivationKind.QUICK
+    )
+    assert (slow.speed, fast.speed) == (SpellSpeed.NORMAL, SpellSpeed.FAST)
+    assert slow.rules == ("RULE-EFFECT-002", "RULE-CHAIN-004")
+    assert fast.rules == ("RULE-EFFECT-003", "RULE-CHAIN-005")
 
 
 # ======================================================================

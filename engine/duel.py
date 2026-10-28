@@ -64,6 +64,7 @@ from engine.activation_timing import (
 )
 from engine.chain import Chain
 from engine.game_state_view import GameStateView
+from engine.ids import EffectRef, InstanceId
 from engine.priority import PriorityState
 from engine.response import ResponseLoop, ResponseState
 from engine.state.game_state import DEFAULT_LIFE_POINTS, DuelResult, GameState
@@ -81,6 +82,7 @@ from engine.spell_activation import (
     duel_activator,
     duel_components,
     duel_resolver,
+    effect_kind_of,
 )
 from engine.summon import duel_executor
 from engine.turn_progression import ProgressionStatus, TurnProgressor
@@ -1980,6 +1982,47 @@ class Duel:
             RuleActionKind.SET_SPELL_TRAP,
         )
 
+    def _effect_kind(
+        self, effect_ref: "EffectRef | None", instance: "InstanceId | None"
+    ) -> "ActivationKind | None":
+        """
+        그 발동이 쓰려는 **효과 하나의 분류** (Phase 6-AB 보완7).
+
+        ``None`` 은 **"모른다"** 다 — 가리킨 카드를 판에서 찾지 못했거나,
+        그 ``EffectRef`` 의 정의가 등록부에 없거나, 정의가 **다른 카드의
+        것**일 때다. 관문은 그것을 몬스터 효과에서 ``UNKNOWN`` 으로 받고,
+        ``UNKNOWN`` 은 허가가 아니다.
+
+        **왜 이 자리가 읽는가.** 분류는 효과 정의 등록부
+        (:attr:`EffectActivator.definitions`) 에 있고 관측
+        (``GameStateView``)에는 **없다**. 그래서 타이밍 관문은 스스로 알 수
+        없고, 등록부를 들고 있는 이쪽이 읽어서 값으로 넘긴다 —
+        :meth:`_set_this_turn` · :meth:`_activation_stage` 와 **같은 자리이고
+        같은 이유**다 (ADR-007).
+
+        🔴 **판정은 한 자리에서만 한다.** 여기서 하는 일은 "어느 효과인가" 를
+        찾아 주는 것뿐이고, 그 분류가 어떤 스펠 스피드인지는
+        :data:`~engine.activation_timing.KIND_SPEED` 한 벌이 정한다. 찾는
+        방법도 한 벌이다 — :func:`~engine.spell_activation.effect_kind_of`
+        가 효과 계층의 그 함수를 **그대로** 부른다. 이 모듈이 효과 계층을
+        직접 읽지 않으므로 (``test_a_the_duel_module_still_imports_no_
+        effect_layer``) 다리 쪽을 지나는 것이고, ``duel_components`` 가
+        journal 객체를 그쪽에서 만드는 것과 같은 자리다. 후보 생성 ·
+        ``apply`` · 거절 이유가 모두 이 메서드를 지난다.
+
+        🔴 **읽기만 한다.** 등록부도 판도 바꾸지 않는다.
+        """
+        if effect_ref is None or instance is None:
+            return None
+        card = self.state.find_instance(instance)
+        if card is None:
+            return None
+        return effect_kind_of(
+            self._activator.definitions,
+            effect_ref,
+            source_card_id=card.card_id,
+        )
+
     def _activation_sources(self, seat: int):
         """
         발동이 **출발할 수 있는 자리들** (Phase 3-E-14).
@@ -2064,6 +2107,7 @@ class Duel:
         if verdict.validity is not ActionValidity.VALID:
             return verdict
         # 스펠 스피드는 체인을 보고, 체인은 ``GameState`` 밖에 산다 (ADR-007).
+        link = self.chain.links[-1] if self.chain.links else None
         timed = ActivationTimingChecker(validator.view).check(
             ActivationTiming(
                 self.chain,
@@ -2076,6 +2120,20 @@ class Duel:
                 # 관측에 없는 사실이므로 판을 들고 있는 이 자리가 읽어서
                 # 값으로 넘긴다 (``point`` · ``set_this_turn`` 과 같은 자리).
                 simultaneous=self._is_simultaneous(action),
+                # 🔴 **이 효과의 발동 분류** (보완7). 몬스터 효과의 스펠
+                # 스피드는 카드 종류가 아니라 효과 분류가 정하고, 그 분류는
+                # 이미 정의에 적혀 있다 — 관문이 관측만 받아서 보지 못하던
+                # 것을 여기서 값으로 넘긴다 (``stage`` 와 같은 자리).
+                activation_kind=self._effect_kind(
+                    action.effect_ref, action.source
+                ),
+                # 응수할 링크의 효과도 같은 길로 읽는다 — 분류표를 두 벌
+                # 만들지 않는다.
+                responding_kind=(
+                    None
+                    if link is None
+                    else self._effect_kind(link.effect_ref, link.source)
+                ),
             ),
             action,
         )

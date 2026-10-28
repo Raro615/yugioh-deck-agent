@@ -874,6 +874,13 @@ def test_f_the_context_stores_nothing_twice():
     #: 열렸는지 · 유발을 등재하는 중인지 · 빠른 효과 기회인지는 ``Duel`` 의
     #: 수명 상태(``window_passed`` · 등재 자리)이고 ``GameStateView`` 에
     #: 없다. 앞의 셋과 **같은 이유로** 판을 든 쪽이 값으로 넘긴다.
+    #: 🔴 **일곱째 · 여덟째 값이 늘었다** (보완7). ``activation_kind`` 는
+    #: "이번에 발동하려는 **효과 하나**의 분류" 이고 ``responding_kind`` 는
+    #: 응수 대상 링크의 같은 것이다. 둘 다 관측에 없다 — 분류는 효과 정의
+    #: 등록부(``EffectActivator.definitions``)에 손으로 적혀 있고
+    #: ``GameStateView`` 는 그것을 들고 다니지 않는다. 앞의 값들과 **같은
+    #: 이유로** 등록부를 든 쪽이 값으로 넘긴다
+    #: (``Duel._effect_kind`` · ``ResponseLoop._effect_kind``).
     assert fields <= {
         "chain",
         "priority",
@@ -881,6 +888,8 @@ def test_f_the_context_stores_nothing_twice():
         "set_this_turn",
         "simultaneous",
         "stage",
+        "activation_kind",
+        "responding_kind",
     }
     assert {"chain", "priority"} <= fields
 

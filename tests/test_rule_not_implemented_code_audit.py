@@ -145,7 +145,14 @@ MINE = 0
 #: ``_refusal_verdict`` 의 설명이 **그 코드가 왜 그 자리에서 틀렸는지**를
 #: 적는다 (규칙이 막은 것을 "엔진 미지원" 으로 보고하고 있었다). 즉 이
 #: 코드의 **사용**이 하나 줄고 그것을 설명하는 글이 늘었다.
-STRING_OCCURRENCES = 91
+#: 🔴 91 → **93** (Phase 6-AB 보완7). 🔴 **늘어난 둘도 전부 산문이다** —
+#: ``CODE_OCCURRENCES`` 는 74 그대로다. ``ActivationTiming.responding_kind``
+#: 의 설명이 *"적법한 함정이 몬스터 효과에 응수하려 할 때 이 코드를
+#: 받았다"* 는 실측을 인용하고, ``verified_activation_kind`` 의 설명이
+#: *"이미 확인된 사실을 모른다고 답하고 있었다 — 어니스트 ①이 이 코드"*
+#: 를 인용한다. 보완6 과 같은 결의 증가다: 이 코드의 **잘못된 사용**을
+#: 고치면서 그 까닭을 적은 글이 늘어난다.
+STRING_OCCURRENCES = 93
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -323,9 +330,28 @@ PROSE_OCCURRENCES = {
     # **위**에 넣은 것들이다: ``_window_group`` · ``_window_can_act`` ·
     # ``_resolving_other_window`` 와 각자의 설명, ``_window_actor`` 의 네 묶음
     # 순서, ``_enforce_mandatory`` 의 등재 좁히기, ``_response_priority``.
-    ("engine/duel.py", 2267),
-    ("engine/duel.py", 2273),
-    ("engine/duel.py", 2485),
+    # 🔴 **보완7 에서 셋이 +58 밀렸다** (2267 · 2273 · 2485 →
+    # 2325 · 2331 · 2543). 위에 들어간 것은 ``Duel._effect_kind`` 와 그
+    # 설명이고, **개수는 하나도 바뀌지 않았다** — 바뀐 것이 줄 번호뿐이라는
+    # 것이 그 증거다.
+    ("engine/duel.py", 2325),
+    ("engine/duel.py", 2331),
+    ("engine/duel.py", 2543),
+    # 🔴 **보완7 이 둘을 더했다 — 둘 다 산문이다.**
+    #
+    #   ``activation_timing.py`` 511
+    #     ``ActivationTiming.responding_kind`` 의 설명. 전 턴에 세운 적법한
+    #     함정이 몬스터 효과에 응수하려 할 때 이 코드를 받았다는 **실측**을
+    #     인용한다 (규칙은 그 응수를 허락한다).
+    #   ``effect/definition.py`` 896
+    #     ``verified_activation_kind`` 의 설명. *"이미 확인된 사실을
+    #     모른다고 답하고 있었다 — 어니스트 ①이 ``RULE_NOT_IMPLEMENTED``"*
+    #     를 인용하며 그 함수가 왜 있는지 적는다.
+    #
+    # 🔴 **코드 자리는 하나도 늘지 않았다** — 보완7 이 한 일은 이 코드를
+    # **덜 쓰게** 만든 것이다 (몬스터 효과의 거절이 규칙 거절로 갈렸다).
+    ("engine/activation_timing.py", 511),
+    ("engine/effect/definition.py", 896),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
@@ -359,6 +385,9 @@ PROSE_OCCURRENCES = {
 #: 🔴 73 → **74** (보완5) — ``_zone_from_grave`` 의 관문 하나.
 #: ``STRING_OCCURRENCES`` 의 설명과 같은 자리다.
 #: 🔴 보완6 에서 **바뀌지 않았다** — 늘어난 둘은 산문이다.
+#: 🔴 보완7 에서도 **바뀌지 않았다** — 늘어난 둘도 산문이다. 이 Phase 는
+#: 이 코드를 새로 쓰지 않았고, 몬스터 효과의 거절을 이 코드에서
+#: ``SPELL_SPEED_TOO_LOW`` 로 **옮겼다**.
 CODE_OCCURRENCES = 74
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
@@ -471,7 +500,7 @@ CONTRACT_VIOLATIONS = {
     # 🔴 보완6 에서 +6 밀렸다 (485 → 491) — ``act`` 가 ``stage`` 를
     # 키워드로 받게 되면서 그 자리보다 **위**에 줄이 늘었다. 위반 13 ·
     # 적합 19 는 그대로다.
-    ("engine/response.py", 491, "ResponseOutcome.REFUSED"),
+    ("engine/response.py", 492, "ResponseOutcome.REFUSED"),
 }
 
 #: 같은 주사에서 **올바른** 자리 (모른다 쪽 상태와 짝지었다).
@@ -726,7 +755,11 @@ def test_02_the_string_count_is_79_but_the_code_count_is_67():
     assert len(sites) == CODE_OCCURRENCES
     #: 🔴 15 → **17** (보완6) — 늘어난 둘은 산문이다 (``_refusal`` ·
     #: ``_refusal_verdict`` 의 설명).
-    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 17
+    #: 🔴 17 → **19** (보완7) — 늘어난 둘도 산문이다
+    #: (``ActivationTiming.responding_kind`` · ``verified_activation_kind``
+    #: 의 설명). 코드 수는 74 그대로이고, 그 차이가 이 등식이 지키는
+    #: 사실이다: **문자열이 늘어도 코드가 늘지 않았다.**
+    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 19
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()

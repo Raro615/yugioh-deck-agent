@@ -876,6 +876,58 @@ def execution_availability(
     return ExecutionAvailability.EXECUTABLE
 
 
+def verified_activation_kind(
+    definitions: "EffectDefinitionSource | None",
+    effect_ref: "EffectRef | None",
+    *,
+    source_card_id: int | None,
+) -> "ActivationKind | None":
+    """
+    **그 효과의 발동 분류** — 등록부에서 찾아 카드까지 맞춰 본 것만
+    (Phase 6-AB 보완7).
+
+    왜 이 함수가 있는가
+    -------------------
+    몬스터 효과의 스펠 스피드는 **효과 분류**가 정하고
+    (:data:`~engine.activation_timing.KIND_SPEED`), 그 분류는 이미
+    :attr:`EffectDefinition.activation_kind` 에 손으로 적혀 있다 (ADR-006).
+    그런데 타이밍 관문은 관측(``GameStateView``)만 받으므로 등록부를 볼 수
+    없었고, 그래서 **이미 확인된 사실을 모른다고 답하고 있었다** (보완7 §2 의
+    실측: 어니스트 ①이 ``RULE_NOT_IMPLEMENTED``).
+
+    이 함수가 그 **한 자리**다. 관문과 보고 계층이 각자 등록부를 뒤지면
+    분류표가 두 벌이 되므로, 두 자리 모두 이것을 부른다
+    (:meth:`~engine.duel.Duel._effect_kind` ·
+    :class:`~engine.response.ResponseLoop`).
+
+    무엇을 ``None`` 으로 돌려주는가 — **넷 다 "모른다" 다**
+    ------------------------------------------------------
+    ========================================  ==========================
+    등록부가 없다                              판정할 근거가 없다
+    ``effect_ref`` 가 없다                     어느 효과인지 모른다
+    그 ``effect_ref`` 의 정의가 없다            적힌 것이 없다
+    정의의 카드와 발동하려는 카드가 다르다       **남의 분류를 빌리지 않는다**
+    ========================================  ==========================
+
+    🔴 마지막 줄이 이 함수의 안전장치다. ``source`` 와 ``effect_ref`` 가
+    어긋난 요청은 검증기가 ``EFFECT_REF_CARD_MISMATCH`` 로 따로 거절하지만,
+    이 함수는 **그 거절을 기다리지 않고** 분류 자체를 주지 않는다 — 순서가
+    바뀌어도 다른 카드의 분류가 새어 들어오지 않게.
+
+    🔴 **분류를 안다는 것이 실행 지원이 아니다.** 돌려주는 것은 "이 효과가
+    어느 절차로 발동하는가" 하나이고, 조건 · 비용 · 대상 · 구현 등록 ·
+    출처 금지는 :func:`execution_availability` 와 발동기가 그대로 본다.
+    """
+    if definitions is None or effect_ref is None:
+        return None
+    definition = definitions.definition_for(effect_ref)
+    if definition is None:
+        return None
+    if source_card_id is not None and definition.source_card_id != source_card_id:
+        return None
+    return definition.activation_kind
+
+
 __all__ = [
     "EffectSource",
     "FORBIDDEN_SOURCES",
@@ -888,4 +940,5 @@ __all__ = [
     "EffectImplementationLookup",
     "EmptyImplementationLookup",
     "execution_availability",
+    "verified_activation_kind",
 ]
