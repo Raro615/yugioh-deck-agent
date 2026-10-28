@@ -269,11 +269,17 @@ def test_defence_position_is_now_reachable_through_legal_actions(repository):
 
     # 1. 후보에는 오른다.
     assert seen[PlayerActionKind.SET_MONSTER] == 271, dict(seen)
-    #: 🔴 **정정 (보완5): 56 → 16.** 판을 바꾸는 행위 뒤마다 빠른 효과
-    #: 기회를 지나는 ``PASS`` 둘이 끼어들어 산책의 궤적이 갈라졌다. 이 줄이
-    #: 지키는 것은 **후보에 오른다는 사실**이고 횟수는 그때의 측정값이다
-    #: (바로 위 설명). ``SET_MONSTER`` 의 271 은 **한 점도 바뀌지 않았다.**
-    assert seen[PlayerActionKind.SET_SPELL_TRAP] == 16, dict(seen)
+    #: 🔴 **정정 (보완5): 56 → 16, 그리고 (보완6): 16 → 56 으로 돌아왔다.**
+    #:
+    #: 보완5 가 판을 바꾸는 행위 뒤마다 빠른 효과 기회를 열면서 산책의
+    #: 궤적이 갈라졌고, 보완6 이 그 자리에서 스펠 스피드 1 발동을 막으면서
+    #: **원래 궤적으로 돌아왔다.** 🔴 되돌아온 값이 보완5 **이전**의 값과
+    #: 같다는 것이 이 변경이 또 하나의 왜곡을 더한 것이 아니라는 증거다.
+    #:
+    #: 이 줄이 지키는 것은 **후보에 오른다는 사실**이고 횟수는 그때의
+    #: 측정값이다 (바로 위 설명). ``SET_MONSTER`` 의 271 은 세 Phase 를
+    #: 지나 **한 점도 바뀌지 않았다.**
+    assert seen[PlayerActionKind.SET_SPELL_TRAP] == 56, dict(seen)
     assert seen[PlayerActionKind.SET_SPELL_TRAP] > 0, dict(seen)
 
     # 2. 규칙 기반 정책은 고르지 않는다 — 그래서 판에도 생기지 않는다.

@@ -845,7 +845,13 @@ def test_f_greedy_is_not_the_best_play(repository):
     "순위 로직이 바뀌었다" 가 아니라 **"고를 수 있는 수가 늘었다"** 이고,
     규칙 기반 쪽이 한 점도 안 움직인 것이 그 증거다.
 
-    Phase 6-AB 보완5 에서 무작위 쪽이 13,300 → **12,000** 으로 또 움직였다.
+    Phase 6-AB 보완6 에서 무작위 쪽이 12,000 → **20,900** 으로 또 움직였다.
+    보완6 이 빠른 효과 기회에서 스펠 스피드 1 발동을 막았으므로 (공식 Fast
+    Effect Timing — 상자 A 에서만 할 수 있는 행동이다) 무작위가 그 자리에서
+    고를 수 있는 수가 줄고 궤적이 또 갈라졌다. **규칙 기반의 70,700 은 네
+    번째로 한 점도 바뀌지 않았고** 붕괴 씨앗도 10 · 15 그대로다.
+
+    Phase 6-AB 보완5 에서 무작위 쪽이 13,300 → **12,000** 으로 움직였다.
     판을 바꾸는 행위 뒤마다 빠른 효과 기회를 지나는 ``PASS`` 둘이 필수
     절차로 끼어들었고 (공식 Fast Effect Timing — box B · C), 무작위는 그
     걸음마다 아무 것이나 고르므로 궤적이 또 갈라졌다. **규칙 기반의
@@ -873,8 +879,28 @@ def test_f_greedy_is_not_the_best_play(repository):
         for seed in COMPARISON_SEEDS
     ]
     assert sum(rules) == 70700, sum(rules)
-    assert sum(chance) == 12000, sum(chance)
-    assert all(r >= c for r, c in zip(rules, chance)), list(zip(rules, chance))
+    assert sum(chance) == 20900, sum(chance)
+
+    #: 🔴 **정정 (보완6): Phase 3-B 의 원래 증거가 돌아왔다.**
+    #:
+    #: 이 자리에는 ``all(r >= c)`` 가 있었다 — 3-E-3 에서 무작위가 무너져
+    #: **어느 씨앗에서도 이기지 못하게** 되었을 때 더한 줄이다. 보완6 이
+    #: 빠른 효과 기회에서 스펠 스피드 1 을 막으면서 무작위가 그만큼 덜
+    #: 무너지고, **이기는 씨앗이 다시 나타났다.**
+    #:
+    #: 즉 이 줄이 깨진 것은 결함이 아니라 이 시험이 처음 들었던 증거
+    #: (*"끝났을 때의 판이 무작위보다 나쁜 씨앗이 존재한다"*) 의 복귀이고,
+    #: 이 시험의 주장(**탐욕은 baseline 이지 정답이 아니다**)을 **더 강하게**
+    #: 받친다. 그래서 단정을 약하게 하지 않고 **그 씨앗을 못박는다.**
+    #:
+    #: 🔴 **무작위가 이기는 씨앗을 찾아 범위를 넓히지 않았다** — 씨앗
+    #: 목록은 그대로이고, 그 안에서 실측한 것이다.
+    beaten = [
+        (seed, rule, luck)
+        for seed, rule, luck in zip(COMPARISON_SEEDS, rules, chance)
+        if luck > rule
+    ]
+    assert beaten == [(3, 5500, 6500), (16, 5700, 7900)], beaten
 
     # 그런데도 탐욕은 정답이 아니다 — **스스로 무너지는 씨앗이 있다.**
     collapsed = [seed for seed, total in zip(COMPARISON_SEEDS, rules) if total == 0]
