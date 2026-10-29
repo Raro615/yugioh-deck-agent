@@ -51,11 +51,15 @@ import pytest
 
 from agent.simulation import SimulationStatus, Simulator
 from engine.action import PlayerAction, PlayerActionKind
+from engine.action_target import ActionTarget
 from engine.activation_timing import ActivationStage
+from engine.cost.choice import CandidateSource, ChoiceSpec
 from engine.duel import Duel, duel_components, target_combinations
 from engine.effect.definition import EffectDefinitionRegistry
 from engine.effect.library import EFFECT_LIBRARY
+from engine.effect.target import TargetSpec
 from engine.ids import EffectRef
+from engine.target_bridge import target_enumeration_limits
 from engine.priority import PriorityState
 from engine.state.game_state import GameState
 from engine.target_bridge import selections_for
@@ -817,6 +821,31 @@ def test_e03_the_output_separates_what_ran_from_what_did_not(repository):
     assert "돌려볼 수 있음 (정적 확인)" in blob
     assert "엔진의 행위 계층이 판정할 수 있음 (정적 확인)" in blob
 
+    #: ③-2 🔴 **비고 · 기대에 남아 있던 허가 표현도 사라졌다** (보완8 세
+    #: 항목 ③). ``StepStatus`` · ``StepBasis`` 만 고쳤을 때 ``note`` 가
+    #: *"엔진이 일반 소환을 허가합니다"* 를 그대로 들고 있었다 (실측).
+    plan = blob[blob.index("아래는 실행하지 않은 정적 계획입니다"):]
+    assert "허가합니다" not in plan
+    assert "엔진이 일반 소환을 허가" not in plan
+    #: 있는 것은 **종류의 판정 기능**이고, 이 판의 허가가 아니다.
+    assert "**판정 계층이 있는 종류**입니다" in plan
+    assert "이 판의 허가가 아닙니다" in plan
+    #: 그리고 결과를 단정하지 않는다.
+    assert "성공하면 앞면 공격 표시로" in plan
+    assert "발동이 성공하면 엔진에 등록된 구현대로" in plan
+    assert "이 판의 적법성이 아닙니다" in plan
+
+    #: ③-3 🔴 **실행 기록 쪽의 수락 · 해결 표현은 그대로다** — 문구 하나의
+    #: 부재가 아니라 **두 절의 뜻이 갈리는지**를 본다.
+    executed = blob[blob.index("🔴 실제 엔진 실행"):blob.index(
+        "아래는 실행하지 않은 정적 계획입니다")]
+    assert "수락 예" in executed
+    assert "적용된 효과 기록:" in executed
+    assert "를 해결했습니다" in executed
+    #: 그 말들은 정적 계획 절에 **없다** — 거기서는 아무것도 수락되지 않았다.
+    assert "수락 예" not in plan
+    assert "적용된 효과 기록" not in plan
+
     #: ④ 지원 범위 내 실행을 전체 합법성 보장으로 적지 않는다.
     assert "최선의 전개가 아닙니다" in blob
     assert "사람이 확인해야" in blob
@@ -840,3 +869,618 @@ def test_e05_the_rejected_input_still_reports_its_rule(repository):
     assert "패 4장 > 덱 3장" in blob
     #: 🔴 거절한 입력에는 정적 계획을 보여 주지 않는다 (6-AA 의 성과).
     assert "아래는 실행하지 않은 정적 계획입니다" not in blob
+
+
+# ======================================================================
+# F. 같은 효과의 **혼합** 대상 조합 (보완8 세 항목 ②)
+#
+# 🔴 **왜 이 묶음을 더했는가.** 기존 ``test_b02``~``b04`` 는 *모두 INVALID* ·
+# *모두 VALID* · *서로 다른 효과* 를 재었다. 그 셋으로는 **같은 효과 안에서
+# 합법 · 거절 · 미확인 조합이 섞인 경우**를 말할 수 없고, 보고서 §8 · §13 이
+# 그것을 충족했다고 적은 것은 과장이었다.
+#
+# 아래는 **실제 등재 카드 싸이크론**(``5318639:e[0]``)으로 그 혼합을 만든다.
+# 그 효과의 대상 규칙은 "필드(양쪽)의 마법 · 함정 1장" 이므로 한 판에서
+# 세 가지가 함께 나온다:
+#
+#     내 앞면 마법       → 조건 참      → **VALID** 조합이 된다
+#     내 앞면 몬스터     → 조건 거짓    → **INVALID**: 후보가 되지 않는다
+#     상대 뒷면 마법·함정 → 정체 모름    → **UNKNOWN**: 셀 수 없다
+#
+# 🔴 합성은 ``F03`` 하나뿐이고 (들여다보지 못한 자리까지 섞으려면 대상
+# 규칙을 넓혀야 한다) 그 자리에 합성이라고 적는다.
+# ======================================================================
+
+CYCLONE = 5318639                  # 싸이크론 — 필드(양쪽)의 마법·함정 1장
+CYCLONE_REF = EffectRef(CYCLONE, 0)
+UNREADABLE = "target-candidate-identity"
+UNSEEN_ZONE = "target-candidate-zone"
+
+
+def _mixed_target_board(repository, *, facedown_opponent=True, definitions=None):
+    """
+    같은 효과에 **세 종류의 대상**이 함께 있는 판. 🔴 초기 판 구성이다.
+
+    ``facedown_opponent=False`` 면 모름 쪽을 빼고 VALID · INVALID 만 둔다 —
+    ``F01`` 과 ``F02`` 가 **같은 판에서 한 가지만 다르게** 비교하도록.
+    """
+    state = GameState.create(
+        repository,
+        decks=([LUSTER_DRAGON] * 30, [LUSTER_DRAGON] * 30),
+        turn_player=P0,
+        seed=1,
+    )
+    cyclone = state.create_instance(CYCLONE, owner=P0, zone=Zone.HAND)
+    #: ① 조건이 **참**인 대상 — 내 앞면 마법.
+    legal_target = state.create_instance(POT_OF_GREED, owner=P0, zone=Zone.SZONE)
+    state.move(legal_target, Zone.SZONE, to_player=P0, position=Position.FACEUP)
+    #: ② 조건이 **거짓**인 대상 — 같은 규칙이 보는 자리의 몬스터.
+    monster = state.create_instance(LUSTER_DRAGON, owner=P0, zone=Zone.MZONE)
+    state.move(
+        monster, Zone.MZONE, to_player=P0, position=Position.FACEUP_ATTACK
+    )
+    #: ③ 조건을 **판정할 수 없는** 대상 — 상대의 뒷면 마법·함정.
+    hidden = None
+    if facedown_opponent:
+        hidden = state.create_instance(POT_OF_GREED, owner=P1, zone=Zone.SZONE)
+        state.move(
+            hidden, Zone.SZONE, to_player=P1, position=Position.FACEDOWN
+        )
+    state.turn.turn_number = 3
+    state.turn.turn_player = P0
+    state.turn.set_phase(Phase.MAIN1)
+    duel = Duel(
+        state=state,
+        priority=PriorityState.idle(turn_player=P0, phase=Phase.MAIN1),
+        **duel_components(definitions=definitions)
+        if definitions is not None
+        else duel_components(),
+    )
+    return duel, cyclone.instance_id, legal_target.instance_id, monster.instance_id
+
+
+def _cyclone_held(duel, seat=P0):
+    """싸이크론 효과에 대한 보류만."""
+    return [
+        w
+        for w in duel.legal_actions(seat).withheld
+        if w.kind is PlayerActionKind.ACTIVATE_EFFECT
+        and str(CYCLONE_REF) in w.reason
+    ]
+
+
+@pytest.mark.real_card
+def test_f01_a_legal_and_an_illegal_combination_coexist(repository):
+    """
+    🔴 **사례 A — 같은 효과에 VALID 와 INVALID 가 함께 있다** (실제 카드).
+
+    규칙이 거짓이라고 답한 대상은 **후보가 되지 않고 미지원으로도 집계되지
+    않는다** — 그것은 규칙의 답이고 빠진 구현이 아니다. 그리고 합법인 조합은
+    그대로 남아 실제로 ``apply`` 에서 수락된다.
+    """
+    duel, cyclone, legal_target, monster = _mixed_target_board(
+        repository, facedown_opponent=False
+    )
+    definition = duel._activator.definitions.definition_for(CYCLONE_REF)
+
+    #: ① 같은 규칙이 **두 자리를 다 본다** — 그래서 혼합이다.
+    spec = definition.targets[0].spec
+    assert Zone.SZONE in spec.choice.source.zones
+    assert Zone.MZONE in spec.choice.source.zones
+
+    #: ② 조합은 **하나**다 — 몬스터는 조건이 거짓이라 후보가 아니다.
+    combos = target_combinations(duel.state, P0, definition, cyclone)
+    assert len(combos) == 1, combos
+    assert combos[0][0].instance_id == legal_target
+
+    #: ③ 그 하나가 허가 목록에 있고, 몬스터를 가리킨 조합은 없다.
+    offered = _activations(duel, P0, CYCLONE)
+    assert len(offered) == 1, offered
+    picked = offered[0]
+    assert [t.instance_id for t in picked.targets] == [legal_target]
+    assert all(
+        monster not in [t.instance_id for t in a.targets] for a in offered
+    )
+
+    #: ④ 🔴 **거짓인 조합이 미지원으로 집계되지 않는다.**
+    assert _cyclone_held(duel) == []
+    assert all(
+        str(CYCLONE_REF) not in w.line_ko()
+        for w in duel.legal_actions(P0).unsupported()
+    )
+
+    #: ⑤ 그리고 그 조합이 **실제로 수락된다** — 후보 목록만 믿지 않는다.
+    before = _fingerprint(duel)
+    step = duel.apply(picked)
+    assert step.accepted is True, step.reason
+    assert _fingerprint(duel) != before
+
+
+@pytest.mark.real_card
+def test_f02_a_legal_and_an_unknown_combination_coexist(repository):
+    """
+    🔴 **사례 B — 같은 효과에 VALID 와 UNKNOWN 이 함께 있다** (실제 카드).
+
+    실측 (이 보완 전)::
+
+        eligible  = (내 앞면 마법,)        → 조합 1개 · 후보가 된다
+        undecided = (상대 뒷면 마법·함정,)  → 🔴 **보류 0건** — 조용히 사라졌다
+
+    즉 *"합법인 대상이 하나 있다"* 가 *"대상 공간을 끝까지 검증했다"* 로
+    읽혔다. 지금은 둘을 함께 적는다.
+    """
+    duel, cyclone, legal_target, _monster = _mixed_target_board(repository)
+    definition = duel._activator.definitions.definition_for(CYCLONE_REF)
+
+    #: ① 모름 쪽이 실제로 생겼는지 **판정 계층에서** 확인한다.
+    limits = target_enumeration_limits(duel.state, P0, definition, cyclone)
+    assert limits is not None
+    assert limits.eligible == 1 and limits.undecided == 1, limits
+    assert limits.complete is False
+
+    #: ② 🔴 **합법 조합은 그대로 후보다** — 모름 하나가 효과 전체를 막지
+    #: 않는다 (사용자 요구 ②).
+    offered = _activations(duel, P0, CYCLONE)
+    assert len(offered) == 1, offered
+    assert [t.instance_id for t in offered[0].targets] == [legal_target]
+
+    #: ③ 🔴 **그런데 모름이 숨지 않는다** — 보류 한 줄이 그 범위를 적는다.
+    held = _cyclone_held(duel)
+    assert len(held) == 1, held
+    entry = held[0]
+    assert entry.code is ValidationCode.INFORMATION_UNAVAILABLE
+    assert entry.validity is ActionValidity.UNKNOWN
+    assert entry.missing is not None and UNREADABLE in entry.missing
+    #: 범위를 **수로** 적는다 — 패의 장수가 아니라 대상 후보의 수다.
+    assert entry.scope == "대상 후보 2장 중 1장은 정체를 읽을 수 없음"
+    assert "합법인 조합은 그대로 후보로 남아 있습니다" in entry.reason
+    #: 그리고 미지원 집계에 들어간다 — 검증 한계이기 때문이다.
+    assert entry in duel.legal_actions(P0).unsupported()
+
+    #: ④ 🔴 **가려진 카드의 정체가 새지 않는다** (3-E-41).
+    line = entry.line_ko()
+    assert str(POT_OF_GREED) not in line
+    assert "#" not in line
+    for forbidden in ("source", "action", "instance_id"):
+        assert not hasattr(entry, forbidden), forbidden
+
+    #: ⑤ 효과 전체를 거절한 것으로 적지 않는다 — "모든 조합" 이라고 말하지
+    #: 않고, 허가 목록이 비어 있지도 않다.
+    assert "모든 조합" not in entry.reason
+    assert offered
+
+    #: ⑥ 그리고 그 합법 조합은 실제로 수락된다.
+    step = duel.apply(offered[0])
+    assert step.accepted is True, step.reason
+
+
+@pytest.mark.real_card
+def test_f03_two_different_unknown_reasons_on_one_effect(repository):
+    """
+    🔴 **사례 C — 같은 효과에 서로 다른 UNKNOWN 사유가 둘** (**합성**).
+
+    🔴 **합성 조건이다.** 등재된 효과 가운데 발동 시점에 고르면서 *들여다보지
+    못한 자리*까지 보는 대상 규칙은 없다. 그래서 싸이크론의 대상 규칙을
+    ``{MZONE, HAND}`` · 양쪽으로 넓힌 **테스트 전용 정의**를 쓴다 — 실제
+    싸이크론이 패를 보는 카드라는 뜻이 **아니다.** 기존 확장점
+    (``CandidateSource``) 만 쓰고 새 판정은 만들지 않는다.
+
+    그 판에서 한 효과가 네 가지를 함께 만난다::
+
+        내 패의 마법            → 조건 참     → VALID 조합
+        상대 필드의 뒷면 몬스터   → 정체 모름   → UNKNOWN ①
+        상대 패                 → 자리를 못 봄 → UNKNOWN ②
+    """
+    base = next(
+        e.definition
+        for e in EFFECT_LIBRARY
+        if e.definition.effect_ref == CYCLONE_REF
+    )
+    wide_spec = TargetSpec.targeting(
+        ChoiceSpec(
+            source=CandidateSource(
+                zones=frozenset({Zone.MZONE, Zone.HAND}),
+                owner=None,
+                require=base.targets[0].spec.choice.source.require,
+            ),
+            minimum=1,
+            maximum=1,
+        )
+    )
+    wide = dataclasses.replace(
+        base,
+        targets=(dataclasses.replace(base.targets[0], spec=wide_spec),),
+    )
+    kept = tuple(
+        e.definition
+        for e in EFFECT_LIBRARY
+        if e.definition.effect_ref != CYCLONE_REF
+    )
+    registry = EffectDefinitionRegistry(kept + (wide,))
+
+    state = GameState.create(
+        repository,
+        decks=([LUSTER_DRAGON] * 30, [LUSTER_DRAGON] * 30),
+        turn_player=P0,
+        seed=1,
+    )
+    cyclone = state.create_instance(CYCLONE, owner=P0, zone=Zone.HAND)
+    in_hand = state.create_instance(POT_OF_GREED, owner=P0, zone=Zone.HAND)
+    facedown = state.create_instance(LUSTER_DRAGON, owner=P1, zone=Zone.MZONE)
+    state.move(
+        facedown, Zone.MZONE, to_player=P1, position=Position.FACEDOWN_DEFENSE
+    )
+    for _ in range(2):
+        state.create_instance(LUSTER_DRAGON, owner=P1, zone=Zone.HAND)
+    state.turn.turn_number = 3
+    state.turn.turn_player = P0
+    state.turn.set_phase(Phase.MAIN1)
+    duel = Duel(
+        state=state,
+        priority=PriorityState.idle(turn_player=P0, phase=Phase.MAIN1),
+        **duel_components(definitions=registry),
+    )
+
+    limits = target_enumeration_limits(duel.state, P0, wide, cyclone.instance_id)
+    assert limits is not None
+    assert limits.undecided >= 1 and limits.unchecked, limits
+
+    #: ① 합법 조합은 남는다 — 모름 **둘**이 있어도 막지 않는다.
+    offered = _activations(duel, P0, CYCLONE)
+    assert offered, duel.legal_actions(P0).withheld
+    assert in_hand.instance_id in {
+        t.instance_id for a in offered for t in a.targets
+    }
+
+    #: ② 🔴 **사유가 둘이고 서로 다르다** — 하나로 뭉개지 않는다.
+    held = _cyclone_held(duel)
+    missing = {w.missing for w in held}
+    assert len(held) == 2, held
+    assert any(m and UNREADABLE in m for m in missing), missing
+    assert any(m and UNSEEN_ZONE in m for m in missing), missing
+    assert len({w.scope for w in held}) == 2, held
+
+    #: ③ 둘 다 모름이고 둘 다 미지원 집계에 들어간다.
+    for entry in held:
+        assert entry.validity is ActionValidity.UNKNOWN
+        assert entry in duel.legal_actions(P0).unsupported()
+    #: ④ 그리고 어느 줄에도 카드 식별자가 없다.
+    for entry in held:
+        assert "#" not in entry.line_ko()
+        assert str(LUSTER_DRAGON) not in entry.line_ko()
+
+
+@pytest.mark.real_card
+def test_f04_the_direct_apply_does_not_borrow_another_combinations_reason(
+    repository,
+):
+    """
+    🔴 **직접 ``apply`` 가 다른 조합의 사유를 빌려오지 않는다** (요구 ②).
+
+    같은 효과에 보류 한 줄(모름)과 허가 한 줄(합법)이 함께 있는 판에서,
+    **거절될 조합**을 직접 넣으면 그 조합 자신의 판정이 와야 한다 — 보류에
+    적힌 "정체를 읽을 수 없다" 가 와서는 안 된다.
+    """
+    duel, cyclone, legal_target, monster = _mixed_target_board(repository)
+    held = _cyclone_held(duel)
+    assert len(held) == 1 and held[0].missing
+
+    #: 조건이 **거짓**인 대상(몬스터)을 직접 가리킨다 — 후보가 아니다.
+    intruder = PlayerAction.activate_effect(
+        actor=P0,
+        source=cyclone,
+        effect_ref=CYCLONE_REF,
+        targets=(ActionTarget.instance(monster),),
+    )
+    assert intruder not in duel.legal_actions(P0).allowed
+
+    before = _fingerprint(duel)
+    step = duel.apply(intruder)
+    assert step.accepted is False
+    #: 🔴 **그 조합 자신의 까닭**이다 — 보류의 모름이 아니다.
+    assert step.code is not ValidationCode.INFORMATION_UNAVAILABLE
+    assert held[0].missing not in (step.reason or "")
+    assert "정체를 읽을 수 없는" not in step.reason
+    #: 그리고 판은 그대로다.
+    assert _fingerprint(duel) == before
+
+
+@pytest.mark.real_card
+def test_f05_the_mixed_board_reads_the_same_in_a_fork(repository):
+    """
+    🔴 **원본과 사본이 같은 후보 · 같은 사유를 본다** (요구 ②).
+
+    그리고 조회와 거절은 판을 바꾸지 않는다 — 혼합 판에서도 같다.
+    """
+    duel, cyclone, legal_target, monster = _mixed_target_board(repository)
+    before = _fingerprint(duel)
+
+    def seen(d):
+        legal = d.legal_actions(P0)
+        return (
+            tuple(
+                (str(a.effect_ref), tuple(t.instance_id for t in a.targets))
+                for a in legal.allowed
+                if a.kind is PlayerActionKind.ACTIVATE_EFFECT
+            ),
+            tuple(
+                (w.kind, w.code, w.missing, w.scope, w.reason)
+                for w in legal.withheld
+            ),
+        )
+
+    mine = seen(duel)
+    fork = Simulator(duel=duel)._fork()
+    assert seen(fork) == mine
+
+    #: 조회를 몇 번 해도, 거절을 받아도 판이 그대로다.
+    for _ in range(3):
+        duel.legal_actions(P0)
+    duel.apply(
+        PlayerAction.activate_effect(
+            actor=P0,
+            source=cyclone,
+            effect_ref=CYCLONE_REF,
+            targets=(ActionTarget.instance(monster),),
+        )
+    )
+    assert _fingerprint(duel) == before
+
+
+# ======================================================================
+# G. ``/combo`` 의 **종료 원인**과 **전체 지원 상태** (보완8 세 항목 ①)
+#
+# 🔴 **왜 이 묶음을 더했는가.** ``execute_opening`` 은 중간 사유를
+# ``run.unsupported`` 에 **모으고 있었다.** 그런데 종료 판정은 **마지막
+# 자리**의 ``missing_here`` 만 보았다. 그래서 중간에 중요한 미지원을
+# 지나왔어도 마지막 자리가 깨끗하면 ``stopped_kind="flow_only"`` 가 되고,
+# 멈춘 설명이 그 한계를 한 글자도 말하지 않았다. 실측 (이 보완 전)::
+#
+#     normal_summon 1걸음 · 중간 P1 기회에서 trap-activation-event 미지원
+#     → run.unsupported 에는 남는다
+#     → 마지막 P0 패는 비어 있어 그 자리의 미지원은 없다
+#     → stopped_kind = "flow_only"
+#     → ExecutedStep.unsupported = ()  🔴 걸음에도 안 남는다
+#     → 종료 설명도 마지막 후보만 언급
+#
+# 고친 방식: **두 질문을 가른다.** ``stopped_kind`` 는 *"왜 멈췄는가"*,
+# ``OpeningRun.fully_supported`` 는 *"끝까지 검증했는가"* 다. 그리고 걸음에
+# ``unsupported_during`` 을 더해 **시점**을 구분했다.
+# ======================================================================
+
+
+def _single_summon_hand(duel, seat=P0):
+    """
+    그 자리의 패를 **일반 소환 가능한 몬스터 한 장**만 남긴다 (나머지는 덱으로).
+
+    🔴 초기 판 구성이다 — 이 뒤의 변화는 전부 ``Duel.apply`` 가 만든다.
+    마지막 자리의 패를 비워 *"마지막 상태는 깨끗한데 중간에 미지원을
+    지나왔다"* 를 만들려는 것이다.
+    """
+    for card in list(duel.state.player(seat).hand)[1:]:
+        duel.state.move(card, Zone.DECK, to_player=seat)
+    return duel
+
+
+def _run_opening(duel, repository, **kwargs):
+    from deck.opening import OpeningSetup, execute_opening
+
+    setup = OpeningSetup(duel=duel, journal=duel.journal)
+    return execute_opening(setup, repository, **kwargs)
+
+
+@pytest.mark.real_card
+def test_g01_a_mid_flight_limit_survives_a_clean_final_position(repository):
+    """
+    🔴 **사례 A — 중간에 중요 UNKNOWN, 마지막 자리는 깨끗하다.**
+
+    🔴 **합성 조건**이다 (``_waiting_gift_registry``). 실제 욕망의 선물이
+    사건을 기다리는 카드라는 뜻이 **아니다.**
+    """
+    duel, _gift = _board_with_facedown_gift(
+        repository, definitions=_waiting_gift_registry()
+    )
+    _single_summon_hand(duel)
+    run = _run_opening(duel, repository)
+
+    #: ① 한 걸음 실행하고, 마지막 자리의 패는 비었다.
+    assert run.executed == 1
+    assert [s.kind for s in run.steps] == ["normal_summon"]
+    assert len(duel.state.player(P0).hand) == 0
+
+    #: ② 멈춘 **원인**은 그대로 "흐름뿐" 이다 — 과거 사유로 덮지 않는다.
+    assert run.stopped_kind == "flow_only"
+
+    #: ③ 🔴 **그런데 끝까지 검증한 것이 아니다** — 두 질문이 갈렸다.
+    assert run.fully_supported is False
+    assert any("trap-activation-event" in line for line in run.unsupported)
+
+    #: ④ 🔴 멈춘 설명이 그 한계를 말한다. 그리고 **시점을 분명히 적는다** —
+    #: 이 자리의 것이 아니라 앞선 자리의 것이다.
+    assert "앞선 자리" in run.stopped_reason
+    assert "전개 전체를 지원 범위 안에서 검증한 것은 아닙니다" in run.stopped_reason
+
+    #: ⑤ 🔴 걸음의 두 목록이 **시점으로** 갈린다.
+    step = run.steps[0]
+    assert step.unsupported == ()
+    assert any(
+        "trap-activation-event" in line for line in step.unsupported_during
+    )
+
+    #: ⑥ 그리고 상대 기회의 사유에는 카드 식별자가 없다 (관측 경계 유지).
+    blob = "\n".join(run.unsupported)
+    assert str(GIFT_OF_GREED) not in blob
+    assert str(GIFT_REF) not in blob
+    assert "관측 밖입니다" in blob
+
+
+@pytest.mark.real_card
+def test_g02_a_rule_refusal_alone_is_still_fully_supported(repository):
+    """
+    🔴 **사례 B — 규칙상 INVALID 만 있다.**
+
+    세트한 턴의 함정은 룰북이 막는다 (``SET_THIS_TURN``). 그것은 규칙의
+    답이므로 **미지원이 아니고**, 전체 지원 상태는 참이다 — INVALID 를
+    미지원으로 승격하지 않는다.
+    """
+    from engine.state.rule_usage import RuleActionKind
+
+    state = GameState.create(
+        repository,
+        decks=([LUSTER_DRAGON] * 30, [LUSTER_DRAGON] * 30),
+        turn_player=P0,
+        seed=1,
+    )
+    trap = state.create_instance(GIFT_OF_GREED, owner=P0, zone=Zone.SZONE)
+    state.move(trap, Zone.SZONE, to_player=P0, position=Position.FACEDOWN)
+    #: 🔴 "이 턴에 세웠다" 는 기록을 **초기 판 구성으로** 적는다 — 이 사실은
+    #: 관측에 없고 ``rule_uses`` 에만 있다 (``Duel._set_this_turn``).
+    state.turn.turn_number = 3
+    state.turn.turn_player = P0
+    state.turn.set_phase(Phase.MAIN1)
+    state.rule_uses.record_card(
+        state.turn.turn_number, P0, trap.instance_id,
+        RuleActionKind.SET_SPELL_TRAP,
+    )
+    duel = Duel(
+        state=state,
+        priority=PriorityState.idle(turn_player=P0, phase=Phase.MAIN1),
+        **duel_components(),
+    )
+    assert len(duel.state.player(P0).hand) == 0
+
+    legal = duel.legal_actions(P0)
+    held = _held(duel)
+    #: ① 보류가 있고 **전부 확정 거부**다.
+    assert held, legal.withheld
+    assert all(w.is_rule_refusal for w in legal.withheld), legal.withheld
+    assert any(w.code is ValidationCode.SET_THIS_TURN for w in held), held
+    assert legal.unsupported() == ()
+
+    run = _run_opening(duel, repository)
+    #: ② 멈춘 원인은 흐름뿐이고, **끝까지 검증했다.**
+    assert run.stopped_kind == "flow_only"
+    assert run.unsupported == []
+    assert run.fully_supported is True
+    #: ③ 그리고 멈춘 설명에 과거 사유가 끼어들지 않는다.
+    assert "앞선 자리" not in run.stopped_reason
+
+
+@pytest.mark.real_card
+def test_g03_a_clean_flow_end_says_so(repository):
+    """
+    🔴 **사례 C — 미지원이 하나도 없는 정상 흐름 종료.**
+
+    패도 비었고 판 위에 등재 효과도 없다. 그러면 ``flow_only`` 와 "끝까지
+    검증했다" 가 **함께** 참이고, 그것이 이 낱말을 믿을 수 있는 경우다.
+    """
+    state = GameState.create(
+        repository,
+        decks=([LUSTER_DRAGON] * 30, [LUSTER_DRAGON] * 30),
+        turn_player=P0,
+        seed=1,
+    )
+    monster = state.create_instance(LUSTER_DRAGON, owner=P0, zone=Zone.MZONE)
+    state.move(
+        monster, Zone.MZONE, to_player=P0, position=Position.FACEUP_ATTACK
+    )
+    state.turn.turn_number = 3
+    state.turn.turn_player = P0
+    state.turn.set_phase(Phase.MAIN1)
+    duel = Duel(
+        state=state,
+        priority=PriorityState.idle(turn_player=P0, phase=Phase.MAIN1),
+        **duel_components(),
+    )
+    assert len(duel.state.player(P0).hand) == 0
+
+    run = _run_opening(duel, repository)
+    assert run.stopped_kind == "flow_only"
+    assert run.fully_supported is True
+    assert run.unsupported == []
+    assert all(s.unsupported == () for s in run.steps)
+    assert all(s.unsupported_during == () for s in run.steps)
+
+
+@pytest.mark.real_card
+def test_g04_a_real_stop_cause_is_not_covered_by_the_cumulative_list(
+    repository,
+):
+    """
+    🔴 **사례 D — 중요 미지원과 상한 도달이 함께 있다.**
+
+    그때 ``stopped_kind`` 는 **상한**이라고 말해야 한다 — 누적 미지원이
+    실제 종료 원인을 덮지 않는다. 그리고 전체 지원 상태는 따로 거짓이다.
+    """
+    duel, _gift = _board_with_facedown_gift(
+        repository, definitions=_waiting_gift_registry()
+    )
+    _single_summon_hand(duel)
+    run = _run_opening(duel, repository, max_actions=1)
+
+    #: ① 실제 종료 원인이 그대로 남는다.
+    assert run.stopped_kind == "limit"
+    assert "상한" in run.stopped_reason
+    #: ② 그리고 그 설명에 과거 미지원이 끼어들지 않는다 (덮지도, 덮이지도).
+    assert "앞선 자리" not in run.stopped_reason
+    #: ③ 그런데 전체 지원 상태는 거짓이다 — 두 사실이 함께 남는다.
+    assert run.fully_supported is False
+    assert any("trap-activation-event" in line for line in run.unsupported)
+
+
+@pytest.mark.real_card
+def test_g05_the_combo_answer_separates_the_two_questions(repository):
+    """
+    🔴 **사용자에게 가는 문장이 둘을 가른다** — 렌더링까지 확인한다.
+
+    ``flow_only`` 하나만 보고 "정상 검증 완료" 로 읽지 않게 하는 것이
+    이 보완의 목적이다 (요구 ①).
+    """
+    from deck.report import render_opening_run
+
+    duel, _gift = _board_with_facedown_gift(
+        repository, definitions=_waiting_gift_registry()
+    )
+    _single_summon_hand(duel)
+    run = _run_opening(duel, repository)
+    text = render_opening_run(run)
+
+    #: ① 전체 지원 상태가 **한 줄로** 나온다.
+    assert "전체 지원 상태: 🔴 **끝까지 검증하지 못했습니다**" in text
+    #: ② 걸음의 두 시점이 서로 다른 말로 나온다.
+    #:
+    #: 🔴 **도중 사유의 문장은 여기 적지 않는다** — 수와 자리만 적고 누적
+    #: 목록으로 연결한다. 걸음마다 문장을 다시 적으면 긴 전개에서 메시지
+    #: 상한에 걸려 정적 계획 절이 잘렸다 (실측).
+    assert "🔴 **도중에** 만난 미지원 2건 (지나온 자리 · 아래 `미지원 사유`)" in text
+    #: ③ 누적 목록이 그 문장을 들고 있다 — 연결이 끊기지 않는다.
+    assert "이 전개 중에 만난 **미지원 사유**" in text
+    assert any(
+        "trap-activation-event" in line for line in text.splitlines()
+    )
+
+    #: ④ 🔴 깨끗한 전개에서는 그 반대가 나온다 — 같은 함수로 확인한다.
+    clean = GameState.create(
+        repository,
+        decks=([LUSTER_DRAGON] * 30, [LUSTER_DRAGON] * 30),
+        turn_player=P0,
+        seed=1,
+    )
+    monster = clean.create_instance(LUSTER_DRAGON, owner=P0, zone=Zone.MZONE)
+    clean.move(
+        monster, Zone.MZONE, to_player=P0, position=Position.FACEUP_ATTACK
+    )
+    clean.turn.turn_number = 3
+    clean.turn.turn_player = P0
+    clean.turn.set_phase(Phase.MAIN1)
+    quiet = _run_opening(
+        Duel(
+            state=clean,
+            priority=PriorityState.idle(turn_player=P0, phase=Phase.MAIN1),
+            **duel_components(),
+        ),
+        repository,
+    )
+    quiet_text = render_opening_run(quiet)
+    assert "전체 지원 상태: ✅" in quiet_text
+    assert "끝까지 검증하지 못했습니다" not in quiet_text

@@ -428,7 +428,13 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     #: 채우는 자리가 셋 → 다섯 → 일곱 → **열**이 되었다. 추가 보완이 더한
     #: 셋은 **원래 침묵이던 자리**다 (실행 구현 없음 · 대상 환전 실패 ·
     #: 관문 거절) — 보류가 늘어난 것이 느슨해진 것이 아니라 정직해진 것이다.
-    assert len(filled) == 10, len(filled)
+    #:
+    #: 🔴 열 → **열둘** (보완8 세 항목 ②). 늘어난 둘은
+    #: ``_note_target_limits`` 의 두 자리이고, **또 원래 침묵이던 자리**다:
+    #: 대상 조합을 끝까지 세지 못한 범위(가려진 후보 · 들여다보지 못한 자리)를
+    #: 전에는 아무 데도 적지 않았다. 둘 다 **모듈 상수**에서 채우므로
+    #: 아래 ``kinds`` 는 셋 그대로다 — 출처의 종류는 늘지 않았다.
+    assert len(filled) == 12, len(filled)
 
     def source_kind(keyword) -> str:
         value = keyword.value
@@ -511,9 +517,12 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     #: "비턴 플레이어다" 와 ``_activation_actions`` 의 규칙 거절, 그리고
     #: ``_flow_actions`` 의 우선권 자리가 모름에서 **확정 거부로 옮겨 온**
     #: 것이다. 전부 "규칙이 답했다" 쪽이므로 규율을 쓰는 자리가 늘었다.
+    #: 🔴 **보완8 세 항목 ②는 비우는 쪽을 늘리지 않았다** — 더한 두 자리는
+    #: 둘 다 ``missing`` 을 **채운다** (정보가 없어서 모르는 쪽이다). 그래서
+    #: 비우는 자리는 열둘 그대로이고 채우는 쪽만 열 → 열둘이 되었다.
     empty = len(calls) - len(filled)
-    assert empty == len(calls) - 10
-    assert empty >= 12, empty
+    assert empty == len(calls) - 12
+    assert empty == 12, empty
 
 
 # ======================================================================

@@ -48,6 +48,7 @@ Phase 가 그 관문을 열지 않았고, ``G`` 절이 그 사실을 **센다.**
 """
 
 import ast
+import dataclasses
 import itertools
 import math
 import pathlib
@@ -82,6 +83,7 @@ from engine.target_bridge import (
     UNSUPPORTED_MULTIPLE_BINDINGS,
     UNSUPPORTED_VARIABLE_COUNT,
     TargetBridgeError,
+    TargetEnumerationLimits,
     chosen_bindings,
     required_target_count,
     selections_for,
@@ -885,17 +887,40 @@ def test_f01_only_one_production_file_changed():
 @pytest.mark.real_card
 def test_f02_no_new_data_type_was_added():
     """
-    🔴 **§10 — 새 데이터 타입 0개.**
+    🔴 **§10 — 미지원 사유는 ``str`` 상수다.**
 
-    미지원 사유는 ``str`` 상수다 — ``engine.effect.semantics`` 의
-    ``MISSING_*`` 와 같은 모양이고, 새 ``Enum`` 이나 ``dataclass`` 를 만들지
-    않았다.
+    ``engine.effect.semantics`` 의 ``MISSING_*`` 와 같은 모양이고, 그 사유를
+    담으려고 새 ``Enum`` 이나 ``dataclass`` 를 만들지 않았다.
+
+    🔴 **정정 (Phase 6-AB 보완8 세 항목 ②).** 이 시험의 이름은 *"새 데이터
+    타입 0개"* 였고 그것이 **더는 사실이 아니다.** 보완8 의 마무리가
+    ``TargetEnumerationLimits`` 하나를 더했다 — *대상 조합을 끝까지 세지
+    못한 범위*(가리킬 수 있는 후보 수 · 정체를 읽을 수 없는 후보 수 ·
+    들여다보지 못한 자리)를 담는 자리다.
+
+    왜 상수로 안 되는가: 그 범위는 **판에 따라 달라지는 수**이고 (사유
+    상수는 판과 무관한 이름이다), 소비자가 "어느 범위의 제한인가" 를
+    문자열을 파싱하지 않고 읽어야 한다 (사용자 요구 ②). 그래서 **수를 담는
+    불변 묶음** 하나를 둔다.
+
+    아래는 그 타입이 **그 성질을 지키는지** 함께 센다 — 불변이고, 수와 자리
+    이름만 들고 있고, 카드 식별자를 담지 않는다.
     """
     tree = ast.parse(BRIDGE.read_text(encoding="utf-8"))
     classes = [
         node.name for node in tree.body if isinstance(node, ast.ClassDef)
     ]
-    assert classes == ["TargetBridgeError"], classes
+    assert classes == ["TargetBridgeError", "TargetEnumerationLimits"], classes
+
+    #: 🔴 **불변이고 슬롯이 고정이다** — 다리가 상태를 들고 있지 않다.
+    assert dataclasses.is_dataclass(TargetEnumerationLimits)
+    params = dataclasses.fields(TargetEnumerationLimits)
+    assert [f.name for f in params] == ["eligible", "undecided", "unchecked"]
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        TargetEnumerationLimits(1, 0, ()).eligible = 2  # type: ignore[misc]
+    #: 🔴 **카드 식별자를 담을 칸이 없다** (3-E-41 과 같은 결).
+    for forbidden in ("instance_id", "card_id", "instances", "candidates"):
+        assert forbidden not in {f.name for f in params}, forbidden
     for name in (
         UNSUPPORTED_VARIABLE_COUNT,
         UNSUPPORTED_MULTIPLE_BINDINGS,

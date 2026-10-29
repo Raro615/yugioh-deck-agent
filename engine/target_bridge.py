@@ -75,6 +75,7 @@ from __future__ import annotations
 
 import itertools
 import math
+from dataclasses import dataclass
 
 from engine.action import PlayerAction
 from engine.action_target import ActionTarget, ActionTargetKind
@@ -400,6 +401,23 @@ def target_combinations(
     assert choice is not None  # unsupported_enumeration 이 보증한다
     take = choice.minimum
 
+    found, pool = _candidate_pool(state, seat, definition, source, binding)
+
+    #: 상한은 **거른 뒤의** 후보 수로 본다 — 가려진 카드를 세어서 상한을
+    #: 넘겼다고 하면, 못 쓸 후보 때문에 쓸 수 있는 효과가 막힌다.
+    if unsupported_enumeration(definition, len(pool)) is not None:
+        return []
+    return [targets_from(combo) for combo in itertools.combinations(pool, take)]
+
+
+def _candidate_pool(state, seat, definition, source, binding):
+    """
+    이 대상 규칙의 **후보 묶음**과, 그 가운데 행위가 가리킬 수 있는 것들.
+
+    :func:`target_combinations` 과 :func:`target_enumeration_limits` 가 **같은
+    호출**을 쓰게 하려고 뺀 자리다 (보완8 세 항목 ②). 두 벌이 되면 "셀 수
+    있는 것" 과 "못 센 범위" 가 다른 규칙으로 갈린다.
+    """
     context = ConditionContext(
         player=seat, source=source, effect_ref=definition.effect_ref
     )
@@ -430,16 +448,87 @@ def target_combinations(
         for instance in found.eligible
         if ordinary.find(instance) is not None
     )
+    return found, pool
 
-    #: 상한은 **거른 뒤의** 후보 수로 본다 — 가려진 카드를 세어서 상한을
-    #: 넘겼다고 하면, 못 쓸 후보 때문에 쓸 수 있는 효과가 막힌다.
-    if unsupported_enumeration(definition, len(pool)) is not None:
-        return []
-    return [targets_from(combo) for combo in itertools.combinations(pool, take)]
+
+@dataclass(frozen=True, slots=True)
+class TargetEnumerationLimits:
+    """
+    대상 조합을 **다 세지 못한 범위** (Phase 6-AB 보완8 세 항목 ②).
+
+    🔴 **왜 이 자리가 생겼는가.** :func:`target_combinations` 은 ``eligible``
+    만 조합으로 묶는다. 그것은 옳다 — ``undecided`` (후보인지 모른다) 를
+    올리면 ``UNKNOWN`` 이 허가가 된다. 그런데 **올리지 않는 것과 아무 말도
+    하지 않는 것은 다르다.** 실측 (이 보완 전, 실제 등재 카드 싸이크론
+    ``5318639:e[0]``)::
+
+        내 앞면 마법 1장        → eligible   → 조합 1개 · 후보가 된다
+        상대 뒷면 마법·함정 1장  → undecided  → 🔴 **조용히 사라졌다**
+        내 앞면 몬스터 1장      → 조건 거짓   → 제외 (옳다 — 규칙의 답이다)
+
+    그래서 *"합법인 대상이 하나 있다"* 가 *"대상 공간을 끝까지 검증했다"* 로
+    읽혔다. 사용자 요구 ②의 *"VALID 대안이 있다고 중요한 UNKNOWN 선택지를
+    모두 숨기지 않는다"* 가 그 자리다.
+
+    🔴 **어느 카드인지 적지 않는다.** 수와 자리 이름만 들고 있다 — 조건
+    계층의 사유 문장은 ``#62 는 뒷면이라 정체를 모름`` 처럼 **인스턴스를
+    가리키므로** 그대로 옮기지 않는다 (3-E-41 의 불변식과 같은 결).
+    """
+
+    eligible: int
+    """지금 관측에서 **확실히 후보**인 것의 수 (행위가 가리킬 수 있는 것)."""
+    undecided: int
+    """후보인지 **모르는** 것의 수. 가려져 정체를 읽을 수 없는 카드들이다."""
+    unchecked: tuple[str, ...]
+    """**아예 들여다보지 못한 자리**들의 이름. 존 이름은 비공개가 아니다."""
+
+    @property
+    def complete(self) -> bool:
+        """대상 공간을 끝까지 셌는가."""
+        return not self.undecided and not self.unchecked
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        bits = [f"가리킬 수 있는 후보 {self.eligible}장"]
+        if self.undecided:
+            bits.append(f"정체를 읽을 수 없어 세지 못한 후보 {self.undecided}장")
+        if self.unchecked:
+            bits.append(
+                f"들여다보지 못한 자리 {len(self.unchecked)}곳"
+                f" ({', '.join(self.unchecked)})"
+            )
+        return " · ".join(bits)
+
+
+def target_enumeration_limits(
+    state: GameState, seat: int, definition, source: InstanceId
+) -> "TargetEnumerationLimits | None":
+    """
+    :func:`target_combinations` 이 **세지 못한 범위**. 다 셌으면 ``None``.
+
+    🔴 **판정을 새로 하지 않는다.** 같은 ``_candidate_pool`` 을 쓰므로 "셀 수
+    있는 것" 과 "못 센 것" 이 한 규칙에서 나온다.
+
+    발동 시점에 고를 것이 없는 효과(무작위 · 전부 · 해결 시점 선택)는
+    ``None`` 이다 — 셀 대상이 없으므로 못 센 범위도 없다.
+    """
+    bindings = chosen_bindings(definition)
+    if not bindings:
+        return None
+    if unsupported_enumeration(definition) is not None:
+        return None
+    found, pool = _candidate_pool(state, seat, definition, source, bindings[0])
+    limits = TargetEnumerationLimits(
+        eligible=len(pool),
+        undecided=len(found.undecided),
+        unchecked=tuple(found.unchecked),
+    )
+    return None if limits.complete else limits
 
 
 __all__ = [
     "MAX_TARGET_COMBINATIONS",
+    "TargetEnumerationLimits",
+    "target_enumeration_limits",
     "UNSUPPORTED_COMBINATION_COUNT",
     "UNSUPPORTED_DUPLICATE_CHOICE",
     "UNSUPPORTED_MULTIPLE_BINDINGS",

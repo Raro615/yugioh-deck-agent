@@ -232,13 +232,22 @@ def render_opening_run(run) -> str:
         lines.append(f"      이유: {step.reason}")
         if step.note:
             lines.append(f"      🔴 {step.note}")
-        lines.append(f"      이 뒤의 행동 후보 {step.next_candidates}건")
+        #: 🔴 **도중에 만난 미지원은 수와 자리만 이 줄에 붙인다** (보완8 세
+        #: 항목 ①). 문장은 아래 누적 목록에 한 번만 적는다 — 걸음마다 다시
+        #: 적으면 긴 전개에서 메시지 상한에 걸려 **정적 계획 절이 잘린다**
+        #: (실측). 사용자 요구 ①의 *"어디서 확인할 수 있는지 연결해라"* 다.
+        during = (
+            f" · 🔴 **도중에** 만난 미지원 {len(step.unsupported_during)}건"
+            f" (지나온 자리 · 아래 `미지원 사유`)"
+            if step.unsupported_during else ""
+        )
+        lines.append(f"      이 뒤의 행동 후보 {step.next_candidates}건{during}")
         if step.unsupported:
             #: 🔴 **이 걸음 뒤에 "지원하지 않아 오르지 못한 후보" 가 있었다**
             #: (6-AB 최종 보완 ④). 규칙이 막은 것과 섞지 않는다 — 여기 오는
             #: 것은 빠진 규칙의 이름이 붙은 보류뿐이다.
-            lines.append(f"      🔴 이 뒤에 지원하지 않아 후보가 되지 못한 것"
-                         f" {len(step.unsupported)}건:")
+            lines.append(f"      🔴 이 뒤 **자리**의 미지원"
+                         f" {len(step.unsupported)}건 (지금 이 자리):")
             lines.extend(f"         - {item}" for item in step.unsupported)
     lines.append("")
     #: 🔴 **"해결" 의 뜻을 적는다** (Phase 6-AA — 사용자 실험 ④).
@@ -256,6 +265,16 @@ def render_opening_run(run) -> str:
     if run.stopped_reason:
         lines.append(f"  멈춘 이유: {run.stopped_reason}"
                      + (f" [{run.stopped_kind}]" if run.stopped_kind else ""))
+    #: 🔴 **두 질문을 따로 적는다** (보완8 세 항목 ①). 위 줄은 *"왜
+    #: 멈췄는가"* 이고, 이 줄은 *"전개 전체를 지원 범위 안에서 검증했는가"*
+    #: 다. 하나만 보면 ``flow_only`` 를 "정상 검증 완료" 로 읽는다 — 중간에
+    #: 미지원을 지나왔어도 마지막 자리는 깨끗할 수 있기 때문이다 (실측).
+    lines.append(
+        "  전체 지원 상태: ✅ 모든 자리를 지원 범위 안에서 판정했습니다"
+        if run.fully_supported else
+        f"  전체 지원 상태: 🔴 **끝까지 검증하지 못했습니다**"
+        f" (미지원 {len(run.unsupported)}건 · 멈춘 자리와 다른 질문)"
+    )
     if run.unsupported:
         #: 🔴 **실행에 영향을 준 미지원 사유를 전개 요약 안에 둔다** (6-AB
         #: 최종 보완 ④). 걸음별로 흩어 두면 읽는 쪽이 "이 전개는 끝까지

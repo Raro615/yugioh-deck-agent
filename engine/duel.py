@@ -73,6 +73,7 @@ from engine.target_bridge import (
     TargetBridgeError,
     selections_for,
     target_combinations,
+    target_enumeration_limits,
 )
 from engine.spell_activation import (
     PLACEMENT_SOURCE_ZONES,
@@ -172,6 +173,22 @@ MANDATORY_TRIGGER_UNPLAYABLE = (
 #: 빠른 효과 기회 쪽은 후보를 **아예 만들지 않아** 이유가 남지 않았다
 #: (실측: 보완8 §2 A5 · A6 — ``apply`` 가 "지금 허가된 행위가 아닙니다" 로
 #: ``RULE_NOT_IMPLEMENTED`` 를 돌려주었다).
+#: 🔴 **대상 공간을 끝까지 세지 못하는 두 까닭** (Phase 6-AB 보완8 세 항목 ②).
+#:
+#: 둘 다 ``INFORMATION_UNAVAILABLE`` 의 ``missing`` 으로 쓰인다 — "코드가
+#: 생겨야 풀린다" 가 아니라 **"정보가 없어서 모른다"** 쪽이다. 그래서 이름도
+#: 빠진 구현이 아니라 **읽을 수 없는 것**을 가리킨다.
+#:
+#: 🔴 상수로 두는 이유: :meth:`Duel._withheld_for` 가 ``(효과 · 코드 ·
+#: 모자란 것)`` 을 열쇠로 묶으므로, 문장을 그 자리에서 조립하면 같은 사유가
+#: 여러 줄이 된다 (``scope`` 가 걸음마다 달라지는 것과 같은 함정).
+UNREADABLE_TARGET_RULE = (
+    "target-candidate-identity (가려진 카드라 그 대상 후보를 셀 수 없다)"
+)
+UNSEEN_TARGET_ZONE_RULE = (
+    "target-candidate-zone (들여다보지 못한 자리의 후보를 셀 수 없다)"
+)
+
 OPEN_STATE_ONLY_KINDS: tuple[PlayerActionKind, ...] = (
     PlayerActionKind.NORMAL_SUMMON,
     PlayerActionKind.SPECIAL_SUMMON,
@@ -1357,6 +1374,25 @@ class Duel:
                     # 이 줄이 없어도 결과가 같았다. 사건이 관문을 열게 된
                     # 지금은, 없으면 같은 발동이 **목록에 두 번** 오른다.
                     continue
+                # 🔴 **못 센 대상 범위를 적는다** (보완8 세 항목 ②).
+                #
+                # ``target_combinations`` 은 ``eligible`` 만 조합으로
+                # 묶는다 — 그것은 옳다 (모름을 허가로 바꾸지 않는다).
+                # 그런데 **올리지 않는 것과 아무 말도 하지 않는 것은
+                # 다르다.** 실측 (실제 등재 카드 싸이크론)::
+                #
+                #     내 앞면 마법 1장      → 후보가 된다
+                #     상대 뒷면 마법·함정    → 🔴 조용히 사라졌다
+                #     내 앞면 몬스터        → 조건 거짓으로 제외 (규칙의 답)
+                #
+                # 그래서 "합법인 대상이 하나 있다" 가 "대상 공간을 끝까지
+                # 검증했다" 로 읽혔다. 이 보류가 그 둘을 가른다 —
+                # **허가 목록은 그대로**이므로 합법 조합은 막지 않는다.
+                limits = target_enumeration_limits(
+                    self.state, seat, definition, card.instance_id
+                )
+                if limits is not None:
+                    self._note_target_limits(refusals, effect_ref, limits)
                 for targets in target_combinations(
                     self.state, seat, definition, card.instance_id
                 ):
@@ -1395,6 +1431,64 @@ class Duel:
                         continue
                     allowed.append(candidate)
         return allowed, tuple(refusals.values())
+
+    @staticmethod
+    def _note_target_limits(
+        refusals: dict, effect_ref: "EffectRef", limits
+    ) -> None:
+        """
+        **대상 공간을 끝까지 세지 못했다**를 보류로 적는다 (보완8 세 항목 ②).
+
+        🔴 **두 가지 모름을 따로 적는다.** 가려져 정체를 읽을 수 없는 후보와
+        아예 들여다보지 못한 자리는 **다른 사실**이고, 합치면 "무엇이 생기면
+        풀리는가" 가 한 문장으로 뭉개진다.
+
+        🔴 **어느 카드인지 적지 않는다.** 조건 계층의 사유 문장은 인스턴스를
+        가리키므로(``#62 는 뒷면이라 정체를 모름``) 옮기지 않고, **수와 자리
+        이름**만 적는다 (3-E-41 의 불변식과 같은 결). 자리 이름은 비공개가
+        아니다 — 상대의 패가 가려져 있다는 사실은 양쪽이 안다.
+
+        🔴 **``scope`` 는 이 자리의 범위를 적는다.** 보류 쪽의 ``scope`` 가
+        패의 장수를 적는 자리와 **다른 사실**이므로, 그 수를 대상 범위의
+        근거로 쓰지 않는다 (사용자 요구 ②).
+        """
+        if limits.undecided:
+            key = (effect_ref, ValidationCode.INFORMATION_UNAVAILABLE,
+                   UNREADABLE_TARGET_RULE)
+            refusals.setdefault(
+                key,
+                WithheldAction(
+                    PlayerActionKind.ACTIVATE_EFFECT,
+                    f"{effect_ref} 의 대상 후보를 끝까지 세지 못했습니다 —"
+                    f" 가려져 정체를 읽을 수 없는 후보가 있습니다."
+                    f" 합법인 조합은 그대로 후보로 남아 있습니다.",
+                    ValidationCode.INFORMATION_UNAVAILABLE,
+                    missing=UNREADABLE_TARGET_RULE,
+                    scope=(
+                        f"대상 후보 {limits.eligible + limits.undecided}장 중"
+                        f" {limits.undecided}장은 정체를 읽을 수 없음"
+                    ),
+                ),
+            )
+        if limits.unchecked:
+            key = (effect_ref, ValidationCode.INFORMATION_UNAVAILABLE,
+                   UNSEEN_TARGET_ZONE_RULE)
+            refusals.setdefault(
+                key,
+                WithheldAction(
+                    PlayerActionKind.ACTIVATE_EFFECT,
+                    f"{effect_ref} 의 대상 후보를 끝까지 세지 못했습니다 —"
+                    f" 들여다보지 못한 자리가 있습니다"
+                    f" ({', '.join(limits.unchecked)})."
+                    f" 합법인 조합은 그대로 후보로 남아 있습니다.",
+                    ValidationCode.INFORMATION_UNAVAILABLE,
+                    missing=UNSEEN_TARGET_ZONE_RULE,
+                    scope=(
+                        f"가리킬 수 있는 후보 {limits.eligible}장 ·"
+                        f" 들여다보지 못한 자리 {len(limits.unchecked)}곳"
+                    ),
+                ),
+            )
 
     def activation_validator(self, seat: int, offers=None) -> ActionValidator:
         """

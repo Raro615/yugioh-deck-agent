@@ -411,11 +411,30 @@ class ExecutedStep:
     note: str = ""
     unsupported: tuple[str, ...] = ()
     """
-    이 걸음 **뒤의 자리**에서 지원하지 않아 후보가 되지 못한 것들.
+    이 걸음이 **끝난 뒤 그 자리**에서 지원하지 않아 후보가 되지 못한 것들.
 
     ``LegalActions.unsupported()`` 가 고른다 — 빠진 규칙의 이름이 붙은
     보류만이다. 🔴 **규칙이 막은 것은 여기 없다.** 그것은 규칙의 답이고,
     이 칸이 말하는 것은 "이 저장소에 그 규칙이 없어 오르지 못했다" 다.
+
+    🔴 **이 칸은 "지금 이 자리" 하나만 말한다** (보완8 세 항목 ①). 이
+    걸음의 **자동 처리 도중**(체인 해결 · 양측의 기회를 지나가는 패스)에
+    만난 사유는 여기 오지 않는다 — 그쪽은 :attr:`unsupported_during` 이고,
+    둘을 합치면 "지금 후보가 되지 못한 것" 과 "지나오면서 만난 것" 이 같은
+    목록으로 보인다.
+    """
+    unsupported_during: tuple[str, ...] = ()
+    """
+    이 걸음의 **자동 처리 도중** 지나간 자리에서 만난 미지원 사유
+    (보완8 세 항목 ①).
+
+    :func:`_settle_chain` 이 양측의 응답 기회를 지나가면서 적은 것들 가운데
+    **이 걸음에서 처음 본** 것이다. 🔴 **시점이 다르다** — 이것은 이미
+    지나온 자리의 사실이고, :attr:`unsupported` 는 지금 자리의 사실이다.
+    둘을 섞으면 과거의 사유가 "현재 후보가 되지 못한 것" 으로 읽힌다.
+
+    🔴 다른 자리의 기회에서 만난 것은 **어느 카드인지 적지 않는다**
+    (:func:`unsupported_reasons_elsewhere`).
     """
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
@@ -442,7 +461,9 @@ class OpeningRun:
     ``"duel_over"``      듀얼이 끝났다
     ``"no_candidates"``  허가된 후보가 **하나도** 없다
     ``"unsupported"``    판을 바꿀 후보가 없는데 **미지원 보류가 있다**
-    ``"flow_only"``      남은 후보가 흐름뿐이고 미지원 보류가 없다
+    ``"flow_only"``      남은 후보가 흐름뿐이고 **그 자리에** 미지원 보류가
+                        없다 — 🔴 전개 **전체**가 지원 범위 안에서 검증되었다는
+                        뜻이 아니다 (:attr:`fully_supported` 가 그것을 말한다)
     ``"not_chosen"``     후보는 있는데 **검증용 선택 방식**이 고르지 않았다
     ``"rejected"``       행동이 거절되었다
     ``"limit"``          이 단계가 선언한 상한에 닿았다
@@ -451,6 +472,20 @@ class OpeningRun:
     🔴 **"흐름뿐" 과 "미지원" 을 가르는 것이 이 칸을 만든 이유다.** 6-AB
     추가 보완까지 둘이 같은 문장으로 나왔고, 그래서 읽는 쪽이 "지원하지
     않아 오르지 못한 후보가 있다" 를 "정상 전개 종료" 로 읽을 수 있었다.
+
+    🔴 **이 칸은 "왜 멈췄는가" 하나만 말한다** (보완8 세 항목 ①). 전개
+    **전체**를 지원 범위 안에서 검증했는가는 :attr:`fully_supported` 가
+    따로 답한다 — 두 질문이고, 하나의 낱말로 둘을 말하면 어느 쪽이든
+    거짓이 된다. 실측 (이 보완 전)::
+
+        일반 소환 1걸음 → 중간 P1 기회에서 trap-activation-event 미지원
+        → 마지막 P0 패는 비어 있으므로 그 자리의 미지원은 없다
+        → stopped_kind="flow_only"  🔴 그리고 멈춘 설명이 그 한계를
+                                       한 글자도 말하지 않았다
+
+    그 재현은 **합성 조건**이다 (테스트 전용 정의에서
+    ``activation_waits_for_event`` 만 참으로 바꾼다). 실제 욕망의 선물이
+    사건을 기다리는 카드라는 뜻이 아니다.
     """
     unsupported: list[str] = field(default_factory=list)
     """
@@ -459,6 +494,39 @@ class OpeningRun:
     Simulator 와 ``/combo`` 까지 가는 것이 이것이다 — 걸음별로도 남고
     (:attr:`ExecutedStep.unsupported`) 여기 모인다.
     """
+
+    @property
+    def fully_supported(self) -> bool:
+        """
+        **전개 전체를 지원 범위 안에서 검증했는가** (보완8 세 항목 ①).
+
+        :attr:`unsupported` 가 비었을 때만 참이다 — 걸음마다의 자리든 자동
+        처리 도중 지나간 자리든, 한 번이라도 "이 저장소에 그 규칙이 없어
+        오르지 못한 후보" 를 만났으면 거짓이다.
+
+        🔴 **:attr:`stopped_kind` 와 다른 질문이다.** 그 칸은 *"왜
+        멈췄는가"* 이고 이 칸은 *"끝까지 검증했는가"* 다. 둘은 서로를
+        덮지 않는다:
+
+        ==========================  ==================  ==================
+        상황                          ``stopped_kind``    ``fully_supported``
+        ==========================  ==================  ==================
+        미지원 없이 흐름만 남았다       ``flow_only``       참
+        중간에 미지원을 지나왔고
+        마지막 자리는 깨끗하다          ``flow_only``       **거짓**
+        멈춘 자리에 미지원이 있다       ``unsupported``     거짓
+        행동이 거절되었다              ``rejected``        만난 것에 따른다
+        상한에 닿았다                 ``limit``           만난 것에 따른다
+        ==========================  ==================  ==================
+
+        🔴 **누적 미지원이 실제 종료 원인을 덮지 않는다** — 거절 · 상한 ·
+        정책 미선택은 :attr:`stopped_kind` 가 그대로 말한다.
+
+        🔴 이름은 ``agent.simulation.SimulationResult.fully_supported`` 와
+        같다. 같은 질문이므로 같은 이름을 쓴다 — 읽는 쪽이 두 계층에서
+        다른 낱말을 배우지 않게.
+        """
+        return not self.unsupported
 
     @property
     def executed(self) -> int:
@@ -771,6 +839,18 @@ def execute_opening(
                 f" 후보 생성 · 검증용 선택 방식에서** 더 고를 것이 없다는"
                 f" 뜻입니다. 실제로 이 패의 전개가 끝났다는 뜻이 아니고,"
                 f" 엔진이 막았다는 뜻도 아닙니다."
+                #: 🔴 **"더 고를 것이 없다" 와 "끝까지 검증했다" 를
+                #: 가른다** (보완8 세 항목 ①). 이 자리가 깨끗해도 전개
+                #: 도중에 미지원을 지나왔으면 전체를 검증한 것이 아니다.
+                #: 시점을 분명히 적는다 — **이 자리의 것이 아니다.**
+                + (
+                    f" 🔴 그리고 이 전개 도중에 **지원하지 않아 후보가 되지"
+                    f" 못한 것 {len(run.unsupported)}건**을 지나왔습니다"
+                    f" (지금 이 자리가 아니라 **앞선 자리**의 사실입니다 —"
+                    f" 아래 `미지원 사유` 목록). 그래서 전개 전체를 지원"
+                    f" 범위 안에서 검증한 것은 아닙니다."
+                    if run.unsupported else ""
+                )
                 if flow_only else
                 f"검증용 선택 방식이 고를 행동을 찾지 못했습니다"
                 f" (후보 {len(legal.allowed)}건: {kinds})"
@@ -785,10 +865,15 @@ def execute_opening(
         gate = _gate_code(duel, action, repository)
 
         before_hash = duel.state.state_hash()
+        #: 🔴 **자동 처리 도중 새로 만난 사유만 따로 센다** (보완8 세
+        #: 항목 ①). ``run.unsupported`` 는 처음 본 순서대로 쌓이므로,
+        #: 이 걸음 앞의 길이를 기억하면 **이 걸음이 더한 것**이 잘린다.
+        seen_unsupported = len(run.unsupported)
         step = duel.apply(action)
         settled, resolved = (None, True)
         if step.accepted and duel.priority.is_open:
             settled, resolved = _settle_chain(duel, note_unsupported)
+        during = tuple(run.unsupported[seen_unsupported:])
         after_hash = duel.state.state_hash()
 
         events = []
@@ -821,6 +906,7 @@ def execute_opening(
             note=("체인이 끝까지 풀리지 않았습니다" if step.accepted
                   and not resolved else ""),
             unsupported=note_unsupported(duel.legal_actions(duel.to_act)),
+            unsupported_during=during,
         ))
         if not step.accepted:
             run.stopped_kind = "rejected"

@@ -24,7 +24,8 @@
 
 일반 소환과 특수 소환을 섞지 않는다
 -----------------------------------
-엔진은 ``NORMAL_SUMMON`` 을 **허가한다**. 반면 ``SPECIAL_SUMMON`` 은
+엔진에는 ``NORMAL_SUMMON`` 의 **조건 판정 계층이 있다** (그래서 돌려볼 수
+있다 — 🔴 어떤 판에서 허가가 난다는 뜻이 아니다). 반면 ``SPECIAL_SUMMON`` 은
 ``ActionValidator`` 가 **언제나 ``UNKNOWN``** 을 돌려주고
 (``UnimplementedRule("special-summon-condition")``), 융합·싱크로·엑시즈·
 링크의 재료 선택 절차는 엔진에 **없다**. 그래서 특수 소환은 계획에 넣지
@@ -185,11 +186,15 @@ class ComboPlanner:
                     action=f"'{name}' 을 일반 소환합니다",
                     requires=("이번 턴 일반 소환권이 남아 있어야 합니다",
                               "메인 몬스터 존에 빈 자리가 있어야 합니다"),
-                    expected="앞면 공격 표시로 몬스터 존에 놓입니다",
+                    expected="성공하면 앞면 공격 표시로 몬스터 존에 놓입니다",
                     basis=StepBasis.ENGINE_ACTION,
                     status=StepStatus.CONFIRMED,
-                    note=("엔진이 일반 소환을 허가합니다 — 특수 소환과"
-                          " 달리 조건 판정 계층이 있습니다"),
+                    #: 🔴 **"허가합니다" 를 쓰지 않는다** (보완8 세 항목 ③).
+                    #: 이 계획은 엔진을 돌리지 않으므로 **이 판에서 허가를
+                    #: 받은 것이 아니다.** 있는 것은 *그 행동 종류의 판정
+                    #: 기능*이고, 그것과 *이 판에서의 허가*는 다른 사실이다.
+                    note=("일반 소환은 **판정 계층이 있는 종류**입니다"
+                          " (특수 소환과 달리) — 이 판의 허가가 아닙니다"),
                 ))
                 summon_right_used = True
             else:
@@ -198,7 +203,7 @@ class ComboPlanner:
                     action=f"'{name}' 을 일반 소환합니다",
                     requires=("🔴 이번 턴 일반 소환권을 이미 썼습니다 —"
                               " 추가 소환 수단이 필요합니다",),
-                    expected="앞면 공격 표시로 몬스터 존에 놓입니다",
+                    expected="성공하면 앞면 공격 표시로 몬스터 존에 놓입니다",
                     basis=StepBasis.ENGINE_ACTION,
                     status=StepStatus.CONDITIONAL,
                     note="소환권을 되찾는 수단을 이 계획이 찾지 못했습니다",
@@ -233,11 +238,13 @@ class ComboPlanner:
                 order=order, card_id=card.id, card_name=name,
                 action=f"'{name}' 의 효과를 발동합니다",
                 requires=("카드에 적힌 발동 조건을 사람이 확인해야 합니다",),
-                expected="엔진에 등록된 구현대로 상태가 바뀝니다",
+                #: 🔴 **결과를 단정하지 않는다** (보완8 세 항목 ③). 이
+                #: 걸음은 실행하지 않았으므로 발동이 적법한지도 모른다.
+                expected="발동이 성공하면 엔진에 등록된 구현대로 상태가 바뀝니다",
                 basis=StepBasis.ENGINE_EXECUTABLE,
                 status=StepStatus.CONFIRMED,
-                note=("엔진에 실행 구현이 등록된 카드입니다 — 돌려볼 수"
-                      " 있습니다"),
+                note=("엔진에 실행 구현이 등록된 카드입니다 — **돌려볼 수"
+                      " 있다**는 뜻이고 이 판의 적법성이 아닙니다"),
             )
 
         if card.effects and card.has_effect_from("HAND"):

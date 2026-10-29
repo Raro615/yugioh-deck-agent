@@ -1882,13 +1882,16 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
         if sites:
             by_function[node.name] = sites
 
-    #: 🔴 **보류를 만드는 자리는 이 여섯뿐이다** — 늘면 여기서 드러난다.
+    #: 🔴 **보류를 만드는 자리는 이 일곱뿐이다** — 늘면 여기서 드러난다.
     #: (보완8 이 둘을 더했다: ``_activation_actions`` 와
-    #: ``_stage_closed_actions``. 아래에서 각자의 기준을 따로 센다.)
+    #: ``_stage_closed_actions``. 보완8 의 세 항목 마무리가
+    #: ``_note_target_limits`` 를 더했다 — 대상 조합을 끝까지 세지 못한
+    #: 범위를 적는 자리다. 아래에서 각자의 기준을 따로 센다.)
     assert sorted(by_function) == [
         "_activation_actions",
         "_enforce_mandatory",
         "_flow_actions",
+        "_note_target_limits",
         "_stage_closed_actions",
         "_trigger_actions",
         "_withheld_board_actions",
@@ -1991,6 +1994,30 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
         "ValidationCode.STAGE_FORBIDS_ACTION",
         "ValidationCode.NOT_TURN_PLAYER",
     }, stage_codes
+
+    #: 🔴 **``_note_target_limits`` 의 두 자리는 둘 다 채운다** (보완8 세
+    #: 항목 ②). 가려진 후보도 들여다보지 못한 자리도 **정보가 없어서
+    #: 모르는** 것이고, 그래서 "무엇이 없어서 모르는가" 를 답할 수 있다.
+    #: 둘은 **서로 다른 모름**이므로 같은 이름을 쓰지 않는다.
+    assert filled("_note_target_limits") == [True, True]
+    target_missing = {
+        ast.unparse(
+            next(kw.value for kw in node.keywords if kw.arg == "missing")
+        )
+        for node in by_function["_note_target_limits"]
+    }
+    assert target_missing == {
+        "UNREADABLE_TARGET_RULE",
+        "UNSEEN_TARGET_ZONE_RULE",
+    }, target_missing
+    #: 🔴 그리고 둘 다 ``INFORMATION_UNAVAILABLE`` 이다 — "코드가 생겨야
+    #: 풀린다" 가 아니라 **"정보가 없다"** 쪽이고, 그 코드는 ``UNKNOWN`` 이다.
+    for node in by_function["_note_target_limits"]:
+        code = ast.unparse(node.args[2])
+        assert code == "ValidationCode.INFORMATION_UNAVAILABLE", code
+    assert CODE_VALIDITY[
+        ValidationCode.INFORMATION_UNAVAILABLE
+    ] is ActionValidity.UNKNOWN
 
     #: 🔴 **비운 자리가 왜 비었는지 코드가 적는다.** 빈 칸을 설명 없이 두면
     #: 다음 사람이 "빠뜨렸다" 로 읽고 아무 값이나 채운다. 자리마다 **그 함수
