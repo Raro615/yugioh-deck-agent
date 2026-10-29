@@ -243,11 +243,11 @@ PROSE_OCCURRENCES = {
     ("engine/trigger_chain.py", 623),
     ("engine/validation.py", 129),
     ("engine/validation.py", 180),
-    ("engine/validation.py", 207),
-    ("engine/validation.py", 223),
+    ("engine/validation.py", 215),
     ("engine/validation.py", 231),
-    ("engine/validation.py", 363),
-    ("engine/validation.py", 369),
+    ("engine/validation.py", 239),
+    ("engine/validation.py", 362),
+    ("engine/validation.py", 368),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
