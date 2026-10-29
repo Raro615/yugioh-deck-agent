@@ -778,7 +778,12 @@ def test_17_the_relation_result_fits_the_existing_validation_vocabulary():
     셋 다 **이미 있는** 코드이고, 세 번째는 3-E-45 가 "적었는데 읽을 수
     없다" 에 쓰려고 만든 그 코드다. 새 코드를 더하지 않았다.
     """
-    assert len(CODE_VALIDITY) == 48
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 늘어난 셋은
+    #: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+    #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다 — 이 파일이
+    #: 쓰는 코드 셋(``OK`` · ``CANDIDATE_NOT_ELIGIBLE`` ·
+    #: ``INFORMATION_UNAVAILABLE``)은 그대로이고 모름 쪽도 7 그대로다.
+    assert len(CODE_VALIDITY) == 51
     assert CODE_VALIDITY[ValidationCode.OK] is ActionValidity.VALID
     assert (
         CODE_VALIDITY[ValidationCode.CANDIDATE_NOT_ELIGIBLE] is ActionValidity.INVALID
@@ -928,7 +933,10 @@ def test_20_this_phase_changed_nothing(repository):
         "actor",
         "note",
     ]
-    assert len(CODE_VALIDITY) == 48
+    #: 🔴 48 → 51 (보완8) — **이 Phase** 가 더한 것은 아니다. 늘어난 셋은
+    #: 전부 ``INVALID`` 이고, 이 파일이 의존하는 어휘는 그대로다 (``test_17``
+    #: 의 설명).
+    assert len(CODE_VALIDITY) == 51
 
     #: dormant 파이프라인을 연결하지 않았다.
     duel_source = source_of("engine/duel.py")

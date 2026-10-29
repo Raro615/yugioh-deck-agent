@@ -108,7 +108,14 @@ MINE = 0
 
 #: ``ValidationCode`` 멤버 수. 프롬프트가 "48개 rejection usage" 라고 말한 48 은
 #: **이 수**이고 사용처 수가 아니다.
-CODE_MEMBER_COUNT = 48
+#:
+#: 🔴 48 → **51** (Phase 6-AB 보완8). 늘어난 셋은
+#: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+#: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다 — 모름 쪽은 7
+#: 그대로다. 보완8 이 한 일이 그것이다: **모름이던 흐름 거절을 규칙 거절로
+#: 옮긴다.** 이 감사가 지키는 구분(확정 거부와 모름을 섞지 않는다)이 실제로
+#: 쓰인 자리다.
+CODE_MEMBER_COUNT = 51
 
 #: ``engine/`` + ``agent/`` 에서 코드가 **등장하는** 줄.
 #: 69 → **67** (Phase 3-E-38 이 M1 ×2 · M2 ×2 를 고치면서 2 감소).
@@ -129,7 +136,12 @@ CODE_MEMBER_COUNT = 48
 #: 🔴 73 → 74 (Phase 6-AB 보완5). ``_zone_from_grave`` 한 자리가 더해졌다 —
 #: 거부 생성(``REJECTION_PRODUCTIONS``)도 같이 하나 늘었으므로 아래
 #: "차이가 13" 은 그대로다 (6-V 와 같은 결).
-CODE_OCCURRENCES = 74
+#: 🔴 74 → **80** (Phase 6-AB 보완8). 늘어난 여섯도 **전부 거부 생성 쪽**이고
+#: (``REJECTION_PRODUCTIONS`` 61 → 67), 그래서 아래 "차이가 13" 은 그대로다 —
+#: 멤버십 · 비교 · enum 정의 쪽은 하나도 늘지 않았다. 늘어난 여섯이 무엇인지는
+#: ``REJECTION_PRODUCTIONS`` 의 설명에 있다 (이미 모름이던 보류 자리가 코드를
+#: 명시하게 된 것이고, 새 거절이 아니다).
+CODE_OCCURRENCES = 80
 
 #: 그중 **거부를 만드는** 자리.
 #:
@@ -178,7 +190,17 @@ CODE_OCCURRENCES = 74
 #: 🔴 60 → 61 (Phase 6-AB 보완5). ``_zone_from_grave`` 의 "이동 사건의
 #: 도착지와 지금 자리가 다르다" 갈래가 거부 생성 한 자리를 더했다 —
 #: ``_zone_from_summon`` 의 같은 갈래(바로 위)와 **같은 결**이다.
-REJECTION_PRODUCTIONS = 61
+#: 🔴 61 → **67** (Phase 6-AB 보완8). 늘어난 여섯은 **새 거절이 아니다** —
+#: 보완8 이 ``WithheldAction`` 에 ``code`` 를 필수로 만들었고, 그래서 **이미
+#: ``missing=`` 을 달고 있던** (즉 이미 모름이던) 보류 자리 여섯이 그 코드를
+#: 인자로 **명시**하게 되었다. 전에는 그 사실이 "``missing`` 이 비어 있지
+#: 않다" 로만 암시되었고 읽는 쪽이 짐작해야 했다.
+#:
+#: 🔴 그리고 같은 Phase 가 **반대 방향으로도** 움직였다: 흐름 거절 넷이 이
+#: 코드에서 ``STAGE_FORBIDS_ACTION`` · ``NOT_TURN_PLAYER`` ·
+#: ``NO_RESPONSE_WINDOW`` 로 빠져나갔다. 즉 이 코드로 **거절하는 횟수는
+#: 늘지 않았고**, 그 코드를 **적는 자리**가 늘었다.
+REJECTION_PRODUCTIONS = 67
 
 #: enum 이 **섹션 주석으로 선언한** 묶음 → 멤버 수.
 DECLARED_SECTIONS = {
@@ -190,6 +212,10 @@ DECLARED_SECTIONS = {
     "우선권 · 응답 기회 (Phase 2-F-1)": 5,
     "일반 소환 (Phase 2-I)": 2,
     "발동 타이밍 · 스펠 스피드 (Phase 2-S)": 2,
+    #: 🔴 보완8 이 더한 묶음 — 셋 다 ``INVALID`` 다 (``CODE_VALIDITY`` 가
+    #: 그것을 따로 고정한다). 기존 여덟 묶음의 멤버 수는 **하나도**
+    #: 바뀌지 않았다: 새 코드가 기존 묶음에 끼어들지 않았다는 뜻이다.
+    "흐름의 단계 · 필수 절차 (Phase 6-AB 보완8)": 3,
 }
 
 #: ``# --- 모른다 (UNKNOWN) ---`` 섹션의 멤버. 여기 있는 코드는
@@ -1445,7 +1471,9 @@ def test_31_the_distinctions_from_phase_3e24_to_3e36_still_hold():
     assert ResolutionStatus.CONDITION_UNKNOWN is not ResolutionStatus.CONDITION_FALSE
 
     #: enum 크기가 하나도 늘지 않았다.
-    assert len(ValidationCode) == 48
+    #: 🔴 48 → 51 (보완8) — 늘어난 셋은 전부 ``INVALID`` 이므로 모름 쪽은
+    #: 7 그대로다 (``CODE_MEMBER_COUNT`` 의 설명 참고).
+    assert len(ValidationCode) == 51
     assert len(ConditionResult) == 3
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5

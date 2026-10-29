@@ -298,7 +298,19 @@ def test_02_apply_accepts_exactly_what_legal_actions_offered(repository):
     #: 🔴 거부 사유가 **목록에 없다**(`RULE_NOT_IMPLEMENTED`)여야 한다 — 수행기까지
     #: 갔다면 다른 코드가 돌아온다.
     assert step.code is ValidationCode.RULE_NOT_IMPLEMENTED, step.code
-    assert "허가된 행위가 아닙니다" in step.reason
+    #: 🔴 **정정 (Phase 6-AB 보완8 마무리).** 문장이 더 좁아졌다. 전에는
+    #: ``_refusal`` 의 **마지막 기본값**("목록에 없다")이 돌아왔다. 보완8 이
+    #: ``_rule_verdict`` 를 끼운 뒤로는 **규칙 검증기**가 먼저 답하고, 그
+    #: 답이 특수 소환 조건이 이 저장소에 없다는 것이다. 실측::
+    #:
+    #:     전: "special_summon 는 지금 허가된 행위가 아닙니다."
+    #:     후: "아직 구현하지 않은 규칙이 걸려 있습니다.
+    #:          [special-summon-condition (카드마다 다르다)]"
+    #:
+    #: 🔴 이 시험이 재는 것은 그대로다: **수행기까지 가지 않았다.** 수행기가
+    #: 돌았다면 코드가 ``RULE_NOT_IMPLEMENTED`` 가 아니고 판이 바뀐다.
+    assert step.reason.startswith("아직 구현하지 않은 규칙이 걸려 있습니다.")
+    assert "[special-summon-condition" in step.reason
     #: 그리고 판이 한 글자도 바뀌지 않았다 — 특수 소환이 실제로 일어나지 않았다.
     assert duel.state.state_hash() == before
 
@@ -1073,6 +1085,9 @@ def test_27_no_new_action_kind_or_generator_was_added():
 
     #: 후보 생성기는 넷뿐이다.
     duel_code = code_only("engine/duel.py")
+    #: 🔴 보완8 이 ``_stage_closed_actions`` 하나를 더했다 — 단계·차례가 닫은
+    #: 행동을 **아무 데도 적지 않던** 자리다 (BLOCKER-F6-2). 생성자 목록이
+    #: 늘어난 것이 느슨해진 것이 아니라 정직해진 것이다.
     generators = [
         name
         for name in (
@@ -1080,10 +1095,11 @@ def test_27_no_new_action_kind_or_generator_was_added():
             "_activation_actions",
             "_flow_actions",
             "_withheld_board_actions",
+            "_stage_closed_actions",
         )
         if name in duel_code
     ]
-    assert len(generators) == 4, generators
+    assert len(generators) == 5, generators
     for forbidden in ("_special_summon_actions", "_position_actions", "ActionGraph"):
         assert forbidden not in duel_code, forbidden
 
@@ -1093,7 +1109,12 @@ def test_28_the_legal_actions_container_keeps_allowed_and_withheld_apart():
     names = [f.name for f in dataclasses.fields(LegalActions)]
     assert names == ["seat", "allowed", "withheld"], names
     held = [f.name for f in dataclasses.fields(WithheldAction)]
-    assert held == ["kind", "reason", "missing"], held
+    #: 🔴 **정정 (Phase 6-AB 보완8).** ``code`` 와 ``scope`` 가 늘었다 —
+    #: ``code`` 는 **규칙의 이름**, ``scope`` 는 **개수**다. 섞지 않는다는
+    #: 성질은 그대로다: 보류에는 ``PlayerAction`` 도 식별자도 없다 (3-E-41).
+    assert held == ["kind", "reason", "code", "missing", "scope"], held
+    for forbidden in ("source", "action", "instance_id"):
+        assert forbidden not in held, forbidden
     #: 보류는 ``PlayerAction`` 이 아니라 **종류와 이유**다 — 고를 수 없다.
     assert "kind" in held and "action" not in held
 

@@ -181,6 +181,14 @@ class ValidationCode(str, Enum):
     것을 위반으로 접지 않는다.
     """
 
+    PRIORITY_STATE_STALE = "priority_state_stale"
+    """
+    우선권 상태가 지금 판과 맞지 않는다 (턴 플레이어 · 페이즈가 다르다).
+
+    ``INVALID`` 가 아니라 ``UNKNOWN`` 에 쓴다 — 어느 쪽이 낡았는지 모르는
+    상태에서 "안 된다" 고 단정하지 않는다.
+    """
+
     # --- 흐름의 단계 · 필수 절차 (Phase 6-AB 보완8) ----------------------
     STAGE_FORBIDS_ACTION = "stage_forbids_action"
     """
@@ -232,15 +240,6 @@ class ValidationCode(str, Enum):
     ``TRIGGER_WORDING_MISSING`` 이 그 사실을 적는다 — **모름을 위반으로
     접지 않는다.**
     """
-
-    PRIORITY_STATE_STALE = "priority_state_stale"
-    """
-    우선권 상태가 지금 판과 맞지 않는다 (턴 플레이어 · 페이즈가 다르다).
-
-    ``INVALID`` 가 아니라 ``UNKNOWN`` 에 쓴다 — 어느 쪽이 낡았는지 모르는
-    상태에서 "안 된다" 고 단정하지 않는다.
-    """
-
 
 
 # ======================================================================

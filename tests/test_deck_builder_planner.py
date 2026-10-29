@@ -439,7 +439,17 @@ def test_30_action_basis_is_not_confused_with_effect_implementation():
     갈랐다.
     """
     assert StepBasis.ENGINE_ACTION is not StepBasis.ENGINE_EXECUTABLE
-    assert "허가" in StepBasis.ENGINE_ACTION.describe_ko()
+    #: 🔴 **정정 (Phase 6-AB 보완8 마무리).** 이 줄은 ``"허가"`` 를 찾고
+    #: 있었다 — 그 낱말이 사용자 요구 §6 이 집은 과대 진술이다. 정적 계획은
+    #: **엔진을 돌리지 않으므로** 무엇도 "허가" 받지 않았다. 지금 문구는
+    #: *"엔진의 행위 계층이 판정할 수 있음 (정적 확인)"* 이다.
+    #:
+    #: 이 시험이 지키는 구분(행위 근거 ≠ 효과 실행 구현)은 그대로이고, 아래는
+    #: 그 구분을 **낱말 둘**로 고정한다: 한쪽은 "행위 계층", 다른 쪽은 "실행
+    #: 구현". 그리고 "허가" 가 **돌아오지 않는지**도 함께 본다.
+    assert "행위 계층" in StepBasis.ENGINE_ACTION.describe_ko()
+    assert "정적 확인" in StepBasis.ENGINE_ACTION.describe_ko()
+    assert "허가" not in StepBasis.ENGINE_ACTION.describe_ko()
     assert "실행 구현" in StepBasis.ENGINE_EXECUTABLE.describe_ko()
 
     source = inspect.getsource(planner_module)

@@ -894,13 +894,22 @@ def test_32_the_three_record_types_stay_distinct():
 
 
 def test_33_the_vocabulary_this_phase_depends_on_is_unchanged():
-    """**§36-19 · 20 · 21: 어휘가 그대로다.**"""
+    """
+    **§36-19 · 20 · 21: 어휘가 그대로다.**
+
+    🔴 **정정 (Phase 6-AB 보완8).** ``ValidationCode`` 가 48 → 51 이 되었다.
+    그런데 **이 Phase 가 의존하는 어휘는 그대로다**: 이 파일이 읽는 것은
+    ``unknown_codes()`` 이고 그것은 **7 그대로**다 — 늘어난 셋이 전부
+    ``INVALID`` 이기 때문이다. 그래서 숫자 하나만 고치고, 이 시험이 지키는
+    사실(모름의 집합이 조용히 늘지 않는다)은 **더 강해졌다.**
+    """
     from engine.validation import ActionValidity, unknown_codes
 
     assert len(SimulationStatus) == 5
     assert len(Terminal) == 4
-    assert len(ValidationCode) == 48
+    assert len(ValidationCode) == 51
     assert len(ActionValidity) == 3
+    #: 🔴 enum 이 셋 늘었는데도 **모름은 7 그대로**다.
     assert len(unknown_codes()) == 7
     #: 3-E-38 의 두 구분도 그대로다.
     assert (

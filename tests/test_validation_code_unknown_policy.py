@@ -175,9 +175,20 @@ def small_duel(repository, seed: int = 11):
 # ======================================================================
 
 
-def test_01_the_enum_still_has_exactly_forty_eight_members():
-    """**§17-1: 멤버 수가 그대로다.**"""
-    assert len(ValidationCode) == 48
+def test_01_the_enum_declares_every_member_it_uses():
+    """
+    **§17-1: 멤버 수가 그대로다.**
+
+    🔴 **이름을 정정했다 (보완8).** 함수 이름에 숫자를 적어 두면 숫자가
+    움직일 때마다 이름이 거짓이 된다 — 이 파일이 ``test_02`` 에서 3-E-39 의
+    같은 실수를 이미 적었다.
+    """
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 늘어난 셋은
+    #: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+    #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 모름
+    #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
+    #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
+    assert len(ValidationCode) == 51
     #: 그리고 ``str`` enum 이라는 성질도 그대로다 — policy 가 멤버를 만들지 않았다.
     assert issubclass(ValidationCode, str)
 
@@ -198,7 +209,12 @@ def test_02_no_new_member_was_added_and_none_was_renamed():
         for stmt in classes["ValidationCode"].body
         if isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Constant)
     ]
-    assert len(declared) == 48
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 늘어난 셋은
+    #: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+    #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 모름
+    #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
+    #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
+    assert len(declared) == 51
     assert declared == list(ValidationCode.__members__)
     #: 값도 이름의 소문자형 그대로다.
     for name in declared:
@@ -227,11 +243,20 @@ def test_04_the_policy_is_total_and_breaks_at_import_if_a_member_is_missed():
     """
     **§17-4 · §16-8: 빠뜨릴 수 없는 구조다.**
 
-    policy 가 48개 **전부**를 다루고, 빠지면 **import 할 때** 터지는 검사가
+    policy 가 51개 **전부**를 다루고, 빠지면 **import 할 때** 터지는 검사가
     소스에 있다. 집합이 조용히 낡던 바로 그 길을 막는다.
+
+    🔴 **보완8 이 그 검사가 실제로 작동하는 것을 확인했다** — 새 코드 셋을
+    더하면서 ``CODE_VALIDITY`` 를 먼저 고치지 않았을 때 ``import`` 가
+    터졌다. 이 시험이 지키는 성질이 그 자리에서 쓰였다.
     """
     assert set(CODE_VALIDITY) == set(ValidationCode)
-    assert len(CODE_VALIDITY) == 48
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 늘어난 셋은
+    #: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+    #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 모름
+    #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
+    #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
+    assert len(CODE_VALIDITY) == 51
 
     #: 검사가 실제로 있는지 구문으로 확인한다.
     source = source_of("engine/validation.py")
@@ -422,7 +447,12 @@ def test_16_unknown_is_not_invalid():
     invalid_set = codes_declaring(ActionValidity.INVALID)
     assert unknown_set & invalid_set == frozenset()
     assert len(unknown_set) == 7
-    assert len(invalid_set) == 39
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 늘어난 셋은
+    #: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+    #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 모름
+    #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
+    #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
+    assert len(invalid_set) == 42
 
 
 def test_17_unknown_is_not_a_loss_and_not_a_zero_score():
@@ -567,13 +597,18 @@ def test_23_the_unclassifiable_code_is_explicit_and_is_not_unknown():
 
 
 def test_24_the_four_buckets_partition_the_enum_without_a_remainder():
-    """**분류가 48 을 남김없이 나눈다: 1 + 39 + 7 + 1.**"""
+    """
+    **분류가 51 을 남김없이 나눈다: 1 + 42 + 7 + 1.**
+
+    🔴 48 → 51 (보완8). 늘어난 셋은 전부 ``INVALID`` 이므로 **모름 쪽 7은
+    그대로**다 — 모름이던 자리를 규칙 거절로 옮긴 것이다.
+    """
     valid = codes_declaring(ActionValidity.VALID)
     invalid = codes_declaring(ActionValidity.INVALID)
     unknown = codes_declaring(ActionValidity.UNKNOWN)
     undecided = codes_declaring(None)
-    assert (len(valid), len(invalid), len(unknown), len(undecided)) == (1, 39, 7, 1)
-    assert len(valid | invalid | unknown | undecided) == 48 == len(ValidationCode)
+    assert (len(valid), len(invalid), len(unknown), len(undecided)) == (1, 42, 7, 1)
+    assert len(valid | invalid | unknown | undecided) == 51 == len(ValidationCode)
     assert valid == frozenset({ValidationCode.OK})
 
 
@@ -617,11 +652,21 @@ def test_27_the_duel_step_and_withheld_action_shapes_are_untouched():
         "reason",
         "result",
     }
+    #: 🔴 **``WithheldAction`` 은 바뀌었다 (Phase 6-AB 보완8).** 그 없음이
+    #: BLOCKER-F7-1 의 내용이었다 — 읽는 쪽이 "규칙이 막았다" 와 "판정 근거가
+    #: 없다" 를 문장으로 짐작해야 했다. ``code`` 는 **규칙의 이름**이고
+    #: ``scope`` 는 **개수**다. 식별자는 여전히 없다 (3-E-41 의 불변식).
     assert {f.name for f in dataclasses.fields(WithheldAction)} == {
         "kind",
         "reason",
+        "code",
         "missing",
+        "scope",
     }
+    for forbidden in ("source", "action", "instance_id"):
+        assert forbidden not in {
+            f.name for f in dataclasses.fields(WithheldAction)
+        }
 
 
 def test_28_the_trigger_pipeline_is_still_dormant():
@@ -766,7 +811,12 @@ def test_33_the_only_thing_this_phase_changed_is_where_the_policy_lives():
     엔진에 policy 가 생기고 agent 의 사본이 없어졌다. 그 밖의 모양은 전부
     그대로다 — 멤버 수 · 상태 수 · 자료형 · 분기 한 자리.
     """
-    assert len(ValidationCode) == 48
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 늘어난 셋은
+    #: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+    #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 모름
+    #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
+    #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
+    assert len(ValidationCode) == 51
     assert len(SimulationStatus) == 5
     assert len(ActionValidity) == 3
     assert len(ResolutionStatus) == 14

@@ -661,11 +661,22 @@ def test_14_the_canonical_legal_action_path_is_unchanged(board):
 
     #: 보류된 것은 **``PlayerAction`` 을 들고 있지 않다** — ``kind`` 와 이유만
     #: 싣는다. 그래서 ``UNKNOWN`` 이 구조적으로 후보가 될 수 없다.
+    #:
+    #: 🔴 **정정 (Phase 6-AB 보완8).** 칸이 둘 늘었다 — ``code`` (**규칙의
+    #: 이름**)와 ``scope`` (**개수**). 그 둘이 없던 것이 BLOCKER-F7-1 의
+    #: 내용이었다: 읽는 쪽이 "규칙이 막았다" 와 "판정 근거가 없다" 를 문장으로
+    #: 짐작해야 했다.
+    #:
+    #: 🔴 이 시험이 지키는 성질은 그대로다 — ``PlayerAction`` 도, 그것을
+    #: 되살릴 수 있는 **식별자**도 없다 (3-E-41 의 불변식). 그래서 아래는
+    #: 늘어난 둘을 고정하면서 금지된 칸이 여전히 없다는 것을 함께 센다.
     import dataclasses
     from engine.duel import WithheldAction
 
     held_fields = {f.name for f in dataclasses.fields(WithheldAction)}
-    assert held_fields == {"kind", "reason", "missing"}
+    assert held_fields == {"kind", "reason", "code", "missing", "scope"}
+    for forbidden in ("source", "action", "instance_id", "targets", "effect_ref"):
+        assert forbidden not in held_fields, forbidden
     assert "action" not in held_fields
     for held in first.withheld:
         assert isinstance(held.kind, PlayerActionKind)

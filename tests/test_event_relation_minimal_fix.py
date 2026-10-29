@@ -524,11 +524,26 @@ def test_13_every_pair_the_gate_can_emit_agrees_with_the_unknown_policy():
 
 def test_14_no_validation_code_was_added_or_redefined():
     """
-    **새 ``ValidationCode`` 를 만들지 않았다.** 48개 그대로이고, 쓴 코드 셋은
-    전부 이 Phase **이전부터** 있던 것이다.
+    **새 ``ValidationCode`` 를 만들지 않았다.** 쓴 코드 셋은 전부 이 Phase
+    **이전부터** 있던 것이다.
+
+    🔴 **정정 (Phase 6-AB 보완8).** *이* Phase 는 하나도 더하지 않았고,
+    **뒤의 Phase 가 셋을 더했다.** 숫자만 올리면 다음에 조용히 늘어난 것을
+    잡지 못하므로 무엇이 늘었는지를 **이름으로** 고정한다.
     """
-    assert len(ValidationCode) == 48
-    assert len(CODE_VALIDITY) == 48
+    added = {
+        "STAGE_FORBIDS_ACTION",
+        "MANDATORY_TRIGGER_PENDING",
+        "TRIGGER_TIMING_MISSED",
+    }
+    assert added <= set(ValidationCode.__members__)
+    assert len(ValidationCode) - len(added) == 48
+    #: 🔴 셋 다 ``INVALID`` 다 — 모름 쪽은 늘지 않았다.
+    for name in added:
+        assert CODE_VALIDITY[ValidationCode[name]] is ActionValidity.INVALID
+    #: 🔴 policy 가 enum 전부를 덮는다는 성질은 그대로다 (import 때 터진다).
+    assert set(CODE_VALIDITY) == set(ValidationCode)
+    assert len(CODE_VALIDITY) == 51
     for name in (
         "OK",
         "CANDIDATE_NOT_ELIGIBLE",

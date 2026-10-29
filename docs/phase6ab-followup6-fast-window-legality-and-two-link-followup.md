@@ -761,6 +761,14 @@ BLOCKER 로 만들지 않는다"* 를 따른다.
 |---|---|
 | **BLOCKER-F6-1** | 🔴 **기동 효과의 거절 코드가 `SPELL_SPEED_TOO_LOW` 가 아니다.** 차단 자체는 성립한다 — 후보에서 빠지고 `apply` 가 거절하고 판이 바뀌지 않는다. 그런데 코드는 `UNKNOWN` / `RULE_NOT_IMPLEMENTED` 이고 `missing = MONSTER_CLASSIFICATION_MISSING` 이다: 관문이 몬스터 효과를 "기동 · 유발 · 플립" 과 "유발즉시" 로 가르는 축을 갖고 있지 않다. 그 축을 심는 일은 ①·② 밖이고 저장소 전역에 기록된 `UNKNOWN` 이라 건드리지 않았다. `test_c02` 가 **실측된 사실**을 센다 — 통과시키려고 기대값을 바꾼 것이 아니다 |
 | **BLOCKER-F6-2** | `Duel.apply` 가 **흐름 계층**(우선권 · 차례 · 필수 처리)의 거절에는 여전히 *"아직 구현하지 않은 규칙"* 문장을 쓴다. 관문이 `VALID` 를 낸 자리이므로 이유를 **지어내지 않고** 예전 문장을 그대로 둔 것이고 (§5.2), 그 문장이 그 자리에 대해 부정확하다 |
+
+> 🔴 **정정 (보완8).** **BLOCKER-F6-2 는 해소되었다.** 흐름 계층의 거절이
+> `STAGE_FORBIDS_ACTION` · `NOT_TURN_PLAYER` · `NO_RESPONSE_WINDOW` ·
+> `MANDATORY_TRIGGER_PENDING` 으로 갈라졌고, `Duel._refusal` 이 그 판정을
+> 지어내지 않고 **판정한 계층의 말을 그대로** `apply` 결과로 옮긴다.
+> 실측과 계약은
+> [`phase6ab-followup8-candidate-reasons-and-flow-rejections.md`](phase6ab-followup8-candidate-reasons-and-flow-rejections.md)
+> 에 있다.
 | **BLOCKER-F5-1** | 「경우」 효과의 **장소 검사** — 보완5 그대로. `graveyard_zone_for` 가 반쪽을 메웠다 |
 | **BLOCKER-F5-2** | 강제 「때」가 타이밍을 놓친 경우 `UNKNOWN` — 6-AB 이래 그대로. 공식 근거를 찾지 못했다 |
 

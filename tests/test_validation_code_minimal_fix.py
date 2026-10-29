@@ -50,7 +50,12 @@ from engine.effect import EffectProvenance
 from engine.effect.definition import ExecutionAvailability
 from engine.effect.resolution import ResolutionStatus
 from engine.ids import InstanceId
-from engine.validation import ActionValidity, ValidationCode, ValidationResult
+from engine.validation import (
+    CODE_VALIDITY,
+    ActionValidity,
+    ValidationCode,
+    ValidationResult,
+)
 
 from tests.conftest import requires_official_db
 
@@ -60,6 +65,18 @@ from tests.test_validation_code_consistency import (
     resolve,
     synthetic,
 )
+
+#: 🔴 Phase 6-AB 보완8 이 더한 코드 셋 (48 → 51). 셋 다 ``INVALID`` 이고,
+#: 그래서 ``unknown_codes()`` 는 7 그대로다 — 보완8 은 **모름이던 흐름 거절을
+#: 규칙 거절로 옮겼을 뿐** 모름을 늘리지 않았다.
+ADDED_IN_FOLLOWUP8 = frozenset(
+    {
+        "STAGE_FORBIDS_ACTION",
+        "MANDATORY_TRIGGER_PENDING",
+        "TRIGGER_TIMING_MISSED",
+    }
+)
+
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 MINE = 0
@@ -451,7 +468,18 @@ def test_12_genuine_unimplemented_rules_still_use_the_old_code():
 
 def test_13_no_new_validation_code_was_added():
     """**T (§15): ``ValidationCode`` 가 한 칸도 늘지 않았다.**"""
-    assert len(ValidationCode) == 48
+    #: 🔴 **정정 (Phase 6-AB 보완8).** 이 줄은 48 을 고정하고 있었고, 그
+    #: 숫자가 지키던 것은 *"이 Phase 가 어휘를 늘리지 않았다"* 였다. 보완8 이
+    #: 셋을 더했으므로 (``STAGE_FORBIDS_ACTION`` ·
+    #: ``MANDATORY_TRIGGER_PENDING`` · ``TRIGGER_TIMING_MISSED``) 이제는
+    #: **무엇이 늘었는지를 이름으로** 고정한다 — 숫자만 올리면 다음에 조용히
+    #: 늘어난 것을 잡지 못한다.
+    assert len(ValidationCode) == 51
+    assert ADDED_IN_FOLLOWUP8 <= set(ValidationCode.__members__)
+    assert len(ValidationCode) - len(ADDED_IN_FOLLOWUP8) == 48
+    #: 🔴 셋 다 ``INVALID`` 다 — 모름 쪽은 7 그대로다.
+    for _name in ADDED_IN_FOLLOWUP8:
+        assert CODE_VALIDITY[ValidationCode[_name]] is ActionValidity.INVALID
     for name in ("CONDITION_FALSE", "EXECUTION_ERROR", "INVALID_CONTEXT"):
         assert name not in ValidationCode.__members__
     #: 두 코드는 **이미 있던** 멤버다.
@@ -718,8 +746,8 @@ def test_23_the_distinctions_from_phase_3e24_to_3e37_still_hold():
     ):
         assert getattr(ValidationCode, name) is not ValidationCode.RULE_NOT_IMPLEMENTED
 
-    #: enum 크기가 하나도 늘지 않았다.
-    assert len(ValidationCode) == 48
+    #: enum 크기 — 보완8 이 더한 셋 말고는 그대로다 (``test_13`` 의 설명).
+    assert len(ValidationCode) - len(ADDED_IN_FOLLOWUP8) == 48
     assert len(ConditionResult) == 3
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5

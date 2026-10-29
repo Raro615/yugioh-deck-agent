@@ -64,8 +64,25 @@ from engine.trigger import (
     TriggerSpec,
     TriggerStatus,
 )
-from engine.validation import ActionValidity, ValidationCode, ValidationResult
+from engine.validation import (
+    CODE_VALIDITY,
+    ActionValidity,
+    ValidationCode,
+    ValidationResult,
+)
 from engine.vocabulary import Phase, Position, Zone
+
+#: 🔴 Phase 6-AB 보완8 이 더한 코드 셋 (48 → 51). 셋 다 ``INVALID`` 이고,
+#: 그래서 ``unknown_codes()`` 는 7 그대로다 — 보완8 은 **모름이던 흐름 거절을
+#: 규칙 거절로 옮겼을 뿐** 모름을 늘리지 않았다.
+ADDED_IN_FOLLOWUP8 = frozenset(
+    {
+        "STAGE_FORBIDS_ACTION",
+        "MANDATORY_TRIGGER_PENDING",
+        "TRIGGER_TIMING_MISSED",
+    }
+)
+
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -397,7 +414,18 @@ def test_09_no_new_vocabulary_was_added():
 
     측정값(3-E-24 에서 센 그대로): ``ValidationCode`` 48개.
     """
-    assert len(list(ValidationCode)) == 48
+    #: 🔴 **정정 (Phase 6-AB 보완8).** 이 줄은 48 을 고정하고 있었고, 그
+    #: 숫자가 지키던 것은 *"이 Phase 가 어휘를 늘리지 않았다"* 였다. 보완8 이
+    #: 셋을 더했으므로 (``STAGE_FORBIDS_ACTION`` ·
+    #: ``MANDATORY_TRIGGER_PENDING`` · ``TRIGGER_TIMING_MISSED``) 이제는
+    #: **무엇이 늘었는지를 이름으로** 고정한다 — 숫자만 올리면 다음에 조용히
+    #: 늘어난 것을 잡지 못한다.
+    assert len(ValidationCode) == 51
+    assert ADDED_IN_FOLLOWUP8 <= set(ValidationCode.__members__)
+    assert len(ValidationCode) - len(ADDED_IN_FOLLOWUP8) == 48
+    #: 🔴 셋 다 ``INVALID`` 다 — 모름 쪽은 7 그대로다.
+    for _name in ADDED_IN_FOLLOWUP8:
+        assert CODE_VALIDITY[ValidationCode[_name]] is ActionValidity.INVALID
     #: 고칠 때 쓴 코드 셋은 전부 **이미 있던** 것이다.
     for code in (
         ValidationCode.CANDIDATE_NOT_ELIGIBLE,

@@ -467,6 +467,11 @@ def test_09_a_targeting_effect_depends_on_the_board_not_on_an_event(repository):
 def test_10_enumeration_is_deterministic_and_side_effect_free(repository):
     """
     §15 — 같은 판에서 몇 번 불러도 같은 답이고, 판도 RNG 도 바뀌지 않는다.
+
+    🔴 **정정 (Phase 6-AB 보완8).** ``_activation_actions`` 가 이제 둘을
+    돌려준다 — ``(허가, 보류)``. 전에는 허가만 돌려주고 관문이 막은 후보를
+    **조용히 버렸다** (BLOCKER-F7-1). 그래서 아래는 **둘 다** 흔들리지 않는
+    것을 센다: 보류가 결정적이지 않으면 같은 판에서 보고가 달라진다.
     """
     state, _ = board(repository, MYSTICAL_SPACE_TYPHOON, give_target=True)
     duel = duel_of(state)
@@ -475,16 +480,20 @@ def test_10_enumeration_is_deterministic_and_side_effect_free(repository):
     before_hash = state.state_hash()
     before_rng = state.rng.getstate()
 
-    runs = [
-        tuple(
-            action.canonical_state()
-            for action in duel._activation_actions(MINE, validator)
+    def snapshot():
+        allowed, withheld = duel._activation_actions(MINE, validator)
+        return (
+            tuple(action.canonical_state() for action in allowed),
+            tuple(
+                (held.kind, held.reason, held.code, held.missing, held.scope)
+                for held in withheld
+            ),
         )
-        for _ in range(5)
-    ]
+
+    runs = [snapshot() for _ in range(5)]
 
     assert len(set(runs)) == 1, "같은 판에서 답이 흔들린다"
-    assert runs[0], "후보가 하나도 없으면 이 시험이 흐려진다"
+    assert runs[0][0], "후보가 하나도 없으면 이 시험이 흐려진다"
     assert state.state_hash() == before_hash, "열거가 판을 바꿨다"
     assert state.rng.getstate() == before_rng, "열거가 RNG 를 소비했다"
 

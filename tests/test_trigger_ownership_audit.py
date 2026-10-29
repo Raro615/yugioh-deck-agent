@@ -49,6 +49,7 @@ from engine.activation import EffectActivator
 from engine.duel import Duel, TurnStep
 from engine.trigger import TriggerCandidate, TriggerRequirement
 from engine.trigger_order import UNRESOLVED_ORDER_RULES
+from engine.validation import ValidationCode
 from engine.vocabulary import Phase
 
 from tests.conftest import requires_official_db
@@ -238,6 +239,20 @@ def test_06_apply_refuses_anything_that_is_not_a_legal_action(repository):
 
     그래서 "엔진이 내부에서 유발을 발동한다" 를 지금 구조에 끼워 넣으려면
     ``apply`` 를 **우회**해야 한다. 우회는 두 번째 실행 경로를 만드는 일이다.
+
+    🔴 **정정 (Phase 6-AB 보완8).** 거절 **문장**이 바뀌었다. 전에는
+    *"{종류} 는 지금 허가된 행위가 아닙니다"* 에 ``RULE_NOT_IMPLEMENTED`` 가
+    붙었다 — 즉 "내 턴에 상대가 발동을 밀어 넣었다" 는 **규칙이 분명히 막은**
+    일을 "이 저장소에 그 규칙이 없다" 로 적고 있었다. 실측::
+
+        → 전: RULE_NOT_IMPLEMENTED "activate_effect 는 지금 허가된 행위가 아닙니다."
+        → 후: NOT_TURN_PLAYER      "지금은 P0 의 열린 상태입니다 — 비턴
+                                   플레이어는 자동으로 발동하는 유발 효과
+                                   외에는 행동할 수 없습니다
+                                   (룰북 TURN PLAYER'S PRIORITY)."
+
+    이 시험이 지키는 것(허가 목록에 없는 행위는 거절된다 · 판이 바뀌지
+    않는다)은 그대로다. 아래는 그 **더 좁은 답**을 고정한다.
     """
     duel = at_main1(small_duel(repository))
     seat = duel.turn_player
@@ -247,9 +262,16 @@ def test_06_apply_refuses_anything_that_is_not_a_legal_action(repository):
         actor=1 - seat,
         source=duel.state.player(1 - seat).hand[0].instance_id,
     )
+    before = duel.state.state_hash()
     step = duel.apply(intruder)
     assert not step.accepted
-    assert "허가된 행위가 아닙니다" in step.reason
+    #: 🔴 규칙이 막았다 — 모름이 아니다.
+    assert step.code is ValidationCode.NOT_TURN_PLAYER
+    assert "TURN PLAYER'S PRIORITY" in step.reason
+    #: 🔴 확정 거부이므로 빠진 규칙의 이름이 붙지 않는다.
+    assert "[" not in step.reason
+    #: 그리고 판은 그대로다 — 이 시험의 본문이다.
+    assert duel.state.state_hash() == before
 
 
 @pytest.mark.real_card

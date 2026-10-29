@@ -282,7 +282,12 @@ def test_07_seven_of_forty_eight_codes_are_in_the_set():
     **엔진의 policy 에서 파생된 집합**이다 — 그 사실은 ``test_17`` 이 센다.
     """
     assert len(_UNKNOWN_CODES) == 7
-    assert len(ValidationCode) == 48
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 늘어난 셋은
+    #: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+    #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 위의
+    #: ``_UNKNOWN_CODES`` 는 **7 그대로**다 — 보완8 은 모름을 늘리지 않았고
+    #: **모름이던 흐름 거절을 규칙 거절로 옮겼다.**
+    assert len(ValidationCode) == 51
     #: 집합의 정의가 ``frozenset`` 이다 — 런타임에 늘어날 수 없다.
     assert isinstance(_UNKNOWN_CODES, frozenset)
 
@@ -657,8 +662,23 @@ def test_24_a_genuine_missing_rule_still_lands_on_unknown():
 
 
 def test_25_no_new_enum_member_was_added_anywhere():
-    """**§22-22 · §20: 이번 Phase 는 enum 을 하나도 건드리지 않았다.**"""
-    assert len(ValidationCode) == 48
+    """
+    **§22-22 · §20: 이번 Phase 는 enum 을 하나도 건드리지 않았다.**
+
+    🔴 **정정 (Phase 6-AB 보완8).** *그* Phase 는 건드리지 않았고, **뒤의
+    Phase 가 셋을 더했다.** 숫자만 올리면 다음에 조용히 늘어난 것을 잡지
+    못하므로, 무엇이 늘었는지를 **이름으로** 고정한다.
+    """
+    added = {
+        "STAGE_FORBIDS_ACTION",
+        "MANDATORY_TRIGGER_PENDING",
+        "TRIGGER_TIMING_MISSED",
+    }
+    assert added <= set(ValidationCode.__members__)
+    assert len(ValidationCode) - len(added) == 48
+    #: 🔴 셋 다 ``INVALID`` 이므로 이 파일의 모름 집합은 7 그대로다.
+    assert len(_UNKNOWN_CODES) == 7
+    assert not (added & {c.name for c in _UNKNOWN_CODES})
     assert len(SimulationStatus) == 5
     assert len(ActionValidity) == 3
     assert len(ConditionResult) == 3
@@ -752,16 +772,32 @@ def test_28_the_codes_that_block_a_candidate_never_reach_the_simulator(repositor
     그래서 M1/M2 가 고친 코드도, ``HIDDEN_CARD`` 도 이 길로는 기계가 읽을
     형태로 나오지 않는다.
     """
+    #: 🔴 **정정 (Phase 6-AB 보완8).** ``code`` 와 ``scope`` 가 늘었다 —
+    #: 그 없음이 BLOCKER-F7-1 의 내용이었다. ``code`` 는 **규칙의 이름**이고
+    #: ``scope`` 는 **개수**이며, 식별자는 여전히 없다 (3-E-41).
+    #: 이 시험이 재는 성질(후보를 차단한 코드는 Simulator 에 닿지 않는다)은
+    #: 그대로다: ``WithheldAction`` 에는 ``PlayerAction`` 이 없다.
     assert {f.name for f in dataclasses.fields(WithheldAction)} == {
         "kind",
         "reason",
+        "code",
         "missing",
+        "scope",
     }
+    for forbidden in ("source", "action", "instance_id"):
+        assert forbidden not in {
+            f.name for f in dataclasses.fields(WithheldAction)
+        }
     duel = small_duel(repository)
     withheld = duel.legal_actions(duel.to_act).withheld
     assert withheld, "보류가 하나도 없는 판이면 이 측정이 무의미하다"
     for entry in withheld:
-        assert not hasattr(entry, "code")
+        #: 🔴 이제 코드를 들고 있다 (보완8) — 그러나 그것이 **후보를
+        #: 만들지는 못한다**: 행위 자체가 없으므로 Simulator 에 닿을 길이
+        #: 없다. 이 시험이 재던 것은 그 쪽이고, 그것은 그대로다.
+        assert isinstance(entry.code, ValidationCode)
+        assert not hasattr(entry, "action")
+        assert not hasattr(entry, "source")
 
 
 # ======================================================================
@@ -875,16 +911,25 @@ def test_32_the_agent_layer_no_longer_writes_the_policy_down():
         for node in tree.body
         if isinstance(node, ast.ClassDef)
     }
-    assert sizes["ValidationCode"] == 48
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 늘어난 셋은
+    #: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+    #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 위의
+    #: ``_UNKNOWN_CODES`` 는 **7 그대로**다 — 보완8 은 모름을 늘리지 않았고
+    #: **모름이던 흐름 거절을 규칙 거절로 옮겼다.**
+    assert sizes["ValidationCode"] == 51
     assert sizes["ActionValidity"] == 3
 
 
 def test_33_the_forty_eight_codes_partition_without_a_remainder():
     """
-    **§15 의 분류가 48 을 남김 없이 나눈다.**
+    **§15 의 분류가 51 을 남김 없이 나눈다.**
 
     보고서의 표를 손으로 더하다 ``TRUE INVALID`` 를 37 로 적어 합이 49 가 된
     적이 있다. 분할을 코드로 적어 두면 그 실수가 여기서 걸린다.
+
+    🔴 48 → **51** (Phase 6-AB 보완8). 늘어난 셋은 전부 **확정 거부** 쪽으로
+    갔다 (36 → 39) — 이름 붙인 범주 12는 그대로다. 이 파일이 재는 "모름은
+    12 안에만 있다" 가 바로 그 사실이다.
     """
     unknown = MEASURED_UNKNOWN_VALIDITY_CODES
     context_dependent = {"CANDIDATE_NOT_FOUND", "CHAIN_DEFINITION_UNAVAILABLE"}
@@ -895,5 +940,6 @@ def test_33_the_forty_eight_codes_partition_without_a_remainder():
     assert len(named) == 1 + len(unknown) + 2 + len(context_dependent) == 12
     #: 나머지가 전부 확정 거부 쪽이다.
     rest = all_names - named
-    assert len(rest) == 36
-    assert len(all_names) == 48 == len(named) + len(rest)
+    assert len(rest) == 39
+    assert len(named) + len(rest) == len(ValidationCode) == 51
+    assert len(all_names) == 51 == len(named) + len(rest)

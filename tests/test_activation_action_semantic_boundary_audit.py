@@ -586,7 +586,21 @@ def test_13_the_engine_splits_on_effect_ref_not_on_card_versus_effect(repository
 
 
 def test_14_a_real_duel_offers_activate_effect_and_withholds_activate_card(repository):
-    """§4 · §5 — 실제 듀얼에서 한쪽은 후보로, 한쪽은 ``withheld`` 로 나온다."""
+    """
+    §4 · §5 — 실제 듀얼에서 한쪽은 후보로, 한쪽은 ``withheld`` 로 나온다.
+
+    🔴 **정정 (Phase 6-AB 보완8).** 이 시험은
+    ``withheld[ACTIVATE_EFFECT] == 0`` 을 고정하고 있었다. 그 **0 이
+    BLOCKER-F7-1 의 내용**이었다: ``_activation_actions`` 가 관문에서 걸린
+    후보를 이유 없이 버렸고, 그래서 "발동할 것이 없다" 와 "발동이 지금
+    규칙상 안 된다" 를 읽는 쪽이 가를 수 없었다. 보완8 이 그 자리를 채웠고
+    (그리고 ``_stage_closed_actions`` 가 단계·차례가 닫은 발동도 적는다),
+    실측은 이 궤적에서 **206건**이다.
+
+    🔴 **이 시험이 지키는 비대칭은 그대로다**: ``ACTIVATE_CARD`` 는 후보가
+    **되지 못하고** (0건), ``ACTIVATE_EFFECT`` 는 후보가 **된다**. 바뀐 것은
+    *"후보가 되지 못한 발동도 이유를 남긴다"* 쪽이다.
+    """
     duel, counts = walk_for_activation(repository, seed=401)
 
     assert counts["offered"][PlayerActionKind.ACTIVATE_EFFECT] > 0, dict(
@@ -594,7 +608,10 @@ def test_14_a_real_duel_offers_activate_effect_and_withholds_activate_card(repos
     )
     assert counts["offered"][PlayerActionKind.ACTIVATE_CARD] == 0
     assert counts["withheld"][PlayerActionKind.ACTIVATE_CARD] > 0
-    assert counts["withheld"][PlayerActionKind.ACTIVATE_EFFECT] == 0
+    #: 🔴 **0 이 아니다** — 이 BLOCKER 는 풀렸다.
+    assert counts["withheld"][PlayerActionKind.ACTIVATE_EFFECT] > 0, dict(
+        counts["withheld"]
+    )
 
     #: 그리고 고른 발동이 실제로 수락되고 체인이 쌓였다.
     assert counts["first_activation"] is not None
