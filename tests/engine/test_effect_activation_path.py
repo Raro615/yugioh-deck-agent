@@ -31,6 +31,7 @@ Phase 3-E-3 Implementation — **첫 번째 실제 Effect Action Path**.
 RULE-SPELLTRAP-001 · 002 · 004~011, RULE-CHAIN-004 · 009, RULE-TURN-004.
 """
 
+import ast
 import pathlib
 import re
 
@@ -893,6 +894,40 @@ def test_24_no_policy_ever_receives_a_raw_game_state(repository):
     assert all(isinstance(a, PlayerAction) for a in legal.allowed)
 
 
+def _identifiers(source: str) -> set[str]:
+    """
+    소스의 **식별자**만 모은다 — 주석도 문자열도 아니다.
+
+    🔴 **왜 필요한가** (Phase 6-AB 보완8 마무리). "이 계층에 그 이름이 없다"
+    를 지키는 검사들이 파일 원문을 정규식으로 훑으면 **설명을 분기로 센다.**
+    실측으로 결함을 적은 주석이 그 결함을 고친 Phase 에서 테스트를 깨뜨리는
+    일이 생기고, 그러면 사람은 글을 지워서 통과시키려 한다.
+
+    분기는 식별자로만 쓸 수 있으므로 식별자만 본다. 같은 뜻의 기법을 이
+    저장소는 이미 쓴다 (``ast.unparse`` 로 주석을 떼는 보완6 의 ``test_f03``).
+    """
+    tokens: set[str] = set()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            tokens.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            tokens.add(node.attr)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            tokens.add(node.name)
+        elif isinstance(node, ast.arg):
+            tokens.add(node.arg)
+        elif isinstance(node, ast.keyword) and node.arg:
+            tokens.add(node.arg)
+        elif isinstance(node, ast.alias):
+            tokens.add(node.name.rsplit(".", 1)[-1])
+            if node.asname:
+                tokens.add(node.asname)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            tokens.update(node.module.split("."))
+    return tokens
+
+
 @pytest.mark.real_card
 def test_25_the_search_policy_needs_no_activation_branch(repository):
     """
@@ -901,9 +936,19 @@ def test_25_the_search_policy_needs_no_activation_branch(repository):
     후보 목록이 넓어진 것만으로 저절로 들어오고, 시뮬레이션되고, 점수를
     받는다. ``agent/`` 어디에도 발동의 이름이 없다는 것을 AST 토큰으로
     지킨다 (Phase 3-E-2 가 세트에 쓴 것과 같은 자리).
-    """
-    import re as _re
 
+    🔴 **정정 (Phase 6-AB 보완8 마무리).** 이 테스트는 "AST 토큰으로
+    지킨다" 고 적어 두고 실제로는 **파일 원문을 정규식으로** 훑고 있었다.
+    그래서 주석과 docstring 의 글자까지 분기로 셌다. 보완8 이
+    ``agent/simulation.py`` 의 설명에 실측을 인용하면서 (어떤 보류가 어느
+    걸음에서 유실되었는지 — 그 줄에 ``activate_card`` 라는 **측정값**이
+    들어간다) 이 테스트가 깨졌는데, 깨진 것은 분기가 아니라 설명이었다.
+
+    그래서 이제 **식별자만** 본다 — 이름 · 속성 · 정의 이름 · 키워드 ·
+    import 이름이다. 느슨해진 것이 아니다: 분기는 식별자로만 쓸 수 있고,
+    글로 적은 측정값은 분기가 아니다. 검사 범위는 그대로 ``agent/*.py``
+    전체이고, 금지 이름 목록도 그대로다.
+    """
     forbidden = (
         "ACTIVATE_CARD",
         "ACTIVATE_EFFECT",
@@ -913,10 +958,18 @@ def test_25_the_search_policy_needs_no_activation_branch(repository):
         "effect_ref",
         "SpellPlaced",
     )
-    for path in sorted((ROOT / "agent").glob("*.py")):
-        tokens = set(_re.findall(r"[A-Za-z_][A-Za-z_0-9]*", path.read_text()))
+    paths = sorted((ROOT / "agent").glob("*.py"))
+    assert paths, "agent/ 에 파일이 없다면 이 테스트는 아무것도 재지 않는다"
+    for path in paths:
+        tokens = _identifiers(path.read_text(encoding="utf-8"))
         hits = {t for t in tokens for name in forbidden if name in t}
         assert not hits, (path.name, hits)
+
+    #: 🔴 그리고 **원문에는 있다** — 그 자리가 설명이라는 것을 함께 고정한다.
+    #: (설명이 사라지면 여기서 깨진다. 숨기려고 글을 지우지 못하게 한다.)
+    simulation = (ROOT / "agent" / "simulation.py").read_text(encoding="utf-8")
+    assert "activate_card" in simulation
+    assert "activate_card" not in _identifiers(simulation)
 
 
 @pytest.mark.real_card

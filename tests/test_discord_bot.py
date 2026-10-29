@@ -1401,7 +1401,21 @@ def test_45_a_valid_hand_reaches_the_existing_combo_planner(monkeypatch):
 
 
 def test_46_the_plan_becomes_a_discord_answer_with_every_field(monkeypatch):
-    r"""🟢 §8-4 — 계획이 **플래너가 준 정보만으로** 메시지가 된다."""
+    r"""🟢 §8-4 — 계획이 **플래너가 준 정보만으로** 메시지가 된다.
+
+    🔴 **정정 (Phase 6-AB 보완8 마무리).** 걸음의 상태 이름이 바뀌었다.
+    ``StepStatus.CONFIRMED`` 의 표시가 *"확정"* 이었고, ``ENGINE_ACTION``
+    근거가 *"엔진이 이 행위를 허가함"* 이었다 — 둘 다 **실행하지 않은 정적
+    계획**의 칸이므로 사용자가 "돌려서 확인했다" 로 읽었다 (요구 §6: 실제로
+    적용·해결된 것과 **정적으로 추론한 것**을 가른다). 지금은::
+
+        상태: 돌려볼 수 있음 (정적 확인)
+        근거: 엔진의 행위 계층이 판정할 수 있음 (정적 확인)
+
+    느슨해진 것이 아니다 — **같은 사실을 더 좁게** 적는다. 아래는 세 걸음의
+    상태·근거를 전부 고정하고, "확정" 이라는 옛 표시가 **돌아오지 않는지**도
+    함께 본다.
+    """
     import deck.planner
 
     _SpyPlanner.seen = []
@@ -1422,7 +1436,14 @@ def test_46_the_plan_becomes_a_discord_answer_with_every_field(monkeypatch):
     assert "1. ✔ 걸음 1 을 합니다" in text
     assert "2. ~ 걸음 2 을 합니다" in text
     assert "3. ? 걸음 3 을 합니다" in text
-    assert "상태: 확정  ·  근거: 엔진에 효과 실행 구현 있음" in text
+    assert "상태: 돌려볼 수 있음 (정적 확인)  ·  근거: 엔진에 효과 실행 구현 있음" in text
+    assert "상태: 조건부  ·  근거: 엔진의 행위 계층이 판정할 수 있음 (정적 확인)" in text
+    assert "상태: 미확인  ·  근거: 근거 없음" in text
+    #: 🔴 옛 표시가 돌아오지 않는다 — 정적 계획을 "확정" 으로 적지 않는다.
+    assert "상태: 확정" not in text
+    assert "엔진이 이 행위를 허가함" not in text
+    #: 🔴 그리고 이 절이 실행이 아니라는 것을 그 머리글이 말한다.
+    assert "**[아래는 실행하지 않은 정적 계획입니다]**" in text
     assert "필요: 조건 1" in text
     assert "기대: 기대 1" in text
     assert "비고: 비고 1" in text

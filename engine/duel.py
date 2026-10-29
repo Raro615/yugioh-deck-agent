@@ -2481,6 +2481,12 @@ class Duel:
         된다.
 
         🔴 **종류마다 한 줄이다** (사용자 요구 ③-8) — 카드 수와 무관하다.
+
+        🔴 **두 자리 다 ``missing`` 을 비운다.** 막는 것은 **단계와 차례**이고
+        그것은 빠진 규칙이 아니라 **순서**다 — 규칙이 **있어서** 막는다.
+        근거는 공식 Fast Effect Timing 도표(상자 A)와 룰북 ``TURN PLAYER'S
+        PRIORITY`` 이고 둘 다 이 저장소가 이미 읽을 수 있는 것이다. 없는
+        것을 빈 값으로 채우지 않는다 (``_flow_actions`` 와 같은 기준이다).
         """
         if self.priority.is_open:
             stage = self._activation_stage()
@@ -2690,11 +2696,21 @@ class Duel:
         if verdict is None:
             verdict = self._rule_verdict(action)
         if verdict is not None:
-            return DuelStep(action, False, verdict.code, verdict.reason)
+            return DuelStep(
+                action,
+                False,
+                verdict.code,
+                self._refusal_sentence(verdict.reason, verdict.missing_rule),
+            )
 
         held = self._withheld_for(action, legal)
         if held is not None:
-            return DuelStep(action, False, held.code, held.reason)
+            return DuelStep(
+                action,
+                False,
+                held.code,
+                self._refusal_sentence(held.reason, held.missing),
+            )
 
         return DuelStep(
             action,
@@ -2702,6 +2718,33 @@ class Duel:
             ValidationCode.RULE_NOT_IMPLEMENTED,
             f"{action.kind.value} 는 지금 허가된 행위가 아닙니다.",
         )
+
+    @staticmethod
+    def _refusal_sentence(reason: str, missing: str | None) -> str:
+        """
+        거절 문장에 **무엇이 없어서 모르는가**를 붙인다 (Phase 6-AB 보완8 마무리).
+
+        🔴 **왜.** :class:`DuelStep` 에는 ``missing`` 칸이 없다. 그래서 판정
+        계층이 ``missing_rule`` 로 들고 있던 *"무엇이 빠졌는가"* 가 ``apply``
+        경계에서 사라졌다. 실측 (마무리 §2)::
+
+            special_summon 요청
+            → 검증기: UNKNOWN / RULE_NOT_IMPLEMENTED
+                      missing_rule="special-summon-condition (카드마다 다르다)"
+            → DuelStep: "아직 구현하지 않은 규칙이 걸려 있습니다."
+               🔴 **카드마다 다른 조건이라는 구체적인 사유가 유실된다.**
+
+        보류 목록은 :meth:`WithheldAction.line_ko` 로 같은 일을 이미 하고
+        있었다. 같은 규약을 ``apply`` 결과에도 쓴다 — 확정 거부
+        (``missing is None``) 에는 아무것도 붙지 않으므로 *"규칙이 막았다"* 와
+        *"판정 근거가 없다"* 의 구분은 그대로다.
+
+        🔴 **새 사실을 만들지 않는다.** 판정 계층이 적어 둔 이름을 옮길
+        뿐이고, 카드 식별자는 들어가지 않는다 (규칙 이름만이다).
+        """
+        if not missing:
+            return reason
+        return f"{reason} [{missing}]"
 
     def _rule_verdict(self, action: PlayerAction) -> "ValidationResult | None":
         """

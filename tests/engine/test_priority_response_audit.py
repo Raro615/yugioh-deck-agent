@@ -54,6 +54,7 @@ from engine.duel import Duel
 from engine.effect.library import EFFECT_LIBRARY
 from engine.priority import PriorityHolder, PriorityState, ResponseWindow
 from engine.state.game_state import GameState
+from engine.validation import ActionValidity, ValidationCode
 from engine.vocabulary import Phase, Position, Zone
 
 from tests.conftest import requires_official_db
@@ -277,6 +278,22 @@ def test_05_the_opponent_never_receives_a_candidate(repository):
     그래서 창이 닫혀 있는 걸음에서만 "반대쪽은 비어 있다" 를 재고, 열린
     걸음에서는 **쥔 자리만 받는다**를 재는 쪽으로 바꾼다. 둘 다 "없는 권한을
     허가로 바꾸지 않는다" 의 같은 얼굴이다.
+
+    🔴 **정정 (Phase 6-AB 보완8).** 이 테스트는 비턴 플레이어의 ``PASS`` 가
+    ``missing="우선권을 여는 규칙 (Phase 2-F)"`` 을 달고 **UNKNOWN** 으로
+    보류되는 것을 고정했다. 그때는 그것이 맞았다 — 우선권을 여는 자리가
+    저장소에 없었다. 그 자리는 그 뒤로 생겼고 (보완5·보완6 이 빈 체인 빠른
+    효과 기회를 열었다), 그래서 지금 이 보류는 **규칙이 금지한 것**이다:
+    룰북 ``TURN PLAYER'S PRIORITY`` 는 비턴 플레이어가 지나갈 수 있는
+    기회가 없다고 적고, 예외는 자동으로 발동하는 유발 효과뿐이다. 실측::
+
+        비턴 플레이어 자리의 PASS
+        → 전: RULE_NOT_IMPLEMENTED / missing="우선권을 여는 규칙 (Phase 2-F)"
+        → 후: NO_RESPONSE_WINDOW   / missing=None (확정 거부)
+
+    즉 **모름이 규칙 거절로 옮겨갔다.** 느슨해진 것이 아니라 더 단단해진
+    것이고, 아래는 그 쪽을 고정한다 — 코드 · 판정 · ``missing`` 없음 ·
+    룰북 근거를 함께 본다. "없는 권한을 허가로 바꾸지 않는다" 는 그대로다.
     """
     checked = 0
     opened = 0
@@ -290,9 +307,16 @@ def test_05_the_opponent_never_receives_a_candidate(repository):
             continue
         passes = [w for w in other.withheld if w.kind is PlayerActionKind.PASS]
         assert len(passes) == 1, other.withheld
-        assert "우선권" in passes[0].reason
-        assert passes[0].missing is not None
-        assert "우선권" in passes[0].missing
+        held = passes[0]
+        #: 🔴 규칙이 금지한 것이다 — 모름이 아니다.
+        assert held.code is ValidationCode.NO_RESPONSE_WINDOW
+        assert held.validity is ActionValidity.INVALID
+        assert held.is_rule_refusal
+        assert held.missing is None, held
+        assert held not in other.unsupported()
+        #: 🔴 그리고 그 근거가 룰북이라고 적혀 있다.
+        assert "응답 기회가 열려 있지 않습니다" in held.reason
+        assert "TURN PLAYER'S PRIORITY" in held.reason
         checked += 1
     assert checked > 100, checked
     assert opened > 0, "열린 분기를 한 번도 밟지 않았다 — 궤적이 주장을 가린다"
@@ -309,6 +333,22 @@ def test_06_no_registered_fast_effect_can_ever_be_activated(repository):
     우선권을 여는 자리가 없기 때문이다.
 
     가설이 아니라 이름이 있는 카드들이다.
+
+    🔴 **정정 (Phase 6-AB 보완8).** 후보가 비어 있다는 사실은 그대로지만
+    **까닭의 분류가 바뀌었다.** 이 테스트는 보류 가운데 ``missing`` 에
+    "우선권" 이 적힌 것이 하나라도 있는지만 보았다 — 즉 "모름" 쪽을 찾았다.
+    지금 비턴 플레이어의 자리는 **규칙이 금지한 것**으로 적힌다. 실측
+    (``hand`` · ``set`` 양쪽 모두)::
+
+        normal_summon … activate_effect  → NOT_TURN_PLAYER   / missing=None
+        pass                             → NO_RESPONSE_WINDOW / missing=None
+        activate_card (패에 있을 때만)    → RULE_NOT_IMPLEMENTED
+                                           / missing="activation-timing (Phase 2-C/2-F)"
+
+    그래서 아래는 **둘을 갈라서** 본다: 흐름 거절은 확정이고 ``missing`` 이
+    없으며, 발동 타이밍의 모름만 ``missing`` 을 들고 ``unsupported()`` 로
+    간다. 세트 쪽에는 ``activate_card`` 보류가 아예 없고 (``withheld`` 는
+    패만 훑는다) 그 한계도 함께 적는다.
     """
     registered = {entry.effect_ref.card_id for entry in EFFECT_LIBRARY}
     assert set(SPELL_SPEED_2_PLUS) <= registered, set(SPELL_SPEED_2_PLUS) - registered
@@ -323,9 +363,38 @@ def test_06_no_registered_fast_effect_can_ever_be_activated(repository):
             )
             legal = duel.legal_actions(P0)
             assert legal.allowed == (), (name, where, legal.allowed)
-            # 그리고 그 이유가 우선권이라고 적혀 있다.
-            reasons = {w.missing for w in legal.withheld}
-            assert any(r and "우선권" in r for r in reasons), (name, where, reasons)
+
+            by_kind = {w.kind: w for w in legal.withheld}
+            #: 🔴 흐름 쪽은 확정 거부다 — 룰북 근거가 붙고 ``missing`` 이 없다.
+            for kind in (PlayerActionKind.ACTIVATE_EFFECT, PlayerActionKind.PASS):
+                held = by_kind.get(kind)
+                assert held is not None, (name, where, kind, legal.withheld)
+                assert held.is_rule_refusal, (name, where, held)
+                assert held.missing is None, (name, where, held)
+                assert "TURN PLAYER'S PRIORITY" in held.reason, (name, where, held)
+            assert by_kind[PlayerActionKind.ACTIVATE_EFFECT].code is (
+                ValidationCode.NOT_TURN_PLAYER
+            )
+            assert by_kind[PlayerActionKind.PASS].code is (
+                ValidationCode.NO_RESPONSE_WINDOW
+            )
+
+            #: 🔴 패에 있을 때만 발동 타이밍의 **모름**이 따로 적힌다.
+            card_held = by_kind.get(PlayerActionKind.ACTIVATE_CARD)
+            if where == "hand":
+                assert card_held is not None, (name, legal.withheld)
+                assert card_held.code is ValidationCode.RULE_NOT_IMPLEMENTED
+                assert card_held.missing == "activation-timing (Phase 2-C/2-F)"
+                assert card_held in legal.unsupported()
+            else:
+                #: 🔴 **남은 한계**: 보류는 패만 훑으므로 세트된 함정은
+                #: 보류 줄조차 받지 못한다. 숨기지 않고 여기에 적는다.
+                assert card_held is None, (name, legal.withheld)
+
+            #: 🔴 어느 쪽이든 흐름 거절이 ``unsupported()`` 로 새지 않는다.
+            unsupported_kinds = {w.kind for w in legal.unsupported()}
+            assert PlayerActionKind.PASS not in unsupported_kinds
+            assert PlayerActionKind.ACTIVATE_EFFECT not in unsupported_kinds
 
 
 # ======================================================================

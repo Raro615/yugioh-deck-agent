@@ -152,7 +152,24 @@ MINE = 0
 #: *"이미 확인된 사실을 모른다고 답하고 있었다 — 어니스트 ①이 이 코드"*
 #: 를 인용한다. 보완6 과 같은 결의 증가다: 이 코드의 **잘못된 사용**을
 #: 고치면서 그 까닭을 적은 글이 늘어난다.
-STRING_OCCURRENCES = 93
+#: 🔴 93 → **110** (Phase 6-AB 보완8). 🔴 **이번에는 코드도 늘었다** —
+#: 산문 11 · 코드 6 이다 (``CODE_OCCURRENCES`` 74 → 80).
+#:
+#: 🔴 **늘어난 코드 6은 새 거절이 아니다.** 보완8 이 ``WithheldAction`` 에
+#: ``code`` 를 필수로 만들었고, 그래서 **이미 ``missing`` 을 달고 있던**
+#: (즉 이미 모름이던) 보류 자리 여섯이 그 코드를 **명시**하게 되었다. 전에는
+#: 그 사실이 "``missing`` 이 비어 있지 않다" 로만 암시되었다 — 읽는 쪽이
+#: 짐작해야 했고 그것이 보완8 이 고친 결함이다.
+#:
+#: 즉 이 코드로 **거절하는 횟수는 늘지 않았고**, 그 코드를 **적는 자리**가
+#: 늘었다. 그리고 보완8 은 반대 방향으로도 움직였다: 흐름 거절 넷이 이
+#: 코드에서 ``STAGE_FORBIDS_ACTION`` 등으로 **빠져나갔다**.
+#:
+#: 🔴 110 → **111** (보완8 마무리). 늘어난 하나는 산문이다 —
+#: ``Duel._refusal_sentence`` 의 설명이 *"검증기가 UNKNOWN /
+#: RULE_NOT_IMPLEMENTED 로 답하면서 들고 있던 missing_rule 이 apply 경계에서
+#: 사라졌다"* 는 실측을 인용한다.
+STRING_OCCURRENCES = 111
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -186,172 +203,51 @@ STRING_OCCURRENCES = 93
 #:   ``duel.py``     +38 (2300→2338)
 #:                   원인: ``_apply_pass`` 의 빈 체인 가지
 PROSE_OCCURRENCES = {
-    # 🔴 **Phase 6-Z 에서 세 파일의 자리가 밀렸다** (문자열 88 · 코드 73 ·
-    # 산문 15 는 **하나도 바뀌지 않았다** — 바뀐 것이 줄 번호뿐이라는 것이
-    # 그 증거다).
+    # 🔴 **Phase 6-AB 보완8 이 이 표를 실측값으로 다시 적었다.**
     #
-    #   ``activation.py``       639 → 640 · 677 → 678 (+1)
-    #     ``from engine.target_bridge import decided_at_resolution`` **한
-    #     줄**이 import 블록에 들어갔다. 그래서 아래 전부가 +1 이다.
-    #   ``effect/executor.py``  954 → 1117 (+163)
-    #     ``ResolutionChooser`` 프로토콜과 ``ResolutionChoice`` (+56) 가
-    #     클래스 **위**에 들어가고, ``_ask_for_choice`` (+107) 가 이 자리
-    #     위에 들어갔다.
-    #   ``duel.py``             910 → 1100 (+190)
-    #     ``triggers`` · ``consumed_events`` 칸(+38) ·
-    #     ``activation_validator`` · ``_trigger_offers`` ·
-    #     ``_trigger_actions`` (+119) · ``_activation_actions`` 의 유발
-    #     제외(+12) · ``legal_actions`` 의 사건 읽기(+9) 가 전부 위에 있다.
-    # 🔴 **Phase 6-AB 보완4 에서 세 파일의 자리가 또 밀렸다** (문자열 · 코드 ·
-    # 산문 개수는 **하나도 바뀌지 않았다** — 바뀐 것이 줄 번호뿐이라는 것이
-    # 그 증거다). 밀린 이유는 전부 **읽기 전용 접근자**다:
+    # 전에는 Phase 마다 "어느 줄이 밀렸는가" 를 좌표로 쌓아 왔고, 그 기록이
+    # 이 상수의 절반을 차지했다. 보완8 은 ``engine/duel.py`` 의 보류 생성
+    # 자리 전부를 건드렸으므로 좌표가 대거 밀렸다 — 밀린 좌표를 또 한 번
+    # 손으로 옮겨 적는 대신 **실측값으로 다시 적고**, 지키려는 주장을
+    # ``test_02`` 의 등식에 남긴다: **문자열 - 코드 = 산문**이고, 그
+    # 산문이 어느 파일의 어느 줄인지가 아래 표다.
     #
-    #   ``activation.py``       640 → 651 · 678 → 689 (+11)
-    #     ``EffectActivator.lookup`` 프로퍼티가 ``definitions`` 바로 뒤에
-    #     들어갔다 — 탐색 사본이 원본의 실행 계약을 물려받는 자리다 (③).
-    #   ``effect/executor.py``  1136 → 1147 (+11)
-    #     ``EffectImplementationRegistry.refs()`` 가 위에 들어갔다.
-    ("engine/activation.py", 651),      # M2: 코드도 표에서 가져온다
-    ("engine/activation.py", 689),      # M1: 확실한 거부이고 미구현이 아니다
-    ("engine/effect/executor.py", 1147),# M2: 이 근거로는 절대 실행하지 않는다
+    # 🔴 **주장은 그대로다**: 이 코드의 등장 대부분이 ``UnimplementedRule``
+    # 과 무관하고, 산문과 코드를 구분하지 않으면 "이 코드가 몇 번 쓰이는가"
+    # 를 알 수 없다. 좌표를 적는 이유도 그것이다 — 어느 쪽이 설명이고 어느
+    # 쪽이 실제 사용인지 고정한다.
+    ("engine/activation.py", 651),
+    ("engine/activation.py", 689),
+    ("engine/activation_timing.py", 511),
+    ("engine/duel.py", 174),
+    ("engine/duel.py", 952),
+    ("engine/duel.py", 1149),
+    ("engine/duel.py", 2454),
+    ("engine/duel.py", 2641),
+    ("engine/duel.py", 2635),
+    ("engine/duel.py", 2664),
+    ("engine/duel.py", 2666),
+    #: 🔴 보완8 마무리가 더한 자리 — ``_refusal_sentence`` 의 설명이다.
+    ("engine/duel.py", 2732),
+    ("engine/duel.py", 2973),
+    ("engine/effect/definition.py", 896),
+    ("engine/effect/executor.py", 1147),
     ("engine/special_summon.py", 77),
-    # 🔴 **``engine/trigger.py`` 의 다섯 자리가 Phase 6-F 에서 전부
-    # 움직였다.** 그 Phase 가 ``TriggerSubject`` · ``subject_relation`` ·
-    # ``_from_relation`` (+260줄) 을 넣었고, 자리 네 개가 그 아래로 밀렸으며
-    # (1063 → 1277 · 1403 → 1636 · 1409 → 1642 · 1432 → 1665) **새 자리
-    # 하나가 생겼다** (736 — ``subject_relation`` 의 docstring 이 왜 이
-    # 코드를 쓰는지 적는다).
-    #
-    # 🔴 이 핀이 줄 번호를 세는 이상 그런 이동은 **반드시 여기서 드러나야
-    # 한다** — 그것이 번호를 적어 둔 이유다. 산문 자리는 13 그대로다:
-    # 6-F 가 ``trigger_compiler.py`` 의 인용 하나를 지우고
-    # ``trigger.py`` 에 하나를 더했다.
-    # 🔴 **Phase 6-H 에서 다시 다섯 자리가 움직이고 하나가 생겼다.**
-    #
-    # ``TriggerSubject.OTHER`` (+20줄) 과 ``GROUP_MEMBERSHIP_RULE`` (+13줄) 이
-    # ``subject_relation`` **위**에 들어가서 736 → 771 로 밀렸고, 그 아래
-    # 네 자리는 ``subject_relation`` 의 두 분기(+27줄) 까지 더해 +60 씩
-    # 밀렸다 (1277 → 1337 · 1636 → 1696 · 1642 → 1702 · 1665 → 1725).
-    #
-    # 새로 생긴 자리는 **743** — ``GROUP_MEMBERSHIP_RULE`` 의 주석이 왜 이
-    # 코드를 쓰는지(코드가 생겨야 풀리는 모름) 적는다. 그래서 산문은
-    # 13 → **14** 다.
-    #
-    # 🔴 **Phase 6-V 에서 여섯 자리가 전부 밀렸다** (6-W 가 실측해 정정).
-    # 그 Phase 가 ``summoned_zone_for`` 와 ``_zone_from_summon`` 을 넣어
-    # 모듈이 2,059 → 2,199 줄이 됐고, 자리들이 그 아래로 밀렸다:
-    # 743 → 775 · 771 → 803 · 1337 → 1369 (+32), 그리고
-    # 1696 → 1741 · 1702 → 1747 · 1725 → 1770 (+45).
-    #
-    # **산문은 15 그대로다.** 6-V 가 더한 ``RULE_NOT_IMPLEMENTED`` 는
-    # 코드 자리이므로 ``CODE_OCCURRENCES`` 가 72 → 73 으로 받는다.
     ("engine/trigger.py", 811),
     ("engine/trigger.py", 839),
     ("engine/trigger.py", 1405),
-    # 3-E-45: ``_event_relation`` 이 왜 세 갈래인가를 적은 docstring 셋
-    # (6-F 가 네 갈래로 늘렸고, 그 설명도 같은 자리에 있다).
     ("engine/trigger.py", 1778),
     ("engine/trigger.py", 1784),
     ("engine/trigger.py", 1807),
-    # 🔴 **Phase 6-Y 가 두 자리를 밀었다** (553 → 607 · 569 → 623).
-    # ``plan`` 의 ``selections`` 통로와 그 설명이 위에 들어가 +54 줄이다.
-    # **문자열 88 · 코드 73 · 산문 15 는 그대로다** — 늘어난 것은 설명이고
-    # 이 코드를 쓰는 자리가 늘지 않았다.
     ("engine/trigger_chain.py", 607),
     ("engine/trigger_chain.py", 623),
     ("engine/validation.py", 129),
     ("engine/validation.py", 180),
-    # 🔴 **Phase 6-R 이 자리 하나를 더했다 — 산문 14 → 15.**
-    #
-    # ``Duel._resolve_chain`` 의 주석이 **고치기 전의 거짓 코드를 실측해서
-    # 인용한다.** 불발된 링크가 든 체인이 남아 있는 동안 발동 관문이
-    # ``SPELL_SPEED_TOO_LOW`` 로 거절했고, 후보 생성이 그것을 **보류
-    # 목록에도 남기지 않고** 버렸으므로, 호출자가 ``apply`` 로 직접 넣으면
-    # ``RULE_NOT_IMPLEMENTED`` ("허가된 행위가 아닙니다") 가 돌아왔다.
-    #
-    # 🔴 그리고 그것이 **이 감사가 지키는 구분의 증거**다: 그 자리의
-    # ``RULE_NOT_IMPLEMENTED`` 는 "규칙 계층이 없다" 를 뜻하지 않았다 —
-    # ``ActionValidator`` 는 같은 자리에서 ``OK`` 를 돌려주고 있었다. 즉
-    # **거짓**이었고, 6-R 이 그 원인(체인 잔존)을 고쳤다. 코드 자리는
-    # 하나도 늘지 않았다.
-    #
-    # 🔴 **그 자리가 868 → 910 으로 밀렸다** (Phase 6-S). 그 Phase 가
-    # ``Duel._flow_actions`` 에 설명 42줄을 붙였고 (묶여 있던 조건을
-    # 가르면서 룰북 ``TURN PLAYER'S PRIORITY`` 두 줄과 실측을 적었다),
-    # 그 함수가 이 자리보다 **위**에 있어서 아래가 같은 만큼 밀렸다.
-    # 자리가 밀린 것뿐이고 **산문 15 · 문자열 87 은 하나도 바뀌지 않았다**
-    # — 바뀐 것이 줄 번호뿐이라는 것이 그 증거다 (3-F-11 · 6-K · 6-M 과
-    # 같은 결).
-    #
-    # 🔴 **그 자리가 다시 910 → 1100 으로 밀렸다** (Phase 6-Z — 위의 표).
-    #
-    # 🔴 **그리고 1100 → 1267 로 또 밀렸다** (Phase 6-AA, +167). 그 Phase 가
-    # ``timing_floor`` · ``consumed_events`` 의 설명(+45) 과
-    # ``_mandatory_offers`` · ``_opportunity_is_open`` · ``_consumption_key``
-    # (+55) 와 ``_trigger_actions`` 의 세 갈래(+40) 와 ``_flow_actions`` 의
-    # 강제 유발 분기(+20) 를 이 자리보다 **위**에 넣었다.
-    #
-    # 🔴 **그리고 1267 → 1498 로 또 밀렸다** (Phase 6-AB, +231). 그 Phase 가
-    # ``TRIGGER_WORDING_MISSING`` · ``MANDATORY_TRIGGER_UNPLAYABLE`` 상수(+20)
-    # 와 ``_enforce_mandatory``(+90) 와 ``_offer_is_activatable`` ·
-    # ``_timing_is_current``(+65) 와 ``activation_validator`` 의 설명(+25) 과
-    # ``_trigger_actions`` 의 어휘 두 갈래(+31) 를 이 자리보다 **위**에
-    # 넣었다. ``effect/executor.py`` 쪽은 1117 → **1136** (+19 —
-    # ``EffectExecutor.chooser``).
-    #
-    # 🔴 **그리고 1498 → 1794 로 또 밀렸다** (Phase 6-AB 보완, +296). 그
-    # 보완이 ``declined_events`` 의 설명(+45) 과 ``to_act`` · ``_duty_seat``
-    # (+50) 와 ``_enforce_mandatory`` 의 양측 판정(+35) 과
-    # ``_window_admits`` · ``_missed_timing`` (+105) 과
-    # ``_decline_open_offers`` · ``_decline_key`` (+45) 와
-    # ``legal_actions`` 의 유발 하위 이동(+16) 을 이 자리보다 **위**에 넣었다.
-    #
-    # 🔴 **그리고 1794 → 1832 로 또 밀렸다** (Phase 6-AB 추가 보완, +38).
-    # 그 보완이 ``window_floor`` · ``chain_floor`` 의 설명(+70) 과
-    # ``_window_admits`` 의 단계 판정(+30) 을 이 자리보다 **위**에 넣고,
-    # ``_decline_open_offers`` · ``_decline_key`` (−62) 를 지웠다.
-    #
-    # **문자열 88 · 코드 73 · 산문 15 · 위반 13 · 적합 19 는 전부 그대로다**
-    # — 바뀐 것이 줄 번호뿐이라는 것이 그 증거다 (실측으로 확인했다).
-    #
-    # 🔴 **Phase 6-AB 최종 보완에서 1832 → 2090 으로 밀렸다** (+258).
-    # 그 보완이 이 자리보다 **위**에 넣은 것들이다:
-    # ``LegalActions.unsupported()`` (+15) · ``window_passed`` 칸의 설명
-    # (+29) · ``to_act`` 의 창 분기 (+6) · ``_enforce_mandatory`` 의 창
-    # 블록 (+50) · ``_window_admits`` 의 재정렬과 설명 (+40) ·
-    # ``_window_claims`` · ``_window_actor`` · ``_is_simultaneous`` 와
-    # 각자의 설명.
-    #
-    # **문자열 · 코드 · 산문 개수는 또 전부 그대로다** — 이 Phase 는
-    # ``RULE_NOT_IMPLEMENTED`` 를 새로 쓰지도 지우지도 않았고, 바뀐 것이
-    # 줄 번호뿐이라는 것이 그 증거다.
-    #
-    # 🔴 **보완4 에서 2090 → 2300 으로 밀렸다** (+210). 그 보완이 이 자리보다
-    # **위**에 넣은 것들이다: ``_window_group`` · ``_window_can_act`` ·
-    # ``_resolving_other_window`` 와 각자의 설명, ``_window_actor`` 의 네 묶음
-    # 순서, ``_enforce_mandatory`` 의 등재 좁히기, ``_response_priority``.
-    # 🔴 **보완7 에서 셋이 +58 밀렸다** (2267 · 2273 · 2485 →
-    # 2325 · 2331 · 2543). 위에 들어간 것은 ``Duel._effect_kind`` 와 그
-    # 설명이고, **개수는 하나도 바뀌지 않았다** — 바뀐 것이 줄 번호뿐이라는
-    # 것이 그 증거다.
-    ("engine/duel.py", 2325),
-    ("engine/duel.py", 2331),
-    ("engine/duel.py", 2543),
-    # 🔴 **보완7 이 둘을 더했다 — 둘 다 산문이다.**
-    #
-    #   ``activation_timing.py`` 511
-    #     ``ActivationTiming.responding_kind`` 의 설명. 전 턴에 세운 적법한
-    #     함정이 몬스터 효과에 응수하려 할 때 이 코드를 받았다는 **실측**을
-    #     인용한다 (규칙은 그 응수를 허락한다).
-    #   ``effect/definition.py`` 896
-    #     ``verified_activation_kind`` 의 설명. *"이미 확인된 사실을
-    #     모른다고 답하고 있었다 — 어니스트 ①이 ``RULE_NOT_IMPLEMENTED``"*
-    #     를 인용하며 그 함수가 왜 있는지 적는다.
-    #
-    # 🔴 **코드 자리는 하나도 늘지 않았다** — 보완7 이 한 일은 이 코드를
-    # **덜 쓰게** 만든 것이다 (몬스터 효과의 거절이 규칙 거절로 갈렸다).
-    ("engine/activation_timing.py", 511),
-    ("engine/effect/definition.py", 896),
+    ("engine/validation.py", 207),
+    ("engine/validation.py", 223),
+    ("engine/validation.py", 231),
+    ("engine/validation.py", 363),
+    ("engine/validation.py", 369),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
@@ -388,7 +284,12 @@ PROSE_OCCURRENCES = {
 #: 🔴 보완7 에서도 **바뀌지 않았다** — 늘어난 둘도 산문이다. 이 Phase 는
 #: 이 코드를 새로 쓰지 않았고, 몬스터 효과의 거절을 이 코드에서
 #: ``SPELL_SPEED_TOO_LOW`` 로 **옮겼다**.
-CODE_OCCURRENCES = 74
+#: 🔴 74 → **80** (Phase 6-AB 보완8). 늘어난 여섯은 전부
+#: ``engine/duel.py`` 의 보류 생성 자리이고, **이미 모름이던 자리가 그
+#: 코드를 명시하게 된 것**이다 (``STRING_OCCURRENCES`` 의 설명 참고).
+#: 새로 이 코드로 거절하게 된 자리는 **없다** — 오히려 흐름 거절 넷이
+#: 이 코드에서 빠져나갔다.
+CODE_OCCURRENCES = 80
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {
@@ -728,7 +629,12 @@ def test_01_the_enum_itself_forbids_attaching_this_code_to_a_refusal():
     assert "``UNKNOWN`` 쪽의 코드다" in doc
 
     assert ValidationCode.RULE_NOT_IMPLEMENTED.value == "rule_not_implemented"
-    assert len(ValidationCode) == 48
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 흐름 거절을 규칙 거절로 적기 위해
+    #: 셋을 더했다 — ``STAGE_FORBIDS_ACTION`` ·
+    #: ``MANDATORY_TRIGGER_PENDING`` · ``TRIGGER_TIMING_MISSED``. 🔴 **셋 다
+    #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
+    #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
+    assert len(ValidationCode) == 51
 
 
 def test_02_the_string_count_is_79_but_the_code_count_is_67():
@@ -759,7 +665,11 @@ def test_02_the_string_count_is_79_but_the_code_count_is_67():
     #: (``ActivationTiming.responding_kind`` · ``verified_activation_kind``
     #: 의 설명). 코드 수는 74 그대로이고, 그 차이가 이 등식이 지키는
     #: 사실이다: **문자열이 늘어도 코드가 늘지 않았다.**
-    assert strings - len(sites) == len(PROSE_OCCURRENCES) == 19
+    #: 🔴 19 → **30** (보완8). 늘어난 11은 전부 산문이다 — 왜 그 자리가
+    #: 모름이고 왜 다른 자리가 규칙 거절인지를 적었다.
+    #: 🔴 30 → **31** (보완8 마무리). 늘어난 하나도 산문이다
+    #: (``_refusal_sentence`` 의 설명). 코드 수는 80 그대로다.
+    assert strings - len(sites) == 31
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()
@@ -1283,11 +1193,23 @@ def test_17_the_misclassified_code_reaches_the_duel_boundary(repository):
     """
     **N (§20): production 도달.**
 
-    ``Duel.apply`` 가 발동기의 코드를 **그대로** ``DuelStep.code`` 에 넣는다
-    (``duel.py:912``). 즉 오분류가 공개 경계까지 간다.
+    ``Duel.apply`` 가 발동기의 코드를 **그대로** ``DuelStep.code`` 에 넣는다.
+    즉 오분류가 공개 경계까지 간다.
 
-    그리고 ``Duel.apply`` 자신도 목록 멤버십 거절에 이 코드를 쓴다 —
-    "미구현" 이 아니라 "지금 후보가 아니다" 인데 같은 코드다.
+    🔴 **정정 (Phase 6-AB 보완8 마무리).** 이 테스트는 ``special_summon``
+    거절의 문장이 *"{종류} 는 지금 허가된 행위가 아닙니다"* 라고 고정하고
+    있었다 — 그것은 ``Duel._refusal`` 의 **마지막 기본 문장**이고, "목록에
+    없다" 밖에 말하지 못한다. 보완8 이 ``_rule_verdict`` 를 끼운 뒤로는
+    규칙 검증기가 **먼저** 답한다. 실측::
+
+        ActionValidator.validate(special_summon)
+        → UNKNOWN / RULE_NOT_IMPLEMENTED
+          missing_rule="special-summon-condition (카드마다 다르다)"
+
+    그래서 아래는 그 **더 좁은 답**을 고정한다. 코드는 여전히
+    ``RULE_NOT_IMPLEMENTED`` 이고 — 특수 소환 조건이 실제로 이 저장소에
+    없으므로 이번에는 **옳은 분류**다 — 바뀐 것은 "왜" 뿐이다. 느슨하게
+    풀지 않고, 기본 문장이 아직 살아 있다는 것도 함께 고정한다.
     """
     duel = Duel.start(
         repository,
@@ -1303,13 +1225,18 @@ def test_17_the_misclassified_code_reaches_the_duel_boundary(repository):
     step = duel.apply(PlayerAction.special_summon(actor=seat, source=source))
     assert step.accepted is False
     assert step.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert "허가된 행위가 아닙니다" in step.reason
+    #: 🔴 규칙 검증기의 말이 그대로 왔다 — 목록 멤버십 문장이 아니다.
+    assert step.reason.startswith("아직 구현하지 않은 규칙이 걸려 있습니다.")
+    #: 🔴 그리고 **무엇이 없어서 모르는가**가 결과까지 따라왔다.
+    assert "[special-summon-condition (카드마다 다르다)]" in step.reason
+    assert "허가된 행위가 아닙니다" not in step.reason
     assert duel.state.state_hash() == before
 
     #: 발동기의 코드가 그대로 흘러간다는 것을 소스로 확인한다.
-    assert "DuelStep(action, False, activated.code, activated.reason)" in source_of(
-        "engine/duel.py"
-    )
+    duel_source = source_of("engine/duel.py")
+    assert "DuelStep(action, False, activated.code, activated.reason)" in duel_source
+    #: 🔴 기본 문장은 **지우지 않았다** — 남은 자리를 숨기지 않기 위해서다.
+    assert "는 지금 허가된 행위가 아닙니다." in duel_source
 
 
 def test_18_the_unimplemented_resolver_sites_are_dormant():
@@ -1547,14 +1474,23 @@ def test_25_real_corpus_sample_of_this_code(repository):
 
     실제 카드로 한 판을 돌리고, 받아들여진 수와 거절된 수의 코드를 모은다.
 
-    **``WithheldAction`` 은 코드를 들고 있지 않다** — 필드가 ``kind`` ·
-    ``reason``(문자열) · ``missing`` 뿐이다 (3-E-28 이 이미 측정한 모양).
-    그래서 보류 쪽은 문장으로, 적용 쪽은 코드로 센다.
+    🔴 **정정 (Phase 6-AB 보완8 마무리).** 이 테스트는 *"``WithheldAction``
+    은 코드를 들고 있지 않다 — 필드가 ``kind`` · ``reason`` · ``missing``
+    뿐이다"* 를 3-E-28 의 실측으로 적고 ``assert not hasattr(withheld,
+    "code")`` 로 고정하고 있었다. 그 **없음이 BLOCKER-F7-1 의 내용**이었다:
+    읽는 쪽이 "규칙이 막았다" 와 "판정 근거가 없다" 를 문장으로 짐작해야
+    했다. 보완8 이 ``code`` 를 **필수 필드**로 만들었으므로 이제는 그 반대를
+    고정한다 — 그리고 느슨하게 지우지 않고, 코드와 ``missing`` 이 **서로
+    모순되지 않는다**는 더 강한 사실까지 함께 센다.
+
+    🔴 식별자는 여전히 없다 (3-E-41 의 불변식). ``code`` 는 규칙 이름이고
+    ``scope`` 는 개수다 — 어느 카드인지는 들어가지 않는다.
     """
     deck = [card.id for card in list(repository.all_cards())[:16]]
     duel = Duel.start(repository, decks=(list(deck), list(deck)), seed=11)
     seen_codes: set[ValidationCode] = set()
     withheld_missing: set[str] = set()
+    withheld_codes: set[ValidationCode] = set()
 
     for _ in range(80):
         if duel.is_over:
@@ -1563,7 +1499,18 @@ def test_25_real_corpus_sample_of_this_code(repository):
             continue
         legal = duel.legal_actions()
         for withheld in legal.withheld:
-            assert not hasattr(withheld, "code")
+            #: 🔴 이제 코드를 들고 있다 — 짐작할 필요가 없다.
+            assert isinstance(withheld.code, ValidationCode)
+            withheld_codes.add(withheld.code)
+            #: 🔴 그리고 코드와 ``missing`` 이 서로 모순되지 않는다.
+            if withheld.validity is ActionValidity.UNKNOWN:
+                assert withheld.missing, withheld
+            else:
+                assert withheld.validity is ActionValidity.INVALID, withheld
+                assert withheld.missing is None, withheld
+            #: 🔴 식별자는 없다 (3-E-41).
+            for forbidden in ("source", "action", "instance_id"):
+                assert not hasattr(withheld, forbidden), forbidden
             if withheld.missing:
                 withheld_missing.add(withheld.missing)
         if not legal.allowed:
@@ -1584,8 +1531,9 @@ def test_25_real_corpus_sample_of_this_code(repository):
     #: 그리고 거절 쪽에서 실제로 이 코드가 나온다.
     assert ValidationCode.RULE_NOT_IMPLEMENTED in seen_codes
     assert ValidationCode.OK in seen_codes
-    #: 보류 쪽은 **규칙 이름**을 들고 있다 (코드가 아니다).
+    #: 보류 쪽은 **규칙 이름**을 들고 있다 — 그리고 이제 코드도 함께다.
     assert withheld_missing, "보류에 missing 문장이 하나도 없습니다."
+    assert withheld_codes, "보류에 코드가 하나도 없습니다."
 
 
 def test_26_the_distinctions_from_phase_3e24_to_3e35_still_hold():
@@ -1605,7 +1553,12 @@ def test_26_the_distinctions_from_phase_3e24_to_3e35_still_hold():
     assert ResolutionStatus.CONDITION_UNKNOWN is not ResolutionStatus.CONDITION_FALSE
 
     #: enum 크기가 늘지 않았다 — 이번 Phase 가 새 코드를 만들지 않았다.
-    assert len(ValidationCode) == 48
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 흐름 거절을 규칙 거절로 적기 위해
+    #: 셋을 더했다 — ``STAGE_FORBIDS_ACTION`` ·
+    #: ``MANDATORY_TRIGGER_PENDING`` · ``TRIGGER_TIMING_MISSED``. 🔴 **셋 다
+    #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
+    #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
+    assert len(ValidationCode) == 51
     assert len(ConditionResult) == 3
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5

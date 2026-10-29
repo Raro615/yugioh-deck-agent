@@ -95,7 +95,7 @@ from engine.spell_activation import activatable_effects
 from engine.state.game_state import GameState
 from engine.summon import duel_executor
 from engine.target_bridge import TargetBridgeError, selections_for, target_combinations
-from engine.validation import ActionValidity, ValidationCode
+from engine.validation import CODE_VALIDITY, ActionValidity, ValidationCode
 from engine.vocabulary import Phase, Position, Zone
 
 from tests.conftest import requires_official_db
@@ -949,8 +949,22 @@ def test_d03_the_rulebook_forbids_the_off_turn_activation(repository):
     assert action not in duel.legal_actions(P0).allowed
     assert duel.legal_actions(P0).allowed == ()
     #: 그리고 그 이유가 ``withheld`` 에 적혀 있다.
-    reasons = [w.reason for w in duel.legal_actions(P0).withheld]
-    assert any("우선권" in reason for reason in reasons), reasons
+    #: 🔴 **정정 (Phase 6-AB 보완8).** 전에는 그 줄이 ``PASS`` 하나였고
+    #: 한국어 "우선권" 을 담고 있었다. 보완8 은 비턴 플레이어가 요청할 수
+    #: 있는 **종류마다** 줄을 남기고, 문장은 룰북의 절 제목을 그대로 인용
+    #: 한다 (``engine`` 이 ``rules`` 를 import 하지 않으므로 — ADR-007 —
+    #: 그 인용이 이 시험의 대조 지점이다). 짐작이 아니라 그 제목을 센다.
+    withheld = duel.legal_actions(P0).withheld
+    reasons = [w.reason for w in withheld]
+    assert reasons, withheld
+    assert all("TURN PLAYER'S PRIORITY" in reason for reason in reasons), reasons
+    #: 🔴 그리고 발동 요청 자체가 **확정 거부**로 적힌다 — 모름이 아니다.
+    by_kind = {w.kind: w for w in withheld}
+    held = by_kind[PlayerActionKind.ACTIVATE_EFFECT]
+    assert held.code is ValidationCode.NOT_TURN_PLAYER
+    assert held.is_rule_refusal
+    assert held.missing is None, held
+    assert duel.legal_actions(P0).unsupported() == ()
 
 
 @pytest.mark.real_card
@@ -1165,8 +1179,19 @@ def test_f02_the_withheld_reason_is_true_in_every_position(repository):
 
     예전에는 창이 **열려 있는데도** "우선권이 열려 있지 않습니다" 라고
     적었다 (⑥). 지금은 두 이유가 갈라져 있고 둘 다 사실이다.
+
+    🔴 **정정 (Phase 6-AB 보완8).** 닫힌 쪽(②)의 문장이 바뀌었다. 전에는
+    *"우선권이 열려 있지 않습니다."* 에 ``missing="우선권을 여는 규칙 (Phase
+    2-F)"`` 이 붙어 **UNKNOWN** 이었다 — 우선권을 여는 자리가 저장소에 없던
+    때의 사실이다. 그 자리는 보완5·보완6 이 만들었고, 그래서 지금 ②의
+    보류는 **규칙이 금지한 것**이다: 룰북 ``TURN PLAYER'S PRIORITY`` 가
+    비턴 플레이어에게 지나갈 기회를 주지 않는다 (예외는 자동 발동 유발).
+
+    두 문장이 **둘 다 사실**이라는 이 시험의 성질은 그대로다. 바뀐 것은
+    ②의 사실이 *"모른다"* 에서 *"규칙이 막는다"* 로 옮겨간 것이고, 아래는
+    그것을 코드와 ``missing`` 없음으로 함께 고정한다.
     """
-    seen = {"열려 있지 않습니다": 0, "지금은": 0}
+    seen = {"응답 기회": 0, "지금은": 0}
     for name, duel, seat, is_open, holds in flow_positions(repository):
         legal = duel.legal_actions(seat)
         passes = [
@@ -1191,11 +1216,16 @@ def test_f02_the_withheld_reason_is_true_in_every_position(repository):
             assert held.missing is None, (name, held.missing)
             seen["지금은"] += 1
         else:
-            assert "우선권이 열려 있지 않습니다." == held.reason, name
-            assert held.missing is not None, name
-            seen["열려 있지 않습니다"] += 1
+            #: 🔴 규칙이 금지한 것이다 — 모름이 아니다.
+            assert held.code is ValidationCode.NO_RESPONSE_WINDOW, name
+            assert held.is_rule_refusal, name
+            assert held.missing is None, (name, held.missing)
+            assert "지나갈 응답 기회가 열려 있지 않습니다" in held.reason, name
+            assert "TURN PLAYER'S PRIORITY" in held.reason, name
+            assert held not in legal.unsupported(), name
+            seen["응답 기회"] += 1
     assert seen["지금은"] == 2, seen
-    assert seen["열려 있지 않습니다"] == 1, seen
+    assert seen["응답 기회"] == 1, seen
 
 
 @pytest.mark.real_card
@@ -1620,46 +1650,110 @@ def test_i01_the_engine_only_opens_half_of_the_priority_rule(repository):
 @pytest.mark.real_card
 def test_i02_a_gate_blocked_activation_leaves_no_withheld_reason(repository):
     """
-    🔴 **BLOCKER (Phase 6-R 이 기록, 6-S 가 수를 센다) — 조용한 보류.**
+    🔴 **BLOCKER 였다 — 조용한 보류. Phase 6-AB 보완8 이 풀었다.**
 
-    ``_activation_actions`` 가 관문에서 걸린 후보를 **이유 없이 버린다.**
-    그래서 "발동할 것이 없다" 와 "발동이 지금 규칙상 안 된다" 를 읽는 쪽이
-    가를 수 없다.
+    6-R 이 기록하고 6-S 가 수를 센 결함: ``_activation_actions`` 가 관문에서
+    걸린 후보를 **이유 없이 버렸다.** 그래서 "발동할 것이 없다" 와 "발동이
+    지금 규칙상 안 된다" 를 읽는 쪽이 가를 수 없었다. 그때의 실측은 관문이
+    막은 발동 **아홉 건**에 대해 ``withheld`` 의 ``ACTIVATE_EFFECT`` 가
+    **0건**이었다.
 
-    스물 자리 중 **고를 수 있는 자리**에서 관문이 막은 발동이 **아홉 건**
-    이고 (관문 1 이 다섯 · 관문 2 가 하나 · 관문 3 이 셋), 그 중
-    ``withheld`` 에 ``ACTIVATE_EFFECT`` 로 남은 것은 **0건**이다.
+    🔴 이 테스트 자신이 조건을 적어 두었다 — *"이유가 적히기 시작했다면 이
+    BLOCKER 는 풀렸다"*. 보완8 이 그 자리를 채웠으므로 이제 **풀린 쪽**을
+    고정한다. 당시의 수(9)는 그대로 두고, 그 아홉이 지금 어떻게 보고되는지를
+    센다. 실측 (스물 자리 전수)::
 
-    🔴 고를 수 **없는** 자리에서 네 번째 판정자가 막은 발동은 따로 센다 —
-    그쪽은 룰북이 금지하는 것이고 (§82), 이유가 ``withheld`` 의 ``PASS``
-    항목에 적혀 있다 (6-S 가 고친 자리).
+        관문이 막은 발동                    9건 (1:다섯 · 2:하나 · 3:셋)
+        고를 수 있는 자리의 보류 줄          8건
+        고를 수 **없는** 자리의 보류 줄       2건 (NOT_TURN_PLAYER)
+        남은 1건                           G1 로스트 — 옮긴 조작이 없어
+                                           (``executable=False``) **후보
+                                           자체가 만들어지지 않는다**
 
-    🔴 고치지 않는다 — ``withheld`` 에 후보마다 항목을 넣는 일은
-    ``legal_actions`` 의 공유 계약을 늘린다 (목록 크기가 바뀐다). §16 이
-    직접 차단이 아닌 한 수정하지 않는다고 적었고, 이번 결함은 그것 없이도
-    전부 측정할 수 있었다.
+    🔴 **남은 1건은 숨기지 않는다.** 관문이 막은 것이 아니라 **후보 생성
+    전에** 빠지는 범위이고, 그래서 관문의 말이 있을 수 없다. 아래가 그
+    한계를 그 자리에서 직접 확인한다 — 보류가 비어 있다는 것까지 함께.
+
+    🔴 그리고 식별자는 늘지 않았다: 효과 참조는 ``reason`` 문자열에만 있고
+    (저장소의 기존 규약), ``WithheldAction`` 에는 ``source`` · ``action`` ·
+    ``instance_id`` 가 여전히 없다 (3-E-41 의 불변식).
     """
     blocked = collections.Counter()
-    reported = 0
+    acting_reported = 0
+    idle_reported = 0
+    codes = collections.Counter()
+    silent: list[str] = []
     for name, duel, seat in all_states(repository):
         result = audit(duel, seat)
         blocked.update(result["blocked"])
-        reported += sum(
-            1
+        held = [
+            w
             for w in result["legal"].withheld
             if w.kind is PlayerActionKind.ACTIVATE_EFFECT
-        )
+        ]
+        for w in held:
+            codes[w.code.name] += 1
+            #: 🔴 코드와 ``missing`` 이 서로 모순되지 않는다.
+            if w.validity is ActionValidity.UNKNOWN:
+                assert w.missing, (name, w)
+            else:
+                assert w.validity is ActionValidity.INVALID, (name, w)
+                assert w.missing is None, (name, w)
+            #: 🔴 식별자 칸은 여전히 없다 (3-E-41).
+            for forbidden in ("source", "action", "instance_id"):
+                assert not hasattr(w, forbidden), forbidden
+        gates = {
+            gate: n
+            for gate, n in result["blocked"].items()
+            if gate.startswith(("1 ", "2 ", "3 "))
+        }
+        if may_act(duel, seat):
+            acting_reported += len(held)
+        else:
+            idle_reported += len(held)
+        if gates and not held:
+            silent.append(name)
+
     gate_blocked = sum(
         n for gate, n in blocked.items() if gate.startswith(("1 ", "2 ", "3 "))
     )
     assert gate_blocked == 9, dict(blocked)
     #: 🔴 그리고 네 번째 판정자가 막은 것은 **따로** 센다 (룰북 §82).
     assert blocked["0 우선권 (룰북 TURN PLAYER'S PRIORITY)"] > 0, dict(blocked)
-    assert reported == 0, "이유가 적히기 시작했다면 이 BLOCKER 는 풀렸다"
     #: 그리고 세 관문이 **전부** 쓰인다 — 한 관문만 막는 것이 아니다.
     assert blocked["1 ActionValidator"] == 5, dict(blocked)
     assert blocked["2 ActivationTimingChecker"] == 1, dict(blocked)
     assert blocked["3 can_activate"] == 3, dict(blocked)
+
+    #: 🔴 **0건이 아니다** — 이 BLOCKER 는 풀렸다.
+    assert acting_reported == 8, (acting_reported, dict(codes))
+    assert idle_reported == 2, (idle_reported, dict(codes))
+    #: 🔴 그리고 그 여덟이 **한 코드로 뭉개지지 않았다**.
+    assert codes["RULE_NOT_IMPLEMENTED"] == 4, dict(codes)
+    assert codes["CANDIDATE_NOT_ELIGIBLE"] == 2, dict(codes)
+    assert codes["WRONG_PHASE"] == 1, dict(codes)
+    assert codes["SET_THIS_TURN"] == 1, dict(codes)
+    assert codes["NOT_TURN_PLAYER"] == 2, dict(codes)
+
+    #: 🔴 **남은 한계 하나** — 그 자리를 이름으로 못 박고 까닭을 확인한다.
+    assert silent == ["G1 로스트 (executable=False)"], silent
+    duel, seat = next(
+        (duel, seat)
+        for name, duel, seat in all_states(repository)
+        if name == silent[0]
+    )
+    legal = duel.legal_actions(seat)
+    assert legal.withheld == (), legal.withheld
+    activations = [
+        action
+        for action in conceivable(duel, seat)
+        if action.kind is PlayerActionKind.ACTIVATE_EFFECT
+    ]
+    assert len(activations) == 1, activations
+    ready, why = execution_ready(activations[0])
+    #: 관문이 막은 것이 아니라 **옮긴 조작이 없어** 후보가 되지 못한다.
+    assert ready is False
+    assert "executable=False" in why
 
 
 @pytest.mark.real_card
@@ -1734,9 +1828,20 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
                                                    따른다**    하면 채우고 규칙이
                                                              금지하면 비운다 (추가)
     ``_flow_actions``   창은 열렸고 상대 차례다     **없다**     순서다 (6-S)
-    ``_flow_actions``   우선권이 열리지 않았다      **있다**     여는 규칙이 없다
+    ``_flow_actions``   응답 기회가 없다            **없다**     규칙이 금지한다
+                                                             (보완8) — 룰북
+                                                             TURN PLAYER'S
+                                                             PRIORITY
     ``_flow_actions``   페이즈 전환이 거절됐다      **있다**     진행 규칙이 댄다
     ``_withheld_board_actions``                   **있다**     발동 규칙이 댄다
+    ``_activation_actions`` 관문이 거절했다         **관문을     후보 제외와 직접
+                                                  따른다**    적용이 같은 근거를
+                                                             쓴다 (보완8)
+    ``_stage_closed_actions`` 단계가 닫았다         **없다**     순서다 (보완8) —
+                                                             Fast Effect
+                                                             Timing 상자 A
+    ``_stage_closed_actions`` 내 차례가 아니다      **없다**     규칙이 금지한다
+                                                             (보완8)
     ==========================================  ===========  ==============
 
     🔴 **비우는 자리가 넷에서 일곱으로 늘었고, 그것은 규율을 지키는 자리가
@@ -1748,6 +1853,18 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     아니라 **순서**이고, 근거는 공식 Fast Effect Timing 도표다. 그래서
     ``_enforce_mandatory`` 는 다섯 자리가 되고 **채우는 것은 여전히
     하나**다 — 강제인데 절차를 보장할 근거가 없는 그 자리뿐이다.
+
+    🔴 **보완8 이 함수 둘과 자리 셋을 더하고, 자리 하나를 옮겼다.**
+
+    더한 함수 둘은 전에 **조용히 사라지던** 자리다. ``_activation_actions``
+    는 관문이 막은 비유발 후보를 이유 없이 버렸고 (BLOCKER-F7-1),
+    ``_stage_closed_actions`` 는 단계·차례가 닫은 행동을 아무 데도 적지
+    않아 ``apply`` 가 그 거절을 ``RULE_NOT_IMPLEMENTED`` 로 다시 적었다
+    (BLOCKER-F6-2). 둘 다 **보류가 늘어난 것이 정직해진 것**이다.
+
+    옮긴 자리 하나는 ``_flow_actions`` 의 비턴 플레이어 ``PASS`` 다 —
+    채움에서 **비움**으로 갔다. 모름이 하나 줄었고, 그것이 이 Phase 가
+    한 일이다: **모름이던 자리를 규칙 거절로 옮긴다.**
     """
     source = production_source("engine/duel.py")
     tree = ast.parse(source)
@@ -1765,10 +1882,14 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
         if sites:
             by_function[node.name] = sites
 
-    #: 🔴 **보류를 만드는 자리는 이 넷뿐이다** — 늘면 여기서 드러난다.
+    #: 🔴 **보류를 만드는 자리는 이 여섯뿐이다** — 늘면 여기서 드러난다.
+    #: (보완8 이 둘을 더했다: ``_activation_actions`` 와
+    #: ``_stage_closed_actions``. 아래에서 각자의 기준을 따로 센다.)
     assert sorted(by_function) == [
+        "_activation_actions",
         "_enforce_mandatory",
         "_flow_actions",
+        "_stage_closed_actions",
         "_trigger_actions",
         "_withheld_board_actions",
     ], sorted(by_function)
@@ -1820,16 +1941,56 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     assert filled("_withheld_board_actions") == [True], filled(
         "_withheld_board_actions"
     )
-    #: 🔴 **흐름 쪽 셋 중 하나는 비운다** — 순서는 빠진 규칙이 아니다 (6-S).
+    #: 🔴 **흐름 쪽 셋 중 둘을 비운다** — 순서는 빠진 규칙이 아니다 (6-S).
+    #:
+    #: 🔴 **보완8 이 하나를 채움에서 비움으로 옮겼다.** 비턴 플레이어의
+    #: ``PASS`` 가 ``missing="우선권을 여는 규칙 (Phase 2-F)"`` 를 달고
+    #: 있었다 — 우선권을 여는 자리가 **없던** 때의 사실이다. 그 자리는
+    #: 보완5·보완6 이 만들었고, 그래서 지금 그 보류는 룰북 ``TURN PLAYER'S
+    #: PRIORITY`` 가 **금지한 것**이다. 모름이 하나 줄었다.
     flow = filled("_flow_actions")
     assert len(flow) == 3, flow
-    assert flow.count(True) == 2 and flow.count(False) == 1, flow
+    assert flow.count(True) == 1 and flow.count(False) == 2, flow
     #: 🔴 **강제 쪽 다섯 중 하나만 채운다** (최종 보완이 하나 더했다) —
     #: 보장할 근거가 없는 자리 하나만 채우고, 규칙이 **있어서** 막는 자리와
     #: **순서** 자리 넷은 비운다.
     forced = filled("_enforce_mandatory")
     assert forced.count(True) == 1, forced
     assert forced.count(False) == len(forced) - 1, forced
+
+    #: 🔴 **보완8 이 더한 자리 둘** — 기준은 그대로다.
+    #:
+    #: ``_activation_actions`` 는 **관문을 따른다**: 관문이 모른다고 하면
+    #: 그 ``missing_rule`` 을 싣고, 규칙이 금지한다고 하면 ``None`` 이다.
+    #: ``_trigger_actions`` 의 관문 자리와 **같은 조건식**이고, 그것이 §3 의
+    #: *"후보 제외와 직접 적용이 같은 근거를 쓴다"* 가 뜻하는 것이다.
+    activation = by_function["_activation_actions"]
+    assert len(activation) == 1, len(activation)
+    assert filled("_activation_actions") == [True]
+    gate_missing = next(
+        kw.value for kw in activation[0].keywords if kw.arg == "missing"
+    )
+    assert isinstance(gate_missing, ast.IfExp), ast.unparse(gate_missing)
+    assert "UNKNOWN" in ast.unparse(gate_missing.test)
+    assert ast.unparse(gate_missing.orelse) == "None"
+    assert "missing_rule" in ast.unparse(gate_missing.body)
+
+    #: ``_stage_closed_actions`` 는 **둘 다 비운다** — 단계와 차례는 빠진
+    #: 규칙이 아니라 순서다. 그 두 자리는 ``STAGE_FORBIDS_ACTION`` 과
+    #: ``NOT_TURN_PLAYER`` 이고, 둘 다 ``INVALID`` 이므로 ``unsupported()``
+    #: 로 새지 않는다 (``engine/validation.py`` 의 ``CODE_VALIDITY``).
+    assert filled("_stage_closed_actions") == [False, False]
+    stage_codes = set()
+    for node in by_function["_stage_closed_actions"]:
+        code = ast.unparse(node.args[2])
+        stage_codes.add(code)
+        assert CODE_VALIDITY[
+            getattr(ValidationCode, code.rsplit(".", 1)[-1])
+        ] is ActionValidity.INVALID, code
+    assert stage_codes == {
+        "ValidationCode.STAGE_FORBIDS_ACTION",
+        "ValidationCode.NOT_TURN_PLAYER",
+    }, stage_codes
 
     #: 🔴 **비운 자리가 왜 비었는지 코드가 적는다.** 빈 칸을 설명 없이 두면
     #: 다음 사람이 "빠뜨렸다" 로 읽고 아무 값이나 채운다. 자리마다 **그 함수
@@ -1858,3 +2019,8 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     #: 추가 보완이 더한 자리들이 그 규율을 따르는지 센다.
     assert "근거가 생겨야 풀리는 자리이므로 ``missing`` 을 채운다" in trigger_body
     assert "관문이 말한 것을 따른다" in trigger_body
+    #: 🔴 보완8 이 더한 두 자리도 그 함수 안에서 기준을 적는다.
+    assert "관문이 말한 것을 따른다" in function_body("_activation_actions")
+    assert (
+        "빠진 규칙이 아니라 **순서**다" in function_body("_stage_closed_actions")
+    )

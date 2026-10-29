@@ -220,7 +220,25 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: 🔴 **이 파일이 지키는 구분이 또 한 번 쓰인 자리다** — 보완7 이 고친
 #: 것이 바로 그 혼동이고 (규칙이 막은 발동과 응수가 이 코드로 보고되던
 #: 자리), 보완7 도 ``UnimplementedRule`` 을 **하나도 만들지 않았다.**
-RULE_NOT_IMPLEMENTED_MENTIONS = 93
+#:
+#: 🔴 93 → **111** (Phase 6-AB 보완8 · 마무리). 산문 12 · 코드 6 이다.
+#:
+#: 🔴 **늘어난 코드 6은 새 거절이 아니다.** 보완8 이 ``WithheldAction`` 에
+#: ``code`` 를 **필수 필드**로 만들었고, 그래서 **이미 ``missing`` 을 달고
+#: 있던** (즉 이미 모름이던) 보류 자리 여섯이 그 코드를 **명시**하게 되었다.
+#: 전에는 그 사실이 "``missing`` 이 비어 있지 않다" 로만 암시되었고, 읽는
+#: 쪽이 짐작해야 했다 — 그것이 보완8 이 고친 결함이다 (BLOCKER-F7-1).
+#:
+#: 그리고 보완8 은 **반대 방향으로도** 움직였다: 흐름 거절 넷이 이 코드에서
+#: ``STAGE_FORBIDS_ACTION`` · ``NOT_TURN_PLAYER`` · ``NO_RESPONSE_WINDOW``
+#: 로 **빠져나갔다**. 즉 이 코드로 **거절하는 횟수는 늘지 않았고**, 그 코드를
+#: **적는 자리**가 늘었다.
+#:
+#: 🔴 **이 파일이 지키는 구분이 또 한 번 쓰인 자리다** — 보완8 이 고친 것이
+#: 바로 "규칙이 막은 것" 과 "이 저장소에 그 규칙이 없는 것" 의 혼동이고,
+#: 보완8 도 ``UnimplementedRule`` 을 **하나도 만들지 않았다** (위
+#: ``production`` 자리 수는 그대로다).
+RULE_NOT_IMPLEMENTED_MENTIONS = 111
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
@@ -823,6 +841,23 @@ def test_11_legal_actions_never_builds_the_action_that_reaches_them(repository):
 
     그리고 ``Duel.apply`` 로 직접 넣으면 **목록 멤버십 관문**이 먼저
     거절한다 — 조건 평가까지 가지 않는다. 판은 바뀌지 않는다.
+
+    🔴 **정정 (Phase 6-AB 보완8 · 마무리).** 마지막 문장의 앞부분이 더는
+    사실이 아니다. 보완8 이 ``Duel._refusal`` 에 **규칙 검증기** 단계를
+    끼웠으므로 (``_rule_verdict``), ``apply`` 는 "목록에 없다" 로 끝내지
+    않고 **검증기에게 묻는다.** 즉 조건 평가까지 **간다.** 실측::
+
+        → 전: RULE_NOT_IMPLEMENTED "special_summon 는 지금 허가된 행위가 아닙니다."
+        → 후: RULE_NOT_IMPLEMENTED "아직 구현하지 않은 규칙이 걸려 있습니다.
+                                   [special-summon-condition (카드마다 다르다)]"
+
+    **코드는 같고 까닭이 좁아졌다.** 그리고 이 테스트의 아래쪽이 재던 것
+    ("검증기에게 직접 물으면 조건이 돌아간다 — 같은 코드, 다른 까닭") 은
+    이제 **둘이 같은 까닭을 말한다**로 바뀐다: 후보 제외와 직접 적용이 같은
+    근거를 쓴다는 것이 보완8 의 요구 §3 이다. 아래가 그 일치를 고정한다.
+
+    바뀌지 않은 것: ``SPECIAL_SUMMON`` 은 ``allowed`` 에도 ``withheld`` 에도
+    없고 (그래서 production 호출자가 없다), 판은 바뀌지 않는다.
     """
     deck = [card.id for card in list(repository.all_cards())[:12]]
     duel = Duel.start(repository, decks=(list(deck), list(deck)), seed=5)
@@ -841,14 +876,20 @@ def test_11_legal_actions_never_builds_the_action_that_reaches_them(repository):
     step = duel.apply(action)
     assert step.accepted is False
     assert step.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    #: **멤버십 거절이다** — 조건이 아니라 목록에 없어서다.
-    assert "허가된 행위가 아닙니다" in step.reason
+    #: 🔴 **멤버십 문장이 아니다** — 검증기의 조건이 돌아갔다.
+    assert "허가된 행위가 아닙니다" not in step.reason
+    assert step.reason.startswith("아직 구현하지 않은 규칙이 걸려 있습니다.")
     assert duel.state.state_hash() == before
 
-    #: 그래도 검증기에게 직접 물으면 조건이 돌아간다 — 같은 코드, 다른 까닭.
+    #: 🔴 그리고 **같은 판정이다** — 검증기에게 직접 물은 것과 일치한다.
     verdict = ActionValidator(duel.view(seat)).validate(action)
     assert verdict.code is ValidationCode.RULE_NOT_IMPLEMENTED
     assert verdict.missing_rule == SPECIAL_SUMMON_CONDITION_RULE
+    assert step.code is verdict.code
+    assert verdict.reason in step.reason
+    #: 🔴 빠진 규칙의 이름까지 결과를 따라왔다 (``DuelStep`` 에는 그 칸이
+    #: 없으므로 문장에 싣는다 — ``Duel._refusal_sentence``).
+    assert f"[{SPECIAL_SUMMON_CONDITION_RULE}]" in step.reason
 
 
 def test_12_the_cost_layer_sibling_is_dormant_but_its_consumer_is_live():
@@ -1112,7 +1153,12 @@ def test_17_the_distinctions_from_phase_3e24_to_3e34_still_hold():
     #: 상태 수가 늘지 않았다 — 이번 Phase 가 새 enum 을 만들지 않았다.
     assert len(ConditionResult) == 3
     assert len(ActionValidity) == 3
-    assert len(ValidationCode) == 48
+    #: 🔴 48 → **51** (Phase 6-AB 보완8). 흐름 거절을 규칙 거절로 적기 위해
+    #: 셋을 더했다 — ``STAGE_FORBIDS_ACTION`` ·
+    #: ``MANDATORY_TRIGGER_PENDING`` · ``TRIGGER_TIMING_MISSED``. 🔴 **셋 다
+    #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
+    #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
+    assert len(ValidationCode) == 51
     assert len(SimulationStatus) == 5
 
     #: ``Requirement`` 는 조건을 반드시 받는다 (3-E-34).

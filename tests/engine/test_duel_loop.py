@@ -34,7 +34,7 @@ from engine.duel import (
     Duel,
     TurnStep,
 )
-from engine.validation import ValidationCode
+from engine.validation import CODE_VALIDITY, ActionValidity, ValidationCode
 from engine.vocabulary import Phase, Zone
 
 from tests.conftest import requires_official_db
@@ -251,16 +251,37 @@ def test_c_an_action_outside_the_list_is_refused(repository):
     """
     ``legal_actions`` 가 목록이고, :meth:`Duel.apply` 는 **그 자리에서 다시
     묻는다.** 목록을 믿고 적용하면 그 사이의 변화를 놓친다.
+
+    🔴 **정정 (Phase 6-AB 보완8 마무리).** 이 테스트는 거절 문장이 *"{종류}
+    는 지금 허가된 행위가 아닙니다"* 라고 고정했다. 그 문장은 ``_refusal``
+    의 **마지막 기본값**이고 ``RULE_NOT_IMPLEMENTED`` 를 달고 있었다 — 즉
+    "상대 턴에 상대가 소환을 요청했다" 는 **규칙이 분명히 막은** 일을 "이
+    저장소에 그 규칙이 없다" 로 적고 있었다. 실측::
+
+        P1 이 P0 의 턴에 일반 소환 요청
+        → 전: RULE_NOT_IMPLEMENTED "normal_summon 는 지금 허가된 행위가 아닙니다."
+        → 후: NOT_TURN_PLAYER       "자신의 턴이 아닙니다."
+
+    목록 밖이라는 사실은 그대로이고 (``accepted`` 가 거짓이다), 바뀐 것은
+    **왜**다. 그래서 아래는 코드까지 함께 고정한다 — 확정 거부이므로
+    모름으로 집계되지 않아야 한다.
     """
     duel = small_duel(repository)
     stranger = PlayerAction.normal_summon(
         actor=THEIRS, source=duel.state.player(THEIRS).hand[0].instance_id
     )
 
+    assert stranger not in duel.legal_actions(THEIRS).allowed
+    before = duel.state.state_hash()
     step = duel.apply(stranger)
 
     assert not step.accepted
-    assert "허가된 행위가 아닙니다" in step.reason
+    assert step.code is ValidationCode.NOT_TURN_PLAYER
+    assert "자신의 턴이 아닙니다" in step.reason
+    #: 🔴 확정 거부다 — 빠진 규칙 이름이 붙지 않는다.
+    assert "[" not in step.reason
+    assert CODE_VALIDITY[step.code] is ActionValidity.INVALID
+    assert duel.state.state_hash() == before
 
 
 @pytest.mark.real_card
