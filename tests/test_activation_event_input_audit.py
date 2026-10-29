@@ -232,15 +232,26 @@ def test_03_timing_and_priority_live_in_the_gate_not_the_enumerator():
 
     타이밍 · 우선권 · 체인을 열거가 보지 않는 것은 빠뜨린 것이 아니라
     ``_activation_gate`` 가 보기 때문이다. 둘을 따로 재서 그것을 보인다.
+
+    🔴 **정정 (보완8 마무리2).** 관문이 **타이밍 사실을 조립하는 자리**를
+    ``_activation_timing`` 으로 뺐다 (관측에 없는 사실 넷을 넘기므로 두
+    자리에서 조립하면 한쪽이 하나를 빠뜨려도 조용히 더 좁은 답이 나온다).
+    그래서 ``chain`` · ``priority`` 는 그 자리에 있다. 이 시험이 지키는
+    사실은 그대로이므로 — **열거는 흐름을 보지 않고 관문 쪽이 본다** —
+    관문을 그 조립 자리까지 묶어서 센다.
     """
     enumerator = names_in(function_body("engine/duel.py", "_activation_actions"))
     gate = names_in(function_body("engine/duel.py", "_activation_gate"))
+    assembly = names_in(function_body("engine/duel.py", "_activation_timing"))
 
     #: 열거는 흐름을 보지 않는다.
     assert {"chain", "priority"} & enumerator == set()
-    #: 관문은 셋 다 본다.
-    assert {"chain", "priority", "ActivationTimingChecker"} <= gate
+    #: 관문은 셋 다 본다 (조립 자리를 포함해서).
+    assert {"chain", "priority", "ActivationTiming"} <= assembly
+    assert {"chain", "priority", "ActivationTimingChecker"} <= gate | assembly
     assert {"validate", "can_activate"} <= gate
+    #: 🔴 그리고 관문이 그 자리를 **직접** 부른다 — 열거가 아니다.
+    assert "_activation_timing" in gate
 
 
 def test_04_activation_timing_declares_a_point_that_nobody_passes():

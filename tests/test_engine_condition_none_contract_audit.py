@@ -259,6 +259,10 @@ def _statement_order(path: str, function: str) -> tuple[str, ...]:
         "_check_supported",
         "_check_condition",
         "_check_targets",
+        #: 🔴 보완8 마무리2 가 ``_check`` 의 **대상 의존이 아닌 단계 전부**를
+        #: 이 자리로 뺐다. 세지 않으면 그 호출이 순서에서 사라지고, 그러면
+        #: "정의 관문이 조건 관문보다 먼저다" 를 이 시험이 더는 재지 못한다.
+        "_check_before_targets",
     }
     order: list[str] = []
     for statement in target.body:
@@ -801,12 +805,27 @@ def test_12_every_consumer_of_activation_reads_none_the_same_way():
     #: 소스 문자열 위치로 재면 안 된다 — 함수 본문의 **글자 순서**는 호출
     #: 순서가 아니므로, 관문을 실제로 뒤로 옮겨도 글자 순서는 그대로다.
     #: 그래서 **호출 순서를 AST 로** 읽는다.
+    #:
+    #: 🔴 **정정 (보완8 마무리2).** ``_check`` 의 **대상 의존이 아닌 단계
+    #: 전부**가 ``_check_before_targets`` 로 빠졌다 —
+    #: ``can_activate_ignoring_targets`` 가 같은 것을 쓰게 하려는 것이고,
+    #: 두 벌이 되면 "대상과 무관한 거절" 과 "조합별 거절" 이 다른 규칙으로
+    #: 갈린다. **순서는 그대로**이므로 두 함수를 이어서 센다.
     assert _statement_order("engine/activation.py", "_check") == (
+        "_check_before_targets",
+        "_check_targets",
+    )
+    assert _statement_order(
+        "engine/activation.py", "_check_before_targets"
+    ) == (
         "definition-none-gate",
         "_check_authority",
         "_check_condition",
-        "_check_targets",
     )
+    #: 🔴 그리고 **대상 단계만** 빠진 길이 하나 더 있다.
+    assert _statement_order(
+        "engine/activation.py", "can_activate_ignoring_targets"
+    ) == ("_check_before_targets",)
     assert _statement_order("engine/effect/executor.py", "_plan") == (
         "_check_authority",
         "_check_supported",

@@ -1374,25 +1374,44 @@ class Duel:
                     # 이 줄이 없어도 결과가 같았다. 사건이 관문을 열게 된
                     # 지금은, 없으면 같은 발동이 **목록에 두 번** 오른다.
                     continue
-                # 🔴 **못 센 대상 범위를 적는다** (보완8 세 항목 ②).
+                # 🔴 **대상과 무관한 발동 거절을 먼저 묻는다**
+                # (보완8 마무리2).
                 #
-                # ``target_combinations`` 은 ``eligible`` 만 조합으로
-                # 묶는다 — 그것은 옳다 (모름을 허가로 바꾸지 않는다).
-                # 그런데 **올리지 않는 것과 아무 말도 하지 않는 것은
-                # 다르다.** 실측 (실제 등재 카드 싸이크론)::
+                # 보완8 세 항목 ②는 *"못 센 대상 범위"* 를 조합 판정보다
+                # **앞에서** 적었고, 그래서 **발동 자체가 규칙상 금지된**
+                # 효과까지 "진행에 영향을 주는 미지원" 으로 집계되었다.
+                # 실측 (실제 등재 카드 싸이크론 · 세트한 턴)::
                 #
-                #     내 앞면 마법 1장      → 후보가 된다
-                #     상대 뒷면 마법·함정    → 🔴 조용히 사라졌다
-                #     내 앞면 몬스터        → 조건 거짓으로 제외 (규칙의 답)
+                #     상대 뒷면 카드 없음 → flow_only · fully_supported=True
+                #     상대 뒷면 카드 있음 → 🔴 unsupported ·
+                #                          fully_supported=False
+                #                          (같은 턴 · 같은 금지인데)
                 #
-                # 그래서 "합법인 대상이 하나 있다" 가 "대상 공간을 끝까지
-                # 검증했다" 로 읽혔다. 이 보류가 그 둘을 가른다 —
-                # **허가 목록은 그대로**이므로 합법 조합은 막지 않는다.
-                limits = target_enumeration_limits(
-                    self.state, seat, definition, card.instance_id
+                # 두 판 모두 그 효과는 **세트한 턴이라 발동할 수 없다.**
+                # 상대의 뒷면 카드가 있다는 이유만으로 이번 진행을 미지원으로
+                # 분류해서는 안 된다.
+                #
+                # 🔴 **규칙을 복제하지 않는다.** 같은 관문의 **대상 의존이
+                # 아닌 단계들**을 그대로 쓴다 (:meth:`_target_free_verdict`).
+                # 세트 턴 규칙도, 스펠 스피드도 이 자리에 다시 적지 않는다.
+                independent = self._target_free_verdict(
+                    seat, effect_ref, card.instance_id, validator=validator
                 )
-                if limits is not None:
-                    self._note_target_limits(refusals, effect_ref, limits)
+                #: 🔴 **확정 거절만** 대상 범위 보고를 멈춘다. ``UNKNOWN``
+                #: (발동 가능성이 남아 있다) 은 멈추지 않는다 — 모름을
+                #: 확정 거부로 바꾸지 않는다.
+                forbidden = (
+                    independent is not None
+                    and independent.validity is ActionValidity.INVALID
+                )
+                if independent is not None:
+                    #: 🔴 **그 이유를 잃지 않는다.** 조합이 하나도 만들어지지
+                    #: 않는 판(대상이 전부 가려진 경우)에서는 아래 반복이
+                    #: 아무것도 적지 못하므로, 이 자리가 적는다. 조합이
+                    #: 있으면 같은 관문이 같은 코드를 내므로 열쇠가 같고 한
+                    #: 줄로 묶인다.
+                    self._note_gate_refusal(refusals, effect_ref, independent)
+                offered_before = len(allowed)
                 for targets in target_combinations(
                     self.state, seat, definition, card.instance_id
                 ):
@@ -1410,31 +1429,126 @@ class Duel:
                         candidate, validator=validator, selections=selections
                     )
                     if gate.validity is not ActionValidity.VALID:
-                        # ``missing`` 은 관문이 말한 것을 따른다 — 모른다고
-                        # 하면 채우고, 규칙이 금지한다고 하면 비운다
-                        # (``_trigger_actions`` 와 **같은 기준**이다).
-                        key = (effect_ref, gate.code, gate.missing_rule)
-                        refusals.setdefault(
-                            key,
-                            WithheldAction(
-                                PlayerActionKind.ACTIVATE_EFFECT,
-                                f"{effect_ref} 를 지금 발동할 수 없습니다: "
-                                f"{gate.reason}",
-                                gate.code,
-                                missing=(
-                                    gate.missing_rule
-                                    if gate.validity is ActionValidity.UNKNOWN
-                                    else None
-                                ),
-                            ),
-                        )
+                        self._note_gate_refusal(refusals, effect_ref, gate)
                         continue
                     allowed.append(candidate)
+
+                # 🔴 **못 센 대상 범위를 적는다** (보완8 세 항목 ②) — 단,
+                # **발동이 금지되지 않았을 때만.**
+                #
+                # ``target_combinations`` 은 ``eligible`` 만 조합으로 묶는다 —
+                # 그것은 옳다 (모름을 허가로 바꾸지 않는다). 그런데 **올리지
+                # 않는 것과 아무 말도 하지 않는 것은 다르다.** 실측 (싸이크론
+                # · 세트한 턴이 아닐 때)::
+                #
+                #     내 앞면 마법 1장      → 후보가 된다
+                #     상대 뒷면 마법·함정    → 🔴 조용히 사라졌다
+                #     내 앞면 몬스터        → 조건 거짓으로 제외 (규칙의 답)
+                #
+                # 🔴 **허가 목록은 그대로**이므로 합법 조합은 막지 않는다.
+                # 그리고 **허가된 조합이 몇 개인지를 함께 넘긴다** — 보류
+                # 문장이 "합법인 조합이 남아 있다" 를 단정하지 않게 하려는
+                # 것이다 (보완8 마무리2 ③).
+                if not forbidden:
+                    limits = target_enumeration_limits(
+                        self.state, seat, definition, card.instance_id
+                    )
+                    if limits is not None:
+                        self._note_target_limits(
+                            refusals,
+                            effect_ref,
+                            limits,
+                            offered=len(allowed) - offered_before,
+                        )
         return allowed, tuple(refusals.values())
 
     @staticmethod
+    def _note_gate_refusal(
+        refusals: dict, effect_ref: "EffectRef", gate: "ValidationResult"
+    ) -> None:
+        """
+        관문이 낸 거절 하나를 보류로 적는다 (보완8 마무리2 가 자리를 뺐다).
+
+        🔴 **한 자리에서 적는다.** 조합별 관문과 대상에 독립적인 관문이
+        **같은 문장과 같은 열쇠**를 쓰게 하려는 것이다 — 둘이 다른 문장을
+        쓰면 같은 거절이 두 줄로 보인다 (조합이 없는 판에서는 뒤쪽만,
+        있는 판에서는 앞쪽만 적히므로 조용히 달라진다).
+
+        ``missing`` 은 관문이 말한 것을 따른다 — 모른다고 하면 채우고,
+        규칙이 금지한다고 하면 비운다 (``_trigger_actions`` 와 **같은
+        기준**이다).
+        """
+        key = (effect_ref, gate.code, gate.missing_rule)
+        refusals.setdefault(
+            key,
+            WithheldAction(
+                PlayerActionKind.ACTIVATE_EFFECT,
+                f"{effect_ref} 를 지금 발동할 수 없습니다: {gate.reason}",
+                gate.code,
+                missing=(
+                    gate.missing_rule
+                    if gate.validity is ActionValidity.UNKNOWN
+                    else None
+                ),
+            ),
+        )
+
+    def _target_free_verdict(
+        self,
+        seat: int,
+        effect_ref: "EffectRef",
+        source: "InstanceId",
+        *,
+        validator: ActionValidator,
+    ) -> "ValidationResult | None":
+        """
+        이 효과의 발동이 **대상과 무관하게** 막혀 있는가 (보완8 마무리2).
+
+        막는 것이 없으면 ``None`` 이다 — **``VALID`` 를 돌려주지 않는다.**
+        이것은 부분 판정이고, 허가로 읽힐 수 있는 값을 내보내지 않는다.
+
+        🔴 **같은 관문을 쓴다.** :meth:`_activation_gate` 의 세 단계 가운데
+        **대상에 의존하지 않는 부분**만 같은 순서로 지난다:
+
+        ===================================  ==============================
+        1. ``ActionValidator``                ``ACTIVATE_EFFECT`` 의 요구는
+                                             쥔 쪽 · 범위 · 차례 · 페이즈 ·
+                                             빈 칸이고 대상을 읽는 자리는
+                                             참조 무결성 하나다 — 대상이
+                                             없으면 통과한다
+        2. ``ActivationTimingChecker``        ``ActivationTiming`` 에 대상이
+                                             **없다** (세트 턴 · 스펠 스피드 ·
+                                             단계가 여기서 나온다)
+        3. ``can_activate_ignoring_targets``  ``can_activate`` 의 단계 가운데
+                                             ``_check_targets`` **하나만**
+                                             지나지 않는다
+        ===================================  ==============================
+
+        🔴 **대상이 없는 행위로 묻는다.** 조합 하나를 골라 묻지 않는다 —
+        그러면 *"첫 번째 조합의 거절을 효과 전체의 거절로 간주"* 가 되고,
+        대상이 전부 가려진 판(조합이 0개)에서는 물을 것조차 없다. 그 두 함정이
+        이 자리를 대상 없는 질문으로 만든 이유다.
+
+        🔴 **판을 바꾸지 않는다.** 세 단계 모두 읽기만 한다.
+        """
+        probe = PlayerAction.activate_effect(
+            actor=seat, source=source, effect_ref=effect_ref, targets=()
+        )
+        verdict = validator.validate(probe)
+        if verdict.validity is not ActionValidity.VALID:
+            return verdict
+        timed = ActivationTimingChecker(validator.view).check(
+            self._activation_timing(probe), probe
+        )
+        if timed.validity is not ActionValidity.VALID:
+            return timed
+        return self._activator.can_activate_ignoring_targets(
+            self.state, self.chain, probe, authorization=verdict
+        )
+
+    @staticmethod
     def _note_target_limits(
-        refusals: dict, effect_ref: "EffectRef", limits
+        refusals: dict, effect_ref: "EffectRef", limits, *, offered: int
     ) -> None:
         """
         **대상 공간을 끝까지 세지 못했다**를 보류로 적는다 (보완8 세 항목 ②).
@@ -1451,7 +1565,26 @@ class Duel:
         🔴 **``scope`` 는 이 자리의 범위를 적는다.** 보류 쪽의 ``scope`` 가
         패의 장수를 적는 자리와 **다른 사실**이므로, 그 수를 대상 범위의
         근거로 쓰지 않는다 (사용자 요구 ②).
+
+        🔴 **문장이 실제 후보 상태와 맞는다** (보완8 마무리2 ③). ``offered``
+        는 이 효과가 **허가 목록에 올린 조합 수**다. 전에는 그 수를 보지 않고
+        언제나 *"합법인 조합은 그대로 후보로 남아 있습니다"* 라고 적었고,
+        허가된 조합이 0개인 판에서 그것은 **거짓**이었다 (실측: 세트한 턴의
+        싸이크론). 0개면 그 사실을 단정하지 않고 **무엇을 판정하지 못했는지**
+        적는다 — "합법인 조합이 없다" 고도 말하지 않는다. 가려진 쪽을 보지
+        못했으므로 있는지 없는지를 모른다.
+
+        🔴 **부르는 쪽이 발동 금지를 먼저 가른다.** 대상과 무관한 확정 거절이
+        있으면 이 함수는 **불리지 않는다** (:meth:`_activation_actions` 의
+        ``forbidden``) — 발동 자체가 금지된 효과의 대상 정보 부족을 진행의
+        미지원으로 승격하지 않기 위해서다.
         """
+        tail = (
+            " 합법인 조합은 그대로 후보로 남아 있습니다."
+            if offered
+            else " 지금 허가된 조합은 없고, 가려진 쪽을 보지 못했으므로"
+                 " 합법인 조합이 있는지도 말할 수 없습니다."
+        )
         if limits.undecided:
             key = (effect_ref, ValidationCode.INFORMATION_UNAVAILABLE,
                    UNREADABLE_TARGET_RULE)
@@ -1460,8 +1593,7 @@ class Duel:
                 WithheldAction(
                     PlayerActionKind.ACTIVATE_EFFECT,
                     f"{effect_ref} 의 대상 후보를 끝까지 세지 못했습니다 —"
-                    f" 가려져 정체를 읽을 수 없는 후보가 있습니다."
-                    f" 합법인 조합은 그대로 후보로 남아 있습니다.",
+                    f" 가려져 정체를 읽을 수 없는 후보가 있습니다.{tail}",
                     ValidationCode.INFORMATION_UNAVAILABLE,
                     missing=UNREADABLE_TARGET_RULE,
                     scope=(
@@ -1479,8 +1611,7 @@ class Duel:
                     PlayerActionKind.ACTIVATE_EFFECT,
                     f"{effect_ref} 의 대상 후보를 끝까지 세지 못했습니다 —"
                     f" 들여다보지 못한 자리가 있습니다"
-                    f" ({', '.join(limits.unchecked)})."
-                    f" 합법인 조합은 그대로 후보로 남아 있습니다.",
+                    f" ({', '.join(limits.unchecked)}).{tail}",
                     ValidationCode.INFORMATION_UNAVAILABLE,
                     missing=UNSEEN_TARGET_ZONE_RULE,
                     scope=(
@@ -2243,6 +2374,49 @@ class Duel:
             allowed.append(candidate)
         return allowed, withheld
 
+    def _activation_timing(self, action: PlayerAction) -> ActivationTiming:
+        """
+        이 발동에 걸리는 **타이밍 사실 묶음**. 조립하는 자리는 여기 하나다.
+
+        🔴 **한 자리여야 한다** (보완8 마무리2 가 자리를 뺐다). 관측에 없는
+        사실을 넷 넘기므로 (``set_this_turn`` · ``stage`` · ``simultaneous``
+        · 효과 분류), 두 자리에서 조립하면 **한쪽이 하나를 빠뜨려도 오류 없이
+        조용히** 더 좁은 답이 나온다. 그래서 :meth:`_activation_gate` 와
+        :meth:`_target_free_verdict` 가 **같은 것**을 쓴다
+        (``test_g01_the_production_gate_always_receives_a_stage`` 가 그 자리를
+        하나로 못 박는다).
+
+        🔴 **판을 읽기만 한다.**
+        """
+        # 스펠 스피드는 체인을 보고, 체인은 ``GameState`` 밖에 산다 (ADR-007).
+        link = self.chain.links[-1] if self.chain.links else None
+        return ActivationTiming(
+            self.chain,
+            self.priority,
+            set_this_turn=self._set_this_turn(action),
+            # 🔴 **흐름의 단계** (보완6). 체인이 비어 있어도 판이 열려
+            # 있는지는 체인으로 갈리지 않는다 (:meth:`_activation_stage`).
+            stage=self._activation_stage(),
+            # 🔴 **이 발동이 동시 발동 묶음의 것인가** (최종 보완).
+            # 관측에 없는 사실이므로 판을 들고 있는 이 자리가 읽어서
+            # 값으로 넘긴다 (``point`` · ``set_this_turn`` 과 같은 자리).
+            simultaneous=self._is_simultaneous(action),
+            # 🔴 **이 효과의 발동 분류** (보완7). 몬스터 효과의 스펠
+            # 스피드는 카드 종류가 아니라 효과 분류가 정하고, 그 분류는
+            # 이미 정의에 적혀 있다 — 관문이 관측만 받아서 보지 못하던
+            # 것을 여기서 값으로 넘긴다 (``stage`` 와 같은 자리).
+            activation_kind=self._effect_kind(
+                action.effect_ref, action.source
+            ),
+            # 응수할 링크의 효과도 같은 길로 읽는다 — 분류표를 두 벌
+            # 만들지 않는다.
+            responding_kind=(
+                None
+                if link is None
+                else self._effect_kind(link.effect_ref, link.source)
+            ),
+        )
+
     def _set_this_turn(self, action: PlayerAction) -> "bool | None":
         """
         발동하려는 카드를 **이 턴에 세웠는가** (Phase 3-E-15).
@@ -2396,36 +2570,8 @@ class Duel:
         verdict = validator.validate(action)
         if verdict.validity is not ActionValidity.VALID:
             return verdict
-        # 스펠 스피드는 체인을 보고, 체인은 ``GameState`` 밖에 산다 (ADR-007).
-        link = self.chain.links[-1] if self.chain.links else None
         timed = ActivationTimingChecker(validator.view).check(
-            ActivationTiming(
-                self.chain,
-                self.priority,
-                set_this_turn=self._set_this_turn(action),
-                # 🔴 **흐름의 단계** (보완6). 체인이 비어 있어도 판이 열려
-                # 있는지는 체인으로 갈리지 않는다 (:meth:`_activation_stage`).
-                stage=self._activation_stage(),
-                # 🔴 **이 발동이 동시 발동 묶음의 것인가** (최종 보완).
-                # 관측에 없는 사실이므로 판을 들고 있는 이 자리가 읽어서
-                # 값으로 넘긴다 (``point`` · ``set_this_turn`` 과 같은 자리).
-                simultaneous=self._is_simultaneous(action),
-                # 🔴 **이 효과의 발동 분류** (보완7). 몬스터 효과의 스펠
-                # 스피드는 카드 종류가 아니라 효과 분류가 정하고, 그 분류는
-                # 이미 정의에 적혀 있다 — 관문이 관측만 받아서 보지 못하던
-                # 것을 여기서 값으로 넘긴다 (``stage`` 와 같은 자리).
-                activation_kind=self._effect_kind(
-                    action.effect_ref, action.source
-                ),
-                # 응수할 링크의 효과도 같은 길로 읽는다 — 분류표를 두 벌
-                # 만들지 않는다.
-                responding_kind=(
-                    None
-                    if link is None
-                    else self._effect_kind(link.effect_ref, link.source)
-                ),
-            ),
-            action,
+            self._activation_timing(action), action
         )
         if timed.validity is not ActionValidity.VALID:
             return timed

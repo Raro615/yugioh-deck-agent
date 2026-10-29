@@ -681,6 +681,12 @@ def test_b02_the_gate_asks_three_layers_in_order(repository):
 
     1 번이 거절하면 2·3 을 묻지 않는다. 합치면 구현이 없는 카드가 **규칙
     위반**으로 읽히고 그것은 거짓이다 (ADR-006).
+
+    🔴 **정정 (보완8 마무리2).** ``ActivationTiming`` 을 **조립하는 자리**가
+    ``_activation_timing`` 으로 빠졌다 — 관측에 없는 사실 넷을 넘기므로 두
+    자리에서 조립하면 한쪽이 하나를 빠뜨려도 **오류 없이 조용히** 더 좁은
+    답이 나오기 때문이다 (``_target_free_verdict`` 가 둘째 호출자다). 관문의
+    **순서와 세 계층**은 그대로이므로, 조립을 그 자리에서 찾는다.
     """
     tree = method_tree(Duel._activation_gate)
     names = {
@@ -694,9 +700,21 @@ def test_b02_the_gate_asks_three_layers_in_order(repository):
         if isinstance(node, ast.Attribute)
     ]
     assert "ActivationTimingChecker" in names
-    assert "ActivationTiming" in names
+    assert "_activation_timing" in attrs
     assert "validate" in attrs
     assert "can_activate" in attrs
+
+    #: 🔴 그리고 조립하는 자리는 **하나**이고 거기서 단계를 넘긴다.
+    assembly = method_tree(Duel._activation_timing)
+    built = [
+        node
+        for node in ast.walk(assembly)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "ActivationTiming"
+    ]
+    assert len(built) == 1, len(built)
+    assert "stage" in {kw.arg for kw in built[0].keywords}
 
     #: 합친 답이 하나씩 물은 답과 **같다**.
     duel, hands, _ = board(repository, my_hand=(POT,))
@@ -1664,15 +1682,24 @@ def test_i02_a_gate_blocked_activation_leaves_no_withheld_reason(repository):
     센다. 실측 (스물 자리 전수)::
 
         관문이 막은 발동                    9건 (1:다섯 · 2:하나 · 3:셋)
-        고를 수 있는 자리의 보류 줄          8건
+        고를 수 있는 자리의 보류 줄          9건
         고를 수 **없는** 자리의 보류 줄       2건 (NOT_TURN_PLAYER)
-        남은 1건                           G1 로스트 — 옮긴 조작이 없어
+        그 9건 가운데 관문이 막은 것          8건
+        남은 1건 (관문이 막았는데 보류 없음)   G1 로스트 — 옮긴 조작이 없어
                                            (``executable=False``) **후보
                                            자체가 만들어지지 않는다**
 
     🔴 **남은 1건은 숨기지 않는다.** 관문이 막은 것이 아니라 **후보 생성
     전에** 빠지는 범위이고, 그래서 관문의 말이 있을 수 없다. 아래가 그
     한계를 그 자리에서 직접 확인한다 — 보류가 비어 있다는 것까지 함께.
+
+    🔴 **보완8 마무리2 가 보류 줄을 하나 더 만들었다** (8 → 9). 늘어난 줄은
+    **F2 벌금 · 후보 1장** 이고, 그 자리는 이 감사의 관문 집계에 **들어 있지도
+    않았다** (``gates={}``) — 고를 수 있는 조합이 없어 관문에게 물을 것조차
+    없었기 때문이다. 즉 그 효과는 *"후보도 없고 이유도 없다"* 로 조용히
+    사라지고 있었다. 마무리2 가 **대상에 독립적인 발동 판정**을 더하면서 그
+    자리의 실제 이유(발동 조건이 거짓 — ``자신 HAND 에 2장 이상``)가
+    드러났다. 보류가 늘어난 것이 **느슨해진 것이 아니라 정직해진 것**이다.
 
     🔴 그리고 식별자는 늘지 않았다: 효과 참조는 ``reason`` 문자열에만 있고
     (저장소의 기존 규약), ``WithheldAction`` 에는 ``source`` · ``action`` ·
@@ -1726,11 +1753,12 @@ def test_i02_a_gate_blocked_activation_leaves_no_withheld_reason(repository):
     assert blocked["3 can_activate"] == 3, dict(blocked)
 
     #: 🔴 **0건이 아니다** — 이 BLOCKER 는 풀렸다.
-    assert acting_reported == 8, (acting_reported, dict(codes))
+    assert acting_reported == 9, (acting_reported, dict(codes))
     assert idle_reported == 2, (idle_reported, dict(codes))
-    #: 🔴 그리고 그 여덟이 **한 코드로 뭉개지지 않았다**.
+    #: 🔴 그리고 그 아홉이 **한 코드로 뭉개지지 않았다**.
     assert codes["RULE_NOT_IMPLEMENTED"] == 4, dict(codes)
-    assert codes["CANDIDATE_NOT_ELIGIBLE"] == 2, dict(codes)
+    #: 🔴 2 → 3 (마무리2) — 늘어난 하나가 F2 벌금이다 (위 설명).
+    assert codes["CANDIDATE_NOT_ELIGIBLE"] == 3, dict(codes)
     assert codes["WRONG_PHASE"] == 1, dict(codes)
     assert codes["SET_THIS_TURN"] == 1, dict(codes)
     assert codes["NOT_TURN_PLAYER"] == 2, dict(codes)
@@ -1834,9 +1862,11 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
                                                              PRIORITY
     ``_flow_actions``   페이즈 전환이 거절됐다      **있다**     진행 규칙이 댄다
     ``_withheld_board_actions``                   **있다**     발동 규칙이 댄다
-    ``_activation_actions`` 관문이 거절했다         **관문을     후보 제외와 직접
+    ``_note_gate_refusal``  관문이 거절했다         **관문을     후보 제외와 직접
                                                   따른다**    적용이 같은 근거를
-                                                             쓴다 (보완8)
+                                                             쓴다 (보완8).
+                                                             부르는 쪽이 둘이다
+                                                             (마무리2)
     ``_stage_closed_actions`` 단계가 닫았다         **없다**     순서다 (보완8) —
                                                              Fast Effect
                                                              Timing 상자 A
@@ -1887,10 +1917,16 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     #: ``_stage_closed_actions``. 보완8 의 세 항목 마무리가
     #: ``_note_target_limits`` 를 더했다 — 대상 조합을 끝까지 세지 못한
     #: 범위를 적는 자리다. 아래에서 각자의 기준을 따로 센다.)
+    #:
+    #: 🔴 **정정 (보완8 마무리2).** ``_activation_actions`` 가 목록에서
+    #: 빠지고 ``_note_gate_refusal`` 이 들어왔다 — **자리가 줄거나 늘지
+    #: 않았고 이름이 옮겨졌다.** 관문의 거절을 적는 문장이 두 자리에서
+    #: 필요해졌으므로 (조합별 관문과 **대상에 독립적인** 관문) 한 자리로
+    #: 뺐다. 두 벌이 되면 같은 거절이 판에 따라 다른 문장으로 보인다.
     assert sorted(by_function) == [
-        "_activation_actions",
         "_enforce_mandatory",
         "_flow_actions",
+        "_note_gate_refusal",
         "_note_target_limits",
         "_stage_closed_actions",
         "_trigger_actions",
@@ -1963,13 +1999,28 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
 
     #: 🔴 **보완8 이 더한 자리 둘** — 기준은 그대로다.
     #:
-    #: ``_activation_actions`` 는 **관문을 따른다**: 관문이 모른다고 하면
+    #: ``_note_gate_refusal`` 은 **관문을 따른다**: 관문이 모른다고 하면
     #: 그 ``missing_rule`` 을 싣고, 규칙이 금지한다고 하면 ``None`` 이다.
     #: ``_trigger_actions`` 의 관문 자리와 **같은 조건식**이고, 그것이 §3 의
     #: *"후보 제외와 직접 적용이 같은 근거를 쓴다"* 가 뜻하는 것이다.
-    activation = by_function["_activation_actions"]
+    #:
+    #: 🔴 그 자리를 **부르는 쪽이 둘**이다 (보완8 마무리2) — 조합별 관문과
+    #: 대상에 독립적인 관문. 둘이 **같은 문장과 같은 열쇠**를 쓴다는 것이
+    #: 이 자리를 뺀 이유다.
+    activation = by_function["_note_gate_refusal"]
     assert len(activation) == 1, len(activation)
-    assert filled("_activation_actions") == [True]
+    assert filled("_note_gate_refusal") == [True]
+    callers = {
+        node.func.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "_note_gate_refusal"
+    }
+    assert callers == {"_note_gate_refusal"}
+    assert source.count("self._note_gate_refusal(") == 2, source.count(
+        "self._note_gate_refusal("
+    )
     gate_missing = next(
         kw.value for kw in activation[0].keywords if kw.arg == "missing"
     )
@@ -2047,7 +2098,7 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     assert "근거가 생겨야 풀리는 자리이므로 ``missing`` 을 채운다" in trigger_body
     assert "관문이 말한 것을 따른다" in trigger_body
     #: 🔴 보완8 이 더한 두 자리도 그 함수 안에서 기준을 적는다.
-    assert "관문이 말한 것을 따른다" in function_body("_activation_actions")
+    assert "관문이 말한 것을 따른다" in function_body("_note_gate_refusal")
     assert (
         "빠진 규칙이 아니라 **순서**다" in function_body("_stage_closed_actions")
     )

@@ -492,6 +492,58 @@ class EffectActivator:
     # ==================================================================
     # 판정 — 전부 판을 읽기만 한다
     # ==================================================================
+    def can_activate_ignoring_targets(
+        self,
+        state: GameState,
+        chain: Chain,
+        action: PlayerAction,
+        authorization: ValidationResult | None = None,
+    ) -> "ValidationResult | None":
+        """
+        **대상과 무관한** 발동 장애가 있는가. 없으면 ``None`` (보완8 마무리2).
+
+        🔴 **왜 이 자리가 필요했는가.** 후보 생성이 *"대상 공간을 끝까지 세지
+        못했다"* 를 적으려면 먼저 **발동 자체가 가능한가**를 알아야 한다.
+        그러지 않으면 세트한 턴의 함정처럼 **발동이 규칙상 금지된** 효과도
+        상대의 뒷면 카드 하나 때문에 "진행에 영향을 주는 미지원" 으로
+        집계된다 (실측: `tests/test_withheld_reason_propagation.py` 의 묶음 H).
+
+        🔴 **규칙을 새로 만들지 않는다.** :meth:`_check` 가 쓰는 **같은
+        비공개 단계들**을 같은 순서로 지난다 — 모양 · 허가 · 정의 · 출처
+        권한 · 발동 조건. 다른 것은 **마지막 하나(`_check_targets`)를 지나지
+        않는다**는 것뿐이고, 그것이 유일한 대상 의존 단계다.
+
+        그 다섯이 대상에 의존하지 않는다는 근거:
+
+        * ``_check_shape`` 는 ``kind`` · ``effect_ref`` · 체인 용량만 본다.
+        * ``_verdict`` → ``ActionValidator`` 의 ``ACTIVATE_EFFECT`` 요구는
+          쥔 쪽 · 범위 · 차례 · 페이즈 · 빈 칸이고, ``action.targets`` 를
+          읽는 자리는 참조 무결성(``_first_unseen``) 하나다 — 대상이 없으면
+          그 검사는 통과한다.
+        * ``_check_authority`` 는 정의의 출처 권한만 본다.
+        * ``_check_condition`` 은 **이미** ``self._condition_context(action,
+          ())`` 로 **대상을 비운 채** 조건을 평가한다 (이 모듈이 전부터
+          그렇게 해 왔다).
+
+        🔴 **``VALID`` 를 돌려주지 않는다.** 이것은 **부분 판정**이므로
+        ``None`` 으로만 "막는 것이 없다" 를 말한다 — 허가로 읽힐 수 있는 값을
+        내보내지 않는다 (``UNKNOWN`` 이 조용히 허가가 되는 것을 막는 이
+        모듈의 태도와 같다).
+
+        🔴 **판을 바꾸지 않는다** — ``_check`` 와 같은 읽기 전용 단계들이다.
+        """
+        blocked = self._check_before_targets(state, chain, action, authorization)
+        if blocked is None:
+            return None
+        if blocked.status in _UNKNOWN_STATUSES:
+            return ValidationResult.unknown(
+                blocked.code,
+                blocked.reason,
+                missing_rule=blocked.missing,
+                notes=blocked.unchecked,
+            )
+        return ValidationResult.invalid(blocked.code, blocked.reason)
+
     def _check(
         self,
         state: GameState,
@@ -500,7 +552,37 @@ class EffectActivator:
         selections: tuple[TargetSelection, ...],
         authorization: ValidationResult | None,
     ) -> ActivationResult | None:
-        """막는 것이 있으면 그 결과, 없으면 ``None``."""
+        """
+        막는 것이 있으면 그 결과, 없으면 ``None``.
+
+        🔴 **대상 의존 단계는 마지막 하나다** — 앞의 다섯은
+        :meth:`_check_before_targets` 가 들고 있고
+        :meth:`can_activate_ignoring_targets` 도 그것을 쓴다. 두 벌이 되면
+        "대상과 무관한 거절" 과 "조합별 거절" 이 다른 규칙으로 갈린다.
+        """
+        before = self._check_before_targets(state, chain, action, authorization)
+        if before is not None:
+            return before
+        definition = self._definitions.definition_for(action.effect_ref)
+        assert definition is not None  # _check_before_targets 가 보증한다
+        verdict = self._verdict(state, action, authorization)
+        return self._check_targets(
+            state, definition, action, chain, selections, verdict
+        )
+
+    def _check_before_targets(
+        self,
+        state: GameState,
+        chain: Chain,
+        action: PlayerAction,
+        authorization: ValidationResult | None,
+    ) -> ActivationResult | None:
+        """
+        발동의 **대상 의존이 아닌** 단계 전부. 막는 것이 없으면 ``None``.
+
+        :meth:`_check` 와 :meth:`can_activate_ignoring_targets` 가 **같은
+        것**을 쓰도록 뺀 자리다 (보완8 마무리2). 순서는 전과 같다.
+        """
         shape = self._check_shape(action, chain)
         if shape is not None:
             return shape
@@ -547,8 +629,7 @@ class EffectActivator:
         condition = self._check_condition(state, definition, action, chain, verdict)
         if condition is not None:
             return condition
-
-        return self._check_targets(state, definition, action, chain, selections, verdict)
+        return None
 
     def _check_shape(
         self, action: PlayerAction, chain: Chain

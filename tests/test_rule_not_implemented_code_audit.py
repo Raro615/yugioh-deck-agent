@@ -216,20 +216,20 @@ PROSE_OCCURRENCES = {
     # 과 무관하고, 산문과 코드를 구분하지 않으면 "이 코드가 몇 번 쓰이는가"
     # 를 알 수 없다. 좌표를 적는 이유도 그것이다 — 어느 쪽이 설명이고 어느
     # 쪽이 실제 사용인지 고정한다.
-    ("engine/activation.py", 651),
-    ("engine/activation.py", 689),
+    ("engine/activation.py", 732),
+    ("engine/activation.py", 770),
     ("engine/activation_timing.py", 511),
     ("engine/duel.py", 175),
     ("engine/duel.py", 969),
     ("engine/duel.py", 1166),
-    ("engine/duel.py", 2548),
-    ("engine/duel.py", 2729),
-    ("engine/duel.py", 2735),
-    ("engine/duel.py", 2758),
-    ("engine/duel.py", 2760),
+    ("engine/duel.py", 2694),
+    ("engine/duel.py", 2875),
+    ("engine/duel.py", 2881),
+    ("engine/duel.py", 2904),
+    ("engine/duel.py", 2906),
     #: 🔴 보완8 마무리가 더한 자리 — ``_refusal_sentence`` 의 설명이다.
-    ("engine/duel.py", 2826),
-    ("engine/duel.py", 3067),
+    ("engine/duel.py", 2972),
+    ("engine/duel.py", 3213),
     ("engine/effect/definition.py", 896),
     ("engine/effect/executor.py", 1147),
     ("engine/special_summon.py", 77),
@@ -378,8 +378,16 @@ CONTRACT_VIOLATIONS = {
     #
     # **위반 13 · 적합 19 는 그대로다** — 실측으로 확인했다. 자리의 성격도
     # 개수도 짝지은 상태도 바뀌지 않았고, 바뀐 것이 줄 번호뿐이다.
-    ("engine/activation.py", 566, "ActivationStatus.INVALID_ACTION"),
-    ("engine/activation.py", 598, "ActivationStatus.CHAIN_REFUSED"),
+    # 🔴 **Phase 6-AB 보완8 마무리2 에서 그 둘이 +81 밀렸다**
+    # (566 → 647 · 598 → 679). 원인 하나다 —
+    # ``EffectActivator.can_activate_ignoring_targets`` 와 그 설명(+81줄)이
+    # 이 자리들보다 **위**에 들어갔다. 대상과 무관한 발동 거절을 후보
+    # 생성이 먼저 물을 수 있어야 하기 때문이다.
+    #
+    # **위반 13 · 적합 19 는 그대로다** — 자리의 성격도 개수도 짝지은
+    # 상태도 바뀌지 않았고, 바뀐 것이 줄 번호뿐이다.
+    ("engine/activation.py", 647, "ActivationStatus.INVALID_ACTION"),
+    ("engine/activation.py", 679, "ActivationStatus.CHAIN_REFUSED"),
     ("engine/effect/executor.py", 606, "ResolutionStatus.EXECUTION_ERROR"),
     ("engine/effect/executor.py", 754, "ResolutionStatus.INVALID_OPERATION"),
     ("engine/effect/executor.py", 767, "ResolutionStatus.INVALID_OPERATION"),
