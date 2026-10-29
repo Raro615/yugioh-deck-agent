@@ -368,7 +368,36 @@ class Simulator:
         return forked()
 
     @staticmethod
-    def _settle_forced_passes(fork: Duel) -> "DuelStep | None":
+    def _encountered_line(held, *, seat: int, viewer: int) -> str:
+        """
+        만난 미지원 사유 한 줄 — **관측 경계를 지켜서** (보완8 마무리).
+
+        그 자리가 보는 사람 자신이면 전과 같은 한 줄이다. **다른 자리**의
+        기회에서 만난 것이면 ``reason`` 을 싣지 않는다 — 그 문장은
+        ``EffectRef`` 를 담을 수 있고 (보완8 이 비유발 후보의 사유에 효과
+        이름을 넣었다), 뒷면 카드의 ``EffectRef`` 는 **그 카드의 정체**다.
+
+        🔴 **그래도 사실은 남는다**: 어느 종류의 기회였고 무엇이 없어서
+        오르지 못했는지(``missing``)는 규칙의 이름이므로 새지 않는다. 그것이
+        "이 미래는 끝까지 검증된 것이 아니다" 를 말하는 데 필요한 전부다.
+
+        🔴 **면책이 아니라 경계다.** 지운 것이 있다는 사실을 문장에 적어,
+        읽는 쪽이 "사유가 없다" 로 읽지 않게 한다.
+        """
+        if seat == viewer:
+            #: 🔴 ``scope`` 는 **싣지 않는다** — 걸음마다 달라지는 메모이므로
+            #: 쌓아 모으면 같은 사유가 여러 줄이 된다
+            #: (``WithheldAction.scope``).
+            return held.line_ko(with_scope=False)
+        return (
+            f"{held.kind.value} [{held.missing}]: P{seat} 의 기회에서 만났고 "
+            "어느 카드인지는 이 자리의 관측 밖입니다."
+        )
+
+    @staticmethod
+    def _settle_forced_passes(
+        fork: Duel,
+    ) -> "tuple[DuelStep | None, tuple[tuple[int, object], ...]]":
         """
         **고를 것이 없는 응답 창을 사본에서 닫는다** (Phase 3-E-11).
 
@@ -395,13 +424,36 @@ class Simulator:
         그 문장은 절차를 지났다는 뜻이고 **결과가 아니다.** 그래서 체인이
         비어 가는 그 걸음 — 해결(또는 불발)을 적은 걸음 — 을 기억해
         돌려준다. 체인이 서지 않았으면 마지막 걸음 그대로다.
+
+        🔴 **지나가는 자리마다 미지원 사유를 모아 함께 돌려준다**
+        (보완8 마무리).
+
+        전에는 :meth:`simulate` 가 **자동 진행이 끝난 마지막 상태**의
+        ``unsupported()`` 만 읽었다. 그래서 중간 기회에서 만난 사유가 결과에
+        남지 않았다 — 실측 (보완8 마무리 §2)::
+
+            [1] P0 빠른 효과 기회 → activate_card [activation-timing]
+            [2] P1 빠른 효과 기회 → 🔴 activate_effect
+                                      [trap-activation-event]
+            최종 (판이 다시 열림)  → activate_card [activation-timing]
+            SimulationResult.unsupported = (activate_card … ,)  ← 둘째가 없다
+
+        사본은 이 함수가 끝나면 버려지므로 **여기서 읽지 않으면 그 사실이
+        영영 밖으로 나가지 않는다.**
+
+        🔴 **자리를 함께 적는다.** 누구의 기회였는지를 알아야 보는 사람의
+        관측 경계를 지킬 수 있다 (:meth:`_encountered_line`).
         """
         last: "DuelStep | None" = None
         resolution: "DuelStep | None" = None
+        met: list[tuple[int, object]] = []
         guard = 0
         while fork.priority.is_open and guard < 8:
             guard += 1
-            legal = fork.legal_actions()
+            seat = fork.to_act
+            legal = fork.legal_actions(seat)
+            for held in legal.unsupported():
+                met.append((seat, held))
             passes = [
                 a for a in legal.allowed if a.kind is PlayerActionKind.PASS
             ]
@@ -414,7 +466,10 @@ class Simulator:
                 resolution = last
             if not last.accepted:
                 break
-        return resolution if resolution is not None else last
+        return (
+            resolution if resolution is not None else last,
+            tuple(met),
+        )
 
     def simulate(self, action: PlayerAction, *, viewer: int) -> SimulationResult:
         """
@@ -456,11 +511,33 @@ class Simulator:
             )
 
         if step.accepted:
-            settled = self._settle_forced_passes(fork)
-            #: 🔴 **그 미래의 경계를 함께 돌려준다** (6-AB 최종 보완 ④).
+            settled, met = self._settle_forced_passes(fork)
+            #: 🔴 **그 미래의 경계를 함께 돌려준다** (6-AB 최종 보완 ④ ·
+            #: 보완8 마무리가 중간 자리까지 넓혔다).
+            #:
             #: 사본의 다음 자리에서 **지원하지 않아 오르지 못한** 후보가
             #: 있으면 그 미래는 끝까지 검증된 것이 아니다. 사본은 버려지므로
             #: 지금 읽지 않으면 그 사실이 영영 밖으로 나가지 않는다.
+            #:
+            #: 🔴 **자동 진행 중에 만난 것도 함께 모은다.** 전에는 마지막
+            #: 상태만 읽어서 중간 기회의 구체적인 사유가 사라졌다 (실측:
+            #: :meth:`_settle_forced_passes` 의 설명).
+            #:
+            #: 🔴 **순서대로, 중복 없이.** 같은 줄은 한 번만 남기고 (같은
+            #: 사유가 자리마다 반복된다) **다른 효과의 사유는 합치지
+            #: 않는다** — 묶는 열쇠가 완성된 한 줄이고 그 안에 효과 이름이
+            #: 들어 있다.
+            lines: list[str] = []
+            for seat, held in met:
+                line = self._encountered_line(held, seat=seat, viewer=viewer)
+                if line not in lines:
+                    lines.append(line)
+            for held in fork.legal_actions(fork.to_act).unsupported():
+                line = self._encountered_line(
+                    held, seat=fork.to_act, viewer=viewer
+                )
+                if line not in lines:
+                    lines.append(line)
             return SimulationResult(
                 action=action,
                 status=SimulationStatus.SUPPORTED,
@@ -469,10 +546,7 @@ class Simulator:
                 code=step.code,
                 # 사본은 여기서 버려진다. 넘어가는 것은 관측뿐이다.
                 future=fork.view(viewer),
-                unsupported=tuple(
-                    f"{held.kind.value} [{held.missing}]: {held.reason}"
-                    for held in fork.legal_actions(fork.to_act).unsupported()
-                ),
+                unsupported=tuple(lines),
             )
 
         status = (

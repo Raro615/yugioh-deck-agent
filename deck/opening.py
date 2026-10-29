@@ -513,7 +513,7 @@ def _describe_action(action, repository) -> "tuple[int | None, str, str | None, 
     return card_id, name, ref, targets
 
 
-def unsupported_reasons(legal) -> tuple[str, ...]:
+def unsupported_reasons(legal, *, with_scope: bool = True) -> tuple[str, ...]:
     """
     그 자리의 보류 가운데 **미지원 사유**만, 읽을 수 있는 한 줄씩.
 
@@ -522,7 +522,26 @@ def unsupported_reasons(legal) -> tuple[str, ...]:
     정한다 (``WithheldAction.missing``).
     """
     return tuple(
-        f"{held.kind.value} [{held.missing}]: {held.reason}"
+        held.line_ko(with_scope=with_scope) for held in legal.unsupported()
+    )
+
+
+def unsupported_reasons_elsewhere(legal, seat: int) -> tuple[str, ...]:
+    """
+    **다른 자리**의 기회에서 만난 미지원 사유 (보완8 마무리).
+
+    ``unsupported_reasons`` 와 같은 사실을 적지만 ``reason`` 을 싣지 않는다 —
+    그 문장은 ``EffectRef`` 를 담을 수 있고, 뒷면 카드의 ``EffectRef`` 는
+    **그 카드의 정체**다. 전개 보고는 고른 자리의 눈으로 읽히므로 그 경계를
+    넘지 않는다 (``agent.simulation.Simulator._encountered_line`` 과 같은
+    기준이다).
+
+    🔴 **지운 것이 있다는 사실을 문장에 적는다** — 읽는 쪽이 "사유가 없다"
+    로 읽지 않게.
+    """
+    return tuple(
+        f"{held.kind.value} [{held.missing}]: P{seat} 의 기회에서 만났고 "
+        "어느 카드인지는 전개 보고의 관측 밖입니다."
         for held in legal.unsupported()
     )
 
@@ -559,7 +578,7 @@ def _gate_code(duel, action, repository) -> str:
     ).code.name
 
 
-def _settle_chain(duel) -> "tuple[object | None, bool]":
+def _settle_chain(duel, note=None) -> "tuple[object | None, bool]":
     """
     열린 응답 창을 **기존 절차로** 닫는다 — 양쪽이 패스한다.
 
@@ -583,7 +602,16 @@ def _settle_chain(duel) -> "tuple[object | None, bool]":
     for _ in range(MAX_CHAIN_PASSES):
         if not duel.priority.is_open:
             break
-        legal = duel.legal_actions()
+        seat = duel.to_act
+        legal = duel.legal_actions(seat)
+        # 🔴 **지나가는 자리의 미지원 사유를 적는다** (보완8 마무리).
+        #
+        # 전에는 이 반복이 조용히 패스만 했고, 부르는 쪽은 반복이 **끝난
+        # 뒤**의 자리만 읽었다. 그래서 중간 기회에서 만난 구체적인 사유가
+        # 보고에 남지 않았다 — ``agent.simulation`` 쪽과 **같은 결함**이고
+        # 같은 방식으로 고친다.
+        if note is not None:
+            note(legal, seat)
         passing = [a for a in legal.allowed
                    if a.kind is PlayerActionKind.PASS]
         if not passing:
@@ -641,10 +669,27 @@ def execute_opening(
     picker = choose or first_meaningful
     seen_events = len(list(journal)) if journal is not None else 0
 
-    def note_unsupported(legal) -> "tuple[str, ...]":
-        """이 자리의 미지원 사유를 걸음에 붙이고 전체 목록에도 모은다."""
-        found = unsupported_reasons(legal)
-        for line in found:
+    #: 전개를 고르는 자리 — 보고가 **누구의 눈으로** 읽히는가.
+    actor_seat = duel.to_act
+
+    def note_unsupported(legal, seat: "int | None" = None) -> "tuple[str, ...]":
+        """
+        이 자리의 미지원 사유를 걸음에 붙이고 전체 목록에도 모은다.
+
+        ``seat`` 을 주면 그 자리가 전개를 고르는 자리와 다를 때 관측 경계를
+        지켜서 적는다 (보완8 마무리) — 자동 패스가 지나가는 **상대 기회**가
+        그런 자리다.
+        """
+        if seat is not None and seat != actor_seat:
+            found = unsupported_reasons_elsewhere(legal, seat)
+            keys = found
+        else:
+            found = unsupported_reasons(legal)
+            #: 🔴 **누적에는 ``scope`` 를 싣지 않는다** — 그 메모는 걸음마다
+            #: 달라지므로 (패가 줄어든다) 같은 사유가 걸음 수만큼 쌓인다
+            #: (``WithheldAction.scope`` 의 실측).
+            keys = unsupported_reasons(legal, with_scope=False)
+        for line in keys:
             if line not in run.unsupported:
                 run.unsupported.append(line)
         return found
@@ -743,7 +788,7 @@ def execute_opening(
         step = duel.apply(action)
         settled, resolved = (None, True)
         if step.accepted and duel.priority.is_open:
-            settled, resolved = _settle_chain(duel)
+            settled, resolved = _settle_chain(duel, note_unsupported)
         after_hash = duel.state.state_hash()
 
         events = []

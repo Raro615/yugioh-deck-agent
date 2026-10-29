@@ -158,12 +158,31 @@ def test_02_withheld_action_field_inventory():
     그리고 ``action`` 자체도 없다 — 들고 있는 것은 **종류**(`kind`)뿐이다.
     """
     fields = {f.name for f in dataclasses.fields(WithheldAction)}
-    assert fields == {"kind", "reason", "missing"}
-    for absent in ("code", "status", "validation", "source", "viewer", "action",
-                   "validity", "notes"):
+    #: 🔴 **Phase 6-AB 보완8 이 ``code`` 와 ``scope`` 를 더했다.**
+    #:
+    #: 이 시험은 *"code 가 없다"* 를 못 박고 있었고 (3-E-40 의 측정을 HEAD
+    #: 에서 재확인하는 자리였다), 그 사실이 **결함의 원인**이었다 — 읽는
+    #: 쪽이 규칙 거절과 모름을 ``missing`` 이 비었는지로 짐작해야 했고,
+    #: ``Duel.apply`` 는 그 짐작조차 하지 않고 ``RULE_NOT_IMPLEMENTED`` 를
+    #: 다시 적었다 (보완8 §2 의 실측).
+    #:
+    #: ``scope`` 는 "이 거절이 패 몇 장에 걸렸는가" 의 메모다. 자리를 따로
+    #: 둔 이유는 누적 목록의 열쇠에서 빼야 하기 때문이다.
+    assert fields == {"kind", "reason", "code", "missing", "scope"}
+    #: 🔴 **그래도 식별자는 들어오지 않았다** — 이 시험의 본래 주장이고
+    #: ``test_26`` 이 그 이유를 적는다.
+    for absent in ("status", "validation", "source", "viewer", "action",
+                   "notes", "instance_id", "effect_ref"):
         assert absent not in fields, absent
     #: 들고 있는 것은 행위가 아니라 **종류**다 — 어느 카드인지 적지 않는다.
-    assert isinstance(WithheldAction(PlayerActionKind.PASS, "x").kind, PlayerActionKind)
+    sample = WithheldAction(
+        PlayerActionKind.PASS, "x", ValidationCode.NO_RESPONSE_WINDOW
+    )
+    assert isinstance(sample.kind, PlayerActionKind)
+    #: 🔴 ``validity`` 는 **저장되지 않고 코드에서 파생된다** — 3-E-40 이
+    #: 지운 "둘째 사본" 을 다시 만들지 않았다 (``test_06`` 과 같은 규율).
+    assert "validity" not in fields
+    assert sample.validity is CODE_VALIDITY[sample.code]
 
 
 def test_03_validation_result_field_inventory():
@@ -237,8 +256,18 @@ def test_06_the_validity_is_not_stored_but_is_derivable_from_the_code():
     recoverable = {
         name: CODE_VALIDITY[ValidationCode[name]] for name in ValidationCode.__members__
     }
-    assert len(recoverable) == 48
-    assert sum(1 for v in recoverable.values() if v is not None) == 47
+    #: 🔴 48 → **51** (Phase 6-AB 보완7 이 셋, 보완8 이 셋을 더했다 —
+    #: 보완7 의 셋은 효과 분류 쪽이 아니라 **이 파일이 세는 수**에 영향이
+    #: 없었고, 보완8 의 셋이 흐름 거절을 규칙 거절로 적는 자리다:
+    #: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+    #: ``TRIGGER_TIMING_MISSED``).
+    #:
+    #: 🔴 **이 시험이 지키는 사실은 그대로다** — 판정을 코드에서 되찾을 수
+    #: 있고, 되찾을 수 없는 것은 **여전히 하나**다. 새 코드 셋도
+    #: ``CODE_VALIDITY`` 에 분류를 적었고 (적지 않으면 import 가 터진다),
+    #: 그래서 ``DuelStep`` 에 ``validity`` 를 더할 이유가 생기지 않았다.
+    assert len(recoverable) == 51
+    assert sum(1 for v in recoverable.values() if v is not None) == 50
     assert [n for n, v in recoverable.items() if v is None] == [
         "CHAIN_DEFINITION_UNAVAILABLE"
     ]
@@ -333,9 +362,21 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     assert all(site.startswith("engine/duel.py:") for site in sites)
 
     source = source_of("engine/duel.py")
-    assert 'missing="우선권을 여는 규칙 (Phase 2-F)"' in source
-    assert 'missing="; ".join(plan.unresolved_rules) or None' in source
-    assert "missing=verdict.missing_rule" in source
+    #: 🔴 **Phase 6-AB 보완8 이 두 자리를 바꿨다 — 그리고 느슨함을 줄였다.**
+    #:
+    #: * 손으로 쓴 ``missing="우선권을 여는 규칙 (Phase 2-F)"`` 가 **사라졌다.**
+    #:   그 문장은 우선권을 여는 계층이 없던 때의 것이고, 지금은 그 계층이
+    #:   있으므로 그 자리는 **규칙 거절**(``NO_RESPONSE_WINDOW``)이다 —
+    #:   없는 것을 적을 이유가 없어졌다. 즉 **첫째 출처가 없어졌다.**
+    #: * ``plan.unresolved_rules`` 는 그대로이고 지역 변수를 거친다.
+    #: * ``verdict.missing_rule`` 도 그대로다.
+    #: 🔴 **주석이 아니라 코드를 본다.** 보완8 은 그 문장을 **왜 바꿨는지**
+    #: 주석으로 적어 두었으므로 원문 검색은 그 설명에 걸린다 — ``ast`` 로
+    #: 다시 쓴 코드에는 주석이 없다.
+    code_only = ast.unparse(ast.parse(source))
+    assert "우선권을 여는 규칙 (Phase 2-F)" not in code_only
+    assert "plan.unresolved_rules" in code_only
+    assert "verdict.missing_rule" in code_only
 
     #: 🔴 **Phase 6-AA 가 느슨함을 하나 더 늘렸다 — 넷째 출처.**
     #:
@@ -394,18 +435,43 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
         if isinstance(value, ast.Constant):
             return "손으로 쓴 문자열"
         if isinstance(value, ast.Name):
-            return "모듈 상수"
+            #: 🔴 **보완8 이 이 갈래를 둘로 갈랐다.** 전에는 모든 ``Name`` 을
+            #: "모듈 상수" 로 셌는데, 보완8 이 판정 계층의 값을 **지역 변수**로
+            #: 받아 넘기는 자리를 둘 만들었다 (``unresolved`` ·
+            #: ``missing``). 둘은 다른 종류다 — 상수는 이 자리가 **고른**
+            #: 값이고, 지역 변수는 판정한 계층의 답을 **옮긴** 값이다.
+            return (
+                "모듈 상수" if value.id.isupper() else "판정 계층의 값 (지역 변수)"
+            )
         if isinstance(value, ast.Attribute):
             return f"{ast.unparse(value.value)} 의 칸"
         return ast.unparse(value)
 
     kinds = sorted({source_kind(keyword) for keyword in filled})
-    #: 🔴 **다섯 종류다** — 셋도 넷도 아니다.
-    assert len(kinds) == 5, kinds
-    assert "손으로 쓴 문자열" in kinds
+    #: 🔴 **Phase 6-AB 보완8 이 출처를 다섯 → 셋으로 줄였다** — 이 시험이
+    #: 지적해 온 느슨함이 **줄어든** 첫 변화다.
+    #:
+    #: ===========================  =================================
+    #: 손으로 쓴 문자열               🔴 **없어졌다** — 우선권 문장 하나가
+    #:                               규칙 거절로 바뀌었다
+    #: ``verdict`` 의 칸              🔴 **없어졌다** — 지역 변수를 거친다
+    #: 모듈 상수                      그대로 (유발 쪽 다섯 자리)
+    #: 판정 계층의 값 (지역 변수)       ``_withheld_board_actions`` ·
+    #:                               ``_flow_actions`` 의 페이즈 전환
+    #: 관문의 답을 조건부로            ``_trigger_actions`` ·
+    #:                               ``_activation_actions``
+    #: ===========================  =================================
+    #:
+    #: 🔴 **고치지 않고 적어 둔다는 이 시험의 태도는 그대로다.** 다만
+    #: 이번에는 적을 것이 "늘었다" 가 아니라 **"줄었다"** 다. 남은 셋 중
+    #: 둘(지역 변수 · 관문의 답)은 판정한 계층의 답을 **옮기는** 자리이고,
+    #: 모듈 상수 다섯 자리만 이 자리가 값을 **고른다** — 느슨함을 더 줄이려면
+    #: 그쪽을 모으는 것이 방향이다 (경계 재설계는 여전히 범위 밖이다).
+    assert len(kinds) == 3, kinds
+    assert "손으로 쓴 문자열" not in kinds
     assert "모듈 상수" in kinds
-    assert "verdict 의 칸" in kinds
-    #: 다섯째 — 판정한 계층의 답을 조건부로 옮기는 자리 (추가 보완).
+    assert "판정 계층의 값 (지역 변수)" in kinds
+    #: 셋째 — 관문의 답을 조건부로 옮기는 자리.
     forwarded = [k for k in kinds if "gate.missing_rule" in k]
     assert len(forwarded) == 1, kinds
     assert "UNKNOWN" in forwarded[0]
@@ -440,9 +506,14 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     #: 🔴 **이 시험이 지적하는 느슨함은 또 늘지 않았다** — 채우는 자리는
     #: 열 그대로이고 출처도 다섯 그대로다. 늘어난 것은 **규율을 쓰는
     #: 자리**이므로, 개수가 아니라 그 성질을 센다.
+    #: 🔴 **보완8 이 비우는 쪽을 여덟 → 열둘로 늘렸다.** 늘어난 넷은
+    #: ``_stage_closed_actions`` 가 적는 "판이 열린 상태가 아니다" ·
+    #: "비턴 플레이어다" 와 ``_activation_actions`` 의 규칙 거절, 그리고
+    #: ``_flow_actions`` 의 우선권 자리가 모름에서 **확정 거부로 옮겨 온**
+    #: 것이다. 전부 "규칙이 답했다" 쪽이므로 규율을 쓰는 자리가 늘었다.
     empty = len(calls) - len(filled)
     assert empty == len(calls) - 10
-    assert empty >= 7, empty
+    assert empty >= 12, empty
 
 
 # ======================================================================
@@ -533,10 +604,21 @@ def test_12_the_duelstep_substitutes_the_code_for_a_non_candidate(repository):
 
     step = duel.apply(ghost)
     assert step.accepted is False
-    assert step.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert step.code is not verdict.code
+    #: 🔴 **Phase 6-AB 보완8 이 F-1 을 고쳤다 — 코드가 갈아 끼워지지 않는다.**
+    #:
+    #: 3-E-41 은 *"production 경로에서는 닿지 않으니 지금의 코드로도
+    #: 충분하다"* 로 적어 두었다. 보완8 이 ``Duel._refusal`` 에
+    #: :meth:`~engine.duel.Duel._rule_verdict` 를 더하면서 그 자리도 함께
+    #: 메워졌다 — **발동이 아닌 종류의 거절도 검증기에게 묻기** 때문이다.
+    #: 그래서 *"가려져서 모른다"* 가 *"엔진이 못 한다"* 로 바뀌지 않는다.
+    #:
+    #: 🔴 **느슨하게 하지 않고 좁혔다**: 전에는 둘이 **다르다**를 셌고
+    #: 지금은 **같다**를 센다 (이유 문장까지).
+    assert step.code is verdict.code
+    assert step.code is ValidationCode.HIDDEN_CARD
+    assert step.reason == verdict.reason
 
-    #: 판정은 살아남는다 — 둘 다 모름 쪽이다.
+    #: 판정은 그대로 모름 쪽이다.
     assert CODE_VALIDITY[verdict.code] is ActionValidity.UNKNOWN
     assert CODE_VALIDITY[step.code] is ActionValidity.UNKNOWN
     assert step.code in unknown_codes()
@@ -582,9 +664,18 @@ def test_14_the_unknown_validation_of_a_withheld_card_reaches_the_consumer(repos
     #: 사람이 읽는 두 칸은 **그대로 온다.**
     assert entry.reason == verdict.reason
     assert entry.missing == verdict.missing_rule
-    #: 기계가 읽는 두 칸은 **오지 않는다.**
-    assert not hasattr(entry, "code")
-    assert not hasattr(entry, "validity")
+    #: 🔴 **기계가 읽는 둘도 이제 온다** (Phase 6-AB 보완8).
+    #:
+    #: 이 시험의 제목이 *"다만 코드 없이"* 였고 그것이 결함이었다 — 읽는
+    #: 쪽이 규칙 거절과 모름을 가르려면 ``missing`` 이 비었는지를 짐작해야
+    #: 했다. 지금은 코드가 그것을 말하고, ``validity`` 는 저장되지 않고
+    #: **코드에서 파생된다** (3-E-40 이 지운 둘째 사본을 만들지 않았다).
+    assert entry.code is verdict.code
+    assert entry.validity is verdict.validity
+    assert entry.is_rule_refusal is False
+    assert "validity" not in {
+        f.name for f in dataclasses.fields(WithheldAction)
+    }
 
 
 @requires_official_db
@@ -640,11 +731,27 @@ def test_15_the_m1_gate_verdict_is_never_recorded_anywhere(repository):
     assert all(v.validity is ActionValidity.INVALID for v in verdicts)
     assert all(v.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE for v in verdicts)
 
-    #: 그런데 보류 목록에는 **그 코드도, 그 종류도** 없다.
+    #: 🔴 **Phase 6-AB 보완8 이 이 자리를 고쳤다 — 보류에 남는다.**
+    #:
+    #: 이 시험의 제목(*"M1 관문 판정이 어디에도 기록되지 않는다"*)이 바로
+    #: 3-E-41 이 **F-2** 로 적어 둔 결함이고, 보완8 이 그것을 끝냈다
+    #: (``Duel._activation_actions`` 가 ``(allowed, withheld)`` 를 돌려준다).
+    #:
+    #: 🔴 **느슨하게 하지 않고 더 센다**: 그 종류가 보류에 있고, 코드가
+    #: 관문의 것과 같고, 규칙 거절이므로 ``missing`` 이 비어 있고, 어느
+    #: 효과인지가 문장에 남아 있다.
     kinds = {w.kind for w in legal.withheld}
-    assert PlayerActionKind.ACTIVATE_EFFECT not in kinds
-    assert all(not hasattr(w, "code") for w in legal.withheld)
-    #: 남아 있는 것은 "아직 못 한다" 쪽 이야기다.
+    assert PlayerActionKind.ACTIVATE_EFFECT in kinds
+    recorded = [
+        w for w in legal.withheld
+        if w.kind is PlayerActionKind.ACTIVATE_EFFECT
+    ]
+    assert all(w.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE for w in recorded)
+    assert all(w.is_rule_refusal for w in recorded)
+    assert all(w.missing is None for w in recorded)
+    #: 규칙이 막은 것이므로 **미지원 집계에는 들어가지 않는다.**
+    assert not [w for w in legal.unsupported() if w in recorded]
+    #: 남아 있는 "아직 못 한다" 쪽 이야기도 그대로다.
     assert any("아직 없습니다" in w.reason for w in legal.withheld)
 
 
@@ -656,7 +763,15 @@ def test_16_the_withheld_board_scan_stops_after_the_first_card():
     하나씩만 남긴다". 그 전제가 **늘 참은 아니다**: 두 장이 서로 다른 까닭으로
     보류되면 첫 장의 이유가 둘 다를 대표한다.
 
-    구문으로 확인한다 — 함수 안에 ``break`` 가 있다.
+    🔴 **Phase 6-AB 보완8 이 F-2 의 이 절반을 고쳤다 — 멈추지 않는다.**
+
+    그 전제(*"같은 이유가 패의 카드마다 반복된다"*)가 늘 참은 아니라는 것이
+    이 시험의 지적이었고, 지금은 패 전체를 묻고 **(코드 · 모자란 것)** 으로
+    묶는다. 서로 다른 까닭으로 보류되면 **줄이 둘**이 된다.
+
+    🔴 **느슨하게 하지 않고 더 센다**: ``break`` 가 없어졌고, 묶는 열쇠가
+    코드와 모자란 것이고, 몇 장에 걸렸는지가 ``scope`` 에 남고, **어느
+    카드인지는 여전히 적지 않는다** (``test_26`` 의 invariant).
     """
     tree = ast.parse(source_of("engine/duel.py"))
     scan = next(
@@ -665,9 +780,35 @@ def test_16_the_withheld_board_scan_stops_after_the_first_card():
         if isinstance(node, ast.FunctionDef)
         and node.name == "_withheld_board_actions"
     )
-    body = ast.unparse(scan)
-    assert "break" in body
-    assert "종류별로 하나씩만" in source_of("engine/duel.py")
+    #: 🔴 **문자열을 벗겨 코드만 본다** — 보완8 은 이 함수가 왜 멈추지
+    #: 않게 됐는지 docstring 에 적었고, 거기에 ``break`` 라는 **말**이 있다.
+    class _StripStrings(ast.NodeTransformer):
+        def visit_Constant(self, node):  # noqa: N802 - ast 규약
+            if isinstance(node.value, str):
+                return ast.copy_location(ast.Constant(value=""), node)
+            return node
+
+    body = ast.unparse(_StripStrings().visit(scan))
+    assert "break" not in body
+    #: 패 전체를 돈다 — 그리고 묶는다.
+    assert "self.state.player(seat).hand" in body
+    assert "groups" in body
+    assert "scope=" in body
+    #: 🔴 식별자는 싣지 않는다 — 수만 센다.
+    assert "instance_id" in body  # 후보를 만들 때만 쓴다
+    assert "source=card.instance_id" in body
+    assert "WithheldAction" in body
+    held_call = next(
+        node
+        for node in ast.walk(scan)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "WithheldAction"
+    )
+    passed = {kw.arg for kw in held_call.keywords} | {
+        "positional"
+    } if held_call.args else {kw.arg for kw in held_call.keywords}
+    assert "source" not in passed and "effect_ref" not in passed
 
 
 @requires_official_db
@@ -983,10 +1124,22 @@ def test_26_the_withheld_entry_names_a_kind_not_a_card():
     invariant 를 자료형이 **구조적으로** 지키고 있다.
     """
     fields = {f.name for f in dataclasses.fields(WithheldAction)}
+    #: 🔴 **Phase 6-AB 보완8 이 ``code`` 와 ``scope`` 를 더했고 이 invariant
+    #: 는 그대로다.** 그것이 이 시험의 요지다 — 후보별 판정을 보존하면서도
+    #: 식별자를 싣지 않는 길이 있었다: 코드는 **규칙의 이름**이고 ``scope``
+    #: 는 **수**이며, 어느 효과인지는 ``reason`` 문장에 남는다 (그 자리가
+    #: 들고 있는 자기 카드의 ``EffectRef`` 다).
+    #:
+    #: 🔴 그리고 그 ``reason`` 이 **다른 자리로 넘어갈 때는 지운다** —
+    #: ``agent.simulation.Simulator._encountered_line`` ·
+    #: ``deck.opening.unsupported_reasons_elsewhere`` 가 상대 기회의
+    #: 문장을 싣지 않는다 (보완8 마무리).
     assert "source" not in fields
     assert "action" not in fields
     assert "instance_id" not in fields
-    assert fields == {"kind", "reason", "missing"}
+    assert "effect_ref" not in fields
+    assert "card_id" not in fields
+    assert fields == {"kind", "reason", "code", "missing", "scope"}
 
 
 @requires_official_db
@@ -1036,7 +1189,16 @@ def test_29_the_validation_vocabulary_is_unchanged():
     """**§33-1 ~ 7: 어휘가 그대로다.** 이 Phase 는 AUDIT-ONLY 다."""
     from agent.simulation import SimulationStatus
 
-    assert len(ValidationCode) == 48
+    #: 🔴 48 → **51** (Phase 6-AB 보완8 이 셋을 더했다 —
+    #: ``STAGE_FORBIDS_ACTION`` · ``MANDATORY_TRIGGER_PENDING`` ·
+    #: ``TRIGGER_TIMING_MISSED``). 더한 이유는 이 파일이 지적한 것과 **같은
+    #: 결**이다: 확인된 흐름 규칙의 거절이 ``RULE_NOT_IMPLEMENTED`` 로
+    #: 보고되어 규칙상 불가능한 행동이 **엔진 미지원**으로 집계되고 있었다.
+    #:
+    #: 🔴 **모름 쪽은 늘지 않았다** — 셋 다 ``INVALID`` 다. 그래서
+    #: ``unknown_codes()`` 는 7 그대로이고, 그것이 이 변경이 "모름을 늘려
+    #: 문제를 덮은 것" 이 아님을 말한다.
+    assert len(ValidationCode) == 51
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5
     assert len(unknown_codes()) == 7
@@ -1060,16 +1222,36 @@ def test_30_unknown_is_still_neither_false_nor_invalid_nor_a_loss():
 
 def test_31_this_phase_changed_no_production_file():
     """
-    **§21 · §26: AUDIT-ONLY — 네 자료형이 3-E-40 이 남긴 모양 그대로다.**
+    **§21 · §26: 3-E-41 은 AUDIT-ONLY 였다 — 그리고 그 뒤가 고쳤다.**
+
+    🔴 **이 시험의 원래 주장은 "3-E-41 이 production 을 한 줄도 고치지
+    않았다" 였고, 그것은 지금도 참이다** (그 Phase 는 측정만 했다). 다만
+    그 사실을 **"네 자료형의 칸 수가 그대로다"** 로 재고 있었으므로, 뒤의
+    Phase 가 그 결함들을 고치면 깨지게 되어 있었다.
+
+    Phase 6-AB 보완8 이 3-E-41 이 적어 둔 **F-1 · F-2 · F-3** 를 고쳤다.
+    그래서 칸 수 핀을 그 사실에 맞게 옮기고, **이 파일이 지키려던 것**은
+    그대로 센다: 판정 정책이 한 벌이고 (``CODE_VALIDITY``), 듀얼이 그 사본을
+    만들지 않는다.
+
+    🔴 ``engine/duel.py`` 가 ``CODE_VALIDITY`` 를 **읽게** 되었다 —
+    ``WithheldAction`` 이 코드와 ``missing`` 의 일치를 강제하려면 그 정책을
+    봐야 한다. **읽는 것은 사본이 아니다**: 표는 여전히 한 자리에만 있고
+    (``engine/validation.py``), 듀얼은 그것을 ``import`` 해서 묻는다.
     """
     assert len({f.name for f in dataclasses.fields(DuelStep)}) == 5
-    assert len({f.name for f in dataclasses.fields(WithheldAction)}) == 3
+    #: 🔴 3 → **5** (보완8: ``code`` · ``scope``). 이유는 ``test_02``.
+    assert len({f.name for f in dataclasses.fields(WithheldAction)}) == 5
     assert len({f.name for f in dataclasses.fields(LegalActions)}) == 3
     assert len({f.name for f in dataclasses.fields(ValidationResult)}) == 5
     #: policy 는 3-E-40 의 것을 그대로 쓴다 — 새로 만들지 않았다.
-    assert len(CODE_VALIDITY) == 48
+    assert len(CODE_VALIDITY) == 51
     assert "CODE_VALIDITY" in source_of("engine/validation.py")
-    assert "CODE_VALIDITY" not in source_of("engine/duel.py")
+    #: 🔴 **표를 만드는 자리는 여전히 하나다.** 듀얼은 읽기만 한다 —
+    #: ``CODE_VALIDITY = {`` 같은 선언이 그쪽에 없다는 것으로 센다.
+    duel_source = source_of("engine/duel.py")
+    assert "CODE_VALIDITY = " not in duel_source
+    assert "CODE_VALIDITY" in duel_source
 
 
 def test_32_adding_validity_to_the_step_would_recreate_the_copy_3e40_removed():
@@ -1085,7 +1267,10 @@ def test_32_adding_validity_to_the_step_would_recreate_the_copy_3e40_removed():
     #: 파생이 전단사는 아니다 — 여러 코드가 같은 판정을 가리킨다.
     from engine.validation import codes_declaring
 
-    assert len(codes_declaring(ActionValidity.INVALID)) == 39
+    #: 🔴 39 → **42** (Phase 6-AB 보완8 의 셋). 🔴 **모름 · 통과 · 미분류는
+    #: 그대로다** — 늘어난 셋이 전부 확정 거부이므로, 이 변경이 "모름을 늘려
+    #: 문제를 덮은 것" 이 아니라는 사실이 이 네 줄에 함께 적힌다.
+    assert len(codes_declaring(ActionValidity.INVALID)) == 42
     assert len(codes_declaring(ActionValidity.UNKNOWN)) == 7
     assert len(codes_declaring(ActionValidity.VALID)) == 1
     assert len(codes_declaring(None)) == 1

@@ -818,25 +818,38 @@ def combo_messages(agent, hand_text: str, board_text: str = "",
         lines.append("**[엔진이 지원하지 않아 계획에 넣지 않은 절차]**")
         lines.extend(f"  - {item}" for item in plan.unsupported)
 
-    if plan.manual_checks:
+    #: 🔴 **같은 검사를 두 번 다르게 말하지 않는다** (Phase 6-AB 보완8).
+    #:
+    #: 6-AA 는 플래너의 *"덱 초안을 주지 않아 검증하지 않았습니다"* 를
+    #: 그대로 보여 주고 **그 아래에 해명 두 줄**을 붙였다. 그 해명은 참이지만,
+    #: 사용자가 읽는 것은 **상충하는 검사 결과 두 개와 변명**이다 — 플래너가
+    #: 별도 입력을 받지 않았다는 것은 **내부 사정**이고 그 자체가 검사 결과로
+    #: 전달될 일이 아니다.
+    #:
+    #: 그래서 이미 ``recipe:`` 가 검사한 항목은 **그 목록에서 빼고**, 실제
+    #: 결과를 **한 번** 적는다. 🔴 **플래너의 판정을 바꾸지 않는다** —
+    #: ``plan.manual_checks`` 는 그대로이고, 바뀌는 것은 사용자에게 보여 줄
+    #: 때 어느 줄이 이미 답을 받았는지 가리는 일뿐이다.
+    answered_by_recipe = bool(recipe_text and recipe_text.strip())
+    shown_checks = [
+        item for item in plan.manual_checks
+        if not (answered_by_recipe and draft is None
+                and "패가 덱에서 나올 수" in item)
+    ]
+    hidden = len(plan.manual_checks) - len(shown_checks)
+
+    if shown_checks:
         lines.append("")
         lines.append("**[사람이 직접 확인할 것]**")
-        lines.extend(f"  - {item}" for item in plan.manual_checks)
-        #: 🔴 **레시피 검사와 충돌하지 않게 한다** (Phase 6-AA — 사용자 실험
-        #: ②). 정적 계획은 ``draft`` 를 받지 않으면 "패가 덱에서 나올 수
-        #: 있는지 확인하지 않았다" 고 적는다. 그 문장은 **플래너에 대해서는
-        #: 참**이지만, 같은 응답에서 레시피가 그것을 이미 검사했다면 읽는
-        #: 쪽에는 모순으로 보인다. 플래너의 판정을 바꾸지 않고 **누가 무엇을
-        #: 검사했는지** 적는다.
-        if recipe_text and recipe_text.strip() and draft is None:
-            lines.append("")
-            lines.append("🔴 위 항목 중 **패가 덱에서 나올 수 있는지**는"
-                         " 위쪽 `[실제 엔진 실행]` 절이 `recipe:` 로 **이미"
-                         " 검사했습니다.**")
-            lines.append("정적 계획은 자연어 `deck:` 초안을 받지 않아 그"
-                         " 검사를 하지 않았다고 적습니다 — 두 절이 다른"
-                         " 입력을 보기 때문이고, 실제 판정은 `recipe:` 쪽"
-                         "입니다.")
+        lines.extend(f"  - {item}" for item in shown_checks)
+
+    if hidden:
+        lines.append("")
+        lines.append("🔴 **패가 덱에서 나올 수 있는지는 이 요청에서 이미"
+                     " 검사했습니다** — 위쪽 `[실제 엔진 실행]` 절이"
+                     " `recipe:` 로 판정했고, 그 결과가 이 응답의 판정입니다."
+                     " (정적 계획은 자연어 `deck:` 초안을 받는 별도 경로여서"
+                     " 그 검사를 따로 하지 않습니다.)")
 
     return paginate(lines)
 

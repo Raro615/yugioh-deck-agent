@@ -146,7 +146,11 @@ class StepBasis(str, Enum):
 
     def describe_ko(self) -> str:
         return {
-            StepBasis.ENGINE_ACTION: "엔진이 이 행위를 허가함",
+            #: 🔴 **"허가함" 을 쓰지 않는다** (Phase 6-AB 보완8). 이
+            #: 계획은 엔진을 **돌리지 않고** 만든다 — 그 문장은 실제 실행에서
+            #: 허가를 받았다는 뜻으로 읽혔다 (사용자 보고). 뜻은 그대로이고
+            #: 말만 정확히 한다: 행위 계층이 그 종류를 판정할 수 있다.
+            StepBasis.ENGINE_ACTION: "엔진의 행위 계층이 판정할 수 있음 (정적 확인)",
             StepBasis.ENGINE_EXECUTABLE: "엔진에 효과 실행 구현 있음",
             StepBasis.LUA_PARSED: "Lua 파싱 근거 있음 (실행 구현 없음)",
             StepBasis.PRINTED_TYPE_ONLY: "카드 종류상 효과만 확인",
@@ -174,7 +178,11 @@ class StepStatus(str, Enum):
 
     def describe_ko(self) -> str:
         return {
-            StepStatus.CONFIRMED: "확정",
+            #: 🔴 **"확정" 을 쓰지 않는다** (Phase 6-AB 보완8). 위
+            #: docstring 이 적은 뜻은 *"돌려볼 수 있다"* 인데 "확정" 은
+            #: **이미 됐다**로 읽혔다 (사용자 보고 — 실행하지 않은 계획의
+            #: 걸음에 그 말이 붙어 있었다).
+            StepStatus.CONFIRMED: "돌려볼 수 있음 (정적 확인)",
             StepStatus.CONDITIONAL: "조건부",
             StepStatus.UNKNOWN: "미확인",
             StepStatus.UNSUPPORTED: "미지원",

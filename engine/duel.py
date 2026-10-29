@@ -270,6 +270,23 @@ class WithheldAction:
     reason: str
     code: ValidationCode
     missing: str | None = None
+    scope: str | None = None
+    """
+    **이 거절이 몇 자리에 걸린 것인가** — 한 스냅샷 안에서만 뜻이 있는 메모
+    (Phase 6-AB 보완8 마무리).
+
+    예: ``"패 5장 중 5장"``. 읽는 쪽이 "한 장만 걸렸는가 전부 걸렸는가" 를
+    가를 수 있게 한다 (사용자 요구 ③ — *"어느 범위의 제한인지 소비자가
+    구분할 수 있게"*).
+
+    🔴 **쌓아 모으는 목록의 열쇠에 넣지 않는다.** 이 수는 걸음마다 달라지므로
+    (패가 줄어든다) 문장에 섞으면 **같은 사유가 걸음 수만큼 쌓인다** —
+    실측으로 ``/combo`` 의 미지원 목록이 1건에서 5건으로 늘었고 다섯 줄이
+    같은 사유였다. 그래서 자리를 따로 둔다: 한 자리의 표시에는 싣고,
+    누적에는 싣지 않는다 (:meth:`line_ko`).
+
+    🔴 **수만 적는다. 어느 카드인지는 적지 않는다** — 3-E-41 의 invariant.
+    """
 
     def __post_init__(self) -> None:
         if not isinstance(self.code, ValidationCode):
@@ -304,6 +321,18 @@ class WithheldAction:
     def is_rule_refusal(self) -> bool:
         """확인된 규칙이 막았는가 (``INVALID``)."""
         return self.validity is ActionValidity.INVALID
+
+    def line_ko(self, *, with_scope: bool = True) -> str:
+        """
+        읽을 수 있는 한 줄. ``with_scope=False`` 면 :attr:`scope` 를 뺀다.
+
+        🔴 **누적 목록은 ``with_scope=False`` 로 모은다** — 그 메모가 걸음마다
+        달라져서 같은 사유를 여러 줄로 만들기 때문이다 (:attr:`scope`).
+        """
+        line = f"{self.kind.value} [{self.missing}]: {self.reason}"
+        if with_scope and self.scope:
+            line += f" ({self.scope})"
+        return line
 
 
 @dataclass(frozen=True, slots=True)
@@ -2498,25 +2527,48 @@ class Duel:
 
     def _withheld_board_actions(self, seat: int, validator: ActionValidator):
         """
-        **왜 마법 · 함정을 발동할 수 없는가.** 한 번만 적는다.
+        **왜 마법 · 함정을 발동할 수 없는가.** 같은 이유는 한 줄로 묶는다.
 
-        같은 이유가 패의 카드마다 반복되므로 종류별로 하나씩만 남긴다.
+        🔴 **첫 장에서 멈추지 않는다** (Phase 6-AB 보완8).
+
+        전에는 거절 하나를 적고 ``break`` 했다. 그러면 읽는 쪽은 **그 이유가
+        몇 장에 걸린 것인지** 알 수 없다 — 패가 다섯 장이고 한 장만 걸렸는지,
+        다섯 장 전부가 같은 이유로 걸렸는지가 같은 한 줄로 나온다. Phase
+        3-E-41 이 그 자리를 **F-2** 로 적어 두었다 (*"첫 장에서 멈춘다"*).
+
+        지금은 패 전체를 묻고 **(코드 · 모자란 것)** 으로 묶어 묶음마다 한
+        줄을 남기며, 그 줄이 **몇 장 중 몇 장**인지 적는다.
+
+        🔴 **어느 카드인지는 적지 않는다.** 수는 세어도 식별자는 싣지 않는다
+        — 뒷면 · 비공개 카드의 정체가 보류를 통해 새지 않게 하는 3-E-41 의
+        invariant 그대로다. 수는 그 자리의 패 크기이고 공개 정보다.
+
+        🔴 **읽기만 한다** — 검증기는 ``GameStateView`` 만 받는다.
         """
-        held: list[WithheldAction] = []
-        for card in self.state.player(seat).hand:
+        hand = [card for card in self.state.player(seat).hand if card is not None]
+        groups: dict[tuple, list[str]] = {}
+        for card in hand:
             action = PlayerAction.activate_card(actor=seat, source=card.instance_id)
             verdict = validator.validate(action)
             if verdict.validity is ActionValidity.VALID:  # pragma: no cover
                 continue
+            key = (verdict.code, verdict.missing_rule)
+            groups.setdefault(key, []).append(verdict.reason)
+        held: list[WithheldAction] = []
+        for (code, missing), reasons in groups.items():
             held.append(
                 WithheldAction(
                     PlayerActionKind.ACTIVATE_CARD,
-                    verdict.reason,
-                    verdict.code,
-                    missing=verdict.missing_rule,
+                    reasons[0],
+                    code,
+                    missing=missing,
+                    scope=(
+                        None
+                        if len(hand) <= 1
+                        else f"패 {len(hand)}장 중 {len(reasons)}장이 같은 이유"
+                    ),
                 )
             )
-            break
         return held
 
     # ------------------------------------------------------------------
