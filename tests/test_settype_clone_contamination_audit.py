@@ -1147,7 +1147,12 @@ def test_31_hidden_information_and_view_are_unchanged(repository):
     #: 🔴 6-X 가 처음에는 블록 이름 목록을 실었다가 고쳤다 — 그러면 카드의
     #: 유발 사건 정체가 관측으로 나가고, ``test_trigger_semantics_audit``
     #: 의 ``test_13`` 이 그것을 잡는다. 판정이 필요한 것은 한 비트다.
-    assert len(fields) == 28
+    #: 🔴 Phase 6-AD 에서 28 → **29** (``special_summon_restriction_signals``).
+    #: 금지 목록은 또 하나도 약해지지 않았다 — 새 칸이 싣는 것은
+    #: ``core.card_model.SPECIAL_SUMMON_RESTRICTION_CODES`` 한 상수의 등장
+    #: 여부뿐이고, 스크립트 본문도 사건 정체도 나가지 않는다.
+    assert len(fields) == 29
+    assert "special_summon_restriction_signals" in fields
     assert "effect_types" not in fields
     assert "script" not in fields
     assert "code" not in fields

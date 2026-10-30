@@ -1278,7 +1278,12 @@ def test_32_hidden_information_and_the_view_are_unchanged(repository):
     #: 싣는 것은 **한 비트**다 (그 카드 자신의 텍스트가 자기 묘지행을
     #: 적었는가). 6-X 가 처음에는 블록 이름 목록을 실었다가 고쳤다 —
     #: 그러면 유발 사건 정체가 관측으로 나간다.
-    assert len(fields) == 28
+    #: 🔴 Phase 6-AD 에서 28 → **29** (``special_summon_restriction_signals``).
+    #: 금지 목록은 또 하나도 약해지지 않았다 — 새 칸이 싣는 것은
+    #: ``core.card_model.SPECIAL_SUMMON_RESTRICTION_CODES`` 한 상수의 등장
+    #: 여부뿐이고, 스크립트 본문도 사건 정체도 나가지 않는다.
+    assert len(fields) == 29
+    assert "special_summon_restriction_signals" in fields
     assert "effect_count" in fields
     assert "normal_summon_restriction_signals" in fields
     for banned in ("categories", "properties", "ranges", "target_ranges",

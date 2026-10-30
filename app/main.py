@@ -882,7 +882,6 @@ def _print_opening(agent: DeckAgent, recipe_text: str,
         print("  🔴 고른 방식은 검증용 기준점입니다 — 행동은"
               " first_meaningful, 해결 중의 카드 선택은 first-permitted."
               " 최선의 전개가 아닙니다.")
-
     else:
         print(f"  🔴 고른 방식은 검증용 전개 정책 {line.name} 입니다 —"
               f" 사람이 적어 둔 경로를 따라갔을 뿐이고 최선 전개 탐색도,"

@@ -120,7 +120,12 @@ MINE = 0
 #: ``LINK_MATERIAL_INVALID`` 이고 **둘 다 ``INVALID``** 다 — 모름 쪽은 여전히
 #: 5 다. 둘 다 **확인된** 제한 · 확인된 소재 조건의 위반에만 쓰고, 읽지 못한
 #: 쪽은 ``RULE_NOT_IMPLEMENTED`` 로 남는다 (enum 설명이 직접 적는다).
-CODE_MEMBER_COUNT = 53
+#:
+#: 🔴 53 → **54** (Phase 6-AD). 늘어난 하나는 ``SPECIAL_SUMMON_FORBIDDEN``
+#: 이고 **``INVALID``** 다 — 모름 쪽은 5 그대로다. **확인된** 금지에만 쓰고
+#: (손으로 읽은 금지 표가 범위까지 답한 경우), 신호는 있는데 누구에게
+#: 걸리는지 읽지 못한 쪽은 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
+CODE_MEMBER_COUNT = 54
 
 #: ``engine/`` + ``agent/`` 에서 코드가 **등장하는** 줄.
 #: 69 → **67** (Phase 3-E-38 이 M1 ×2 · M2 ×2 를 고치면서 2 감소).
@@ -236,6 +241,9 @@ DECLARED_SECTIONS = {
     #: 멤버 수는 **하나도** 바뀌지 않았다: 새 코드가 기존 묶음에 끼어들지
     #: 않았다는 뜻이다 (보완8 과 같은 결).
     "횟수 제한 · 링크 소재 (Phase 6-AC)": 2,
+    #: 🔴 Phase 6-AD 가 더한 묶음 — ``INVALID`` 하나다. 기존 열 묶음의
+    #: 멤버 수는 **하나도** 바뀌지 않았다 (6-AC · 보완8 과 같은 결).
+    "특수 소환 금지 (Phase 6-AD)": 1,
 }
 
 #: ``# --- 모른다 (UNKNOWN) ---`` 섹션의 멤버. 여기 있는 코드는
@@ -741,7 +749,7 @@ def test_10_source_forbidden_is_a_different_code_from_structural_source_forbidde
     #: 🔴 255 → 260 (Phase 6-AC). ``_link_summon`` 의 요구 생성이 그 위에
     #: 더해져 자리가 다섯 줄 밀렸다 — 자리만 움직였고 이 감사가 지키는 사실
     #: (간접 경로가 **하나뿐**이라는 것)은 그대로다.
-    assert hits == [("engine/action_validation.py", 260)]
+    assert hits == [("engine/action_validation.py", 261)]
 
 
 # ======================================================================
@@ -1505,7 +1513,7 @@ def test_31_the_distinctions_from_phase_3e24_to_3e36_still_hold():
     #: 🔴 48 → 51 (보완8) — 늘어난 셋은 전부 ``INVALID`` 이므로 모름 쪽은
     #: 7 그대로다 (``CODE_MEMBER_COUNT`` 의 설명 참고).
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 53
+    assert len(ValidationCode) == 54
     assert len(ConditionResult) == 3
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5

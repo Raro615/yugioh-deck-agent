@@ -150,7 +150,10 @@ CONDITION_REQUIRED_FIELDS = {
 #: ``engine/link_rules.py`` · ``engine/use_limit.py`` 다. 셋 중 어느 것도
 #: ``Condition | None`` 칸을 만들지 않았고 (아래 전수 주사가 그것을 센다),
 #: 그래서 이 감사가 재는 다섯 자리는 **그대로**다.
-ENGINE_FILE_COUNT = 72
+#: 🔴 72 → **73** (Phase 6-AD). 늘어난 하나는 ``engine/summon_restriction.py``
+#: 이고, 특수 소환 금지를 판정하는 **순수** 모듈이다. ``Condition | None``
+#: 칸을 만들지 않았으므로 (아래 전수 주사가 센다) 다섯 자리는 그대로다.
+ENGINE_FILE_COUNT = 73
 
 #: 조건·요구·발동 이름에 대한 ``None`` 검사 수. ``engine/`` **패키지만** 센다
 #: (``tests/engine/`` 까지 세면 분모가 오염된다 — 한 번 틀렸던 자리다).

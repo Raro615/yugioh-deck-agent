@@ -380,9 +380,14 @@ def test_06_the_duel_closure_excludes_the_assembly_and_two_part_modules():
     #: 판정) 과 ``engine.use_limit`` (1턴 1회의 값) 이다. 셋 다 이 Phase 가
     #: **구현한 것**이고 휴면 모듈이 아니다.
     #:
+    #: 🔴 62 → **63** (Phase 6-AD). 늘어난 하나는
+    #: ``engine.summon_restriction`` 이고, ``engine.condition.model`` 과
+    #: ``engine.link_rules`` 가 특수 소환 금지를 판정하려고 그것을 읽는다 —
+    #: 이 Phase 가 **구현한 것**이고 휴면 모듈이 아니다.
+    #:
     #: 🔴 **휴면 모듈 넷은 그대로 폐쇄 밖이다** — 아래 루프가 그것을
     #: 고정하고, 그것이 이 감사의 질문이다. 트리거 계층이 켜진 것이 아니다.
-    assert len(closure) == 62
+    assert len(closure) == 63
     for module in (
         "engine.trigger_chain",
         "engine.trigger_order",
@@ -812,8 +817,11 @@ def test_18_only_four_codes_have_a_dormant_carrier_at_all():
     #: 중 어느 것도 dormant 층에 실리지 않았다.** 위 집합이 여덟 그대로인
     #: 것이 그 사실이다 — 보완8 과 같은 결이고, 위험의 범위는 넓어지지
     #: 않았다.
-    assert len(members) == 53, len(members)
-    assert len(members - with_dormant) == 45
+    #: 🔴 45 → **46** (Phase 6-AD). enum 이 53 → 54 로 늘었고
+    #: (``SPECIAL_SUMMON_FORBIDDEN``), **그것도 dormant 층에 실리지
+    #: 않았다.** 위 집합이 여덟 그대로인 것이 그 사실이다.
+    assert len(members) == 54, len(members)
+    assert len(members - with_dormant) == 46
 
 
 def test_19_four_of_the_five_dormant_gates_duplicate_a_live_question():
@@ -946,12 +954,12 @@ def test_24_the_validation_vocabulary_is_unchanged():
     #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
     #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 53
+    assert len(ValidationCode) == 54
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5
     assert len(unknown_codes()) == 7
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(CODE_VALIDITY) == 53
+    assert len(CODE_VALIDITY) == 54
 
 
 def test_25_this_phase_changed_no_production_file():

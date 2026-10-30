@@ -243,7 +243,11 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: ``STRING_OCCURRENCES`` 가 그 갈래를 적는다. 늘어난 코드 셋 중 **이
 #: 파일이 재는 ``UnimplementedRule`` 과 관계된 것은 0건**이고, 그것이 이
 #: 상수가 지키는 사실이다 (아래 배수 검사가 그 비율을 센다).
-RULE_NOT_IMPLEMENTED_MENTIONS = 117
+#: 🔴 117 → **119** (Phase 6-AD). 늘어난 둘은 **전부 산문**이고 둘 다
+#: ``engine/validation.py`` 의 새 코드 설명이다 — 코드 자리는 83 그대로다
+#: (저쪽 파일의 ``CODE_OCCURRENCES``). 이 파일이 재는
+#: ``UnimplementedRule`` 과 관계된 것은 역시 **0건**이다.
+RULE_NOT_IMPLEMENTED_MENTIONS = 119
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
@@ -270,6 +274,12 @@ MISSING_RULES_OVERRIDES = {
     ("engine/action_validation.py", "_NormalSpellActivation"),
     ("engine/action_validation.py", "_NormalSummonProcedure"),
     ("engine/action_validation.py", "_LinkMaterialsLegal"),
+    #: 🔴 Phase 6-AD — 특수 소환 금지 조건. ``UnimplementedRule`` 을 쓰지
+    #: 않고 ``missing_rules`` 를 직접 채운다 (``summon-prohibition-scope``):
+    #: 판정 모듈이 **왜** 모르는지 알고 있으므로 자리표시자가 필요 없다.
+    #: 공용 조건 어휘에 있는 이유는 쓰는 데가 둘이기 때문이다 (링크 소환
+    #: 후보의 요구 · 특수 소환하는 효과의 발동 조건).
+    ("engine/condition/model.py", "SpecialSummonPermitted"),
 }
 
 #: ``_NormalSummonProcedure`` · ``_NormalSpellActivation`` 이 실제로 내놓는
@@ -984,11 +994,39 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     assert len(activations) == 10
     assert not any(isinstance(a, UnimplementedRule) for a in activations)
 
-    #: 여덟 개 전부 **판정 가능한** 조건이다 — UNKNOWN 을 내지 않는다.
+    #: 열 개 전부 **판정 가능한** 조건이다 — 자리표시자가 아니다.
+    #:
+    #: 🔴 **Phase 6-AD 가 이 루프의 단언을 정정했다.** 6-AC 까지는 전부
+    #: ``() `` 였는데, 그것은 이 시험판의 우연이었다 — 등재된 조건이 전부
+    #: 자기 판만 세는 것들이었다. 6-AD 가 성유물－『성장』 ② 의 발동 조건에
+    #: **특수 소환 금지**를 더했고, 그 판정은 **판에 모르는 앞면 카드가 있으면
+    #: 모름**이다 (ADR-006). 이 시험판(``new_state``)에는 스크립트를 읽을 수
+    #: 없는 카드 1000 이 앞면으로 놓여 있으므로, 그 조건의 올바른 답은
+    #: ``()`` 가 아니라 **이름 붙은 모름**이다.
+    #:
+    #: 그래서 단언을 **약하게 만들지 않고 정확하게** 바꿨다 — 이 파일이
+    #: 재는 것은 "``UnimplementedRule`` 이 쓰이지 않는다" 이고, 그 성질은
+    #: 그대로다: 아래 이름은 **판정 모듈이 직접 적은 것**이고 자리표시자가
+    #: 만든 것이 아니다.
+    from engine.summon_restriction import SUMMON_PROHIBITION_RULE_MISSING
+
     view = GameStateView.from_state(new_state(), viewer=MINE)
     context = ConditionContext(player=MINE)
+    reported = set()
     for activation in activations:
-        assert activation.missing_rules(view, context) == ()
+        found = activation.missing_rules(view, context)
+        assert set(found) <= {SUMMON_PROHIBITION_RULE_MISSING}, found
+        reported |= set(found)
+    #: 🔴 **공허하지 않다** — 하나는 실제로 그 이름을 낸다.
+    assert reported == {SUMMON_PROHIBITION_RULE_MISSING}
+    #: 🔴 그리고 그 이름을 내는 조건은 ``UnimplementedRule`` 이 아니다.
+    noisy = [
+        a
+        for a in activations
+        if a.missing_rules(view, context)
+    ]
+    assert len(noisy) == 1, noisy
+    assert not isinstance(noisy[0], UnimplementedRule)
 
 
 @requires_official_db
@@ -1176,7 +1214,7 @@ def test_17_the_distinctions_from_phase_3e24_to_3e34_still_hold():
     #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
     #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 53
+    assert len(ValidationCode) == 54
     assert len(SimulationStatus) == 5
 
     #: ``Requirement`` 는 조건을 반드시 받는다 (3-E-34).

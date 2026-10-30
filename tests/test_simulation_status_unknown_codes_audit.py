@@ -288,7 +288,7 @@ def test_07_seven_of_forty_eight_codes_are_in_the_set():
     #: ``_UNKNOWN_CODES`` 는 **7 그대로**다 — 보완8 은 모름을 늘리지 않았고
     #: **모름이던 흐름 거절을 규칙 거절로 옮겼다.**
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 53
+    assert len(ValidationCode) == 54
     #: 집합의 정의가 ``frozenset`` 이다 — 런타임에 늘어날 수 없다.
     assert isinstance(_UNKNOWN_CODES, frozenset)
 
@@ -677,6 +677,9 @@ def test_25_no_new_enum_member_was_added_anywhere():
         #: 🔴 Phase 6-AC 가 둘을 더했다 — 둘 다 ``INVALID`` 다.
         "EFFECT_USE_LIMIT_REACHED",
         "LINK_MATERIAL_INVALID",
+        #: 🔴 Phase 6-AD 가 하나를 더했다 — 특수 소환이 금지된 판의 거절
+        #: 이고, 확인된 금지이므로 ``INVALID`` 쪽이다.
+        "SPECIAL_SUMMON_FORBIDDEN",
     }
     assert added <= set(ValidationCode.__members__)
     assert len(ValidationCode) - len(added) == 48
@@ -921,7 +924,7 @@ def test_32_the_agent_layer_no_longer_writes_the_policy_down():
     #: ``_UNKNOWN_CODES`` 는 **7 그대로**다 — 보완8 은 모름을 늘리지 않았고
     #: **모름이던 흐름 거절을 규칙 거절로 옮겼다.**
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert sizes["ValidationCode"] == 53
+    assert sizes["ValidationCode"] == 54
     assert sizes["ActionValidity"] == 3
 
 
@@ -948,8 +951,12 @@ def test_33_the_forty_eight_codes_partition_without_a_remainder():
     #: 🔴 Phase 6-AC 가 둘을 더했다 — ``EFFECT_USE_LIMIT_REACHED`` ·
     #: ``LINK_MATERIAL_INVALID``. **둘 다 ``INVALID``** 이므로 모름 쪽은
     #: 그대로이고 확정 거부 쪽만 늘었다 (보완8 과 같은 결).
-    assert len(rest) == 41
+    #: 🔴 Phase 6-AD 가 하나를 더했다 — ``SPECIAL_SUMMON_FORBIDDEN``. 그것도
+    #: ``INVALID`` 다 (**확인된** 금지이고, 누구에게 걸리는지 읽지 못한 쪽은
+    #: ``RULE_NOT_IMPLEMENTED`` 로 모름에 남는다). 그래서 41 → **42** 이고
+    #: 모름 쪽 12 는 그대로다 — 그것이 이 파일이 재는 사실이다.
+    assert len(rest) == 42
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(named) + len(rest) == len(ValidationCode) == 53
+    assert len(named) + len(rest) == len(ValidationCode) == 54
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(all_names) == 53 == len(named) + len(rest)
+    assert len(all_names) == 54 == len(named) + len(rest)

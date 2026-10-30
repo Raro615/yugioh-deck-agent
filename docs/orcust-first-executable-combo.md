@@ -334,7 +334,17 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 `Duel._trigger_actions` 가 `targets=()` 인 후보 **하나**만 만들고
 `selections_for` 에 넘겼다. 기르수 ① 은 **덱**에서 고르므로 선택이 해결
 시점으로 미뤄지고 (`decided_at_resolution`) 그 길을 타지 않았지만, 『성장』 ② 은
-**패**에서 고른다 — 자기 패는 평소 관측에 보이므로 발동 시점에 가리킨다. 실측:
+**패**에서 고르고, 이 Phase 는 *"자기 패는 평소 관측에 보이므로 발동 시점에
+가리킨다"* 고 읽었다.
+
+> 🔴 **그 읽기가 틀렸다 — Phase 6-AD 가 정정했다** (§13.3). 볼 수 있는지와
+> **규칙상 언제 고르는지**는 다른 축이다. 공식 스크립트는 `s.sptg1` 에서
+> 후보의 **존재만** 확인하고 (`Duel.IsExistingMatchingCard`) 고르는 것은
+> `s.spop1` 의 `Duel.SelectMatchingCard` 다. 아래 결함 ① 자체는 그대로다
+> (조합 열거가 없었던 것은 사실이고 `target_combinations` 가 그 자리를
+> 채웠다) — 틀린 것은 **그 효과가 그 길을 타야 한다는 판단**이다.
+
+실측:
 
 ```
 🔴 activate_effect [이 유발 효과의 실행 구현]:
@@ -570,7 +580,7 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 | --- | --- | --- | --- | --- | --- |
 | 1 | `normal_summon` 69811710 | 없음 (소환권은 비용이 아니다) | 없음 | — (소환은 효과가 아니다) | 패 → 몬스터 존[0] 앞면 공격 |
 | 2 | `activate_effect` `69811710:e[0]` | 없음 (`cost.costs == ()`) | **해결 중에** 덱의 『성장』 (덱은 가려진 자리 — `decided_at_resolution`) | `체인1 … 해결했습니다` · `EffectEvent 69811710:e[0]` | 덱 → 묘지 (`ZoneMoved send_to_grave`) |
-| 3 | `activate_effect` `93920420:e[1]` | 없음 | **발동 시점에** 패의 『성장』 (`@primary=[#79]`) | `체인1 … 대상 @primary=[#79] 를 해결했습니다` · `EffectEvent 93920420:e[1]` | 패 → 몬스터 존[0] 앞면 공격 (`MonsterSummoned special`) |
+| 3 | `activate_effect` `93920420:e[1]` | 없음 | **해결 중에** 패의 『성장』 (6-AD 가 정정 — §13.3) | `체인1 … 해결했습니다` · `EffectEvent 93920420:e[1]` | 패 → 몬스터 존[0] 앞면 공격 (`MonsterSummoned special`) |
 | 4 | `link_summon` 30741503 | 없음 — **소재는 비용이 아니라 소환 절차다** | 소재 = 기르수 + 『성장』 (조합 1가지가 허가됨) | — (소환은 효과가 아니다) | 소재 2장 → 묘지, 엑스트라 덱 → 엑스트라 몬스터 존[0] (`MonsterSummoned link`) |
 | 5 | `pass` | — | — | 이 유발 처리 기회에서 발동하지 않기로 했다 | 없음 |
 
@@ -824,7 +834,7 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 | `pytest tests/test_orcust_girsu_line.py` | `37 passed · 2:29` · 종료 코드 **0** |
 | `pytest <루트 ② 의 두 파일>` | `2 failed, 67 passed · 3:29` (둘 다 기존 실패) |
 | `pytest <루트 ① 에서 고친 10개 파일>` | `364 passed · 21:12` · 종료 코드 **0** |
-| `pytest <ck_aa 25개 파일 전부>` (정정 뒤 다시) | GRAA |
+| `pytest <ck_aa 25개 파일 전부>` (정정 뒤 다시) | `716 passed · 34:39` · 종료 코드 **0** |
 
 🔴 **전체 회귀를 또 한 번 전부 돌리지는 않았다.** 정정은 모두 **그 시험 파일
 안의 단언**이고 production 을 건드리지 않았다 — production 의 마지막 변경은
@@ -943,3 +953,255 @@ python -m app.main combo "69811710,703897,2930675,12989604,93920420" \
 | 특수 소환 범위 확대 | `OPERATION_RULINGS` 의 `MAY_BE_SPECIAL_SUMMONED` 와 `REVIVAL_LIMIT_FREE_ZONES`. 묘지·제외를 열려면 **소환 이력**을 적는 자리가 먼저 필요하다 |
 
 🔴 **다음 단계를 자동으로 시작하지 않았다.**
+
+---
+
+## 13. Phase 6-AD — 이 경로에서 확인된 규칙 문제 둘의 정정
+
+### 13.0 무엇이 사실이고 무엇이 틀렸는가
+
+위 §8 의 네 단계는 **실제로 실행됐다.** 그 사실은 그대로이고, 이 절은 그것을
+취소하지 않는다. 그런데 그 실행을 통과시킨 시험들이 **규칙 두 가지를 재지
+못했다.**
+
+| | 문제 | 어디서 틀렸는가 |
+| --- | --- | --- |
+| ① | **특수 소환이 금지된 판에서 링크 소환이 수락되었다** | 소재 조건과 놓을 자리만 보았고, 링크 소환이 규칙상 **특수 소환**이라는 사실을 쓰지 않았다 |
+| ② | **『성장』 ② 의 패 선택을 발동 시점에 고정했다** | "자기 패는 보인다" 는 **관측의 축**으로 "규칙상 언제 고르는가" 를 짐작했다 |
+
+🔴 **두 문제 모두 "통과하는 시험" 이 있었다.** 그래서 이 절의 각 항목은 **먼저
+재현을 측정하고** 그 다음에 고친 것을 적는다.
+
+### 13.1 문제 ① 재현 — 측정값
+
+판 (전부 실제 카드):
+
+| 자리 | 카드 |
+| --- | --- |
+| 자신 몬스터 존 | 잭나이츠 오르페골 기르수 [69811710] · 성유물－『성장』 [93920420] · **파슬 다이너 파키세팔로 [42009836]** (앞면) |
+| 자신 엑스트라 덱 | 오르페골 갈라테아 [30741503] |
+
+파키세팔로의 공식 텍스트: 「서로, 몬스터를 특수 소환할 수 없다」.
+`c42009836.lua`: `EFFECT_TYPE_FIELD` · `LOCATION_MZONE` ·
+`EFFECT_CANNOT_SPECIAL_SUMMON` · `EFFECT_FLAG_PLAYER_TARGET` ·
+`SetTargetRange(1,1)`.
+
+| | 6-AC (정정 전) | 6-AD (정정 후) |
+| --- | --- | --- |
+| `legal_actions` 의 링크 소환 후보 | **1건** (기르수 + 『성장』) | **0건** |
+| `Duel.apply` | `accepted=True` · `code=OK` | `accepted=False` · `code=special_summon_forbidden` |
+| 거절 이유 | — | `링크 소환은 특수 소환입니다 — 42009836 … 이 특수 소환을 금지합니다` |
+| 판 | 갈라테아가 엑스트라 몬스터 존에 놓이고 파키세팔로는 필드에 남았다 | `state_hash` 동일 · 엑스트라 몬스터 존 0 · 묘지 0 · `state.uses` 0 · `journal` 0 |
+| 보류 목록 | — | 같은 코드 (`special_summon_forbidden`) |
+
+고정한 시험: `tests/test_summon_prohibition_and_resolution_choice.py` 의
+`test_h01`(재현) · `test_h02`(대조군 — 파키세팔로만 빼면 그대로 된다).
+
+### 13.2 문제 ① 의 판정 계약 — 확인된 금지 · 미확인 간섭 · 안전 범위
+
+**관측이 신호 비트를 들고 온다.** `core.card_model.
+SPECIAL_SUMMON_RESTRICTION_CODES = ("EFFECT_CANNOT_SPECIAL_SUMMON",)` 하나이고,
+`Card.special_summon_restriction_signals` 가 세 답을 돌려준다 — `None`(스크립트를
+읽지 못했다) · `()`(끝까지 읽었고 없다) · 비어 있지 않음(막을 수 있다).
+`CardDefinitionView` 가 그 칸을 싣는다 (28 → 29). 실측: 42009836 ·
+93920420 → `('EFFECT_CANNOT_SPECIAL_SUMMON',)` · 69811710 · 30741503 → `()` ·
+21844576 → `None`. 저장소 14,127장 중 **792장**이 그 상수를 적는다.
+
+🔴 **`EFFECT_SPSUMMON_CONDITION`(소생 제한) 과
+`EFFECT_SPSUMMON_COUNT_LIMIT`(횟수) 는 넣지 않았다** — 그 둘은 "지금 이 판에서
+특수 소환이 금지되었는가" 가 아니라 **그 카드 한 장의 조건**이다.
+
+**범위는 손으로 읽은 표가 답한다** (`engine/summon_restriction.py` 의
+`SPECIAL_SUMMON_PROHIBITIONS`). 표는 **양방향**이다:
+
+| 카드 | `prohibits` | 범위 | 근거 |
+| --- | --- | --- | --- |
+| 42009836 | `True` | 양쪽 (`SetTargetRange(1,1)`) · `LOCATION_MZONE` | 공식 텍스트 + `c42009836.lua` |
+| 93920420 | `False` | 없음 | 그 상수는 ③(`s.spop2`)의 **소환 제약**이고 이 판의 금지가 아니다 |
+
+🔴 **"막지 않는다" 줄이 없으면 정상 경로가 막힌다.** 『성장』 자신이 그 상수를
+적으므로, 표가 한쪽만 보면 §8 의 4 단계 직전 판이 `UNDETERMINED` 가 되고 경로가
+끝나지 않는다 (`test_h11` 이 그 판을 `ALLOWED` 로 고정한다).
+
+판정 함수 `assess_special_summon_permission(view, actor)` 는 양쪽의
+`MZONE` · `EMZONE` · `SZONE` 을 훑고 **뒷면은 건너뛴다** (지속 효과를 적용하지
+않는다 — `test_h04`). 세 갈래가 그대로 보존된다:
+
+| 관측 | 답 | 쓰이는 코드 |
+| --- | --- | --- |
+| 표가 "이 자리 · 이 상대에게 적용된다" 고 답한다 | `FORBIDDEN` | `special_summon_forbidden` → **INVALID** |
+| 신호는 있는데 표에 범위가 없다 / 카드 정체를 모른다 / 스크립트를 못 읽었다 | `UNDETERMINED` | `rule_not_implemented` → **UNKNOWN** + `summon-prohibition-scope` |
+| 신호가 `()` 이거나 표가 "막지 않는다" 고 적었다 | 다음 카드로 | — |
+
+`test_h05`(오르페골 스켈레촌 21441617 — 신호는 있고 표에 없다) ·
+`test_h06`(페더맨 21844576 — 스크립트를 못 읽는다) 가 **미확인을 허가로 접지
+않는다**는 것을 고정한다. 🔴 **unchecked 설명만 붙여 통과시키지 않는다** —
+`LINK_BLIND_SPOTS` 에 남은 세 줄은 **off-field 금지 · 무효화와 지속 효과 제거 ·
+범위가 좁혀진 금지**이고, 이 세 가지는 **지원하지 않는다고 적은** 것이다.
+
+**두 자리가 같은 함수를 부른다** — 그래서 후보 제외와 직접 실행이 갈릴 수 없다:
+
+1. `engine/condition/model.py` 의 `SpecialSummonPermitted` (공용 조건 어휘).
+   `engine/action_validation.py` 의 `_link_summon` 이 **소재 요구보다 앞에**
+   그것을 건다.
+2. `engine/link_rules.py` 의 `assess_link_materials` 자신 (`test_h09`).
+3. `engine/effect/ruling.py` 의 `explain_special_summon` (효과로 하는 특수 소환).
+
+🔴 **요구의 순서가 두 성질을 만든다.** `ActionValidator._check_requirements` 는
+`FALSE` 를 만나면 **그 자리에서** 돌려주고 `UNKNOWN` 은 모아 둔다. 그래서 금지
+요구를 앞에 두면 **확인된 금지가 소재의 모름보다 먼저** 답하고 (`test_h07`),
+**모르는 금지가 소재의 확정 위반을 가리지 않는다** (`test_h08`).
+
+### 13.3 문제 ② — 발동 조건과 해결 시점 선택을 가른다
+
+`c93920420.lua` 를 다시 읽었다:
+
+```lua
+s.spfilter1 = c:IsSetCard(SET_WORLD_LEGACY) and c:IsCanBeSpecialSummoned(...)
+s.sptg1 = Duel.GetLocationCount(tp,LOCATION_MZONE)>0
+          and Duel.IsExistingMatchingCard(s.spfilter1,tp,LOCATION_HAND,0,1,nil,e,tp)
+s.spop1 = Duel.SelectMatchingCard(tp,s.spfilter1,tp,LOCATION_HAND,0,1,1,nil,e,tp)
+          → Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP)
+```
+
+**`s.sptg1` 은 아무 카드도 고르지 않는다.** 고르는 것은 `s.spop1` 이다. 그래서
+세 축을 나눈다 — **대상 지정** · **비용 선택** · **해결 시점 선택**.
+
+| 자리 | 6-AC | 6-AD |
+| --- | --- | --- |
+| 선택 시점 | 다리 계층이 **가려진 존인가**로 짐작했다 (`CONCEALED_ZONES`) | 정의가 **선언한다** — `TargetSpec.chosen_at_resolution` |
+| 『성장』 ② | 패는 가려지지 않았으므로 **발동 시점** | `chosen_at_resolution=True` → **해결 시점** |
+| 발동 조건 | `ZoneHasFreeSlot(CONTROLLER, MZONE)` 하나 | `And(ZoneHasFreeSlot(…), SpecialSummonPermitted())` |
+| 후보의 존재 | **확인하지 않았다** | 발동 관문이 `TargetResolver.availability` 로 확인한다 |
+| 발동 기록의 `targets` | 패의 한 장 (`@primary=[#79]`) | **비어 있다 — 정상이다** |
+| 실제 선택 | — | `ExecutedStep.resolution_choices` · `PolicyChooser.records` |
+
+`decided_at_resolution` 의 **선언이 짐작보다 먼저**다. 선언하지 않은 효과는
+예전 그대로 가려진 존 기준으로 갈린다 (ADR-006 — 없는 것을 기본값으로 메꾸지
+않는다). 기르수 ① 의 덱 선택은 한 글자도 바뀌지 않았다.
+
+**`IsCanBeSpecialSummoned` 를 해결 단계로만 미루지 않았다.** 그 술어가 묻는 것을
+셋으로 갈라 각자의 자리에 두었다:
+
+| 무엇 | 어디서 | 왜 그 자리인가 |
+| --- | --- | --- |
+| 「성유물」 몬스터가 패에 **있는가** | 발동 관문 (`_check_targets` 의 해결 시점 갈래 + `availability`) | `s.sptg1` 의 `IsExistingMatchingCard` 와 같은 자리 |
+| **판이** 특수 소환을 금지하는가 | 발동 조건 (`SpecialSummonPermitted`) | 금지된 판에서는 어느 카드든 나오지 못한다 |
+| **그 카드 자신**을 특수 소환할 수 있는가 (소환 조건 · 소생 제한) | 해결 중의 관문 (`RuleQuestion.MAY_BE_SPECIAL_SUMMONED`) | 자리마다 답이 다르고 (패 밖은 소환 이력을 묻는다) 그 이력이 이 엔진에 없다 |
+
+🔴 **"후보가 있다" 와 "그 카드를 지금 특수 소환할 수 있다" 를 합치지 않았다.**
+`test_j05` 는 패에 「성유물」 몬스터가 **한 장도 없으면** 발동이
+`no_candidates`(**INVALID** — 자기 패는 가려진 자리가 아니므로 전부 보았다)로
+거절되는 것을 재고, `test_j04` 는 후보가 **있는데** 그 카드의
+`MAY_BE_SPECIAL_SUMMONED` 가 등재되지 않아 `UNKNOWN` 인 판에서 **발동은
+수락되지만 특수 소환은 일어나지 않는** 것을 잰다.
+
+**발동기와 조립 층이 같은 질문을 쓰게 고쳤다 (실측한 결함).** 조립 층은
+`declared_gate_question` 만 보았고 특수 소환은 **종류 관문**이므로
+(`RULE_GATED`) 질문이 `None` 이 되어 **모든 해결 시점 후보가 `UNKNOWN`** 이었다.
+그 상태로 선택 시점을 미루자 해결이 *"0장 골랐습니다 (최소 1장)"* 으로 끝났다.
+`engine/effect/semantics.py` 에 `RULE_GATED_QUESTIONS` · `rule_gate_question()`
+을 더하고, `BoardRuling.explain` 이 그 질문을 `explain_special_summon` 으로
+**보내게** 했다 (묻는 자리를 하나로 둔다 — `test_j06` ③).
+
+### 13.4 체인 시점의 상태 변화 — 잰 것과 재지 못한 것
+
+| §5 | 요구 | 결과 |
+| --- | --- | --- |
+| A | 발동 시점에 패의 한 장이 묶이지 않는다 | ✅ `test_j01` — 패에 『성장』 **두 장**을 두고도 `target_combinations` 가 `[()]`, `chosen_bindings` 0, `required_target_count` 0 |
+| B | 발동과 해결 사이에 패가 바뀌면 그때의 패에서 고른다 | ⚠️ **부분** — `test_j04b` 가 후보 목록이 **그 자리의 패에서** 세어지는 것을 두 판으로 잰다 (1장 ↔ 2장). 🔴 **체인 도중에** 패를 바꾸는 사례는 재지 못했다 (아래) |
+| C | 원래 후보가 사라지고 다른 합법 후보가 남으면 그것으로 해결한다 | ⚠️ **부분** — `test_j03`(후보 둘 중 하나만 소환되고 나머지는 패에 남는다) · `test_j04`(선호한 카드가 후보에 없으면 끌어오지 않는다). 사라지는 **순간**은 위와 같은 이유로 재지 못했다 |
+| D | 해결 시점에 후보가 없거나 몬스터 존이 꽉 차면 잘못된 소환이 없다 | ✅ `test_j05`(후보 0 → `no_candidates`) · `test_c04`(존이 꽉 차면 발동 조건이 **거짓**) |
+| E | 해결 시점에 특수 소환 금지가 걸려 있으면 허가되지 않는다 | ⚠️ **부분** — `test_j06` 이 **양쪽 끝**을 잰다 (발동 조건 `FALSE` · 해결 시점 후보 판정 `FALSE`) 고 두 답이 **같은 함수**에서 나오는 것을 고정한다. 금지가 체인 도중에 **새로 생기는** 경우는 재지 못했다 |
+| F | 선택 기록과 실제로 소환된 카드가 같다 | ✅ `test_j02` — 고른 개체가 몬스터 존에 있고 걸음 기록도 같은 카드를 적는다 |
+| G | 같은 선택 계약이 사본에 닿고 원본이 오염되지 않는다 | ✅ `test_j07` — 사본의 기록은 비어 있고, 사본의 정책은 **다른 객체**이며 선호는 같다. 사본에서 쓸 수 없는 정책을 감싸면 **만들 때** 거절한다 |
+
+🔴 **왜 체인 도중의 변화를 재지 못했는가 — 범위를 적는다.** 체인에 응답으로
+올릴 수 있는 것은 등재된 유발 **둘**(기르수 ① · 『성장』 ②)뿐이고, 둘 다 패를
+줄이지도 지속 효과를 세우지도 않는다. 등재된 마법 열여섯은 `activate_card` 의
+적법성을 판정할 계층이 없어 후보가 되지 않는다 (실측 보류 사유:
+`activation-timing (Phase 2-C/2-F)`). **테스트 편의를 위해 규칙상 불가능한
+체인을 허가하지 않았고**, 통합 시험 중에 패를 직접 바꾸거나 관문·결과를 주입
+하지도 않았다 — 패와 필드는 **시작 상태**로만 구성했다. 그 변화를 만드는
+효과가 등재되면 B · C · E 를 끝까지 잴 수 있다.
+
+### 13.5 해결 시점 선택의 기록과 보고
+
+경로가 "해결 중에 이 카드를 고른다" 를 적는 자리가 생겼다 —
+`PlannedAction.resolution_card_ids` 다. 🔴 `target_card_ids` 와 **다른 시점**
+이고, 6-AC 가 『성장』 ② 에 적었던 `target_card_ids=(93920420,)` 를 거기로
+옮겼다. 그 칸을 그대로 두면 후보의 `targets` 가 비었으므로 그 단계는 **영원히
+걸러지지 않는다** (실측: 경로가 2/4 에서 멈췄다).
+
+그 의도가 닿는 곳은 **해결 중에 묻는 쪽**이다 — `app.main.opening_wiring` 이
+`agent.choice.PreferredCardChoice(line.resolution_preferences,
+FirstPermittedChoice())` 를 만든다. 그 정책이 지키는 것:
+
+- `offer.permitted` **안에서만** 집는다 — 후보 밖의 카드를 집는 길이 없다.
+- 선호가 그 자리에 없으면 **뒤의 기준점**에게 넘긴다 (강제하지 않는다).
+- 상태를 들고 있지 않다 — 센 횟수도, 앞서 집은 것도 없다.
+- `forked()` 가 **새 정책**을 만들고 뒤의 정책에게도 사본을 묻는다.
+- 사본에서 쓸 수 없는 정책을 감싸면 **만들 때** 거절한다 (나중에 발견하지
+  않도록).
+
+보고는 **발동의 대상과 해결 중의 선택을 다른 줄로** 적는다. 실측
+(`/combo … --line orcust-girsu`):
+
+```
+  ✔ 3. P0 activate_effect · 성유물－『성장』 [93920420]
+      판정 OK · 수락 예 · 결과 OK · 상태 변경 있음
+      효과 93920420:e[1]
+      해결 중 선택 1장:
+         - 93920420:e[1] · 성유물－『성장』 [93920420] (후보 1장)
+      적용된 효과 기록: 93920420:e[1]
+```
+
+🔴 **비어 있는 `targets` 를 채우려고 선택을 발동 시점으로 당기지 않았다.**
+그리고 **경로 성공을 발동 수락으로 판정하지 않는다** — `line_progress` 가
+`resolution_card_ids` 를 실행 기록의 해결 시점 선택과 대조하므로, 발동만
+수락되고 해결이 특수 소환을 만들지 못한 판은 "3/3 완료" 로 적히지 않는다
+(`test_j04` ⑥ 이 그것을 고정한다 — 실측으로 그 일이 일어났고 그래서 그 대조를
+넣었다).
+
+### 13.6 정상 경로 재실행 (§6)
+
+같은 레시피 · 같은 패 · 같은 경로로 다시 돌렸다.
+
+```
+python3 -m app.main combo "69811710,703897,2930675,12989604,93920420" \
+    --recipe <ORCUST_VERIFICATION_RECIPE 를 적은 .ydk> --line orcust-girsu
+```
+
+| 항목 | 결과 |
+| --- | --- |
+| 경로 | ✅ **4/4 단계** |
+| 걸음 | 5 (네 단계 + 유발 기회를 지나가는 `pass`) · 상태 변경 4 |
+| 효과가 실제로 해결된 걸음 | 2 (`69811710:e[0]` · `93920420:e[1]`) |
+| 해결 중 선택 | 2건 — 기르수 ① 이 덱의 『성장』 (후보 2장) · 『성장』 ② 가 패의 『성장』 (후보 1장) |
+| 최종 엑스트라 몬스터 존 | 오르페골 갈라테아 [30741503] |
+| 최종 몬스터 존 | 없음 (둘 다 소재가 되었다) |
+| 최종 묘지 (3장) | 『성장』(덱에서) · 기르수(소재) · 『성장』(소재) |
+| 최종 패 (3장) | 클리막스 · 열쇠 · 자각 |
+| 남은 덱 · 엑스트라 덱 | 34 · 5 |
+| 멈춘 이유 | `not_chosen` — 경로가 끝났고 남은 후보는 `end_phase` · `set_spell_trap` |
+
+🔴 **§8 의 최종 상태와 같다.** 비용과 소재는 여전히 다른 칸이고 (소재 2장은
+`materials`), 개체가 늘지도 사라지지도 않았고, 「1턴에 1번」 두 건이 그대로
+기록되고, 5 걸음째의 `pass` 도 그대로다 — 바뀐 것은 **3 단계의 선택이 언제
+일어나는가**와 그것이 보고에 적히는 자리다.
+
+### 13.7 측정 결과 (§7)
+
+실행기는 §10.3 과 같다 (`runtests.sh` — 종료 코드를 로그 안에 적는다).
+
+| 묶음 | 명령 | passed | failed | skipped | 종료 코드 | 소요 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 6-AD 새 시험 | `pytest tests/test_summon_prohibition_and_resolution_choice.py` | **20** | 0 | 0 | **0** | 1:19 |
+
+**왜 이 범위를 돌렸는가** — 이 작업이 **공유 계약**에 닿았다: `ValidationCode`
+(53 → 54) · `CardDefinitionView` 의 칸 (28 → 29) · 공용 조건 어휘 (판을 묻는
+술어 16 → 17) · `engine/` 모듈 수 (72 → 73) · `TargetSpec` 의 칸 ·
+`BoardRuling.explain` 의 분기 · `ExecutedStep` 의 칸 · `PlannedAction` 의 칸 ·
+`opening_wiring` 의 서명. 그 수를 세는 감사가 저장소 전역에 흩어져 있으므로
+바뀐 파일만으로는 영향을 알 수 없다 (6-AC 가 그것을 실측으로 배웠다 — §10.3).
+

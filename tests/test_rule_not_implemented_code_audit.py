@@ -176,7 +176,14 @@ MINE = 0
 #: ``engine/duel.py`` 의 갈래 표). 새로 이 코드로 거절하게 된 자리는
 #: 하나다 — 소재 조건을 **읽지 못한** 링크 몬스터이고, 그것은 모름이
 #: 맞다 (읽은 조건의 위반은 ``LINK_MATERIAL_INVALID`` 로 간다).
-STRING_OCCURRENCES = 117
+#: 🔴 117 → **119** (Phase 6-AD). 늘어난 둘은 **전부 산문**이고 둘 다
+#: ``engine/validation.py`` 에 있다 — 새 코드
+#: (``SPECIAL_SUMMON_FORBIDDEN``) 의 설명과 그 묶음 표가 **확인된 금지와
+#: 읽지 못한 금지를 가른다**는 것을 적으면서 이 코드 이름을 인용했다
+#: ("누구에게 걸리는지 읽지 못한 카드는 이 코드가 아니라
+#: ``RULE_NOT_IMPLEMENTED`` 이고 모름 쪽에 남는다"). ``CODE_OCCURRENCES``
+#: 는 **83 그대로**다 — 새로 이 코드로 거절하게 된 자리는 없다.
+STRING_OCCURRENCES = 119
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -260,10 +267,16 @@ PROSE_OCCURRENCES = {
     ("engine/validation.py", 215),
     ("engine/validation.py", 231),
     ("engine/validation.py", 239),
-    ("engine/validation.py", 265),
-    ("engine/validation.py", 387),
-    ("engine/validation.py", 393),
-    ("engine/validation.py", 398),
+    #: 🔴 Phase 6-AD 가 ``SPECIAL_SUMMON_FORBIDDEN`` 묶음을 그 위에 넣어
+    #: 아래 줄 번호가 밀렸고, **산문 둘**이 늘었다 (255 · 420) — 새 코드의
+    #: 설명과 그 묶음 표가 "누구에게 걸리는지 읽지 못한 카드는 이 코드가
+    #: 아니라 ``RULE_NOT_IMPLEMENTED`` 이고 모름 쪽에 남는다" 를 적는다.
+    ("engine/validation.py", 255),
+    ("engine/validation.py", 283),
+    ("engine/validation.py", 405),
+    ("engine/validation.py", 411),
+    ("engine/validation.py", 416),
+    ("engine/validation.py", 420),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
@@ -671,7 +684,7 @@ def test_01_the_enum_itself_forbids_attaching_this_code_to_a_refusal():
     #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
     #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 53
+    assert len(ValidationCode) == 54
 
 
 def test_02_the_string_count_is_79_but_the_code_count_is_67():
@@ -707,9 +720,9 @@ def test_02_the_string_count_is_79_but_the_code_count_is_67():
     #: 🔴 30 → **31** (보완8 마무리). 늘어난 하나도 산문이다
     #: (``_refusal_sentence`` 의 설명). 코드 수는 80 그대로다.
     #: 🔴 31 → **34** (Phase 6-AC). 늘어난 산문 셋과 늘어난 코드 셋이
-    #: **따로** 세어진다 — 그것이 이 등식이 지키는 사실이다 (문자열 117 ·
-    #: 코드 83 · 산문 34).
-    assert strings - len(sites) == 34
+    #: **따로** 세어진다 — 그것이 이 등식이 지키는 사실이다 (문자열 119 ·
+    #: 코드 83 · 산문 **36** — Phase 6-AD 가 산문 둘을 더했다).
+    assert strings - len(sites) == 36
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()
@@ -1599,7 +1612,7 @@ def test_26_the_distinctions_from_phase_3e24_to_3e35_still_hold():
     #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
     #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 53
+    assert len(ValidationCode) == 54
     assert len(ConditionResult) == 3
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5

@@ -202,13 +202,26 @@ def test_01_the_engine_condition_vocabulary_only_asks_about_the_board():
         "PhaseIs",
         "ZoneCountAtLeast",
         "ZoneHasFreeSlot",
+        #: 🔴 16 → **17** (Phase 6-AD, ``SpecialSummonPermitted``). 그것도
+        #: **판만** 묻는다 — 양쪽 필드의 앞면 카드를 훑어 특수 소환을 금지
+        #: 하는 것이 있는지 보고, 문맥에서는 ``player`` 하나만 읽는다
+        #: (아래 AST 주사가 그 집합을 고정한다).
+        #:
+        #: 🔴 **공용 어휘에 둔 이유**가 이 자리에 보인다 — 쓰는 데가 둘이고
+        #: (링크 소환 후보의 요구 · 특수 소환하는 효과의 발동 조건) 효과 정의
+        #: 계층은 ``engine.action_validation`` 을 읽지 않는다.
+        "SpecialSummonPermitted",
     }
-    assert len(board_predicates) == 16
+    assert len(board_predicates) == 17
     assert vocabulary == combinators | board_predicates, sorted(vocabulary)
     gates = by_module["engine.action_validation"]
     #: 🔴 8 → **9** (Phase 6-AC, ``_LinkMaterialsLegal``). 그 조건도 판만
     #: 묻는다 — 엑스트라 덱의 소재 조건과 필드의 몬스터이고, 문맥에서
     #: 사건을 읽지 않는다. 아래 "이름에도 사건이 없다" 가 그것을 센다.
+    #:
+    #: 🔴 **6-AD 는 이 수를 늘리지 않았다.** 특수 소환 금지 조건은 공용
+    #: 어휘 쪽에 있고 (위 ``board_predicates``), 그래서 같은 판정을 효과
+    #: 정의와 후보 요구가 함께 쓴다.
     assert len(gates) == 9, sorted(gates)
 
     #: 이름에도 사건이 없다.

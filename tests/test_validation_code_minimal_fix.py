@@ -92,6 +92,12 @@ ADDED_IN_PHASE_6AC = frozenset(
     }
 )
 
+#: 🔴 Phase 6-AD 가 더한 코드. **확인된** 특수 소환 금지에만 쓰고 (손으로
+#: 읽은 금지 표가 범위까지 답한 경우), 신호는 있는데 누구에게 걸리는지 읽지
+#: 못한 쪽은 ``RULE_NOT_IMPLEMENTED`` 로 모름에 남는다. 그래서 이 코드는
+#: ``INVALID`` 쪽이고 모름 집합은 늘지 않았다.
+ADDED_IN_PHASE_6AD = frozenset({"SPECIAL_SUMMON_FORBIDDEN"})
+
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 MINE = 0
@@ -490,13 +496,15 @@ def test_13_no_new_validation_code_was_added():
     #: **무엇이 늘었는지를 이름으로** 고정한다 — 숫자만 올리면 다음에 조용히
     #: 늘어난 것을 잡지 못한다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 53
+    assert len(ValidationCode) == 54
     assert ADDED_IN_FOLLOWUP8 <= set(ValidationCode.__members__)
     assert ADDED_IN_PHASE_6AC <= set(ValidationCode.__members__)
+    assert ADDED_IN_PHASE_6AD <= set(ValidationCode.__members__)
     assert (
         len(ValidationCode)
         - len(ADDED_IN_FOLLOWUP8)
         - len(ADDED_IN_PHASE_6AC)
+        - len(ADDED_IN_PHASE_6AD)
         == 48
     )
     #: 🔴 셋 다 ``INVALID`` 다 — 모름 쪽은 7 그대로다.
@@ -770,10 +778,12 @@ def test_23_the_distinctions_from_phase_3e24_to_3e37_still_hold():
 
     #: enum 크기 — 보완8 이 더한 셋 말고는 그대로다 (``test_13`` 의 설명).
     assert ADDED_IN_PHASE_6AC <= set(ValidationCode.__members__)
+    assert ADDED_IN_PHASE_6AD <= set(ValidationCode.__members__)
     assert (
         len(ValidationCode)
         - len(ADDED_IN_FOLLOWUP8)
         - len(ADDED_IN_PHASE_6AC)
+        - len(ADDED_IN_PHASE_6AD)
         == 48
     )
     assert len(ConditionResult) == 3

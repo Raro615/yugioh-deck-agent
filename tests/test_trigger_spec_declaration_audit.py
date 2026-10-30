@@ -530,12 +530,25 @@ def test_07_the_condition_field_works_but_cannot_see_the_event(repository):
         for name in names
         if any(word in name.lower() for word in ("event", "timing", "actor"))
     }
-    #: 소환이 든 이름은 **정확히 둘**이고, 둘 다 "지금 일반 소환을 할 수
+    #: 소환이 든 이름은 **정확히 셋**이고, 셋 다 "지금 소환을 할 수
     #: 있는가" 를 묻는 **상태** 술어다 — "소환이 일어났는가" 가 아니다.
+    #:
+    #: 🔴 둘 → **셋** (Phase 6-AD, ``SpecialSummonPermitted``). 그것도 판만
+    #: 본다 — 양쪽 필드의 앞면 카드를 훑어 특수 소환을 금지하는 것이 있는지
+    #: 보고, 사건도 시점도 읽지 않는다 (아래 루프가 그것을 센다).
     assert {name for name in names if "summon" in name.lower()} == {
         "_NormalSummonRightAvailable",
         "_NormalSummonProcedure",
+        "SpecialSummonPermitted",
     }
+    #: 🔴 새 술어도 **사건 어휘를 쓰지 않는다** — 다른 모듈에 있으므로 아래
+    #: 루프와 따로 센다.
+    permitted_body = _function_body(
+        "engine/condition/model.py", "SpecialSummonPermitted", "evaluate"
+    )
+    assert "view" in permitted_body
+    for absent in ("SummonKind", "MonsterSummoned", "TimingEvent", "delta"):
+        assert absent not in permitted_body, absent
     validation = source_of("engine/action_validation.py")
     for predicate in ("_NormalSummonRightAvailable", "_NormalSummonProcedure"):
         body = _function_body("engine/action_validation.py", predicate, "evaluate")

@@ -884,8 +884,19 @@ def test_b12_activation_time_targeting_is_untouched(repository):
     🔴 **Phase 6-AC 가 "나머지" 를 열넷으로 늘렸다** (등재 15 → 16). 더해진
     성유물－『성장』 ② 는 **패**를 보고, 패는 가려진 존이 아니므로
     (``CONCEALED_ZONES`` 는 덱 · 엑스트라뿐) 미루는 쪽이 아니라 **그대로
-    두는 쪽**에 들어간다. 미뤄진 둘은 여전히 둘이다 — 이 Phase 가 미루는
-    범위를 넓히지 않았다는 것이 이 수가 말하는 사실이다.
+    두는 쪽**에 들어간다.
+
+    🔴 **Phase 6-AD 가 그 판단을 정정했다 — 미뤄진 것은 셋이다.** 볼 수
+    있는지(``CONCEALED_ZONES``)와 **규칙상 언제 고르는지**는 다른 축이고,
+    『성장』 ② 의 공식 스크립트는 ``s.sptg1`` 에서 후보의 **존재만** 확인
+    하고 (``Duel.IsExistingMatchingCard``) 고르는 것은 ``s.spop1`` 의
+    ``Duel.SelectMatchingCard`` 다. 그래서 그 효과는 **선언으로**
+    미뤄진다 (``TargetSpec.chosen_at_resolution``).
+
+    이 시험이 지키는 사실은 그대로다 — **선언하지 않은 효과는 한 글자도
+    달라지지 않는다.** 아래 두 루프가 그것을 센다: 덱을 보는 둘은 예전처럼
+    가려진 존 때문에 미뤄지고, 『성장』 ② 만 **선언 때문에** 미뤄진다.
+    벌금(패 2장)은 여전히 발동 시점이다.
     """
     from engine.effect.library import EFFECT_LIBRARY
     from engine.target_bridge import (
@@ -906,13 +917,25 @@ def test_b12_activation_time_targeting_is_untouched(repository):
         else:
             kept.append(definition.effect_ref.card_id)
 
-    assert sorted(deferred) == sorted([GIRSU, BURIAL]), deferred
-    #: 🔴 13 → 14 (Phase 6-AC) — 성유물－『성장』 ② 는 **패**를 본다.
-    assert len(kept) == 14, kept
+    assert sorted(deferred) == sorted([GIRSU, BURIAL, GROWTH]), deferred
+    #: 🔴 13 → 14 (Phase 6-AC) → **13** (Phase 6-AD). 6-AC 는 성유물－
+    #: 『성장』 ② 를 "패를 보므로 그대로 두는 쪽" 에 넣었고, 6-AD 가 그
+    #: 판단을 정정해 **미루는 쪽**으로 옮겼다. 열셋은 6-AC 전과 같은
+    #: 집합이다 — 그것이 이 수가 말하는 사실이다 (등재된 다른 효과는 한
+    #: 글자도 달라지지 않았다).
+    assert len(kept) == 13, kept
     from engine.effect.library import WORLD_WAND
 
-    assert WORLD_WAND in kept
-    #: 🔴 미뤄진 둘은 **덱을 본다** — 그것이 미루는 유일한 이유다.
+    #: 🔴 **이제 미루는 쪽이다** (Phase 6-AD) — 6-AC 는 이 줄을 ``in kept``
+    #: 로 적었고, 그 단언이 "패는 보이므로 발동 시점에 고른다" 라는 틀린
+    #: 판단을 고정하고 있었다.
+    assert WORLD_WAND in deferred
+    assert WORLD_WAND not in kept
+    #: 🔴 **미루는 이유가 둘이고, 섞이지 않는다** (Phase 6-AD).
+    #:
+    #: 덱을 보는 둘은 **가려진 존** 때문에 미뤄지고 (짐작), 『성장』 ② 는
+    #: **정의의 선언** 때문에 미뤄진다 (읽은 것). 한 루프로 합치면 "선언이
+    #: 짐작보다 먼저" 라는 성질이 보이지 않는다.
     for card_id in deferred:
         definition = next(
             e.definition
@@ -920,9 +943,17 @@ def test_b12_activation_time_targeting_is_untouched(repository):
             if e.definition.effect_ref.card_id == card_id
         )
         looked = set()
+        declared = False
         for binding in definition.targets:
             looked |= binding.spec.looked_at_zones()
-        assert looked & CONCEALED_ZONES, (card_id, looked)
+            declared = declared or binding.spec.chosen_at_resolution
+        if card_id == GROWTH:
+            #: 패만 본다 — 가려진 존이 아니다. 그래도 미뤄진다.
+            assert not (looked & CONCEALED_ZONES), (card_id, looked)
+            assert declared is True
+        else:
+            assert looked & CONCEALED_ZONES, (card_id, looked)
+            assert declared is False
 
     #: 벌금은 패를 본다 — 발동 시점에 2장을 그대로 받는다.
     from engine.effect.library import definition_registry
@@ -1317,7 +1348,17 @@ def test_c12_the_discord_and_cli_paths_share_the_same_wiring():
     #: 만들고 둘이 그것을 부른다.
     factory = _source("app/main.py")
     assert "def opening_wiring(" in factory
-    assert "PolicyChooser(FirstPermittedChoice())" in factory
+    #: 🔴 **기준점은 그대로이고, 그 앞에 선호가 붙을 수 있다** (Phase 6-AD).
+    #:
+    #: 6-AC 까지 이 줄은 ``PolicyChooser(FirstPermittedChoice())`` 한 조각을
+    #: 글자로 찾았다. 6-AD 가 경로의 **해결 시점 선호**를 그 자리에 실으면서
+    #: 두 줄이 되었다 — 기준점을 만들고, 선호가 있으면 그것으로 감싼다.
+    #: 두 자리를 각각 센다: 기준점이 사라지면 "최선이 아니다" 가 거짓이 되고,
+    #: 감싸는 쪽이 사라지면 경로의 의도가 해결 시점에 닿지 않는다.
+    assert "FirstPermittedChoice()" in factory
+    assert "PolicyChooser(selector)" in factory
+    assert "PreferredCardChoice(wanted, selector)" in factory
+    assert "resolution_preferences" in factory
     assert "TriggerSource(repository)" in factory
     #: 🔴 **기준점임을 그 자리가 말한다** — 최선이라고 적지 않는다.
     assert "기준점" in factory

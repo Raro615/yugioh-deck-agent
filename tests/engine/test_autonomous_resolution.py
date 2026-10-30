@@ -538,7 +538,28 @@ def test_c05_declining_leaves_the_board_untouched(repository):
 @pytest.mark.real_card
 @requires_official_db
 def test_c06_an_empty_deck_offers_nothing_and_invents_nothing(repository):
-    """§8-10 — 덱에 적법한 후보가 없으면 허용 후보가 0건이고 멈춘다."""
+    """
+    §8-10 — 덱에 적법한 후보가 없으면 **발동 자체가 거절된다.**
+
+    🔴 **Phase 6-AD 가 이 시험의 단언을 정정했다.** 6-Y~6-AC 는 여기서
+    *"발동은 정상 경로로 일어나고 막히는 자리는 해결 중이다"* 를 쟀는데,
+    공식 스크립트는 그렇게 적지 않는다 — ``c69811710.lua`` 의 ``s.tgtg``
+    는 ``chk==0`` 에서::
+
+        Duel.IsExistingMatchingCard(s.tgfilter,tp,LOCATION_DECK,0,1,nil)
+
+    를 돌려준다. 즉 **후보의 존재가 발동 조건**이고, 덱에 「오르페골」 ·
+    「성유물」 카드가 한 장도 없으면 이 효과는 **발동할 수 없다.**
+
+    6-AD 가 발동 관문의 해결 시점 갈래에 ``TargetResolver.availability`` 를
+    더하면서 그 조건이 실제로 걸리기 시작했다. 그래서 막히는 자리가 해결
+    중에서 **발동 시점**으로 옮겨졌고, 이 시험은 그 **올바른 규칙**을
+    재도록 고쳤다 — 단언을 지우거나 약하게 만들지 않았다.
+
+    🔴 **자기 덱을 보는 것은 반칙이 아니다.** 플레이어는 자기 덱의 내용을
+    알고, 공식 스크립트도 같은 자리에서 같은 것을 묻는다. 엔진에서는 그
+    규칙이 선언한 ``looked_at`` 이 열린 관측으로만 센다.
+    """
     plain = sorted(
         card.id
         for card in repository.all_cards()
@@ -557,26 +578,39 @@ def test_c06_an_empty_deck_offers_nothing_and_invents_nothing(repository):
     )
     duel = setup.duel
     _agent_summons(duel)
-    #: 🔴 **제안은 생긴다** — 발동 조건은 덱 장수만 보므로 카드군 카드가
-    #: 없어도 적법하다. 막히는 자리는 그 **뒤**다.
+    #: 🔴 **제안은 생긴다** — 유발의 다섯 관문은 사건 · 시점 · 선언을 보고,
+    #: 대상 후보의 수를 세지 않는다. 막히는 자리는 **발동 관문**이다.
     offers = trigger_offers(duel, repository, MINE)
     assert len(offers) == 1, offers
 
     run = run_trigger(
         duel, repository, MINE, offers[0], FirstPermittedChoice(), chooser=chooser
     )
-    #: 🔴 **발동은 정상 경로로 일어난다** — 막히는 자리는 해결 중이다.
-    assert run.activated is True
-    assert run.links == 1
-    #: 후보가 0건이므로 고를 것이 없고, 장수로 거절된다.
-    assert run.choice is not None
-    assert run.choice.permitted == ()
-    assert run.chosen == ()
+    #: 🔴 **발동이 거절된다** — 체인이 서지 않는다 (``links == 0``).
+    assert run.links == 0
     assert run.refused is not None
-    assert "최소 1장" in run.refused.reason, run.refused.reason
-    #: 🔴 **그 거절은 엔진이 쓴 문장이다** — 배선이 미리 걸러 낸 것이
-    #: 아니라 ``TargetResolver._check_count`` 가 해결 중에 낸 것이다.
-    assert "too_few_selected" in run.refused.reason, run.refused.reason
+    #: 🔴 **고를 일이 아예 없었다** — 해결 시점 선택을 묻지 않았다.
+    assert run.choice is None
+    assert run.chosen == ()
+    #: 🔴 **후보에 오르지도 않았다** — 그리고 그 보류에 **엔진이 쓴 코드**가
+    #: 실려 있다 (보완8 이 세운 계약). "허가되지 않았다" 만으로는 "사건이
+    #: 없다" 와 "후보가 없다" 를 가를 수 없다.
+    from engine.action import PlayerAction as _PlayerAction
+    from engine.validation import CODE_VALIDITY, ActionValidity, ValidationCode
+
+    asked = _PlayerAction.activate_effect(
+        actor=MINE, source=offers[0].source, effect_ref=offers[0].effect_ref
+    )
+    legal = duel.legal_actions(MINE)
+    assert asked not in legal.allowed
+    held = [
+        reason
+        for reason in legal.withheld
+        if reason.code is ValidationCode.NO_CANDIDATES
+    ]
+    assert len(held) == 1, [(r.kind.value, r.code.value) for r in legal.withheld]
+    assert CODE_VALIDITY[held[0].code] is ActionValidity.INVALID
+    assert "후보" in held[0].reason, held[0].reason
     #: 🔴 **카드를 만들지 않았다.**
     assert len(duel.state.player(MINE).zone(Zone.GRAVE)) == 0
     assert len(duel.state.player(MINE).zone(Zone.DECK)) == 35

@@ -539,6 +539,9 @@ def test_14_no_validation_code_was_added_or_redefined():
         #: 함께 센다. 모름 쪽은 늘지 않았다.
         "EFFECT_USE_LIMIT_REACHED",
         "LINK_MATERIAL_INVALID",
+        #: 🔴 Phase 6-AD 가 하나를 더했다 — 특수 소환이 금지된 판의 거절
+        #: 이고, 확인된 금지이므로 ``INVALID`` 쪽이다.
+        "SPECIAL_SUMMON_FORBIDDEN",
     }
     assert added <= set(ValidationCode.__members__)
     assert len(ValidationCode) - len(added) == 48
@@ -548,7 +551,7 @@ def test_14_no_validation_code_was_added_or_redefined():
     #: 🔴 policy 가 enum 전부를 덮는다는 성질은 그대로다 (import 때 터진다).
     assert set(CODE_VALIDITY) == set(ValidationCode)
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(CODE_VALIDITY) == 53
+    assert len(CODE_VALIDITY) == 54
     for name in (
         "OK",
         "CANDIDATE_NOT_ELIGIBLE",
