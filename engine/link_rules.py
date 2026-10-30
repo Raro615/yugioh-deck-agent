@@ -46,6 +46,11 @@ from enum import Enum
 
 from engine.archetype import matches_setcode
 from engine.ids import InstanceId
+from engine.summon_restriction import (
+    SUMMON_PROHIBITION_RULE_MISSING,
+    SUMMON_RESTRICTION_BLIND_SPOTS,
+    assess_special_summon_permission,
+)
 from engine.vocabulary import Position, Zone
 
 
@@ -98,10 +103,16 @@ LINK_MATERIAL_RULE_MISSING: str = (
 )
 
 #: 🔴 **언제나 못 보는 것.** 판정을 바꾸지 않는다 (모듈 머리말).
+#:
+#: 🔴 **특수 소환 금지는 여기 없다** (Phase 6-AD). 6-AC 까지 이 목록이
+#: 그 범위를 덮고 있었고, 그래서 금지가 걸린 판에서도 링크 소환이
+#: 수락되었다 — 못 본 것으로 적어 두고 **실행은 허가하는** 모양이었다.
+#: 지금은 :func:`~engine.summon_restriction.assess_special_summon_permission`
+#: 이 실제로 판정하고, 그 함수가 못 보는 범위만 아래에 더해진다.
 LINK_BLIND_SPOTS: tuple[str, ...] = (
     f"{LINK_MATERIAL_BAN_RULE} 를 확인하지 않았습니다 — 그 제약을 적는 "
     "자리가 판에 없습니다.",
-)
+) + SUMMON_RESTRICTION_BLIND_SPOTS
 
 
 # ======================================================================
@@ -390,7 +401,22 @@ def assess_link_materials(
     엑스트라 덱에 있는가), 그 다음 소재 조건을 찾고, 마지막에 고른 소재를
     하나하나 본다. 반대로 하면 "소재가 틀렸다" 가 "애초에 링크 몬스터가
     아니다" 를 가린다.
+
+    🔴 **특수 소환 금지를 함께 본다** (Phase 6-AD). 링크 소환은 규칙상
+    특수 소환이므로 (공식 룰북) 판에 걸린 특수 소환 금지가 이 행동도
+    막는다. 6-AC 까지 이 함수는 그것을 보지 않았고, 그래서 파슬 다이너
+    파키세팔로가 필드에 **그대로 남아 있는** 판에서 링크 소환이
+    ``accepted=True`` · ``code=OK`` 로 수락되었다 (실측 — 그쪽 모듈 머리말).
+
+    그 판정이 **두 자리로 갈려 들어간다.**
+
+    1. **확인된 금지**는 소재를 보기 전에 막는다 (``ILLEGAL``). 규칙이 답한
+       것이 소재 조건의 모름보다 먼저다 (보완8 이 세운 구분).
+    2. **판정할 수 없는 금지**는 **마지막에** 본다 (``UNDETERMINED``).
+       소재가 확실히 틀린 행동은 판을 못 읽는 것과 무관하게 틀렸으므로,
+       모름이 확정 거부를 가리지 않게 한다.
     """
+    permission = assess_special_summon_permission(view, actor)
     if source is None:
         return _illegal("소환할 링크 몬스터가 지목되지 않았습니다.")
 
@@ -421,6 +447,12 @@ def assess_link_materials(
         return _illegal(
             f"{source} 는 P{card.controller} 의 카드입니다 "
             f"(P{actor} 가 소환하려 했습니다)."
+        )
+
+    #: 🔴 **확인된 특수 소환 금지가 소재보다 먼저다** (Phase 6-AD).
+    if permission.forbidden:
+        return _illegal(
+            f"링크 소환은 특수 소환입니다 — {permission.reason}"
         )
 
     rule = material_rule_for(definition.card_id)
@@ -521,6 +553,16 @@ def assess_link_materials(
     placement = assess_link_placement(view, actor, materials)
     if placement is not None:
         return placement
+
+    #: 🔴 **마지막 자리** (Phase 6-AD). 소재와 배치가 전부 맞은 뒤에만
+    #: "막는지 모른다" 를 돌려준다 — 그 전에 돌려주면 소재가 확실히 틀린
+    #: 행동이 모름으로 가려진다.
+    if not permission.allowed:
+        return _undetermined(
+            f"링크 소환은 특수 소환입니다 — {permission.reason}",
+            permission.missing_rule or SUMMON_PROHIBITION_RULE_MISSING,
+            rule,
+        )
 
     return _legal(rule)
 

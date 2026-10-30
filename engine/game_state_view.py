@@ -175,6 +175,26 @@ class CardDefinitionView:
     실어 보내는 것은 **이 목록에 든 네 상수의 등장 여부**뿐이다
     (:data:`core.card_model.NORMAL_SUMMON_RESTRICTION_CODES`).
     """
+    special_summon_restriction_signals: tuple[str, ...] | None = None
+    """
+    이 카드가 **특수 소환 자체를 막을 수 있는** 스크립트 상수들
+    (:attr:`core.card_model.Card.special_summon_restriction_signals`,
+    Phase 6-AD).
+
+    :attr:`normal_summon_restriction_signals` 와 **대칭이고 같은 세 가지
+    답**이다 — ``None`` 은 "스크립트를 읽지 못했다", ``()`` 는 "끝까지
+    읽었고 한 건도 없다", 비어 있지 않은 값은 "막을 수 있는 것을 찾았다".
+
+    기본값이 ``None`` 인 것도 같은 이유다 — **손으로 만든 관측이 조용히
+    허가를 얻지 않게** 한다. 이 칸에서는 그 방향이 특히 중요하다: ``()`` 가
+    링크 소환을 허가하는 쪽이므로, 적지 않은 관측은 ``None`` 이어야 한다.
+
+    🔴 **실어 보내는 것은 상수 하나의 등장 여부뿐이다**
+    (:data:`core.card_model.SPECIAL_SUMMON_RESTRICTION_CODES`). 어느 효과
+    자리가 그렇게 적었는지, 누구에게 걸리는지는 내보내지 않는다 — 언제
+    걸리는지는 손으로 읽은 표가 따로 답한다
+    (:data:`engine.summon_restriction.SPECIAL_SUMMON_PROHIBITIONS`).
+    """
     self_grave_text_evidence: bool | None = None
     """
     이 카드 자신의 텍스트가 **자기가 묘지로 보내진 상황**을 적었는가
@@ -274,6 +294,9 @@ class CardDefinitionView:
             normal_summon_restriction_signals=(
                 card.normal_summon_restriction_signals
             ),
+            special_summon_restriction_signals=(
+                card.special_summon_restriction_signals
+            ),
             self_grave_text_evidence=card.self_grave_text_evidence,
             effect_count=len(card.script.effects) if card.script is not None else 0,
         )
@@ -299,6 +322,7 @@ class CardDefinitionView:
             self.type_names,
             self.setcodes,
             self.normal_summon_restriction_signals,
+            self.special_summon_restriction_signals,
             self.self_grave_text_evidence,
             self.effect_count,
         )
@@ -334,6 +358,11 @@ class CardDefinitionView:
                 None
                 if self.normal_summon_restriction_signals is None
                 else list(self.normal_summon_restriction_signals)
+            ),
+            "special_summon_restriction_signals": (
+                None
+                if self.special_summon_restriction_signals is None
+                else list(self.special_summon_restriction_signals)
             ),
             #: ``None`` 은 ``None`` 으로 남는다 — ``False`` 로 바꾸면 "읽지
             #: 않았다" 가 "읽었고 없다" 로 둔갑한다. 지금은 둘의 판정 결과가

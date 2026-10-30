@@ -241,6 +241,24 @@ class ValidationCode(str, Enum):
     접지 않는다.**
     """
 
+    # --- 특수 소환 금지 (Phase 6-AD) -------------------------------------
+    SPECIAL_SUMMON_FORBIDDEN = "special_summon_forbidden"
+    """
+    **판에 걸린 특수 소환 금지가 이 행동을 막는다.**
+
+    ``LINK_MATERIAL_INVALID`` 와 **다른 사실**이다 — 소재는 조건을 만족하고
+    놓을 자리도 있는데, 특수 소환 자체가 금지된 판이다. 두 코드를 합치면
+    보고가 "소재가 틀렸다" 고 적고, 그것은 거짓이다 (6-AD 가 그 자리를
+    실측했다: 파키세팔로가 필드에 남아 있는데 소재는 적법했다).
+
+    🔴 **확인된 금지에만 쓴다.** 금지 상수를 적었지만 그것이 지금 누구에게
+    걸리는지 읽지 못한 카드는 이 코드가 아니라 ``RULE_NOT_IMPLEMENTED`` 이고
+    ``UNKNOWN`` 이다 (``engine.summon_restriction`` 의 세 갈래).
+
+    링크 소환이 이 코드를 받는 이유: **링크 소환은 규칙상 특수 소환이다**
+    (공식 룰북). 그래서 특수 소환에 걸린 금지가 링크 소환에도 걸린다.
+    """
+
     # --- 횟수 제한 · 링크 소재 (Phase 6-AC) ------------------------------
     EFFECT_USE_LIMIT_REACHED = "effect_use_limit_reached"
     """
@@ -398,6 +416,9 @@ CODE_VALIDITY: "dict[ValidationCode, ActionValidity | None]" = {
     #: 읽지 못한 쪽은 이 코드가 아니라 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
     ValidationCode.EFFECT_USE_LIMIT_REACHED: ActionValidity.INVALID,
     ValidationCode.LINK_MATERIAL_INVALID: ActionValidity.INVALID,
+    #: Phase 6-AD — **확인된** 금지의 위반이다. 금지가 지금 걸리는지 읽지
+    #: 못한 쪽은 이 코드가 아니라 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
+    ValidationCode.SPECIAL_SUMMON_FORBIDDEN: ActionValidity.INVALID,
 }
 
 _UNCLASSIFIED = set(ValidationCode) - set(CODE_VALIDITY)

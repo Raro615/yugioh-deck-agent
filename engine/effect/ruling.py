@@ -67,6 +67,7 @@ from engine.game_state_view import (
     GameStateView,
 )
 from engine.ids import InstanceId
+from engine.summon_restriction import assess_special_summon_permission
 from engine.vocabulary import Zone
 
 
@@ -697,6 +698,19 @@ class BoardRuling:
                 ConditionResult.UNKNOWN,
                 f"{instance} 가 보이지 않아 어떤 카드인지 알 수 없습니다.",
             )
+        #: 🔴 **판에 걸린 특수 소환 금지를 먼저 본다** (Phase 6-AD).
+        #:
+        #: 소생 제한보다 **앞**인 것이 뜻을 가진다 — 금지된 판에서는 어느
+        #: 자리에서 나오든 특수 소환이 일어나지 않으므로, "그 자리는 소생
+        #: 제한을 묻는다" 를 먼저 돌려주면 확인된 금지가 모름으로 집계된다
+        #: (6-AB 보완6 · 보완8 이 세운 구분).
+        #:
+        #: 판정은 :mod:`engine.summon_restriction` 하나가 하고, 링크 소환의
+        #: 요구(``_SpecialSummonPermitted``)도 **같은 함수**를 부른다 —
+        #: 두 경로가 같은 판에서 다른 답을 낼 수 없다.
+        permission = assess_special_summon_permission(self._view, card.controller)
+        if permission.forbidden:
+            return RulingVerdict(ConditionResult.FALSE, permission.reason)
         if card.zone not in REVIVAL_LIMIT_FREE_ZONES:
             allowed = " · ".join(
                 sorted(z.value for z in REVIVAL_LIMIT_FREE_ZONES)
@@ -708,7 +722,16 @@ class BoardRuling:
                 f"이력을 적지 않습니다 ({SUMMON_HISTORY_RULE}). 특수 소환이 "
                 f"판정되는 자리는 {allowed} 뿐입니다.",
             )
-        return self.explain(RuleQuestion.MAY_BE_SPECIAL_SUMMONED, instance)
+        decided = self.explain(RuleQuestion.MAY_BE_SPECIAL_SUMMONED, instance)
+        if decided.answer is not ConditionResult.TRUE or permission.allowed:
+            return decided
+        #: 🔴 **막는지 모르는 판에서 허가를 내지 않는다.** 등재된 사실이
+        #: ``TRUE`` 여도 판이 금지하는지 읽지 못했으면 모름이다 (ADR-006).
+        return RulingVerdict(
+            ConditionResult.UNKNOWN,
+            permission.reason,
+            decided.unchecked + permission.unchecked,
+        )
 
     # ------------------------------------------------------------------
     def _facts_of(self, card) -> "CardRuleFacts | None":

@@ -309,6 +309,30 @@ NORMAL_SUMMON_RESTRICTION_CODES: tuple[str, ...] = (
     "EFFECT_SUMMON_PROC",
 )
 
+#: 판 위의 카드가 **특수 소환 자체를 막을 수 있는** EDOPro 스크립트 상수
+#: (Phase 6-AD).
+#:
+#: :data:`NORMAL_SUMMON_RESTRICTION_CODES` 와 **대칭이고 같은 규율**이다 —
+#: 판정이 아니라 **신호**다. 파일 전체 긁기이므로 그 상수가 *누구에게*
+#: 걸리는지는 이 값이 말하지 않는다. 실측: 코퍼스 14,127장 중 792장이
+#: 이 상수를 적는다.
+#:
+#: 🔴 **왜 하나뿐인가.** EDOPro 가 "특수 소환할 수 없다" 를 적는 자리는
+#: 셋이고 뜻이 다르다.
+#:
+#: - ``EFFECT_CANNOT_SPECIAL_SUMMON`` — **특수 소환을 막는다.** 여기 싣는다.
+#: - ``EFFECT_SPSUMMON_CONDITION`` — 소생 제한 · 「특수 소환으로만」 조건.
+#:   막는 것이 아니라 **그 카드가 나오는 조건**이고, 이 저장소에서는
+#:   ``engine.effect.ruling`` 의 소생 제한 쪽이 다룬다.
+#: - ``EFFECT_SPSUMMON_COUNT_LIMIT`` — 횟수 제한. 금지가 아니라 **횟수**다
+#:   (``engine.use_limit``).
+#:
+#: 셋을 한 신호로 합치면 「특수 소환으로만 특수 소환할 수 있다」 를 적은
+#: 카드가 "특수 소환을 막는 카드" 로 읽힌다 — 그것은 거짓 금지다.
+SPECIAL_SUMMON_RESTRICTION_CODES: tuple[str, ...] = (
+    "EFFECT_CANNOT_SPECIAL_SUMMON",
+)
+
 #: 카드가 **자기 자신이 묘지로 보내지는 것**을 전제로 등록하는 사건.
 #:
 #: 룰북이 이 모양을 묘지행에 직접 묶는다 (``Send to the Graveyard``):
@@ -592,6 +616,34 @@ class Card:
             return None
         codes = set(self.script.effect_codes or ())
         return tuple(c for c in NORMAL_SUMMON_RESTRICTION_CODES if c in codes)
+
+    @property
+    def special_summon_restriction_signals(self) -> tuple[str, ...] | None:
+        """
+        이 카드가 **특수 소환 자체를 막을 수 있는** 스크립트 상수들
+        (Phase 6-AD).
+
+        :attr:`normal_summon_restriction_signals` 와 **같은 세 가지 답**이다.
+
+        - ``None`` — **스크립트가 없다.** 확인할 정보가 없다. 막지 않는다는
+          뜻이 **아니다**.
+        - ``()`` — 스크립트를 끝까지 읽었고
+          :data:`SPECIAL_SUMMON_RESTRICTION_CODES` 가 **한 건도 없다**.
+          이것이 "이 카드는 특수 소환을 막지 않는다" 를 확인한 쪽이다.
+        - 비어 있지 않음 — 막을 수 있는 상수를 찾았다. **누구에게 · 언제
+          걸리는지는 이 값이 말하지 않는다** — 그래서 그 자리는 "모른다" 가
+          되고, 언제 걸리는지는 손으로 읽은 표가 따로 답한다
+          (:data:`engine.summon_restriction.SPECIAL_SUMMON_PROHIBITIONS`).
+
+        🔴 **``()`` 와 ``None`` 을 ``if not`` 으로 합치지 말 것.** 합치면
+        스크립트가 없는 카드가 "막지 않음" 으로 둔갑하고, 그 방향의 오차는
+        **거짓 허가**다 (이 신호를 더한 이유가 바로 그 거짓 허가였다 —
+        파슬 다이너 파키세팔로가 필드에 있는데 링크 소환이 수락되었다).
+        """
+        if self.script is None:
+            return None
+        codes = set(self.script.effect_codes or ())
+        return tuple(c for c in SPECIAL_SUMMON_RESTRICTION_CODES if c in codes)
 
     @property
     def self_grave_text_evidence(self) -> bool | None:
