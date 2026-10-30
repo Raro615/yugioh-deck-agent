@@ -671,14 +671,14 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 
 | 바뀐 사실 | 파일 수 |
 | --- | --- |
-| `EFFECT_LIBRARY` 18 → 19 | 29 |
-| 실행 가능 15 → 16 | 7 |
-| `OPERATION_RULINGS` 19 → 21 | 5 |
-| `ValidationCode` 51 → 53 (그리고 그 파생 — `INVALID` 42 → 44 · 나머지 39 → 41 · 코드에서 판정을 되찾는 자리 50 → 52) | 11 |
-| `EffectDefinition` 칸 12 → 13 | 9 |
-| 등재 `ordinal` 집합 `{0}` → `{0, 1}` | 11 |
-| `PlayerActionKind` 11 → 12 | 8 |
-| 등재된 몬스터 효과 2 → 3 | 4 |
+| `EFFECT_LIBRARY` 18 → 19 | **32** |
+| 등재 `ordinal` 집합 `{0}` → `{0, 1}` | **14** |
+| `ValidationCode` 51 → 53 (그리고 그 파생 — `INVALID` 42 → 44 · 나머지 39 → 41 · 코드에서 판정을 되찾는 자리 50 → 52) | **11** |
+| 실행 가능 15 → 16 | **7** |
+| `EffectDefinition` 칸 12 → 13 | **7** |
+| `PlayerActionKind` 11 → 12 | **6** |
+| `OPERATION_RULINGS` 19 → 21 | **5** |
+| 등재된 몬스터 효과 2 → 3 | **5** |
 
 🔴 **같은 수를 여러 파일이 박아 두고 있다는 것 자체가 이 저장소의 사실이다.**
 한 자리를 고치면 나머지가 남고, 그래서 **전체 회귀 없이는 끝났는지 알 수
@@ -729,6 +729,13 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 | `test_official_activation_player_action_contract` | 몬스터 효과 등재 2 → 3 · `executable` 의 `ordinal` 분포 `{0: 15, 1: 1}` · 금지 항목 셋은 여전히 없다 |
 | `test_opening_duel_integration` | `combo_messages` · `combo_texts` 에 `line_text` 가 **맨 뒤**에 붙었다 (기본값 `""` — 예전 호출이 그대로 돈다) |
 | `test_deck_builder_planner` 쪽 정적 계획 문구 | `deck/planner.py` 의 "엔진이 구조적으로 지원하지 않는 절차" 목록에서 특수 소환 · 링크 소환 줄을 **정정**했다 — 둘 다 좁은 범위에서 실제로 실행된다 |
+
+**⑥ 전체 회귀가 드러낸 것 (한 번도 열어 보지 않은 파일 19건)**
+
+바뀐 파일만 골라 돌리는 방식으로는 찾을 수 없었던 자리다. 무엇이 왜 바뀌었는지는
+§10.3 의 표에 파일별로 적었고, 그중 둘은 수가 아니라 **읽는 자리**가 틀렸다 —
+등재가 전부 0번 블록이던 때는 `row[3][0]` 으로 읽어도 같았지만, 『성장』 은 공식
+②(ordinal 1)를 등재했으므로 0번을 읽으면 **등재하지 않은 효과**의 코드를 센다.
 
 
 ### 10.3 측정 결과
@@ -816,7 +823,8 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 | --- | --- |
 | `pytest tests/test_orcust_girsu_line.py` | `37 passed · 2:29` · 종료 코드 **0** |
 | `pytest <루트 ② 의 두 파일>` | `2 failed, 67 passed · 3:29` (둘 다 기존 실패) |
-| `pytest <루트 ① 에서 고친 10개 파일>` | FIXAA |
+| `pytest <루트 ① 에서 고친 10개 파일>` | `364 passed · 21:12` · 종료 코드 **0** |
+| `pytest <ck_aa 25개 파일 전부>` (정정 뒤 다시) | GRAA |
 
 🔴 **전체 회귀를 또 한 번 전부 돌리지는 않았다.** 정정은 모두 **그 시험 파일
 안의 단언**이고 production 을 건드리지 않았다 — production 의 마지막 변경은
