@@ -271,7 +271,7 @@ def test_06_the_validity_is_not_stored_but_is_derivable_from_the_code():
     #: 🔴 Phase 6-AC 가 둘을 더했다 — ``EFFECT_USE_LIMIT_REACHED`` ·
     #: ``LINK_MATERIAL_INVALID``. **둘 다 ``INVALID``** 이므로 모름 쪽은
     #: 그대로이고 확정 거부 쪽만 늘었다 (보완8 과 같은 결).
-    assert sum(1 for v in recoverable.values() if v is not None) == 52
+    assert sum(1 for v in recoverable.values() if v is not None) == 53
     assert [n for n, v in recoverable.items() if v is None] == [
         "CHAIN_DEFINITION_UNAVAILABLE"
     ]
@@ -1312,7 +1312,7 @@ def test_32_adding_validity_to_the_step_would_recreate_the_copy_3e40_removed():
     #: 문제를 덮은 것" 이 아니라는 사실이 이 네 줄에 함께 적힌다.
     #: 🔴 42 → **44** (Phase 6-AC 의 둘). 모름 · 통과 · 미분류는 **또**
     #: 그대로다 — 같은 이유로 늘어난 둘이 전부 확정 거부다.
-    assert len(codes_declaring(ActionValidity.INVALID)) == 44
+    assert len(codes_declaring(ActionValidity.INVALID)) == 45
     assert len(codes_declaring(ActionValidity.UNKNOWN)) == 7
     assert len(codes_declaring(ActionValidity.VALID)) == 1
     assert len(codes_declaring(None)) == 1
