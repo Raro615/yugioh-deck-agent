@@ -511,9 +511,11 @@ def test_10_every_registered_effect_is_free_chain_not_a_trigger(repository):
 
     assert len(EFFECT_LIBRARY) >= 16
     #: 🔴 Phase 6-V 에서 ``EVENT_SUMMON_SUCCESS`` 가 들어왔다 (기르수 ①).
-    #: 아래 "코드가 없는 쪽이 정확히 한 건이고 그것이 기동 효과" 는 그대로다.
+    #: 🔴 Phase 6-AC 에서 ``EVENT_TO_GRAVE`` 가 들어왔다 (성유물－『성장』 ②).
+    #: 아래 "코드가 없는 쪽이 정확히 한 건이고 그것이 기동 효과" 는 그대로다 —
+    #: 늘어난 둘은 **유발 쪽**이고 코드 없음 쪽은 하나도 움직이지 않았다.
     assert set(codes) == {
-        "EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", None
+        "EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE", None
     }, collections.Counter(codes)
     #: 🔴 코드가 없는 쪽이 **정확히 한 건**이고, 그것이 기동 효과다.
     from engine.effect.library import HONEST

@@ -634,7 +634,14 @@ def test_f01_the_gate_now_tells_evidence_from_no_evidence(repository):
 
     #: 🔴 **갈린다** — 이것이 6-W 와 달라진 전부다.
     assert answers["A 증거 있다"][0] is ConditionResult.TRUE, answers
-    assert "자기 묘지행을 전제한 효과가 그 카드 텍스트에 있다" in answers["A 증거 있다"][1]
+    #: 🔴 **Phase 6-AC 가 근거의 출처를 바꿨다.** 6-X 부터 이 답은 규칙서에서
+    #: **파생된** 것이었고 (``self_grave_text_fact``), 6-AC 가 이 카드
+    #: (성유물－『성장』)를 ``OPERATION_RULINGS`` 에 **등재**했으므로 등재가
+    #: 먼저 답한다. 답(``TRUE``)은 같고 **왜 그런지를 적는 자리**가 바뀌었다 —
+    #: 그 차이를 지우지 않으려고 사유도 등재된 문장으로 다시 고정한다.
+    #: 둘이 같은 답에 이른다는 것은 ``test_i01`` 이 따로 센다.
+    assert "공식 텍스트 전문을 읽었고" in answers["A 증거 있다"][1]
+    assert "그 상황을 스스로 전제한다" in answers["A 증거 있다"][1]
 
     #: 증거가 없는 둘은 그대로 ``UNKNOWN`` 이다 — 근거 없는 허가를 주지
     #: 않는다는 것이 이 Phase 가 **지킨** 쪽이다.
@@ -662,15 +669,21 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
     2. ``rulebook_facts`` — 순수 통상 몬스터만
 
     기르수 후보 47장 중 어느 쪽에도 걸리는 카드가 **0장**이다.
+
+    🔴 **Phase 6-AC 가 그 0 을 1 로 만들었다.** 성유물－『성장』 을 등재했고,
+    그 카드는 기르수 후보 안에 있다. 이 시험이 지키는 사실은 "답이 나오는
+    자리가 **둘뿐**이다" 이고 그것은 그대로다 — 바뀐 것은 그 둘 중 하나가
+    이제 후보 하나를 덮는다는 것이다. 그래서 **0장** 을 **그 한 장**으로
+    고정한다: 느슨하게 하지 않고 어느 카드인지 적는다.
     """
     pool = _orcust_pool(repository)
     covered = [cid for cid in pool if _facts_for(repository, cid) is not None]
-    assert covered == [], covered
+    assert covered == [SELF_GRAVE_TRIGGER], covered
 
-    #: 등록소는 19장이고 그 안에 후보가 없다.
+    #: 등록소는 21장이고 그 안에 든 후보는 **그 한 장**이다.
     #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
     assert len(OPERATION_RULINGS) == 21
-    assert not (set(OPERATION_RULINGS.card_ids) & set(pool))
+    assert set(OPERATION_RULINGS.card_ids) & set(pool) == {SELF_GRAVE_TRIGGER}
 
 
 @pytest.mark.real_card
@@ -947,8 +960,18 @@ def test_i01_one_registered_fact_lets_the_same_path_resolve(repository):
     )
 
     #: 🔴 **사본**이다. 원본 등록소는 건드리지 않는다.
+    #:
+    #: 🔴 Phase 6-AC 가 이 카드를 **원본에** 등재했으므로, 사본에서는 그
+    #: 자리를 **빼고** 만든다. 한 카드의 사실을 두 군데에 적을 수 없다는
+    #: 것이 등록소의 계약이고 (``RulingError``), 그 계약을 우회하지 않는다.
+    #: 빼고 손으로 다시 적는 것이 이 시험이 재려던 바로 그 등가성이다 —
+    #: 손으로 적은 사실과 유도된 사실이 **같은 결과**에 이른다.
     derived = OperationRulingRegistry(
-        tuple(OPERATION_RULINGS.facts_for(c) for c in OPERATION_RULINGS.card_ids)
+        tuple(
+            OPERATION_RULINGS.facts_for(c)
+            for c in OPERATION_RULINGS.card_ids
+            if c != SELF_GRAVE_TRIGGER
+        )
     )
     note = (
         "자기 스크립트가 EVENT_TO_GRAVE 를 SINGLE 로 등록한다 — 공식 "
@@ -967,7 +990,8 @@ def test_i01_one_registered_fact_lets_the_same_path_resolve(repository):
             restriction_note=note,
         )
     )
-    assert len(derived) == len(OPERATION_RULINGS) + 1
+    #: 🔴 하나를 빼고 하나를 적었으므로 크기는 원본과 **같다**.
+    assert len(derived) == len(OPERATION_RULINGS)
 
     deck_before = len(duel.state.player(MINE).zone(Zone.DECK))
     grave_before = len(duel.state.player(MINE).zone(Zone.GRAVE))
@@ -1014,8 +1038,18 @@ def test_i02_the_production_registry_is_untouched():
     """
     #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
     assert len(OPERATION_RULINGS) == 21
-    assert SELF_GRAVE_TRIGGER not in OPERATION_RULINGS
-    #: 원본에서 묘지 질문에 답하는 것은 **통상 몬스터 한 장**뿐이다.
+    #: 🔴 **이 카드는 이제 원본에 있다** (Phase 6-AC). 그래서 "새지 않았다"
+    #: 를 유무로는 더 이상 셀 수 없고, **사유로** 센다: 원본이 들고 있는
+    #: 문장은 6-AC 가 적은 등재 사유이고, ``test_i01`` 이 사본에 적은
+    #: 스크립트 근거 문장이 **아니다.**
+    assert SELF_GRAVE_TRIGGER in OPERATION_RULINGS
+    registered_note = OPERATION_RULINGS.facts_for(SELF_GRAVE_TRIGGER).answer_for(
+        RuleQuestion.MAY_BE_SENT_TO_GRAVE
+    ).note
+    assert "공식 텍스트 전문을 읽었고" in registered_note, registered_note
+    assert "EVENT_TO_GRAVE" not in registered_note, registered_note
+    #: 원본에서 묘지 질문에 답하는 것은 **두 장**이다 — 통상 몬스터 하나와
+    #: 6-AC 가 등재한 성유물－『성장』. 느슨하게 하지 않고 둘을 적는다.
     answering = [
         card_id
         for card_id in OPERATION_RULINGS.card_ids
@@ -1024,4 +1058,4 @@ def test_i02_the_production_registry_is_untouched():
         )
         is not None
     ]
-    assert answering == [FEATHERMAN], answering
+    assert sorted(answering) == sorted([FEATHERMAN, SELF_GRAVE_TRIGGER]), answering

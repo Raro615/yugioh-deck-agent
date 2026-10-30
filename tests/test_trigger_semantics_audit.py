@@ -366,7 +366,14 @@ def test_09_no_registered_effect_needs_a_trigger_event(repository):
     #: (``EVENT_SUMMON_SUCCESS`` · ``SINGLE``+``TRIGGER_O``)을 등재했으므로
     #: 코드와 종류 양쪽에 유발이 들어온다. 지우는 대신 **정확히 하나**임을
     #: 센다 — ``QUICK`` 과 ``FLIP`` 은 여전히 0건이고 그것이 남은 사실이다.
-    assert codes == {"EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", None}, codes
+    #:
+    #: 🔴 **Phase 6-AC 가 하나를 둘로 만들었다** (성유물－『성장』 ② ·
+    #: ``EVENT_TO_GRAVE`` · ``SINGLE``+``TRIGGER_O``). 종류 집합은 **하나도**
+    #: 늘지 않았다 — 두 유발이 같은 종류 선언을 쓴다. ``QUICK`` 과 ``FLIP``
+    #: 은 여전히 0건이고, 그것이 이 시험에 남은 사실이다.
+    assert codes == {
+        "EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE", None
+    }, codes
     assert types == {"ACTIVATE", "IGNITION", "SINGLE", "TRIGGER_O"}, types
     assert not [t for t in types if t.startswith(("QUICK", "FLIP"))], types
     assert sorted(t for t in types if t.startswith("TRIGGER")) == ["TRIGGER_O"]
@@ -439,10 +446,15 @@ def test_11_free_chain_must_not_be_read_as_a_trigger_event(repository):
     #: 요지였다. 기르수 ① 이 등재되면서 **실제로 유발 사건을 쓰는 효과가
     #: 하나** 생겼다.
     #:
-    #: 두 읽기의 차이는 그대로 남는다 — 틀린 읽기는 17건 전부를 유발로
-    #: 보고(``EVENT_FREE_CHAIN`` 까지), 맞는 읽기는 **하나만** 본다.
-    assert len(naive_trigger) == 17, "틀린 읽기는 전부를 유발로 본다"
-    assert correct_trigger == [69811710], correct_trigger
+    #: 두 읽기의 차이는 그대로 남는다 — 틀린 읽기는 18건 전부를 유발로
+    #: 보고(``EVENT_FREE_CHAIN`` 까지), 맞는 읽기는 **둘만** 본다.
+    #:
+    #: 🔴 Phase 6-AC: 틀린 읽기 17 → 18 · 맞는 읽기 1 → 2 (성유물－『성장』
+    #: ②). **차이는 16 그대로다** — 그것이 이 시험이 재는 값이고, 등재가
+    #: 늘어도 두 읽기의 거리는 바뀌지 않는다.
+    assert len(naive_trigger) == 18, "틀린 읽기는 전부를 유발로 본다"
+    assert sorted(correct_trigger) == [69811710, 93920420], correct_trigger
+    assert len(naive_trigger) - len(correct_trigger) == 16
 
 
 @pytest.mark.real_card

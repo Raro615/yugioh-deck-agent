@@ -63,6 +63,7 @@ from tests.engine.test_trigger_normal_path_integration import (
     THEIRS,
     _board,
     _settle,
+    _settle_registration,
     _summon,
     _trigger_action,
 )
@@ -497,8 +498,22 @@ def test_b04_synthetic_the_block_lifts_once_the_duty_is_done(repository):
     assert duel.apply(action).accepted is True
     _settle(duel)
 
-    #: 사건을 썼으므로 기회가 닫혔다.
-    assert duel._mandatory_offers(MINE) == ()
+    #: 사건을 썼으므로 **그 사건의** 기회가 닫혔다.
+    #:
+    #: 🔴 **Phase 6-AC 가 범위를 좁히게 만들었다.** 해결이 성유물－『성장』 을
+    #: 묘지로 보내고 6-AC 가 그 ② 를 등재했으므로, **새 사건이 새 기회를
+    #: 연다.** 그것은 이 시험이 재는 "쓴 기회가 다시 열리지 않는다" 와 다른
+    #: 사실이다. 그래서 단언을 "하나도 없다" 에서 **"기르수의 것이 없다"** 로
+    #: 좁힌다 — 느슨하게 하는 것이 아니라 재는 대상을 정확히 가리킨다.
+    remaining = {
+        offer.effect_ref.card_id for offer in duel._mandatory_offers(MINE)
+    }
+    assert GIRSU not in remaining, remaining
+    #: 그리고 남은 것은 **새 사건의 것**이다 — 번호가 소환 사건보다 뒤다.
+    assert remaining <= {GROWTH}, remaining
+    #: 새로 열린 기회를 지나면 흐름이 이어진다.
+    _settle_registration(duel)
+    _settle(duel)
     legal = duel.legal_actions(MINE)
     assert [a for a in legal.allowed if a.kind is PlayerActionKind.END_PHASE]
     del chooser
@@ -869,6 +884,11 @@ def test_d04_a_fork_does_not_write_back_into_the_original(repository):
 
     #: 사본이 페이즈를 넘겨도 원본의 바닥은 움직이지 않는다.
     _settle(fork)
+    #: 🔴 해결이 성유물－『성장』 을 묘지로 보냈으면 그 ② 의 등재 기회가
+    #: 열려 있고, 그 기회를 지나기 전에는 페이즈를 넘길 수 없다 (Phase
+    #: 6-AC). 그 거절은 **옳다** — 지나지 않은 기회가 남아 있었다.
+    _settle_registration(fork)
+    _settle(fork)
     _end_phase(fork)
     assert fork.timing_floor > before_floor
     assert duel.timing_floor == before_floor
@@ -889,10 +909,24 @@ def test_d05_a_state_hash_alone_does_not_decide_what_can_be_activated(repository
     _summon(duel)
     fork = dataclasses.replace(duel, state=duel.state.clone())
 
-    #: 사본에서 기회만 소비하고 **판은 아직 바꾸지 않는다** (해결 전이다).
+    #: 사본에서 발동한다 — 해결 전이므로 카드는 아직 움직이지 않는다.
     assert fork.apply(_trigger_action(fork)).accepted is True
+
+    #: 🔴 **Phase 6-AC 가 이 시험의 발판을 바꿨다.** 기르수 ① 에 「이
+    #: 카드명의 ①의 효과는 1턴에 1번」 을 등재했으므로 (``use_limit``),
+    #: 발동이 ``GameState.uses`` 에 기록을 남긴다. 그 기록은 판의 모양에
+    #: **들어간다** (``canonical_state`` 가 ``uses`` 를 담는다). 그래서
+    #: "발동만으로는 해시가 바뀌지 않는다" 는 더 이상 참이 아니다.
+    assert fork.state.state_hash() != duel.state.state_hash()
+    assert len(fork.state.uses) == 1 and len(duel.state.uses) == 0
+
+    #: 🔴 **그래도 이 시험의 주장은 그대로이고, 오히려 날카로워진다.**
+    #: 사용 기록을 **같게 맞춰** 해시를 되돌려도 기회는 돌아오지 않는다 —
+    #: 기회는 흐름 위의 자리(``consumed_events`` · ``timing_floor``)이고
+    #: 판의 모양에 들어 있지 않다. 그것이 둘을 섞으면 안 되는 이유다.
+    fork.state.uses.clear()
     assert fork.state.state_hash() == duel.state.state_hash(), (
-        "발동만으로는 판의 모양이 바뀌지 않는다 — 그래서 이 시험이 성립한다"
+        "사용 기록을 맞추면 판의 모양은 같다 — 그래서 이 시험이 성립한다"
     )
     #: 🔴 그런데 **기회는 다르다.**
     assert fork.consumed_events != duel.consumed_events

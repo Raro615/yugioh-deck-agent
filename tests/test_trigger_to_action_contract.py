@@ -510,7 +510,12 @@ def test_10_the_existing_action_kinds_already_cover_the_optional_choice():
     kinds = {kind.name for kind in PlayerActionKind}
     assert {"ACTIVATE_EFFECT", "PASS"} <= kinds
     #: 측정값 11개. 늘어나면 이 Phase 의 결론을 다시 봐야 한다.
-    assert len(kinds) == 11
+    #:
+    #: 🔴 **늘었고, 결론을 다시 봤다** (Phase 6-AC: 11 → 12). 더해진
+    #: ``LINK_SUMMON`` 은 **링크 소환 절차**이고 임의 발동과 무관하다. 이
+    #: Phase 의 결론("임의 발동은 ``ACTIVATE_EFFECT`` 와 ``PASS`` 로 이미
+    #: 표현된다")은 그대로다 — 아래 두 단언이 그 결론을 직접 센다.
+    assert len(kinds) == 12
     #: 시스템 전용 종류를 만들지 않았다.
     assert not {k for k in kinds if "SYSTEM" in k or "TRIGGER" in k}
 

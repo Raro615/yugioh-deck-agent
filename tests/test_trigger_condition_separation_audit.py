@@ -169,6 +169,10 @@ def test_01_the_effect_definition_has_no_event_field():
     **사건 칸이 아니다** — "어떤 절차로 발동하는가" (기동 · 유발 · 플립 ·
     유발즉시) 이고, "무엇이 일어났는가" 를 담지 않는다. 사건을 담는 칸은
     여전히 없고, 그것이 이 테스트가 지키는 사실이다.
+
+    🔴 **Phase 6-AC 가 칸을 하나 더했다** (``use_limit``). 그것도 **사건
+    칸이 아니다** — "1턴에 몇 번까지인가" 이고, 그 카드 텍스트에서 옮긴
+    값이다. 사건을 담는 칸은 여전히 없다.
     """
     names = [field.name for field in dataclasses.fields(EffectDefinition)]
     assert names == [
@@ -186,6 +190,10 @@ def test_01_the_effect_definition_has_no_event_field():
         #: 않으며, 아래의 ``absent`` 목록과 ``"EVENT" not in source`` 가
         #: 그 사실을 그대로 센다.
         "activation_waits_for_event",
+        #: 🔴 Phase 6-AC — 「1턴에 1번」 (``UseLimit``). 그 카드 텍스트에서
+        #: 옮긴 값이고 사건이 아니다. 담는 자리는 :mod:`engine.use_limit`
+        #: 이며, **판의 기록**(``UseRegistry``)과 일부러 갈라 두었다.
+        "use_limit",
         "provenance",
     ]
     for absent in ("code", "event", "point", "trigger", "setcode", "timing"):
@@ -316,10 +324,21 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 🔴 **Phase 6-V 가 "등재된 효과가 유발 사건을 쓰지 않는다" 를
     #: 끝냈다.** 기르수 ① 이 ``EVENT_SUMMON_SUCCESS`` 를 쓴다. 지우는 대신
     #: 세 갈래를 **각각** 센다 — 자유 체인 16 · 유발 1 · 코드 없음 1.
-    assert len(codes) == 18
-    assert set(codes) == {"EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", None}
+    #:
+    #: 🔴 **Phase 6-AC 가 네 갈래로 만들었다** — 성유물－『성장』 ②
+    #: (``EVENT_TO_GRAVE``). 자유 체인 16 과 코드 없음 1 은 **하나도**
+    #: 움직이지 않았다: 늘어난 것은 유발 쪽 하나뿐이고, 그것이 이 분포가
+    #: 말하는 사실이다.
+    assert len(codes) == 19
+    assert set(codes) == {
+        "EVENT_FREE_CHAIN",
+        "EVENT_SUMMON_SUCCESS",
+        "EVENT_TO_GRAVE",
+        None,
+    }
     assert len([c for c in codes if c == "EVENT_FREE_CHAIN"]) == 16
     assert len([c for c in codes if c == "EVENT_SUMMON_SUCCESS"]) == 1
+    assert len([c for c in codes if c == "EVENT_TO_GRAVE"]) == 1
     assert len([c for c in codes if c is None]) == 1
 
 
@@ -346,7 +365,12 @@ def test_05_the_eight_activation_conditions_are_state_conditions(repository):
     #: 🔴 8 → **9** (Phase 6-V, 기르수 ①). 기르수의 조건도 **상태 조건**
     #: 이다 (자신 덱에 1장 이상) — 사건을 묻지 않는다. 이 파일이 지키는
     #: 사실이 그것이므로 유발 효과가 들어와도 약해지지 않았다.
-    assert len(with_condition) == 9
+    #:
+    #: 🔴 9 → **10** (Phase 6-AC, 성유물－『성장』 ②). 그 조건도 **상태
+    #: 조건**이다 (자신 몬스터 존에 빈 자리가 있다) — 특수 소환하는 효과가
+    #: 들어와도 조건 어휘는 판만 묻는다. 아래 "조건 문구에 사건 어휘가
+    #: 없다" 검사가 그것을 그대로 센다.
+    assert len(with_condition) == 10
     #: 사례로 쓰는 넷의 종류를 못박는다.
     assert with_condition[POT_OF_GREED]["types"] == ["SPELL"]
     assert with_condition[RELOAD]["types"] == ["QUICKPLAY", "SPELL"]
@@ -542,8 +566,13 @@ def test_12_the_summon_kind_vocabulary_exists_but_the_timing_point_does_not():
     ``SummonKind`` 가 ``normal`` / ``special`` 을 구분하고
     ``MonsterSummoned.summon`` 이 그것을 싣는다. 그런데 ``TimingPoint`` 에는
     ``monster_summoned`` 하나뿐이고 **특수소환 전용 시점이 없다.**
+
+    🔴 **Phase 6-AC 가 어휘를 셋으로 만들었다** (``link``). 그런데 이
+    시험이 지키는 사실은 그대로다 — ``TimingPoint`` 는 **하나도** 늘지
+    않았고 여전히 ``monster_summoned`` 하나다. 소환의 종류가 늘어도 시점이
+    갈리지 않는다는 것이 요점이고, 아래 두 단언이 그것을 센다.
     """
-    assert [kind.value for kind in SummonKind] == ["normal", "special"]
+    assert [kind.value for kind in SummonKind] == ["normal", "special", "link"]
     assert "summon" in [f.name for f in dataclasses.fields(MonsterSummoned)]
 
     points = [point.value for point in TimingPoint]
@@ -616,7 +645,11 @@ def test_14_no_registered_effect_can_special_summon():
             present.add(kind.name)
             if kind.name == "SPECIAL_SUMMON":
                 users.append(str(entry.definition.effect_ref))
-    assert users == []
+    #: 🔴 **Phase 6-AC 가 이 시험의 사실을 끝냈다.** 그때까지 "등재된 어느
+    #: 효과도 특수 소환하지 않는다" 가 참이었고 이 시험이 그것을 세고
+    #: 있었다. 6-AC 가 성유물－『성장』 ② 를 등재했으므로 **정확히 하나**가
+    #: 되었다 — 지우는 대신 그 하나를 못박는다. 둘이 되면 깨진다.
+    assert users == ["93920420:e[1]"], users
 
     #: **빈 목록이 엉뚱한 이유로 비지 않았다는 것까지 본다.** ``kind`` 조회가
     #: 깨지면 위 단정이 **그냥 통과**한다 — 그래서 실제로 읽힌 연산 종류를
@@ -630,8 +663,11 @@ def test_14_no_registered_effect_can_special_summon():
         "RETURN_TO_HAND",
         "SEND_TO_GRAVE",
         "SHUFFLE",
+        #: 🔴 Phase 6-AC — 성유물－『성장』 ② 가 실제로 읽힌다.
+        "SPECIAL_SUMMON",
     }
-    assert "SPECIAL_SUMMON" not in present
+    #: 🔴 그리고 **그 하나뿐**이다 — 위 ``users`` 가 어느 효과인지 적는다.
+    assert "SPECIAL_SUMMON" in present
 
 
 # ======================================================================

@@ -375,9 +375,14 @@ def test_06_the_duel_closure_excludes_the_assembly_and_two_part_modules():
     #: ``engine.effect.library`` 가 기르수 ① 의 카드군 조건을 만들려고
     #: 그것을 import 하기 때문이다 (숫자를 손으로 적지 않는 쪽을 골랐다).
     #:
+    #: 🔴 59 → **62** (Phase 6-AC). 늘어난 셋도 새 트리거 계층이 아니다:
+    #: ``engine.link_summon`` · ``engine.link_rules`` (링크 소환 절차와 그
+    #: 판정) 과 ``engine.use_limit`` (1턴 1회의 값) 이다. 셋 다 이 Phase 가
+    #: **구현한 것**이고 휴면 모듈이 아니다.
+    #:
     #: 🔴 **휴면 모듈 넷은 그대로 폐쇄 밖이다** — 아래 루프가 그것을
     #: 고정하고, 그것이 이 감사의 질문이다. 트리거 계층이 켜진 것이 아니다.
-    assert len(closure) == 59
+    assert len(closure) == 62
     for module in (
         "engine.trigger_chain",
         "engine.trigger_order",
@@ -801,9 +806,14 @@ def test_18_only_four_codes_have_a_dormant_carrier_at_all():
     #: ``TRIGGER_TIMING_MISSED``), **그 셋 중 어느 것도 dormant 층에
     #: 실리지 않았다.** 위 집합이 여덟 그대로인 것이 그 사실이다 — 위험의
     #: 범위는 넓어지지 않았고 관계 없는 쪽만 늘었다.
-    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    #:
+    #: 🔴 43 → **45** (Phase 6-AC). enum 이 51 → 53 으로 늘었고
+    #: (``EFFECT_USE_LIMIT_REACHED`` · ``LINK_MATERIAL_INVALID``), **그 둘
+    #: 중 어느 것도 dormant 층에 실리지 않았다.** 위 집합이 여덟 그대로인
+    #: 것이 그 사실이다 — 보완8 과 같은 결이고, 위험의 범위는 넓어지지
+    #: 않았다.
     assert len(members) == 53, len(members)
-    assert len(members - with_dormant) == 43
+    assert len(members - with_dormant) == 45
 
 
 def test_19_four_of_the_five_dormant_gates_duplicate_a_live_question():

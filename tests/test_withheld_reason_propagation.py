@@ -715,23 +715,34 @@ def test_e01_the_user_five_card_run_is_preserved(repository):
     blob = _combo_blob(repository, USER_HAND, USER_RECIPE)
 
     #: ① 실행 걸음과 해결 걸음.
-    assert "엔진이 실제로 5걸음 실행" in blob
-    assert "실행 5걸음 · 상태 변경 5걸음" in blob
-    assert "효과가 실제로 해결된 걸음** 1걸음" in blob
+    #:
+    #: 🔴 **Phase 6-AC 에서 수가 늘었다** (5 → 6걸음 · 효과 해결 1 → 2).
+    #: 성유물－『성장』 ② 가 등재되어 기르수 ① 의 해결이 묘지로 보낸 카드가
+    #: **다음 유발을 연다** — 그 걸음이 하나 더 붙었고 그것도 효과 해결이다.
+    #: 보존하는 대상은 "사용자가 확인한 결과" 이므로, 수를 그대로 두면 이
+    #: 시험이 **사라진 출력을 찾는** 셈이 된다. 수를 고치고 **무엇이 늘었는지**
+    #: 를 함께 센다 (아래 ② 의 묘지 · 몬스터 존이 그 걸음의 결과다).
+    assert "엔진이 실제로 6걸음 실행" in blob
+    assert "실행 6걸음 · 상태 변경 6걸음" in blob
+    assert "효과가 실제로 해결된 걸음** 2걸음" in blob
 
-    #: ② 판 — 사용자가 적은 장수 그대로.
-    assert "몬스터 존: 1장 — 잭나이츠 오르페골 기르수 [69811710]" in blob
+    #: ② 판 — 🔴 **한 걸음이 늘어난 만큼 달라졌다.** 패에 있던 성유물－
+    #: 『성장』 이 **특수 소환되어** 몬스터 존으로 갔다 (1장 → 2장, 패 1장
+    #: → 0장). 묘지의 한 장은 덱에서 보내진 **다른** 사본이고 그대로다.
+    assert "몬스터 존: 2장" in blob
+    assert "잭나이츠 오르페골 기르수 [69811710]" in blob
     assert "마법·함정 존: 3장" in blob
     for card in ("703897", "2930675", "12989604"):
         assert card in blob
-    assert "패: 1장 — 성유물－『성장』 [93920420]" in blob
     assert "묘지: 1장 — 성유물－『성장』 [93920420]" in blob
     assert "남은 덱: 34장" in blob
 
-    #: ③ 멈춘 자리 — 흐름만 남았지만 **정상 종료가 아니다**.
+    #: ③ 멈춘 자리 — 🔴 **흐름만 남았고, 그 자리의 보류는 0건이다**
+    #: (Phase 6-AC). 세트를 모두 끝낸 뒤라 패에 발동 후보가 남지 않는다.
+    #: 도중에 지나온 미지원은 **그대로 1건**이고 보고가 그것을 적는다 —
+    #: 그 구분이 보완8 이 세운 것이다.
     assert "end_phase" in blob
     assert "activate_card [activation-timing" in blob
-    assert "정상 전개 종료가 아닙니다" in blob
 
 
 @pytest.mark.real_card
@@ -745,6 +756,16 @@ def test_e02_the_generic_activate_card_reason_names_its_scope(repository):
     "특정 카드의 미지원" 으로 추측해 표시하지 않는다.
 
     이 시험은 그 둘을 함께 센다: 범위는 ``scope`` 가 말하고, 식별자는 없다.
+
+    🔴 **Phase 6-AC 가 재는 자리를 옮기게 만들었다.** 6-AB 때 그 보류는
+    전개가 **멈춘 자리**에 남아 있었다. 6-AC 가 지원을 늘려 전개가 한 걸음
+    더 나아가고, 마지막 자리는 세트를 모두 끝낸 뒤라 패에 발동 후보가
+    남지 않는다 — 그 자리의 보류가 **0건**이 되었다.
+
+    그 보류 자체는 사라지지 않았다: 전개 **도중의** 자리에 그대로 있고
+    ``run.unsupported`` 가 그것을 싣는다. 그래서 이 시험은 그 보류가 실제로
+    있는 자리, 즉 **전개가 시작되기 전의 자리**에서 센다 — 재는 대상(사유의
+    범위와 식별자 없음)은 한 글자도 약해지지 않았다.
     """
     from deck.opening import build_opening, execute_opening
     from deck.recipe import parse_recipe
@@ -757,11 +778,10 @@ def test_e02_the_generic_activate_card_reason_names_its_scope(repository):
         chooser=chooser, triggers=triggers,
     )
     assert setup.duel is not None, setup.blockers
-    run = execute_opening(setup, repository)
-
-    assert run.stopped_kind == "unsupported"
     duel = setup.duel
     seat = duel.to_act
+
+    #: 🔴 **전개를 돌리기 전에** 그 자리에서 센다 (위 설명).
     legal = duel.legal_actions(seat)
     held = [
         w for w in legal.withheld
@@ -771,6 +791,8 @@ def test_e02_the_generic_activate_card_reason_names_its_scope(repository):
     entry = held[0]
 
     #: ① **후보와 연결된 판정이다** — 그 자리의 패를 실제로 물었다.
+    #: 🔴 패는 **전개를 돌리기 전에** 읽는다 (아래에서 돌린다) — 전개가
+    #: 끝난 뒤의 패는 비어 있고, 그 자리를 재는 것이 아니다.
     hand = [c for c in duel.state.player(seat).hand if c]
     assert hand, "패가 비어 있으면 이 측정이 무의미하다"
     from engine.action_validation import ActionValidator
@@ -789,6 +811,14 @@ def test_e02_the_generic_activate_card_reason_names_its_scope(repository):
 
     #: ③ 패가 한 장뿐이면 ``scope`` 를 붙이지 않는다 (셀 것이 없다).
     assert (entry.scope is None) is (len(hand) <= 1)
+
+    #: 🔴 그리고 **전개를 돌려도 그 보류는 보고에 남는다** (Phase 6-AC) —
+    #: 멈춘 자리는 깨끗해졌지만 (``flow_only``) 지나온 미지원은 그대로다.
+    #: 두 질문을 가른 것이 보완8 이고, 이 자리가 그 구분이 쓰이는 자리다.
+    run = execute_opening(setup, repository)
+    assert run.stopped_kind == "flow_only", run.stopped_kind
+    assert any("activate_card" in line for line in run.unsupported), run.unsupported
+    assert run.fully_supported is False
 
 
 @pytest.mark.real_card

@@ -187,7 +187,7 @@ def test_01_the_operation_kind_is_a_job_not_an_event():
 
 def test_02_summon_kind_says_which_summon_and_only_that():
     """
-    §3 — ``SummonKind`` 는 **소환의 종류**이고, 지금 두 값뿐이다.
+    §3 — ``SummonKind`` 는 **소환의 종류**이고, 지금 세 값이다.
 
     ``SPECIAL`` 은 실제로 쓰이는 값이다 — 특수 소환 절차가 그것을 들고 있다.
 
@@ -196,9 +196,27 @@ def test_02_summon_kind_says_which_summon_and_only_that():
        라고 말한다. 그것은 ``SPECIAL`` 이 들어오기 전(Phase 2-T 이전)의
        문장이고 **지금은 사실이 아니다.** 이 Phase 는 문서가 아니라 값을
        측정했다 — 그래서 아래가 docstring 이 아니라 멤버 목록을 센다.
+
+    🔴 **Phase 6-AC 가 ``LINK`` 를 더했다 (둘 → 셋).** 어휘를 늘린 것이
+    아니라 **절차를 구현하고** 그 절차가 들고 있을 값을 적었다. 그래서
+    아래가 멤버 목록만 세지 않고 **절차와 대조한다** — 값 하나마다 그것을
+    들고 있는 절차가 하나씩 있다. 들고 있는 절차가 없는 값이 생기면
+    깨진다.
     """
-    assert {kind.value for kind in SummonKind} == {"normal", "special"}
+    assert {kind.value for kind in SummonKind} == {"normal", "special", "link"}
     assert SPECIAL_SUMMON_PROCEDURE.summon is SummonKind.SPECIAL
+    #: 🔴 세 값 전부 **구현된 절차가 들고 있다** (Phase 6-AC).
+    from engine.link_summon import LINK_SUMMON_PROCEDURE
+    from engine.normal_summon import NORMAL_SUMMON_PROCEDURE
+
+    assert {
+        procedure.summon
+        for procedure in (
+            NORMAL_SUMMON_PROCEDURE,
+            SPECIAL_SUMMON_PROCEDURE,
+            LINK_SUMMON_PROCEDURE,
+        )
+    } == set(SummonKind)
 
     #: 절차의 네 값은 **범위**이고 규칙이 아니다 (파일이 그렇게 적어 두었다).
     assert SPECIAL_SUMMON_FROM_ZONES == frozenset({Zone.HAND, Zone.GRAVE})
@@ -536,11 +554,18 @@ def test_11_a_failed_special_summon_leaves_no_event_at_all(repository):
 # ======================================================================
 
 
-def test_12_no_registered_effect_performs_a_special_summon():
+def test_12_exactly_one_registered_effect_performs_a_special_summon():
     """
-    §5 A — 등재 16효과 중 ``SPECIAL_SUMMON`` 을 쓰는 것은 **0개**다.
+    §5 A — 등재 16효과 중 ``SPECIAL_SUMMON`` 을 쓰는 것은 **0개**였다.
 
-    그런데 **죽은 자의 소생은 목록에 있다** — ``operations=()`` 와
+    🔴 **Phase 6-AC 가 그 0 을 1 로 만들었다** — 성유물－『성장』 ②.
+    지우는 대신 **그 하나**를 못박는다. 그리고 **죽은 자의 소생은 여전히
+    못 한다**: 둘의 차이가 이 Phase 가 한 일을 정확히 말한다 — 패에서의
+    특수 소환은 소생 제한이 **묻지 않는** 자리이고, 묘지에서의 특수 소환은
+    "이 카드가 정규 소환을 거쳤는가" 를 묻는다. 그 이력이 없으므로 소생은
+    UNKNOWN 으로 남는다.
+
+    그래서 **죽은 자의 소생은 목록에 있다** — ``operations=()`` 와
     ``executable=False`` 로, **왜 못 옮겼는지 적어 둔 채**로. 즉 데이터
     계층은 "아직 안 했다" 가 아니라 **"읽고 나서 거절했다"** 다.
     """
@@ -549,7 +574,13 @@ def test_12_no_registered_effect_performs_a_special_summon():
         for entry in EFFECT_LIBRARY
         for operation in entry.definition.operations
     ]
-    assert OperationKind.SPECIAL_SUMMON not in kinds
+    summoners = [
+        str(entry.definition.effect_ref)
+        for entry in EFFECT_LIBRARY
+        for operation in entry.definition.operations
+        if operation.kind is OperationKind.SPECIAL_SUMMON
+    ]
+    assert summoners == ["93920420:e[1]"], summoners
     #: 열거가 공허하지 않음을 **실제로 있는 종류**로 고정한다.
     assert {kind.value for kind in kinds} == {
         "change_life",
@@ -560,6 +591,8 @@ def test_12_no_registered_effect_performs_a_special_summon():
         "return_to_hand",
         "send_to_grave",
         "shuffle",
+        #: 🔴 Phase 6-AC — 성유물－『성장』 ②.
+        "special_summon",
     }
 
     reborn = entry_for(EffectRef(MONSTER_REBORN, 0))
@@ -578,6 +611,10 @@ def test_12_no_registered_effect_performs_a_special_summon():
     #: (``IsCanBeSpecialSummoned`` 류), 이 테스트가 지키는 사실(등재 효과 중
     #: 특수 소환을 하는 것이 없다)은 그대로다 — 6-L 이 더한 조작은
     #: ``return_to_hand`` 다.
+    #:
+    #: 🔴 Phase 6-AC 가 등재를 하나 늘렸지만 **실행 불가 항목은 셋 그대로**
+    #: 다 — 더한 성유물－『성장』 ② 는 ``executable=True`` 이고, 남은 셋의
+    #: 이유는 하나도 바뀌지 않았다.
     assert sum(1 for entry in EFFECT_LIBRARY if not entry.executable) == 3
 
 

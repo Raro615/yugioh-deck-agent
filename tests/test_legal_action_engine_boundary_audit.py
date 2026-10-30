@@ -584,12 +584,20 @@ def test_06_activation_is_dispatched_by_the_duel_not_the_executor():
 # ======================================================================
 
 
-def test_07_the_executable_set_is_exactly_eight_kinds():
-    """§6 ① — Engine 이 실행할 수 있는 종류는 **여덟**이다."""
+def test_07_the_executable_set_is_exactly_nine_kinds():
+    """
+    §6 ① — Engine 이 실행할 수 있는 종류는 **아홉**이다.
+
+    🔴 **Phase 6-AC 가 여덟을 아홉으로 만들었다** — ``LINK_SUMMON`` 이
+    더해졌다. 실행할 수 **없는** 셋은 하나도 움직이지 않았다: 이 Phase 가
+    한 일은 새 절차 하나를 실제로 실행하게 만든 것이고, 못 하던 것을
+    할 수 있는 척 바꾼 것이 아니다.
+    """
     assert duel_executor().supported == frozenset(
         {
             PlayerActionKind.NORMAL_SUMMON,
             PlayerActionKind.SPECIAL_SUMMON,
+            PlayerActionKind.LINK_SUMMON,
             PlayerActionKind.SET_MONSTER,
             PlayerActionKind.SET_SPELL_TRAP,
             PlayerActionKind.ATTACK,
@@ -599,6 +607,7 @@ def test_07_the_executable_set_is_exactly_eight_kinds():
         {
             PlayerActionKind.NORMAL_SUMMON,
             PlayerActionKind.SPECIAL_SUMMON,
+            PlayerActionKind.LINK_SUMMON,
             PlayerActionKind.SET_MONSTER,
             PlayerActionKind.SET_SPELL_TRAP,
             PlayerActionKind.ATTACK,
@@ -607,7 +616,7 @@ def test_07_the_executable_set_is_exactly_eight_kinds():
             PlayerActionKind.PASS,
         }
     )
-    #: 실행할 수 **없는** 셋.
+    #: 실행할 수 **없는** 셋 — 그대로다.
     assert set(PlayerActionKind) - executable_kinds() == {
         PlayerActionKind.ACTIVATE_CARD,
         PlayerActionKind.CHANGE_POSITION,
@@ -621,6 +630,11 @@ def test_08_the_offered_set_is_exactly_seven_kinds(repository):
 
     실행 가능한 여덟에서 ``special_summon`` 하나가 빠진다 — 그 비대칭이
     ``test_10`` 의 주제다.
+
+    🔴 **Phase 6-AC 가 비대칭을 둘로 늘렸다.** ``link_summon`` 도 실행은
+    되지만 이 세 덱에서는 후보로 나오지 않는다 — 엑스트라 덱이 비어 있고
+    소재 조건을 읽은 카드가 없기 때문이다. 즉 "낼 수 있는 종류" 는 일곱
+    그대로이고, 늘어난 것은 **실행 가능한 쪽**이다. 그 차이를 섞지 않는다.
     """
     offered: collections.Counter = collections.Counter()
     for seed in (309, 310, 311):
@@ -644,7 +658,11 @@ def test_08_the_offered_set_is_exactly_seven_kinds(repository):
 
     #: 🔴 ③ ⊂ ① — 후보로 나오는 것은 전부 실행 가능하다 (B 분류가 **0종류**).
     assert set(offered) <= executable_kinds()
-    assert executable_kinds() - set(offered) == {PlayerActionKind.SPECIAL_SUMMON}
+    assert executable_kinds() - set(offered) == {
+        PlayerActionKind.SPECIAL_SUMMON,
+        #: 🔴 Phase 6-AC — 이 세 덱에는 엑스트라 덱 카드가 없다.
+        PlayerActionKind.LINK_SUMMON,
+    }
 
 
 def test_09_the_withheld_kinds_name_the_missing_rule(repository):
@@ -1067,11 +1085,20 @@ def test_26_this_phase_changed_no_production_file():
 
 
 def test_27_no_new_action_kind_or_generator_was_added():
-    """§7 — 새 ``PlayerActionKind`` 도, 새 후보 생성기도 없다."""
-    assert len(list(PlayerActionKind)) == 11
+    """
+    §7 — 새 ``PlayerActionKind`` 도, 새 후보 생성기도 없다.
+
+    🔴 **Phase 6-AC 에서 그 사실이 끝났다** — ``LINK_SUMMON`` 하나와
+    ``_link_summon_actions`` 하나가 더해졌다. 3-F-21 이 적은 "이 감사가
+    더한 것은 없다" 는 그 Phase 의 사실이었고, 지우는 대신 **무엇이 언제
+    더해졌는지** 를 적는다. 자리와 순서는 그대로다: 새 종류는 목록의
+    **끝이 아니라 소환 묶음 안**에 들어갔다 (어휘를 뜻으로 묶는다).
+    """
+    assert len(list(PlayerActionKind)) == 12
     assert [k.value for k in PlayerActionKind] == [
         "normal_summon",
         "special_summon",
+        "link_summon",
         "set_monster",
         "set_spell_trap",
         "activate_card",
@@ -1096,10 +1123,18 @@ def test_27_no_new_action_kind_or_generator_was_added():
             "_flow_actions",
             "_withheld_board_actions",
             "_stage_closed_actions",
+            #: 🔴 Phase 6-AC — 링크 소환 후보를 만드는 자리다. 엑스트라
+            #: 덱을 보고 소재 조합을 펼치므로 다른 생성기로는 쓸 수 없다.
+            "_link_summon_actions",
         )
         if name in duel_code
     ]
-    assert len(generators) == 5, generators
+    assert len(generators) == 6, generators
+    #: 🔴 ``_special_summon_actions`` 는 **여전히 없다** (Phase 6-AC).
+    #: 효과에 의한 특수 소환은 후보 생성기가 아니라 **효과 해결**이 하고,
+    #: 플레이어가 직접 선언하는 특수 소환 절차는 아직 지원하지 않는다.
+    #: 링크 소환만 생성기를 얻은 이유가 그것이다 — 그쪽은 플레이어가
+    #: 선언하는 절차이고, 그 절차를 이 Phase 가 구현했다.
     for forbidden in ("_special_summon_actions", "_position_actions", "ActionGraph"):
         assert forbidden not in duel_code, forbidden
 

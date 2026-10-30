@@ -176,10 +176,15 @@ def test_04_activate_effect_already_names_a_single_effect():
     fields = set(PlayerAction.__dataclass_fields__)
     assert {"kind", "actor", "source", "effect_ref", "targets"} <= fields
 
-    #: 행위 종류 목록을 **고정**한다 — 이 Phase 는 하나도 더하지 않았다.
+    #: 행위 종류 목록을 **고정**한다 — 이 Phase(6-F)는 하나도 더하지
+    #: 않았다. 🔴 **Phase 6-AC 가 하나를 더했다** (``link_summon``) — 유발
+    #: 때문이 아니라 **링크 소환 절차**를 구현해서다. 이 시험이 지키는
+    #: 사실("유발을 위해 새 종류가 필요하지 않다")은 그대로다: 더해진
+    #: 종류는 유발과 무관하고, 아래 ``TRIGGER`` 금지 검사가 그것을 센다.
     assert {kind.value for kind in PlayerActionKind} == {
         "normal_summon",
         "special_summon",
+        "link_summon",
         "set_monster",
         "set_spell_trap",
         "activate_card",

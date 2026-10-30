@@ -213,7 +213,14 @@ def test_03_no_translation_function_exists_from_candidate_to_action():
     #: 그리고 후보를 행위로 바꾸는 자리는 **하나**다.
     duel_methods = {name for name in vars(Duel) if not name.startswith("__")}
     #: ``triggers`` 는 메서드가 아니라 **칸**이다 (불투명한 값).
+    #: 🔴 **Phase 6-AC 가 하나를 더했다** — ``_note_trigger_refusal``. 그것은
+    #: 후보를 행위로 바꾸는 자리가 아니라, ``_trigger_actions`` 안에 **같은
+    #: 모양으로 두 번** 있던 보류 기록을 함수 하나로 묶은 것이다. 받는
+    #: 것도 ``TriggerCandidate`` 가 아니라 불투명한 제안과 관문의 답이다.
+    #: 그래서 이 시험이 지키는 사실(후보를 행위로 바꾸는 번역기가 없다)은
+    #: 그대로이고, 아래 ``together`` 검사가 그것을 직접 센다.
     assert sorted(m for m in duel_methods if "trigger" in m) == [
+        "_note_trigger_refusal",
         "_trigger_actions",
         "_trigger_offers",
         "triggers",
@@ -703,6 +710,15 @@ def test_12_trigger_metadata_is_the_largest_category_the_engine_cannot_run(repos
     #: 코드를 가진 등재가 0개" 가 참이었고 그것이 이 테스트의 요지였다.
     #: 6-V 가 기르수 ①(``EVENT_SUMMON_SUCCESS``)을 등재했으므로 0 이 1 이
     #: 된다. 지우는 대신 **정확히 하나이고 그것이 무엇인지**를 센다.
-    assert set(codes) == {"EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", None}
-    triggers = [c for c in codes if c and c != "EVENT_FREE_CHAIN"]
-    assert triggers == ["EVENT_SUMMON_SUCCESS"], triggers
+    #: 🔴 **Phase 6-AC 가 그 1 을 2 로 만들었다.** 성유물－『성장』 ②
+    #: (``EVENT_TO_GRAVE``) 를 등재했다. 같은 성질의 고침이고, 늘어난 쪽이
+    #: **서로 다른 사건**이라는 것이 이 수가 말하는 사실이다 — 한 사건에
+    #: 맞춘 우회로가 아니라 사건 코드를 읽는 같은 길이 둘을 다 태운다.
+    assert set(codes) == {
+        "EVENT_FREE_CHAIN",
+        "EVENT_SUMMON_SUCCESS",
+        "EVENT_TO_GRAVE",
+        None,
+    }
+    triggers = sorted(c for c in codes if c and c != "EVENT_FREE_CHAIN")
+    assert triggers == ["EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE"], triggers

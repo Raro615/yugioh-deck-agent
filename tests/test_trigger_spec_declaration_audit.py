@@ -607,16 +607,22 @@ def test_09_the_second_requirement_needs_the_same_axes_plus_more():
     §7 — "특정 종류의 특수 소환 발생에 반응" 은 위와 **같은 세 축**을
     요구하고, 거기에 하나를 더 요구한다 — **어떤 특수 소환법인가.**
 
-    그 축은 `SummonKind` 에 **값 자체가 없다**: `SPECIAL` 하나로
-    융합 · 싱크로 · 엑시즈 · 링크 · 의식 · 펜듈럼을 전부 덮는다
+    그 축은 `SummonKind` 에 **값이 거의 없다**: `SPECIAL` 하나로
+    융합 · 싱크로 · 엑시즈 · 의식 · 펜듈럼을 전부 덮는다
     (STRUCTURAL-62 가 그 결정을 적어 두었다).
 
     즉 두 요구는 "같은 정보가 필요한가?" 에 대해 **아니다** — 두 번째가
     한 축 더 깊다. 그러나 그 축은 **선언의 문제가 아니라 어휘의 문제**다.
+
+    🔴 **Phase 6-AC 가 그 축에 값 하나를 더했다** — ``LINK``. 지어내서 더한
+    것이 아니라 **그 절차를 실제로 구현해서** 더했다 (소재 조건 판정 · 소재
+    이동 · 엑스트라 몬스터 존 배치). 그래서 아래 목록에서 ``link`` 만
+    빠지고 나머지 다섯은 **여전히 없다** — 구현하지 않은 소환법의 이름을
+    어휘에 적지 않는다는 것이 이 시험이 지키는 사실이고, 그것은 그대로다.
     """
-    assert {kind.value for kind in SummonKind} == {"normal", "special"}
-    #: 소환법 이름이 하나도 없다 — 지어내지 않았기 때문이다.
-    for method in ("fusion", "synchro", "xyz", "link", "ritual", "pendulum"):
+    assert {kind.value for kind in SummonKind} == {"normal", "special", "link"}
+    #: 구현하지 않은 소환법 이름이 하나도 없다 — 지어내지 않았기 때문이다.
+    for method in ("fusion", "synchro", "xyz", "ritual", "pendulum"):
         assert method not in {kind.value for kind in SummonKind}
 
     #: 그래서 첫 요구가 막히는 세 축은 그대로 막히고,
