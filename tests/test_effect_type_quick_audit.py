@@ -636,7 +636,12 @@ def test_10_effect_definition_has_no_effect_types_field():
     # 왜 그 칸이 필요했나: ``TRAP_TRIGGER_MISSING`` 이 *"공식 스크립트의
     # SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 **스스로 적고 있었고**,
     # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
-    assert len(definition) == 12
+    #
+    # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
+    # 아니고 ``effect_types`` 도 아니다** — 담는 것은 "1턴에 몇 번까지인가"
+    # 이고 그 카드 텍스트에서 옮긴 값이다. 아래 집합 비교가 그것을 이름으로
+    # 고정하므로, 이름이 다른 칸이 끼어들면 여기서 깨진다.
+    assert len(definition) == 13
     assert definition == {
         "effect_ref",
         "source_card_id",
@@ -649,6 +654,7 @@ def test_10_effect_definition_has_no_effect_types_field():
         "requirements",
         "guards",
         "activation_waits_for_event",  # Phase 6-Q — 사건을 **기다리는가** (bool). 어떤 사건인지는 담지 않는다
+        "use_limit",  # Phase 6-AC — 「1턴에 몇 번까지인가」. effect_types 가 아니다
         "provenance",
     }
 

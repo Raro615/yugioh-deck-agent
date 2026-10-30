@@ -1145,8 +1145,10 @@ def test_28_on_the_registered_set_the_value_is_a_constant(repository):
     # ``executable=False``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 16건이었다. 아래 단언들은 **하나도 약해지지
     # 않았다** — 수만 움직였다.
-    #: 🔴 17 → 18 (Phase 6-V, 기르수 ①).
-    assert len(rows) == 18
+    #: 🔴 17 → 18 (Phase 6-V, 기르수 ①) → **19** (Phase 6-AC, 성유물－
+    #: 『성장』 ②). 아래 단언들은 하나도 약해지지 않았다 — 마법·함정 줄
+    #: 열여섯은 **그대로**이고 늘어난 것은 몬스터 줄이다.
+    assert len(rows) == 19
     #: 🔴 Phase 6-K — 몬스터 줄만 모양이 다르다. 어니스트 ①(기동)은
     #: ``SetCode`` 가 없어 ``None`` 이고, ②(유발 즉시)가
     #: ``EVENT_FREE_CHAIN`` 이다. **등재된 것은 ① 이므로** 그 줄은 "그
@@ -1159,15 +1161,26 @@ def test_28_on_the_registered_set_the_value_is_a_constant(repository):
     assert len(spell_trap) == 16, spell_trap
     assert all(codes == (FREE_CHAIN,) for *_, codes in spell_trap), spell_trap
     monsters = [row for row in rows if row[2] == "몬스터"]
-    #: 🔴 1 → **2** (Phase 6-V, 기르수 ①).
-    assert len(monsters) == 2, monsters
-    #: 어니스트 ① — 등재된 블록의 코드가 **없다**. 기르수 ① — **다르다**.
-    #: 두 줄의 ``codes`` 는 카드의 블록 전체이고, 등재된 것은 0번이다.
-    first_codes = sorted(
-        str(row[3][0]) for row in monsters
+    #: 🔴 1 → **2** (Phase 6-V, 기르수 ①) → **3** (Phase 6-AC, 『성장』 ②).
+    assert len(monsters) == 3, monsters
+    #: 🔴 **등재된 블록의 코드를 읽는다** (Phase 6-AC 정정). 전에는 세 줄
+    #: 모두 0번 블록이었으므로 ``row[3][0]`` 으로 읽어도 같았다. 『성장』 은
+    #: 공식 **②**(ordinal 1)를 등재했으므로 0번을 읽으면 **등재하지 않은
+    #: 효과**의 코드를 세게 된다 — 그래서 ``ordinal`` 로 읽는다.
+    #:
+    #: 어니스트 ① — 등재된 블록의 코드가 **없다**. 기르수 ① —
+    #: ``EVENT_SUMMON_SUCCESS``. 『성장』 ② — ``EVENT_TO_GRAVE``.
+    #: 셋 다 ``EVENT_FREE_CHAIN`` 이 **아니고**, 그것이 이 줄이 재는 사실이다.
+    registered_codes = sorted(
+        str(row[3][row[1]]) for row in monsters
     )
-    assert first_codes == ["EVENT_SUMMON_SUCCESS", "None"], first_codes
-    assert all(ordinal == 0 for _, ordinal, *_ in rows)
+    assert registered_codes == [
+        "EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE", "None"
+    ], registered_codes
+    assert FREE_CHAIN not in registered_codes
+    #: 🔴 **"등재된 것은 전부 0번" 이 끝났다** (Phase 6-AC) — 1 인 것이
+    #: 정확히 한 줄이다.
+    assert sorted(ordinal for _, ordinal, *_ in rows) == [0] * 18 + [1]
 
     #: 그런데 **공식 스펠 스피드는 둘로 갈린다** — 같은 상수, 다른 속도.
     #:
