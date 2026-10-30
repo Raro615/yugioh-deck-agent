@@ -117,8 +117,19 @@ CL1_REF = SYNTH_REF
 CL2_REF = REAL_REF
 
 #: 합성 정의 **둘**을 한 등록부에 — CL1 의 드로우와 후속의 드로우.
+#:
+#: 🔴 **갈아 끼운다** (Phase 6-AC). 6-AC 가 ``93920420:e[1]`` 의 실제 효과를
+#: 프로덕션 목록에 등재했으므로, 합성을 그냥 더하면 같은 ``EffectRef`` 가 두
+#: 번 등록되어 등록부가 거절한다 (실측: 수집 단계의
+#: ``EffectDefinitionError``). ``test_followup_trigger_integration`` 이 같은
+#: 이유로 같은 모양을 쓴다.
 _FOLLOW_ENTRY = next(e for e in FOLLOW_ENTRIES if e.effect_ref == FOLLOW_REF)
-ENTRIES = SYNTH_ENTRIES + (_FOLLOW_ENTRY,)
+ENTRIES = tuple(
+    e for e in SYNTH_ENTRIES if e.effect_ref != FOLLOW_REF
+) + (_FOLLOW_ENTRY,)
+assert len(ENTRIES) == len(SYNTH_ENTRIES), (
+    "합성은 갈아 끼우는 것이다 — 길이가 달라지면 실제 등재를 빼지 못했다."
+)
 DEFINITIONS = EffectDefinitionRegistry(
     tuple(entry.definition for entry in ENTRIES)
 )
@@ -591,19 +602,37 @@ def test_e02_a_fork_resolving_does_not_spend_the_parents_chain(repository):
 # ======================================================================
 # H. 합성을 실제 지원으로 적지 않는다
 # ======================================================================
-def test_h01_production_knows_neither_synthetic_definition():
+def test_h01_production_does_not_know_these_synthetic_operations():
     """
-    🔴 **프로덕션 등록부에 두 합성 정의가 없다.**
+    🔴 **프로덕션 등록부에 이 파일의 합성 조작이 없다.**
 
-    그래서 이 파일의 성공은 ``69811710`` 의 둘째 효과 지원도,
-    ``93920420`` 의 지원도 **아니다.**
+    그래서 이 파일의 성공은 ``69811710`` 의 둘째 효과 지원이 **아니다.**
+
+    🔴 **Phase 6-AC 정정.** 이 테스트는 "두 합성 정의가 **없다**" 였고,
+    둘 중 하나(``93920420:e[1]``)는 이제 프로덕션에 **있다** — 6-AC 가 실제
+    효과를 등재했다. 그래서 재는 것을 **정의의 유무에서 조작의 차이로**
+    옮긴다: 프로덕션이 아는 그 효과의 조작은 **특수 소환**이고, 이 파일이
+    쓰는 것은 **드로우**다. 즉 이 파일의 성공은 여전히 그 카드의 지원을
+    주장하지 않는다.
     """
+    from engine.effect.operation import DrawOperation, OperationKind
+
     production = definition_registry()
-    assert production.definition_for(CL1_REF) is None
-    assert production.definition_for(FOLLOW_REF) is None
     refs = {entry.effect_ref for entry in EFFECT_LIBRARY}
+
+    #: ① 기르수의 둘째 효과는 **여전히 없다.**
+    assert production.definition_for(CL1_REF) is None
     assert CL1_REF not in refs
-    assert FOLLOW_REF not in refs
+
+    #: ② 『성장』 ① 은 **있다.** 그런데 조작이 다르다 — 그것이 요점이다.
+    real = production.definition_for(FOLLOW_REF)
+    assert real is not None
+    assert FOLLOW_REF in refs
+    assert [op.kind for op in real.operations] == [
+        OperationKind.SPECIAL_SUMMON
+    ]
+    assert isinstance(FOLLOW_DEFINITION.operations[0], DrawOperation)
+    assert real.canonical_state() != FOLLOW_DEFINITION.canonical_state()
 
 
 def test_h02_what_is_synthetic_is_the_operation_only():

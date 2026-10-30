@@ -751,7 +751,8 @@ def cmd_combo(agent: DeckAgent, args) -> int:
         candidate = Path(recipe_text)
         if candidate.is_file():
             recipe_text = candidate.read_text(encoding="utf-8")
-    _print_opening(agent, recipe_text, hand_ids)
+    _print_opening(agent, recipe_text, hand_ids,
+                   getattr(args, "line", "") or "")
 
     plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
                                                board=board_ids)
@@ -789,8 +790,16 @@ def opening_wiring(repository) -> tuple:
 
 
 def _print_opening(agent: DeckAgent, recipe_text: str,
-                   hand_ids: "list[int]") -> None:
-    """🔴 **실제 엔진 실행 절** (Phase 6-T). 레시피가 없으면 그 사실을 적는다."""
+                   hand_ids: "list[int]", line_text: str = "") -> None:
+    """
+    🔴 **실제 엔진 실행 절** (Phase 6-T). 레시피가 없으면 그 사실을 적는다.
+
+    ``line_text`` (Phase 6-AC) 는 **검증용 전개 정책의 이름**이다. 주지
+    않으면 ``first_meaningful`` 그대로다 — Discord 쪽 ``line:`` 과 **같은
+    것**이고, 두 어댑터가 같은 함수(``deck.combo_policy.line_named``)를
+    쓴다.
+    """
+    from deck.combo_policy import COMBO_LINES, line_named, line_progress
     from deck.opening import build_opening, execute_opening, opening_hand_size
     from deck.recipe import parse_recipe
     from deck.report import (
@@ -831,6 +840,12 @@ def _print_opening(agent: DeckAgent, recipe_text: str,
     #: 🔴 ``FirstPermittedChoice`` 는 **전략이 아니라 기준점**이다 —
     #: ``first_meaningful`` 과 같은 자리다 (허용된 후보의 앞쪽을 집는다).
     #: 아래 출력은 그 선택으로 실제로 일어난 일이고, 최선의 전개가 아니다.
+    line = line_named(line_text)
+    if line_text and line_text.strip() and line is None:
+        names = " · ".join(sorted(COMBO_LINES))
+        print(f"  ⚠️ --line {line_text} 라는 검증용 전개 경로가 없습니다 —"
+              f" 기본 선택 방식(first_meaningful)으로 실행했습니다."
+              f" 있는 경로: {names}")
     chooser, triggers = opening_wiring(agent.repository)
     setup = build_opening(
         agent.repository,
@@ -839,10 +854,21 @@ def _print_opening(agent: DeckAgent, recipe_text: str,
         chooser=chooser,
         triggers=triggers,
     )
-    run = execute_opening(setup, agent.repository)
-    print("  🔴 고른 방식은 검증용 기준점입니다 — 행동은"
-          " first_meaningful, 해결 중의 카드 선택은 first-permitted."
-          " 최선의 전개가 아닙니다.")
+    run = execute_opening(
+        setup,
+        agent.repository,
+        **({"choose": line.policy()} if line is not None else {}),
+    )
+    if line is None:
+        print("  🔴 고른 방식은 검증용 기준점입니다 — 행동은"
+              " first_meaningful, 해결 중의 카드 선택은 first-permitted."
+              " 최선의 전개가 아닙니다.")
+    else:
+        print(f"  🔴 고른 방식은 검증용 전개 정책 {line.name} 입니다 —"
+              f" 사람이 적어 둔 경로를 따라갔을 뿐이고 최선 전개 탐색도,"
+              f" 범용 AI 도, 엔진이 스스로 찾은 전개도 아닙니다.")
+        print(f"     경로: {line.title_ko}")
+        print(f"     {line_progress(run, line).describe_ko()}")
     print(render_opening_setup(setup))
     print(render_opening_run(run))
     print(render_opening_board(setup, agent.repository))
@@ -905,6 +931,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--recipe", default="",
                    help="실제 덱 레시피 — 주면 엔진으로 실행 검증합니다."
                         ' 예: "욕망의 항아리 x3, 11091375 x37" 또는 .ydk 경로')
+    p.add_argument("--line", default="",
+                   help="검증용 전개 경로 이름 — 적어 둔 경로를 따라"
+                        " 실행합니다. 예: orcust-girsu")
     p.set_defaults(func=cmd_combo)
 
     return parser

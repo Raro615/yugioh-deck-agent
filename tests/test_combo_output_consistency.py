@@ -202,24 +202,39 @@ def test_06_the_stop_reason_is_scoped_to_what_this_repo_supports(repository):
 
     그래서 기대 문장이 바뀐다 — ``"현재 지원 범위"`` 한정은 **미지원
     보류가 없는** 자리의 문장이 되었고 (``stopped_kind == "flow_only"``),
-    이 패는 ``"unsupported"`` 다. 재는 요구는 그대로이고 **더 좁게** 센다.
+    이 패는 ``"unsupported"`` 였다.
+
+    🔴 **Phase 6-AC 가 그 자리를 ``"flow_only"`` 로 되돌렸다 — 지원이
+    늘어서다.** 6-AB 때 멈춘 자리에 남아 있던 미지원 보류는
+    ``activate_card`` 하나였고, 6-AC 가 그것을 고친 것은 **아니다.** 바뀐
+    것은 **그 자리에 도달하는 경로**다: 성유물－『성장』 ① 이 등재되어
+    전개가 한 걸음 더 나아가고 (5 → 6걸음, 효과 해결 1 → 2), 마지막 자리는
+    세트를 모두 끝낸 뒤라 패에 발동 후보가 남지 않는다. 그래서 **그 자리의**
+    보류가 0건이 되었고, 도중에 지나온 미지원은 그대로 1건이다.
+
+    재는 요구는 그대로다 — "끝났다고 단정하지 않는다" · "막혔다고 적지
+    않는다" · "도중에 지나온 미지원을 적는다". 셋 다 아래에서 센다.
     """
     setup = _opened(repository, [69811710, 703897, 2930675, 12989604, 93920420])
     run = execute_opening(setup, repository)
     assert run.stopped_reason
     assert "end_phase" in run.stopped_reason
     #: 🔴 한 낱말로 갈린다 — 네 가지가 같은 문장으로 나오지 않는다.
-    assert run.stopped_kind == "unsupported", (
+    assert run.stopped_kind == "flow_only", (
         run.stopped_kind, run.stopped_reason
     )
+    #: 🔴 **멈춘 자리는 깨끗한데 전개 전체를 검증한 것은 아니다** — 보완8 이
+    #: 가른 두 질문이고, 이 패가 그 자리다.
     assert run.unsupported
+    assert run.fully_supported is False
     #: 🔴 **끝났다고 단정하지 않는다** — 그 요구는 그대로다.
-    assert "전개가 끝난 것이 아니라" in run.stopped_reason
+    assert "실제로 이 패의 전개가 끝났다는 뜻이 아니고" in run.stopped_reason
     #: 🔴 **막혔다고 적지도 않는다** — 그 요구도 그대로다.
-    assert "엔진이 막았다" not in run.stopped_reason
-    assert "엔진이 그 수단을 모르는 자리" in run.stopped_reason
-    #: 🔴 그리고 **지원하지 않아 후보가 되지 못한 것**을 적는다 (6-AB 최종).
+    assert "엔진이 막았다는 뜻도 아닙니다" in run.stopped_reason
+    #: 🔴 그리고 **지원하지 않아 후보가 되지 못한 것**을 적는다 (6-AB 최종 ·
+    #: 보완8 이 시점을 "앞선 자리" 로 분명히 했다).
     assert "지원하지 않아 후보가 되지" in run.stopped_reason
+    assert "앞선 자리" in run.stopped_reason
 
 
 # ======================================================================
@@ -235,19 +250,28 @@ def test_07_resolved_steps_and_resolved_effects_are_different_numbers(repository
 
     체인을 만들지 않는 소환 · 세트도 "막히지 않았다" 이므로 들어온다.
     사용자의 전개에서 ``resolved`` 는 5 였고 **효과 해결은 1** 이었다.
+
+    🔴 **Phase 6-AC 에서 수가 둘 다 늘었다** (6 · 2). 성유물－『성장』 ① 이
+    등재되어 기르수 ① 뒤에 한 걸음이 더 붙었고, 그 걸음도 효과 해결이다.
+    **재는 것은 수가 아니라 두 수가 다르다는 사실**이고 그것은 그대로다.
     """
     setup = _opened(repository, [69811710, 703897, 2930675, 12989604, 93920420])
     run = execute_opening(setup, repository)
 
-    assert run.executed == 5, run.executed
-    assert run.resolved == 5, run.resolved
+    assert run.executed == 6, run.executed
+    assert run.resolved == 6, run.resolved
     #: 🔴 **둘이 다르다** — 그것이 이 시험의 전부다.
-    assert run.effects_resolved == 1, run.effects_resolved
-    #: 그 하나가 유발 발동이다 — 기록이 말한다.
+    assert run.effects_resolved == 2, run.effects_resolved
+    #: 그 둘이 유발 발동이다 — 기록이 말한다.
     effect_steps = [s for s in run.steps if s.effect_events]
-    assert len(effect_steps) == 1
-    assert effect_steps[0].kind == "activate_effect"
-    assert effect_steps[0].effect_events == ("69811710:e[0]",)
+    assert [s.kind for s in effect_steps] == [
+        "activate_effect",
+        "activate_effect",
+    ]
+    assert [s.effect_events for s in effect_steps] == [
+        ("69811710:e[0]",),
+        ("93920420:e[1]",),
+    ]
 
 
 @pytest.mark.real_card
@@ -257,9 +281,10 @@ def test_08_the_output_says_what_resolved_means(repository):
     blob = _blob(repository, HAND_OK)
     assert "막히지 않고 끝난 걸음" in blob
     assert "효과를 그만큼 해결했다는 뜻이 **아닙니다**" in blob
-    assert "효과가 실제로 해결된 걸음** 1걸음" in blob
+    #: Phase 6-AC 에서 1 → 2 (위 ``test_07`` 의 설명).
+    assert "효과가 실제로 해결된 걸음** 2걸음" in blob
     #: 한 줄 요약도 같은 수를 쓴다 — 두 수가 갈라지지 않는다.
-    assert "효과 해결 1걸음" in blob
+    assert "효과 해결 2걸음" in blob
 
 
 def test_09_the_run_cannot_count_chains_from_the_steps():

@@ -452,7 +452,20 @@ def test_a03_an_eligible_second_offer_does_not_expire_when_a_chain_opens(
     #: 🔴 해결 뒤에는 창이 옮겨 갔다.
     assert duel.chain.is_empty
     assert duel.window_floor >= 0
-    assert _activations(duel) == []
+    #: 🔴 **정정 (Phase 6-AC): 그 **두 제안**이 더 이상 허가되지 않는다.**
+    #:
+    #: 전에는 ``_activations(duel) == []`` 로 셌고, 그 식이 참이었던 것은
+    #: **후속 유발의 실행 구현이 없었기** 때문이다. 6-AC 가 성유물－『성장』
+    #: ① 을 등재했으므로, 기르수 ① 의 해결이 만든 **새 사건**(덱 → 묘지)이
+    #: 새 제안을 연다 — 그것은 기회의 종료가 깨진 것이 **아니라** 다른
+    #: 기회가 열린 것이고, ``test_followup_trigger_integration`` 이 재는
+    #: 바로 그 경로다.
+    #:
+    #: 그래서 재는 것을 **이 기회의 두 제안**으로 좁힌다.
+    assert {a.effect_ref for a in _activations(duel)} & {
+        SYNTH_REF,
+        REAL_REF,
+    } == set()
 
 
 # ======================================================================
@@ -1028,8 +1041,13 @@ def test_d05_the_combo_answer_says_the_run_was_not_fully_supported(
     assert "미지원 사유" in blob
     #: 🔴 그래서 걸음 수를 "전개를 다 했다" 로 읽을 수 없다고 적는다.
     assert "전개를 다 했다" in blob
-    #: 🔴 멈춘 자리가 미지원이면 그것도 적는다.
-    assert "정상 전개 종료가 아닙니다" in blob
+    #: 🔴 **정정 (Phase 6-AC).** 이 패의 멈춘 자리는 더 이상 미지원이
+    #: 아니다 (``stopped_kind == "flow_only"``) — 전개가 한 걸음 더 나아가
+    #: 세트를 모두 끝내고 멈추므로 그 자리에 발동 후보가 남지 않는다.
+    #: 그래서 "정상 전개 종료가 아닙니다" 대신 **도중에 지나온 미지원**을
+    #: 적는 줄을 센다. 재는 요구(④ — 미지원이 응답까지 간다)는 그대로다.
+    assert "전개 도중에 지나온 미지원이 있습니다" in blob
+    assert "정상 전개 종료가 아닙니다" not in blob
 
 
 # ======================================================================
@@ -1270,7 +1288,9 @@ def test_f02_the_combo_answer_keeps_both_inputs(repository):
     bad = "\n".join(
         bot.combo_messages(_Agent(repository), HAND_OVER, recipe_text=RECIPE)
     )
-    assert "엔진이 실제로 5걸음 실행" in good
-    assert "효과 해결 1걸음" in good
+    #: Phase 6-AC 에서 5 → 6걸음 · 효과 해결 1 → 2
+    #: (``test_combo_output_consistency`` 의 ``test_07`` 이 그 변화를 적는다).
+    assert "엔진이 실제로 6걸음 실행" in good
+    assert "효과 해결 2걸음" in good
     assert "실행하지 않았습니다" in bad
     assert "엔진이 실제로" not in bad

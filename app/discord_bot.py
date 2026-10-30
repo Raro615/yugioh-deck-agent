@@ -572,7 +572,8 @@ def _combo_step_lines(agent, plan) -> "list[str]":
 
 
 def _executed_lines(agent, recipe_text: str,
-                    hand_ids: "list[int]") -> "tuple[list[str], bool]":
+                    hand_ids: "list[int]",
+                    line_text: str = "") -> "tuple[list[str], bool]":
     """
     🔴 **실제 엔진 실행 절** (Phase 6-T). 레시피가 없으면 빈 목록이 아니라
     **무엇이 부족한지** 적는다 (§5 · §15).
@@ -587,6 +588,7 @@ def _executed_lines(agent, recipe_text: str,
     출력에 없으면 사용자는 초안으로 검증했다고 믿는다.
     """
     from app.main import opening_wiring
+    from deck.combo_policy import COMBO_LINES, line_named, line_progress
     from deck.opening import build_opening, execute_opening, opening_hand_size
     from deck.recipe import parse_recipe
     from deck.report import (
@@ -638,6 +640,20 @@ def _executed_lines(agent, recipe_text: str,
     #: 만든다. 어댑터가 제 손으로 만들면 ``agent`` · ``integration`` 을 직접
     #: import 하게 되고, 그 경계는 Phase 5-A 부터 지켜 온 것이다
     #: (``test_discord_bot::test_15``).
+    #: 🔴 **검증용 전개 정책을 고를 수 있다** (Phase 6-AC).
+    #:
+    #: 이름을 주지 않으면 ``choose`` 를 넘기지 않고, 그때 동작은 6-AB 와 한
+    #: 글자도 다르지 않다 (``execute_opening`` 이 ``first_meaningful`` 을
+    #: 쓴다). 이름이 틀리면 **비슷한 것을 골라 주지 않고** 그 사실을 적는다 —
+    #: 사용자가 요청한 경로가 아닌 것으로 검증한 결과를 보여 주면 안 된다.
+    line = line_named(line_text)
+    if line_text and line_text.strip() and line is None:
+        names = " · ".join(f"`{name}`" for name in sorted(COMBO_LINES))
+        lines.append(
+            f"⚠️ `line:{line_text}` 라는 검증용 전개 경로가 없습니다 —"
+            f" **기본 선택 방식(`first_meaningful`)으로 실행했습니다.**"
+            f" 있는 경로: {names}"
+        )
     chooser, triggers = opening_wiring(agent.repository)
     setup = build_opening(
         agent.repository,
@@ -646,7 +662,11 @@ def _executed_lines(agent, recipe_text: str,
         chooser=chooser,
         triggers=triggers,
     )
-    run = execute_opening(setup, agent.repository)
+    run = execute_opening(
+        setup,
+        agent.repository,
+        **({"choose": line.policy()} if line is not None else {}),
+    )
     #: 🔴 **한 줄 요약은 실측에서만 나온다.** 실행한 걸음 · 해결된 걸음 ·
     #: 상태가 바뀐 걸음을 각각 센다 (세 사실을 묶지 않는다 — 6-R).
     if setup.can_run:
@@ -655,12 +675,25 @@ def _executed_lines(agent, recipe_text: str,
             f" (효과 해결 {run.effects_resolved}걸음 · 상태 변경"
             f" {run.state_changes}걸음). 아래는 실측 기록입니다."
         )
-        lines.append(
-            "🔴 고른 방식은 **검증용 기준점**입니다 — 행동은"
-            " `first_meaningful` (판을 바꾸는 후보의 첫 번째), 해결 중의"
-            " 카드 선택은 `first-permitted` (허용된 후보의 앞쪽). **최선의"
-            " 전개가 아닙니다.**"
-        )
+        if line is None:
+            lines.append(
+                "🔴 고른 방식은 **검증용 기준점**입니다 — 행동은"
+                " `first_meaningful` (판을 바꾸는 후보의 첫 번째), 해결 중의"
+                " 카드 선택은 `first-permitted` (허용된 후보의 앞쪽). **최선의"
+                " 전개가 아닙니다.**"
+            )
+        else:
+            #: 🔴 **무엇으로 실행했는지 그대로 적는다** (Phase 6-AC §5).
+            #: "경로를 따라갔다" 와 "최선을 찾았다" 를 섞지 않는다.
+            progress = line_progress(run, line)
+            lines.append(
+                f"🔴 고른 방식은 **검증용 전개 정책 `{line.name}`** 입니다 —"
+                f" 사람이 적어 둔 경로를 따라갔을 뿐이고 **최선 전개 탐색도,"
+                f" 범용 AI 도, 엔진이 스스로 찾은 전개도 아닙니다.**"
+                f" 해결 중의 카드 선택은 `first-permitted` 그대로입니다."
+            )
+            lines.append(f"  경로: {line.title_ko}")
+            lines.append(f"  {progress.describe_ko()}")
         #: 🔴 **미지원 사유를 요약 줄에 올린다** (Phase 6-AB 최종 보완 ④).
         #: 걸음 기록 안에만 두면 묻힌다 — 실행에 영향을 준 사실이고,
         #: 이것이 있으면 위의 "N걸음 실행" 을 "이 패로 할 수 있는 것을 다
@@ -700,7 +733,8 @@ def _executed_lines(agent, recipe_text: str,
 
 
 def combo_messages(agent, hand_text: str, board_text: str = "",
-                   deck_text: str = "", recipe_text: str = "") -> "list[str]":
+                   deck_text: str = "", recipe_text: str = "",
+                   line_text: str = "") -> "list[str]":
     """
     ``/combo`` 의 응답. **discord 를 모른다.** 메시지 여러 개를 돌려준다.
 
@@ -717,6 +751,10 @@ def combo_messages(agent, hand_text: str, board_text: str = "",
     🔴 **입력을 추측해서 해석하지 않는다.** 이름을 찾지 못한 토큰은
     버리지 않고 그대로 적는다 — 해석된 카드만으로 계획을 세우면 사용자는
     자기가 적은 카드가 들어간 계획을 봤다고 믿는다.
+
+    ``line_text`` (Phase 6-AC) 는 **검증용 전개 정책의 이름**이다. 주면 그
+    경로를 따라가고, 주지 않으면 ``first_meaningful`` 그대로다 — 사용자가
+    고르지 않은 정책이 조용히 행동 선택을 바꾸지 않는다 (§5).
     """
     from app.main import _parse_card_ids
     from deck.hand import FixedHand
@@ -777,7 +815,7 @@ def combo_messages(agent, hand_text: str, board_text: str = "",
     #: ``deck:`` 초안과 **가르는 것이 요점**이다 — 초안은 이 저장소가 추천한
     #: 구성이고 사용자가 확정한 덱이 아니다 (§5).
     executed_lines, input_refused = _executed_lines(
-        agent, recipe_text, hand_ids
+        agent, recipe_text, hand_ids, line_text
     )
 
     #: 🔴 **입력이 거절되면 정적 전개 추천을 내지 않는다** (Phase 6-AA —
@@ -941,7 +979,8 @@ class SearchService:
         return search_message(self._agent, query, limit=limit)
 
     def combo_texts(self, hand_text: str, board_text: str = "",
-                    deck_text: str = "", recipe_text: str = "") -> "list[str]":
+                    deck_text: str = "", recipe_text: str = "",
+                    line_text: str = "") -> "list[str]":
         """
         전개 계획을 세워 **메시지 목록**을 돌려준다.
 
@@ -955,11 +994,11 @@ class SearchService:
             return [COMBO_UNAVAILABLE_MESSAGE]
         try:
             return combo_messages(self._agent, hand_text, board_text,
-                                  deck_text, recipe_text)
+                                  deck_text, recipe_text, line_text)
         except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
             logger.exception("전개 계획 생성에 실패했습니다. 패=%r 필드=%r"
-                             " 덱=%r 레시피=%r", hand_text, board_text,
-                             deck_text, recipe_text)
+                             " 덱=%r 레시피=%r 경로=%r", hand_text, board_text,
+                             deck_text, recipe_text, line_text)
             return [COMBO_ERROR_MESSAGE]
 
     def deck_texts(self, request_text: str) -> "list[str]":
@@ -1125,14 +1164,17 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         board="(선택) 이미 필드·묘지에 있는 카드",
         deck="(선택) 덱 요청 — 주면 이 패가 덱에서 나올 수 있는지 함께 봅니다",
         recipe="(선택) 실제 덱 레시피 — 주면 엔진으로 실행 검증합니다."
-               " 예: 욕망의 항아리 x3, 11091375 x37 / 또는 YDK")
+               " 예: 욕망의 항아리 x3, 11091375 x37 / 또는 YDK",
+        line="(선택) 검증용 전개 경로 이름 — 적어 둔 경로를 따라 실행합니다."
+             " 예: orcust-girsu")
     async def combo_command(interaction: "discord.Interaction",
                             hand: str, board: str = "",
-                            deck: str = "", recipe: str = "") -> None:
+                            deck: str = "", recipe: str = "",
+                            line: str = "") -> None:
         #: 🔴 ``/search`` · ``/deck`` 과 같은 순서다.
         await interaction.response.defer()
         texts = await asyncio.to_thread(
-            combo_service.combo_texts, hand, board, deck, recipe)
+            combo_service.combo_texts, hand, board, deck, recipe, line)
         for text in texts:
             await interaction.followup.send(text)
 

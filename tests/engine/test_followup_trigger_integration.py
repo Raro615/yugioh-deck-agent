@@ -139,19 +139,39 @@ FOLLOW_DEFINITION = EffectDefinition(
         note=(
             "🔴 합성 — **조작만** 바꿔 끼웠다. 시점 선언(묘지 도착 · 임의 · "
             "IF)은 실제 Lua 가 만든 것이고 이 정의가 주장하지 않는다. 실제 "
-            "효과는 패에서 「星遺物」 몬스터를 특수 소환하는 것이고, 특수 "
-            "소환은 이 범위 밖이므로 룰북의 드로우 한 장으로 바꾸었다. "
-            "이것은 93920420 의 지원 완료가 아니다."
+            "효과는 패에서 「성유물」 몬스터를 특수 소환하는 것이고, 여기서는 "
+            "룰북의 드로우 한 장으로 바꾸었다. 이것은 93920420 의 지원 "
+            "완료가 아니다. "
+            "🔴 **Phase 6-AC 정정** — 이 주석은 '특수 소환은 이 범위 밖이므로' "
+            "라고 적고 있었고, 그 문장은 더 이상 참이 아니다 (실제 효과가 "
+            "EFFECT_LIBRARY 에 등재되었다). 합성을 **그래도 유지하는** 이유는 "
+            "다른 것이다: 이 파일이 재는 것은 **후속 유발의 배선**이고, 조작이 "
+            "특수 소환이면 그 측정이 소환 관문(등록된 카드 사실 · 빈 칸)과 "
+            "엉킨다. 한 조작만 남겨 두면 배선만 재진다."
         ),
     ),
 )
-FOLLOW_ENTRIES = EFFECT_LIBRARY + (
+
+#: 🔴 **실제 등재를 빼고 합성을 끼운다** (Phase 6-AC).
+#:
+#: 6-AC 가 ``93920420:e[1]`` 을 프로덕션 목록에 등재했으므로, 그냥 더하면
+#: 같은 ``EffectRef`` 가 두 번 등록되어 ``EffectDefinitionRegistry`` 가
+#: 거절한다 (실측: 수집 단계에서 ``EffectDefinitionError``). 더하는 것이
+#: 아니라 **갈아 끼우는** 것이 이 파일의 뜻이다 — 같은 효과의 조작만 바꾼
+#: 사본이다.
+FOLLOW_ENTRIES = tuple(
+    entry for entry in EFFECT_LIBRARY if entry.effect_ref != FOLLOW_REF
+) + (
     LibraryEntry(
         definition=FOLLOW_DEFINITION,
         lua_file="(합성 조작 — 선언은 c93920420.lua)",
         lua_excerpt="(합성 — 드로우 1장. 실제 카드 효과가 아니다)",
         executable=True,
     ),
+)
+assert len(FOLLOW_ENTRIES) == len(EFFECT_LIBRARY), (
+    "합성은 **갈아 끼우는** 것이다 — 목록의 길이가 달라지면 실제 등재를 "
+    "빼지 못했다는 뜻이다."
 )
 FOLLOW_DEFINITIONS = EffectDefinitionRegistry(
     tuple(entry.definition for entry in FOLLOW_ENTRIES)
@@ -544,16 +564,31 @@ def test_d05_if_the_card_moved_again_the_gate_says_unknown(repository):
 # ======================================================================
 # E. 합성을 실제 지원으로 적지 않는다
 # ======================================================================
-def test_e01_production_does_not_know_this_definition():
+def test_e01_production_knows_the_real_effect_not_this_operation():
     """
-    🔴 **프로덕션 등록부에는 이 정의가 없다.**
+    🔴 **프로덕션 등록부가 아는 조작은 이것이 아니다.**
 
-    그래서 이 파일의 성공은 ``93920420`` 의 지원 완료가 **아니다.** 실제
-    효과(특수 소환)는 구현되지 않았고, 그 사실이 여기 적혀 있다.
+    🔴 **Phase 6-AC 정정.** 이 테스트는 "프로덕션 등록부에는 이 **정의**가
+    없다" 였고, 그 근거는 *"실제 효과(특수 소환)는 구현되지 않았다"* 였다.
+    6-AC 가 그 효과를 구현해 등재했으므로 앞 문장은 더 이상 참이 아니다.
+
+    재는 요구는 그대로다 — **이 파일의 성공이 그 카드의 지원을 주장하지
+    않는다.** 그래서 정의의 유무 대신 **조작의 차이**를 센다: 프로덕션은
+    특수 소환을, 이 파일은 드로우를 쓴다.
     """
+    from engine.effect.operation import OperationKind
+
     production = definition_registry()
-    assert production.definition_for(FOLLOW_REF) is None
-    assert FOLLOW_REF not in [entry.effect_ref for entry in EFFECT_LIBRARY]
+    real = production.definition_for(FOLLOW_REF)
+    assert real is not None
+    assert FOLLOW_REF in [entry.effect_ref for entry in EFFECT_LIBRARY]
+    assert [op.kind for op in real.operations] == [
+        OperationKind.SPECIAL_SUMMON
+    ]
+    assert [op.kind for op in FOLLOW_DEFINITION.operations] == [
+        OperationKind.DRAW
+    ]
+    assert real.canonical_state() != FOLLOW_DEFINITION.canonical_state()
 
 
 def test_e02_what_is_synthetic_is_the_operation_only():
@@ -611,28 +646,48 @@ def test_f02_without_a_duel_registry_it_says_so():
     assert _duel_registries(_Bare()) == (None, None)
 
 
-def test_f03_the_production_registry_alone_cannot_see_it(repository):
+def test_f03_the_registry_decides_which_operation_runs(repository):
     """
-    🔴 **이것이 ①이 고친 결함이다.** 프로덕션 등록부로만 판정하면 같은
-    실제 사건에서 같은 후보가 ``ELIGIBLE`` 이 되지 못한다.
+    🔴 **이것이 ①이 고친 결함이다.** 등록부가 다르면 같은 실제 사건에서
+    같은 후보의 **판정과 실행 내용**이 갈린다.
 
     같은 판 · 같은 사건 · 같은 선언이고 **등록부만 다르다.**
+
+    🔴 **Phase 6-AC 정정.** 전에는 프로덕션 등록부에 이 효과의 정의가
+    **없어서** 후보가 아예 오르지 않았고, 그 차이로 결함을 보였다. 6-AC 가
+    실제 효과를 등재했으므로 이제 **둘 다** 후보를 올린다 — 갈리는 것은
+    후보의 유무가 아니라 **그 후보가 실행할 조작**이다. ①의 요구(사본이
+    원본의 등록부를 물려받아야 한다)는 그대로이고, 그 요구를 **더 정확한
+    축**으로 센다.
     """
+    from engine.effect.operation import OperationKind
+
     duel, _, _ = _resolved_girsu(repository)
     _recorded, event = _grave_move(duel)
     view = duel.view(MINE)
     registry = registry_for_view(view, repository).registry
 
+    duel_definitions, duel_implementations = _duel_registries(duel)
     with_duel = _integrator(
-        view, registry, *(), **dict(
-            zip(("definitions", "implementations"), _duel_registries(duel))
-        )
+        view,
+        registry,
+        definitions=duel_definitions,
+        implementations=duel_implementations,
     ).collect_and_order(event)
     with_production = _integrator(view, registry).collect_and_order(event)
 
     assert [e.candidate.effect_ref for e in with_duel.canonical_sequence] == [
         FOLLOW_REF
     ]
-    assert FOLLOW_REF not in [
+    assert [
         e.candidate.effect_ref for e in with_production.canonical_sequence
-    ]
+    ] == [FOLLOW_REF]
+
+    #: 🔴 **같은 후보 · 다른 조작.** 등록부가 실행 내용을 정한다.
+    assert [
+        op.kind for op in duel_definitions.definition_for(FOLLOW_REF).operations
+    ] == [OperationKind.DRAW]
+    assert [
+        op.kind
+        for op in definition_registry().definition_for(FOLLOW_REF).operations
+    ] == [OperationKind.SPECIAL_SUMMON]
