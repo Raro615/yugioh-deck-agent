@@ -307,8 +307,16 @@ def render_opening_board(setup, repository=None) -> str:
         lines.append("  상태가 없습니다.")
         return "\n".join(lines)
     state = setup.duel.state
+    #: 🔴 **엑스트라 몬스터 존을 적는다** (Phase 6-AC). 그 전까지 이 표에
+    #: 그 자리가 없었고, 링크 소환이 실행되기 전에는 언제나 비어 있었으므로
+    #: 빠진 것이 보이지 않았다. 6-AC 가 링크 소환을 실행하게 만든 뒤
+    #: 실측하니 **갈라테아가 보고에서 사라졌다** — 몬스터 존 0장으로 적히고
+    #: 엑스트라 덱만 한 장 줄어 있어서, 읽는 쪽이 카드가 어디로 갔는지 알
+    #: 수 없었다. 판에 있는 자리를 적지 않는 것은 보고의 결함이다.
     rows = (
-        ("몬스터 존", Zone.MZONE), ("마법·함정 존", Zone.SZONE),
+        ("몬스터 존", Zone.MZONE),
+        ("엑스트라 몬스터 존", Zone.EMZONE),
+        ("마법·함정 존", Zone.SZONE),
         ("패", Zone.HAND), ("묘지", Zone.GRAVE), ("제외", Zone.REMOVED),
         ("엑스트라 덱", Zone.EXTRA), ("남은 덱", Zone.DECK),
     )

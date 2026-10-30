@@ -110,7 +110,7 @@ agent/simulation.py Simulator._fork   판만 복제 · 기록은 씨앗으로 �
 | --- | --- | --- |
 | 1 | 「잭나이츠 오르페골 기르수」(69811710) **일반 소환** | 필드에 기르수 |
 | 2 | 기르수 ① **발동** — 덱의 「성유물－『성장』」(93920420) 을 묘지로 | 묘지에 『성장』 |
-| 3 | 묘지로 보내진 『성장』 ① **발동** — **패의** 『성장』 을 **특수 소환** | 필드에 『성장』 |
+| 3 | 묘지로 보내진 『성장』 ② **발동** — **패의** 『성장』 을 **특수 소환** | 필드에 『성장』 |
 | 4 | 기르수 + 『성장』 을 소재로 「오르페골 갈라테아」(30741503) **링크 소환** | 엑스트라 몬스터 존에 갈라테아 |
 
 §3 의 다섯 조건을 각각 만족한다.
@@ -140,12 +140,30 @@ agent/simulation.py Simulator._fork   판만 복제 · 기록은 씨앗으로 �
 `s.tgfilter = c:IsSetCard({SET_ORCUST,SET_WORLD_LEGACY}) and c:IsAbleToGrave()`
 · `Duel.SendtoGrave(tc,REASON_EFFECT)`.
 
-**성유물－『성장』 (93920420)**
+**성유물－『성장』 (93920420) — 등재한 것은 공식 ②다**
 
-> You can only use each of the following effects of "World Legacy - "World
-> Wand"" once per turn.
-> ● If this card is sent to the GY: You can Special Summon 1 "World Legacy"
-> monster from your hand.
+> 이 카드명의 ②③의 효과는 각각 1턴에 1번밖에 사용할 수 없다.
+> ①: 통상 소환한 이 카드는 엑스트라 덱에서 특수 소환된 몬스터와의 전투로는
+> 파괴되지 않는다.
+> **②: 이 카드가 묘지로 보내졌을 경우에 발동할 수 있다. 패에서 "성유물"
+> 몬스터 1장을 특수 소환한다.**
+> ③: 묘지의 이 카드를 제외하고, 자신의 제외 상태인 "오르페골" 몬스터 1장을
+> 대상으로 하여 발동할 수 있다. …
+
+🔴 **등재 번호가 처음으로 0 이 아니다.** 지금까지 모든 등재는
+`EffectRef(card_id, 0)` 이었고, 이것은 `EffectRef(93920420, 1)` 이다 — 공식
+②가 Lua 의 **두 번째** 블록(`e2`)이기 때문이다. 블록과 공식 번호의 대응:
+
+| Lua | 공식 | 등재 | `SetCountLimit` |
+| --- | --- | --- | --- |
+| `e1` (ordinal 0) | ① 전투 내구 (지속) | 아니오 | 없다 |
+| `e2` (ordinal 1) | ② 묘지로 보내졌을 경우 → 패에서 특수 소환 | **예** | `(1, id)` |
+| `e3` (ordinal 2) | ③ 묘지의 이 카드를 제외 → 제외된 「오르페골」 | 아니오 | `(1, {id,1})` |
+
+②와 ③의 제한 **열쇠가 다르다** — ②는 카드명 기준이고 ③은 그 카드명의 그
+효과 기준이다. 그래서 「각각 1턴에 1번」 을 한 범위로 뭉뚱그리지 않았다:
+등재한 ②에만 `LimitScope.PER_CARD_NAME` 을 적었고, ③은 **등재하지 않았으므로
+제한도 적지 않았다** (ADR-006 — 없는 것을 기본값으로 메꾸지 않는다).
 
 `c93920420.lua` e2: `EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O` ·
 `SetCode(EVENT_TO_GRAVE)` · `SetCountLimit(1,id)` ·
@@ -309,13 +327,13 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 발동 조건은 판이 바뀌면 참이 될 수 있지만 이쪽은 이 턴 안에서 다시 참이 되지
 않는다.
 
-### 4.4 후보 생성의 결함 두 개 (이 경로가 드러낸 것)
+### 4.4 이 경로가 드러낸 결함 다섯 개
 
 **① 발동 시점에 고르는 유발의 조합을 열거하지 못했다.**
 
 `Duel._trigger_actions` 가 `targets=()` 인 후보 **하나**만 만들고
 `selections_for` 에 넘겼다. 기르수 ① 은 **덱**에서 고르므로 선택이 해결
-시점으로 미뤄지고 (`decided_at_resolution`) 그 길을 타지 않았지만, 『성장』 ① 은
+시점으로 미뤄지고 (`decided_at_resolution`) 그 길을 타지 않았지만, 『성장』 ② 은
 **패**에서 고른다 — 자기 패는 평소 관측에 보이므로 발동 시점에 가리킨다. 실측:
 
 ```
@@ -333,7 +351,7 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 묻고, 그 함수는 `window_passed`(그 자리가 이 창에서 발동하지 않기로 했다)를
 **한 가지 더** 본다. `_trigger_actions` 의 네 검사에는 그것이 없어서 둘의 답이
 갈렸고, 갈리면 관문이 `event_backed` 없이 판정해 `trigger-effect-activation`
-(엔진 미지원)을 적었다. 실측 (자동 `PASS` 뒤의 『성장』 ①):
+(엔진 미지원)을 적었다. 실측 (자동 `PASS` 뒤의 『성장』 ②):
 
 ```
 🔴 activate_effect [trigger-effect-activation]: 발동 관문을 지나지 못했습니다
@@ -349,7 +367,23 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 않는 조건의 문장은 바뀌지 않는다. 없으면 소재 조건 위반 네 가지가 모두 같은 한
 줄로 보고된다 (실측).
 
-**④ import 고리** — `engine/effect/executor.py` 가 `engine.special_summon` ·
+**④ 보고가 링크 몬스터를 적지 않았다.**
+
+`render_opening_board` 의 표에 **엑스트라 몬스터 존이 없었다.** 링크 소환이
+실행되기 전에는 그 자리가 언제나 비어 있었으므로 빠진 것이 보이지 않았다.
+실측 (이 경로를 돌린 직후):
+
+```
+몬스터 존: 0장 — 없음
+...
+엑스트라 덱: 5장 — ...   ← 갈라테아만 빠져 있다
+```
+
+즉 **갈라테아가 보고에서 사라졌다** — 읽는 쪽이 카드가 어디로 갔는지 알 수
+없었다. 판에 있는 자리를 적지 않는 것은 보고의 결함이므로 한 줄을 더했다
+(`("엑스트라 몬스터 존", Zone.EMZONE)`). 다른 줄은 바뀌지 않았다.
+
+**⑤ import 고리** — `engine/effect/executor.py` 가 `engine.special_summon` ·
 `engine.summon` 을 모듈 위에서 읽어, 그 두 모듈이 먼저 import 되는 경로에서
 `ImportError` 가 났다. 🔴 **기준 HEAD `8630622` 에서도 재현된다** (단독 실행한
 `tests/engine/test_action_validation.py`) — 전체 테스트에서는 다른 파일이
@@ -368,10 +402,25 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 | `ActivationStatus` | 15 | **16** | `USE_LIMIT_REACHED` |
 | `RuleQuestion` | 7 | **8** | `MAY_BE_SPECIAL_SUMMONED` |
 | `EffectDefinition` 의 칸 | 12 | **13** | `use_limit` |
-| `EFFECT_LIBRARY` | 18 (실행 15) | **19 (실행 16)** | 성유물－『성장』 ① |
+| 등재한 `ordinal` 의 집합 | `{0}` | **`{0, 1}`** | 공식 ②를 등재한 첫 자리 (『성장』) |
+| `EFFECT_LIBRARY` | 18 (실행 15) | **19 (실행 16)** | 성유물－『성장』 ② |
 | `OPERATION_RULINGS` | 19 | **21** | 『성장』 · 갈라테아 |
 | `Condition` 의 설명 메서드 | `unknown_reasons` · `missing_rules` | **+ `refusal_reasons`** | 기본값이 빈 튜플이므로 기존 문장은 바뀌지 않는다 |
 | `Duel` 의 보류 생성 자리 | 7 | **9** | `_link_summon_actions` · `_note_trigger_refusal` |
+| `engine/` 모듈 | 69 | **72** | `link_summon.py` · `link_rules.py` · `use_limit.py` |
+
+**새 모듈 셋을 왜 갈랐는가**
+
+| 모듈 | 들고 있는 것 | 가른 이유 |
+| --- | --- | --- |
+| `engine/link_rules.py` | 소재 조건의 판정 (순수) | `link_summon.py` 에 함께 두면 `engine.effect` 초기화 중에 순환 import 가 난다 (실측 — §4.1) |
+| `engine/link_summon.py` | 절차 (소재 이동 · 배치) | — |
+| `engine/use_limit.py` | 「1턴에 몇 번까지인가」 — **값** | 처음에는 `engine/state/use_registry.py` 에 두었다. 그 모듈에는 **판의 기록**(`UseRegistry`)도 있어서, 정의 계층이 그것을 가져오면 **정의가 판을 알게 된다**. `test_the_library_never_reaches_into_the_board` 가 그것을 금지하고 있었고 실제로 깨졌다 — 값과 기록을 갈랐다 |
+
+🔴 **열쇠를 만드는 자리는 하나다.** `UseRegistry.card_key` ·
+`card_name_key` · `effect_key` 는 이름을 유지한 채 `engine/use_limit.py` 로
+넘긴다. 양쪽에 적으면 둘이 갈라지고, 그러면 "이 카드 1장" 과 "이 카드명
+전체" 가 같은 제약이 되는 사고가 난다 — 그것이 그 모듈 머리말의 경고다.
 
 🔴 **코드 분류를 비워 둔 자리는 없다.** `CODE_VALIDITY` 는 분류되지 않은 코드가
 있으면 import 가 실패하므로 (53 / 53), 두 새 코드도 `INVALID` 로 적혀 있다 —
@@ -391,8 +440,9 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 | 소재 고르기의 전략 | 없다. 조합을 전부 만들어 검증기에게 묻고, 정책이 **카드 ID 로** 하나를 고른다 |
 | 묘지 · 제외 · 덱 · 엑스트라 덱에서의 특수 소환 | `special-summon-history` (이력) + `SPECIAL_SUMMON_FROM_ZONES` 가 패 · 묘지만 옮겼다 |
 | 표시 형식 선택 | `SPECIAL_SUMMON_POSITION` 이 앞면 공격으로 고정 (STRUCTURAL-61). 링크 몬스터는 **규칙이** 하나로 정하므로 그쪽은 고정이 맞다 |
-| 『성장』 ③ (묘지 제외 → 제외된 「오르페골」 특수 소환 + 소환 제약) | 등재하지 않았다. 제약을 적는 계층이 없다 |
-| 기르수 ② (「세계수 토큰」) · 기르수 ① 의 열 갈래 | 등재하지 않았다 |
+| 『성장』 ① (통상 소환한 이 카드는 엑스트라 덱에서 특수 소환된 몬스터와의 전투로 파괴되지 않는다) | 등재하지 않았다 — 지속 효과이고 전투 계층이 범위 밖이다 |
+| 『성장』 ③ (묘지의 이 카드를 제외 → 제외된 「오르페골」 특수 소환 + 소환 제약) | 등재하지 않았다. 제약을 적는 계층이 없다. 제한의 열쇠도 ②와 **다르다** (`(1, {id,1})`) — 적지 않았으므로 제한도 적지 않았다 |
+| 기르수 ② (「성유물 토큰」을 서로의 필드에 1장씩) · 기르수 ① 의 열 갈래 (같은 세로열에 다른 카드 2장 이상 → 이 턴 튜너 취급) | 등재하지 않았다 |
 | 「오르페골 디베르」 · 「오르페골 스켈레촌」 의 묘지 제외 전개 | 등재하지 않았다 — 덱에서의 특수 소환과 제외 소재가 범위 밖이다 |
 | 갈라테아 ① (제외된 기계족 → 덱 + 「오르페골」 마법·함정 세트) | 등재하지 않았다 |
 | `activate_card` 의 발동 타이밍 | `activation-timing (Phase 2-C/2-F)` — 이 Phase 전부터 남아 있는 범용 한계다 |
@@ -524,7 +574,7 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 | 4 | `link_summon` 30741503 | 없음 — **소재는 비용이 아니라 소환 절차다** | 소재 = 기르수 + 『성장』 (조합 1가지가 허가됨) | — (소환은 효과가 아니다) | 소재 2장 → 묘지, 엑스트라 덱 → 엑스트라 몬스터 존[0] (`MonsterSummoned link`) |
 | 5 | `pass` | — | — | 이 유발 처리 기회에서 발동하지 않기로 했다 | 없음 |
 
-5 걸음째의 `pass` 는 4 단계가 만든 새 사건(소재가 묘지로 갔다)이 연 『성장』 ①
+5 걸음째의 `pass` 는 4 단계가 만든 새 사건(소재가 묘지로 갔다)이 연 『성장』 ②
 의 기회를 지나간다. 그 효과는 「1턴에 1번」 을 이미 썼고 패에 「성유물」 몬스터도
 없다.
 
@@ -560,7 +610,7 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 | --- | --- | --- | --- |
 | 69811710 기르수 | HAND | GRAVE | 일반 소환 → 링크 **소재** |
 | 93920420 『성장』 | DECK | GRAVE | 기르수 ① 의 **효과** |
-| 93920420 『성장』 | HAND | GRAVE | 『성장』 ① 의 **효과**로 특수 소환 → 링크 **소재** |
+| 93920420 『성장』 | HAND | GRAVE | 『성장』 ② 의 **효과**로 특수 소환 → 링크 **소재** |
 | 30741503 갈라테아 | EXTRA | EMZONE | 링크 **소환** |
 
 소재 · 비용 · 효과로 움직인 카드가 각각 구분된다 — 소재는 `ZoneMoved` 의
@@ -613,25 +663,68 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 
 ### 10.2 정정한 기존 감사
 
-| 파일 / 시험 | 왜 바뀌었나 |
-| --- | --- |
-| `tests/engine/test_action_execution.py` (2) | `PlayerActionKind` 에 종류가 하나 늘었다 — 표본과 `UNSUPPORTED_REASON` 을 채웠다 |
-| `tests/engine/test_action_validation.py` | 같은 이유 |
-| `tests/engine/test_self_reference_target.py` (2) | 목록 18 → 19 · 실행 15 → 16 · `PlayerAction` 칸에 `materials` |
-| `tests/engine/test_special_summon.py` (2) | `SummonKind` 가 셋이 되었다 (**절차와 대조해** 센다) · 특수 소환을 등재한 효과가 하나 생겼다 |
-| `tests/engine/test_trigger_compiler.py` (2) | 특수 소환 선언이 링크 소환까지 덮는다. 한 시험은 `sorted(...)[0]` 이 **묶음을 대표하지 못한** 식이었고 그것도 고쳤다 |
-| `tests/engine/test_summon_trigger_execution.py` (2) | 같은 이유 · 유발이 둘이 되었다 (순서 주장은 그대로) |
-| `tests/engine/test_operation_integration.py` (2) | `_summon_ruling` 이 **같은 종류의** 관측 예외로 하나 더 생겼다 · `SPECIAL_SUMMON` 을 쓰는 실제 카드가 생겼다 |
-| `tests/engine/test_legal_action_candidate_consistency.py` | 보류를 만드는 자리가 7 → 9 (`_link_summon_actions` · `_note_trigger_refusal`) |
-| `tests/engine/test_followup_trigger_integration.py` (3) | 합성이 **더하기에서 갈아 끼우기로** — 실제 효과가 등재되어 같은 `EffectRef` 중복 등록이 되었다. "프로덕션이 이 정의를 모른다" 는 **조작의 차이**로 다시 적었다 |
-| `tests/engine/test_two_link_followup_trigger.py` (2) | 같은 이유 |
-| `tests/engine/test_trigger_window_completion.py` (3) | 기회 종료를 **그 두 제안**으로 좁혔다 (새 사건이 새 기회를 연다) · 사용자 패의 걸음 5 → 6 · 효과 해결 1 → 2 · 멈춘 자리가 `unsupported` → `flow_only` |
-| `tests/test_combo_output_consistency.py` (3) | 같은 수의 변화 |
-| `tests/test_deck_builder_planner.py` 쪽 정적 계획 문구 | `deck/planner.py` 의 "엔진이 구조적으로 지원하지 않는 절차" 목록에서 특수 소환 · 링크 소환 줄을 **정정**했다 — 둘 다 좁은 범위에서 실제로 실행된다 |
+고친 시험 파일은 **83개**다. 전부 "수를 고치고 **무엇이 왜 바뀌었는가**를 그
+자리에 적는" 방식이고, **assertion 을 지우거나 skip 으로 숨긴 자리는 없다.**
+몇 자리는 더 정확한 축으로 **다시 세게** 바꿨다.
 
-🔴 **assertion 을 지우거나 skip 으로 숨긴 자리는 없다.** 수를 고친 자리는 전부
-"무엇이 왜 바뀌었는가" 를 그 자리에 적었고, 몇 자리는 **더 정확한 축**으로 다시
-세게 바꿨다 (정의의 유무 → 조작의 차이, 후보의 유무 → 실행 내용의 차이).
+**① 같은 수가 여러 파일에 박혀 있던 것 (기계적)**
+
+| 바뀐 사실 | 파일 수 |
+| --- | --- |
+| `EFFECT_LIBRARY` 18 → 19 | 23 |
+| 실행 가능 15 → 16 | 6 |
+| `OPERATION_RULINGS` 19 → 21 | 5 |
+| `ValidationCode` 51 → 53 (그리고 그 파생 — `INVALID` 42 → 44 · 나머지 39 → 41 · 코드에서 판정을 되찾는 자리 50 → 52) | 11 |
+| `EffectDefinition` 칸 12 → 13 | 5 |
+| 등재 `ordinal` 집합 `{0}` → `{0, 1}` | 6 |
+| `PlayerActionKind` 11 → 12 | 5 |
+
+**② 사실이 뒤집혀 시험의 이름까지 고친 것**
+
+| 시험 | 전 | 후 |
+| --- | --- | --- |
+| `test_j_no_real_card_special_summons_yet` | 실행 가능한 실제 카드가 특수 소환을 **하지 않는다** | `..._exactly_one_...` — 정확히 하나이고, **죽은 자의 소생은 여전히 못 한다** (패와 묘지의 차이 = 소생 제한) |
+| `test_12_no_registered_effect_performs_a_special_summon` | 등재 중 `SPECIAL_SUMMON` 이 **0개** | `test_12_exactly_one_...` — 그 하나를 `EffectRef` 로 못박는다 |
+| `test_c09_girsu_is_the_only_registered_trigger_effect` | 등재된 유발이 **하나** | `test_c09_two_registered_trigger_effects_now_exist` — 수만 늘리지 않고 **공통성을 센다** (같은 등재 경로 · 같은 분류 · 서로 다른 조작과 `ordinal`) |
+| `test_16_the_library_now_has_exactly_one_trigger` | — | `..._exactly_two_triggers` |
+| `test_02_summon_kind_says_which_summon_and_only_that` | 멤버 둘을 센다 | 멤버 셋을 **구현된 절차와 대조**한다 (값마다 그것을 들고 있는 절차가 하나) |
+| `test_07_the_executable_set_is_exactly_eight_kinds` | 여덟 | `..._nine_kinds` — "낼 수 있는 일곱" 과 섞지 않는다 |
+| `test_14_no_registered_effect_can_special_summon` | 0개 | 그 하나를 못박는다 (이름은 유지 — 파일 전체가 그 축이다) |
+
+**③ 측정 자리가 옮겨 간 것 (느슨하게 하지 않고 걸음을 적었다)**
+
+| 시험 | 무엇이 달라졌나 |
+| --- | --- |
+| `test_a03` · `test_a07` (`test_trigger_normal_path_integration`) · `test_b04` (`test_bilateral_trigger_order`) · `test_a05` (`test_empty_chain_fast_window`) | 기르수 ① 의 해결이 묘지로 보낸 카드가 『성장』 이고 6-AC 가 그 ②를 등재했으므로, **해결 직후가 등재 단계(box D)** 다. 단언을 느슨하게 하지 않고 그 기회를 지나는 걸음을 적었다 |
+| `test_b11` · `test_d04` (같은 두 파일) | 같은 이유로 다음 발동이 `STAGE_FORBIDS_ACTION` 으로 거절된다 — **그 거절은 옳다.** 지나는 걸음을 더했다 |
+| `test_d05_a_state_hash_alone_does_not_decide_...` | 기르수 ① 에 `use_limit` 이 붙어 **발동이 판의 모양을 바꾼다** (`uses` 가 `canonical_state` 에 들어 있다). 그래서 주장을 더 날카롭게 고쳤다 — 사용 기록을 맞춰 해시를 되돌려도 **기회는 돌아오지 않는다** |
+| `test_e02` (`test_withheld_reason_propagation`) | `activate_card` 보류가 멈춘 자리에서 사라졌다 (전개가 한 걸음 더 간다). 그 보류가 **실제로 있는 자리**(전개 시작 전)에서 재고, `run.unsupported` 가 그것을 싣는 것을 함께 센다 |
+| `test_c01` · `test_g05` (`test_graveyard_movement_ruling`) · `test_f01` · `test_f02` · `test_i01` · `test_i02` (`test_deck_to_grave_blocker`) | 묘지행 판정의 근거가 **파생에서 등재로** 옮겼다 (991/684 → 990/685, 합 1,675 그대로 · 뒤집힌 카드 **0장**). 사본 등록소는 그 자리를 **빼고** 만든다 — 한 카드의 사실은 한 군데에만 적는다는 계약을 우회하지 않는다 |
+
+**④ 사용자 패 전개의 수가 움직인 것**
+
+| 시험 | 전 | 후 |
+| --- | --- | --- |
+| `test_combo_output_consistency` (3) · `test_withheld_reason_propagation` (2) · `test_trigger_window_completion` (3) | 5걸음 · 효과 해결 1 · 멈춘 자리 `unsupported` | **6걸음 · 효과 해결 2 · `flow_only`** |
+
+🔴 멈춘 자리가 깨끗해진 것과 **전개 전체가 검증된 것**은 다르다 —
+`run.fully_supported is False` 는 그대로이고, 지나온 미지원 1건이 보고에 남는다.
+
+**⑤ 좌표와 목록을 실측값으로 다시 적은 것**
+
+| 감사 | 바뀐 것 |
+| --- | --- |
+| `test_rule_not_implemented_code_audit` | 문자열 111 → 117 · 코드 80 → 83 · 산문 31 → 34 (세 수를 **따로** 세는 등식이 이 감사의 주장이고 그대로다) · status/code 위반 13 · 적합 19 는 **그대로**이고 열 자리의 좌표만 밀렸다 (원인 셋을 적었다) |
+| `test_validation_code_rejection_semantics_audit` | 코드 51 → 53 · 거부 생성 67 → 70 · `RULE_NOT_IMPLEMENTED` 자리 80 → 83 (차이 13 **그대로**) · 섹션 하나 추가 · 좌표 255 → 260 · 여러 줄이 된 호출을 다시 못박았다 |
+| `test_duelstep_withheld_validation_audit` | `WithheldAction` 자리 24 → 28 · `missing` 채우는 자리 12 → 16 · **비우는 자리 12 그대로**. 출처 종류가 셋 → 다섯이 된 것을 숨기지 않고 적고, **성질로는 셋**임을 조건식 셋을 못박아 함께 센다 |
+| `test_trigger_pipeline_dormant_audit` | `Duel` 폐쇄 59 → 62 (새 모듈 셋) · dormant 와 무관한 코드 43 → 45 — **휴면 모듈 넷은 그대로 폐쇄 밖**이고 새 코드 둘 다 dormant 층에 없다 |
+| `test_unimplemented_rule_semantics_audit` | `missing_rules` override 8 → 9 (`_LinkMaterialsLegal` — `UnimplementedRule` 이 아니면서 **조건부로** 낸다) · `UnimplementedRule` 이 아닌 `activation` 9 → 10 |
+| `test_engine_condition_none_contract_audit` | `engine/` 파일 69 → 72 — `Condition | None` 칸은 **다섯 그대로** |
+| `test_legal_action_engine_boundary_audit` | 실행 가능 8 → 9 · 후보 생성기 5 → 6 · **낼 수 있는 종류는 일곱 그대로** (`_special_summon_actions` 는 여전히 **없다**) |
+| `test_official_activation_player_action_contract` | 몬스터 효과 등재 2 → 3 · `executable` 의 `ordinal` 분포 `{0: 15, 1: 1}` · 금지 항목 셋은 여전히 없다 |
+| `test_opening_duel_integration` | `combo_messages` · `combo_texts` 에 `line_text` 가 **맨 뒤**에 붙었다 (기본값 `""` — 예전 호출이 그대로 돈다) |
+| `test_deck_builder_planner` 쪽 정적 계획 문구 | `deck/planner.py` 의 "엔진이 구조적으로 지원하지 않는 절차" 목록에서 특수 소환 · 링크 소환 줄을 **정정**했다 — 둘 다 좁은 범위에서 실제로 실행된다 |
+
 
 ### 10.3 측정 결과
 
@@ -719,10 +812,13 @@ python -m app.main combo "69811710,703897,2930675,12989604,93920420" \
 
 실측 (`combo_messages` 의 문자열, 토큰 없이 생성):
 
-| 입력 | 메시지 | 줄 | 글자 | 잘린 줄 |
-| --- | --- | --- | --- | --- |
-| `line:` 없음 | 4 | 146 | 7,845 | 6 |
-| `line:orcust-girsu` | 4 | 142 | 7,538 | 6 |
+| 입력 | 메시지 | 각 메시지 글자 | 줄 | 글자 | 못 보낸 줄 |
+| --- | --- | --- | --- | --- | --- |
+| `line:` 없음 | 4 | 1,918 · 1,987 · 1,995 · 1,964 | 147 | 7,867 | 6 |
+| `line:orcust-girsu` | 4 | 1,826 · 1,912 · 1,946 · 1,929 | 144 | 7,616 | 6 |
+
+못 보낸 줄은 **조용히 사라지지 않는다** — 마지막 메시지가
+*"… (길이 제한으로 6줄을 보내지 못했습니다)"* 를 적는다 (실측, 두 입력 모두).
 
 🔴 **잘림은 이 Phase 가 만든 것이 아니다** — 보완8 마무리 시점에도 같은 자리가
 잘려 있었고, `/combo` 는 메시지 4개 · 각 2,000자의 상한을 쓴다. `line:` 쪽이
