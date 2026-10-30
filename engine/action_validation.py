@@ -141,6 +141,11 @@ _COMPLETE_RULES: frozenset[PlayerActionKind] = frozenset(
         # 범위에 **몬스터의 기동 효과**가 더해졌고, 그 역시 ``VALID`` 가
         # "구현이 있다" 를 뜻하지는 않는다 (ADR-006).
         PlayerActionKind.ACTIVATE_EFFECT,
+        # Phase 6-AC — 링크 소환. 범위는
+        # ``engine.link_summon.LINK_MATERIAL_RULES`` 가 정하고 그 밖의 모든
+        # 링크 몬스터를 ``UNKNOWN`` 으로 남기므로, 여기 올려도 범위가
+        # 넓어지지 않는다 (``ACTIVATE_EFFECT`` 와 같은 구조).
+        PlayerActionKind.LINK_SUMMON,
     }
 )
 
@@ -389,7 +394,17 @@ class ActionValidator:
         for requirement in requirements:
             verdict = self._evaluator.evaluate(requirement.condition, context)
             if verdict.result is ConditionResult.FALSE:
-                return ValidationResult.invalid(requirement.code, requirement.detail)
+                #: 🔴 **조건이 왜 거짓인지 알면 그것도 전한다** (Phase
+                #: 6-AC). 아래 ``UNKNOWN`` 갈래와 **같은 모양**이고, 기본값이
+                #: 빈 튜플이므로 그것을 채우지 않는 조건의 문장은 바뀌지
+                #: 않는다.
+                why = "; ".join(
+                    requirement.condition.refusal_reasons(self._view, context)
+                )
+                return ValidationResult.invalid(
+                    requirement.code,
+                    f"{requirement.detail} ({why})" if why else requirement.detail,
+                )
             if verdict.result is ConditionResult.UNKNOWN:
                 # 조건 계층이 **무엇 때문에** 모르는지 이미 알고 있다.
                 # 다시 추측하지 않고 그대로 전한다.
@@ -638,6 +653,71 @@ def _special_summon(
         )
     )
     return tuple(requirements)
+
+
+#: 링크 소환이 메인 페이즈의 행위라는 근거.
+#:
+#:     RULE-TURN-004 · RULE-TURN-006 — "you can Normal Summon, Set, …
+#:     **Special Summon** …" 이 메인 페이즈의 행동 목록이다.
+#:
+#: 🔴 효과에 의한 특수 소환과 가른다. 그쪽은 효과가 때를 정하므로
+#: :func:`_special_summon` 이 페이즈를 보지 않지만, **플레이어가 선언하는**
+#: 링크 소환은 메인 페이즈의 행위다.
+LINK_SUMMON_PHASES = MAIN_PHASES
+
+
+def _link_summon(
+    validator: ActionValidator, action: PlayerAction
+) -> tuple[Requirement, ...]:
+    """
+    링크 소환. **이 목록을 전부 통과하면 허가가 난다** (``_COMPLETE_RULES``).
+
+    🔴 **``SPECIAL_SUMMON`` 의 ``UNKNOWN`` 을 풀어 주는 것이 아니다.**
+    :func:`_special_summon` 은 한 글자도 바뀌지 않았고 여전히 언제나
+    ``UNKNOWN`` 이다. 여기서 허가가 나는 범위는
+    :data:`~engine.link_summon.LINK_MATERIAL_RULES` 에 **손으로 적힌** 링크
+    몬스터뿐이고, 적히지 않은 카드는 이 목록의 마지막 요구가 ``UNKNOWN``
+    으로 막는다 — 그래서 ``_COMPLETE_RULES`` 에 올려도 범위가 넓어지지
+    않는다 (``ACTIVATE_EFFECT`` 를 올릴 때와 **같은 구조**다).
+
+    소환권을 보지 않는다 — 링크 소환은 특수 소환이므로 그 권리를 쓰지 않는다.
+
+    빈 칸도 여기서 보지 않는다. :func:`~engine.link_summon.assess_link_materials`
+    가 **소재가 떠난 뒤의 판**으로 세기 때문이다 — 소재가 엑스트라 몬스터
+    존에 있는 경우를 여기서 ``ZONE_FULL`` 로 잡으면 합법인 링크 소환이
+    거절된다.
+    """
+    return (
+        Requirement(
+            IsTurnPlayer(PlayerRef.CONTROLLER),
+            ValidationCode.NOT_TURN_PLAYER,
+            "자신의 턴이 아닙니다.",
+        ),
+        Requirement(
+            PhaseIs(LINK_SUMMON_PHASES),
+            ValidationCode.WRONG_PHASE,
+            "메인 페이즈가 아닙니다.",
+        ),
+        Requirement(
+            ControllerIs(PlayerRef.CONTROLLER, action.source),
+            ValidationCode.SOURCE_NOT_CONTROLLED,
+            "자신의 엑스트라 덱 카드가 아닙니다.",
+        ),
+        Requirement(
+            IsMonster(action.source),
+            ValidationCode.SOURCE_WRONG_CARD_TYPE,
+            "몬스터가 아닙니다.",
+        ),
+        #: 🔴 **판정은 한 곳에서만 한다.** 링크 몬스터인가 · 엑스트라 덱에
+        #: 있는가 · 소재가 조건에 맞는가 · 놓을 자리가 있는가를 여기서 다시
+        #: 적지 않고 :func:`~engine.link_summon.assess_link_materials` 에게
+        #: 묻는다 — 후보 생성기도 **같은 함수**를 부른다.
+        Requirement(
+            _LinkMaterialsLegal(action.source, action.materials),
+            ValidationCode.LINK_MATERIAL_INVALID,
+            "고른 소재가 그 링크 몬스터의 소재 조건을 만족하지 않습니다.",
+        ),
+    )
 
 
 def _set_monster(
@@ -1157,6 +1237,7 @@ _REQUIREMENT_BUILDERS: dict[
 ] = {
     PlayerActionKind.NORMAL_SUMMON: _normal_summon,
     PlayerActionKind.SPECIAL_SUMMON: _special_summon,
+    PlayerActionKind.LINK_SUMMON: _link_summon,
     PlayerActionKind.SET_MONSTER: _set_monster,
     PlayerActionKind.SET_SPELL_TRAP: _set_spell_trap,
     PlayerActionKind.CHANGE_POSITION: _change_position,
@@ -2064,6 +2145,83 @@ class _NormalSpellActivation(Condition):
             "이번 Phase 가 판정할 수 있는 발동이다 (통상 · 속공 마법 · "
             "세트된 일반 함정 또는 기동 효과)"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _LinkMaterialsLegal(Condition):
+    """
+    고른 소재로 그 링크 몬스터를 링크 소환할 수 있는가.
+
+    판정은 :func:`~engine.link_summon.assess_link_materials` 하나가 한다 —
+    :class:`_NormalSummonProcedure` 가 ``assess_normal_summon`` 에게 묻는 것과
+    **같은 자리**이고 같은 이유다 (검증기와 후보 생성기가 같은 답을 써야
+    한다).
+
+    세 갈래가 그대로 보존된다.
+
+    - ``LEGAL`` → ``TRUE``
+    - ``ILLEGAL`` → ``FALSE``
+    - ``UNDETERMINED`` → ``UNKNOWN`` (+ 없는 규칙 이름)
+    """
+
+    instance: InstanceId | None = None
+    materials: tuple[InstanceId, ...] = ()
+
+    def evaluate(self, view, context) -> ConditionResult:
+        assessment = self._assess(view, context)
+        if assessment.permits_procedure:
+            return ConditionResult.TRUE
+        if assessment.is_refusal:
+            return ConditionResult.FALSE
+        return ConditionResult.UNKNOWN
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        if assessment.permits_procedure or assessment.is_refusal:
+            return ()
+        return (assessment.reason,)
+
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        rule = self._assess(view, context).missing_rule
+        return (rule,) if rule else ()
+
+    def refusal_reasons(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        return (assessment.reason,) if assessment.is_refusal else ()
+
+    def _assess(self, view, context):
+        # 🔴 **절차가 아니라 판정 모듈에서 읽는다** (:mod:`engine.link_rules`).
+        #
+        # ``engine.link_summon`` 은 ``engine.summon`` · ``engine.effect`` 를
+        # 끌고 오고, 그 길은 ``engine.special_summon`` 에서 **부분 초기화된
+        # 모듈**을 만난다 (실측: 이 파일의 시험을 단독 실행하면
+        # ``ImportError``). 판정 모듈은 그 계층을 아예 모른다 — 그 가름의
+        # 근거는 ``engine/link_rules.py`` 의 머리말이 적는다.
+        from engine.link_rules import assess_link_materials
+
+        source = self.instance if self.instance is not None else context.source
+        return assess_link_materials(view, context.player, source, self.materials)
+
+    def canonical_state(self) -> tuple:
+        return (
+            "link_materials_legal",
+            self.instance.value if self.instance else None,
+            tuple(m.value for m in self.materials),
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {
+            "kind": "link_materials_legal",
+            "materials": [m.value for m in self.materials],
+        }
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        sent = " · ".join(str(m) for m in self.materials) or "없음"
+        return f"{which} 를 소재 {sent} 로 링크 소환할 수 있다"
 
 
 @dataclass(frozen=True, slots=True)

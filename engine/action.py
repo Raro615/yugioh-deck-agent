@@ -62,6 +62,32 @@ class PlayerActionKind(str, Enum):
     링크는 각자 재료를 고르는 절차가 있고, 그 절차가 생길 때 어떻게
     표현할지 정한다.
     """
+    LINK_SUMMON = "link_summon"
+    """
+    **링크 소환한다** (Phase 6-AC). 엑스트라 덱의 링크 몬스터 하나와
+    :attr:`PlayerAction.materials` 가 필요하다.
+
+    ``SPECIAL_SUMMON`` 과 가르는 이유
+    ---------------------------------
+    위의 ``SPECIAL_SUMMON`` docstring 이 "어떤 특수 소환법인가는 여기서
+    말하지 않는다 … 그 절차가 생길 때 어떻게 표현할지 정한다" 고 적어
+    두었다. **그 절차가 생겼고, 이것이 그 표현이다.**
+
+    =====================  =====================  =======================
+                            ``SPECIAL_SUMMON``     ``LINK_SUMMON``
+    =====================  =====================  =======================
+    출발 자리               패 · 묘지               **엑스트라 덱**
+    놓이는 자리             몬스터 존               **엑스트라 몬스터 존**
+    소재                    없다                    **반드시 있다**
+    검증                    언제나 ``UNKNOWN``      소재 조건을 **읽은**
+                                                    카드만 ``VALID``
+    =====================  =====================  =======================
+
+    🔴 **``SPECIAL_SUMMON`` 의 ``UNKNOWN`` 을 이 종류가 풀어 주지 않는다.**
+    플레이어가 직접 선언하는 특수 소환은 그대로 ``UNKNOWN`` 이다 — 여기서
+    허가가 나는 것은 **소재 조건을 손으로 확인한 링크 몬스터**뿐이고, 그
+    목록은 :data:`~engine.link_summon.LINK_MATERIAL_RULES` 다.
+    """
     SET_MONSTER = "set_monster"
     """일반 소환권을 써서 뒷면 수비 표시로 세트한다."""
     SET_SPELL_TRAP = "set_spell_trap"
@@ -121,6 +147,7 @@ _NEEDS_SOURCE: frozenset[PlayerActionKind] = frozenset(
     {
         PlayerActionKind.NORMAL_SUMMON,
         PlayerActionKind.SPECIAL_SUMMON,
+        PlayerActionKind.LINK_SUMMON,
         PlayerActionKind.SET_MONSTER,
         PlayerActionKind.SET_SPELL_TRAP,
         PlayerActionKind.ACTIVATE_CARD,
@@ -149,6 +176,25 @@ _ALLOWS_EFFECT_REF: frozenset[PlayerActionKind] = _NEEDS_EFFECT_REF | frozenset(
     {PlayerActionKind.ACTIVATE_CARD}
 )
 
+#: 소재를 **가질 수 있는** 종류.
+#:
+#: 🔴 하나뿐이고, 그것이 사실이다. 융합 · 싱크로 · 엑시즈는 소재를 쓰지만
+#: 그 절차가 아직 없으므로 (``PlayerActionKind`` 에 종류도 없다) 여기 적지
+#: 않는다 — 미리 적어 두면 "소재를 받을 수 있는 행위" 가 절차 없이 생긴다.
+_ALLOWS_MATERIALS: frozenset[PlayerActionKind] = frozenset(
+    {PlayerActionKind.LINK_SUMMON}
+)
+
+#: 소재가 **반드시 있어야 하는** 종류.
+#:
+#: 링크 소환은 소재가 0장일 수 없다 (공식 절차 — 링크 수치만큼의 몬스터를
+#: 소재로 한다). 그래서 :data:`_ALLOWS_MATERIALS` 와 같은 내용이지만 **다른
+#: 질문**이고, 두 표가 갈리는 날 (소재가 선택인 절차가 들어오는 날) 한쪽만
+#: 고치면 된다.
+_NEEDS_MATERIALS: frozenset[PlayerActionKind] = frozenset(
+    {PlayerActionKind.LINK_SUMMON}
+)
+
 #: ``phase`` 가 필요한 종류.
 _NEEDS_PHASE: frozenset[PlayerActionKind] = frozenset(
     {PlayerActionKind.CHANGE_PHASE}
@@ -158,6 +204,9 @@ _NEEDS_PHASE: frozenset[PlayerActionKind] = frozenset(
 _TARGET_COUNT: dict[PlayerActionKind, int | None] = {
     PlayerActionKind.NORMAL_SUMMON: 0,
     PlayerActionKind.SPECIAL_SUMMON: 0,
+    #: 🔴 **소재는 대상이 아니다** — 링크 소재는 ``materials`` 에 들어가고
+    #: 이 칸은 ``0`` 이다 (``PlayerAction.materials`` 의 설명).
+    PlayerActionKind.LINK_SUMMON: 0,
     PlayerActionKind.SET_MONSTER: 0,
     PlayerActionKind.SET_SPELL_TRAP: 0,
     PlayerActionKind.CHANGE_POSITION: 0,
@@ -197,6 +246,22 @@ class PlayerAction:
     targets: tuple[ActionTarget, ...] = ()
     effect_ref: EffectRef | None = None
     phase: Phase | None = None
+    materials: tuple[InstanceId, ...] = ()
+    """
+    **소재로 보낼 카드들** (Phase 6-AC). 링크 소환만 쓴다.
+
+    🔴 **``targets`` 에 넣지 않는다.** 「대상」 은 유희왕의 규칙 용어이고
+    (``EFFECT_FLAG_CARD_TARGET`` · 「대상으로 지정할 수 없다」 내성), 링크
+    소재는 **대상으로 지정되지 않는다.** 같은 칸에 넣으면 "대상 내성을 가진
+    몬스터는 링크 소재가 될 수 없다" 가 되고, 그것은 규칙이 아니다.
+
+    ``source`` 와도 다르다 — ``source`` 는 **소환되는** 링크 몬스터이고
+    여기 든 것은 **필드를 떠나는** 몬스터들이다. 한 칸에 섞으면 "무엇이
+    소환되는가" 를 잃는다.
+
+    순서를 유지한다. 소재의 순서가 규칙을 바꾸지는 않지만, 기록이
+    재현되어야 하므로 (``canonical_state``) 받은 순서를 그대로 들고 있는다.
+    """
 
     def __post_init__(self) -> None:
         if self.actor not in (0, 1):
@@ -206,6 +271,31 @@ class PlayerAction:
         if not isinstance(self.targets, tuple):
             raise MalformedAction(
                 "targets 는 tuple 이어야 합니다 — Action 은 불변입니다."
+            )
+        if not isinstance(self.materials, tuple):
+            raise MalformedAction(
+                "materials 는 tuple 이어야 합니다 — Action 은 불변입니다."
+            )
+        if self.materials and self.kind not in _ALLOWS_MATERIALS:
+            raise MalformedAction(
+                f"{self.kind.value} 에는 소재가 없습니다 — 소재를 쓰는 "
+                "행위는 "
+                + " · ".join(sorted(k.value for k in _ALLOWS_MATERIALS))
+                + " 뿐입니다."
+            )
+        if self.kind in _NEEDS_MATERIALS and not self.materials:
+            raise MalformedAction(
+                f"{self.kind.value} 에는 소재가 필요합니다 — 소재 없는 "
+                "링크 소환은 표현 자체가 성립하지 않습니다."
+            )
+        if len(set(self.materials)) != len(self.materials):
+            raise MalformedAction(
+                f"같은 카드를 소재로 두 번 쓸 수 없습니다: {self.materials}"
+            )
+        if self.source is not None and self.source in self.materials:
+            raise MalformedAction(
+                "소환되는 카드가 자기 소재가 될 수 없습니다: "
+                f"{self.source}"
             )
 
     # ------------------------------------------------------------------
@@ -225,6 +315,27 @@ class PlayerAction:
         (STRUCTURAL-41 · 61).
         """
         return cls(kind=PlayerActionKind.SPECIAL_SUMMON, actor=actor, source=source)
+
+    @classmethod
+    def link_summon(
+        cls,
+        actor: int,
+        source: InstanceId,
+        materials: "tuple[InstanceId, ...]",
+    ) -> "PlayerAction":
+        """
+        엑스트라 덱의 링크 몬스터를 **고른 소재로** 링크 소환한다.
+
+        어느 칸에 놓이는지는 여기서 말하지 않는다 —
+        :data:`~engine.link_summon.LINK_SUMMON_PROCEDURE` 가 정하고, 그
+        범위가 어디까지인지는 그 모듈이 적는다.
+        """
+        return cls(
+            kind=PlayerActionKind.LINK_SUMMON,
+            actor=actor,
+            source=source,
+            materials=tuple(materials),
+        )
 
     @classmethod
     def set_monster(cls, actor: int, source: InstanceId) -> "PlayerAction":
@@ -349,6 +460,9 @@ class PlayerAction:
             if self.effect_ref is not None
             else None,
             self.phase.value if self.phase is not None else None,
+            #: 🔴 **순서를 유지한다** — ``targets`` 와 같은 이유이고, 재현에
+            #: 쓰이는 값이므로 정렬해 버리면 기록이 입력과 달라진다.
+            tuple(m.value for m in self.materials),
         )
 
     def to_dict(self) -> dict:
@@ -365,6 +479,8 @@ class PlayerAction:
             }
         if self.phase is not None:
             data["phase"] = self.phase.value
+        if self.materials:
+            data["materials"] = [m.value for m in self.materials]
         return data
 
     @classmethod
@@ -383,6 +499,9 @@ class PlayerAction:
             if ref is not None
             else None,
             phase=Phase(phase) if phase is not None else None,
+            materials=tuple(
+                InstanceId(m) for m in data.get("materials", ())
+            ),
         )
 
     def __str__(self) -> str:
@@ -395,4 +514,6 @@ class PlayerAction:
             bits.append(self.phase.value)
         if self.targets:
             bits.append("->" + ",".join(str(t) for t in self.targets))
+        if self.materials:
+            bits.append("소재=" + ",".join(str(m) for m in self.materials))
         return " ".join(bits)

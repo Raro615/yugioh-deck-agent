@@ -137,6 +137,19 @@ class ActivationStatus(str, Enum):
     """의미가 공식 근거에서 확인되지 않았다."""
     NOT_IMPLEMENTED = "not_implemented"
     """정의가 없거나, 실행 구현이 등록되어 있지 않다 (ADR-006)."""
+    USE_LIMIT_REACHED = "use_limit_reached"
+    """
+    그 효과의 **1턴 사용 횟수를 이미 썼다** (Phase 6-AC).
+
+    ``CONDITION_FALSE`` 와 **합치지 않는다.** 발동 조건은 판 위의 사실을
+    묻고 (덱에 카드가 있는가 · 빈 칸이 있는가) 판이 바뀌면 참이 될 수
+    있지만, 이 쪽은 **이 턴 안에서는 다시 참이 되지 않는다.** 섞어 적으면
+    읽는 쪽이 "판을 바꾸면 된다" 로 읽는다.
+
+    ``CONDITION_UNKNOWN`` 과도 다르다 — **확인된 제한**에만 쓴다. 제한을
+    읽지 못한 효과는 이 상태가 되지 않고 제한이 없는 것처럼 동작한다
+    (``EffectDefinition.use_limit`` 의 설명).
+    """
     CONDITION_FALSE = "condition_false"
     """발동 조건이 **거짓**이다."""
     CONDITION_UNKNOWN = "condition_unknown"
@@ -458,6 +471,20 @@ class EffectActivator:
                 payment=payment,
             )
 
+        #: 🔴 **발동 시점에 센다.** 공식 규칙에서 「1턴에 1번」 은 **발동**
+        #: 으로 소비되고 해결로 소비되지 않는다 (무효가 되어도 횟수는 쓴
+        #: 것이다). 그래서 체인에 오르는 이 자리에서 적는다.
+        #:
+        #: 🔴 비용 지불 **뒤**다 — 치르지 못해 발동이 성립하지 않은 것은
+        #: 쓴 것이 아니다.
+        if definition.use_limit is not None and action.source is not None:
+            state.uses.mark_used(
+                definition.use_limit.scope,
+                definition.use_limit.key_for(
+                    action.actor, action.effect_ref, action.source
+                ),
+            )
+
         link = ChainLink(
             sequence=len(chain),
             actor=action.actor,
@@ -629,7 +656,51 @@ class EffectActivator:
         condition = self._check_condition(state, definition, action, chain, verdict)
         if condition is not None:
             return condition
+
+        #: 🔴 **조건 **뒤**에 본다** (Phase 6-AC). 순서가 뜻을 가진다 —
+        #: 「이 효과를 이미 썼다」 는 발동 조건이 참이었을 때에만 의미가 있는
+        #: 말이고, 먼저 보면 조건이 거짓인 효과까지 "이미 썼다" 로 보고된다.
+        limited = self._check_use_limit(state, definition, action, chain, verdict)
+        if limited is not None:
+            return limited
         return None
+
+    def _check_use_limit(
+        self,
+        state: GameState,
+        definition,
+        action: PlayerAction,
+        chain: Chain,
+        verdict: ValidationResult,
+    ) -> ActivationResult | None:
+        """
+        그 효과의 **1턴 사용 횟수**가 남아 있는가. 남아 있으면 ``None``.
+
+        🔴 **제한을 적지 않은 효과는 그냥 통과한다** — 없는 것을 기본값으로
+        메꾸지 않는다 (``EffectDefinition.use_limit``). 그래서 이 메서드가
+        생긴 뒤에도 등재된 다른 효과의 동작은 한 건도 바뀌지 않는다.
+
+        🔴 **판정은 여기서, 세는 것은 판에서** (``GameState.uses``). 둘을 한
+        자리에 두면 "세는 것" 이 "판정하는 것" 이 되고,
+        :class:`~engine.state.use_registry.UseRegistry` 가 **횟수만 센다**
+        고 적어 둔 계약이 깨진다.
+        """
+        limit = definition.use_limit
+        if limit is None or action.source is None:
+            return None
+        key = limit.key_for(action.actor, action.effect_ref, action.source)
+        used = state.uses.count(limit.scope, key)
+        if used < limit.times:
+            return None
+        return self._fail(
+            ActivationStatus.USE_LIMIT_REACHED,
+            action,
+            chain,
+            ValidationCode.EFFECT_USE_LIMIT_REACHED,
+            f"{action.effect_ref} 는 {limit.describe_ko()} 이고 이 턴에 "
+            f"이미 {used}번 썼습니다.",
+            authorization=verdict,
+        )
 
     def _check_shape(
         self, action: PlayerAction, chain: Chain

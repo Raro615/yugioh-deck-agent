@@ -241,6 +241,31 @@ class ValidationCode(str, Enum):
     접지 않는다.**
     """
 
+    # --- 횟수 제한 · 링크 소재 (Phase 6-AC) ------------------------------
+    EFFECT_USE_LIMIT_REACHED = "effect_use_limit_reached"
+    """
+    **그 효과의 1턴 사용 횟수를 이미 썼다** (``SetCountLimit``).
+
+    ``NORMAL_SUMMON_ALREADY_USED`` 와 **같은 결**이고 다른 축이다 — 그쪽은
+    규칙이 플레이어에게 준 권리이고 이쪽은 **카드가 자기 텍스트로 선언한**
+    제한이다 (「이 카드명의 ①의 효과는 1턴에 1번밖에 사용할 수 없다」).
+
+    🔴 **확인된 제한에만 쓴다.** 제한을 읽지 못한 효과는 이 코드가 아니라
+    제한이 **없는 것처럼** 동작한다 — 그것이 지금 사실이고, 어느 정의가
+    제한을 들고 있는지는 ``EffectDefinition.use_limit`` 이 말한다. 모르는
+    것을 위반으로 접지 않는다.
+    """
+    LINK_MATERIAL_INVALID = "link_material_invalid"
+    """
+    **고른 소재가 그 링크 몬스터의 소재 조건을 만족하지 않는다.**
+
+    장수 · 링크 수치만 맞은 것은 통과가 아니다 (공식 링크 소환 절차 —
+    "using monsters you control whose total number equals its Link Rating
+    **and that meet its material requirements**"). 조건을 **읽은** 링크
+    몬스터에만 쓴다 — 읽지 못한 카드는 ``RULE_NOT_IMPLEMENTED`` 이고
+    ``UNKNOWN`` 이다.
+    """
+
 
 # ======================================================================
 # 어느 판정 묶음의 말인가 — UNKNOWN policy (Phase 3-E-40)
@@ -369,6 +394,10 @@ CODE_VALIDITY: "dict[ValidationCode, ActionValidity | None]" = {
     ValidationCode.TRIGGER_TIMING_MISSED: ActionValidity.INVALID,
     #: 설명이 직접 적는다 — "``INVALID`` 가 아니라 ``UNKNOWN`` 에 쓴다".
     ValidationCode.PRIORITY_STATE_STALE: ActionValidity.UNKNOWN,
+    #: Phase 6-AC — **확인된 제한 · 확인된 소재 조건**의 위반이다. 둘 다
+    #: 읽지 못한 쪽은 이 코드가 아니라 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
+    ValidationCode.EFFECT_USE_LIMIT_REACHED: ActionValidity.INVALID,
+    ValidationCode.LINK_MATERIAL_INVALID: ActionValidity.INVALID,
 }
 
 _UNCLASSIFIED = set(ValidationCode) - set(CODE_VALIDITY)

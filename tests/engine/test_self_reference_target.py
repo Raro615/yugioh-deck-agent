@@ -52,6 +52,7 @@ from engine.effect.library import (
     HONEST,
     OPERATION_RULINGS,
     POT_OF_GREED,
+    WORLD_WAND,
     definition_registry,
 )
 from engine.effect.operation import CardOperation, OperationKind
@@ -1071,16 +1072,19 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     🔴 **Phase 6-V 가 둘 다 하나씩 늘렸다** (18 · 15). 늘어난 하나가
     기르수 ① 이고 그것이 **첫 유발 효과 실행**이다 — 6-L 이 "첫 몬스터
     효과" 였던 것과 같은 자리의 다음 걸음이다.
+
+    🔴 **Phase 6-AC 가 다시 하나씩 늘렸다** (19 · 16). 늘어난 하나가
+    성유물－『성장』 ① 이고, 그것이 **특수 소환을 실행하는 첫 효과**다.
     """
-    assert len(EFFECT_LIBRARY) == 18
+    assert len(EFFECT_LIBRARY) == 19
     executable = [e for e in EFFECT_LIBRARY if e.executable]
-    assert len(executable) == 15
+    assert len(executable) == 16
     monsters = [
         e.definition.source_card_id
         for e in executable
         if e.definition.activation_kind is not None
     ]
-    assert monsters == [HONEST, GIRSU], monsters
+    assert monsters == [HONEST, GIRSU, WORLD_WAND], monsters
 
 
 # ======================================================================
@@ -1162,8 +1166,12 @@ def test_k03_the_public_action_contract_is_unchanged():
     ``PlayerAction`` · ``EffectRef`` · ``ResolutionContext`` 의 칸이
     **하나도 바뀌지 않았다** (§3-1 · §3-2).
     """
+    #: 🔴 **Phase 6-AC 가 ``materials`` 를 더했다.** 이 단언은 "칸이 하나도
+    #: 바뀌지 않았다" 를 지키던 것이고, 바뀐 이유를 함께 적어 둔다 — 링크
+    #: 소재는 **대상이 아니므로** ``targets`` 에 넣을 수 없었다
+    #: (``PlayerAction.materials`` 의 설명).
     assert [f.name for f in dataclasses.fields(PlayerAction)] == [
-        "kind", "actor", "source", "targets", "effect_ref", "phase"
+        "kind", "actor", "source", "targets", "effect_ref", "phase", "materials"
     ]
     assert [f.name for f in dataclasses.fields(EffectRef)] == ["card_id", "ordinal"]
     assert [f.name for f in dataclasses.fields(ResolutionContext)] == [

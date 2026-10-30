@@ -65,6 +65,9 @@ UNSUPPORTED_REASON: dict[PlayerActionKind, str] = {
     PlayerActionKind.SPECIAL_SUMMON: (
         "특수 소환 절차 — 카드마다 다른 소환 조건 · 재료 고르기 · 표시 형식"
     ),
+    PlayerActionKind.LINK_SUMMON: (
+        "링크 소환 절차 — 소재 조건 · 소재 보내기 · 엑스트라 몬스터 존 배치"
+    ),
     PlayerActionKind.SET_MONSTER: "세트 절차 (일반 소환권을 함께 쓴다)",
     PlayerActionKind.SET_SPELL_TRAP: "마법 · 함정 세트 절차",
     PlayerActionKind.ACTIVATE_CARD: "발동 절차 — 비용 · 대상 · 체인 삽입이 앞선다",

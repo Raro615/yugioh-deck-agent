@@ -74,6 +74,7 @@ from engine.target_bridge import (
     selections_for,
     target_combinations,
     target_enumeration_limits,
+    unsupported_enumeration,
 )
 from engine.spell_activation import (
     PLACEMENT_SOURCE_ZONES,
@@ -192,6 +193,9 @@ UNSEEN_TARGET_ZONE_RULE = (
 OPEN_STATE_ONLY_KINDS: tuple[PlayerActionKind, ...] = (
     PlayerActionKind.NORMAL_SUMMON,
     PlayerActionKind.SPECIAL_SUMMON,
+    #: Phase 6-AC — 링크 소환도 **열린 판에서만** 선언한다. 소환은 발동이
+    #: 아니므로 체인에 끼어들 수 없다 (RULE-CHAIN-011).
+    PlayerActionKind.LINK_SUMMON,
     PlayerActionKind.SET_MONSTER,
     PlayerActionKind.SET_SPELL_TRAP,
     PlayerActionKind.CHANGE_POSITION,
@@ -958,6 +962,12 @@ class Duel:
                     ):
                         allowed.append(candidate)
             allowed.extend(self._attack_actions(seat, validator))
+            # 🔴 **엑스트라 덱의 링크 소환도 후보가 된다** (Phase 6-AC).
+            # 패를 도는 위의 고리는 ``source`` 가 패인 행위만 만들므로, 이
+            # 자리가 없으면 링크 소환은 **후보에도 보류에도** 오르지 않는다.
+            opened, held = self._link_summon_actions(seat, validator)
+            allowed.extend(opened)
+            withheld.extend(held)
             opened, held = self._activation_actions(seat, validator)
             allowed.extend(opened)
             withheld.extend(held)
@@ -1290,6 +1300,132 @@ class Duel:
                     ):
                         allowed.append(action)
         return allowed
+
+    def _link_summon_actions(self, seat: int, validator: ActionValidator):
+        """
+        지금 **허가가 나는 링크 소환들**과 막힌 이유 (Phase 6-AC).
+
+        ``_attack_actions`` 와 같은 모양이다 — 짝을 전부 만들어 **검증기에게
+        하나씩 물어본다.** 소재 조건 · 자리 · 페이즈는 전부 검증기의 몫이고
+        (그 안에서
+        :func:`~engine.link_summon.assess_link_materials` 하나가 답한다),
+        그래야 규칙이 한 곳에만 있다.
+
+        🔴 **조합을 만드는 범위를 좁게 적는다.** 소재 후보는 자신 필드의
+        몬스터이고 (``LINK_MATERIAL_ZONES``), 장수는 등록된 소재 조건이 적은
+        **정확한 한 수**다. 그래서 조합 수가 ``C(필드 몬스터, 장수)`` 로
+        닫힌다 — 필드가 여섯 칸이므로 한 카드당 최대 20 조합이다.
+
+        🔴 **소재 조건이 등록되지 않은 링크 몬스터는 장수를 모른다.** 그때
+        조합을 만들 수 없으므로 **소재 없는 짝을 만들지 않고** 보류에 이유만
+        적는다 — 거기서 검증기를 부르면 ``MalformedAction`` 이 된다 (소재
+        없는 링크 소환은 표현 자체가 성립하지 않는다).
+
+        🔴 **어느 카드인지는 보류에 적지 않는다** —
+        :meth:`_withheld_board_actions` 와 같은 invariant 다 (3-E-41).
+        엑스트라 덱은 비공개 자리이므로 수만 센다.
+        """
+        from itertools import combinations
+
+        #: 🔴 **판정 모듈에서 읽는다** — 절차(``engine.link_summon``)를
+        #: 읽으면 ``engine.effect`` 가 딸려 오고, 이 모듈은 그것을 import
+        #: 하지 않는다 (``test_e_the_duel_makes_no_rules_of_its_own``).
+        from engine.link_rules import (
+            LINK_MATERIAL_RULE_MISSING,
+            LINK_MATERIAL_ZONES,
+            material_rule_for,
+        )
+
+        extra = [
+            card
+            for card in self.state.player(seat).zone(Zone.EXTRA)
+            if card is not None
+        ]
+        field = [
+            card.instance_id
+            for zone in sorted(LINK_MATERIAL_ZONES, key=lambda z: z.value)
+            for card in self.state.player(seat).zone(zone)
+            if card is not None
+        ]
+
+        allowed: list[PlayerAction] = []
+        groups: dict[tuple, list[str]] = {}
+        unread = 0
+        for card in extra:
+            rule = material_rule_for(card.card_id)
+            if rule is None:
+                unread += 1
+                continue
+            if len(field) < rule.count:
+                #: 🔴 **조합이 0가지인 것과 조건 위반은 다른 사실이다.**
+                #: 이 자리가 없으면 "필드에 몬스터가 부족하다" 가 후보에도
+                #: 보류에도 오르지 않고 (``combinations`` 가 빈 것을
+                #: 돌려준다) ``/combo`` 는 링크 소환을 **아예 묻지 않은**
+                #: 것처럼 보고한다.
+                groups.setdefault(
+                    (ValidationCode.LINK_MATERIAL_INVALID, None), []
+                ).append(
+                    f"자신 필드의 몬스터가 {len(field)}장이라 소재 "
+                    f"{rule.count}장을 고를 수 없습니다 "
+                    f"(소재 조건: {rule.describe_ko()})."
+                )
+                continue
+            for picked in combinations(field, rule.count):
+                action = PlayerAction.link_summon(
+                    actor=seat, source=card.instance_id, materials=picked
+                )
+                verdict = validator.validate(action)
+                if verdict.validity is ActionValidity.VALID:
+                    allowed.append(action)
+                    continue
+                groups.setdefault(
+                    (verdict.code, verdict.missing_rule), []
+                ).append(verdict.reason)
+
+        held: list[WithheldAction] = []
+        if unread:
+            held.append(
+                WithheldAction(
+                    PlayerActionKind.LINK_SUMMON,
+                    "엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 "
+                    "읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 "
+                    "않으므로 후보를 만들지 않았습니다.",
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    missing=LINK_MATERIAL_RULE_MISSING,
+                    scope=(
+                        None
+                        if len(extra) <= 1
+                        else f"엑스트라 덱 {len(extra)}장 중 {unread}장이 "
+                        "같은 이유"
+                    ),
+                )
+            )
+        #: 🔴 **허가된 조합이 하나라도 있으면 거절 사유를 적지 않는다.**
+        #: 조합마다 한 줄을 남기면 "소재 한 장이 조건에 안 맞는다" 가 합법인
+        #: 조합과 함께 보고되고, 읽는 쪽은 그것을 막힌 것으로 읽는다
+        #: (``_note_target_limits`` 가 ``offered`` 를 보는 것과 같은 자리다).
+        if not allowed:
+            for (code, missing), reasons in groups.items():
+                held.append(
+                    WithheldAction(
+                        PlayerActionKind.LINK_SUMMON,
+                        reasons[0],
+                        code,
+                        missing=missing,
+                        #: 🔴 **"같은 이유" 라고 적지 않는다.** 묶는 열쇠는
+                        #: (코드 · 모자란 것)이므로 한 묶음 안의 문장이
+                        #: 서로 다를 수 있다 (실측: 소재 조건 위반과 놓을
+                        #: 자리 없음이 같은 코드로 묶인다). 묶음이 몇 가지를
+                        #: 덮는지와 **그중 하나**라는 사실을 적는다.
+                        scope=(
+                            None
+                            if len(reasons) <= 1
+                            else f"소재 조합 {len(reasons)}가지가 막혔고 "
+                            "그중 하나의 이유"
+                        ),
+                    )
+                )
+        return allowed, held
 
     def _activation_actions(self, seat: int, validator: ActionValidator):
         """
@@ -2297,11 +2433,6 @@ class Duel:
                     )
                 )
                 continue
-            candidate = PlayerAction.activate_effect(
-                actor=seat,
-                source=offer.source,
-                effect_ref=offer.effect_ref,
-            )
             definition = self._activator.definitions.definition_for(
                 offer.effect_ref
             )
@@ -2327,11 +2458,115 @@ class Duel:
                     )
                 )
                 continue
-            try:
-                selections = selections_for(definition, candidate)
-            except TargetBridgeError:
-                # 🔴 같은 결의 자리다 — 대상 환전이 안 되면 **처리할 수
-                # 없다는 사실**을 적는다. 조용히 넘기지 않는다.
+            # 🔴 **발동 시점에 고르는 유발의 조합을 만든다** (Phase 6-AC).
+            #
+            # 이 자리는 ``targets=()`` 인 후보 **하나**만 만들었고, 그래서
+            # 발동 시점에 대상을 정하는 유발은 ``TargetBridgeError`` 로
+            # **전부** 보류되었다. 실측 (성유물－『성장』 ①, 패에서 고르기)::
+            #
+            #     activate_effect [이 유발 효과의 실행 구현]:
+            #       93920420:e[1] 의 대상 지정을 이 계층이 옮기지 못했습니다
+            #
+            # 그 문장은 **거짓이었다** — 실행 구현은 있고, 없었던 것은 이
+            # 자리의 **조합 열거**다. 기르수 ① 이 통과한 것은 그 선택이
+            # 덱에서 이루어져 해결 시점으로 미뤄지기 때문이고
+            # (``decided_at_resolution``), 패에서 고르는 유발은 그 길을 타지
+            # 않는다.
+            #
+            # 🔴 **``_activation_actions`` 와 같은 함수를 쓴다**
+            # (``target_combinations``). 고를 것이 없으면 빈 조합 하나를
+            # 돌려주므로 (그 함수의 계약) 기르수 쪽 동작은 한 글자도 바뀌지
+            # 않는다.
+            # 🔴 **관문을 여는 판정과 같은 것을 여기서도 묻는다**
+            # (Phase 6-AC).
+            #
+            # 위 네 검사는 창 · 체인 · 어휘를 각각 본다. 그런데
+            # ``event_backed`` 를 만드는 :meth:`_offer_is_activatable` 은
+            # :meth:`_window_admits` 하나로 묻고, 그 함수는 **한 가지를 더**
+            # 본다 — ``window_passed`` (그 자리가 이 창에서 발동하지 않기로
+            # 했다). 그래서 둘의 답이 갈릴 수 있었고, 갈리면 아래 관문이
+            # ``event_backed`` 없이 판정해 **규칙이 닫은 기회를 "엔진
+            # 미지원" 으로** 적는다. 실측 (자동 ``PASS`` 뒤의 성유물－
+            # 『성장』 ①)::
+            #
+            #     🔴 activate_effect [trigger-effect-activation]:
+            #        발동 관문을 지나지 못했습니다
+            #     실제 이유 = 그 자리가 이 창에서 포기했다 (window_passed)
+            #
+            # 🔴 **판정을 복제하지 않는다** — 같은 함수를 부른다.
+            admits = self._window_admits(offer, seat)
+            if admits is not True:
+                withheld.append(
+                    WithheldAction(
+                        PlayerActionKind.ACTIVATE_EFFECT,
+                        "이 창에서는 그 유발을 발동할 수 없습니다 — 그 "
+                        "자리가 이 창에서 발동하지 않기로 했습니다 (기회 "
+                        "자체는 보존됩니다)."
+                        if admits is False
+                        else "이 유발을 지금 발동할 수 있는지 판정할 근거가 "
+                        "없습니다.",
+                        ValidationCode.NO_RESPONSE_WINDOW
+                        if admits is False
+                        else ValidationCode.RULE_NOT_IMPLEMENTED,
+                        missing=(
+                            None if admits is False else TRIGGER_WORDING_MISSING
+                        ),
+                    )
+                )
+                continue
+
+            # 🔴 **대상과 무관한 거절을 먼저 묻는다** (Phase 6-AC) —
+            # ``_activation_actions`` 가 보완8 마무리2 에서 세운 것과 **같은
+            # 자리 · 같은 함수**다 (:meth:`_target_free_verdict`).
+            #
+            # 왜 유발에도 필요한가: 조합이 0가지면 아래 반복이 한 번도 돌지
+            # 않으므로, 관문이 들고 있던 **진짜 이유가 사라진다.** 실측
+            # (성유물－『성장』 ① 이 링크 소재로 다시 묘지에 간 뒤)::
+            #
+            #     🔴 activate_effect [이 유발 효과의 실행 구현]:
+            #        고를 수 있는 대상 조합을 하나도 만들지 못했습니다
+            #     실제 이유 = 「1턴에 1번」 을 이미 썼다 (use_limit)
+            #
+            # 즉 **규칙이 막은 것이 엔진 미지원으로** 집계되었다 — 보완6 ·
+            # 보완8 이 고친 바로 그 혼동이다.
+            independent = self._target_free_verdict(
+                seat, offer.effect_ref, offer.source, validator=validator
+            )
+            forbidden = (
+                independent is not None
+                and independent.validity is ActionValidity.INVALID
+            )
+            if independent is not None:
+                self._note_trigger_refusal(withheld, offer, independent)
+
+            offered = 0
+            bridge_failed = False
+            combinations_here = target_combinations(
+                self.state, seat, definition, offer.source
+            )
+            for targets in combinations_here:
+                candidate = PlayerAction.activate_effect(
+                    actor=seat,
+                    source=offer.source,
+                    effect_ref=offer.effect_ref,
+                    targets=targets,
+                )
+                try:
+                    selections = selections_for(definition, candidate)
+                except TargetBridgeError:
+                    # 🔴 같은 결의 자리다 — 대상 환전이 안 되면 **처리할 수
+                    # 없다는 사실**을 적는다. 조용히 넘기지 않는다.
+                    bridge_failed = True
+                    continue
+                gate = self._activation_gate(
+                    candidate, validator=validator, selections=selections
+                )
+                if gate.validity is ActionValidity.VALID:
+                    allowed.append(candidate)
+                    offered += 1
+                    continue
+                self._note_trigger_refusal(withheld, offer, gate)
+            if bridge_failed and not offered:
                 withheld.append(
                     WithheldAction(
                         PlayerActionKind.ACTIVATE_EFFECT,
@@ -2341,38 +2576,79 @@ class Duel:
                         missing=TRIGGER_IMPLEMENTATION_MISSING,
                     )
                 )
-                continue
-            gate = self._activation_gate(
-                candidate, validator=validator, selections=selections
-            )
-            if gate.validity is not ActionValidity.VALID:
-                # 🔴 **관문이 거절한 이유를 그대로 싣는다** (6-AB 추가 보완).
+            if not combinations_here and not forbidden:
+                # 🔴 **조합이 0가지인 것도 사실이고, 두 가지로 갈린다.**
                 #
-                # 여기서도 조용히 ``continue`` 였다. 그러면 "규칙이 금지한다"
-                # 와 "판정할 수 없다" 가 **둘 다 침묵**으로 나오고, 그 둘을
-                # 가르는 것이 이 Phase 들의 규율이다.
+                # 위 반복이 한 번도 돌지 않으면 후보도 보류도 남지 않으므로
+                # 읽는 쪽은 "그 유발이 아예 없었다" 로 읽는다. 그런데 그
+                # 둘을 **같은 코드로 적으면** 보완6 의 혼동이 되돌아온다.
                 #
-                # ``missing`` 은 관문이 말한 것을 따른다 — 관문이 모른다고
-                # (``UNKNOWN``) 하면 채우고, 규칙이 금지한다고 하면 비운다.
+                # - ``unsupported_enumeration`` 이 모양 이름을 댄다
+                #   → **엔진 미지원** (``RULE_NOT_IMPLEMENTED``)
+                # - 그냥 적격 후보가 없다
+                #   → **규칙의 답** (``NO_CANDIDATES``, ``INVALID``)
+                #
+                # 🔴 ``forbidden`` 일 때는 적지 않는다 — 발동 자체가 규칙상
+                # 불가능하므로 "대상이 없다" 는 그 자리의 질문이 아니고,
+                # 진짜 이유는 위에서 이미 적었다.
+                shape = unsupported_enumeration(definition)
                 withheld.append(
                     WithheldAction(
                         PlayerActionKind.ACTIVATE_EFFECT,
-                        f"{offer.effect_ref} 의 발동 기회가 열렸지만 발동 "
-                        f"관문을 지나지 못했습니다: {gate.reason}",
-                        # 🔴 **관문의 코드를 그대로 옮긴다** (보완8). 전에는
-                        # ``missing`` 만 옮겼고, 그래서 읽는 쪽이 규칙 거절과
-                        # 모름을 "비었는지" 로 짐작해야 했다.
-                        gate.code,
+                        f"{offer.effect_ref} 의 발동 기회가 열렸지만 고를 수 "
+                        "있는 대상 조합을 하나도 만들지 못했습니다"
+                        + (
+                            f" — 선택 장수의 모양을 다리가 다루지 못합니다 "
+                            f"({shape})."
+                            if shape is not None
+                            else " — 적격한 후보가 없습니다 (규칙의 답이고 "
+                            "엔진 미지원이 아닙니다)."
+                        ),
+                        ValidationCode.RULE_NOT_IMPLEMENTED
+                        if shape is not None
+                        else ValidationCode.NO_CANDIDATES,
                         missing=(
-                            gate.missing_rule
-                            if gate.validity is ActionValidity.UNKNOWN
+                            TRIGGER_IMPLEMENTATION_MISSING
+                            if shape is not None
                             else None
                         ),
                     )
                 )
-                continue
-            allowed.append(candidate)
         return allowed, withheld
+
+    def _note_trigger_refusal(self, withheld, offer, gate) -> None:
+        """
+        유발 후보가 **관문에서 거절된 이유** 한 줄 (Phase 6-AC 가 꺼낸 자리).
+
+        전에는 이 문장이 :meth:`_trigger_actions` 안에 **그 자리에서** 적혀
+        있었다. 조합을 열거하게 된 지금은 같은 이유가 조합 수만큼 쌓일 수
+        있으므로, 한 함수에 모아 둔다 — ``WithheldAction`` 의 중복 열쇠가
+        같은 줄을 하나로 묶는다 (``scope`` 는 열쇠에 들지 않는다).
+        """
+        # 🔴 **관문이 거절한 이유를 그대로 싣는다** (6-AB 추가 보완).
+        #
+        # 이 자리도 조용히 ``continue`` 였다. 그러면 "규칙이 금지한다" 와
+        # "판정할 수 없다" 가 **둘 다 침묵**으로 나오고, 그 둘을 가르는 것이
+        # 이 Phase 들의 규율이다.
+        #
+        # ``missing`` 은 관문이 말한 것을 따른다 — 관문이 모른다고
+        # (``UNKNOWN``) 하면 채우고, 규칙이 금지한다고 하면 비운다.
+        withheld.append(
+            WithheldAction(
+                PlayerActionKind.ACTIVATE_EFFECT,
+                f"{offer.effect_ref} 의 발동 기회가 열렸지만 발동 "
+                f"관문을 지나지 못했습니다: {gate.reason}",
+                # 🔴 **관문의 코드를 그대로 옮긴다** (보완8). 전에는
+                # ``missing`` 만 옮겼고, 그래서 읽는 쪽이 규칙 거절과
+                # 모름을 "비었는지" 로 짐작해야 했다.
+                gate.code,
+                missing=(
+                    gate.missing_rule
+                    if gate.validity is ActionValidity.UNKNOWN
+                    else None
+                ),
+            )
+        )
 
     def _activation_timing(self, action: PlayerAction) -> ActivationTiming:
         """

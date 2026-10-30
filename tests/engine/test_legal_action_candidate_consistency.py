@@ -1923,11 +1923,23 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     #: 않았고 이름이 옮겨졌다.** 관문의 거절을 적는 문장이 두 자리에서
     #: 필요해졌으므로 (조합별 관문과 **대상에 독립적인** 관문) 한 자리로
     #: 뺐다. 두 벌이 되면 같은 거절이 판에 따라 다른 문장으로 보인다.
+    #: 🔴 **정정 (Phase 6-AC).** 자리가 둘 늘어 아홉이다.
+    #:
+    #: ``_link_summon_actions``
+    #:     링크 소환 후보를 만드는 자리. 소재 조건을 읽지 않은 엑스트라 덱
+    #:     카드와 소재 조건 위반을 적는다 — 이 자리가 없으면 링크 소환은
+    #:     **후보에도 보류에도** 오르지 않는다.
+    #: ``_note_trigger_refusal``
+    #:     ``_note_gate_refusal`` 과 **같은 이유로 뺀 자리**다. 유발의 관문
+    #:     거절을 적는 문장이 두 자리에서 필요해졌다 (대상 조합별 관문과
+    #:     **대상에 독립적인** 관문), 그래서 한 함수로 뺐다.
     assert sorted(by_function) == [
         "_enforce_mandatory",
         "_flow_actions",
+        "_link_summon_actions",
         "_note_gate_refusal",
         "_note_target_limits",
+        "_note_trigger_refusal",
         "_stage_closed_actions",
         "_trigger_actions",
         "_withheld_board_actions",
@@ -1942,40 +1954,66 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
             for node in by_function[name]
         ]
 
-    #: 🔴 **유발 쪽 아홉 중 여섯은 채우고 셋은 비운다.**
+    #: 🔴 **유발 쪽 열 중 일곱은 채우고 셋은 비운다** (Phase 6-AC 가 정정).
     #:
-    #: 채우는 여섯 — 기록 없음 · 강제·임의 모름 · 타이밍 근거 없음 · 실행
-    #: 구현 없음 · 대상 환전 실패 · 관문 거절. 전부 "무엇이 생겨야 풀리는가"
-    #: 를 답할 수 있는 자리다.
+    #: 채우는 일곱 — 기록 없음 · 강제·임의 모름 · 타이밍 근거 없음 · 실행
+    #: 구현 없음 · 대상 환전 실패 · **창 자격 모름** · **대상 조합 0가지**.
+    #: 전부 "무엇이 생겨야 풀리는가" 를 답할 수 있는 자리다.
     #:
     #: 비우는 셋 — 기회가 끝났다 · 체인이 먼저다 · 타이밍을 놓쳤다. 전부
     #: **규칙이 답한** 자리다.
     #:
-    #: 🔴 **마지막 하나(관문 거절)는 조건부다.** 관문이 ``UNKNOWN`` 이라고
-    #: 하면 그것이 말한 ``missing_rule`` 을 싣고, 규칙이 금지한다고 하면
-    #: ``None`` 을 싣는다. AST 로는 "칸이 있다" 로 세어지므로 그 사실을
-    #: 아래에서 따로 확인한다 — 수만 세면 "언제나 채운다" 로 읽힌다.
+    #: 🔴 **관문 거절 자리가 빠졌다** — ``_note_trigger_refusal`` 로 옮겼다
+    #: (위 설명). 대신 6-AC 가 둘을 더했고, **둘 다 조건부**다.
     trigger = filled("_trigger_actions")
-    assert len(trigger) == 9, trigger
-    assert trigger.count(True) == 6 and trigger.count(False) == 3, trigger
+    assert len(trigger) == 10, trigger
+    assert trigger.count(True) == 7 and trigger.count(False) == 3, trigger
 
-    #: 🔴 관문 거절 자리의 ``missing`` 은 **관문의 답을 그대로 따른다.**
-    gate_site = [
-        node
+    #: 🔴 **조건부 자리 둘** (6-AC). 각자 "규칙이 답했는가" 를 보고 갈린다 —
+    #: 규칙이 답한 쪽은 ``missing`` 을 비우고, 모르는 쪽만 이름을 싣는다.
+    conditionals = [
+        kw.value
         for node in by_function["_trigger_actions"]
-        if any(
-            isinstance(kw.value, ast.IfExp)
-            for kw in node.keywords
-            if kw.arg == "missing"
-        )
+        for kw in node.keywords
+        if kw.arg == "missing" and isinstance(kw.value, ast.IfExp)
     ]
-    assert len(gate_site) == 1, len(gate_site)
-    conditional = next(
-        kw.value for kw in gate_site[0].keywords if kw.arg == "missing"
+    assert len(conditionals) == 2, len(conditionals)
+    #: ① 창이 **닫혔다**(``False``)면 규칙의 답이므로 비우고, 모르면 채운다.
+    #: ② 조합을 못 만든 이유가 **모양**이면 채우고, 후보가 없으면 비운다.
+    shapes = {
+        ast.unparse(c.test): (ast.unparse(c.body), ast.unparse(c.orelse))
+        for c in conditionals
+    }
+    assert shapes["admits is False"] == ("None", "TRIGGER_WORDING_MISSING")
+    assert shapes["shape is not None"] == (
+        "TRIGGER_IMPLEMENTATION_MISSING",
+        "None",
     )
-    #: 조건은 "관문이 모른다고 했는가" 이고, 그렇지 않으면 ``None`` 이다.
-    assert "UNKNOWN" in ast.unparse(conditional.test)
-    assert ast.unparse(conditional.orelse) == "None"
+
+    #: 🔴 **유발의 관문 거절도 관문의 답을 그대로 따른다** — 자리만 옮겼고
+    #: 조건식은 ``_note_gate_refusal`` 과 **같다.**
+    assert filled("_note_trigger_refusal") == [True]
+    trigger_gate = next(
+        kw.value
+        for node in by_function["_note_trigger_refusal"]
+        for kw in node.keywords
+        if kw.arg == "missing"
+    )
+    assert isinstance(trigger_gate, ast.IfExp)
+    assert "UNKNOWN" in ast.unparse(trigger_gate.test)
+    assert ast.unparse(trigger_gate.orelse) == "None"
+
+    #: 🔴 **링크 소환 쪽 둘** (6-AC). 하나는 언제나 채우고 (소재 조건을 읽지
+    #: 않았다 — 근거가 생겨야 풀린다), 하나는 **판정을 따른다.**
+    assert filled("_link_summon_actions") == [True, True]
+    link_sites = by_function["_link_summon_actions"]
+    missings = [
+        ast.unparse(kw.value)
+        for node in link_sites
+        for kw in node.keywords
+        if kw.arg == "missing"
+    ]
+    assert missings == ["LINK_MATERIAL_RULE_MISSING", "missing"], missings
     #: 🔴 **판 쪽 하나는 채운다** — 발동 규칙이 이유를 댄다.
     assert filled("_withheld_board_actions") == [True], filled(
         "_withheld_board_actions"
@@ -2096,7 +2134,18 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     #: 🔴 채우는 쪽도 **무엇이 생겨야 풀리는가**를 그 함수 안에서 적는다 —
     #: 추가 보완이 더한 자리들이 그 규율을 따르는지 센다.
     assert "근거가 생겨야 풀리는 자리이므로 ``missing`` 을 채운다" in trigger_body
-    assert "관문이 말한 것을 따른다" in trigger_body
+    #: 🔴 **정정 (6-AC).** "관문이 말한 것을 따른다" 는 문장은 관문 거절
+    #: 자리의 기준이고, 그 자리가 ``_note_trigger_refusal`` 로 옮겨 갔다 —
+    #: 그래서 그 함수 안에서 찾는다 (``_note_gate_refusal`` 과 같은 자리).
+    assert "관문이 말한 것을 따른다" in function_body("_note_trigger_refusal")
+    #: 🔴 6-AC 가 ``_trigger_actions`` 에 더한 두 자리도 그 함수 안에서
+    #: 기준을 적는다 — 하나는 규칙이 닫은 창, 하나는 조합 0가지의 두 갈래다.
+    assert "판정을 복제하지 않는다" in trigger_body
+    assert "규칙의 답" in trigger_body
+    #: 🔴 링크 소환 쪽도 같은 규율을 따른다.
+    assert (
+        "장수와 링크 수치만 맞춰 통과시키지" in function_body("_link_summon_actions")
+    )
     #: 🔴 보완8 이 더한 두 자리도 그 함수 안에서 기준을 적는다.
     assert "관문이 말한 것을 따른다" in function_body("_note_gate_refusal")
     assert (

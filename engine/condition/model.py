@@ -91,6 +91,23 @@ class Condition:
         """
         return ()
 
+    def refusal_reasons(
+        self, view: "GameStateView", context: ConditionContext
+    ) -> tuple[str, ...]:
+        """
+        이 조건이 ``FALSE`` 인 **구체적인 이유**들 (Phase 6-AC).
+
+        :meth:`unknown_reasons` 와 **대칭**이다. 모름에 이유를 남기면서
+        거짓에는 남기지 않을 이유가 없고, 남기지 않으면 부르는 쪽이
+        ``Requirement.detail`` 의 **한 문장**밖에 전할 수 없다 — 그 문장은
+        종류를 말하지만 *어느 소재가 왜* 는 말하지 못한다 (실측: 소재 조건
+        위반 네 가지가 모두 같은 한 줄로 보고되었다).
+
+        🔴 **기본값이 빈 튜플이고, 그것이 기존 동작이다.** 이 값을 채우지
+        않는 조건의 거절 문장은 한 글자도 바뀌지 않는다.
+        """
+        return ()
+
     def to_dict(self) -> dict:
         """JSON 으로 바로 나갈 수 있는 형태."""
         raise NotImplementedError  # pragma: no cover - 추상

@@ -28,7 +28,12 @@ import pathlib
 import pytest
 
 from engine.duel import Duel
-from engine.effect.delta import MonsterSummoned, SummonKind, ZoneMoved
+from engine.effect.delta import (
+    SPECIAL_SUMMON_KINDS,
+    MonsterSummoned,
+    SummonKind,
+    ZoneMoved,
+)
 from engine.effect.library import definition_registry
 from engine.effect.operation import OperationKind
 from engine.event_pipeline import EventPipeline
@@ -289,7 +294,20 @@ def test_c_the_two_summon_events_compile_to_different_declarations():
 
     assert normal.spec.point is special.spec.point is TimingPoint.MONSTER_SUMMONED
     assert normal.spec.summons == frozenset({SummonKind.NORMAL})
-    assert special.spec.summons == frozenset({SummonKind.SPECIAL})
+    #: 🔴 **Phase 6-AC — 특수 소환 선언은 링크 소환에도 발화한다.**
+    #:
+    #: 공식 룰북이 그렇게 적는다 ("Link Summoning is a type of Special
+    #: Summon"), 그리고 그 사실은 한 곳에만 적혀 있다
+    #: (:data:`~engine.effect.delta.SPECIAL_SUMMON_KINDS`). 이 단언이
+    #: ``{SPECIAL}`` 을 고정하고 있던 동안에는 소환법이 둘뿐이어서 같은
+    #: 값이었다 — 링크가 생기자 **둘이 갈렸고**, 갈린 쪽이 맞다.
+    assert special.spec.summons == SPECIAL_SUMMON_KINDS
+    assert special.spec.summons == frozenset(
+        {SummonKind.SPECIAL, SummonKind.LINK}
+    )
+    #: 일반 소환은 그 묶음에 **들지 않는다** — 이 줄이 없으면 위의 변경이
+    #: "소환이면 다 발화한다" 로 넓어졌는지 알 수 없다.
+    assert SummonKind.NORMAL not in SPECIAL_SUMMON_KINDS
 
 
 def test_c_a_normal_summon_declaration_does_not_match_a_special_summon():
@@ -509,9 +527,16 @@ def test_f_the_special_summon_declaration_does_not_fire_on_a_normal_summon(
     """
     registry, compiled = registry_from(repository, [GIRSU])
     assert len(compiled) == 2
-    assert {tuple(sorted(s.spec.summons))[0] for s in compiled} == {
-        SummonKind.NORMAL,
-        SummonKind.SPECIAL,
+    #: 🔴 **두 선언이 서로 다른 소환 묶음을 본다** (Phase 6-AC 가 정정).
+    #:
+    #: 전에는 ``sorted(...)[0]`` 으로 각 묶음의 첫 값만 꺼내 비교했는데,
+    #: 그 식은 묶음이 **한 값일 때만** 뜻이 있다. 특수 소환 선언이 링크까지
+    #: 덮게 되자 (``SPECIAL_SUMMON_KINDS``) 정렬 순서에서 ``link`` 가
+    #: 뽑혔다 — 단언이 깨진 것은 **그 식이 묶음을 대표하지 못했기** 때문이고
+    #: 두 선언이 섞인 것이 아니다. 묶음을 그대로 비교한다.
+    assert {frozenset(s.spec.summons) for s in compiled} == {
+        frozenset({SummonKind.NORMAL}),
+        frozenset(SPECIAL_SUMMON_KINDS),
     }
 
     pipeline = EventPipeline(summoned.view(MINE), registry, definition_registry())

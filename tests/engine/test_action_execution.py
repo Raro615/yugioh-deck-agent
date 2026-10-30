@@ -204,6 +204,14 @@ def _sample_action(state, kind: PlayerActionKind) -> PlayerAction:
         PlayerActionKind.SPECIAL_SUMMON: lambda: PlayerAction.special_summon(
             MINE, hand
         ),
+        #: 🔴 **링크 소환 (Phase 6-AC).** 소재 없는 링크 소환은 표현 자체가
+        #: 성립하지 않으므로 (``PlayerAction.__post_init__``) 소재를 하나
+        #: 준다. 이 판의 ``monster`` 는 저장소 없이 만든 카드이고 ``hand``
+        #: 는 엑스트라 덱 카드가 아니므로, 판정은 아래 단언대로 허가가
+        #: 나지 않는다 — 그것이 이 테스트의 요점이다.
+        PlayerActionKind.LINK_SUMMON: lambda: PlayerAction.link_summon(
+            MINE, hand, (monster,)
+        ),
         PlayerActionKind.SET_MONSTER: lambda: PlayerAction.set_monster(MINE, hand),
         PlayerActionKind.SET_SPELL_TRAP: lambda: PlayerAction(
             kind=PlayerActionKind.SET_SPELL_TRAP, actor=MINE, source=hand

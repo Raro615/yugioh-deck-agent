@@ -487,10 +487,48 @@ class SummonKind(str, Enum):
 
     "어떤 카드가 특수 소환되었는가" 와 "어떤 방법으로" 는 다른 질문이고,
     지금 답할 수 있는 것은 앞의 것뿐이다 (STRUCTURAL-62).
+
+    🔴 **Phase 6-AC 가 그 목록에서 링크 하나를 꺼냈다** — 절차가 생겼기
+    때문이다 (:mod:`engine.link_summon`). 위의 설명은 **그대로 유효하다**:
+    이름이 먼저 생긴 것이 아니라 **재료를 고르고 보내고 놓는 절차**가 먼저
+    생겼고, 그 뒤에 이름을 주었다. 융합 · 싱크로 · 엑시즈 · 의식 · 펜듈럼은
+    여전히 여기 없다.
+    """
+
+    LINK = "link"
+    """
+    링크 소환 (Phase 6-AC). **특수 소환의 한 종류다.**
+
+    ``SPECIAL`` 과 가르는 이유가 둘이다.
+
+    1. **절차가 다르다.** 재료를 골라 묘지로 보내고 엑스트라 덱에서 나온다
+       — 출발 자리 · 소재 · 놓이는 자리가 전부 다르므로 같은
+       :class:`~engine.summon.SummonProcedure` 의 **다른 값**이다.
+    2. **사건이 다르다.** 「링크 소환했을 경우」 와 「특수 소환되었을 경우」
+       는 서로 다른 유발 시점이고, 하나로 적으면 둘을 영영 가를 수 없다.
+
+    🔴 **둘을 포함 관계로 적지 않는다.** 링크 소환은 규칙상 특수 소환이지만
+    (공식 룰북 — "Link Summoning is a type of Special Summon"), 그 사실을
+    열거형 값으로 표현할 방법이 없다. 그래서 "링크 소환도 특수 소환인가" 를
+    묻는 쪽은 :data:`SPECIAL_SUMMON_KINDS` 를 읽는다 — 그 표가 **한 곳에서**
+    그 사실을 적는다.
     """
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
         return self.value
+
+
+#: 규칙상 **특수 소환인** 소환법들 (공식 룰북).
+#:
+#:     "Link Summoning is a type of Special Summon."
+#:
+#: 🔴 왜 표인가: :class:`SummonKind` 는 "어떤 소환법인가" 를 적고, "그것이
+#: 특수 소환인가" 는 **다른 질문**이다. 열거형 값에 포함 관계를 넣을 수
+#: 없으므로 그 사실을 한 곳에 적고, 묻는 쪽은 전부 여기를 읽는다 — 두 곳에
+#: 적으면 융합이 들어오는 날 한쪽만 고쳐진다.
+SPECIAL_SUMMON_KINDS: frozenset[SummonKind] = frozenset(
+    {SummonKind.SPECIAL, SummonKind.LINK}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -604,6 +642,7 @@ __all__ = [
     "ZoneShuffled",
     "PhaseChanged",
     "SummonKind",
+    "SPECIAL_SUMMON_KINDS",
     "MonsterSummoned",
     "canonical_deltas",
 ]

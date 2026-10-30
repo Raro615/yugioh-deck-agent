@@ -353,9 +353,16 @@ def duel_executor(journal=None) -> "ActionExecutor":
 
     - Phase 3-E-1-B: ``ATTACK``
     - Phase 3-E-2: ``SET_MONSTER`` · ``SET_SPELL_TRAP``
+    - Phase 6-AC: ``LINK_SUMMON``
+
+    🔴 ``LINK_SUMMON`` 을 :func:`summon_executor` 에 넣지 않은 이유: 그
+    이름이 말하는 것은 "일반 소환과 특수 소환 둘" 이고 (docstring 이 그렇게
+    적는다), 거기에 링크를 끼우면 그 설명이 거짓이 된다 — 전투와 세트를
+    따로 둔 것과 같은 이유다.
     """
     from engine.action_execution import ActionExecutor
     from engine.battle import AttackHandler
+    from engine.link_summon import LinkSummonHandler
     from engine.set_card import SetMonsterHandler, SetSpellTrapHandler
 
     return (
@@ -363,6 +370,7 @@ def duel_executor(journal=None) -> "ActionExecutor":
         .register(PlayerActionKind.ATTACK, AttackHandler())
         .register(PlayerActionKind.SET_MONSTER, SetMonsterHandler())
         .register(PlayerActionKind.SET_SPELL_TRAP, SetSpellTrapHandler())
+        .register(PlayerActionKind.LINK_SUMMON, LinkSummonHandler())
     )
 
 

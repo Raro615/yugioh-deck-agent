@@ -179,12 +179,34 @@ def test_a_the_action_carries_only_stable_identity():
     assert action.canonical_state()  # 값만으로 직렬화된다
 
 
-def test_a_the_summon_kind_does_not_claim_a_method():
+def test_a_the_summon_kind_names_only_implemented_procedures():
     """
     §7 — "어떤 카드가 특수 소환되었는가" 와 "어떤 방법으로" 는 다른 질문이다.
-    융합 · 싱크로 · 엑시즈 · 링크는 각자의 절차가 생길 때 이름을 갖는다.
+    융합 · 싱크로 · 엑시즈 · 링크는 **각자의 절차가 생길 때** 이름을 갖는다.
+
+    🔴 **Phase 6-AC 에서 링크가 그 이름을 가졌다.** 이 단언이 지키는 것은
+    "이름이 둘이다" 가 아니라 **"절차 없는 이름이 없다"** 이고, 그래서 목록을
+    늘리는 것이 아니라 **절차와 맞춰** 본다 — 링크는
+    :data:`~engine.link_summon.LINK_SUMMON_PROCEDURE` 가 있고, 융합 · 싱크로
+    · 엑시즈 · 의식 · 펜듈럼은 여전히 **이름도 절차도 없다.**
     """
-    assert [k.value for k in SummonKind] == ["normal", "special"]
+    assert [k.value for k in SummonKind] == ["normal", "special", "link"]
+
+    #: 🔴 **이름마다 절차가 있는가.** 이 대조가 이 테스트의 요점이다.
+    from engine.link_summon import LINK_SUMMON_PROCEDURE
+    from engine.normal_summon import NORMAL_SUMMON_PROCEDURE
+
+    procedures = (
+        NORMAL_SUMMON_PROCEDURE,
+        SPECIAL_SUMMON_PROCEDURE,
+        LINK_SUMMON_PROCEDURE,
+    )
+    assert {p.summon for p in procedures} == set(SummonKind)
+
+    #: 아직 없는 소환법의 이름이 들어오지 않았다.
+    assert not {"fusion", "synchro", "xyz", "ritual", "pendulum"} & {
+        k.value for k in SummonKind
+    }
 
 
 def test_a_the_procedure_says_what_it_supports():
@@ -827,17 +849,24 @@ def test_i_the_summon_delta_shows_only_what_the_viewer_may_know(state):
     assert landed.card_id == FEATHERMAN  # 앞면이므로 보인다
 
 
-def test_i_no_library_effect_special_summons_anything():
+def test_i_only_one_library_effect_special_summons_and_it_was_read_by_hand():
     """
-    §14 — 실제 카드를 쓰려 했으나 조건을 만족하는 카드가 **없다.**
+    §14 — 2-T 당시 이 단언은 *"특수 소환을 하는 효과가 **하나도 없다**"* 였다.
+    특수 소환하는 실제 카드의 조건을 **추측해서** 구현하지 않는다는 규율이고,
+    그 규율은 지금도 그대로다.
 
-    라이브러리의 실행 가능한 효과 셋(욕망의 항아리 · 은혜의 단비 ·
-    싸이크론) 중 특수 소환을 하는 것은 하나도 없고, 특수 소환하는 실제
-    카드의 조건을 추측해서 구현하지 않는다. 그래서 이번 단계의 end-to-end
-    는 **실제 카드 정체**(페더맨 · 버스트레이디)를 쓰되 소환 절차 자체는
-    synthetic 시나리오로 검증한다.
+    🔴 **Phase 6-AC 에서 추측하지 않고 하나를 열었다.** 성유물－『성장』
+    (93920420) ① 의 특수 소환 조건은 **공식 텍스트 전문을 읽어** 등록소에
+    적혀 있고 (``OPERATION_RULINGS`` 의 ``MAY_BE_SPECIAL_SUMMONED``), 그
+    답이 쓰이는 범위도 좁다 — 패에서 나오는 특수 소환만이다
+    (``REVIVAL_LIMIT_FREE_ZONES``).
+
+    그래서 이 테스트가 재는 것이 바뀌었다: **"없다" 가 아니라 "손으로 읽은
+    것만"** 이다.
     """
+    from engine.effect.library import OPERATION_RULINGS
     from engine.effect.operation import OperationKind
+    from engine.effect.ruling import RuleQuestion
 
     executable = [entry for entry in EFFECT_LIBRARY if entry.executable]
     kinds = {
@@ -847,8 +876,35 @@ def test_i_no_library_effect_special_summons_anything():
     }
 
     assert executable  # 실행 가능한 효과가 있기는 하다
-    assert OperationKind.DRAW in kinds  # 드로우 · 라이프 · 파괴뿐이다
-    assert not any("summon" in kind.value for kind in kinds)
+    assert OperationKind.DRAW in kinds
+    #: 소환하는 종류는 **특수 소환 하나**다 — 융합 · 싱크로 · 엑시즈 ·
+    #: 의식의 종류는 ``OperationKind`` 에 아예 없다.
+    assert {k for k in kinds if "summon" in k.value} == {
+        OperationKind.SPECIAL_SUMMON
+    }
+
+    #: 🔴 **등재가 하나라는 것과, 그 하나의 답이 적혀 있다는 것.**
+    #:
+    #: 두 번째 단언이 묻는 것은 **그 효과가 소환하는 카드**의 답이 아니다 —
+    #: 무엇이 소환될지는 해결 시점에 고르므로 정적으로 알 수 없고, 그 답은
+    #: 관문이 그때 묻는다 (``_check_rule_gate``). 여기서 확인하는 것은
+    #: 『성장』 ① 이 소환하는 것이 **「성유물」 몬스터**이고 이 판본의 경로가
+    #: 같은 카드명을 고른다는 사실이므로, **그 카드의 답이 등록되어 있는가**
+    #: 하나다. 등재가 늘어나면 첫 단언이 먼저 깨지고, 그때 새 카드의 답을
+    #: 읽었는지 사람이 확인해야 한다.
+    summoning = [
+        entry
+        for entry in executable
+        for operation in entry.definition.operations
+        if operation.kind is OperationKind.SPECIAL_SUMMON
+    ]
+    assert [str(entry.effect_ref) for entry in summoning] == ["93920420:e[1]"]
+    for entry in summoning:
+        facts = OPERATION_RULINGS.facts_for(entry.card_id)
+        assert facts is not None, entry.card_id
+        fact = facts.answer_for(RuleQuestion.MAY_BE_SPECIAL_SUMMONED)
+        assert fact is not None, entry.card_id
+        assert fact.note.strip()
 
 
 @requires_official_db

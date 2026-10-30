@@ -867,19 +867,29 @@ def test_h_three_real_cards_take_three_different_paths(state):
     assert len(set(OPERATION_HANDLERS[kind].apply for kind in paths)) == 3
 
 
-def test_h_no_real_card_uses_move_or_special_summon_yet():
+def test_h_no_real_card_uses_move_yet():
     """
-    §13 의 정직한 결과: MOVE 는 **설계상** 실제 카드가 될 수 없고
-    (``LibraryEntry`` 가 거부한다), 특수 소환은 소환 조건 계층이 없어서
-    아직 실행 가능한 카드가 없다 (Phase 2-U · STRUCTURAL-64).
+    §13 의 정직한 결과: MOVE 는 **설계상** 실제 카드가 될 수 없다
+    (``LibraryEntry`` 가 거부한다).
 
     목록이 늘어나면 이 단언이 깨지도록 되어 있다 — 그것이 이 테스트의
     일이다. Phase 2-W 에서 실제 카드 다섯 장이 더해지며 실제로 깨졌고,
     ``SEND_TO_GRAVE`` · ``DISCARD`` 가 여기 들어왔다. Phase 2-AI 에서
     리로드가 더해지며 다시 깨졌고 ``RETURN_TO_DECK`` · ``SHUFFLE`` 이
     들어왔다. Phase 2-AK 에서 강제 탈출 장치가 ``RETURN_TO_HAND`` 를
-    가져왔다. 요점(MOVE 와 특수 소환에는 아직 실제 카드가 없다)은
-    그대로다 — 둘 다 쓰지 않는다.
+    가져왔다.
+
+    🔴 **Phase 6-AC 에서 특수 소환이 들어왔다 — 이름부터 고쳤다.**
+    이 테스트는 "MOVE 와 특수 소환에는 아직 실제 카드가 없다" 였고, 그중
+    뒤쪽이 더 이상 참이 아니다. 성유물－『성장』(93920420) ① 이
+    ``SpecialSummonOperation`` 으로 등재되었고, 그것을 가능하게 한 것은
+    소환 조건 계층이 **생긴** 것이 아니라 **좁게 열린** 것이다 —
+    :meth:`~engine.effect.ruling.BoardRuling.may_be_special_summoned` 가
+    패에서 나오는 특수 소환에만, 손으로 확인한 카드에만 ``TRUE`` 를
+    돌려준다. 그 범위 밖은 여전히 ``UNKNOWN`` 이고 어떤 특수 소환도
+    일어나지 않는다.
+
+    MOVE 쪽 요점은 그대로다 — 쓰지 않는다.
     """
     from engine.effect.library import EFFECT_LIBRARY
 
@@ -899,9 +909,21 @@ def test_h_no_real_card_uses_move_or_special_summon_yet():
         OperationKind.RETURN_TO_DECK,  # Phase 2-AI — 리로드
         OperationKind.SHUFFLE,  # Phase 2-AI — 리로드
         OperationKind.RETURN_TO_HAND,  # Phase 2-AK — 강제 탈출 장치
+        OperationKind.SPECIAL_SUMMON,  # Phase 6-AC — 성유물－『성장』
     }
     assert OperationKind.MOVE not in kinds
-    assert OperationKind.SPECIAL_SUMMON not in kinds
+
+    #: 🔴 **특수 소환을 등재한 카드는 하나다.** "범위가 좁게 열렸다" 는
+    #: 위 docstring 의 주장을 수로 고정한다 — 늘어나면 이 단언이 깨지고,
+    #: 그때 관문의 범위(``REVIVAL_LIMIT_FREE_ZONES`` · 등록된 카드)를 다시
+    #: 읽어야 한다.
+    summoning = [
+        entry
+        for entry in executable
+        for operation in entry.definition.operations
+        if operation.kind is OperationKind.SPECIAL_SUMMON
+    ]
+    assert [str(entry.effect_ref) for entry in summoning] == ["93920420:e[1]"]
 
 
 # ======================================================================
@@ -1130,7 +1152,7 @@ def test_j_the_observation_boundary_is_the_actors(state):
     """
     관측은 행위자의 시점으로만 만든다.
 
-    **예외가 둘이고, 둘 다 여기서 좁힌다.**
+    **예외가 셋이고, 셋 다 여기서 좁힌다.**
 
     ``_authoritative_candidates`` (2-AB)
         무작위 선택과 "전부" 에는 고르는 사람이 없으므로 후보를 **자리
@@ -1139,15 +1161,26 @@ def test_j_the_observation_boundary_is_the_actors(state):
         규칙 관문은 **관측 질문이 아니다.** "이 카드를 패로 되돌릴 수
         있는가" 의 답은 누가 보고 있는지에 따라 달라지지 않는다. 어리석은
         매장이 자기 덱 안의 카드에 관문을 묻는 것이 그 예다.
+    ``_summon_ruling`` (6-AC)
+        🔴 **같은 종류의 예외가 하나 더 생겼다.** "이 카드를 특수 소환해도
+        되는가" 도 관측 질문이 아니다 — 그 답은 누가 보고 있는지에 따라
+        달라지지 않고, 성유물－『성장』 ① 이 **자기 패**의 카드에 그 관문을
+        묻는 것이 그 예다. 판정기를 만드는 모양도 ``_movement_ruling`` 과
+        한 글자도 다르지 않다.
 
-    둘 다 그 관측이 그 자리에서만 쓰이고 **밖으로 나가지 않는다** —
+    셋 다 그 관측이 그 자리에서만 쓰이고 **밖으로 나가지 않는다** —
     그것까지 확인해야 예외가 구멍이 되지 않는다. 예외를 **하나 더 연 것이
     아니라**, 같은 종류의 예외가 하나 더 생긴 것이고 같은 방법으로
     막는다 (이름까지 ``owner`` 로 고정한다).
     """
     tree = ast.parse(pathlib.Path("engine/effect/executor.py").read_text("utf-8"))
 
-    RULE_QUESTIONS = ("_authoritative_candidates", "_movement_ruling")
+    RULE_QUESTIONS = (
+        "_authoritative_candidates",
+        "_movement_ruling",
+        # Phase 6-AC — 특수 소환 관문. 위 docstring 이 근거를 적는다.
+        "_summon_ruling",
+    )
     counting = {
         node
         for parent in ast.walk(tree)

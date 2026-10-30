@@ -212,6 +212,12 @@ def test_every_action_kind_reports_which_rule_layer_is_missing(validator, state)
         PlayerActionKind.SPECIAL_SUMMON: PlayerAction.special_summon(
             0, hand_card.instance_id
         ),
+        #: 🔴 **링크 소환 (Phase 6-AC).** 이 판의 ``hand_card`` 는 엑스트라
+        #: 덱의 링크 몬스터가 아니므로 소재 조건 판정이 거절한다 — 아래
+        #: 단언대로 허가가 나지 않고, 이유를 말한다.
+        PlayerActionKind.LINK_SUMMON: PlayerAction.link_summon(
+            0, hand_card.instance_id, (card.instance_id,)
+        ),
         PlayerActionKind.SET_MONSTER: PlayerAction.set_monster(
             0, hand_card.instance_id
         ),

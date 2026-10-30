@@ -139,7 +139,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Sequence
 
-from engine.effect.delta import SummonKind
+from engine.effect.delta import SPECIAL_SUMMON_KINDS, SummonKind
 from engine.ids import EffectRef
 from engine.trigger import (
     TimingPoint,
@@ -325,8 +325,13 @@ EVENT_TIMING: dict[str, _Timing] = {
     "EVENT_SUMMON_SUCCESS": _Timing(
         TimingPoint.MONSTER_SUMMONED, summons=frozenset({SummonKind.NORMAL})
     ),
+    #: 🔴 **링크 소환도 여기로 들어온다** (Phase 6-AC). 링크 소환은 규칙상
+    #: 특수 소환이므로 (``SPECIAL_SUMMON_KINDS``) 「특수 소환에 성공했을
+    #: 경우」 유발이 링크 소환에도 발화한다. 그 사실을 이 표에 손으로 다시
+    #: 적지 않고 **그 표를 읽는다** — 융합이 들어오는 날 한쪽만 고쳐지지
+    #: 않게.
     "EVENT_SPSUMMON_SUCCESS": _Timing(
-        TimingPoint.MONSTER_SUMMONED, summons=frozenset({SummonKind.SPECIAL})
+        TimingPoint.MONSTER_SUMMONED, summons=SPECIAL_SUMMON_KINDS
     ),
     # 어디에 **도착했는가** — ``ZoneMoved`` 가 그대로 말해 준다.
     #

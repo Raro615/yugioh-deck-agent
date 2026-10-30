@@ -445,6 +445,24 @@ class RuleQuestion(str, Enum):
     실측: ``Duel.SendtoDeck`` 를 쓰는 카드 825장 중 **557장**이 적는다 (67%).
     리로드(22589918)가 적는 쪽이다 — 2-AI 가 옮기지 못한 그 술어다.
     """
+    MAY_BE_SPECIAL_SUMMONED = "may_be_special_summoned"
+    """
+    H — "이 카드를 특수 소환할 수 있는가" (``Card.IsCanBeSpecialSummoned``,
+    Phase 6-AC).
+
+    🔴 **A~G 와 한 가지가 다르다** — 이 질문은 **카드가 선언할 때만** 물어
+    지는 것이 아니라 :data:`RULE_GATED` 로 **종류만 보고 언제나** 물어진다
+    (파괴와 같은 쪽이다). 그래서 :data:`DECLARED_GATE_RULINGS` 에 넣지
+    않는다. 열거형에 이름이 생긴 것은 **답을 적을 자리**가 필요해서다 —
+    ``_check_rule_gate`` 는 전에도 이 질문을 했고, 답하는 쪽
+    (:class:`UnknownSummonRuling`)에 "확인한 카드" 를 적을 칸이 없었다.
+
+    🔴 **이 답만으로 특수 소환이 허가되지 않는다.** 소생 제한은 카드가
+    아니라 **이력**이므로 (``BoardRuling.may_be_special_summoned`` 의 설명),
+    묘지 · 제외에서 나오는 특수 소환은 이 답이 ``TRUE`` 여도 ``UNKNOWN``
+    이다. 이 칸이 말하는 것은 **카드 자신의 텍스트가 특수 소환을 막지
+    않는다**는 사실 하나다.
+    """
 
 
 #: 질문 → 그 질문을 던지는 공식 Lua 술어 이름. **근거다.**
@@ -479,6 +497,16 @@ DECLARED_GATE_RULINGS: dict[OperationKind, RuleQuestion] = {
     OperationKind.RETURN_TO_DECK: RuleQuestion.MAY_BE_RETURNED_TO_DECK,
 }
 
+#: 질문 → 그 질문을 던지는 공식 Lua 술어 이름 중 **종류 관문** 쪽.
+#:
+#: :data:`LUA_GATE_PREDICATES` 와 가르는 이유: 그 표는 "카드가 선언했으므로
+#: 묻는다" 는 질문들의 표이고 (``DECLARED_GATE_RULINGS`` 와 같은 범위),
+#: 특수 소환은 :data:`RULE_GATED` 로 **언제나** 물어진다. 한 표에 섞으면
+#: "선언한 카드만 묻는다" 는 그 표의 뜻이 거짓이 된다.
+RULE_GATED_PREDICATES: dict[RuleQuestion, str] = {
+    RuleQuestion.MAY_BE_SPECIAL_SUMMONED: "Card.IsCanBeSpecialSummoned",
+}
+
 #: 질문을 한국어 동사로. 거절 이유 문장에 그대로 들어간다.
 QUESTION_VERBS: dict[RuleQuestion, str] = {
     RuleQuestion.MAY_BE_SENT_TO_GRAVE: "묘지로 보낼",
@@ -486,6 +514,7 @@ QUESTION_VERBS: dict[RuleQuestion, str] = {
     RuleQuestion.MAY_BE_RETURNED_TO_HAND: "패로 되돌릴",
     RuleQuestion.MAY_BE_BANISHED: "제외할",
     RuleQuestion.MAY_BE_RETURNED_TO_DECK: "덱으로 되돌릴",
+    RuleQuestion.MAY_BE_SPECIAL_SUMMONED: "특수 소환할",
 }
 
 #: **아직 아무도 묻지 않는** 질문들.
@@ -701,6 +730,7 @@ __all__ = [
     "gating_rules",
     "SEMANTIC_KINDS",
     "UNCHECKED_SEMANTIC_RULES",
+    "RULE_GATED_PREDICATES",
     "SummonRuling",
     "UnknownSummonRuling",
     "DeclaredSummonRuling",

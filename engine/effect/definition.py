@@ -66,6 +66,7 @@ from engine.execution import (
     ValueRef,
 )
 from engine.ids import EffectRef
+from engine.state.use_registry import UseLimit
 from engine.vocabulary import ActivationKind
 
 
@@ -340,6 +341,26 @@ class EffectDefinition:
     **손으로 적는다** (ADR-006). ``EffectSpec.code`` 에서 자동으로 옮기지
     않는다 — 그 변환은 카드 발동 블록 4,297개를 한꺼번에 판정으로 바꾸는
     일이고, 적는 것과 **발동을 판정하는 것**은 다른 결정이다.
+    """
+    use_limit: "UseLimit | None" = None
+    """
+    이 효과의 **확인된** 1턴 사용 제한 (Phase 6-AC).
+
+    ``SetCountLimit(times, scope)`` 를 손으로 옮긴 값이다 — 범위가 셋으로
+    갈리므로 (:class:`~analysis.effect_model.LimitScope`) 불리언으로 적을 수
+    없다. 세는 자리는 :class:`~engine.state.use_registry.UseRegistry` 이고
+    (판에 있다), 판정하는 자리는
+    :meth:`~engine.activation.EffectActivator._check_use_limit` 이다 —
+    **지식 · 상태 · 판정**이 각자 다른 자리에 있다.
+
+    🔴 ``None`` 은 **"제한을 읽지 않았다"** 이고 "제한이 없다" 가 아니다.
+    그때 이 효과는 제한이 없는 것처럼 동작하고, **그것이 지금 사실이다** —
+    등재된 효과 중 ``SetCountLimit`` 를 쓰는 카드가 있는데 그 제한이 옮겨지지
+    않았다는 사실을 ``None`` 이 그대로 보여 준다 (ADR-006: 없는 것을
+    기본값으로 메꾸지 않는다).
+
+    **손으로 적는다.** ``EffectSpec`` 에서 자동으로 옮기지 않는다 —
+    ``activation_kind`` · ``activation_waits_for_event`` 와 같은 규율이다.
     """
     provenance: EffectProvenance = field(default_factory=EffectProvenance)
 
@@ -659,6 +680,10 @@ class EffectDefinition:
             tuple(r.canonical_state() for r in self.requirements),
             tuple(g.canonical_state() for g in self.guards),
             self.activation_kind.value if self.activation_kind is not None else None,
+            #: 🔴 **정규 표현에 싣는다.** 이 값은 실제 판정을 바꾸므로
+            #: (같은 효과를 두 번 발동할 수 있는지) 두 정의가 이 칸만
+            #: 다를 때 "같다" 고 말하면 안 된다.
+            self.use_limit.canonical_state() if self.use_limit is not None else None,
             self.provenance.canonical_state(),
         )
 
@@ -678,6 +703,11 @@ class EffectDefinition:
             data["activation"] = self.activation.to_dict()
         if self.activation_kind is not None:
             data["activation_kind"] = self.activation_kind.value
+        if self.use_limit is not None:
+            data["use_limit"] = {
+                "scope": self.use_limit.scope.value,
+                "times": self.use_limit.times,
+            }
         return data
 
     def describe_ko(self) -> str:

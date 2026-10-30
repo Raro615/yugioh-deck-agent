@@ -12,6 +12,7 @@ from engine.state.use_registry import (
     PerCardKey,
     PerCardNameKey,
     PerEffectKey,
+    UseLimit,
     UseRegistry,
 )
 from engine.state.zones import ZoneContainer, ZoneFull
@@ -23,6 +24,7 @@ __all__ = [
     "ZoneContainer",
     "ZoneFull",
     "PlayerState",
+    "UseLimit",
     "UseRegistry",
     "PerCardKey",
     "PerCardNameKey",

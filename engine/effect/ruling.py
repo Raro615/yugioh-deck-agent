@@ -538,6 +538,30 @@ class RulingVerdict:
     """
 
 
+#: 소생 제한이 **묻지 않는** 출발 자리 (Phase 6-AC).
+#:
+#: 공식 규칙이 그 질문을 어디에 거는지가 근거다.
+#:
+#:     "A monster that must be Special Summoned by a specific procedure
+#:      cannot be Special Summoned **from the Graveyard or while banished**
+#:      unless it was first properly Summoned."
+#:
+#: 패에 있는 카드는 **아직 한 번도 필드에 나온 적이 없다** — 그래서 "정규
+#: 소환을 거쳤는가" 라는 질문이 생기지 않는다. 질문이 생기지 않는 것과
+#: 질문의 답을 아는 것은 다르고, 이 표가 적는 것은 앞쪽이다.
+#:
+#: 🔴 **덱 · 엑스트라 덱도 여기 없다.** 그 자리에서 나오는 특수 소환은
+#: :data:`~engine.special_summon.SPECIAL_SUMMON_FROM_ZONES` 가 애초에 옮기지
+#: 못한 자리이므로 (절차가 멈춘다) 이 표를 넓혀 봐야 의미가 없고, 넓히면
+#: 「엑스트라 덱에서 정규 소환 없이 특수 소환」 이 조용히 허가된다.
+REVIVAL_LIMIT_FREE_ZONES: frozenset[Zone] = frozenset({Zone.HAND})
+
+#: 소생 제한을 판정하려면 무엇이 있어야 하는가. ``missing_rule`` 에 쓰인다.
+SUMMON_HISTORY_RULE: str = (
+    "special-summon-history (소생 제한 — 이 카드가 정규 소환을 거쳤는가)"
+)
+
+
 class BoardRuling:
     """
     **이 판에서** 그 조작을 할 수 있는가.
@@ -546,9 +570,14 @@ class BoardRuling:
     (``may_be_destroyed`` · ``may_be_sent_to_grave`` · ``may_be_discarded``).
     새 질문은 :meth:`may` 로 온다.
 
-    파괴와 특수 소환에는 **언제나 ``UNKNOWN``** 이다. 이 계층이 그 둘의
-    지식을 담지 않기 때문이고, 담지 않은 이유는 :func:`normal_monster_facts`
-    의 설명에 적혀 있다.
+    파괴에는 **언제나 ``UNKNOWN``** 이다. 이 계층이 그 지식을 담지 않기
+    때문이고, 담지 않은 이유는 :func:`normal_monster_facts` 의 설명에 적혀
+    있다.
+
+    🔴 **특수 소환은 Phase 6-AC 가 좁게 열었다** —
+    :meth:`may_be_special_summoned` 의 설명을 보라. "언제나 ``UNKNOWN``" 이
+    아니게 된 범위는 **패에서 나오는 특수 소환이고, 카드가 등록된 경우**
+    뿐이다.
     """
 
     __slots__ = ("_view", "_registry")
@@ -631,8 +660,55 @@ class BoardRuling:
         return ConditionResult.UNKNOWN
 
     def may_be_special_summoned(self, instance: InstanceId) -> ConditionResult:
-        """**언제나 ``UNKNOWN``.** 소생 제한은 카드가 아니라 **이력**이다."""
-        return ConditionResult.UNKNOWN
+        """
+        이 카드를 **효과로** 특수 소환해도 되는가 (Phase 6-AC).
+
+        🔴 **이 메서드는 Phase 6-AC 전까지 언제나 ``UNKNOWN`` 이었다**
+        ("소생 제한은 카드가 아니라 **이력**이다"). 그 문장은 **지금도
+        맞다** — 바뀐 것은 그 이력이 **묻지 않는 자리**를 구분한 것뿐이다.
+
+        세 걸음이고 순서가 규칙이다.
+
+        1. **어디서 나오는가.** :data:`REVIVAL_LIMIT_FREE_ZONES` 밖이면
+           ``UNKNOWN`` 이고 :data:`SUMMON_HISTORY_RULE` 이 그 이름이다 —
+           묘지 · 제외에서 나오는 특수 소환은 "정규 소환을 거쳤는가" 를
+           알아야 하고, 이 엔진은 소환 이력을 적지 않는다.
+        2. **그 카드가 등록되어 있는가.** :meth:`explain` 이 답한다 —
+           ``MAY_BE_SPECIAL_SUMMONED`` 가 적히지 않은 카드는 ``UNKNOWN``
+           이다 (ADR-006).
+        3. **판에 막는 것이 있는가.** :meth:`explain` 안의
+           :meth:`_interference` 가 본다 — 모르는 앞면 카드가 하나라도
+           있으면 ``UNKNOWN`` 이다.
+
+        🔴 **플레이어가 선언하는 특수 소환은 이 메서드를 지나지 않는다.**
+        그쪽은 :class:`~engine.action_validation.ActionValidator` 가 언제나
+        ``UNKNOWN`` 으로 막고 (``_special_summon``), 이 메서드는 **효과
+        해결 중의 관문** (``EffectExecutor._check_rule_gate``)에서만 물어
+        진다. 둘을 한 답으로 만들면 "카드 텍스트가 특수 소환을 막지
+        않는다" 가 "플레이어가 아무 때나 특수 소환할 수 있다" 가 된다.
+        """
+        return self.explain_special_summon(instance).answer
+
+    def explain_special_summon(self, instance: InstanceId) -> RulingVerdict:
+        """답과 이유를 함께. :meth:`may_be_special_summoned` 가 답만 꺼낸다."""
+        card = self._view.find(instance)
+        if card is None or card.card_id is None:
+            return RulingVerdict(
+                ConditionResult.UNKNOWN,
+                f"{instance} 가 보이지 않아 어떤 카드인지 알 수 없습니다.",
+            )
+        if card.zone not in REVIVAL_LIMIT_FREE_ZONES:
+            allowed = " · ".join(
+                sorted(z.value for z in REVIVAL_LIMIT_FREE_ZONES)
+            )
+            return RulingVerdict(
+                ConditionResult.UNKNOWN,
+                f"{instance} 가 {card.zone.value} 에 있습니다. 그 자리에서 "
+                f"나오는 특수 소환은 소생 제한을 묻고, 이 엔진은 소환 "
+                f"이력을 적지 않습니다 ({SUMMON_HISTORY_RULE}). 특수 소환이 "
+                f"판정되는 자리는 {allowed} 뿐입니다.",
+            )
+        return self.explain(RuleQuestion.MAY_BE_SPECIAL_SUMMONED, instance)
 
     # ------------------------------------------------------------------
     def _facts_of(self, card) -> "CardRuleFacts | None":
@@ -757,4 +833,6 @@ __all__ = [
     "OperationRuling",
     "RulingVerdict",
     "BoardRuling",
+    "REVIVAL_LIMIT_FREE_ZONES",
+    "SUMMON_HISTORY_RULE",
 ]

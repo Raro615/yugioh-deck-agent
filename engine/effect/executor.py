@@ -146,11 +146,49 @@ from engine.effect.resolution import (
 from engine.effect.ruling import BoardRuling, OperationRulingRegistry
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
-from engine.special_summon import SPECIAL_SUMMON_PROCEDURE
 from engine.state.game_state import GameState
-from engine.summon import SummonError, SummonPlacement
 from engine.validation import ActionValidity, ValidationCode
 from engine.vocabulary import Zone
+
+def summon_errors() -> type[Exception]:
+    """
+    소환 절차가 던지는 예외. **여기서 읽는다** (Phase 6-AC).
+
+    :func:`special_summon_procedure` 와 **같은 고리 · 같은 이유**다 —
+    ``engine.summon`` 도 ``engine.effect.delta`` 를 모듈 위에서 읽고 그
+    import 가 이 모듈로 돌아온다 (실측: ``from engine.summon import
+    duel_executor`` 한 줄로 ``ImportError`` 가 난다).
+    """
+    from engine.summon import SummonError
+
+    return SummonError
+
+
+def special_summon_procedure():
+    """
+    특수 소환 절차. **여기서 읽는다** (Phase 6-AC 가 모듈 위에서 내렸다).
+
+    🔴 **import 고리를 끊는 자리다.** :mod:`engine.special_summon` 은
+    ``engine.effect.delta`` 를 모듈 위에서 읽고, 그 import 는
+    ``engine.effect.__init__`` 를 지나 **이 모듈**로 돌아온다. 그래서
+    ``engine.special_summon`` 이 먼저 import 되는 경로에서는 이 파일이
+    부분 초기화된 그 모듈에서 이름을 꺼내려다 실패했다 (실측: 기준 HEAD
+    ``8630622`` 에서 ``tests/engine/test_action_validation.py`` 를 단독
+    실행하면 ``ImportError: cannot import name
+    'SPECIAL_SUMMON_PROCEDURE' from partially initialized module``).
+
+    전체 테스트에서는 다른 파일이 ``engine.effect`` 를 먼저 import 해
+    **가려져 있었다** — 고리는 그때도 있었고 순서만 운이 좋았다.
+
+    :mod:`engine.special_summon` 과 :mod:`engine.summon` 이 실행기 계층을
+    **함수 안에서** 읽는 것과 같은 자리이고 같은 이유다 (그 파일들의
+    주석이 "실행기 계층에 의존하면 import 고리가 생긴다 (Phase 2-U)" 라고
+    적는다). 이쪽만 모듈 위에 있어서 고리가 남아 있었다.
+    """
+    from engine.special_summon import SPECIAL_SUMMON_PROCEDURE
+
+    return SPECIAL_SUMMON_PROCEDURE
+
 
 #: 카드를 다루는 일이 카드를 **어디로** 보내는가.
 #:
@@ -293,7 +331,7 @@ class _Step:
     """``instances`` 와 짝을 이루는 **목적지의 주인.** 계획 단계에서 정한다."""
     amount: int | None = None
     player: int | None = None
-    placements: tuple[SummonPlacement, ...] = ()
+    placements: "tuple[SummonPlacement, ...]" = ()
     """소환이 확정한 배치들. 소환이 아닌 일에는 비어 있다 (Phase 2-U)."""
     attempted: "int | None" = None
     """
@@ -1529,18 +1567,18 @@ class EffectExecutor:
         if legal is not None:
             return legal
 
-        placements: list[SummonPlacement] = []
+        placements: "list[SummonPlacement]" = []
         for instance in selection.chosen:
             gate, _ = self._check_rule_gate(state, operation, instance)
             if gate is not None:
                 return gate
             try:
                 placements.append(
-                    SPECIAL_SUMMON_PROCEDURE.plan_for(
+                    special_summon_procedure().plan_for(
                         state, instance, context.controller
                     )
                 )
-            except SummonError as error:
+            except summon_errors() as error:
                 # 지시를 수행할 수 없다. **적법성 위반이 아니다** — 자리가
                 # 어긋났거나 놓을 칸이 없다는 뜻이고, 판은 그대로다.
                 return _fail(
@@ -2051,6 +2089,33 @@ class EffectExecutor:
             self._rulings,
         )
 
+    def _summon_ruling(self, board: GameState, instance: InstanceId):
+        """
+        특수 소환을 물을 **판정기 하나** (Phase 6-AC).
+
+        :meth:`_movement_ruling` 과 **같은 모양**이고 같은 이유다 —
+        ``rulings`` 를 받았으면 **지금 이 판**(계획 단계의 투영)으로
+        :class:`~engine.effect.ruling.BoardRuling` 을 만들고, 받지 않았으면
+        생성자가 받은 판정기를 그대로 쓴다 (옛 호출부와 시험 대역이 그쪽이다).
+
+        🔴 **왜 ``self._summoning`` 을 그냥 쓰지 않는가.** 그 객체는 생성자
+        시점에 만들어지고 판을 모른다. 그런데 "이 카드를 특수 소환해도
+        되는가" 의 답은 **그 카드가 지금 어디에 있는지**에 달려 있다 (패에서
+        나오는가 · 묘지에서 나오는가 — ``REVIVAL_LIMIT_FREE_ZONES``). 판을
+        모르는 판정기는 그 구분을 할 수 없다.
+        """
+        if self._rulings is None:
+            return self._summoning
+        from engine.effect.ruling import BoardRuling
+
+        card = board.find_instance(instance)
+        owner = card.controller if card is not None else 0
+        looked_at = frozenset({card.zone}) if card is not None else frozenset()
+        return BoardRuling(
+            GameStateView.from_state(board, viewer=owner, looked_at=looked_at),
+            self._rulings,
+        )
+
     def _check_rule_gate(
         self, board: GameState, operation: Operation, instance: InstanceId
     ) -> "tuple[EffectResult | None, tuple[str, ...]]":
@@ -2073,9 +2138,21 @@ class EffectExecutor:
         if is_rule_gated(kind):
             # 종류만으로 언제나 물어지는 관문 (파괴 · 특수 소환).
             if kind is OperationKind.SPECIAL_SUMMON:
-                verdict = self._summoning.may_be_special_summoned(instance)
+                #: 🔴 **판을 아는 판정기에게 묻는다** (Phase 6-AC) — 답이
+                #: 그 카드가 **어디에 있는지**에 달려 있기 때문이다
+                #: (:meth:`_summon_ruling`).
+                ruling = self._summon_ruling(board, instance)
+                explain = getattr(ruling, "explain_special_summon", None)
+                if explain is not None:
+                    told = explain(instance)
+                    verdict, blind = told.answer, told.unchecked
+                    unknown = told.reason
+                else:
+                    verdict = ruling.may_be_special_summoned(instance)
+                    unknown = (
+                        f"{instance} 를 특수 소환해도 되는지 판정할 수 없습니다"
+                    )
                 refusal = f"{instance} 는 특수 소환할 수 없다고 판정되었습니다."
-                unknown = f"{instance} 를 특수 소환해도 되는지 판정할 수 없습니다"
             else:
                 verdict = self._destruction.may_be_destroyed(instance)
                 refusal = f"{instance} 는 파괴되지 않는다고 판정되었습니다."
@@ -2184,8 +2261,9 @@ class EffectExecutor:
         # 직접 부르면 칸과 표시 형식이 두 곳에서 정해진다.
         changes = []
         for placement in step.placements:
-            SPECIAL_SUMMON_PROCEDURE.place(state, placement)
-            changes.append(placement.to_delta(SPECIAL_SUMMON_PROCEDURE.summon))
+            procedure = special_summon_procedure()
+            procedure.place(state, placement)
+            changes.append(placement.to_delta(procedure.summon))
         return step.record(), tuple(changes)
 
     def _apply_shuffle(

@@ -174,6 +174,10 @@ def test_a01_girsu_is_now_in_the_library_and_it_is_the_first_trigger(repository)
 
     그리고 이것이 이 목록의 **첫 유발 효과**다 — 그 전까지 등재된 17건은
     전부 기동 효과이거나 마법 · 함정의 카드 발동이었다.
+
+    🔴 **Phase 6-AC 가 두 번째 유발을 더했다** (성유물－『성장』 ①). "첫
+    유발" 이라는 주장은 **순서의 주장**이므로 그대로 둘 수 있고, 아래 단언은
+    목록이 아니라 **순서**를 고정한다 — 기르수가 여전히 처음이다.
     """
     entry = entry_for(EffectRef(GIRSU, 0))
     assert entry is not None
@@ -186,9 +190,15 @@ def test_a01_girsu_is_now_in_the_library_and_it_is_the_first_trigger(repository)
         for e in EFFECT_LIBRARY
         if e.definition.activation_kind is ActivationKind.TRIGGER
     ]
-    assert [e.effect_ref for e in others] == [EffectRef(GIRSU, 0)], (
-        "유발 효과가 늘어났다면 이 테스트의 '첫 유발 효과' 주장을 고쳐야 한다"
+    assert [e.effect_ref for e in others][0] == EffectRef(GIRSU, 0), (
+        "기르수가 **첫** 유발 효과라는 주장이 깨졌다 — 목록의 순서를 보라"
     )
+    #: 🔴 **늘어난 것까지 고정한다.** 수만 세면 "무엇이 더해졌는지" 를 잃고,
+    #: 이름을 적으면 다음 사람이 더할 때 이 줄에서 멈춘다.
+    assert [str(e.effect_ref) for e in others] == [
+        "69811710:e[0]",  # Phase 6-V — 첫 유발
+        "93920420:e[1]",  # Phase 6-AC — 특수 소환을 실행하는 첫 유발
+    ]
 
 
 @requires_official_db
@@ -335,7 +345,12 @@ def test_c01_the_two_registrations_are_split_by_summon_kind(repository):
     }
     assert sorted(specs) == [0, 1]
     assert {k.value for k in specs[0].summons} == {"normal"}
-    assert {k.value for k in specs[1].summons} == {"special"}
+    #: 🔴 **Phase 6-AC — 특수 소환 선언은 링크 소환까지 덮는다.**
+    #: 공식 룰북이 "Link Summoning is a type of Special Summon" 이라고
+    #: 적고, 그 사실은 ``SPECIAL_SUMMON_KINDS`` 한 곳에만 있다. ``e2`` 가
+    #: 일반 소환에 반응하지 않는다는 요점은 그대로다 (아래 줄).
+    assert {k.value for k in specs[1].summons} == {"special", "link"}
+    assert "normal" not in {k.value for k in specs[1].summons}
     for spec in specs.values():
         assert spec.point is TimingPoint.MONSTER_SUMMONED
         assert spec.subject is TriggerSubject.SELF

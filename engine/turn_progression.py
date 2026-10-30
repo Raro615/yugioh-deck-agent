@@ -564,6 +564,23 @@ class TurnProgressor:
         """
         if transition.changes_turn:
             state.turn.begin_next_turn()
+            #: 🔴 **「1턴에 1번」 을 여기서 비운다** (Phase 6-AC).
+            #:
+            #: :meth:`~engine.state.turn.TurnState.begin_next_turn` 이
+            #: "사용 횟수 초기화는 여기서 하지 않는다 — 무엇이 언제
+            #: 리셋되는가는 규칙이다" 라고 적어 두었고, 이 모듈이 **그 규칙을
+            #: 들고 있는 자리**다. 턴이 넘어갈 때 비우는 근거는
+            #: :mod:`engine.state.use_registry` 의 머리말이 이미 적어 둔
+            #: 그대로다 — 세 범위의 리셋 시점이 모두 턴 종료다.
+            #:
+            #: 🔴 **양쪽을 함께 비운다.** 「1턴에 1번」 은 턴이 끝나면
+            #: 풀리는 것이고 "내 턴이 끝나면" 이 아니다.
+            #:
+            #: 🔴 **Phase 6-AC 전까지 이 줄이 없어도 아무것도 달라지지
+            #: 않았다** — 그때까지 ``UseRegistry`` 에 적는 코드가 production
+            #: 에 **한 줄도 없었다**. 제한을 판정하기 시작한 Phase 가
+            #: 리셋도 함께 들고 온다.
+            state.uses.clear()
         else:
             state.turn.advance_phase()
 

@@ -47,6 +47,7 @@ from engine.condition import (
     IsSpellTrap,
     PlayerRef,
     ZoneCountAtLeast,
+    ZoneHasFreeSlot,
 )
 from engine.cost import CandidateSource, ChoiceSpec
 from engine.effect.definition import (
@@ -66,6 +67,7 @@ from engine.effect.operation import (
     LifeChangeOperation,
     OperationKind,
     ShuffleOperation,
+    SpecialSummonOperation,
 )
 from engine.effect.semantics import FIELD_ZONES, DestructionRuling, MovementRuling
 from engine.effect.target import (
@@ -88,6 +90,7 @@ from engine.effect.ruling import (
 )
 from engine.execution import ResultField, ResultRef
 from engine.ids import EffectRef
+from engine.state.use_registry import LimitScope, UseLimit
 from engine.vocabulary import ActivationKind, Zone
 
 
@@ -220,6 +223,8 @@ RELOAD = 22589918
 HONEST = 37742478
 # Phase 6-V — **목록의 첫 유발 효과**다 (그 전까지 전부 기동 · 카드 발동).
 GIRSU = 69811710
+WORLD_WAND = 93920420
+GALATEA = 30741503
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -1268,14 +1273,21 @@ _GIRSU_TRIGGER_ENTRY = LibraryEntry(
         operations=(CardOperation.send_to_grave(PRIMARY_TARGET, gated=True),),
         activation=ZoneCountAtLeast(PlayerRef.CONTROLLER, Zone.DECK, 1),
         activation_kind=ActivationKind.TRIGGER,
+        #: 🔴 **Phase 6-AC 가 옮겼다** — 아래 provenance 가 "SetCountLimit(1,id)
+        #: … 옮기지 못했다" 고 적어 두었던 그 제한이다. ``,id`` 가 붙으면
+        #: 같은 **이름**의 카드 전체 기준이다
+        #: (:class:`~analysis.effect_model.LimitScope`).
+        use_limit=UseLimit(LimitScope.PER_CARD_NAME),
         provenance=EffectProvenance.official_lua(
             "c69811710.lua 의 e1 (EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O, "
             "EVENT_SUMMON_SUCCESS) 에서 발동 분류를, s.tgfilter 의 "
             "IsSetCard({SET_ORCUST,SET_WORLD_LEGACY}) 에서 후보 조건을, "
             "s.tgop 의 Duel.SendtoGrave(tc,REASON_EFFECT) 에서 하는 일을 "
             "옮겼다. IsAbleToGrave 는 관문으로, 발동 조건은 덱 장수 부분만 "
-            "옮겼다. SetCountLimit(1,id) 와 GetColumnGroupCount 갈래는 "
-            "옮기지 못했다 (Phase 6-V)."
+            "옮겼다. SetCountLimit(1,id) 는 Phase 6-AC 가 use_limit 으로 "
+            "옮겼다. GetColumnGroupCount 갈래(같은 열에 다른 카드가 2장 "
+            "이상이면 이 카드를 이 턴 튜너로 취급)는 여전히 옮기지 "
+            "못했다 — 칸의 열 기하도, 종류를 더하는 지속 효과 계층도 없다."
         ),
     ),
     lua_file="c69811710.lua",
@@ -1286,6 +1298,111 @@ _GIRSU_TRIGGER_ENTRY = LibraryEntry(
         "c:IsAbleToGrave(); "
         "Duel.SelectMatchingCard(tp,s.tgfilter,tp,LOCATION_DECK,0,1,1,nil); "
         "Duel.SendtoGrave(tc,REASON_EFFECT)"
+    ),
+    executable=True,
+)
+
+
+#: 🔴 **성유물－『성장』의 묘지행 유발** (Phase 6-AC) — 이 저장소의 **두 번째
+#: 유발**이고, 처음으로 **특수 소환을 실행하는** 효과다.
+#:
+#: 공식 한국어 텍스트 (``data/cards.cdb``, 93920420)::
+#:
+#:     ●이 카드가 묘지로 보내졌을 경우에 발동할 수 있다.
+#:       패에서 "성유물" 몬스터 1장을 특수 소환한다.
+#:
+#: 무엇을 옮겼는가
+#: ---------------
+#: ================================  ===================================
+#: ``e2:SetCode(EVENT_TO_GRAVE)``      ``activation_kind=TRIGGER`` +
+#:                                     트리거 컴파일러의 ``card_moved``
+#:                                     (``EVENT_TIMING``)
+#: ``Duel.GetLocationCount(tp,``       ``ZoneHasFreeSlot(CONTROLLER,
+#: ``LOCATION_MZONE)>0``               MZONE)``
+#: ``s.spfilter1`` 의                  후보 조건 (``CandidateSource``)
+#: ``IsSetCard(SET_WORLD_LEGACY)``
+#: ``Duel.SpecialSummon(g,0,tp,tp,``   ``SpecialSummonOperation``
+#: ``false,false,POS_FACEUP)``
+#: ``e2:SetCountLimit(1,id)``          ``use_limit=PER_CARD_NAME``
+#: ================================  ===================================
+#:
+#: 무엇을 옮기지 **못했는가**
+#: --------------------------
+#: - ``s.spfilter1`` 의 ``IsCanBeSpecialSummoned(e,0,tp,false,false)`` —
+#:   후보 조건에 적지 않고 **관문**이 들고 간다
+#:   (:meth:`~engine.effect.ruling.BoardRuling.may_be_special_summoned`).
+#:   기르수가 ``IsAbleToGrave`` 를 그렇게 다룬 것과 같은 자리다.
+#: - ``POS_FACEUP`` 의 **표시 형식 선택** — 절차가 앞면 공격으로 고정한다
+#:   (``SPECIAL_SUMMON_POSITION``, STRUCTURAL-61).
+#: - ``IIsExistingMatchingCard`` 의 "패에 후보가 있는가" — 발동 조건에 적지
+#:   않는다. 후보 장수(최소 1장)가 같은 것을 말하고, 조건으로 또 적으면 같은
+#:   사실이 두 곳에 적힌다.
+#: - 이 카드의 ``e1``(전투 내성) · ``e3``(묘지에서 자신 제외 → 제외된 오르페골
+#:   특수 소환 + 어둠 이외 특수 소환 금지)는 **등재하지 않았다.** e3 은
+#:   「이 턴 어둠 속성 이외를 특수 소환할 수 없다」 라는 **제약을 거는** 효과이고
+#:   그 제약을 적는 계층이 없다 (STRUCTURAL-76).
+#:
+#: 🔴 **「성유물」 과 「오르페골」 은 다른 카드군이다.** 이 카드의 setcode 는
+#: ``0xfe`` 하나이고 (실측: ``data/cards.cdb`` 93920420), ``s.listed_series``
+#: 에 ``SET_ORCUST`` 가 함께 적힌 것은 **텍스트가 그 이름을 언급한다**는
+#: 뜻이지 이 카드가 그 카드군이라는 뜻이 아니다. 후보 조건에 ``0xfe`` 만
+#: 적는 근거가 그것이다.
+_WORLD_WAND_TRIGGER_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(WORLD_WAND, 1),
+        source_card_id=WORLD_WAND,
+        targets=TargetBinding.single(
+            TargetSpec.choosing(
+                ChoiceSpec(
+                    source=CandidateSource(
+                        # ``LOCATION_HAND, 0`` — 자신 패만이다.
+                        zones=frozenset({Zone.HAND}),
+                        owner=PlayerRef.CONTROLLER,
+                        # 「패에서 "성유물" **몬스터**」 — 둘 다 본다.
+                        # ``s.spfilter1`` 이 ``IsMonster`` 를 적지 않은 것은
+                        # ``IsCanBeSpecialSummoned`` 가 그것을 함의하기
+                        # 때문이고, 그 술어는 관문이 들고 갔으므로 여기서
+                        # 몬스터 여부를 명시한다.
+                        require=And(
+                            (
+                                IsMonster(),
+                                compile_archetype_condition(
+                                    ("SET_WORLD_LEGACY",)
+                                ).condition,
+                            )
+                        ),
+                    ),
+                    minimum=1,
+                    maximum=1,
+                )
+            )
+        ),
+        operations=(SpecialSummonOperation(PRIMARY_TARGET),),
+        activation=ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.MZONE),
+        activation_kind=ActivationKind.TRIGGER,
+        use_limit=UseLimit(LimitScope.PER_CARD_NAME),
+        provenance=EffectProvenance.official_lua(
+            "c93920420.lua 의 e2 (EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O, "
+            "EVENT_TO_GRAVE) 에서 발동 분류를, s.sptg1 의 "
+            "Duel.GetLocationCount(tp,LOCATION_MZONE)>0 에서 발동 조건을, "
+            "s.spfilter1 의 IsSetCard(SET_WORLD_LEGACY) 에서 후보 조건을, "
+            "s.spop1 의 Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP) "
+            "에서 하는 일을, SetCountLimit(1,id) 에서 사용 제한을 옮겼다. "
+            "IsCanBeSpecialSummoned 는 관문으로 넘겼고, 표시 형식 선택과 "
+            "e1(전투 내성) · e3(묘지 제외 효과와 그 소환 제약)은 옮기지 "
+            "못했다."
+        ),
+    ),
+    lua_file="c93920420.lua",
+    lua_excerpt=(
+        "e2:SetType(EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O); "
+        "e2:SetCode(EVENT_TO_GRAVE); e2:SetCountLimit(1,id); "
+        "s.spfilter1 = c:IsSetCard(SET_WORLD_LEGACY) and "
+        "c:IsCanBeSpecialSummoned(e,0,tp,false,false); "
+        "s.sptg1 = Duel.GetLocationCount(tp,LOCATION_MZONE)>0 and "
+        "Duel.IsExistingMatchingCard(s.spfilter1,tp,LOCATION_HAND,0,1,nil,e,tp); "
+        "Duel.SelectMatchingCard(tp,s.spfilter1,tp,LOCATION_HAND,0,1,1,nil,e,tp); "
+        "Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP)"
     ),
     executable=True,
 )
@@ -1318,6 +1435,8 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _HONEST_IGNITION_ENTRY,
     # Phase 6-V — 첫 유발 효과.
     _GIRSU_TRIGGER_ENTRY,
+    # Phase 6-AC — 두 번째 유발, 그리고 **특수 소환을 실행하는 첫 효과**.
+    _WORLD_WAND_TRIGGER_ENTRY,
 )
 
 
@@ -1417,6 +1536,69 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
             restriction_basis=RuleBasis.CARD_TEXT,
             restriction_note=f"기르수: {_SPELL_TRAP_READ}",
         ),
+        #: 🔴 **성유물－『성장』** (Phase 6-AC). 기르수 ① 이 **덱에서 고른
+        #: 카드**에 ``MAY_BE_SENT_TO_GRAVE`` 를 묻고 (6-V 보고서 §11 이 그
+        #: 자리를 적어 두었다), 성장 ① 이 **패에서 고른 카드**에
+        #: ``MAY_BE_SPECIAL_SUMMONED`` 를 묻는다. 두 질문을 **각각** 읽었다.
+        CardRuleFacts(
+            card_id=WORLD_WAND,
+            answers={
+                RuleQuestion.MAY_BE_SENT_TO_GRAVE: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "성유물－『성장』: 공식 텍스트 전문을 읽었고, 자기가 "
+                    "묘지로 가는 것을 막는 문장이 없다. ① 이 「이 카드가 "
+                    "묘지로 보내졌을 경우」 라고 적어 **그 상황을 스스로 "
+                    "전제한다.** 메인 덱의 효과 몬스터이므로 토큰도 "
+                    "엑스트라 덱 카드도 아니다.",
+                ),
+                RuleQuestion.MAY_BE_SPECIAL_SUMMONED: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "성유물－『성장』: 공식 텍스트 전문을 읽었고 소환 조건이 "
+                    "**없다** — 「일반 소환할 수 없다」 도 「특수 소환으로만 "
+                    "특수 소환할 수 있다」 도 적혀 있지 않은 레벨 8 메인 덱 "
+                    "효과 몬스터다. 기계로 읽은 근거도 같은 방향이다: "
+                    "normal_summon_restriction_signals 가 () 이다 (스크립트를 "
+                    "끝까지 읽었고 제약 상수가 0건 — core.card_model 의 세 "
+                    "갈래 규약에서 '제약 없음을 확인했다' 쪽이다). "
+                    "🔴 이 답이 **소생 제한을 판정한 것은 아니다** — 그 "
+                    "질문은 패에서 나오는 특수 소환에 생기지 않고, 그 구분은 "
+                    "engine.effect.ruling.REVIVAL_LIMIT_FREE_ZONES 가 한다.",
+                ),
+            },
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "성유물－『성장』: 공식 텍스트 전문을 읽었다. ① 은 **자기 "
+                "자신**의 전투 내성이고 ② 는 「패에서 성유물 몬스터를 특수 "
+                "소환」 이라 남의 조작을 막지 않는다. "
+                "🔴 ③ (묘지의 자신을 제외 → 제외된 「오르페골」 특수 소환, "
+                "그리고 「그 턴 어둠 속성 이외를 특수 소환할 수 없다」) 에는 "
+                "**남을 막는 문장이 있다.** 그 제약은 **그 효과를 발동했을 "
+                "때에만** 걸리고, ③ 은 EFFECT_LIBRARY 에 등재되지 않았으므로 "
+                "이 엔진에서 발동될 수 없다. 즉 이 '막지 않는다' 는 카드가 "
+                "아니라 **등재 범위**에 근거한다 — ③ 이 등재되면 이 줄은 "
+                "거짓이 되고, 그것을 _WORLD_WAND_RESTRICTION_GUARD 가 "
+                "기계로 지킨다."
+            ),
+        ),
+        #: 🔴 **오르페골 갈라테아** (Phase 6-AC). 링크 소환으로 필드에 놓이고,
+        #: 그 뒤의 어떤 관문이든 판을 훑을 때 이 카드를 만난다
+        #: (``BoardRuling._interference``) — 등록하지 않으면 그 뒤의 모든
+        #: 조작 판정이 ``UNKNOWN`` 이 된다. 어니스트 · 기르수와 같은 이유다.
+        CardRuleFacts(
+            card_id=GALATEA,
+            answers={},
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "오르페골 갈라테아: 공식 텍스트 전문을 읽었다. 「링크 상태의 "
+                "이 카드는 전투로 파괴되지 않는다」 는 **자기 자신**이고, "
+                "나머지는 제외된 자신의 기계족을 덱으로 되돌리고 「오르페골」 "
+                "마법 · 함정을 세트하는 효과다. 남의 조작을 막는 문장이 없다."
+            ),
+        ),
     )
     + tuple(
         CardRuleFacts(
@@ -1446,6 +1628,29 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
     )
 )
 
+
+
+#: 🔴 **성유물－『성장』 ③ 이 등재되면 위의 "막지 않는다" 가 거짓이 된다.**
+#:
+#: 그 줄의 근거는 카드 텍스트가 아니라 **등재 범위**다 (그 ``restriction_note``
+#: 가 직접 그렇게 적는다). 사람이 읽는 주석만으로는 다음 사람이 ③ 을 등재할 때
+#: 그 사실을 알 수 없으므로, **import 시점에 기계가 확인한다** —
+#: ``CODE_VALIDITY`` 가 분류되지 않은 코드를 import 실패로 막는 것과 같은 자리다.
+#:
+#: 등재해야 한다면 이 단언을 지우는 것이 **할 일이 아니다.** ③ 이 거는 제약
+#: (「그 턴 어둠 속성 이외를 특수 소환할 수 없다」) 을 적는 계층을 만들고,
+#: ``restricts_others`` 를 다시 판단해야 한다.
+_WORLD_WAND_RESTRICTION_GUARD = frozenset(
+    {entry.effect_ref for entry in EFFECT_LIBRARY if entry.card_id == WORLD_WAND}
+)
+assert _WORLD_WAND_RESTRICTION_GUARD == {EffectRef(WORLD_WAND, 1)}, (
+    "성유물－『성장』의 등재가 e[1] 하나가 아닙니다: "
+    f"{sorted(str(r) for r in _WORLD_WAND_RESTRICTION_GUARD)}. "
+    "③(e[2]) 은 「그 턴 어둠 속성 이외를 특수 소환할 수 없다」 를 걸고, "
+    "OPERATION_RULINGS 의 restricts_others=False 는 **그것이 등재되지 "
+    "않았다**는 사실에 근거합니다. 등재한다면 그 제약을 적는 계층을 먼저 "
+    "만들고 restricts_others 를 다시 판단하세요."
+)
 
 
 # ======================================================================
