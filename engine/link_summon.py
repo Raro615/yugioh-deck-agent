@@ -103,20 +103,27 @@ class LinkSummonPlan:
     """
 
     placement: SummonPlacement
-    materials: tuple[tuple[InstanceId, int, Zone], ...]
-    """``(소재, 떠나는 자리의 플레이어, 떠나는 자리)`` — 기록에 쓴다."""
+    materials: tuple[tuple[InstanceId, int, Zone, int], ...]
+    """
+    ``(소재, 떠나는 자리의 플레이어, 떠나는 자리, 주인)`` — 기록에 쓴다.
+
+    🔴 **떠나는 쪽과 가는 쪽의 플레이어가 다를 수 있다.** 필드는 **컨트롤러**
+    의 자리이고 묘지는 **주인**의 자리다 (``MoveOperation.to_owner`` 의 설명 —
+    "갈 수 있는 곳이 전부 소유권 기반 존"). 컨트롤을 빼앗긴 몬스터를 소재로
+    쓰면 그 카드는 **주인의** 묘지로 간다.
+    """
 
     def canonical_state(self) -> tuple:
         return (
             self.placement.canonical_state(),
             tuple(
-                (instance.value, player, zone.value)
-                for instance, player, zone in self.materials
+                (instance.value, player, zone.value, owner)
+                for instance, player, zone, owner in self.materials
             ),
         )
 
     def describe_ko(self) -> str:
-        sent = " · ".join(str(i) for i, _p, _z in self.materials)
+        sent = " · ".join(str(i) for i, _p, _z, _o in self.materials)
         return f"소재 {sent} → {LINK_MATERIAL_DESTINATION.value}, {self.placement.describe_ko()}"
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
@@ -155,7 +162,7 @@ class LinkSummonExecutor:
         if not action.materials:
             raise LinkSummonError("소재가 없습니다.")
 
-        leaving: list[tuple[InstanceId, int, Zone]] = []
+        leaving: list[tuple[InstanceId, int, Zone, int]] = []
         for instance in action.materials:
             card = state.find_instance(instance)
             if card is None:
@@ -172,7 +179,9 @@ class LinkSummonExecutor:
                 raise LinkSummonError(
                     f"소재 {instance} 는 P{card.controller} 의 몬스터입니다."
                 )
-            leaving.append((instance, card.controller, located.zone))
+            leaving.append(
+                (instance, card.controller, located.zone, card.owner)
+            )
 
         #: 🔴 **소재가 떠난 뒤의 칸으로 배치를 정한다.** 그래서 배치 계획을
         #: 여기서 직접 만든다 — ``plan_for`` 는 지금 판의 빈 칸을 보므로,
@@ -203,7 +212,7 @@ class LinkSummonExecutor:
             )
 
         target = state.zone(action.actor, self._procedure.to_zone)
-        departing = {instance for instance, _p, _z in leaving}
+        departing = {instance for instance, _p, _z, _o in leaving}
         freed = {
             index
             for index, slot in enumerate(target.slots())
@@ -235,8 +244,10 @@ class LinkSummonExecutor:
         """
         plan = self.plan(state, action)
         deltas: list[StateDelta] = []
-        for instance, from_player, from_zone in plan.materials:
-            state.move(instance, LINK_MATERIAL_DESTINATION, to_player=from_player)
+        for instance, from_player, from_zone, owner in plan.materials:
+            #: 🔴 **주인의 묘지로 보낸다** — 필드는 컨트롤러의 자리이지만
+            #: 묘지는 주인의 자리다 (``LinkSummonPlan.materials`` 의 설명).
+            state.move(instance, LINK_MATERIAL_DESTINATION, to_player=owner)
             moved = state.locate(instance)
             if moved is None or moved.zone is not LINK_MATERIAL_DESTINATION:
                 raise LinkSummonError(
@@ -249,7 +260,7 @@ class LinkSummonExecutor:
                     card=instance,
                     source_player=from_player,
                     source_zone=from_zone,
-                    destination_player=from_player,
+                    destination_player=owner,
                     destination_zone=LINK_MATERIAL_DESTINATION,
                 )
             )
