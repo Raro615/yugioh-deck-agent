@@ -218,6 +218,13 @@ def test_a02_every_step_records_its_choice_cost_and_resolution(repository):
     #: ④ 링크 소환 — 소재 둘과 배치 하나, 기록 세 건.
     assert steps[3].card_id == GALATEA
     assert "(3건)" in steps[3].reason
+    #: 🔴 **소재가 기록에 이름으로 남는다** — ``targets`` 가 아니다.
+    assert steps[3].targets == ()
+    assert len(steps[3].materials) == 2
+    assert "잭나이츠 오르페골 기르수" in steps[3].materials
+    assert "성유물－『성장』" in steps[3].materials
+    #: 소환이 아닌 걸음에는 소재가 없다.
+    assert all(step.materials == () for step in steps[:3])
 
     #: 🔴 **비용은 없다.** 두 효과의 정의가 그렇게 적는다.
     definitions = definition_registry()
@@ -951,6 +958,8 @@ def test_e03_the_combo_answer_marks_the_execution_as_a_verification_policy(
     assert "최선 전개 탐색도" in blob
     assert "엔진이 스스로 찾은 전개도 아닙니다" in blob
     assert "경로를 끝까지 실행했습니다 (4/4단계)" in blob
+    #: 🔴 소재가 **이름으로** 보고에 남는다 (§7 — 무엇을 보냈는가).
+    assert "소재 2장: 잭나이츠 오르페골 기르수 · 성유물－『성장』" in blob
     #: 🔴 실제 실행과 정적 계획이 갈린다 — 그 경계 문장도 그대로다.
     assert "아래는 실행하지 않은 정적 계획입니다" in blob
 

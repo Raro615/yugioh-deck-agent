@@ -939,7 +939,8 @@ def test_f_the_registry_covers_every_registered_real_card():
     # 카드는 필드에 깔려 있고, 모르는 카드가 하나라도 있으면 판 전체의
     # 답이 ``UNKNOWN`` 이 된다. 이 테스트가 지키는 사실이 바로 그것이므로,
     # 수만 움직이고 단언은 그대로다.
-    assert len(OPERATION_RULINGS) == 19
+    #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
+    assert len(OPERATION_RULINGS) == 21
 
 
 def test_f_no_spell_or_trap_claims_to_be_returnable(repository):

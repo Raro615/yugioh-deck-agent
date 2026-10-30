@@ -226,6 +226,11 @@ def render_opening_run(run) -> str:
             lines.append(f"      효과 {step.effect_ref}"
                          + (f" · 대상 {len(step.targets)}개"
                             if step.targets else ""))
+        #: 🔴 **소재를 이름으로 적는다** (Phase 6-AC). 대상과 **다른 줄**이다 —
+        #: 링크 소재는 대상으로 지정되지 않으므로 "대상 2개" 로 적으면 거짓이다.
+        if step.materials:
+            lines.append(f"      소재 {len(step.materials)}장: "
+                         f"{' · '.join(step.materials)}")
         if step.effect_events:
             lines.append(f"      적용된 효과 기록: "
                          f"{', '.join(step.effect_events)}")

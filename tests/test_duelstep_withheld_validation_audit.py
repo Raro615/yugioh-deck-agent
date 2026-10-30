@@ -266,7 +266,8 @@ def test_06_the_validity_is_not_stored_but_is_derivable_from_the_code():
     #: 있고, 되찾을 수 없는 것은 **여전히 하나**다. 새 코드 셋도
     #: ``CODE_VALIDITY`` 에 분류를 적었고 (적지 않으면 import 가 터진다),
     #: 그래서 ``DuelStep`` 에 ``validity`` 를 더할 이유가 생기지 않았다.
-    assert len(recoverable) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(recoverable) == 53
     assert sum(1 for v in recoverable.values() if v is not None) == 50
     assert [n for n, v in recoverable.items() if v is None] == [
         "CHAIN_DEFINITION_UNAVAILABLE"
@@ -1207,7 +1208,8 @@ def test_29_the_validation_vocabulary_is_unchanged():
     #: 🔴 **모름 쪽은 늘지 않았다** — 셋 다 ``INVALID`` 다. 그래서
     #: ``unknown_codes()`` 는 7 그대로이고, 그것이 이 변경이 "모름을 늘려
     #: 문제를 덮은 것" 이 아님을 말한다.
-    assert len(ValidationCode) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(ValidationCode) == 53
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5
     assert len(unknown_codes()) == 7
@@ -1254,7 +1256,8 @@ def test_31_this_phase_changed_no_production_file():
     assert len({f.name for f in dataclasses.fields(LegalActions)}) == 3
     assert len({f.name for f in dataclasses.fields(ValidationResult)}) == 5
     #: policy 는 3-E-40 의 것을 그대로 쓴다 — 새로 만들지 않았다.
-    assert len(CODE_VALIDITY) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(CODE_VALIDITY) == 53
     assert "CODE_VALIDITY" in source_of("engine/validation.py")
     #: 🔴 **표를 만드는 자리는 여전히 하나다.** 듀얼은 읽기만 한다 —
     #: ``CODE_VALIDITY = {`` 같은 선언이 그쪽에 없다는 것으로 센다.

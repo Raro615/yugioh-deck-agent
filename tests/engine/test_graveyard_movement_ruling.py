@@ -333,10 +333,21 @@ def test_b03_the_field_prohibition_is_observed_as_board_interference(repository)
 
 @requires_official_db
 def test_c01_an_ordinary_deck_monster_moves_by_effect(repository):
-    """§5-1 — 일반적인 덱 몬스터가 효과로 묘지로 간다 (증거가 있을 때)."""
+    """
+    §5-1 — 일반적인 덱 몬스터가 효과로 묘지로 간다 (증거가 있을 때).
+
+    🔴 **Phase 6-AC 가 근거의 출처를 바꿨다.** 6-X 부터 이 답은 규칙서에서
+    **파생된** 사실이었고 (``self_grave_text_fact``), 6-AC 가 성유물－
+    『성장』 을 ``OPERATION_RULINGS`` 에 **등재**했으므로 등재가 먼저 답한다.
+    답(``TRUE``)은 같고 **왜 그런지를 적는 자리**가 바뀌었다 — 그 차이를
+    지우지 않으려고 사유도 등재된 문장으로 다시 고정한다.
+    """
     verdict = _ask(repository, GROWTH)
     assert verdict.answer is ConditionResult.TRUE
-    assert "자기 묘지행을 전제한 효과가 그 카드 텍스트에 있다" in verdict.reason
+    #: 등재된 사유 — 공식 텍스트를 읽었다는 것과, ① 이 그 상황을 스스로
+    #: 전제한다는 것을 함께 적는다.
+    assert "공식 텍스트 전문을 읽었고" in verdict.reason, verdict.reason
+    assert "그 상황을 스스로 전제한다" in verdict.reason, verdict.reason
 
 
 @requires_official_db
@@ -924,5 +935,10 @@ def test_g05_the_verdict_distribution_changed_only_one_way(repository):
             newly_true += 1
 
     assert flipped == [], flipped
-    assert newly_true == 991, newly_true
-    assert already == 684, already
+    #: 🔴 991 → 990 · 684 → 685 (Phase 6-AC). 한 장이 **파생에서 등재로**
+    #: 옮겨 갔다 — 성유물－『성장』 이다. 합(1,675)은 그대로이고, 뒤집힌
+    #: 카드는 여전히 **0장**이다: 등재가 파생과 **같은 답**을 적었다는 뜻이고
+    #: 그것이 이 시험이 지키는 사실이다.
+    assert newly_true == 990, newly_true
+    assert already == 685, already
+    assert newly_true + already == 1675

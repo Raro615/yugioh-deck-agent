@@ -287,7 +287,8 @@ def test_07_seven_of_forty_eight_codes_are_in_the_set():
     #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 위의
     #: ``_UNKNOWN_CODES`` 는 **7 그대로**다 — 보완8 은 모름을 늘리지 않았고
     #: **모름이던 흐름 거절을 규칙 거절로 옮겼다.**
-    assert len(ValidationCode) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(ValidationCode) == 53
     #: 집합의 정의가 ``frozenset`` 이다 — 런타임에 늘어날 수 없다.
     assert isinstance(_UNKNOWN_CODES, frozenset)
 
@@ -916,7 +917,8 @@ def test_32_the_agent_layer_no_longer_writes_the_policy_down():
     #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 위의
     #: ``_UNKNOWN_CODES`` 는 **7 그대로**다 — 보완8 은 모름을 늘리지 않았고
     #: **모름이던 흐름 거절을 규칙 거절로 옮겼다.**
-    assert sizes["ValidationCode"] == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert sizes["ValidationCode"] == 53
     assert sizes["ActionValidity"] == 3
 
 
@@ -941,5 +943,7 @@ def test_33_the_forty_eight_codes_partition_without_a_remainder():
     #: 나머지가 전부 확정 거부 쪽이다.
     rest = all_names - named
     assert len(rest) == 39
-    assert len(named) + len(rest) == len(ValidationCode) == 51
-    assert len(all_names) == 51 == len(named) + len(rest)
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(named) + len(rest) == len(ValidationCode) == 53
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(all_names) == 53 == len(named) + len(rest)

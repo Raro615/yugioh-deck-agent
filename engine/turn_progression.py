@@ -69,19 +69,35 @@ UNRESOLVED_PROGRESSION_RULES: tuple[str, ...] = (
     "배틀 스텝 · 데미지 스텝 안의 진행",
 )
 
-#: 턴이 넘어갈 때 **언젠가 초기화되어야 하는** 것들. 지금은 하나도 하지
-#: 않는다.
+#: 턴이 넘어갈 때 **언젠가 초기화되어야 하는** 것들. 아직 하지 않는 것들이다.
 #:
 #: 무엇이 언제 지워지는가는 규칙이고, 규칙 없이 지우면 "지웠다는 사실" 이
-#: 판에 남아 되돌릴 수 없다. 그래서 목록만 남긴다 —
-#: :class:`~engine.state.use_registry.UseRegistry` 가 리셋 시점을 정하지
-#: 않은 것과 같은 이유다.
+#: 판에 남아 되돌릴 수 없다. 그래서 목록만 남긴다.
+#:
+#: 🔴 **Phase 6-AC 가 첫 줄을 이 목록에서 꺼냈다.** ``UseRegistry`` 의
+#: "1턴에 1번" 은 이제 :meth:`TurnProgressor._apply` 가 **실제로 비운다** —
+#: 그 Phase 가 제한을 **판정하기 시작했기** 때문이다 (``EffectDefinition.
+#: use_limit`` · ``EffectActivator._check_use_limit``). 판정하지 않는 값을
+#: 비우는 것은 의미가 없었지만, 판정하기 시작하면 비우지 않는 것이 **버그**다
+#: — 다음 턴에도 영원히 막힌다.
+#:
+#: 근거는 :mod:`engine.state.use_registry` 의 머리말이 이미 적어 둔 그대로다:
+#: *"실제 유희왕에서 세 스코프의 리셋 시점이 모두 '턴 종료 시' 인 것은
+#: 맞지만, 그 규칙을 여기에 넣으면 Phase 1 이 규칙을 담게 된다."* 규칙을
+#: 담는 자리가 이 모듈이고, 그래서 여기서 비운다.
 TURN_BOUNDARY_RESETS: tuple[str, ...] = (
-    "UseRegistry — PER_CARD · PER_CARD_NAME · PER_EFFECT 의 '1턴에 1번'",
     "일반 소환권 (아직 모델이 없다)",
     "이 턴에 공격했는가 · 표시 형식을 바꿨는가 (아직 모델이 없다)",
     "이 턴에만 적용되는 지속 효과 (AppliedEffect, Phase 8)",
     "TurnState.step — 페이즈 안의 진행 단계",
+)
+
+#: 턴이 넘어갈 때 **실제로 비우는** 것들 (Phase 6-AC).
+#:
+#: 🔴 목록을 둘로 가르는 이유: "언젠가 해야 한다" 와 "지금 한다" 는 다른
+#: 사실이고, 한 목록에 두면 읽는 쪽이 어느 쪽인지 알 수 없다.
+TURN_BOUNDARY_PERFORMED: tuple[str, ...] = (
+    "UseRegistry — PER_CARD · PER_CARD_NAME · PER_EFFECT 의 '1턴에 1번'",
 )
 
 
@@ -635,6 +651,7 @@ class PhaseTransitionHandler:
 
 __all__ = [
     "UNRESOLVED_PROGRESSION_RULES",
+    "TURN_BOUNDARY_PERFORMED",
     "TURN_BOUNDARY_RESETS",
     "TurnProgressionError",
     "TransitionKind",

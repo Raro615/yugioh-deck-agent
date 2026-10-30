@@ -29,91 +29,30 @@ Phase 1 은 **언제 지워지는가를 정하지 않는다.** :meth:`UseRegistr
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-#: 🔴 **``LimitScope`` 는 여기서 다시 내보낸다** (Phase 6-AC).
+#: 🔴 **제한의 값과 판의 기록을 가른다** (Phase 6-AC 정정).
 #:
-#: :mod:`engine.effect` 는 ``analysis`` 와 ``core`` 를 **가져오지 않는다**
-#: (``test_the_effect_package_borrows_nothing_from_analysis_or_core`` 가 AST
-#: 로 고정한다). 그런데 효과 정의가 사용 제한을 들고 있어야 하고
-#: (``EffectDefinition.use_limit``), 그 제한의 범위 어휘는 ``analysis`` 가
-#: 이미 적어 두었다 — 같은 열거형을 engine 쪽에 한 벌 더 만들면 둘이
-#: 갈라진다.
+#: ``LimitScope`` · :class:`~engine.use_limit.UseLimit` · 열쇠를 만드는 세
+#: 함수는 :mod:`engine.use_limit` 에 있다. 처음 구현은 그것들을 이 모듈에
+#: 두었는데, 그러면 효과 정의 계층이 이 모듈을 가져오게 되고 **정의가 판을
+#: 알게 된다** (이 모듈에는 판의 기록인 :class:`UseRegistry` 가 있다).
+#: ``test_the_library_never_reaches_into_the_board`` 가 그것을 금지하고 있었고
+#: 실제로 깨졌다. 그 모듈의 머리말이 가른 이유를 적는다.
 #:
-#: 그래서 **이 모듈이 경계가 된다.** 여기는 ``engine.state`` 이고 처음부터
-#: 그 어휘를 읽어 왔으므로 (아래 import 가 Phase 1 의 것이다), 효과 계층은
-#: ``engine.state.use_registry`` 에서 받아 간다.
-from analysis.effect_model import LimitScope
+#: 여기서 **다시 내보낸다** — Phase 1 부터 이 이름들을 여기서 읽어 온
+#: 자리들이 있고 (``engine.state`` 의 ``__init__``), 그 계약을 깨지 않는다.
+from engine.use_limit import (  # noqa: F401  (다시 내보낸다)
+    LimitScope,
+    PerCardKey,
+    PerCardNameKey,
+    PerEffectKey,
+    UseKey,
+    UseLimit,
+    card_key as _card_key,
+    card_name_key as _card_name_key,
+    effect_key as _effect_key,
+)
 
 from engine.ids import EffectRef, InstanceId
-
-#: 세 스코프의 키 타입.
-PerCardKey = tuple[int, int]
-"""``(player, instance_id.value)``"""
-PerCardNameKey = tuple[int, int]
-"""``(player, card_id)``"""
-PerEffectKey = tuple[int, int, int]
-"""``(player, card_id, ordinal)``"""
-
-UseKey = PerCardKey | PerCardNameKey | PerEffectKey
-
-
-@dataclass(frozen=True, slots=True)
-class UseLimit:
-    """
-    **확인된** 1턴 사용 제한 하나 (Phase 6-AC).
-
-    ``SetCountLimit(times, scope)`` 를 손으로 옮긴 값이다. :class:`UseRegistry`
-    가 **횟수를 세기만** 하고 판정하지 않으므로 (모듈 머리말), "몇 번까지
-    인가" 를 들고 있는 자리가 필요했다. 그 자리를 효과 정의 쪽에 둔 이유는
-    하나다 — 제한은 **그 카드 텍스트의 일부**이고 판의 성질이 아니다.
-
-    🔴 **등록되지 않은 효과에는 제한이 없는 것처럼 동작한다.** 그것이 지금
-    사실이고, 없는 것을 기본값으로 메꾸지 않는다 (ADR-006). 어느 정의가
-    제한을 들고 있는지는 ``EffectDefinition.use_limit`` 이 ``None`` 인지로
-    보면 된다.
-
-    :attr:`scope` 에 ``NONE`` · ``UNKNOWN`` 을 담을 수 없다. "범위를
-    모른다" 는 제한이 아니라 **제한을 읽지 못한 것**이고, 그것은 이 칸이
-    ``None`` 인 것으로 표현된다 — :class:`~engine.effect.ruling.RuleFact` 가
-    ``UNKNOWN`` 을 담지 못하는 것과 같은 규율이다.
-    """
-
-    scope: LimitScope
-    times: int = 1
-
-    def __post_init__(self) -> None:
-        if self.scope in (LimitScope.NONE, LimitScope.UNKNOWN):
-            raise ValueError(
-                f"확인된 제한의 범위는 세 가지뿐입니다: {self.scope}. "
-                "읽지 못한 제한은 표에 적지 않습니다 (None 이 그 뜻입니다)."
-            )
-        if self.times < 1:
-            raise ValueError(f"사용 횟수는 1 이상입니다: {self.times}")
-
-    def key_for(
-        self, player: int, effect_ref: EffectRef, instance_id: InstanceId
-    ) -> UseKey:
-        """이 범위에서 이 발동이 세어지는 **열쇠**."""
-        if self.scope is LimitScope.PER_CARD:
-            return UseRegistry.card_key(player, instance_id)
-        if self.scope is LimitScope.PER_CARD_NAME:
-            return UseRegistry.card_name_key(player, effect_ref.card_id)
-        return UseRegistry.effect_key(player, effect_ref)
-
-    def canonical_state(self) -> tuple:
-        return ("use_limit", self.scope.value, self.times)
-
-    def describe_ko(self) -> str:
-        where = {
-            LimitScope.PER_CARD: "이 카드 1장 기준",
-            LimitScope.PER_CARD_NAME: "같은 이름의 카드 전체 기준",
-            LimitScope.PER_EFFECT: "그 카드명의 이 효과 기준",
-        }[self.scope]
-        return f"1턴에 {self.times}번 ({where})"
-
-    def __str__(self) -> str:  # pragma: no cover - 표시용
-        return self.describe_ko()
 
 
 class UseRegistry:
@@ -141,17 +80,21 @@ class UseRegistry:
     # ------------------------------------------------------------------
     # 키 만들기 — 전부 정수 튜플이라 결정론적이다
     # ------------------------------------------------------------------
+    #: 🔴 **열쇠의 모양은 :mod:`engine.use_limit` 하나가 안다** (6-AC 정정).
+    #: 여기서 다시 적으면 둘이 갈라지고, 그러면 "이 카드 1장" 과 "이 카드명
+    #: 전체" 가 같은 제약이 되는 사고가 바로 이 모듈 머리말의 경고다.
+    #: 이름은 그대로 두어 기존 호출자를 깨지 않는다.
     @staticmethod
     def card_key(player: int, instance_id: InstanceId) -> PerCardKey:
-        return (player, instance_id.value)
+        return _card_key(player, instance_id)
 
     @staticmethod
     def card_name_key(player: int, card_id: int) -> PerCardNameKey:
-        return (player, card_id)
+        return _card_name_key(player, card_id)
 
     @staticmethod
     def effect_key(player: int, effect_ref: EffectRef) -> PerEffectKey:
-        return (player, effect_ref.card_id, effect_ref.ordinal)
+        return _effect_key(player, effect_ref)
 
     def _table(self, scope: LimitScope) -> dict:
         try:

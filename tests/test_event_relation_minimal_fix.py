@@ -543,7 +543,8 @@ def test_14_no_validation_code_was_added_or_redefined():
         assert CODE_VALIDITY[ValidationCode[name]] is ActionValidity.INVALID
     #: 🔴 policy 가 enum 전부를 덮는다는 성질은 그대로다 (import 때 터진다).
     assert set(CODE_VALIDITY) == set(ValidationCode)
-    assert len(CODE_VALIDITY) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(CODE_VALIDITY) == 53
     for name in (
         "OK",
         "CANDIDATE_NOT_ELIGIBLE",

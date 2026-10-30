@@ -41,6 +41,7 @@ from agent.choice import DeclineChoice, FirstPermittedChoice, RandomChoice
 from agent.policy import FirstLegalPolicy, RandomPolicy
 from agent.runner import DuelRunner
 from agent.heuristic import rule_based_policy
+from engine.activation_timing import ActivationStage
 from engine.action import PlayerAction, PlayerActionKind
 from engine.condition import ConditionResult
 from engine.effect.journal import EventJournal
@@ -199,6 +200,32 @@ def _settle(duel):
     return steps
 
 
+def _settle_registration(duel):
+    """
+    **유발 등재 단계**를 패스로 지난다 (Phase 6-AC).
+
+    :func:`_settle` 과 **다른 단계**이고, 그래서 다른 함수다. 등재 단계에서는
+    우선권이 **닫힌 채**이고 (공식 Fast Effect Timing 의 box D) 자리를
+    가리키는 것은 보유자가 아니라 등재 단계의 주체다. ``priority.is_open``
+    만 보는 :func:`_settle` 은 이 자리에서 **아무것도 하지 않고** 빠져나가고,
+    그것이 옳다 — 두 단계를 한 고리에 섞으면 호출자가 "어느 단계를 지났는가"
+    를 구분할 수 없다.
+
+    6-AC 가 이 함수를 필요하게 만든 이유: 기르수 ① 이 묘지로 보낸 카드가
+    성유물－『성장』 이고 그 ② 가 등재 기회를 연다. 그 기회를 지나지 않으면
+    다음 발동이 ``STAGE_FORBIDS_ACTION`` 으로 거절된다 — 그 거절은 **옳다.**
+    """
+    steps = _Steps()
+    while len(steps) < 4:
+        actor = duel._window_actor()
+        if actor is None:
+            break
+        passing = PlayerAction.passing(actor=actor)
+        assert passing in duel.legal_actions(actor).allowed
+        steps.append(duel.apply(passing))
+    return steps
+
+
 def _source(path: str) -> str:
     return io.open(PROJECT / path, encoding="utf-8").read()
 
@@ -344,6 +371,26 @@ def test_a03_the_opponent_gets_the_response_window(repository):
     #: 줄은 해결 **직후** 우선권이 닫힐 것을 요구했다. 공식 Fast Effect
     #: Timing 도표는 체인 해결 뒤에도 유발 확인과 빠른 효과 기회를 거치게
     #: 하고, 판이 다시 열리려면 양측이 지나가야 한다.
+    #:
+    #: 🔴 **Phase 6-AC 가 그 "하나" 를 둘로 늘렸다.** 기르수 ① 이 묘지로
+    #: 보낸 카드가 성유물－『성장』 이고, 6-AC 가 그 ② 를 등재했다. 그래서
+    #: 해결 직후는 도표의 **box D** (등재 단계) 이고, 빠른 효과 기회는 그
+    #: 뒤다 — 보완5 가 적은 두 갈래 중 "유발이 있으면" 쪽이 **처음으로 실제
+    #: 카드로** 밟혔다. 단언을 지우지 않고 **한 단계를 앞에 끼운다.**
+    assert duel.priority.is_open is False
+    assert duel._activation_stage() is ActivationStage.TRIGGER_REGISTRATION
+    #: 🔴 그 기회는 **열렸지만 발동할 수 없다** — 이 판의 패에 「성유물」
+    #: 몬스터가 없다. 규칙이 답한 0건이고 (``NO_CANDIDATES``) 엔진 미지원이
+    #: 아니다. 이 구분이 보완8 이 세운 것이고 여기서 실제로 쓰인다.
+    withheld = {
+        reason.code
+        for reason in duel.legal_actions().withheld
+        if "93920420:e[1]" in reason.reason
+    }
+    assert withheld == {ValidationCode.NO_CANDIDATES}, withheld
+
+    #: ③ 등재 단계를 지나가면 **그때** 빠른 효과 기회가 열린다 (box B).
+    assert duel.apply(PlayerAction.passing(actor=MINE)).accepted is True
     assert duel.priority.is_open is True
     assert duel.priority.window is ResponseWindow.RESPONSE
     assert duel.priority.holder.seat == duel.turn_player
@@ -437,11 +484,21 @@ def test_a06_the_journal_records_the_movement(repository):
 def test_a07_the_duel_goes_on_after_the_resolution(repository):
     """
     해결 뒤 **후속 상태가 정상이다** — 체인이 비고 후보가 다시 만들어진다.
+
+    🔴 **Phase 6-AC 가 "해결 뒤" 에 한 단계를 끼웠다.** 기르수 ① 이 묘지로
+    보낸 카드가 성유물－『성장』 이고 6-AC 가 그 ② 를 등재했으므로, 해결
+    직후는 **등재 단계**다 (box D). 판이 다시 열리는 것은 그 기회를 지난
+    뒤이고, 그래서 이 시험이 재는 "정상" 도 그 뒤다. 단언을 느슨하게 하지
+    않고 **지나는 걸음을 적는다.**
     """
     setup, _ = _board(repository, selector=FirstPermittedChoice())
     duel = setup.duel
     _summon(duel)
     duel.apply(_trigger_action(duel))
+    _settle(duel)
+    #: 🔴 등재 기회가 열렸고, 그것을 지나면 빠른 효과 기회가 열린다.
+    assert duel._activation_stage() is ActivationStage.TRIGGER_REGISTRATION
+    assert _settle_registration(duel)
     _settle(duel)
 
     assert len(duel.chain) == 0
@@ -794,6 +851,11 @@ def test_b11_the_candidates_are_counted_at_resolution_time(repository):
         assert action in duel.legal_actions(MINE).allowed
         assert duel.apply(action).accepted is True
         _settle(duel)
+        #: 🔴 해결이 성유물－『성장』 을 묘지로 보냈으면 그 ② 의 등재 기회가
+        #: 열린다 (Phase 6-AC). 지나가지 않으면 둘째 발동이
+        #: ``STAGE_FORBIDS_ACTION`` 으로 거절되고, 그 거절은 **옳다.**
+        _settle_registration(duel)
+        _settle(duel)
 
     assert len(chooser.records) == 2
     counts = [len(r.offer.candidates) for r in chooser.records]
@@ -818,6 +880,12 @@ def test_b12_activation_time_targeting_is_untouched(repository):
 
     실측: 실행 등재된 효과 15개 중 미뤄진 것은 **둘**이고 (기르수 · 어리석은
     매장) 둘 다 덱을 본다. 나머지 열셋은 한 글자도 달라지지 않는다.
+
+    🔴 **Phase 6-AC 가 "나머지" 를 열넷으로 늘렸다** (등재 15 → 16). 더해진
+    성유물－『성장』 ② 는 **패**를 보고, 패는 가려진 존이 아니므로
+    (``CONCEALED_ZONES`` 는 덱 · 엑스트라뿐) 미루는 쪽이 아니라 **그대로
+    두는 쪽**에 들어간다. 미뤄진 둘은 여전히 둘이다 — 이 Phase 가 미루는
+    범위를 넓히지 않았다는 것이 이 수가 말하는 사실이다.
     """
     from engine.effect.library import EFFECT_LIBRARY
     from engine.target_bridge import (
@@ -839,7 +907,11 @@ def test_b12_activation_time_targeting_is_untouched(repository):
             kept.append(definition.effect_ref.card_id)
 
     assert sorted(deferred) == sorted([GIRSU, BURIAL]), deferred
-    assert len(kept) == 13, kept
+    #: 🔴 13 → 14 (Phase 6-AC) — 성유물－『성장』 ② 는 **패**를 본다.
+    assert len(kept) == 14, kept
+    from engine.effect.library import WORLD_WAND
+
+    assert WORLD_WAND in kept
     #: 🔴 미뤄진 둘은 **덱을 본다** — 그것이 미루는 유일한 이유다.
     for card_id in deferred:
         definition = next(
@@ -1096,7 +1168,8 @@ def test_c07_the_ruling_registry_was_not_widened():
     """🔴 **허가를 넓히지 않았다.** 6-X 의 등록소가 그대로다."""
     from engine.effect.library import OPERATION_RULINGS
 
-    assert len(OPERATION_RULINGS) == 19
+    #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
+    assert len(OPERATION_RULINGS) == 21
 
 
 def test_c08_the_defaults_are_the_old_behaviour():
@@ -1130,15 +1203,20 @@ def test_c08_the_defaults_are_the_old_behaviour():
     assert Duel.consumed_events == frozenset()
 
 
-def test_c09_girsu_is_the_only_registered_trigger_effect():
+def test_c09_two_registered_trigger_effects_now_exist():
     """
-    🔴 **측정해 두는 사실.** 실행 등재된 유발 효과가 **하나**다.
+    🔴 **이 시험이 예고한 대로 깨졌고, 예고한 대로 고친다.**
 
-    그래서 "다른 유발 효과로도 같은 경로가 돈다" 는 아직 측정할 수 없다
-    (``test_b13`` 이 그 한계를 적는다). 이 수가 늘면 이 시험이 먼저 깨지고,
-    그때 공통성을 **실제로** 측정해야 한다.
+    6-V 는 "실행 등재된 유발 효과가 **하나**다 — 이 수가 늘면 이 시험이
+    먼저 깨지고, 그때 공통성을 **실제로** 측정해야 한다" 로 적어 두었다.
+    6-AC 가 성유물－『성장』 ② 를 등재해 둘이 되었다.
+
+    그래서 수만 늘리지 않고 **공통성을 실제로 센다**: 둘 다 같은 등재
+    경로를 거치고 (``executable``), 같은 분류를 선언하고
+    (``ActivationKind.TRIGGER``), 서로 **다른 사건**에 반응한다 (소환 성공 ·
+    묘지로 감). 그 다름이 "한 카드에 맞춘 우회로" 가 아니라는 근거다.
     """
-    from engine.effect.library import EFFECT_LIBRARY
+    from engine.effect.library import EFFECT_LIBRARY, WORLD_WAND
 
     triggers = sorted(
         entry.definition.effect_ref.card_id
@@ -1146,7 +1224,30 @@ def test_c09_girsu_is_the_only_registered_trigger_effect():
         if entry.executable
         and entry.definition.activation_kind is ActivationKind.TRIGGER
     )
-    assert triggers == [GIRSU], triggers
+    assert triggers == sorted([GIRSU, WORLD_WAND]), triggers
+    #: 🔴 **서로 다른 일을 한다** — 같은 배선이 둘을 다 태운다. 어느 사건에
+    #: 반응하는지는 정의가 아니라 컴파일된 ``TriggerSpec`` 이 들고 있으므로
+    #: (``activation_waits_for_event``), 여기서는 **정의가 들고 있는 차이**를
+    #: 센다: 조작의 종류와 등재한 ordinal 이 둘 다 다르다.
+    shapes = {
+        entry.card_id: (
+            tuple(op.kind for op in entry.definition.operations),
+            entry.effect_ref.ordinal,
+        )
+        for entry in EFFECT_LIBRARY
+        if entry.executable
+        and entry.definition.activation_kind is ActivationKind.TRIGGER
+    }
+    assert shapes[GIRSU] != shapes[WORLD_WAND], shapes
+    #: 🔴 둘 다 ``activation_waits_for_event`` 를 **적지 않는다** (``None``).
+    #: 그 칸은 "이 정의가 사건을 기다린다고 **선언했는가**" 이고, 어느
+    #: 사건인지는 컴파일된 ``TriggerSpec`` 이 들고 있다. 두 등재가 같은
+    #: 자리를 비워 둔다는 것이 **같은 배선을 탄다**는 근거다.
+    assert {
+        entry.definition.activation_waits_for_event
+        for entry in EFFECT_LIBRARY
+        if entry.card_id in (GIRSU, WORLD_WAND)
+    } == {None}
 
 
 @pytest.mark.real_card

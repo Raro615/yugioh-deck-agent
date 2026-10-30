@@ -188,7 +188,8 @@ def test_01_the_enum_declares_every_member_it_uses():
     #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 모름
     #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
     #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
-    assert len(ValidationCode) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(ValidationCode) == 53
     #: 그리고 ``str`` enum 이라는 성질도 그대로다 — policy 가 멤버를 만들지 않았다.
     assert issubclass(ValidationCode, str)
 
@@ -214,7 +215,8 @@ def test_02_no_new_member_was_added_and_none_was_renamed():
     #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 모름
     #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
     #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
-    assert len(declared) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(declared) == 53
     assert declared == list(ValidationCode.__members__)
     #: 값도 이름의 소문자형 그대로다.
     for name in declared:
@@ -256,7 +258,8 @@ def test_04_the_policy_is_total_and_breaks_at_import_if_a_member_is_missed():
     #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 모름
     #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
     #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
-    assert len(CODE_VALIDITY) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(CODE_VALIDITY) == 53
 
     #: 검사가 실제로 있는지 구문으로 확인한다.
     source = source_of("engine/validation.py")
@@ -608,7 +611,8 @@ def test_24_the_four_buckets_partition_the_enum_without_a_remainder():
     unknown = codes_declaring(ActionValidity.UNKNOWN)
     undecided = codes_declaring(None)
     assert (len(valid), len(invalid), len(unknown), len(undecided)) == (1, 42, 7, 1)
-    assert len(valid | invalid | unknown | undecided) == 51 == len(ValidationCode)
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(valid | invalid | unknown | undecided) == 53 == len(ValidationCode)
     assert valid == frozenset({ValidationCode.OK})
 
 
@@ -816,7 +820,8 @@ def test_33_the_only_thing_this_phase_changed_is_where_the_policy_lives():
     #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 모름
     #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
     #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
-    assert len(ValidationCode) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(ValidationCode) == 53
     assert len(SimulationStatus) == 5
     assert len(ActionValidity) == 3
     assert len(ResolutionStatus) == 14

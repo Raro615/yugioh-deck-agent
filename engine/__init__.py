@@ -1024,11 +1024,17 @@ Phase 1 에서 의도적으로 만들지 않은 것 (TODO)
   "같은 판은 경로와 무관하게 같은 해시" 가 깨진다. ``pending`` 은 이벤트
   대기열이 생길 때 다시 본다.
 - **횟수 제한 판정** — :class:`~engine.state.use_registry.UseRegistry` 는 횟수를
-  세기만 한다. "몇 번까지 허용인가" 는 Phase 4 다.
-- **사용 횟수 · 턴 플래그의 초기화 시점** — ``UseRegistry.clear()`` 와
-  ``TurnState.begin_next_turn()`` 은 있지만, 언제 부를지는 정하지 않았다.
-  Phase 2-H 가 턴을 넘기면서도 **아무것도 지우지 않는다** — 무엇이 언제
-  지워지는가는 규칙이고, 규칙 없이 지우면 되돌릴 수 없다. 지워야 할 것의
-  목록만 ``turn_progression.TURN_BOUNDARY_RESETS`` 에 남아 있다.
+  세기만 한다. "몇 번까지 허용인가" 를 묻는 자리는
+  :meth:`~engine.activation.EffectActivator._check_use_limit` 이고 (Phase
+  6-AC), 그 판정은 **확인된 제한에만** 걸린다 —
+  ``EffectDefinition.use_limit`` 이 ``None`` 인 효과는 제한이 없는 것처럼
+  동작한다 (ADR-006). 지금 제한을 들고 있는 효과는 **둘**이다.
+- **턴 플래그의 초기화 시점** — ``TurnState.begin_next_turn()`` 은 있지만
+  무엇을 함께 지울지는 규칙이고, 규칙 없이 지우면 되돌릴 수 없다. 아직 지우지
+  못하는 것의 목록이 ``turn_progression.TURN_BOUNDARY_RESETS`` 다.
+  🔴 **``UseRegistry`` 는 그 목록에서 빠졌다** — Phase 6-AC 가 제한을
+  판정하기 시작했으므로 턴이 넘어갈 때 **실제로 비운다**
+  (``TURN_BOUNDARY_PERFORMED``). 판정하는 값을 비우지 않으면 다음 턴에도
+  영원히 막힌다.
 - **``AppliedEffect``** — 일시 효과를 보관만 하고 해석하지 않는다. Phase 8.
 """

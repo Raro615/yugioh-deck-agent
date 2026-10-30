@@ -250,10 +250,22 @@ def test_b_every_question_is_its_own_value():
         "may_be_returned_to_hand",  # E — Phase 2-AK
         "may_be_banished",  # F — Phase 2-AK
         "may_be_returned_to_deck",  # G — Phase 2-AK
+        "may_be_special_summoned",  # H — Phase 6-AC
     }
     assert RuleQuestion.MAY_BE_SENT_TO_GRAVE is not RuleQuestion.MAY_BE_DISCARDED
-    # 일곱이 **일곱 개의 다른 값**이다. 하나라도 겹치면 질문이 뭉개진다.
-    assert len({q.value for q in RuleQuestion}) == len(list(RuleQuestion)) == 7
+    # 여덟이 **여덟 개의 다른 값**이다. 하나라도 겹치면 질문이 뭉개진다.
+    #
+    # 🔴 **H 는 A~G 와 한 가지가 다르다** (Phase 6-AC). A~G 는 **카드가
+    # 선언할 때만** 물어지지만 (``DECLARED_GATE_RULINGS``) H 는 종류만 보고
+    # 언제나 물어진다 (``RULE_GATED`` — 파괴와 같은 쪽). 그래서 아래 두 표의
+    # 범위가 갈린다.
+    assert len({q.value for q in RuleQuestion}) == len(list(RuleQuestion)) == 8
+    from engine.effect.semantics import DECLARED_GATE_RULINGS, RULE_GATED_PREDICATES
+
+    assert RuleQuestion.MAY_BE_SPECIAL_SUMMONED not in (
+        DECLARED_GATE_RULINGS.values()
+    )
+    assert RuleQuestion.MAY_BE_SPECIAL_SUMMONED in RULE_GATED_PREDICATES
 
 
 def test_b_the_ruling_has_a_separate_method_for_each_question():

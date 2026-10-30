@@ -101,6 +101,7 @@ from tests.engine.test_trigger_normal_path_integration import (
     THEIRS,
     _board,
     _settle,
+    _settle_registration,
     _summon,
 )
 from tests.engine.test_trigger_window_completion import (
@@ -430,6 +431,16 @@ def test_b04_the_registered_chain_resolves_in_reverse(repository):
     assert duel.apply(_activations(duel, THEIRS)[0]).accepted is True
     settled = _settle(duel)
     assert settled and all(step.accepted for step in settled)
+    #: 🔴 **Phase 6-AC 가 해결 뒤에 한 단계를 끼웠다.** 기르수 ① 이 묘지로
+    #: 보낸 카드가 성유물－『성장』 이고 그 ② 가 등재 기회를 연다 (box D).
+    #: 역순 해결은 그 기회와 **무관하게** 이미 끝났고 (바로 아래 journal 이
+    #: 그것을 센다), 판이 다시 열리는 것은 기회를 지난 뒤다.
+    #: 🔴 새 창이 열렸다는 사실은 **기회를 지나기 전에** 센다 — 지나간
+    #: 자리 기록이 비어 있는 것이 "새 창" 의 뜻이다.
+    assert duel.window_passed == frozenset()
+    registration = _settle_registration(duel)
+    assert all(step.accepted for step in registration)
+    _settle(duel)
 
     #: 🔴 나중에 쌓인 링크(상대)가 먼저 적용되었다.
     applied = [
@@ -450,7 +461,10 @@ def test_b04_the_registered_chain_resolves_in_reverse(repository):
 
     #: 🔴 그리고 판이 다시 열렸다.
     assert duel.chain.is_empty
-    assert duel.window_passed == frozenset()
+    #: 🔴 이 자리의 ``window_passed`` 는 이제 **양쪽이 지나갔다**를 말한다
+    #: (Phase 6-AC) — 그 두 걸음이 바로 위에서 일어났기 때문이다. 창이
+    #: 새로 열렸는지는 위에서 이미 셌다.
+    assert duel.window_passed == frozenset({MINE, THEIRS})
     assert "end_phase" in _kinds(duel, duel.to_act)
 
 

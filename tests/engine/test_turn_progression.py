@@ -28,6 +28,7 @@ from engine.priority import PriorityHolder, PriorityState, ResponseWindow
 from engine.state.game_state import GameState
 from engine.state.turn import TurnState
 from engine.turn_progression import (
+    TURN_BOUNDARY_PERFORMED,
     TURN_BOUNDARY_RESETS,
     UNRESOLVED_PROGRESSION_RULES,
     PhaseTransition,
@@ -230,20 +231,52 @@ def test_a_turn_change_cannot_be_built_with_a_mismatched_shape():
         )
 
 
-def test_turn_boundary_resets_are_recorded_and_not_performed(state, progressor):
+def test_turn_boundary_clears_the_use_registry_and_records_the_rest(
+    state, progressor
+):
     """
-    **턴이 바뀌어도 아무것도 지우지 않는다.**
+    🔴 **Phase 6-AC 가 이 시험을 뒤집었다.**
 
-    무엇이 언제 지워지는가는 규칙이고, 규칙 없이 지우면 되돌릴 수 없다.
-    그래서 :data:`TURN_BOUNDARY_RESETS` 에 목록만 남긴다 — ``UseRegistry``
-    가 리셋 시점을 정하지 않은 Phase 1 의 정책을 그대로 지킨다.
+    원래 이름은 ``test_turn_boundary_resets_are_recorded_and_not_performed``
+    이고 "턴이 바뀌어도 **아무것도 지우지 않는다**" 를 지켰다. 그때 그것이
+    맞았다 — ``UseRegistry`` 에 적는 production 코드가 **한 줄도 없었으므로**
+    비울 것도 없었다.
+
+    6-AC 가 「1턴에 1번」 을 **판정하기 시작했다** (``EffectActivator.
+    _check_use_limit``). 판정하는 값을 비우지 않으면 다음 턴에도 영원히
+    막히므로, 제한을 들고 온 Phase 가 리셋도 함께 들고 왔다.
+
+    재는 것은 그대로 **둘**이다 — 비우는 것과 아직 못 비우는 것이 각자의
+    목록에 있고, 한 목록에 섞여 있지 않다.
     """
     state.uses.mark_card_name_used(MINE, 1000)
     state.turn.set_phase(Phase.END)
     progressor.advance(state)
 
+    #: 🔴 **비운다.** 그리고 그 사실이 목록에 적혀 있다.
+    assert state.uses.card_name_used(MINE, 1000) is False
+    assert any("UseRegistry" in rule for rule in TURN_BOUNDARY_PERFORMED)
+    #: 🔴 **아직 못 비우는 것은 그 목록에 남는다** — 둘을 섞지 않는다.
+    assert not any("UseRegistry" in rule for rule in TURN_BOUNDARY_RESETS)
+    assert TURN_BOUNDARY_RESETS
+    assert not set(TURN_BOUNDARY_RESETS) & set(TURN_BOUNDARY_PERFORMED)
+
+
+def test_a_phase_change_inside_a_turn_does_not_clear_the_use_registry(
+    state, progressor
+):
+    """
+    🔴 **턴 안의 페이즈 이동은 비우지 않는다.** 「1턴에 1번」 은 턴의 일이고
+    페이즈의 일이 아니다 — 섞으면 메인 페이즈 1 에 쓴 효과를 배틀 페이즈에서
+    다시 쓸 수 있게 된다.
+    """
+    state.uses.mark_card_name_used(MINE, 1000)
+    state.turn.set_phase(Phase.MAIN1)
+    result = progressor.advance(state)
+
+    assert result.advanced is True
+    assert state.turn.phase is Phase.BATTLE
     assert state.uses.card_name_used(MINE, 1000) is True
-    assert any("UseRegistry" in rule for rule in TURN_BOUNDARY_RESETS)
 
 
 # ======================================================================

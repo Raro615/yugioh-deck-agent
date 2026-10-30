@@ -146,10 +146,10 @@ def definition_view(repository, card_id: int) -> CardDefinitionView:
 # ======================================================================
 
 
-def test_a01_the_registry_holds_nineteen_hand_written_cards():
+def test_a01_the_registry_holds_twenty_one_hand_written_cards():
     """
     **§4-A 1 · 2** — 등록소는 **카드 ID → 확인된 사실**의 표이고, 지금
-    **19장**이 손으로 적혀 있다.
+    **21장**이 손으로 적혀 있다.
 
     6-O 는 이 표에 줄을 더하지 않았다 (§14 "모든 OPERATION_RULINGS 데이터
     확장" 금지).
@@ -159,9 +159,17 @@ def test_a01_the_registry_holds_nineteen_hand_written_cards():
     이 된다 (``BoardRuling._interference``) — 어니스트가 6-K 에서 들어온
     것과 **같은 이유**다. 그 줄의 ``answers`` 는 비어 있다: 묻지 않은 것을
     참으로 채우지 않았다.
+
+    🔴 **Phase 6-AC 가 두 줄 더했다 (19 → 21): 성유물－『성장』 · 오르페골
+    갈라테아.** 갈라테아는 기르수와 **같은 이유**로 들어왔다 (링크 소환으로
+    필드에 놓이고 그 뒤의 판 훑기에 걸린다, ``answers`` 는 비어 있다).
+    『성장』 은 다르다 — 그 카드에는 **두 질문의 답이 적혀 있다**
+    (``MAY_BE_SENT_TO_GRAVE`` · ``MAY_BE_SPECIAL_SUMMONED``). 둘 다 공식
+    텍스트 전문을 읽은 것이고, 그래서 §14 의 "데이터 확장" 금지를 어긴
+    것이 아니라 **이번 경로가 요구한 두 질문만** 읽었다.
     """
-    assert len(OPERATION_RULINGS) == 19
-    assert len(OPERATION_RULINGS.card_ids) == 19
+    assert len(OPERATION_RULINGS) == 21
+    assert len(OPERATION_RULINGS.card_ids) == 21
     assert FEATHERMAN in OPERATION_RULINGS.card_ids
     assert HONEST in OPERATION_RULINGS.card_ids
     assert POT_OF_GREED in OPERATION_RULINGS.card_ids
@@ -789,8 +797,10 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
 
     #: 🔴 17 → 18 · 14 → 15 (Phase 6-V). 아래가 재는 것은 **욕망의 항아리의
     #: 실행이 그대로인가** 이고, 그 사실은 변하지 않았다.
-    assert len(EFFECT_LIBRARY) == 18
-    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 15
+    #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
+    assert len(EFFECT_LIBRARY) == 19
+    #: Phase 6-AC — 성유물－『성장』 ① 이 실행 가능으로 더해졌다 (15 → 16).
+    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 16
 
     definition = definition_registry().definition_for(
         EffectRef(POT_OF_GREED, 0)
@@ -828,8 +838,15 @@ def test_g01_no_new_rule_engine_and_no_new_result_type():
         "rulebook", "card_text", "official_ruling"
     ]
     assert [r.name for r in ConditionResult] == ["TRUE", "FALSE", "UNKNOWN"]
-    #: 질문 목록도 그대로다.
-    assert len(list(RuleQuestion)) == 7
+    #: 🔴 **판정 체계는 그대로이고 질문이 하나 늘었다** (Phase 6-AC).
+    #:
+    #: 이 단언이 지키는 것은 "새 판정 체계를 만들지 않았다" 이고, 그것은
+    #: 위의 두 줄(근거의 종류 · 결과의 세 값)이 잰다. 질문 목록은 **그
+    #: 체계 안에서** 늘어나는 것이므로 늘어난 사실을 적는다 —
+    #: ``MAY_BE_SPECIAL_SUMMONED`` 가 그것이고, 같은 ``RuleFact`` ·
+    #: 같은 ``RuleBasis`` · 같은 세 값을 쓴다.
+    assert len(list(RuleQuestion)) == 8
+    assert RuleQuestion.MAY_BE_SPECIAL_SUMMONED.value == "may_be_special_summoned"
 
 
 def test_g02_the_registry_data_was_not_expanded():
@@ -844,7 +861,8 @@ def test_g02_the_registry_data_was_not_expanded():
     ``ruling.py`` 에 있고 ``library.py`` 는 그것을 쓰지 않는다" 는 그대로다.
     """
     library = source_of("engine/effect/library.py")
-    assert len(OPERATION_RULINGS) == 19
+    #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
+    assert len(OPERATION_RULINGS) == 21
     #: 라이브러리 쪽은 6-O 가 건드리지 않았다 — 유도는 ruling.py 에 있다.
     assert "rulebook_facts" not in library
 

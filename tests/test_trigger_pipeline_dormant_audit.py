@@ -801,7 +801,8 @@ def test_18_only_four_codes_have_a_dormant_carrier_at_all():
     #: ``TRIGGER_TIMING_MISSED``), **그 셋 중 어느 것도 dormant 층에
     #: 실리지 않았다.** 위 집합이 여덟 그대로인 것이 그 사실이다 — 위험의
     #: 범위는 넓어지지 않았고 관계 없는 쪽만 늘었다.
-    assert len(members) == 51, len(members)
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(members) == 53, len(members)
     assert len(members - with_dormant) == 43
 
 
@@ -934,11 +935,13 @@ def test_24_the_validation_vocabulary_is_unchanged():
     #: ``MANDATORY_TRIGGER_PENDING`` · ``TRIGGER_TIMING_MISSED``. 🔴 **셋 다
     #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
     #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
-    assert len(ValidationCode) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(ValidationCode) == 53
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5
     assert len(unknown_codes()) == 7
-    assert len(CODE_VALIDITY) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(CODE_VALIDITY) == 53
 
 
 def test_25_this_phase_changed_no_production_file():

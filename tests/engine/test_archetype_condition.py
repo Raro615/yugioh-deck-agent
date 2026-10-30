@@ -350,9 +350,14 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     #    등재하면서 그 자리를 **처음으로 썼다** (``s.tgfilter`` 의
     #    ``IsSetCard({SET_ORCUST,SET_WORLD_LEGACY})``). 그래서 "쓰는 등재가
     #    없다" 를 지우고 **정확히 하나이고 그것이 무엇인지**를 고정한다.
-    from engine.effect.library import EFFECT_LIBRARY, GIRSU, HONEST
+    #
+    #    🔴 **Phase 6-AC 가 둘로 만들었다** — 성유물－『성장』 ① 의 후보
+    #    조건도 카드군이다 (``s.spfilter1`` 의
+    #    ``IsSetCard(SET_WORLD_LEGACY)``). "정확히 하나" 를 "그 둘이
+    #    무엇인지" 로 바꾼다.
+    from engine.effect.library import EFFECT_LIBRARY, GIRSU, HONEST, WORLD_WAND
 
-    assert len(EFFECT_LIBRARY) == 18
+    assert len(EFFECT_LIBRARY) == 19
     using_archetype = [
         entry.card_id for entry in EFFECT_LIBRARY
         if entry.definition.targets
@@ -360,7 +365,7 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
             "카드군" in binding.describe_ko() for binding in entry.definition.targets
         )
     ]
-    assert using_archetype == [GIRSU], using_archetype
+    assert using_archetype == [GIRSU, WORLD_WAND], using_archetype
     #: 🔴 조건을 만드는 자리는 **여전히 한 곳**이다 — 기르수의 정의도
     #: ``IsSetCard`` 를 직접 부르지 않고 ``compile_archetype_condition`` 을
     #: 통한다 (위 ② 의 단언이 그것을 지킨다).
@@ -894,29 +899,33 @@ def test_j_nothing_can_add_an_archetype_to_a_card_in_play():
             assert "AddSetcode" not in text, module.as_posix()
 
 
-def test_j_the_archetype_condition_is_now_used_by_exactly_one_execution():
+def test_j_the_archetype_condition_is_used_by_exactly_the_two_orcust_effects():
     """
-    🔴 **이 시험의 이름이 Phase 6-V 에서 바뀌었다.**
+    🔴 **이 시험의 이름이 두 번 바뀌었다.**
 
     원래 이름은 ``test_j_this_phase_turned_on_no_new_execution`` 이었고,
     "카드군 조건이 생겼다고 실행이 켜지지 않았다" 를 지켰다. **그 시점에
     맞았다** — 6-C/6-D 는 조건과 그것을 만드는 자리만 만들었다.
 
     6-V 가 기르수 ① 을 등재하면서 그 조건을 **처음으로 실행 경로에
-    썼다.** 그래서 "하나도 없다" 가 끝났고, 지우는 대신 **정확히 하나이고
-    그것이 무엇인지**를 고정한다. 둘이 되면 이 단언이 깨진다.
-    """
-    from engine.effect.library import EFFECT_LIBRARY, GIRSU
+    썼다.** 그래서 "하나도 없다" 가 끝났고, "정확히 하나" 가 되었다.
 
-    # 🔴 16 → 17 (6-K, 어니스트 ①) → 18 (6-V, 기르수 ①).
-    #    실행 수 13 → 14 (6-L) → **15** (6-V).
-    assert len(EFFECT_LIBRARY) == 18
-    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 15
-    #: 🔴 실행되는 효과 중 카드군 조건을 쓰는 것이 **정확히 하나**다.
+    🔴 **Phase 6-AC 가 둘로 만들었다** — 성유물－『성장』 ① 의 후보 조건이
+    「패에서 **「성유물」** 몬스터」 이므로 같은 카드군 조건을 쓴다. 지우는
+    대신 **그 둘이 무엇인지**를 고정한다. 셋이 되면 이 단언이 깨지고,
+    그때 새 카드가 쓰는 카드군 코드를 사람이 확인해야 한다.
+    """
+    from engine.effect.library import EFFECT_LIBRARY, GIRSU, WORLD_WAND
+
+    # 🔴 16 → 17 (6-K, 어니스트 ①) → 18 (6-V, 기르수 ①) → **19** (6-AC).
+    #    실행 수 13 → 14 (6-L) → 15 (6-V) → **16** (6-AC).
+    assert len(EFFECT_LIBRARY) == 19
+    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 16
+    #: 🔴 실행되는 효과 중 카드군 조건을 쓰는 것이 **정확히 둘**이다.
     using = [
         entry.card_id
         for entry in EFFECT_LIBRARY
         if entry.executable
         and any("카드군" in b.describe_ko() for b in entry.definition.targets)
     ]
-    assert using == [GIRSU], using
+    assert using == [GIRSU, WORLD_WAND], using

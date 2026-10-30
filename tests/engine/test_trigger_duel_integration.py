@@ -263,14 +263,25 @@ def test_03_exactly_one_compiled_trigger_has_a_definition(repository):
     가리키던 사실이 끝났으므로, 지우는 대신 **정확히 하나이고 그것이
     무엇인지**를 센다 — 둘이 되면 깨진다.
 
+    🔴 **Phase 6-AC 가 그 1 을 2 로 만들었다.** 성유물－『성장』 ② 도
+    ``SINGLE + TRIGGER_O`` 다. 같은 성질의 고침이고, 다른 점이 둘 있다 —
+    등재한 ordinal 이 **1** 이고 (지금까지 모든 등재가 0 이었다), 그래서
+    "모든 등재의 ordinal 이 0 이다" 라는 단언도 함께 끝났다.
+
     그래서 "식별이 모호하지 않다" 는 여전히 지켜진다: 등록된 트리거를 가진
-    등재 카드가 기르수뿐이고, 그 등록의 ordinal 이 정의의 ordinal 과 **같다.**
+    등재 카드가 **둘**이고, 각 등록의 ordinal 집합이 정의의 ordinal 을
+    **담고 있다.**
     """
-    from engine.effect.library import EFFECT_LIBRARY, GIRSU
+    from engine.effect.library import EFFECT_LIBRARY, GIRSU, WORLD_WAND
 
     definitions = definition_registry()
-    assert len(definitions) == len(EFFECT_LIBRARY) == 18
-    assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0}
+    #: Phase 6-AC 가 성유물－『성장』 ② 를 더했다 (18 → 19).
+    assert len(definitions) == len(EFFECT_LIBRARY) == 19
+    #: 🔴 0 뿐이던 집합이 {0, 1} 이 되었다 — 공식 ②를 등재한 첫 자리다.
+    assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0, 1}
+    assert [
+        e.effect_ref.ordinal for e in EFFECT_LIBRARY if e.card_id == WORLD_WAND
+    ] == [1]
 
     with_registered_trigger = {}
     for entry in EFFECT_LIBRARY:
@@ -279,13 +290,17 @@ def test_03_exactly_one_compiled_trigger_has_a_definition(repository):
         if registered:
             with_registered_trigger[entry.card_id] = registered
 
-    assert list(with_registered_trigger) == [GIRSU], list(with_registered_trigger)
+    assert sorted(with_registered_trigger) == sorted(
+        [GIRSU, WORLD_WAND]
+    ), list(with_registered_trigger)
     #: 🔴 **식별이 모호하지 않다** — 정의가 가리키는 ordinal 의 등록이 있다.
-    ordinals = {
-        c.spec.effect_ref.ordinal for c in with_registered_trigger[GIRSU]
-    }
-    assert 0 in ordinals, ordinals
-    assert definitions.definition_for(EffectRef(GIRSU, 0)) is not None
+    #: 등재한 ordinal 이 카드마다 다르므로 **그 카드의 ordinal 로** 묻는다.
+    for card_id, ordinal in ((GIRSU, 0), (WORLD_WAND, 1)):
+        ordinals = {
+            c.spec.effect_ref.ordinal for c in with_registered_trigger[card_id]
+        }
+        assert ordinal in ordinals, (card_id, ordinals)
+        assert definitions.definition_for(EffectRef(card_id, ordinal)) is not None
 
 
 # ======================================================================
@@ -1066,8 +1081,12 @@ def test_24_the_whole_corpus_has_exactly_one_executable_trigger(repository):
     #: 🔴 **Phase 6-V 가 0 을 1 로 만들었다** — 기르수 ① 하나이고, 구현도
     #: 등록되어 있다 (``executable=True``). 이 시험의 이름이 가리키던 사실이
     #: 끝났으므로 수를 센다: 둘이 되면 깨진다.
-    assert with_definition == 1
-    assert with_implementation == 1
+    #: 🔴 **Phase 6-AC 가 그 1 을 2 로 만들었다** — 성유물－『성장』 ② 다.
+    #: 구현도 함께 등록되었다 (``executable=True``), 그래서 둘 다 움직인다.
+    #: 전체 컴파일 수 4173 은 **바뀌지 않았다**: 등재가 늘었을 뿐 컴파일러가
+    #: 더 많이 읽게 된 것이 아니다.
+    assert with_definition == 2
+    assert with_implementation == 2
 
 
 # ======================================================================

@@ -357,6 +357,26 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 함께 끊었다 (두 이름을 함수 안에서 읽는다 — 그 두 모듈이 실행기 계층을 그렇게
 읽는 것과 **같은 자리**다).
 
+### 4.5 늘어난 어휘 (전부 손으로 적었다)
+
+| 어휘 | 전 | 후 | 더한 것 |
+| --- | --- | --- | --- |
+| `PlayerActionKind` | 11 | **12** | `link_summon` |
+| `PlayerAction` 의 칸 | 6 | **7** | `materials` (대상이 아니다) |
+| `SummonKind` | 2 | **3** | `LINK` (절차가 있는 이름만 더한다 — 융합 · 싱크로 · 엑시즈 · 의식 · 펜듈럼은 여전히 없다) |
+| `ValidationCode` | 51 | **53** | `EFFECT_USE_LIMIT_REACHED` · `LINK_MATERIAL_INVALID` (둘 다 `INVALID`) |
+| `ActivationStatus` | 15 | **16** | `USE_LIMIT_REACHED` |
+| `RuleQuestion` | 7 | **8** | `MAY_BE_SPECIAL_SUMMONED` |
+| `EffectDefinition` 의 칸 | 12 | **13** | `use_limit` |
+| `EFFECT_LIBRARY` | 18 (실행 15) | **19 (실행 16)** | 성유물－『성장』 ① |
+| `OPERATION_RULINGS` | 19 | **21** | 『성장』 · 갈라테아 |
+| `Condition` 의 설명 메서드 | `unknown_reasons` · `missing_rules` | **+ `refusal_reasons`** | 기본값이 빈 튜플이므로 기존 문장은 바뀌지 않는다 |
+| `Duel` 의 보류 생성 자리 | 7 | **9** | `_link_summon_actions` · `_note_trigger_refusal` |
+
+🔴 **코드 분류를 비워 둔 자리는 없다.** `CODE_VALIDITY` 는 분류되지 않은 코드가
+있으면 import 가 실패하므로 (53 / 53), 두 새 코드도 `INVALID` 로 적혀 있다 —
+확인된 제한과 확인된 소재 조건의 위반이고 모름이 아니다.
+
 ---
 
 ## 5. 아직 지원하지 않는 범위
@@ -507,6 +527,11 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 5 걸음째의 `pass` 는 4 단계가 만든 새 사건(소재가 묘지로 갔다)이 연 『성장』 ①
 의 기회를 지나간다. 그 효과는 「1턴에 1번」 을 이미 썼고 패에 「성유물」 몬스터도
 없다.
+
+🔴 **소재는 `targets` 가 아니라 `ExecutedStep.materials` 에 적힌다.** 보고에도
+다른 줄로 나온다 — `소재 2장: 잭나이츠 오르페골 기르수 · 성유물－『성장』`.
+한 칸에 넣으면 보고가 "대상 2개" 로 적고, 그것은 거짓이다 (링크 소재는 대상으로
+지정되지 않는다).
 
 ### 8.1 최종 상태
 

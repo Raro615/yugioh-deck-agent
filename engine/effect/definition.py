@@ -66,7 +66,7 @@ from engine.execution import (
     ValueRef,
 )
 from engine.ids import EffectRef
-from engine.state.use_registry import UseLimit
+from engine.use_limit import UseLimit
 from engine.vocabulary import ActivationKind
 
 

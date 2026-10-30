@@ -82,6 +82,7 @@ HONEST_REF = EffectRef(HONEST, 0)
 #: 잭나이츠 오르페골 기르수 — §11 의 카드. ③(``e[2]``) 이 기동 효과다.
 GIRSU = 69811710
 GIRSU_IGNITION_ORDINAL = 2
+WORLD_WAND = 93920420
 #: 엘리멘틀 히어로 페더맨 — 통상 몬스터. 효과가 없다.
 FEATHERMAN = 21844576
 #: 볼캐닉 에지 — 스크립트가 있는 효과 몬스터. **등재되지 않았다.**
@@ -376,6 +377,9 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
     이 시험이 틀린 가정을 갖고 있었던 것이 아니라 6-K 시점에 실제로
     하나였다. 지키는 사실은 "**자동 변환이 없다**" 이고, 수가 아니라
     ``EffectSpec.effect_types`` 에서 자동으로 옮기지 않는다는 것이 요지다.
+
+    🔴 **Phase 6-AC 에서 둘이 셋이 됐다** (성유물－『성장』 ② 유발). 같은
+    성질의 고침이고, 지키는 사실도 그대로다 — 셋 다 손으로 적었다.
     """
     declared = {
         entry.definition.effect_ref: entry.definition.activation_kind
@@ -385,6 +389,8 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
     assert declared == {
         HONEST_REF: ActivationKind.IGNITION,
         EffectRef(GIRSU, 0): ActivationKind.TRIGGER,
+        #: 🔴 Phase 6-AC — ``ordinal`` 이 **1** 인 첫 등재이기도 하다.
+        EffectRef(WORLD_WAND, 1): ActivationKind.TRIGGER,
     }
     entry = next(e for e in EFFECT_LIBRARY if e.definition.effect_ref == HONEST_REF)
     #: 🔴 **Phase 6-L 에서 실행된다.** 6-K 시점에는 ``executable=False`` ·

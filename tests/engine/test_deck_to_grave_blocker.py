@@ -668,7 +668,8 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
     assert covered == [], covered
 
     #: 등록소는 19장이고 그 안에 후보가 없다.
-    assert len(OPERATION_RULINGS) == 19
+    #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
+    assert len(OPERATION_RULINGS) == 21
     assert not (set(OPERATION_RULINGS.card_ids) & set(pool))
 
 
@@ -1011,7 +1012,8 @@ def test_i02_the_production_registry_is_untouched():
     사본에 넣은 사실이 프로덕션 등록소로 새면 ``test_f01`` 이 조용히 뜻을
     잃는다 — 그래서 원본의 크기와 내용을 함께 고정한다.
     """
-    assert len(OPERATION_RULINGS) == 19
+    #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
+    assert len(OPERATION_RULINGS) == 21
     assert SELF_GRAVE_TRIGGER not in OPERATION_RULINGS
     #: 원본에서 묘지 질문에 답하는 것은 **통상 몬스터 한 장**뿐이다.
     answering = [

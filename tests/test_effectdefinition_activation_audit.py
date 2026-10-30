@@ -685,7 +685,8 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
-    assert len(EFFECT_LIBRARY) == 18
+    #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
+    assert len(EFFECT_LIBRARY) == 19
     #: 🔴 8 → **9** (Phase 6-V, 기르수 ①).
     assert len(with_activation) == 9
 

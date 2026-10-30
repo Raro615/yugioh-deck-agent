@@ -693,7 +693,8 @@ def test_d04_the_engine_gate_is_not_bypassed(repository):
     from engine.effect.ruling import RuleQuestion
 
     #: 등록소는 6-X 그대로다 — 6-Y 가 허가를 넓히지 않았다.
-    assert len(OPERATION_RULINGS) == 19
+    #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
+    assert len(OPERATION_RULINGS) == 21
     _, _, _, runs = _drive(repository, FirstPermittedChoice())
     choice = runs[0].choice
     #: 제안이 들고 온 판정이 ``BoardRuling`` 의 것과 같은 질문이다.

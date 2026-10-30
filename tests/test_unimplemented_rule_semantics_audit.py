@@ -960,7 +960,8 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
-    assert len(EFFECT_LIBRARY) == 18
+    #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
+    assert len(EFFECT_LIBRARY) == 19
     #: 🔴 8 → **9** (Phase 6-V). 기르수 ① 의 ``activation`` 도
     #: ``UnimplementedRule`` 이 아니다 (``ZoneCountAtLeast``) — 이 테스트가
     #: 지키는 사실이 그것이므로 그대로다.
@@ -1158,7 +1159,8 @@ def test_17_the_distinctions_from_phase_3e24_to_3e34_still_hold():
     #: ``MANDATORY_TRIGGER_PENDING`` · ``TRIGGER_TIMING_MISSED``. 🔴 **셋 다
     #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
     #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
-    assert len(ValidationCode) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(ValidationCode) == 53
     assert len(SimulationStatus) == 5
 
     #: ``Requirement`` 는 조건을 반드시 받는다 (3-E-34).

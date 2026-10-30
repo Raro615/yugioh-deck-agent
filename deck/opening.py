@@ -424,6 +424,17 @@ class ExecutedStep:
     목록으로 보인다.
     """
     unsupported_during: tuple[str, ...] = ()
+    materials: tuple[str, ...] = ()
+    """
+    이 걸음이 **소재로 보낸** 카드들 (Phase 6-AC). 링크 소환만 채운다.
+
+    🔴 **``targets`` 와 다른 칸이다.** 링크 소재는 대상으로 지정되지 않으므로
+    (``PlayerAction.materials`` 의 설명) 한 칸에 넣으면 보고가 "대상 2개" 로
+    적힌다 — 그것은 거짓이다.
+
+    카드 이름을 담는다. 인스턴스 번호가 아니라 **무엇을 보냈는가**가
+    §7 이 요구하는 기록이고, 번호는 판마다 달라 재현에 쓸 수 없다.
+    """
     """
     이 걸음의 **자동 처리 도중** 지나간 자리에서 만난 미지원 사유
     (보완8 세 항목 ①).
@@ -579,6 +590,25 @@ def _describe_action(action, repository) -> "tuple[int | None, str, str | None, 
     ref = str(action.effect_ref) if action.effect_ref is not None else None
     targets = tuple(str(t.instance_id) for t in action.targets)
     return card_id, name, ref, targets
+
+
+def _material_names(duel, action, repository) -> "tuple[str, ...]":
+    """
+    그 행동이 소재로 보낸 카드의 **이름**들 (Phase 6-AC).
+
+    🔴 **행동을 적용하기 전에 읽는다.** 소재는 적용과 함께 필드를 떠나므로
+    (링크 절차가 먼저 묘지로 보낸다) 뒤에 읽으면 자리가 달라져 있다.
+
+    이름을 못 읽으면 번호를 적는다 — 적지 않는 것보다 낫다.
+    """
+    names: list[str] = []
+    for instance in getattr(action, "materials", ()):
+        card = duel.state.find_instance(instance)
+        definition = repository.get(card.card_id) if card is not None else None
+        names.append(
+            definition.display_name() if definition is not None else str(instance)
+        )
+    return tuple(names)
 
 
 def unsupported_reasons(legal, *, with_scope: bool = True) -> tuple[str, ...]:
@@ -863,6 +893,8 @@ def execute_opening(
             card_id = instance.card_id if instance else None
         card = repository.get(card_id) if card_id else None
         gate = _gate_code(duel, action, repository)
+        #: 🔴 **적용 전에** 읽는다 (``_material_names`` 의 설명).
+        materials = _material_names(duel, action, repository)
 
         before_hash = duel.state.state_hash()
         #: 🔴 **자동 처리 도중 새로 만난 사유만 따로 센다** (보완8 세
@@ -907,6 +939,7 @@ def execute_opening(
                   and not resolved else ""),
             unsupported=note_unsupported(duel.legal_actions(duel.to_act)),
             unsupported_during=during,
+            materials=materials,
         ))
         if not step.accepted:
             run.stopped_kind = "rejected"

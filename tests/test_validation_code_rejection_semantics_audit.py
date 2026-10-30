@@ -115,7 +115,12 @@ MINE = 0
 #: 그대로다. 보완8 이 한 일이 그것이다: **모름이던 흐름 거절을 규칙 거절로
 #: 옮긴다.** 이 감사가 지키는 구분(확정 거부와 모름을 섞지 않는다)이 실제로
 #: 쓰인 자리다.
-CODE_MEMBER_COUNT = 51
+#:
+#: 🔴 51 → **53** (Phase 6-AC). 늘어난 둘은 ``EFFECT_USE_LIMIT_REACHED`` ·
+#: ``LINK_MATERIAL_INVALID`` 이고 **둘 다 ``INVALID``** 다 — 모름 쪽은 여전히
+#: 5 다. 둘 다 **확인된** 제한 · 확인된 소재 조건의 위반에만 쓰고, 읽지 못한
+#: 쪽은 ``RULE_NOT_IMPLEMENTED`` 로 남는다 (enum 설명이 직접 적는다).
+CODE_MEMBER_COUNT = 53
 
 #: ``engine/`` + ``agent/`` 에서 코드가 **등장하는** 줄.
 #: 69 → **67** (Phase 3-E-38 이 M1 ×2 · M2 ×2 를 고치면서 2 감소).
@@ -141,7 +146,12 @@ CODE_MEMBER_COUNT = 51
 #: 멤버십 · 비교 · enum 정의 쪽은 하나도 늘지 않았다. 늘어난 여섯이 무엇인지는
 #: ``REJECTION_PRODUCTIONS`` 의 설명에 있다 (이미 모름이던 보류 자리가 코드를
 #: 명시하게 된 것이고, 새 거절이 아니다).
-CODE_OCCURRENCES = 80
+#: 🔴 80 → **83** (Phase 6-AC). 늘어난 셋은 전부 ``engine/duel.py`` 의 후보
+#: 생성 자리다 — 링크 소환의 **읽지 못한 소재 규칙**, 그리고 유발 후보가
+#: 0건일 때 "규칙이 답한 0건" 과 "어휘를 열지 못한 0건" 을 갈라내는 두
+#: 자리다. 거부 생성(``REJECTION_PRODUCTIONS`` 67 → 70)도 같은 수만큼
+#: 늘었으므로 아래 "차이가 13" 은 그대로다.
+CODE_OCCURRENCES = 83
 
 #: 그중 **거부를 만드는** 자리.
 #:
@@ -200,7 +210,13 @@ CODE_OCCURRENCES = 80
 #: 코드에서 ``STAGE_FORBIDS_ACTION`` · ``NOT_TURN_PLAYER`` ·
 #: ``NO_RESPONSE_WINDOW`` 로 빠져나갔다. 즉 이 코드로 **거절하는 횟수는
 #: 늘지 않았고**, 그 코드를 **적는 자리**가 늘었다.
-REJECTION_PRODUCTIONS = 67
+#:
+#: 🔴 67 → **70** (Phase 6-AC). 늘어난 셋은 전부 ``engine/action_validation.py``
+#: 의 링크 소환 자리다 — ``_check_requirements`` 가 거절 사유를 덧붙이면서
+#: ``requirement.code`` 를 두 분기에서 쓰게 되었고(같은 코드, 두 생성 자리),
+#: ``_link_summon`` 의 ``LINK_MATERIAL_INVALID`` 요구 하나가 더해졌다.
+#: ``CODE_OCCURRENCES`` 도 같은 셋만큼 늘어 아래 "차이가 13" 은 그대로다.
+REJECTION_PRODUCTIONS = 70
 
 #: enum 이 **섹션 주석으로 선언한** 묶음 → 멤버 수.
 DECLARED_SECTIONS = {
@@ -216,6 +232,10 @@ DECLARED_SECTIONS = {
     #: 그것을 따로 고정한다). 기존 여덟 묶음의 멤버 수는 **하나도**
     #: 바뀌지 않았다: 새 코드가 기존 묶음에 끼어들지 않았다는 뜻이다.
     "흐름의 단계 · 필수 절차 (Phase 6-AB 보완8)": 3,
+    #: 🔴 Phase 6-AC 가 더한 묶음 — 둘 다 ``INVALID`` 다. 기존 아홉 묶음의
+    #: 멤버 수는 **하나도** 바뀌지 않았다: 새 코드가 기존 묶음에 끼어들지
+    #: 않았다는 뜻이다 (보완8 과 같은 결).
+    "횟수 제한 · 링크 소재 (Phase 6-AC)": 2,
 }
 
 #: ``# --- 모른다 (UNKNOWN) ---`` 섹션의 멤버. 여기 있는 코드는
@@ -718,7 +738,10 @@ def test_10_source_forbidden_is_a_different_code_from_structural_source_forbidde
     #: 🔴 **다시 233 → 255 로 밀렸다** (Phase 6-Z, +22). 같은 이유다 —
     #: 검증기가 사건 목록도 받게 되면서 ``__init__`` 과 ``event_backed``
     #: 프로퍼티가 이 자리보다 위에서 늘었다. 자리는 여전히 하나다.
-    assert hits == [("engine/action_validation.py", 255)]
+    #: 🔴 255 → 260 (Phase 6-AC). ``_link_summon`` 의 요구 생성이 그 위에
+    #: 더해져 자리가 다섯 줄 밀렸다 — 자리만 움직였고 이 감사가 지키는 사실
+    #: (간접 경로가 **하나뿐**이라는 것)은 그대로다.
+    assert hits == [("engine/action_validation.py", 260)]
 
 
 # ======================================================================
@@ -973,9 +996,17 @@ def test_18_the_indirect_path_into_invalid_exists_but_is_closed_by_construction(
     닫혀 있다. **타입이 막는 것이 아니라 조건의 성질이 막는다.**
     """
     source = source_of("engine/action_validation.py")
-    assert "return ValidationResult.invalid(requirement.code, requirement.detail)" in (
+    #: 🔴 Phase 6-AC 가 이 호출을 여러 줄로 바꿨다 — 거절 사유
+    #: (``refusal_reasons``)를 ``detail`` 뒤에 괄호로 덧붙이기 때문이다.
+    #: 한 줄짜리 문자열을 그대로 두면 감사가 **사라진 코드를 찾는** 셈이
+    #: 되므로, 고정하는 사실(``requirement.code`` 가 ``invalid`` 로 **그대로**
+    #: 넘어간다)만 남기고 모양을 새 계약에 맞춘다.
+    assert "return ValidationResult.invalid(\n                    requirement.code," in (
         source
     )
+    #: ``detail`` 도 여전히 그 호출의 두 번째 인자다 — 사유는 **덧붙었을
+    #: 뿐** 바꿔치기되지 않았다.
+    assert 'f"{requirement.detail} ({why})" if why else requirement.detail' in source
 
     #: 이 코드를 든 ``Requirement`` 생성처를 **그 조건과 함께** 센다.
     #: 수만 세면 조건을 바꿔치기한 변경을 놓친다 — 고의 위반이 그 구멍을
@@ -1473,7 +1504,8 @@ def test_31_the_distinctions_from_phase_3e24_to_3e36_still_hold():
     #: enum 크기가 하나도 늘지 않았다.
     #: 🔴 48 → 51 (보완8) — 늘어난 셋은 전부 ``INVALID`` 이므로 모름 쪽은
     #: 7 그대로다 (``CODE_MEMBER_COUNT`` 의 설명 참고).
-    assert len(ValidationCode) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(ValidationCode) == 53
     assert len(ConditionResult) == 3
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5

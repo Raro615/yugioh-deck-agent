@@ -83,6 +83,21 @@ ADDED_IN_FOLLOWUP8 = frozenset(
     }
 )
 
+#: 🔴 Phase 6-AC 가 더한 코드 둘 (51 → 53). 둘 다 ``INVALID`` 이고, 그래서
+#: ``unknown_codes()`` 는 **7 그대로**다 — 6-AC 도 모름을 늘리지 않았다.
+#:
+#: - ``EFFECT_USE_LIMIT_REACHED`` — 확인된 「1턴에 1번」 을 이미 썼다
+#: - ``LINK_MATERIAL_INVALID`` — 확인된 링크 소재 조건을 만족하지 않는다
+#:
+#: 둘 다 **확인된 것의 위반**이다. 읽지 못한 제한과 읽지 못한 소재 조건은
+#: 이 코드가 아니라 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
+ADDED_IN_PHASE_6AC = frozenset(
+    {
+        "EFFECT_USE_LIMIT_REACHED",
+        "LINK_MATERIAL_INVALID",
+    }
+)
+
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -420,9 +435,16 @@ def test_09_no_new_vocabulary_was_added():
     #: ``MANDATORY_TRIGGER_PENDING`` · ``TRIGGER_TIMING_MISSED``) 이제는
     #: **무엇이 늘었는지를 이름으로** 고정한다 — 숫자만 올리면 다음에 조용히
     #: 늘어난 것을 잡지 못한다.
-    assert len(ValidationCode) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(ValidationCode) == 53
     assert ADDED_IN_FOLLOWUP8 <= set(ValidationCode.__members__)
-    assert len(ValidationCode) - len(ADDED_IN_FOLLOWUP8) == 48
+    assert ADDED_IN_PHASE_6AC <= set(ValidationCode.__members__)
+    assert (
+        len(ValidationCode)
+        - len(ADDED_IN_FOLLOWUP8)
+        - len(ADDED_IN_PHASE_6AC)
+        == 48
+    )
     #: 🔴 셋 다 ``INVALID`` 다 — 모름 쪽은 7 그대로다.
     for _name in ADDED_IN_FOLLOWUP8:
         assert CODE_VALIDITY[ValidationCode[_name]] is ActionValidity.INVALID

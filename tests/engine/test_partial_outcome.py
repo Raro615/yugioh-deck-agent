@@ -892,7 +892,8 @@ def test_u_phase_2af_registered_no_real_card_and_none_is_partial():
     # Phase 2-AI 에서 리로드가 열여섯 번째, Phase 6-K 에서 어니스트 ① 이
     # 열일곱 번째, Phase 6-V 에서 기르수 ① 이 **열여덟 번째**다.
     # 아래 단언(이 목록의 성질)은 **약해지지 않았다**.
-    assert len(EFFECT_LIBRARY) == 18
+    #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
+    assert len(EFFECT_LIBRARY) == 19
     for entry in EFFECT_LIBRARY:
         for operation in entry.definition.operations:
             assert getattr(operation, "partial", Partial.ALL_OR_NOTHING) is (

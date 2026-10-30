@@ -237,7 +237,19 @@ def test_a05_after_a_chain_resolves_a_fast_window_follows(repository):
     assert duel.chain.is_empty
     assert duel.chain.resolved_count == 0  # 새 Chain 으로 바뀌었다
 
-    #: 유발 등재가 남아 있지 않다 (남아 있으면 그쪽이 먼저다).
+    #: 🔴 **Phase 6-AC 가 이 판에서 유발을 하나 올렸다.** 기르수 ① 이
+    #: 묘지로 보낸 카드가 성유물－『성장』 이고 6-AC 가 그 ② 를 등재했다.
+    #: 그래서 해결 직후는 **등재 단계**이고, 도표가 그쪽을 먼저라고 적는다
+    #: (box D). 이 시험이 재려는 것은 **그 뒤의 빠른 효과 기회**이므로,
+    #: 단언을 느슨하게 하지 않고 등재 단계를 **지나는 걸음을 적는다.**
+    assert duel._window_actor() == duel.turn_player
+    #: 🔴 **양쪽이 지나간다** — 등재 기회는 한 자리의 것이 아니다 (보완4).
+    passed = 0
+    while (actor := duel._window_actor()) is not None and passed < 4:
+        assert duel.apply(PlayerAction.passing(actor=actor)).accepted
+        passed += 1
+    assert passed == 2, passed
+    #: 지난 뒤에는 등재가 남아 있지 않다 (남아 있으면 그쪽이 먼저다).
     assert duel._window_actor() is None
     #: 🔴 그리고 **빠른 효과 기회가 열려 있다** — 열린 상태가 아니다.
     assert duel.priority.is_open

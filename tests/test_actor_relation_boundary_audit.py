@@ -886,7 +886,8 @@ def test_16_no_validation_code_can_say_the_actor_relation_is_unknown():
     #: 절차** 쪽이고 (``STAGE_FORBIDS_ACTION`` ·
     #: ``MANDATORY_TRIGGER_PENDING`` · ``TRIGGER_TIMING_MISSED``), 행위자
     #: 관계와는 다른 축이다 — 그래서 이 표의 공백은 그대로다.
-    assert len(CODE_VALIDITY) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(CODE_VALIDITY) == 53
     named = [
         code.value
         for code in CODE_VALIDITY
@@ -1042,7 +1043,8 @@ def test_19_this_phase_changed_nothing_in_production(repository):
     #: 판정 어휘를 **이 Phase 가** 늘리지 않았다.
     #: 🔴 48 → 51 은 보완8 이 더한 것이고 (``test_16`` 의 설명), 행위자
     #: 관계 축에는 여전히 코드가 없다.
-    assert len(CODE_VALIDITY) == 51
+    #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
+    assert len(CODE_VALIDITY) == 53
 
     #: 탐색 순위를 **실제로 돌려** 확인한다.
     from agent.runner import DuelRunner

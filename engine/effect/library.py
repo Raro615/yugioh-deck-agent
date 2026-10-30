@@ -90,7 +90,7 @@ from engine.effect.ruling import (
 )
 from engine.execution import ResultField, ResultRef
 from engine.ids import EffectRef
-from engine.state.use_registry import LimitScope, UseLimit
+from engine.use_limit import LimitScope, UseLimit
 from engine.vocabulary import ActivationKind, Zone
 
 

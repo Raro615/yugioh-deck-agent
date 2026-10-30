@@ -1269,8 +1269,10 @@ def test_k02_the_library_grew_no_executable_entry():
     🔴 **Phase 6-V 가 둘 다 하나씩 늘렸다** (18 · 15). 6-M 이 범위를 넓히지
     않았다는 사실은 그대로이고, 넓힌 것은 6-V 다 — 기르수 ① 하나.
     """
-    assert len(EFFECT_LIBRARY) == 18
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 15
+    #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
+    assert len(EFFECT_LIBRARY) == 19
+    #: Phase 6-AC — 성유물－『성장』 ① 이 실행 가능으로 더해졌다 (15 → 16).
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 16
 
 
 def test_k03_only_one_registered_operation_declares_its_origin():

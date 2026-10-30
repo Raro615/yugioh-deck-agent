@@ -226,20 +226,25 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
     assert len(corpus) == 12702
     assert len(activate_only) == 1385
 
-    from engine.effect.library import EFFECT_LIBRARY, GIRSU, HONEST
+    from engine.effect.library import EFFECT_LIBRARY, GIRSU, HONEST, WORLD_WAND
 
-    # ① ``ACTIVATE`` 모양이 아닌 등재는 **정확히 둘**이다.
+    # ① ``ACTIVATE`` 모양이 아닌 등재는 **정확히 셋**이다.
     #
     # 🔴 Phase 6-V 에서 하나가 둘이 됐다 — 기르수 ① 은 ``SINGLE +
     # TRIGGER_O`` 이고 ``EFFECT_TYPE_ACTIVATE`` 가 아니다. 이 시험이
     # 가리키는 "엔진이 담는 모양" 이 **유발 쪽으로 한 장 더** 넓어졌다.
+    #
+    # 🔴 Phase 6-AC 에서 둘이 셋이 됐다 — 성유물－『성장』 도 몬스터이고
+    # ``SINGLE + TRIGGER_O + IGNITION + FIELD`` 다 (c93920420.lua 의 SetType
+    # 호출 넷). ``EFFECT_TYPE_ACTIVATE`` 는 하나도 없다. 세 장 다 몬스터이고,
+    # 그것이 이 목록이 자라는 방향이다 — 마법·함정에서 몬스터로.
     not_activate = []
     for entry in EFFECT_LIBRARY:
         row = corpus.get(entry.card_id)
         assert row is not None, entry.card_id
         if "EFFECT_TYPE_ACTIVATE" not in row["types"]:
             not_activate.append(entry.card_id)
-    assert not_activate == [HONEST, GIRSU], not_activate
+    assert not_activate == [HONEST, GIRSU, WORLD_WAND], not_activate
 
     # ② 그 하나가 기동 효과이고, **실행된다** (Phase 6-L).
     assert corpus[HONEST]["types"] >= {
@@ -294,14 +299,19 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
     unexplained = used - NOT_A_RULE - SUPPORTED - PROVED_BY_EXECUTION
     assert unexplained == set(), unexplained
     assert PROVED_BY_EXECUTION <= used
-    #: 🔴 빼고 센 카드가 **둘**이다 — 블록이 셋 이상인 등재 카드들.
+    #: 🔴 빼고 센 카드가 **셋**이다 — 블록이 셋 이상인 등재 카드들.
     #: 어니스트(6-K)가 첫 번째이고 기르수(6-V)가 두 번째다. 기르수는
     #: 블록이 **넷**이다 (e1 · e2 클론 · e3 기동 · 해결 중 생기는 내부 e1).
-    from engine.effect.library import GIRSU, HONEST
+    #: 🔴 Phase 6-AC 가 세 번째를 더했다 — 성유물－『성장』 도 블록이 **넷**
+    #: 이다 (① 유발 · ② 유발 · ③ 기동 · 필드 지속). 등재한 것은 ② 하나이고,
+    #: 그래서 이 행의 API 집합을 "그 효과가 쓰는 것" 으로 읽을 수 없다 —
+    #: 어니스트 · 기르수와 **같은 이유**로 빼고 센다.
+    from engine.effect.library import GIRSU, HONEST, WORLD_WAND
 
-    assert skipped == [HONEST, GIRSU], skipped
+    assert skipped == [HONEST, GIRSU, WORLD_WAND], skipped
     assert corpus[HONEST]["blocks"] == 3
     assert corpus[GIRSU]["blocks"] >= 3
+    assert corpus[WORLD_WAND]["blocks"] >= 3
 
 
 def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
@@ -327,11 +337,12 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
 
     from engine.effect.library import EFFECT_LIBRARY
 
-    from engine.effect.library import GIRSU, HONEST
+    from engine.effect.library import GIRSU, HONEST, WORLD_WAND
 
     #: 🔴 14 → 15 (Phase 6-V, 기르수 ①).
     executable = {e.card_id for e in EFFECT_LIBRARY if e.executable}
-    assert len(executable) == 15
+    #: Phase 6-AC — 성유물－『성장』 ① 이 실행 가능으로 더해졌다 (15 → 16).
+    assert len(executable) == 16
     # 실행되는 카드는 **하나도 빠짐없이** 막는 것이 없어야 한다.
     #
     # 🔴 어니스트는 예외 집합에 있다 (Phase 6-L). ``clean`` 은
@@ -343,9 +354,15 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     # 🔴 **기르수도 같은 이유로 예외다** (Phase 6-V). ``SINGLE + TRIGGER_O``
     # 이고 ``EFFECT_TYPE_ACTIVATE`` 가 아니므로 그 슬라이스에 들어오지
     # 않는다. 두 장 다 "막는 것이 있다" 가 아니라 **세는 범위가 다르다** 다.
+    #: 🔴 **성유물－『성장』 도 같은 이유로 예외다** (Phase 6-AC).
+    #: ``EFFECT_TYPE_ACTIVATE`` 가 없으므로 그 슬라이스에 들어오지 않는다.
+    #: 세 장 다 "막는 것이 있다" 가 아니라 **세는 범위가 다르다** 다.
     assert HONEST not in set(activate_only)
     assert GIRSU not in set(activate_only)
-    assert executable <= set(clean) | {53129443, 83764718, HONEST, GIRSU}
+    assert WORLD_WAND not in set(activate_only)
+    assert executable <= set(clean) | {
+        53129443, 83764718, HONEST, GIRSU, WORLD_WAND
+    }
 
 
 def test_a_the_repeated_blockers_are_ranked_and_already_filed(corpus, activate_only):

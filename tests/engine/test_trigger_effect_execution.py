@@ -253,14 +253,19 @@ def test_05_the_census_of_what_blocks_resolution(repository):
     assert registered == 4173
     assert len(refs) == 4173
     #: 🔴 6-V 가 기르수 ① 을 등재했다 (0 → 1).
-    assert with_definition == 1
+    #: 🔴 6-AC 가 성유물－『성장』 ② 를 등재했다 (1 → 2). 둘 다 유발이고
+    #: 둘 다 컴파일된다 — 그래서 "정의가 없다" 가 하나 더 줄었다.
+    assert with_definition == 2
     assert len(two_gate) == 31
     assert len(resolvable) == 2999
     assert len(resolvable & two_gate) == 24
 
     assert blockers == {
         #: 🔴 6-V: 4,173 → 4,172 (기르수 ① 의 정의가 생겼다).
-        "definition_missing": 4172,
+        #: 🔴 6-AC: 4,172 → 4,171 (성유물－『성장』 ② 의 정의가 생겼다).
+        #: 나머지 네 막는 이유는 **하나도** 움직이지 않았다 — 이 Phase 가
+        #: 더한 것은 정의이고 새 막는 이유가 아니다.
+        "definition_missing": 4171,
         "operation_unreadable": 726,
         "cost_unpayable": 260,
         "operation_untranslatable": 222,
@@ -658,7 +663,7 @@ def test_15_the_existing_activate_effects_still_resolve(repository):
     assert len(duel.journal.events) >= 2
 
 
-def test_16_the_library_now_has_exactly_one_trigger(repository=None):
+def test_16_the_library_now_has_exactly_two_triggers(repository=None):
     """
     ``EFFECT_LIBRARY`` 에 **유발 효과가 없다.**
 
@@ -681,13 +686,17 @@ def test_16_the_library_now_has_exactly_one_trigger(repository=None):
     유발 즉시(``QUICK``)와 플립(``FLIP``)은 **여전히 0건**이고, 그것이 이
     테스트가 계속 지키는 사실이다.
     """
-    assert len(EFFECT_LIBRARY) == 18
-    assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0}
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 15
-    #: 🔴 등재된 발동 분류 — 유발이 **정확히 하나**이고 유발 즉시 · 플립은 없다.
+    #: 🔴 **Phase 6-AC 가 유발을 둘로 만들었다 (18 → 19).** 성유물－
+    #: 『성장』 ② 도 ``ActivationKind.TRIGGER`` 다. 같은 성질의 고침이고,
+    #: ordinal 집합도 처음으로 {0} 을 벗어났다 (등재한 것이 공식 ②다).
+    assert len(EFFECT_LIBRARY) == 19
+    assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0, 1}
+    #: Phase 6-AC — 성유물－『성장』 ② 가 실행 가능으로 더해졌다 (15 → 16).
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 16
+    #: 🔴 등재된 발동 분류 — 유발이 **정확히 둘**이고 유발 즉시 · 플립은 없다.
     kinds = [entry.definition.activation_kind for entry in EFFECT_LIBRARY]
     assert set(kinds) == {None, ActivationKind.IGNITION, ActivationKind.TRIGGER}
-    assert kinds.count(ActivationKind.TRIGGER) == 1
+    assert kinds.count(ActivationKind.TRIGGER) == 2
     assert kinds.count(ActivationKind.QUICK) == 0
     assert kinds.count(ActivationKind.FLIP) == 0
 

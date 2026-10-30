@@ -50,6 +50,7 @@ from engine.effect.library import (
     EFFECT_LIBRARY,
     FINE,
     GIRSU,
+    WORLD_WAND,
     HONEST,
     MONSTER_REBORN,
     MYSTICAL_SPACE_TYPHOON,
@@ -319,7 +320,8 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
     (``ActivationKind.TRIGGER``). ``executable=True`` 이므로 실행되는 카드
     수도 14 → 15 로 움직인다.
     """
-    assert len(EFFECT_LIBRARY) == 18
+    #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
+    assert len(EFFECT_LIBRARY) == 19
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -332,6 +334,10 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
         RELOAD,  # Phase 2-AI — 패 전부를 되돌리고 되돌린 만큼 드로우한다
         HONEST,  # Phase 6-K — 첫 **몬스터** 효과 (기동). 실행하지 않는다
         GIRSU,  # Phase 6-V — 첫 **유발** 효과. 소환 성공에 반응한다
+        #: 🔴 Phase 6-AC — 성유물－『성장』. 목록의 **첫 특수 소환**이고,
+        #: ``ordinal`` 이 0 이 아닌 **첫** 등재이기도 하다 (공식 ①②③ 중
+        #: ②를 실었다 — ``EffectRef(93920420, 1)``).
+        WORLD_WAND,
     }
 
 
@@ -377,8 +383,14 @@ def test_a_fifteen_real_effect_refs_are_executable():
             HONEST,  # Phase 6-L — 첫 **몬스터** 효과 (자기 참조)
             GIRSU,  # Phase 6-V — 첫 **유발** 효과 (덱에서 묘지로)
         )
+    } | {
+        #: 🔴 Phase 6-AC — 성유물－『성장』 은 ``ordinal`` 이 **1** 이다.
+        #: 위의 ``EffectRef(cid, 0)`` 식이 덮지 못하므로 손으로 적는다 —
+        #: "①만 등재한다" 는 가정이 깨진 **첫** 자리다.
+        EffectRef(WORLD_WAND, 1),
     }
-    assert len(executable) == 15
+    #: Phase 6-AC — 성유물－『성장』 ① 이 실행 가능으로 더해졌다 (15 → 16).
+    assert len(executable) == 16
 
 
 def test_a_every_declined_card_says_what_is_missing():
@@ -462,6 +474,11 @@ def test_a_operation_coverage_by_real_cards():
         OperationKind.RETURN_TO_DECK,  # 리로드 (Phase 2-AI)
         OperationKind.SHUFFLE,  # 리로드 (Phase 2-AI)
         OperationKind.RETURN_TO_HAND,  # 강제 탈출 장치 (Phase 2-AK)
+        #: 🔴 Phase 6-AC — 성유물－『성장』 ② 가 B 에서 A 로 옮겼다. 억지로
+        #: 옮긴 것이 아니라 **실제 카드가 쓰게 되었다**: 패의 「성유물」
+        #: 몬스터를 특수 소환한다 (``explain_special_summon`` 이 패를
+        #: 소생 제한이 묻지 않는 자리로 판정한다).
+        OperationKind.SPECIAL_SUMMON,
     }
     # B. synthetic 으로만 검증된 종류 (STRUCTURAL-66)
     #
@@ -472,10 +489,12 @@ def test_a_operation_coverage_by_real_cards():
     # RETURN_TO_HAND 도 2-AK 에서 B 를 떠나 A 로 갔다. 억지로 옮긴 것이
     # 아니라 강제 탈출 장치가 실제로 그것을 쓴다 — c94192409.lua 의
     # ``Duel.SendtoHand``.
+    # 🔴 SPECIAL_SUMMON 도 6-AC 에서 B 를 떠나 A 로 갔다. 성유물－『성장』 ②
+    # 가 실제로 그것을 쓴다 — c93920420.lua 의 ``Duel.SpecialSummon``. 옮겨
+    # 간 이유를 지우지 않으려고 여기 적어 둔다. **남은 둘은 그대로다.**
     assert not by_real & {
         OperationKind.BANISH,
         OperationKind.RELEASE,
-        OperationKind.SPECIAL_SUMMON,
     }
     # C. 실제 카드가 될 수 없는 것 · 실행되지 않는 것
     assert OperationKind.MOVE not in by_real  # 설계상 불가
@@ -966,11 +985,20 @@ def test_i_a_destroy_trigger_does_not_fire_on_either_of_them(state):
 # ======================================================================
 
 
-def test_j_no_real_card_special_summons_yet():
+def test_j_exactly_one_real_card_special_summons():
     """
-    §9 — Phase 2-U 가 경로를 열었지만 **실행 가능한 실제 카드가 없다.**
-    죽은 자의 소생의 후보 조건이 ``IsCanBeSpecialSummoned`` 이고 그
-    계층이 없다 (STRUCTURAL-64). 추측해서 채우지 않는다.
+    🔴 **Phase 6-AC 가 이 시험의 사실을 뒤집었다.**
+
+    2-U 부터 6-AB 까지 이 자리는 "경로는 열렸지만 **실행 가능한 실제
+    카드가 없다**" 를 고정하고 있었다. 6-AC 가 성유물－『성장』 ② 를
+    등재해 그 사실이 바뀌었다 — 그래서 단언을 **지우는 대신 하나로
+    고정한다.**
+
+    고치면서 사실 하나를 더 좁혔다: **죽은 자의 소생은 여전히 못 한다.**
+    둘의 차이가 이 Phase 가 한 일을 정확히 말한다 — 패에서의 특수 소환은
+    소생 제한이 **묻지 않는** 자리이고, 묘지에서의 특수 소환은 "이 카드가
+    정규 소환을 거쳤는가" 를 묻는다. 그 이력이 없으므로 소생은 UNKNOWN
+    으로 남는다 (``SUMMON_HISTORY_RULE``).
     """
     summoners = [
         entry
@@ -982,9 +1010,10 @@ def test_j_no_real_card_special_summons_yet():
         )
     ]
 
-    assert summoners == []
+    assert [entry.effect_ref for entry in summoners] == [EffectRef(WORLD_WAND, 1)]
+    #: 🔴 여전히 못 하는 쪽 — 빼 버리지 않는다.
     reborn = entry_for(EffectRef(MONSTER_REBORN, 0))
-    assert reborn is not None  # 빼 버리지 않는다
+    assert reborn is not None
     assert reborn.executable is False
     assert "IsCanBeSpecialSummoned" in reborn.note
 
