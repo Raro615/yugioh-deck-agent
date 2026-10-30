@@ -1354,11 +1354,14 @@ def test_44_the_combo_command_is_registered_with_its_four_arguments():
 
     combo = commands["combo"]
     assert combo.description == bot.COMBO_DESCRIPTION
+    #: 🔴 Phase 6-AC 가 ``line`` 을 **맨 뒤에** 더했다 (검증용 전개 정책의
+    #: 이름). 자리가 마지막이고 선택이므로 기존 호출은 그대로 돈다 —
+    #: ``test_45`` 가 그 경로를 그대로 센다.
     assert [p.name for p in combo.parameters] == ["hand", "board", "deck",
-                                                  "recipe"]
+                                                  "recipe", "line"]
     #: 패는 필수, 나머지는 선택 — 무작위 패 생성이 없으므로 패는 받아야 한다
     assert [p.required for p in combo.parameters] == [True, False, False,
-                                                      False]
+                                                      False, False]
 
 
 def test_45_a_valid_hand_reaches_the_existing_combo_planner(monkeypatch):
@@ -1824,14 +1827,16 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
     received: list[tuple] = []
 
     class _Service:
-        #: 🔴 ``recipe_text`` 가 Phase 6-T 에서 붙었다 — 가짜 구현도 같은
-        #: 서명을 받아야 한다. 서명을 안 맞추면 이 시험은 "defer 가 먼저"
-        #: 가 아니라 ``TypeError`` 를 본다 (``test_08`` 의 주석과 같은 결).
+        #: 🔴 ``recipe_text`` 가 Phase 6-T 에서, ``line_text`` 가 Phase
+        #: 6-AC 에서 붙었다 — 가짜 구현도 같은 서명을 받아야 한다. 서명을
+        #: 안 맞추면 이 시험은 "defer 가 먼저" 가 아니라 ``TypeError`` 를
+        #: 본다 (``test_08`` 의 주석과 같은 결 — 실제로 그렇게 깨졌다).
         def combo_texts(self, hand_text, board_text="", deck_text="",
-                        recipe_text=""):
+                        recipe_text="", line_text=""):
             order.append("combo")
             worker.append(threading.get_ident())
-            received.append((hand_text, board_text, deck_text, recipe_text))
+            received.append((hand_text, board_text, deck_text, recipe_text,
+                             line_text))
             return ["첫 번째", "두 번째", "세 번째"]
 
         def prepare(self):  # pragma: no cover - on_ready 전용
@@ -1871,6 +1876,9 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
     #: 🔴 세 인자가 그대로 전달됐다
     #: 🔴 넷째 칸은 ``recipe`` 이고, 이 호출은 주지 않았으므로 **빈 문자열**
     #: 이다 — "주지 않았다" 가 그대로 전달된다 (Phase 6-T).
-    assert received == [("오르페골 디베르", "오르페골 코어", "오르페골 덱", "")]
+    #: 🔴 Phase 6-AC — ``line_text`` 도 빈 문자열로 전달된다 (주지 않았다).
+    assert received == [
+        ("오르페골 디베르", "오르페골 코어", "오르페골 덱", "", "")
+    ]
     #: 🔴 동기 작업이 이벤트 루프 밖에서 돌았다
     assert worker and worker[0] != loop_thread

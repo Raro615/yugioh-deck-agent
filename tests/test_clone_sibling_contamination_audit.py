@@ -862,7 +862,10 @@ def test_23_all_sixteen_effect_definitions_are_untouched(repository):
             # 실제 사실**을 적는다 — 블록이 둘이고 (①기동 · ②유발 즉시)
             # ``code`` 가 없다. 기동 효과는 사건이 아니라 **선언**으로
             # 발동하므로 ``SetCode`` 를 적지 않는다.
-            assert ref.ordinal == 0, ref
+            #: 🔴 **Phase 6-AC 가 "등재한 ordinal 은 0" 을 끝냈다** —
+            #: 성유물－『성장』 은 공식 ②를 등재했으므로 1 이다. 억지로 0 에
+            #: 맞추지 않고 **그 효과의 실제 사실**을 적는다.
+            assert ref.ordinal in (0, 1), ref
             #: 블록이 **셋**이다 — ①기동 · ②유발 즉시, 그리고 ② 의 해결이
             #: 함수 안에서 만드는 ``EFFECT_UPDATE_ATTACK`` 까지 로더가 센다.
             #: 등재된 것은 **0번(기동)** 이다.
@@ -879,9 +882,16 @@ def test_23_all_sixteen_effect_definitions_are_untouched(repository):
             else:
                 #: 기르수 — 블록 넷 (①유발 · ②그 클론 · ③기동 · 해결 중
                 #: 생기는 내부 블록), 등재된 ①은 사건 코드를 **가진다.**
+                #: 🔴 성유물－『성장』 (Phase 6-AC) — 블록 **다섯**이고 등재한
+                #: 것은 **②**다. 억지로 같은 수에 맞추지 않고 실측한 사실을
+                #: 적는다. 두 유발의 사건이 **다르다.**
                 assert entry.definition.activation_kind is _Kind.TRIGGER, ref
-                assert len(card.script.effects) == 4, ref
-                assert ref.resolve(card).code == "EVENT_SUMMON_SUCCESS", ref
+                blocks, code = {
+                    0: (4, "EVENT_SUMMON_SUCCESS"),
+                    1: (5, "EVENT_TO_GRAVE"),
+                }[ref.ordinal]
+                assert len(card.script.effects) == blocks, ref
+                assert ref.resolve(card).code == code, ref
             continue
         assert ref.ordinal == 0, ref
         assert len(card.script.effects) == 1, (ref, len(card.script.effects))
@@ -1415,7 +1425,10 @@ def test_40_the_production_change_is_confined_to_one_file():
     # 왜 그 칸이 필요했나: ``TRAP_TRIGGER_MISSING`` 이 *"공식 스크립트의
     # SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 **스스로 적고 있었고**,
     # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
-    assert len(dataclasses.fields(EffectDefinition)) == 12
+    # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
+    # 아니다** — "1턴에 몇 번까지인가" 이고 그 카드 텍스트에서 옮긴 값이다.
+    # 아래 단언들이 그 사실을 그대로 센다 (``code`` 칸은 여전히 없다).
+    assert len(dataclasses.fields(EffectDefinition)) == 13
     assert "effects" in {f.name for f in dataclasses.fields(LuaScriptInfo)}
 
     tree = ast.parse((PROJECT_ROOT / "sources" / "lua_loader.py").read_text(encoding="utf-8"))

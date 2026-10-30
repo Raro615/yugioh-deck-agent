@@ -883,7 +883,11 @@ def test_21_every_real_card_in_the_library_declares_an_empty_cost():
     # (기르수 ①). 늘어난 두 건 다 비용이 없으므로 아래 단언(전부 빈 비용)은
     # **약해지지 않았다** — 수만 움직였다. 기르수의 Lua 에 ``SetCost`` 가
     # 없다 (``s.tgtg`` 는 target 이고 cost 가 아니다).
-    assert len(entries) == 18, len(entries)
+    # 🔴 Phase 6-AC 에서 18 → **19** (성유물－『성장』 ②). 그 효과도 비용이
+    # 없다 — ``c93920420.lua`` 의 ``e2`` 에 ``SetCost`` 가 없다 (``e3`` 에만
+    # ``Cost.SelfBanish`` 가 있고 ③ 은 등재하지 않았다). 그래서 아래
+    # 단언(전부 빈 비용)은 약해지지 않았다.
+    assert len(entries) == 19, len(entries)
     for entry in entries:
         assert entry.definition.cost.costs == (), entry.definition.source_card_id
 

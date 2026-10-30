@@ -294,6 +294,10 @@ def test_01_the_three_layers_hold_different_fields():
         #: 담고 이것은 "기다리는가" 만 담는다. 그래서 위의 세 단언
         #: (``code`` 가 ``EffectSpec`` 에만 있다) 도 그대로 참이다.
         "activation_waits_for_event",
+        #: 🔴 Phase 6-AC — 「1턴에 몇 번까지인가」 (``UseLimit``). ``code`` 와
+        #: 도 **다른 칸이다** — 사건을 담지 않고 그 카드 텍스트에서 옮긴
+        #: 횟수와 범위만 담는다. 위의 세 단언도 그대로 참이다.
+        "use_limit",
         "cost",
         "targets",
         "declarations",
@@ -348,26 +352,34 @@ def test_03_each_precondition_item_is_classified(repository):
     # 않았다** — 수만 움직였다.
     # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 첫 유발 효과 ·
     # ``executable=True``). 그 시점에 실제로 17건이었다.
-    assert len(rows) == 18
+    # 🔴 Phase 6-AC 에서 18 → **19** (성유물－『성장』 ②, 목록의 첫 특수
+    # 소환 효과 · ``executable=True``). 그때마다 실제로 그 수였다.
+    assert len(rows) == 19
 
     #: 발동 조건 — 실제로 들어 있다 (D).
     #: 🔴 8 → **9** (6-V). 기르수 ① 의 발동 조건은 ``s.tgtg`` 의 덱 장수
     #: 부분이다 (``ZoneCountAtLeast``) — 사건이 아니라 **상태**이고, 그래서
     #: 아래 ``test_11`` 이 지키는 "조건은 판을 읽는다" 가 그대로다.
-    assert sum(1 for r in rows if r["activation"] is not None) == 9, [
+    #: 🔴 9 → **10** (6-AC). 『성장』 ② 의 조건도 **상태**다
+    #: (``ZoneHasFreeSlot``) — 사건이 아니다.
+    assert sum(1 for r in rows if r["activation"] is not None) == 10, [
         r["card_id"] for r in rows if r["activation"] is not None
     ]
     #: 비용 — 칸은 있고 값은 **전부 비어 있다** (STRUCTURAL-120).
     assert all(not r["has_cost"] for r in rows)
-    #: effect_ref/ordinal — 있다. 전부 0 이다.
-    assert {r["ordinal"] for r in rows} == {0}
-    #: 카드 종류 — 등재된 것은 마법 11 · 함정 5 · **몬스터 2**.
+    #: effect_ref/ordinal — 있다. 🔴 **전부 0 이던 것이 끝났다** (6-AC) —
+    #: 『성장』 은 공식 ②를 등재했으므로 1 이고, 1 인 것이 하나뿐이다.
+    assert {r["ordinal"] for r in rows} == {0, 1}
+    assert sum(1 for r in rows if r["ordinal"] == 1) == 1
+    #: 카드 종류 — 등재된 것은 마법 11 · 함정 5 · **몬스터 3**.
     #:
     #: 🔴 3-E-32 시점에 몬스터가 0 이었고 그것은 참이었다. 어니스트 ①(6-K)
     #: 과 기르수 ①(6-V)이 들어오면서 사실이 바뀌었다 — 수를 지우지 않고
     #: 그대로 센다. 마법 · 함정 두 열은 **하나도 움직이지 않았다.**
+    #: 🔴 2 → **3** (Phase 6-AC, 『성장』 ②). 마법 · 함정 두 열은 **또**
+    #: 움직이지 않았고, 그것이 이 분포가 말하는 사실이다.
     assert collections.Counter(r["kind"] for r in rows) == {
-        "spell": 11, "trap": 5, "monster": 2
+        "spell": 11, "trap": 5, "monster": 3
     }
 
 
@@ -567,7 +579,7 @@ def test_10_the_trigger_condition_lives_in_the_dormant_registry():
 
 def test_11_the_can_activate_condition_lives_in_the_definition(repository):
     """
-    §6 — 발동 가능 조건은 ``EffectDefinition.activation`` 이다 (9/18 에 있다).
+    §6 — 발동 가능 조건은 ``EffectDefinition.activation`` 이다 (10/19 에 있다).
 
     🔴 8/17 → **9/18** (Phase 6-V). 기르수 ① 의 조건도 **상태 조건**이다
     (자신 덱에 1장 이상) — 사건을 묻지 않는다. 이 테스트가 지키는 사실이
@@ -575,7 +587,9 @@ def test_11_the_can_activate_condition_lives_in_the_definition(repository):
     """
     rows = registered_rows(repository)
     with_condition = [r for r in rows if r["activation"] is not None]
-    assert len(with_condition) == 9, [r["card_id"] for r in with_condition]
+    #: 🔴 9 → **10** (Phase 6-AC). 『성장』 ② 의 조건도 **상태 조건**이다
+    #: (``ZoneHasFreeSlot`` — 자신 몬스터 존에 빈 자리) — 사건을 묻지 않는다.
+    assert len(with_condition) == 10, [r["card_id"] for r in with_condition]
 
     #: 그 조건은 **판을 읽는다** — 사건이 아니라 상태다.
     sample = next(
@@ -614,9 +628,10 @@ def test_12_the_timing_lives_in_its_own_module_and_comes_from_card_type():
 def test_13_sixteen_registered_definitions_are_tabulated(repository):
     """§5 — 표본 전수. 데이터가 불완전한 칸을 억지로 채우지 않는다."""
     rows = registered_rows(repository)
-    # 🔴 16 → 17 (6-K, 어니스트 ①) → **18** (6-V, 기르수 ①). 이 테스트가
-    # 틀린 가정을 갖고 있었던 것이 아니라 그때마다 실제로 그 수였다.
-    assert len(rows) == 18
+    # 🔴 16 → 17 (6-K, 어니스트 ①) → 18 (6-V, 기르수 ①) → **19**
+    # (6-AC, 『성장』 ②). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라
+    # 그때마다 실제로 그 수였다.
+    assert len(rows) == 19
 
     #: 모든 줄이 같은 모양으로 채워진다.
     #:
@@ -638,22 +653,33 @@ def test_13_sixteen_registered_definitions_are_tabulated(repository):
             #: 기르수 — 등재된 ①이 **사건 코드를 가진다**
             #: (``EVENT_SUMMON_SUCCESS``). 그것이 6-V 가 더한 새 모양이고,
             #: 같은 칸에 억지로 맞추지 않고 **실제 사실**을 적는다.
+            #: 🔴 성유물－『성장』 (Phase 6-AC) — 세 번째 몬스터 줄이고
+            #: 또 다른 모양이다. 등재한 ②가 ``EVENT_TO_GRAVE`` 를 가지고,
+            #: ①(지속)과 ③(기동)의 코드는 사건이 아니라 **효과 상수**다
+            #: (``EFFECT_INDESTRUCTABLE_BATTLE`` ·
+            #: ``EFFECT_CANNOT_SPECIAL_SUMMON``). 같은 칸에 억지로 맞추지
+            #: 않고 **실제 사실**을 적는다.
             assert row["codes"] in (
                 ("EVENT_FREE_CHAIN", "EFFECT_UPDATE_ATTACK"),
                 ("EVENT_SUMMON_SUCCESS", "EVENT_SPSUMMON_SUCCESS",
                  "EFFECT_ADD_TYPE"),
+                ("EFFECT_INDESTRUCTABLE_BATTLE", "EVENT_TO_GRAVE",
+                 "EFFECT_CANNOT_SPECIAL_SUMMON"),
             ), row["codes"]
         else:
             assert row["codes"] == ("EVENT_FREE_CHAIN",)
-        assert row["ordinal"] == 0
+            #: 마법 · 함정은 **블록 하나**이므로 ordinal 이 0 이다.
+            assert row["ordinal"] == 0
         assert row["has_cost"] is False
 
     #: 🔴 executable 은 **14개**다 (나머지 셋은 ADR-006 으로 후보가 되지
     #: 않는다). Phase 6-L 에서 13 → 14 — 어니스트 ① 의 자기 참조 해석이
     #: 연결되어 ``executable=True`` 가 되었다. 이 테스트가 틀린 가정을 갖고
     #: 있었던 것이 아니라 그 시점에 실제로 13건이었다.
-    #: 🔴 14 → **15** (Phase 6-V, 기르수 ①).
-    assert sum(1 for r in rows if r["executable"]) == 15
+    #: 🔴 14 → **15** (Phase 6-V, 기르수 ①) → **16** (Phase 6-AC,
+    #: 『성장』 ②). 실행하지 않는 셋은 **그대로**다 (ADR-006).
+    assert sum(1 for r in rows if r["executable"]) == 16
+    assert sum(1 for r in rows if not r["executable"]) == 3
 
 
 def test_14_three_real_traps_are_withheld_with_the_trap_reason(repository):
@@ -718,8 +744,9 @@ def test_16_monster_effects_are_blocked_for_a_different_reason(repository):
     #: 여전히 후보를 하나도 내지 않는다.
     rows = registered_rows(repository)
     monsters = [r for r in rows if r["kind"] == "monster"]
-    assert len(monsters) == 2, monsters
-    assert monsters[0]["executable"] is True
+    #: 🔴 2 → **3** (Phase 6-AC, 『성장』 ②). 셋 다 실행된다.
+    assert len(monsters) == 3, monsters
+    assert all(row["executable"] is True for row in monsters), monsters
     #: 통상 몬스터는 후보를 내지 않는다.
     assert activatable_effects(LUSTER_DRAGON) == ()
     card = repository.get(LUSTER_DRAGON)
@@ -922,8 +949,14 @@ def test_23_hidden_information_and_the_board_are_untouched(repository):
 
 
 def test_24_engine_v1_was_not_widened():
-    """§10 금지 항목 — 구현·확장이 하나도 없다."""
-    assert len(list(PlayerActionKind)) == 11
+    """
+    §10 금지 항목 — 구현·확장이 하나도 없다.
+
+    🔴 **Phase 6-AC 가 enum 을 하나 넓혔다** (``link_summon``) — 발동과
+    무관한 **소환 절차**이고, 이 감사가 금지하는 네 이름(새 trigger engine ·
+    event bus · timing engine · Condition DSL)은 여전히 **하나도 없다**.
+    """
+    assert len(list(PlayerActionKind)) == 12
     #: 새 trigger engine · event bus · timing engine · Condition DSL 없음.
     for forbidden in (
         "EventBus",
@@ -952,7 +985,9 @@ def test_24_engine_v1_was_not_widened():
     # 왜 그 칸이 필요했나: ``TRAP_TRIGGER_MISSING`` 이 *"공식 스크립트의
     # SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 **스스로 적고 있었고**,
     # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
-    assert len(dataclasses.fields(EffectDefinition)) == 12
+    #: 🔴 Phase 6-AC 에서 12 → **13** 칸 (``use_limit``). 그 칸도 사건
+    #: 칸이 아니고, 아래 교집합 검사가 그 사실을 센다.
+    assert len(dataclasses.fields(EffectDefinition)) == 13
     #: ``TimingPoint`` 도 8개 그대로다.
     assert len(list(TimingPoint)) == 8
 

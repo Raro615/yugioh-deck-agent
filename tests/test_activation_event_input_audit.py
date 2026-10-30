@@ -351,9 +351,11 @@ def test_05_every_executable_effect_is_a_spell_or_a_trap(repository):
     #: 측정값 (3-E-30 → Phase 6-L). 숫자가 바뀌면 이 Phase 의 결론을 다시
     #: 봐야 한다. 🔴 마법 · 함정 세 열은 **하나도 움직이지 않았다** — 몬스터
     #: 열 하나가 더해졌을 뿐이다.
-    #: 🔴 ``MONSTER`` 1 → **2** (Phase 6-V, 기르수 ①). 마법 · 함정 세 열은
-    #: 여기서도 **하나도 움직이지 않았다**.
-    assert seen == {"SPELL": 6, "QUICKPLAY": 3, "TRAP": 4, "MONSTER": 2}, seen
+    #: 🔴 ``MONSTER`` 1 → **2** (Phase 6-V, 기르수 ①) → **3** (Phase 6-AC,
+    #: 성유물－『성장』 ②). 마법 · 함정 세 열은 여기서도 **하나도 움직이지
+    #: 않았다** — 늘어난 것은 몬스터 열뿐이고, 그것이 이 측정이 말하는
+    #: 사실이다.
+    assert seen == {"SPELL": 6, "QUICKPLAY": 3, "TRAP": 4, "MONSTER": 3}, seen
 
 
 @requires_official_db

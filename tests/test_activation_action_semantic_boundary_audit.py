@@ -281,7 +281,12 @@ def test_03_both_kinds_exist_and_neither_was_added_or_removed():
     """§9 — 두 enum 이 그대로 있다. 합치지도 지우지도 않았다."""
     values = [k.value for k in PlayerActionKind]
     assert "activate_card" in values and "activate_effect" in values
-    assert len(values) == 11
+    #: 🔴 Phase 6-AC 에서 11 → **12** (``link_summon``). 발동과 무관한
+    #: **소환 절차**이고, 이 시험이 지키는 사실(두 발동 enum 이 그대로
+    #: 있고 합치지도 지우지도 않았다)은 그대로다 — 바로 위 두 줄이 그것을
+    #: 센다. 아래 금지 이름 셋도 여전히 없다.
+    assert len(values) == 12
+    assert "link_summon" in values
     #: 새 activation enum 도 없다.
     for forbidden in ("ActivationAction", "ActivateKind", "ACTIVATE_ANY"):
         for path in production_files():
@@ -521,7 +526,9 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     # 아니라 그 시점에 실제로 17건이었다.
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
     assert len(EFFECT_LIBRARY) == 19
-    assert len(card_ids) == 18
+    #: 🔴 카드 **수**는 19 가 아니라 19 다 — 한 카드에 둘을 등재한 자리가
+    #: 없으므로 등재 수와 카드 수가 같다 (Phase 6-AC 도 새 카드를 더했다).
+    assert len(card_ids) == 19
 
     kinds = collections.Counter()
     executable_kinds = collections.Counter()
@@ -542,20 +549,23 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
         kinds[kind] += 1
         if by_card[card_id].executable:
             executable_kinds[kind] += 1
-    #: 🔴 몬스터가 **둘** 있다 — 어니스트 ①(6-K) · 기르수 ①(6-V).
-    assert kinds["monster"] == 2, dict(kinds)
+    #: 🔴 몬스터가 **셋** 있다 — 어니스트 ①(6-K) · 기르수 ①(6-V) ·
+    #: 성유물－『성장』 ②(6-AC). 마법 · 함정 쪽 16 은 **그대로**이고,
+    #: 그것이 "늘어난 쪽이 몬스터이고 거기뿐" 을 센다.
+    assert kinds["monster"] == 3, dict(kinds)
     assert kinds["spell"] + kinds["trap"] == 16, dict(kinds)
     #: 🔴 **실행되는 몬스터가 하나 있다** (Phase 6-L · 어니스트 ①). 6-K
     #: 시점에는 0이었고 그것이 그때의 사실이었다. 단언을 지우지 않는다 —
     #: 마법 · 함정 쪽 13 을 따로 못박아서, 늘어난 하나가 **몬스터 쪽이고
     #: 거기뿐**임을 센다.
-    #: 🔴 1 → **2** (Phase 6-V, 기르수 ①). 마법 · 함정 쪽 13 은 **그대로**
-    #: 이고, 그것이 "늘어난 하나가 몬스터 쪽이고 거기뿐" 을 센다.
-    assert executable_kinds["monster"] == 2, dict(executable_kinds)
+    #: 🔴 1 → **2** (Phase 6-V, 기르수 ①) → **3** (Phase 6-AC, 『성장』 ②).
+    #: 마법 · 함정 쪽 13 은 **그대로**이고, 그것이 "늘어난 쪽이 몬스터이고
+    #: 거기뿐" 을 센다.
+    assert executable_kinds["monster"] == 3, dict(executable_kinds)
     assert executable_kinds["spell"] + executable_kinds["trap"] == 13, dict(
         executable_kinds
     )
-    assert sum(executable_kinds.values()) == 15, dict(executable_kinds)
+    assert sum(executable_kinds.values()) == 16, dict(executable_kinds)
 
 
 def test_13_the_engine_splits_on_effect_ref_not_on_card_versus_effect(repository):

@@ -942,7 +942,11 @@ def test_40_engine_v1_definitions_untouched():
     # 아니라 그 시점에 실제로 17건이었다.
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
     assert len(EFFECT_LIBRARY) == 19
-    assert {o for _c, o in refs} == {0}
+    #: 🔴 **Phase 6-AC 가 "전부 ordinal 0" 을 끝냈다** — 성유물－『성장』 은
+    #: 공식 **②**를 등재했다. 억지로 0 에 맞추지 않고 실제 사실을 적는다:
+    #: 1 인 것이 **정확히 한 장**이다.
+    assert {o for _c, o in refs} == {0, 1}
+    assert sum(1 for _c, o in refs if o == 1) == 1
     assert {c for c, _o in refs} & set(CHANGED_CARDS) == set()
 
 

@@ -663,7 +663,7 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 
 ### 10.2 정정한 기존 감사
 
-고친 시험 파일은 **83개**다. 전부 "수를 고치고 **무엇이 왜 바뀌었는가**를 그
+고친 시험 파일은 **89개**다 (새로 만든 `test_orcust_girsu_line.py` 는 별도). 전부 "수를 고치고 **무엇이 왜 바뀌었는가**를 그
 자리에 적는" 방식이고, **assertion 을 지우거나 skip 으로 숨긴 자리는 없다.**
 몇 자리는 더 정확한 축으로 **다시 세게** 바꿨다.
 
@@ -671,13 +671,18 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 
 | 바뀐 사실 | 파일 수 |
 | --- | --- |
-| `EFFECT_LIBRARY` 18 → 19 | 23 |
-| 실행 가능 15 → 16 | 6 |
+| `EFFECT_LIBRARY` 18 → 19 | 29 |
+| 실행 가능 15 → 16 | 7 |
 | `OPERATION_RULINGS` 19 → 21 | 5 |
 | `ValidationCode` 51 → 53 (그리고 그 파생 — `INVALID` 42 → 44 · 나머지 39 → 41 · 코드에서 판정을 되찾는 자리 50 → 52) | 11 |
-| `EffectDefinition` 칸 12 → 13 | 5 |
-| 등재 `ordinal` 집합 `{0}` → `{0, 1}` | 6 |
-| `PlayerActionKind` 11 → 12 | 5 |
+| `EffectDefinition` 칸 12 → 13 | 9 |
+| 등재 `ordinal` 집합 `{0}` → `{0, 1}` | 11 |
+| `PlayerActionKind` 11 → 12 | 8 |
+| 등재된 몬스터 효과 2 → 3 | 4 |
+
+🔴 **같은 수를 여러 파일이 박아 두고 있다는 것 자체가 이 저장소의 사실이다.**
+한 자리를 고치면 나머지가 남고, 그래서 **전체 회귀 없이는 끝났는지 알 수
+없다** (§10.3 의 루트 ① 이 그것을 실측으로 보여 준다).
 
 **② 사실이 뒤집혀 시험의 이름까지 고친 것**
 
@@ -728,7 +733,97 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 
 ### 10.3 측정 결과
 
-(아래 §10.4 에 명령 · passed/failed/skipped · 종료 코드 · 소요 시간을 적는다.)
+**왜 전체 회귀를 돌렸는가** — 이 Phase 가 **아키텍처에 닿았다.** `PlayerAction`
+의 칸과 종류 · `SummonKind` · `EffectDefinition` 의 칸 · `ValidationCode` ·
+`RuleQuestion` · `ActivationStatus` 가 전부 늘었고, `engine/use_limit.py` 를
+갈라내면서 **import 그래프**도 바뀌었다. 그 어휘를 세는 감사가 저장소 전역에
+흩어져 있으므로 바뀐 파일만 돌려서는 영향을 알 수 없다 — **실제로 그랬다**:
+한 번도 열어 보지 않은 파일에서 19건이 깨졌다 (아래 루트 ①).
+
+**실행기**: `runtests.sh` — `timeout 7000 python3 -m pytest … -q -rf` 로 돌리고
+**pytest 의 종료 코드를 로그 안에 적는다**. 🔴 `&` 로 보낸 뒤 `$?` 를 읽으면
+백그라운드 전송의 결과이고 pytest 의 종료 코드가 아니다 (이전 Phase 에서 그렇게
+틀렸고, 그 사실을 그 파일 머리말에 적어 두었다).
+
+| 묶음 | 명령 | passed | failed | skipped | 종료 코드 | 소요 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 엔진 · 에이전트 · 재정 · 룰 | `pytest tests/engine tests/agent tests/rulings tests/rules` | 4,407 | **2** | 1 | 1 | 20:03 |
+| 루트 ① | `pytest <ck_aa 25개 파일>` | 697 | **19** | 0 | 1 | 36:49 |
+| 루트 ② | `pytest <ck_ab 23개 파일>` | 560 | **4** | 5 | 1 | 17:06 |
+| 루트 ③ | `pytest <ck_ac 24개 파일>` | 629 | **4** | 4 | 1 | 20:47 |
+| 루트 ④ | `pytest <ck_ad 22개 파일>` | 486 | **1** | 0 | 1 | 13:30 |
+
+루트를 넷으로 나눈 이유는 한 번에 돌리면 7,000초 상한에 걸리기 때문이다. 네
+묶음이 `tests/*.py` **전부**(94개)를 덮는 것을 매번 확인한다 (`__init__.py` ·
+`conftest.py` 제외).
+
+**기존 실패와 새 실패를 가른다.** 기준 HEAD `8630622` 에서 **같은 집합을 돌려**
+실측했다 (`git worktree` + `data/` 심볼릭 링크 — `cards.cdb` · `data/cache` ·
+`data/constants` 는 저장소에 없으므로 링크해야 같은 조건이 된다. 처음에 링크하지
+않고 돌려 121건이 실패했고, 그것은 **데이터가 없어서**였다 — 그 측정을 버렸다).
+
+```
+8630622 · 위 다섯 묶음의 실패 파일 전부:  9 failed, 2031 passed, 4 skipped · 32:36
+8630622 · ck_aa 25개 파일 그대로:       716 passed · 32:28 · PYTEST_EXIT=0
+```
+
+| 기존 실패 (9건, 이 Phase 전부터) | 원인 |
+| --- | --- |
+| `rulings/test_data_audit::test_every_repository_card_can_reach_a_cid` | 재정 데이터의 cid 매핑 — 12건 > 상한 10 |
+| `agent/test_opponent_resource_weighting_audit::test_07` | 상대 자원 선택 전수 주사 |
+| `test_effect_type_quick_audit::test_29` | 공식 자료에 Lua 이름이 없다는 주장 |
+| `test_event_free_chain_semantic_audit::test_27` | 공식 코퍼스가 그 용어를 쓰지 않는다는 주장 |
+| `test_korean_overlay_unapplied_audit::test_01` · `test_13` · `test_21` · `test_25` | 한국어 오버레이 미적용 분포 |
+| `test_trigger_lifetime_audit::test_02` | 🔴 `_activation_actions` 안의 **지역 변수 `offered_before`** 가 그 감사의 "offer" 금지 낱말에 걸린다. 보완8 이 그 변수를 만들었고 (허가된 조합 수를 세어 보류 문장에 넘긴다), 기준 HEAD 에서도 실패한다 — 사건을 읽는 코드가 아니라 **후보 수를 세는** 코드다. 이번 전개 구현과 무관하므로 손대지 않았다 |
+
+🔴 **그래서 위 다섯 묶음의 실패 30건은 기존 9건 + 새 21건이다.** 숨기지 않고
+적는다. 새 21건은 전부 이 Phase 가 늘린 어휘를 세던 감사이고, **회귀 실행 뒤에
+고쳤다**:
+
+| 묶음 | 실패 | 기존 | 새로 생긴 것 (그 뒤 정정) |
+| --- | --- | --- | --- |
+| 엔진 · 에이전트 · 재정 · 룰 | 2 | 2 | 0 |
+| 루트 ① | 19 | **0** | **19** |
+| 루트 ② | 4 | 2 | 2 |
+| 루트 ③ | 4 | 4 | 0 |
+| 루트 ④ | 1 | 1 | 0 |
+
+**루트 ① 의 19건이 왜 회귀 전에 안 보였는가** — 그 25개 파일을 **한 프로세스로**
+돌린 적이 없었다. 바뀐 파일만 골라 돌리는 방식은 "그 어휘를 세는 다른 파일" 을
+찾지 못한다. 기준 HEAD 에서 같은 25개 파일이 **716 전부 통과**하므로 19건이
+이 Phase 의 것임은 측정으로 확정된다. 정정한 내용:
+
+| 감사 | 바뀐 사실 |
+| --- | --- |
+| `test_activation_precondition_audit` (6) | 등재 18 → 19 · 조건 9 → 10 · 몬스터 2 → 3 · 실행 15 → 16 (실행하지 않는 셋은 그대로) · ordinal 집합 `{0}` → `{0, 1}` · `EffectDefinition` 칸 12 → 13 · `PlayerActionKind` 11 → 12 · 몬스터 줄의 코드 모양 셋째 (`EFFECT_INDESTRUCTABLE_BATTLE` · `EVENT_TO_GRAVE` · `EFFECT_CANNOT_SPECIAL_SUMMON`) |
+| `test_activation_action_semantic_boundary_audit` (2) | `PlayerActionKind` 11 → 12 (`link_summon` 은 **발동과 무관한 소환 절차**) · 몬스터 2 → 3 · 실행되는 몬스터 2 → 3 (마법·함정 13 은 그대로) |
+| `test_create_effect_ordinal_audit` (2) · `test_clone_sibling_contamination_audit` (2) | 등재 ordinal · 블록 수와 코드를 **등재한 ordinal 로** 읽게 고쳤다 · `EffectDefinition` 칸 12 → 13 |
+| `test_discord_bot` (2) | `/combo` 의 인자 4 → 5 (`line` 이 맨 뒤) · 가짜 `combo_texts` 의 서명도 함께 (안 맞추면 이 시험이 `TypeError` 를 보고 "defer 가 먼저" 를 재지 못한다 — 실제로 그렇게 깨졌다) |
+| `test_activation_event_input_audit` · `test_actor_declaration_scope_audit` · `test_auxiliary_effect_creation_clone_audit` · `test_binding_rule_alignment` · `test_branch_setter_audit` (각 1) | 몬스터 열 2 → 3 · `_ENTRY` 18 → 19 (『성장』 ② 도 비용이 없다 — `e2` 에 `SetCost` 가 없고 `Cost.SelfBanish` 는 등재하지 않은 `e3` 의 것이다) · ordinal 집합 · 블록 수 |
+
+정정한 뒤 그 10개 파일을 다시 돌렸다 — 아래 "정정 뒤 확인" 참고.
+
+**루트 ② 의 두 건**도 같은 성질이다 (`EffectDefinition` 칸 12 → 13 · 등재
+18 → 19). 그중 하나는 단순한 수가 아니라 **읽는 자리**가 틀렸다: 세 등재가
+모두 0번 블록이던 때는 `row[3][0]` 으로 읽어도 같았는데, 『성장』 은 공식
+②(ordinal 1)를 등재했으므로 0번을 읽으면 **등재하지 않은 효과**의 코드를
+센다. 그 줄의 `ordinal` 로 읽게 고쳤다. 고친 뒤 그 두 파일을 다시 돌려
+**기존 실패 둘만** 남는 것을 확인했다 (`2 failed, 67 passed · 3:29`).
+
+**정정 뒤 확인**
+
+| 명령 | 결과 |
+| --- | --- |
+| `pytest tests/test_orcust_girsu_line.py` | `37 passed · 2:29` · 종료 코드 **0** |
+| `pytest <루트 ② 의 두 파일>` | `2 failed, 67 passed · 3:29` (둘 다 기존 실패) |
+| `pytest <루트 ① 에서 고친 10개 파일>` | FIXAA |
+
+🔴 **전체 회귀를 또 한 번 전부 돌리지는 않았다.** 정정은 모두 **그 시험 파일
+안의 단언**이고 production 을 건드리지 않았다 — production 의 마지막 변경은
+`render_opening_board` 의 한 줄과 등재 사유의 공식 번호이고, 그 둘을 재는
+시험(`test_orcust_girsu_line` · 보고 문자열을 세는 세 파일)을 따로 돌려
+확인했다. 다음 Phase 가 production 을 건드리면 그때 전체를 다시 돌려야 한다.
+
 
 ---
 
