@@ -1538,7 +1538,7 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
         ),
         #: 🔴 **성유물－『성장』** (Phase 6-AC). 기르수 ① 이 **덱에서 고른
         #: 카드**에 ``MAY_BE_SENT_TO_GRAVE`` 를 묻고 (6-V 보고서 §11 이 그
-        #: 자리를 적어 두었다), 성장 ① 이 **패에서 고른 카드**에
+        #: 자리를 적어 두었다), 성장 ② 가 **패에서 고른 카드**에
         #: ``MAY_BE_SPECIAL_SUMMONED`` 를 묻는다. 두 질문을 **각각** 읽었다.
         CardRuleFacts(
             card_id=WORLD_WAND,
@@ -1547,7 +1547,7 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                     ConditionResult.TRUE,
                     RuleBasis.CARD_TEXT,
                     "성유물－『성장』: 공식 텍스트 전문을 읽었고, 자기가 "
-                    "묘지로 가는 것을 막는 문장이 없다. ① 이 「이 카드가 "
+                    "묘지로 가는 것을 막는 문장이 없다. ② 가 「이 카드가 "
                     "묘지로 보내졌을 경우」 라고 적어 **그 상황을 스스로 "
                     "전제한다.** 메인 덱의 효과 몬스터이므로 토큰도 "
                     "엑스트라 덱 카드도 아니다.",

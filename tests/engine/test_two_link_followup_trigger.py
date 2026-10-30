@@ -624,7 +624,7 @@ def test_h01_production_does_not_know_these_synthetic_operations():
     assert production.definition_for(CL1_REF) is None
     assert CL1_REF not in refs
 
-    #: ② 『성장』 ① 은 **있다.** 그런데 조작이 다르다 — 그것이 요점이다.
+    #: ② 『성장』 ② 는 **있다.** 그런데 조작이 다르다 — 그것이 요점이다.
     real = production.definition_for(FOLLOW_REF)
     assert real is not None
     assert FOLLOW_REF in refs

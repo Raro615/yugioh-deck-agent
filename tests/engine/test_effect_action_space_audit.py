@@ -842,7 +842,7 @@ def test_15_no_library_effect_has_a_cost_so_the_cost_path_is_untravelled():
     #
     # 🔴 기르수의 Lua 에 ``SetCost`` 가 없다 (``s.tgtg`` 는 target 이고
     # cost 가 아니다). 그래서 비용 경로는 **여전히 아무도 지나지 않는다.**
-    #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
+    #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
     assert len(EFFECT_LIBRARY) == 19
 
 

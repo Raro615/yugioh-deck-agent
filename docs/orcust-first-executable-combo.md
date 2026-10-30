@@ -290,7 +290,7 @@ TYPE_EFFECT), 2, nil, s.matcheck)` ·
 
 『성장』 에 대해 읽은 것 (`RuleBasis.CARD_TEXT`):
 
-- `MAY_BE_SENT_TO_GRAVE = TRUE` — ① 이 「이 카드가 묘지로 보내졌을 경우」 라고
+- `MAY_BE_SENT_TO_GRAVE = TRUE` — ② 가 「이 카드가 묘지로 보내졌을 경우」 라고
   적어 그 상황을 스스로 전제한다. 메인 덱의 효과 몬스터이므로 토큰도 엑스트라
   덱 카드도 아니다.
 - `MAY_BE_SPECIAL_SUMMONED = TRUE` — 소환 조건이 **없다.** 「일반 소환할 수

@@ -1074,7 +1074,7 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     효과" 였던 것과 같은 자리의 다음 걸음이다.
 
     🔴 **Phase 6-AC 가 다시 하나씩 늘렸다** (19 · 16). 늘어난 하나가
-    성유물－『성장』 ① 이고, 그것이 **특수 소환을 실행하는 첫 효과**다.
+    성유물－『성장』 ② 이고, 그것이 **특수 소환을 실행하는 첫 효과**다.
     """
     assert len(EFFECT_LIBRARY) == 19
     executable = [e for e in EFFECT_LIBRARY if e.executable]

@@ -320,7 +320,7 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
     (``ActivationKind.TRIGGER``). ``executable=True`` 이므로 실행되는 카드
     수도 14 → 15 로 움직인다.
     """
-    #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
+    #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
     assert len(EFFECT_LIBRARY) == 19
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
@@ -389,7 +389,7 @@ def test_a_fifteen_real_effect_refs_are_executable():
         #: "①만 등재한다" 는 가정이 깨진 **첫** 자리다.
         EffectRef(WORLD_WAND, 1),
     }
-    #: Phase 6-AC — 성유물－『성장』 ① 이 실행 가능으로 더해졌다 (15 → 16).
+    #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     assert len(executable) == 16
 
 

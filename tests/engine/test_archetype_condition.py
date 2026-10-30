@@ -351,7 +351,7 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     #    ``IsSetCard({SET_ORCUST,SET_WORLD_LEGACY})``). 그래서 "쓰는 등재가
     #    없다" 를 지우고 **정확히 하나이고 그것이 무엇인지**를 고정한다.
     #
-    #    🔴 **Phase 6-AC 가 둘로 만들었다** — 성유물－『성장』 ① 의 후보
+    #    🔴 **Phase 6-AC 가 둘로 만들었다** — 성유물－『성장』 ② 의 후보
     #    조건도 카드군이다 (``s.spfilter1`` 의
     #    ``IsSetCard(SET_WORLD_LEGACY)``). "정확히 하나" 를 "그 둘이
     #    무엇인지" 로 바꾼다.
@@ -910,7 +910,7 @@ def test_j_the_archetype_condition_is_used_by_exactly_the_two_orcust_effects():
     6-V 가 기르수 ① 을 등재하면서 그 조건을 **처음으로 실행 경로에
     썼다.** 그래서 "하나도 없다" 가 끝났고, "정확히 하나" 가 되었다.
 
-    🔴 **Phase 6-AC 가 둘로 만들었다** — 성유물－『성장』 ① 의 후보 조건이
+    🔴 **Phase 6-AC 가 둘로 만들었다** — 성유물－『성장』 ② 의 후보 조건이
     「패에서 **「성유물」** 몬스터」 이므로 같은 카드군 조건을 쓴다. 지우는
     대신 **그 둘이 무엇인지**를 고정한다. 셋이 되면 이 단언이 깨지고,
     그때 새 카드가 쓰는 카드군 코드를 사람이 확인해야 한다.

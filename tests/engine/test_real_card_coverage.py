@@ -341,7 +341,7 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
 
     #: 🔴 14 → 15 (Phase 6-V, 기르수 ①).
     executable = {e.card_id for e in EFFECT_LIBRARY if e.executable}
-    #: Phase 6-AC — 성유물－『성장』 ① 이 실행 가능으로 더해졌다 (15 → 16).
+    #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     assert len(executable) == 16
     # 실행되는 카드는 **하나도 빠짐없이** 막는 것이 없어야 한다.
     #

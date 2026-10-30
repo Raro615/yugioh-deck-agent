@@ -9,7 +9,7 @@ Phase 6-AC — **기르수에서 시작하는 오르페골 전개 한 경로가 
 
     1  「잭나이츠 오르페골 기르수」 일반 소환
     2  기르수 ① — 덱의 「성유물－『성장』」 을 묘지로
-    3  묘지의 『성장』 ① — **패의** 『성장』 을 특수 소환
+    3  묘지의 『성장』 ② — **패의** 『성장』 을 특수 소환
     4  기르수 + 『성장』 → 「오르페골 갈라테아」 링크 소환
 
 성공은 테스트 통과가 아니라 **동작**이다. 그래서 A 묶음은 걸음마다 수락 ·
@@ -190,7 +190,7 @@ def test_a02_every_step_records_its_choice_cost_and_resolution(repository):
     걸음마다 **무엇을 골랐고 어떻게 해결됐는가**가 기록에 남는다.
 
     🔴 **비용이 없다는 것도 사실이다.** 이 경로의 네 단계 중 비용을 치르는
-    것은 없고 (기르수 ① · 『성장』 ① 둘 다 ``cost`` 가 비어 있다), 소재는
+    것은 없고 (기르수 ① · 『성장』 ② 둘 다 ``cost`` 가 비어 있다), 소재는
     비용이 아니라 **소환 절차**다. 그 구분을 수로 적는다.
     """
     from engine.effect.library import definition_registry
@@ -209,7 +209,7 @@ def test_a02_every_step_records_its_choice_cost_and_resolution(repository):
     assert steps[1].effect_events == (f"{GIRSU}:e[0]",)
     assert steps[1].resolved is True
 
-    #: ③ 『성장』 ① — 대상은 **발동 시점에** 고른다 (자기 패는 보인다).
+    #: ③ 『성장』 ② — 대상은 **발동 시점에** 고른다 (자기 패는 보인다).
     assert steps[2].effect_ref == f"{WAND}:e[1]"
     assert len(steps[2].targets) == 1
     assert steps[2].effect_events == (f"{WAND}:e[1]",)
@@ -767,7 +767,7 @@ def test_c04_a_full_monster_zone_makes_the_trigger_condition_false(
     """
     🔴 **발동 조건이 거짓인 것과 판정할 수 없는 것은 다르다.**
 
-    『성장』 ① 의 발동 조건은 「자신 몬스터 존에 빈 칸이 있다」 이고, 그것은
+    『성장』 ② 의 발동 조건은 「자신 몬스터 존에 빈 칸이 있다」 이고, 그것은
     **규칙이 답하는** 질문이다 — 몬스터 존을 다 채우면 거짓이 된다.
     """
     from engine.condition import ConditionContext, ConditionEvaluator

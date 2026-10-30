@@ -797,9 +797,9 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
 
     #: 🔴 17 → 18 · 14 → 15 (Phase 6-V). 아래가 재는 것은 **욕망의 항아리의
     #: 실행이 그대로인가** 이고, 그 사실은 변하지 않았다.
-    #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
+    #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
     assert len(EFFECT_LIBRARY) == 19
-    #: Phase 6-AC — 성유물－『성장』 ① 이 실행 가능으로 더해졌다 (15 → 16).
+    #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 16
 
     definition = definition_registry().definition_for(
