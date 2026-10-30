@@ -73,7 +73,7 @@ from typing import Protocol, runtime_checkable
 
 from engine.condition import ConditionContext, ConditionResult
 from engine.effect.ruling import BoardRuling, RuleQuestion
-from engine.effect.semantics import declared_gate_question
+from engine.effect.semantics import declared_gate_question, rule_gate_question
 from engine.effect.targeting import TargetResolver
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
@@ -740,9 +740,23 @@ def _judged_candidates(
 
 
 def _movement_question(definition) -> "RuleQuestion | None":
-    """그 효과의 **관문이 걸린** 조작에 대응하는 규칙 질문. 없으면 ``None``."""
+    """
+    그 효과의 **관문이 걸린** 조작에 대응하는 규칙 질문. 없으면 ``None``.
+
+    관문은 **두 자리**에서 걸린다 (Phase 6-AD) — 카드가 ``gated`` 로 선언한
+    것과, 종류만 보고 언제나 걸리는 것 (``engine.effect.semantics.
+    RULE_GATED``). 선언한 쪽만 보면 특수 소환하는 효과는 질문이 ``None`` 이
+    되고, 그러면 아래 :func:`_judged_candidates` 가 **모든 후보를
+    ``UNKNOWN``** 으로 적는다 — 실측: 『성장』 ② 의 해결이 "0장 골랐습니다
+    (최소 1장)" 으로 끝났다. 허가가 아니라 **질문이 없던 것**이 원인이다.
+
+    🔴 **두 표를 합치지 않는다.** 어느 쪽에서 왔는지가 뜻이고, 판정은
+    엔진의 표가 한다 — 이 함수는 묻기만 한다.
+    """
     for operation in definition.operations:
         question = declared_gate_question(operation)
+        if question is None:
+            question = rule_gate_question(operation)
         if question is not None:
             return question
     return None

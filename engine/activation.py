@@ -950,7 +950,47 @@ class EffectActivator:
                 # 선택이므로, 밖에서 이미 정해 보낸 것도 적법하면 적법하다.
                 # (그 길은 6-W · 6-X 의 시험들이 쓴다. 정상 후보 생성은 그런
                 # 행위를 **만들지 않는다** — ``chosen_bindings`` 가 뺀다.)
-                continue
+                #
+                # 🔴 **그래도 후보가 있는지는 지금 확인한다** (Phase 6-AD).
+                #
+                # 비어 있는 것이 정상인 것은 **무엇을 고를지**이고, "고를 것이
+                # 있는가" 는 다른 질문이다 — 공식 스크립트도 그 둘을 나눠
+                # 적는다: ``c93920420.lua`` 의 ``s.sptg1`` 은
+                # ``Duel.IsExistingMatchingCard`` 로 **존재만** 확인하고
+                # (발동 조건), 고르는 것은 ``s.spop1`` 이다 (해결).
+                #
+                # 6-AC 는 이 자리를 그냥 지나갔고, 그래서 패에 후보가 하나도
+                # 없어도 발동이 수락됐다 — 그것은 발동 조건 검증을 건너뛴
+                # 것이다. ``availability`` 는 이미 그 질문에 답하는 함수이고
+                # (``TargetResolver`` 의 §1), 세 갈래를 그대로 보존한다.
+                #
+                # 🔴 **확인된 부족과 판정할 수 없는 상태를 가른다** —
+                # ``ILLEGAL`` 은 후보를 **전부 보고** 모자란 것이므로
+                # ``INVALID_TARGET`` 이고, ``UNKNOWN`` 은 못 본 곳이나
+                # 미확정이 있는 것이므로 ``UNCHECKED_TARGET`` 이다.
+                resolver = TargetResolver(
+                    GameStateView.from_state(
+                        state,
+                        viewer=action.actor,
+                        looked_at=binding.spec.looked_at_zones(),
+                    )
+                )
+                enough = resolver.availability(binding.spec, context)
+                if enough.legality is TargetLegality.LEGAL:
+                    continue
+                return self._fail(
+                    ActivationStatus.INVALID_TARGET
+                    if enough.legality is TargetLegality.ILLEGAL
+                    else ActivationStatus.UNCHECKED_TARGET,
+                    action,
+                    chain,
+                    enough.code,
+                    f"{binding.ref} 를 해결 중에 고르려면 후보가 있어야 "
+                    f"합니다: {enough.reason}",
+                    missing="; ".join(enough.unchecked) or None,
+                    unchecked=enough.unchecked,
+                    authorization=verdict,
+                )
             # 규칙마다 들여다보는 자리가 다르므로 **규칙마다** 관측을
             # 만든다 (Phase 2-Y). 하나로 합쳐서 전부 열면, 덱을 보는
             # 효과가 같은 판의 다른 규칙에까지 덱을 열어 준다.

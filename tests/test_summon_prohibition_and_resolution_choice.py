@@ -409,3 +409,550 @@ def test_h11_the_registered_path_board_is_judged_allowed(repository):
     found = assess_special_summon_permission(view, P0)
     assert found.permission is SpecialSummonPermission.ALLOWED
     assert found.missing_rule is None
+
+
+# ======================================================================
+# J. 문제 ② — 『성장』 ② 의 선택은 **해결 중에** 일어난다
+#
+# 🔴 **무엇을 재지 못했는지 먼저 적는다** (6-AD §5 의 B · C · D · E).
+#
+# §5 는 "발동과 해결 사이에 패가 바뀌면 그때의 패에서 고른다" 와 "해결
+# 시점에 금지가 걸리면 허가되지 않는다" 를 **체인 도중의 실제 상태 변화**로
+# 재라고 요구한다. 이 저장소에는 그 변화를 만들 수 있는 등재 효과가 없다 —
+# 체인에 응답으로 올릴 수 있는 것은 등재된 유발 둘뿐이고 (기르수 ① ·
+# 『성장』 ②), 둘 다 패를 줄이거나 지속 효과를 세우지 않는다. 등재된 마법
+# 열여섯은 ``activate_card`` 의 적법성을 판정할 계층이 없어 후보가 되지
+# 않는다 (실측: 보류 사유 ``activation-timing (Phase 2-C/2-F)``).
+#
+# 그래서 **체인 도중에 상태를 바꾸는 사례는 재지 못했다.** 대신 같은 성질을
+# 갈라서 잰다:
+#
+# 1. 발동 시점에 **아무 카드도 묶이지 않는다** (J01) — 묶인 것이 없으면
+#    "그때의 패에 고정" 이 구조적으로 불가능하다.
+# 2. 선택은 **해결 시점의 후보 목록**에서 나오고 (J02 · J03), 패가 다르면
+#    고른 카드도 다르다 (J04).
+# 3. 후보가 없으면 **발동 자체가 거절된다** (J05) — 공식 스크립트의
+#    ``s.sptg1`` 과 같은 자리다.
+# 4. 금지된 판은 **양쪽 끝에서** 막힌다 (J06) — 발동 조건이 거짓이고, 해결
+#    시점 후보 판정도 거짓이다. 두 답은 **같은 함수**에서 나오므로 갈릴 수
+#    없다.
+#
+# 🔴 이 네 가지가 "체인 도중에 패가 바뀌어도 맞다" 를 **증명하지 않는다.**
+# 증명하려면 그 변화를 만드는 효과가 등재되어야 한다 — 그것은 이번 범위가
+# 아니다 (§보고의 남은 한계에 적는다).
+# ======================================================================
+WORLD_ARTIFACT_SWORD = 40441990
+"""「성유물－『성건』」 — 패의 **두 번째** 「성유물」 몬스터. 🔴 실제 카드."""
+
+CLIMAX = 703897
+KEY = 2930675
+AWAKENING = 12989604
+CORE = 55051920
+
+
+def _wand_line(resolution_card_ids=(WAND,)):
+    """
+    『성장』 ② 까지만 가는 **세 단계 경로** (링크 소환을 넣지 않는다).
+
+    🔴 **셋째 단계는 "해결 중에 『성장』 을 고른다" 까지가 단계다** (6-AD §6).
+    발동이 수락됐다는 사실만으로 세면, 해결이 특수 소환을 만들지 못한 판도
+    "3/3 완료" 로 적힌다 — 실측으로 그 일이 일어났고 (``test_j04``) 그래서
+    기본값에 그 선언을 넣는다.
+
+    왜 네 단계 경로를 쓰지 않는가 — 링크 소환이 특수 소환된 『성장』 을
+    소재로 **묘지로 보내므로**, 그 뒤에는 "무엇이 특수 소환되었는가" 를
+    필드에서 읽을 수 없다. 이 묶음이 보려는 것은 그 한 장이다.
+    """
+    from deck.combo_policy import ComboLine, PlannedAction
+
+    return ComboLine(
+        name="orcust-girsu-wand-only",
+        title_ko="기르수 → 『성장』 묘지행 → 패에서 「성유물」 몬스터 특수 소환",
+        steps=(
+            PlannedAction(kind="normal_summon", card_id=GIRSU),
+            PlannedAction(
+                kind="activate_effect", card_id=GIRSU, effect_ref=(GIRSU, 0)
+            ),
+            PlannedAction(
+                kind="activate_effect",
+                card_id=WAND,
+                effect_ref=(WAND, 1),
+                resolution_card_ids=tuple(resolution_card_ids),
+            ),
+        ),
+        basis=(
+            "ORCUST_GIRSU_LINE 의 앞 세 단계와 **같은 근거**이고 (그쪽 basis), "
+            "링크 소환 한 단계만 뺐다 — 특수 소환된 카드를 필드에서 읽기 "
+            "위한 시험용 경로다."
+        ),
+    )
+
+
+def _run_wand(repository, hand, *, preferred=(), line=None):
+    """
+    발표한 레시피와 **지정한 패**로 세 단계를 돌린다.
+
+    ``/combo`` 와 같은 배선을 쓴다 — ``app.main.opening_wiring`` 하나가
+    유발과 해결 시점 선택을 꽂는다. ``preferred`` 를 주면 그 목록으로
+    :class:`~agent.choice.PreferredCardChoice` 가 만들어진다 (경로가
+    ``resolution_card_ids`` 로 적는 것과 같은 자리).
+
+    🔴 **패는 시작 상태다.** 돌리는 중에 패를 건드리지 않는다.
+    """
+    from app.main import opening_wiring
+    from deck.combo_policy import ORCUST_VERIFICATION_RECIPE
+    from deck.opening import build_opening, execute_opening
+    from deck.recipe import parse_recipe
+
+    draft = parse_recipe(ORCUST_VERIFICATION_RECIPE, repository).draft
+    assert draft is not None
+    plan = line if line is not None else _wand_line()
+
+    class _Wanted:
+        """``opening_wiring`` 이 읽는 칸 하나만 가진 값."""
+
+        resolution_preferences = tuple(preferred)
+
+    chooser, triggers = opening_wiring(
+        repository, _Wanted() if preferred else None
+    )
+    setup = build_opening(
+        repository, draft, list(hand), chooser=chooser, triggers=triggers
+    )
+    assert setup.can_run, setup.blockers
+    run = execute_opening(setup, repository, choose=plan.policy())
+    return setup, run, chooser, plan
+
+
+def _wand_step(run):
+    """실행 기록에서 『성장』 ② 의 걸음. 없으면 ``None``."""
+    return next(
+        (
+            step
+            for step in run.steps
+            if step.accepted and step.effect_ref == f"{WAND}:e[1]"
+        ),
+        None,
+    )
+
+
+def _wand_record(chooser):
+    """해결 시점 선택 기록에서 『성장』 ② 의 것. 없으면 ``None``."""
+    return next(
+        (
+            record
+            for record in chooser.records
+            if (record.effect_ref.card_id, record.effect_ref.ordinal)
+            == (WAND, 1)
+        ),
+        None,
+    )
+
+
+@pytest.mark.real_card
+def test_j01_the_activation_pins_no_card_from_the_hand(repository):
+    """
+    §5-A — **발동 시점에 패의 어느 한 장도 묶이지 않는다.**
+
+    🔴 **이것이 ② 의 핵심이다.** 묶인 것이 없으면 "발동할 때의 패에 고정"
+    이 **구조적으로** 불가능하다 — 뒤에서 아무리 패가 바뀌어도 되돌릴 것이
+    없다.
+
+    네 가지를 함께 본다 (전부 정의와 다리 계층의 사실이고 판을 읽지 않는다).
+    """
+    from engine.effect.library import definition_registry
+    from engine.ids import EffectRef
+    from engine.target_bridge import (
+        chosen_bindings,
+        decided_at_resolution,
+        required_target_count,
+        target_combinations,
+    )
+
+    definition = definition_registry().definition_for(EffectRef(WAND, 1))
+    assert definition is not None
+    binding = definition.targets[0]
+
+    #: ① 정의가 **선언한다** — 짐작이 아니다.
+    assert binding.spec.chosen_at_resolution is True
+    #: ② 다리 계층이 그 선언을 읽는다.
+    assert decided_at_resolution(binding.spec) is True
+    #: ③ 그래서 발동 시점에 **고를 자리가 없다.**
+    assert chosen_bindings(definition) == ()
+    assert required_target_count(definition) == 0
+    #: ④ 후보 행위에 실리는 조합은 **빈 것 하나**다 — 패의 장수와 무관하다.
+    #:
+    #: 🔴 패에 『성장』 을 **두 장** 두고 센다. 발동 시점에 고르는 효과라면
+    #: 조합이 둘이 되고, 그러면 후보 행위마다 한 장이 묶인다.
+    duel, _mine, _theirs, _extra, hand = _board(
+        repository, [GIRSU], hand=(WAND, WAND)
+    )
+    assert len(hand) == 2
+    combinations = target_combinations(
+        duel.state, P0, definition, hand[0]
+    )
+    assert combinations == [()]
+
+
+@pytest.mark.real_card
+def test_j02_the_choice_happens_while_resolving_and_matches_the_summon(
+    repository,
+):
+    """
+    §5-F — **고른 기록과 실제로 특수 소환된 카드가 같다.**
+
+    그리고 그 선택이 **해결 중에** 일어났다는 증거를 함께 본다 — 발동 기록의
+    ``targets`` 는 비어 있고, 고른 것은 해결 시점 선택 기록에만 있다.
+    """
+    setup, run, chooser, plan = _run_wand(
+        repository, [GIRSU, CLIMAX, KEY, AWAKENING, WAND], preferred=(WAND,)
+    )
+    from deck.combo_policy import line_progress
+
+    assert line_progress(run, plan).completed, run.stopped_reason
+    step = _wand_step(run)
+    assert step is not None
+
+    #: ① 발동 기록에는 대상이 없다 — **정상**이다.
+    assert step.targets == ()
+    #: ② 해결 중에 한 장을 골랐다.
+    record = _wand_record(chooser)
+    assert record is not None
+    assert len(record.chosen) == 1
+    #: ③ 고른 것은 **엔진이 허용한 후보 중 하나**다.
+    assert record.chosen[0] in {c.instance for c in record.offer.permitted}
+    #: ④ 그 개체가 지금 자신 몬스터 존에 있다 — 기록과 판이 일치한다.
+    state = setup.duel.state
+    on_field = [card for card in state.zone(P0, Zone.MZONE)]
+    assert record.chosen[0] in {card.instance_id for card in on_field}
+    summoned = next(
+        card for card in on_field if card.instance_id == record.chosen[0]
+    )
+    assert summoned.card_id == WAND
+    #: ⑤ 걸음 기록도 **같은 카드**를 적는다.
+    assert step.resolution_choices == (WAND,)
+
+
+@pytest.mark.real_card
+def test_j03_two_candidates_in_hand_and_exactly_one_is_summoned(repository):
+    """
+    §5-C 의 앞쪽 — **후보가 둘이면 그중 하나만** 특수 소환된다.
+
+    같은 이름 두 장을 패에 두면, 해결 시점 후보가 둘이고 그중 **고른
+    개체만** 필드에 온다. 나머지는 패에 남는다 — 효과가 「1장」 이라고
+    적혀 있다 (``minimum=maximum=1``).
+    """
+    setup, run, chooser, plan = _run_wand(
+        repository, [GIRSU, CLIMAX, KEY, WAND, WAND], preferred=(WAND,)
+    )
+    from deck.combo_policy import line_progress
+
+    assert line_progress(run, plan).completed, run.stopped_reason
+    record = _wand_record(chooser)
+    assert record is not None
+    #: ① 허용 후보가 둘이었다.
+    assert len(record.offer.permitted) == 2
+    assert record.offer.minimum == 1 and record.offer.maximum == 1
+    #: ② 한 장만 골랐고 한 장만 필드에 왔다.
+    assert len(record.chosen) == 1
+    state = setup.duel.state
+    assert [c.card_id for c in state.zone(P0, Zone.MZONE)].count(WAND) == 1
+    #: ③ 다른 한 장은 **패에 그대로** 있다.
+    assert [c.card_id for c in state.zone(P0, Zone.HAND)].count(WAND) == 1
+
+
+@pytest.mark.real_card
+def test_j04_an_unregistered_candidate_is_not_turned_into_a_success(
+    repository,
+):
+    """
+    §4 · §6 — **후보에 없는 카드를 강제하지 않고, 모름을 성공으로 바꾸지
+    않는다.**
+
+    패에 『성장』 이 **없고** 「성유물－『성건』」(40441990) 만 있는 판이다.
+    경로가 적어 둔 선호는 여전히 『성장』 이고, 정책은 그것을 **끌어오지
+    않는다.** 그러면 남은 후보는 『성건』 뿐인데, 그 카드에는 "특수 소환할
+    수 있는가" 가 **등재되지 않았다** — 그래서 ``UNKNOWN`` 이고 허가가
+    아니다 (ADR-006).
+
+    🔴 **이 자리가 §6 의 "발동 수락 ≠ 경로 성공" 이다.** 발동은 수락됐지만
+    (후보가 **존재**하고 빈 칸도 있다) 해결이 특수 소환을 만들지 못했고,
+    경로 대조는 그 단계를 **세지 않는다.**
+    """
+    setup, run, chooser, plan = _run_wand(
+        repository,
+        [GIRSU, CLIMAX, KEY, AWAKENING, WORLD_ARTIFACT_SWORD],
+        preferred=(WAND,),
+    )
+    from deck.combo_policy import line_progress
+
+    record = _wand_record(chooser)
+    assert record is not None
+    #: ① 선호한 『성장』 은 후보에 없다 — 패에 없으므로.
+    assert WAND not in {c.card_id for c in record.offer.candidates}
+    #: ② 그 자리의 유일한 후보는 『성건』 이고 **허가되지 않았다.**
+    assert [c.card_id for c in record.offer.candidates] == [
+        WORLD_ARTIFACT_SWORD
+    ]
+    assert record.offer.permitted == ()
+    #: ③ 왜 안 되는지가 **이유로 남는다** — 모름을 허가로 접지 않았다.
+    reason = record.offer.candidates[0].reason
+    assert str(WORLD_ARTIFACT_SWORD) in reason
+    #: ④ 아무것도 고르지 않았고 특수 소환도 없다.
+    assert record.chosen == ()
+    state = setup.duel.state
+    assert [c.card_id for c in state.zone(P0, Zone.MZONE)] == [GIRSU]
+    assert WORLD_ARTIFACT_SWORD in [
+        c.card_id for c in state.zone(P0, Zone.HAND)
+    ]
+    #: ⑤ 발동은 **수락**됐지만 해결되지 않았다 — 두 사실이 따로 적힌다.
+    step = _wand_step(run)
+    assert step is not None
+    assert step.accepted is True
+    assert step.resolved is False
+    assert step.resolution_choices == ()
+    assert "고르지 않았습니다" in step.resolution_choice_text[0]
+    #: ⑥ 그래서 경로는 **끝까지 가지 않았다.**
+    progress = line_progress(run, plan)
+    assert progress.completed is False
+    assert progress.done == 2
+
+
+@pytest.mark.real_card
+def test_j04b_the_candidate_list_is_counted_from_the_hand_at_resolution(
+    repository,
+):
+    """
+    §5-B 의 재는 쪽 — **후보 목록은 그 자리의 패에서 세어진다.**
+
+    같은 발동 · 같은 선호로 두 번 돌린다. 패에 『성장』 이 한 장이면 후보가
+    하나, 두 장이면 둘이다. 발동 시점에 고정된 목록이라면 두 판의 선택이
+    같은 모양이어야 한다.
+
+    🔴 **패는 시작 상태로 바꾼다** (§5 가 허용한 자리). 체인 도중에 패를
+    바꾸는 사례는 이 묶음 머리말에 적은 대로 재지 못했다.
+    """
+    _one_setup, one_run, one, plan = _run_wand(
+        repository, [GIRSU, CLIMAX, KEY, AWAKENING, WAND], preferred=(WAND,)
+    )
+    _two_setup, two_run, two, _plan = _run_wand(
+        repository, [GIRSU, CLIMAX, KEY, WAND, WAND], preferred=(WAND,)
+    )
+    from deck.combo_policy import line_progress
+
+    assert line_progress(one_run, plan).completed, one_run.stopped_reason
+    assert line_progress(two_run, plan).completed, two_run.stopped_reason
+
+    first = _wand_record(one)
+    second = _wand_record(two)
+    assert first is not None and second is not None
+    #: ① 후보 수가 **패를 따른다.**
+    assert len(first.offer.permitted) == 1
+    assert len(second.offer.permitted) == 2
+    #: ② 두 판 모두 **그 판의 후보 안에서** 골랐다.
+    assert first.chosen[0] in {c.instance for c in first.offer.permitted}
+    assert second.chosen[0] in {c.instance for c in second.offer.permitted}
+    #: ③ 발동 기록은 두 판 모두 비어 있다 — 고정된 것이 없다.
+    assert _wand_step(one_run).targets == ()
+    assert _wand_step(two_run).targets == ()
+
+
+@pytest.mark.real_card
+def test_j05_no_candidate_in_hand_refuses_the_activation(repository):
+    """
+    §5-D · §3 — **후보가 없으면 발동 자체가 거절된다.**
+
+    ``s.sptg1`` 은 빈 칸과 **후보의 존재**를 함께 본다
+    (``Duel.IsExistingMatchingCard``). 6-AC 는 그 둘째를 옮기지 않았고,
+    그래서 패에 「성유물」 몬스터가 한 장도 없어도 발동이 수락됐다.
+
+    🔴 **거절은 ``INVALID`` 다** — 후보를 **전부 보고** 모자란 것이므로
+    모름이 아니다 (자기 패는 가려진 자리가 아니다).
+    """
+    from engine.ids import EffectRef
+    from engine.validation import ValidationResult
+
+    setup, run, _chooser, plan = _run_wand(
+        repository, [GIRSU, CLIMAX, KEY, AWAKENING, CORE]
+    )
+    from deck.combo_policy import line_progress
+
+    progress = line_progress(run, plan)
+    #: ① 경로가 셋째 단계에서 멈췄다.
+    assert progress.done == 2
+    assert progress.blocked_at is plan.steps[2]
+    #: ② 특수 소환은 일어나지 않았다 — 필드에는 기르수뿐이다.
+    state = setup.duel.state
+    assert [c.card_id for c in state.zone(P0, Zone.MZONE)] == [GIRSU]
+    #: ③ 묘지의 『성장』 에게 직접 물어도 **같은 답**이다.
+    buried = next(
+        card for card in state.zone(P0, Zone.GRAVE) if card.card_id == WAND
+    )
+    before = state.state_hash()
+    result = setup.duel._activator.can_activate(
+        state,
+        setup.duel.chain,
+        PlayerAction.activate_effect(
+            actor=P0, source=buried.instance_id, effect_ref=EffectRef(WAND, 1)
+        ),
+        authorization=ValidationResult.valid("시험이 첫 관문을 대신한다"),
+    )
+    assert result.code is ValidationCode.NO_CANDIDATES
+    assert CODE_VALIDITY[result.code] is ActionValidity.INVALID
+    assert "후보" in result.reason
+    #: ④ 묻는 것만으로 판이 바뀌지 않는다.
+    assert state.state_hash() == before
+
+
+@pytest.mark.real_card
+def test_j06_a_forbidden_board_blocks_both_ends(repository):
+    """
+    §5-E — **금지된 판은 발동 쪽과 해결 쪽 양쪽에서 막힌다.**
+
+    🔴 **체인 도중에 금지가 새로 생기는 사례는 재지 못했다** (이 묶음 머리말).
+    대신 두 끝을 각각 재고, 둘이 **같은 함수**를 부른다는 사실을 함께 고정
+    한다 — 그러면 두 답이 갈릴 수 없다.
+    """
+    from engine.condition import ConditionContext, ConditionEvaluator, ConditionResult
+    from engine.effect.library import OPERATION_RULINGS, definition_registry
+    from engine.effect.ruling import BoardRuling
+    from engine.effect.semantics import RuleQuestion
+    from engine.ids import EffectRef
+
+    duel, _mine, _theirs, _extra, hand = _board(
+        repository, [GIRSU, PACHY], hand=(WAND,)
+    )
+    view = GameStateView.from_state(duel.state, viewer=P0)
+
+    #: ① **발동 쪽** — 발동 조건이 거짓이다 (모름이 아니다).
+    definition = definition_registry().definition_for(EffectRef(WAND, 1))
+    assert definition is not None
+    verdict = ConditionEvaluator(view).evaluate(
+        definition.activation, ConditionContext(player=P0)
+    )
+    assert verdict.result is ConditionResult.FALSE
+
+    #: ② **해결 쪽** — 패의 그 한 장을 특수 소환할 수 있는지가 거짓이다.
+    ruling = BoardRuling(view, OPERATION_RULINGS)
+    told = ruling.explain_special_summon(hand[0])
+    assert told.answer is ConditionResult.FALSE
+    assert str(PACHY) in told.reason
+
+    #: ③ **묻는 자리가 하나다** — 질문으로 물어도 같은 답이 나온다.
+    assert (
+        ruling.explain(RuleQuestion.MAY_BE_SPECIAL_SUMMONED, hand[0]).answer
+        is ConditionResult.FALSE
+    )
+    assert (
+        ruling.may(RuleQuestion.MAY_BE_SPECIAL_SUMMONED, hand[0])
+        is ConditionResult.FALSE
+    )
+
+    #: ④ 파키세팔로를 빼면 둘 다 풀린다 — 대조군.
+    clear, _m, _t, _e, clear_hand = _board(
+        repository, [GIRSU], hand=(WAND,)
+    )
+    clear_view = GameStateView.from_state(clear.state, viewer=P0)
+    assert (
+        ConditionEvaluator(clear_view)
+        .evaluate(definition.activation, ConditionContext(player=P0))
+        .result
+        is ConditionResult.TRUE
+    )
+    assert (
+        BoardRuling(clear_view, OPERATION_RULINGS)
+        .explain_special_summon(clear_hand[0])
+        .answer
+        is ConditionResult.TRUE
+    )
+
+
+@pytest.mark.real_card
+def test_j07_the_preference_never_leaks_between_an_original_and_a_fork(
+    repository,
+):
+    """
+    §5-G · §4 — **원본과 사본 사이에 선택 상태도 기록도 새지 않는다.**
+
+    두 자리를 함께 본다 — 기록을 들고 있는 조립 층
+    (:class:`~integration.autonomy.PolicyChooser`) 과 선호를 들고 있는
+    정책 (:class:`~agent.choice.PreferredCardChoice`).
+    """
+    from agent.choice import FirstPermittedChoice, PreferredCardChoice
+
+    _setup, run, chooser, plan = _run_wand(
+        repository, [GIRSU, CLIMAX, KEY, AWAKENING, WAND], preferred=(WAND,)
+    )
+    from deck.combo_policy import line_progress
+
+    assert line_progress(run, plan).completed, run.stopped_reason
+    asked = len(chooser.records)
+    assert asked >= 2
+
+    #: ① 사본의 기록은 **비어** 있다 — 원본의 선택이 섞이지 않는다.
+    forked = chooser.forked()
+    assert forked is not None
+    assert forked.records == ()
+    #: ② 사본을 만든 것만으로 원본의 기록이 변하지 않는다.
+    assert len(chooser.records) == asked
+    #: ③ 사본의 정책은 **다른 객체**이고 선호는 같다.
+    assert isinstance(chooser.selector, PreferredCardChoice)
+    assert isinstance(forked.selector, PreferredCardChoice)
+    assert forked.selector is not chooser.selector
+    assert forked.selector.preferred == chooser.selector.preferred
+    assert forked.selector.then is not None
+
+    #: ④ 뒤에 둘 정책이 사본에서 쓸 수 없으면 **만들 때** 막는다.
+    class _NoFork:
+        name = "no-fork"
+
+        def accept_offer(self, offer):  # pragma: no cover - 모양만
+            return True
+
+        def choose_cards(self, offer):  # pragma: no cover - 모양만
+            return ()
+
+    from agent.choice import ChoiceError
+
+    with pytest.raises(ChoiceError):
+        PreferredCardChoice((WAND,), _NoFork())
+    #: 제대로 된 것은 만들어진다 — 위가 "전부 막는다" 로 통과하지 않게.
+    assert PreferredCardChoice((WAND,), FirstPermittedChoice()) is not None
+
+
+@pytest.mark.real_card
+def test_j08_the_policy_chooses_only_inside_the_offer_it_was_given(repository):
+    """
+    §4 — **정책은 엔진이 낸 후보 안에서만 고른다.**
+
+    🔴 **실제로 기록된 제안**에 물어본다 — 제안을 지어내면 "엔진이 낸 것
+    안에서만 고른다" 를 재는 것이 아니라 테스트가 만든 모양을 재는 것이 된다.
+    """
+    from agent.choice import FirstPermittedChoice, PreferredCardChoice
+
+    _setup, run, chooser, plan = _run_wand(
+        repository, [GIRSU, CLIMAX, KEY, AWAKENING, WAND], preferred=(WAND,)
+    )
+    from deck.combo_policy import line_progress
+
+    assert line_progress(run, plan).completed, run.stopped_reason
+    record = _wand_record(chooser)
+    assert record is not None
+    permitted = {c.instance for c in record.offer.permitted}
+
+    #: ① 선호가 후보에 있으면 그것을 집는다.
+    wants_wand = PreferredCardChoice((WAND,), FirstPermittedChoice())
+    picked = wants_wand.choose_cards(record.offer)
+    assert len(picked) == record.offer.minimum
+    assert set(picked) <= permitted
+
+    #: ② 후보에 없는 카드를 선호해도 **끌어오지 않는다** — 뒤의 정책이 답한다.
+    wants_absent = PreferredCardChoice((PACHY,), FirstPermittedChoice())
+    fallen_back = wants_absent.choose_cards(record.offer)
+    assert set(fallen_back) <= permitted
+    assert fallen_back == FirstPermittedChoice().choose_cards(record.offer)
+    #: ③ 선호한 카드가 그 목록에 **없었다는 사실**을 함께 적는다.
+    assert PACHY not in {c.card_id for c in record.offer.candidates}
+
+    #: ④ 묻는 것만으로 정책이 앞으로 밀리지 않는다 — 두 번 물으면 같은 답.
+    assert wants_wand.choose_cards(record.offer) == picked

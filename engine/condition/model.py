@@ -473,6 +473,88 @@ class ZoneCountAtLeast(Condition):
 
 
 @dataclass(frozen=True, slots=True)
+class SpecialSummonPermitted(Condition):
+    """
+    지금 **특수 소환을 할 수 있는가** (Phase 6-AD). 소환되는 카드와 무관하다.
+
+    판정은 :func:`~engine.summon_restriction.assess_special_summon_permission`
+    하나가 한다 — :class:`~engine.action_validation._LinkMaterialsLegal` 이
+    ``assess_link_materials`` 에게 묻는 것과 **같은 자리**이고 같은 이유다.
+
+    🔴 **쓰는 자리가 둘이다** (Phase 6-AD).
+
+    1. 링크 소환 후보의 요구 (``engine.action_validation._link_summon``) —
+       링크 소환은 특수 소환이므로 금지된 판에서 허가되지 않는다.
+    2. 특수 소환하는 효과의 **발동 조건** (``engine.effect.library`` 의
+       「성유물－『성장』」 ②) — 공식 스크립트가 발동 조건에
+       ``IsCanBeSpecialSummoned`` 를 함께 적으므로, 그 확인을 해결
+       단계로만 미루면 발동 조건 검증이 빠진다.
+
+    그래서 이 조건이 공용 어휘에 있다 — 두 자리가 **같은 판정**을 써야
+    하고, 효과 정의 계층은 ``engine.action_validation`` 을 읽지 않는다.
+
+    🔴 **이 조건이 답하는 것은 판 하나다.** "그 카드를 특수 소환할 수
+    있는가" (소환 조건 · 소생 제한)는 **다른 질문**이고, 그것은
+    ``RuleQuestion.MAY_BE_SPECIAL_SUMMONED`` 로 후보마다 물어진다. 둘을
+    합치지 않는다.
+
+    세 갈래가 그대로 보존된다.
+
+    - ``ALLOWED`` → ``TRUE``
+    - ``FORBIDDEN`` → ``FALSE`` (확인된 금지 — ``INVALID`` 가 된다)
+    - ``UNDETERMINED`` → ``UNKNOWN`` (+ 없는 규칙 이름)
+
+    🔴 **왜 소재 요구보다 먼저 적는가.** :meth:`ActionValidator.
+    _check_requirements` 는 ``FALSE`` 를 만나면 그 자리에서 돌려주고
+    ``UNKNOWN`` 은 모아 둔다. 그래서 이 요구를 앞에 두면 **확인된 금지는
+    소재의 모름보다 먼저** 답하고 (규칙이 답한 것이 먼저다), **모르는
+    금지는 소재의 확정 위반을 가리지 않는다** (뒤의 ``FALSE`` 가 이긴다).
+    두 순서를 바꾸면 그 두 성질이 모두 깨진다.
+    """
+
+    def evaluate(self, view, context) -> ConditionResult:
+        assessment = self._assess(view, context)
+        if assessment.allowed:
+            return ConditionResult.TRUE
+        if assessment.forbidden:
+            return ConditionResult.FALSE
+        return ConditionResult.UNKNOWN
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        if assessment.allowed or assessment.forbidden:
+            return ()
+        return (assessment.reason,)
+
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        rule = assessment.missing_rule
+        return (rule,) if rule and not assessment.forbidden else ()
+
+    def refusal_reasons(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        return (assessment.reason,) if assessment.forbidden else ()
+
+    def _assess(self, view, context):
+        #: 🔴 **순수 판정 모듈이다** — 등록소도 효과 계층도 읽지 않는다
+        #: (그쪽 머리말의 import 약속). 지연 import 로 적는 이유는 이
+        #: 모듈이 **조건 어휘**이기 때문이다 — 어휘가 판정 표를 모듈
+        #: 머리에서 끌어오면 어휘를 읽는 모든 자리가 그 표를 함께 읽는다.
+        from engine.summon_restriction import assess_special_summon_permission
+
+        return assess_special_summon_permission(view, context.player)
+
+    def canonical_state(self) -> tuple:
+        return ("special_summon_permitted",)
+
+    def to_dict(self) -> dict:
+        return {"kind": "special_summon_permitted"}
+
+    def describe_ko(self) -> str:
+        return "특수 소환이 금지되지 않았다"
+
+
+@dataclass(frozen=True, slots=True)
 class ZoneHasFreeSlot(Condition):
     """칸 방식 존에 빈 칸이 있는가. 필드는 공개이므로 확정된다."""
 

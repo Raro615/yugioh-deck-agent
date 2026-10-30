@@ -228,6 +228,17 @@ def render_opening_run(run) -> str:
                             if step.targets else ""))
         #: 🔴 **소재를 이름으로 적는다** (Phase 6-AC). 대상과 **다른 줄**이다 —
         #: 링크 소재는 대상으로 지정되지 않으므로 "대상 2개" 로 적으면 거짓이다.
+        #: 🔴 **해결 시점의 선택을 따로 적는다** (Phase 6-AD).
+        #:
+        #: 위의 "대상 N개" 는 **발동을 선언할 때** 정해져 있던 것이고, 규칙상
+        #: 해결 중에 고르는 효과는 그 칸이 **정당하게 비어 있다.** 두 줄을
+        #: 합치면 "대상을 지정하지 않는 효과" 가 대상을 지정한 것으로 읽히고,
+        #: 저 칸을 채우려고 선택을 발동 시점으로 당기면 규칙이 틀어진다.
+        if step.resolution_choice_text:
+            lines.append(f"      해결 중 선택 {len(step.resolution_choices)}장:")
+            lines.extend(
+                f"         - {item}" for item in step.resolution_choice_text
+            )
         if step.materials:
             lines.append(f"      소재 {len(step.materials)}장: "
                          f"{' · '.join(step.materials)}")

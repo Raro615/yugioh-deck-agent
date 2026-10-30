@@ -584,8 +584,43 @@ class TargetSpec:
 
     requirement: TargetRequirement = TargetRequirement.NONE
     choice: "ChoiceSpec | RandomSelectionSpec | AllMatchingSpec | None" = None
+    chosen_at_resolution: bool = False
+    """
+    🔴 **이 고르기가 규칙상 해결 중에 일어난다** (Phase 6-AD).
+
+    **관측에 보이는가와 규칙상 언제 고르는가는 다른 축이다.** 6-AC 까지는
+    앞의 것으로 뒤의 것을 짐작했다 — "가려진 존이면 미룬다"
+    (:data:`~engine.target_bridge.CONCEALED_ZONES`). 그 짐작은 덱을 보는
+    효과에는 맞지만 **패를 보는 효과에는 틀린다**: 성유물－『성장』 ② 는
+    자기 패에서 고르므로 발동 시점에 가리킬 수 **있지만**, 공식 스크립트가
+    고르는 자리를 ``s.spop1`` (해결) 에 적는다.
+
+        c93920420.lua
+            s.sptg1  — 빈 몬스터 존과 패의 후보 **존재만** 확인한다
+                       (Duel.GetLocationCount · IsExistingMatchingCard),
+                       SetOperationInfo 를 기록하고 **카드를 고르지 않는다**
+            s.spop1  — Duel.SelectMatchingCard 로 **그때의 패에서** 고르고
+                       Duel.SpecialSummon 한다
+
+    이 칸은 그 사실을 **선언**한다. 근거는 정의의 ``provenance`` 가 들고
+    다닌다 (:class:`~engine.effect.definition.EffectDefinition`).
+
+    🔴 **대상 지정을 해결 시점으로 옮기는 칸이 아니다.** 생성자가
+    ``TARGETING`` 과 함께 쓰는 것을 거부한다 — 대상 지정은 발동 시점에
+    선언하는 것이고 (``EFFECT_FLAG_CARD_TARGET``), 그것을 미루면 무효화 ·
+    회피의 대상이 사라진다.
+    """
 
     def __post_init__(self) -> None:
+        if self.chosen_at_resolution and self.requirement is not (
+            TargetRequirement.CHOOSING
+        ):
+            raise ValueError(
+                "해결 시점 선택은 CHOOSING 에만 적습니다: "
+                f"{self.requirement.value}. 대상 지정은 발동 시점에 선언하는 "
+                "것이고 (EFFECT_FLAG_CARD_TARGET), 무작위 · 전부는 고르는 "
+                "사람이 없습니다."
+            )
         if self.requirement is TargetRequirement.NONE:
             if self.choice is not None:
                 raise ValueError(
@@ -629,9 +664,21 @@ class TargetSpec:
         return cls(requirement=TargetRequirement.TARGETING, choice=choice)
 
     @classmethod
-    def choosing(cls, choice: ChoiceSpec) -> "TargetSpec":
-        """고르지만 대상 지정은 아닌 효과."""
-        return cls(requirement=TargetRequirement.CHOOSING, choice=choice)
+    def choosing(
+        cls, choice: ChoiceSpec, *, chosen_at_resolution: bool = False
+    ) -> "TargetSpec":
+        """
+        고르지만 대상 지정은 아닌 효과.
+
+        ``chosen_at_resolution`` 은 **규칙상 해결 중에 고른다**는 선언이다
+        (:attr:`chosen_at_resolution`). 기본값이 거짓인 것은 ADR-006 이다 —
+        공식 스크립트에서 그 사실을 **읽은** 효과에만 적는다.
+        """
+        return cls(
+            requirement=TargetRequirement.CHOOSING,
+            choice=choice,
+            chosen_at_resolution=chosen_at_resolution,
+        )
 
     @classmethod
     def all_matching(cls, choice: "AllMatchingSpec") -> "TargetSpec":
@@ -705,12 +752,15 @@ class TargetSpec:
         return (
             self.requirement.value,
             self.choice.canonical_state() if self.choice is not None else None,
+            self.chosen_at_resolution,
         )
 
     def to_dict(self) -> dict:
         data: dict = {"requirement": self.requirement.value}
         if self.choice is not None:
             data["choice"] = self.choice.to_dict()
+        if self.chosen_at_resolution:
+            data["chosen_at_resolution"] = True
         return data
 
     def describe_ko(self) -> str:
@@ -718,7 +768,8 @@ class TargetSpec:
             return "대상 없음"
         assert self.choice is not None
         verb = "대상으로 지정" if self.is_targeting else "선택"
-        return f"{self.choice.source.describe_ko()} 에서 {verb}"
+        when = " (해결 시점)" if self.chosen_at_resolution else ""
+        return f"{self.choice.source.describe_ko()} 에서 {verb}{when}"
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
         return self.describe_ko()

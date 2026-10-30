@@ -765,7 +765,7 @@ def cmd_combo(agent: DeckAgent, args) -> int:
     return 0
 
 
-def opening_wiring(repository) -> tuple:
+def opening_wiring(repository, line=None) -> tuple:
     """
     선공 전개 실행에 꽂을 둘 — ``(chooser, triggers)`` (Phase 6-Z).
 
@@ -782,11 +782,30 @@ def opening_wiring(repository) -> tuple:
     🔴 ``FirstPermittedChoice`` 는 **전략이 아니라 기준점**이다 —
     ``first_meaningful`` 과 같은 자리다 (허용된 후보의 앞쪽을 집는다).
     이것으로 돌린 결과는 실제로 일어난 일이고, 최선의 전개가 아니다.
+
+    ``line`` (Phase 6-AD)
+    ---------------------
+    검증용 전개 경로를 주면, 그 경로가 **해결 시점에 고르려는** 카드 목록을
+    선택 정책에 싣는다 (``ComboLine.resolution_preferences``).
+
+    🔴 **왜 이 자리인가.** 규칙상 해결 중에 고르는 선택은 **고르는 시점의
+    행동에 적을 수 없다** — 그때는 아무것도 정해져 있지 않다 (6-AD ②). 그래서
+    경로의 의도가 닿아야 하는 곳은 행동을 거르는 쪽이 아니라 **해결 중에
+    묻는 쪽**이고, 그 둘을 꽂는 자리가 여기 하나다.
+
+    🔴 **강제가 아니다.** :class:`~agent.choice.PreferredCardChoice` 는 엔진이
+    그 자리에서 내놓은 허용 후보 안에서만 집고, 없으면 뒤의 기준점
+    (``FirstPermittedChoice``) 에게 넘긴다 — 경로에 적힌 카드를 후보 밖에서
+    끌어오지 않는다. 실제로 무엇이 집혔는지는 기록이 말한다.
     """
-    from agent.choice import FirstPermittedChoice
+    from agent.choice import FirstPermittedChoice, PreferredCardChoice
     from integration.autonomy import PolicyChooser, TriggerSource
 
-    return PolicyChooser(FirstPermittedChoice()), TriggerSource(repository)
+    selector = FirstPermittedChoice()
+    wanted = tuple(getattr(line, "resolution_preferences", ()) or ())
+    if wanted:
+        selector = PreferredCardChoice(wanted, selector)
+    return PolicyChooser(selector), TriggerSource(repository)
 
 
 def _print_opening(agent: DeckAgent, recipe_text: str,
@@ -846,7 +865,7 @@ def _print_opening(agent: DeckAgent, recipe_text: str,
         print(f"  ⚠️ --line {line_text} 라는 검증용 전개 경로가 없습니다 —"
               f" 기본 선택 방식(first_meaningful)으로 실행했습니다."
               f" 있는 경로: {names}")
-    chooser, triggers = opening_wiring(agent.repository)
+    chooser, triggers = opening_wiring(agent.repository, line)
     setup = build_opening(
         agent.repository,
         parsed.draft,
@@ -863,11 +882,19 @@ def _print_opening(agent: DeckAgent, recipe_text: str,
         print("  🔴 고른 방식은 검증용 기준점입니다 — 행동은"
               " first_meaningful, 해결 중의 카드 선택은 first-permitted."
               " 최선의 전개가 아닙니다.")
+
     else:
         print(f"  🔴 고른 방식은 검증용 전개 정책 {line.name} 입니다 —"
               f" 사람이 적어 둔 경로를 따라갔을 뿐이고 최선 전개 탐색도,"
               f" 범용 AI 도, 엔진이 스스로 찾은 전개도 아닙니다.")
         print(f"     경로: {line.title_ko}")
+        if line.resolution_preferences:
+            #: 🔴 **해결 시점의 선택을 따로 적는다** (6-AD §6). 발동 기록의
+            #: 대상이 비어 있는 것이 정상이므로, 그 칸을 보고 "아무것도 고르지
+            #: 않았다" 로 읽히지 않게 한다.
+            print(f"     해결 중에 고르려는 카드:"
+                  f" {' · '.join(str(c) for c in line.resolution_preferences)}"
+                  f" (엔진이 낸 허용 후보 안에서만 집습니다)")
         print(f"     {line_progress(run, line).describe_ko()}")
     print(render_opening_setup(setup))
     print(render_opening_run(run))

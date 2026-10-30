@@ -46,6 +46,7 @@ from engine.condition import (
     IsMonster,
     IsSpellTrap,
     PlayerRef,
+    SpecialSummonPermitted,
     ZoneCountAtLeast,
     ZoneHasFreeSlot,
 )
@@ -1374,11 +1375,50 @@ _WORLD_WAND_TRIGGER_ENTRY = LibraryEntry(
                     ),
                     minimum=1,
                     maximum=1,
-                )
+                ),
+                #: 🔴 **고르는 자리는 해결 중이다** (Phase 6-AD).
+                #:
+                #: 6-AC 는 이 칸을 적지 않았고, 그래서 다리 계층이 "자기
+                #: 패는 보인다" 는 이유로 발동 시점에 고르게 했다. 공식
+                #: 스크립트는 그렇게 적지 않는다 — ``s.sptg1`` 은 후보의
+                #: **존재만** 확인하고 (``IsExistingMatchingCard``) 고르는
+                #: 것은 ``s.spop1`` 의 ``Duel.SelectMatchingCard`` 다.
+                #:
+                #: 차이가 동작으로 나온다: 발동과 해결 사이에 패가 바뀌면
+                #: 공식 카드는 **그때의 패**에서 고르고, 발동 시점에
+                #: 고정하면 사라진 카드를 특수 소환하려 한다.
+                chosen_at_resolution=True,
             )
         ),
         operations=(SpecialSummonOperation(PRIMARY_TARGET),),
-        activation=ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.MZONE),
+        #: 🔴 **발동 조건이 둘이다** (Phase 6-AD).
+        #:
+        #: ``s.sptg1`` 은 한 줄에 두 가지를 적는다 —
+        #: ``Duel.GetLocationCount(tp,LOCATION_MZONE)>0`` (빈 칸) 과
+        #: ``Duel.IsExistingMatchingCard(s.spfilter1,…)`` 이고, 그
+        #: ``s.spfilter1`` 안에 ``IsCanBeSpecialSummoned`` 가 들어 있다.
+        #:
+        #: 6-AC 는 앞의 하나만 옮기고 뒤의 술어를 **관문으로 넘겼다.** 관문은
+        #: 해결 중에만 열리므로, 그러면 "패에 「성유물」 몬스터가 있다" 와
+        #: "그 몬스터를 지금 특수 소환할 수 있다" 가 같은 뜻이 된다 — 다른
+        #: 뜻이다 (6-AD §3).
+        #:
+        #: 나눠서 옮긴다:
+        #:
+        #: - **후보의 존재**는 ``targets`` 의 선택 명세가 말하고, 발동 관문이
+        #:   그것을 확인한다 (``EffectActivator._check_targets`` 의 해결 시점
+        #:   갈래 — 6-AD 가 그 자리에 ``availability`` 를 더했다).
+        #: - **판이 특수 소환을 금지하는가**는 이 조건이 본다.
+        #: - **그 카드 자신의 소환 조건 · 소생 제한**은 여전히 관문의
+        #:   질문이다 (``RuleQuestion.MAY_BE_SPECIAL_SUMMONED``) — 자리마다
+        #:   답이 다르고 (패 밖은 소환 이력을 묻는다) 그 이력이 이 엔진에
+        #:   없다. 🔴 그래서 **발동 시점에 그 질문까지 답했다고 적지 않는다.**
+        activation=And(
+            (
+                ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.MZONE),
+                SpecialSummonPermitted(),
+            )
+        ),
         activation_kind=ActivationKind.TRIGGER,
         use_limit=UseLimit(LimitScope.PER_CARD_NAME),
         provenance=EffectProvenance.official_lua(
@@ -1388,7 +1428,16 @@ _WORLD_WAND_TRIGGER_ENTRY = LibraryEntry(
             "s.spfilter1 의 IsSetCard(SET_WORLD_LEGACY) 에서 후보 조건을, "
             "s.spop1 의 Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP) "
             "에서 하는 일을, SetCountLimit(1,id) 에서 사용 제한을 옮겼다. "
-            "IsCanBeSpecialSummoned 는 관문으로 넘겼고, 표시 형식 선택과 "
+            "🔴 **s.sptg1 의 Duel.IsExistingMatchingCard 도 발동 조건이다** "
+            "(Phase 6-AD): 후보의 존재는 발동 관문이 선택 명세로 확인하고, "
+            "s.spfilter1 안의 IsCanBeSpecialSummoned 중 '판이 특수 소환을 "
+            "금지하는가' 는 SpecialSummonPermitted 로 발동 조건에 옮겼다. "
+            "🔴 **고르는 시점도 그 둘의 자리에서 읽었다** (Phase 6-AD): "
+            "s.sptg1 은 Duel.IsExistingMatchingCard 로 후보의 존재만 "
+            "확인하고 특정 카드를 고르지 않으며, 고르는 것은 s.spop1 의 "
+            "Duel.SelectMatchingCard 다 — 그래서 chosen_at_resolution 이다. "
+            "그 카드 자신의 소환 조건 · 소생 제한은 관문의 질문으로 "
+            "남겼고 (자리마다 답이 다르고 소환 이력이 없다), 표시 형식 선택과 "
             "e1(전투 내성) · e3(묘지 제외 효과와 그 소환 제약)은 옮기지 "
             "못했다."
         ),

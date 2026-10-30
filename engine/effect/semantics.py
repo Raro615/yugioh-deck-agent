@@ -507,6 +507,26 @@ RULE_GATED_PREDICATES: dict[RuleQuestion, str] = {
     RuleQuestion.MAY_BE_SPECIAL_SUMMONED: "Card.IsCanBeSpecialSummoned",
 }
 
+#: 종류 관문이 걸리는 일 → 그 관문이 묻는 질문 (Phase 6-AD).
+#:
+#: :data:`DECLARED_GATE_RULINGS` 와 **다른 표**다. 저쪽은 "카드가 선언했으
+#: 므로 묻는다" 이고 이쪽은 :data:`RULE_GATED` — **종류만 보고 언제나**
+#: 묻는다. 한 표에 섞으면 저 표의 뜻이 거짓이 된다 (위 ``RULE_GATED_
+#: PREDICATES`` 와 같은 이유).
+#:
+#: 🔴 **파괴는 여기 없다.** ``RULE_GATED`` 에 있지만 그 질문에 답하는 계층이
+#: 없어서 (:meth:`~engine.effect.ruling.BoardRuling.may_be_destroyed` 는
+#: 언제나 ``UNKNOWN``) 열거형에 이름도 없다. 없는 질문을 지어내지 않는다.
+#:
+#: 왜 필요한가 — 조립 층이 **해결 시점 후보마다** "움직일 수 있는가" 를
+#: 붙이는데 (``integration.autonomy._judged_candidates``), 그 질문을
+#: ``DECLARED_GATE_RULINGS`` 에서만 찾으면 특수 소환하는 효과는 질문이
+#: ``None`` 이 되어 **모든 후보가 ``UNKNOWN``** 이 된다. 실측: 그래서
+#: 『성장』 ② 의 해결이 "0장 골랐습니다 (최소 1장)" 으로 끝났다.
+RULE_GATED_QUESTIONS: dict[OperationKind, RuleQuestion] = {
+    OperationKind.SPECIAL_SUMMON: RuleQuestion.MAY_BE_SPECIAL_SUMMONED,
+}
+
 #: 질문을 한국어 동사로. 거절 이유 문장에 그대로 들어간다.
 QUESTION_VERBS: dict[RuleQuestion, str] = {
     RuleQuestion.MAY_BE_SENT_TO_GRAVE: "묘지로 보낼",
@@ -635,6 +655,19 @@ def declared_gate_question(operation) -> "RuleQuestion | None":
     return DECLARED_GATE_RULINGS.get(operation.kind)
 
 
+def rule_gate_question(operation) -> "RuleQuestion | None":
+    """
+    **종류**로 걸리는 관문의 질문. 그런 관문이 없으면 ``None`` (Phase 6-AD).
+
+    :func:`declared_gate_question` 과 짝이고 **겹치지 않는다** — 저쪽은
+    카드가 ``gated`` 로 선언한 일만 보고, 이쪽은 종류가
+    :data:`RULE_GATED` 인 일만 본다. 어느 쪽도 추론하지 않는다.
+    """
+    if not is_rule_gated(getattr(operation, "kind", None)):
+        return None
+    return RULE_GATED_QUESTIONS.get(operation.kind)
+
+
 def ask_movement(
     ruling: "MovementRuling", question: RuleQuestion, instance: InstanceId
 ) -> ConditionResult:
@@ -727,6 +760,8 @@ __all__ = [
     "UnknownDestructionRuling",
     "DeclaredDestructionRuling",
     "is_rule_gated",
+    "RULE_GATED_QUESTIONS",
+    "rule_gate_question",
     "gating_rules",
     "SEMANTIC_KINDS",
     "UNCHECKED_SEMANTIC_RULES",

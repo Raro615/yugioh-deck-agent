@@ -600,7 +600,29 @@ class BoardRuling:
     def explain(
         self, question: RuleQuestion, instance: InstanceId
     ) -> RulingVerdict:
-        """답과 이유를 함께. :meth:`may` 는 여기서 답만 꺼낸다."""
+        """
+        답과 이유를 함께. :meth:`may` 는 여기서 답만 꺼낸다.
+
+        🔴 **특수 소환은 등재된 사실 하나로 끝나지 않는다** (Phase 6-AD).
+        그 질문은 자리(소생 제한) · 판(특수 소환 금지)까지 보아야 하고,
+        그 세 걸음은 :meth:`explain_special_summon` 에 적혀 있다. 묻는
+        자리를 **하나로** 두지 않으면 같은 질문에 두 답이 생긴다 — 실측:
+        조립 층이 이 메서드로 물어 패의 후보를 ``UNKNOWN`` 으로 받고
+        (등재 사실만 보았다), 실행기는 저 메서드로 물어 ``TRUE`` 를 받았다.
+        """
+        if question is RuleQuestion.MAY_BE_SPECIAL_SUMMONED:
+            return self.explain_special_summon(instance)
+        return self._explain_fact(question, instance)
+
+    def _explain_fact(
+        self, question: RuleQuestion, instance: InstanceId
+    ) -> RulingVerdict:
+        """
+        **등재된 사실 하나**로 답한다 — 등록소 → 룰북 유도 → 카드 텍스트.
+
+        자리와 판은 보지 않는다. 그것을 함께 보는 자리는
+        :meth:`explain_special_summon` 이다.
+        """
         card = self._view.find(instance)
         if card is None or card.card_id is None:
             return RulingVerdict(
@@ -674,10 +696,10 @@ class BoardRuling:
            ``UNKNOWN`` 이고 :data:`SUMMON_HISTORY_RULE` 이 그 이름이다 —
            묘지 · 제외에서 나오는 특수 소환은 "정규 소환을 거쳤는가" 를
            알아야 하고, 이 엔진은 소환 이력을 적지 않는다.
-        2. **그 카드가 등록되어 있는가.** :meth:`explain` 이 답한다 —
+        2. **그 카드가 등록되어 있는가.** :meth:`_explain_fact` 가 답한다 —
            ``MAY_BE_SPECIAL_SUMMONED`` 가 적히지 않은 카드는 ``UNKNOWN``
            이다 (ADR-006).
-        3. **판에 막는 것이 있는가.** :meth:`explain` 안의
+        3. **판에 막는 것이 있는가.** :meth:`_explain_fact` 안의
            :meth:`_interference` 가 본다 — 모르는 앞면 카드가 하나라도
            있으면 ``UNKNOWN`` 이다.
 
@@ -722,7 +744,7 @@ class BoardRuling:
                 f"이력을 적지 않습니다 ({SUMMON_HISTORY_RULE}). 특수 소환이 "
                 f"판정되는 자리는 {allowed} 뿐입니다.",
             )
-        decided = self.explain(RuleQuestion.MAY_BE_SPECIAL_SUMMONED, instance)
+        decided = self._explain_fact(RuleQuestion.MAY_BE_SPECIAL_SUMMONED, instance)
         if decided.answer is not ConditionResult.TRUE or permission.allowed:
             return decided
         #: 🔴 **막는지 모르는 판에서 허가를 내지 않는다.** 등재된 사실이

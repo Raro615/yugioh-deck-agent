@@ -654,7 +654,10 @@ def _executed_lines(agent, recipe_text: str,
             f" **기본 선택 방식(`first_meaningful`)으로 실행했습니다.**"
             f" 있는 경로: {names}"
         )
-    chooser, triggers = opening_wiring(agent.repository)
+    #: 🔴 ``line`` 을 함께 넘긴다 (Phase 6-AD) — 그 경로가 **해결 시점에**
+    #: 고르려는 카드를 선택 정책에 싣는 자리가 ``opening_wiring`` 하나다.
+    #: CLI 와 같은 것을 꽂는다는 위 규율이 그대로 적용된다.
+    chooser, triggers = opening_wiring(agent.repository, line)
     setup = build_opening(
         agent.repository,
         parsed.draft,
@@ -690,9 +693,22 @@ def _executed_lines(agent, recipe_text: str,
                 f"🔴 고른 방식은 **검증용 전개 정책 `{line.name}`** 입니다 —"
                 f" 사람이 적어 둔 경로를 따라갔을 뿐이고 **최선 전개 탐색도,"
                 f" 범용 AI 도, 엔진이 스스로 찾은 전개도 아닙니다.**"
-                f" 해결 중의 카드 선택은 `first-permitted` 그대로입니다."
+                f" 해결 중의 카드 선택은 `first-permitted` 이고, 경로가"
+                f" 적어 둔 카드가 있으면 **엔진이 낸 허용 후보 안에서** 그것을"
+                f" 먼저 집습니다."
             )
             lines.append(f"  경로: {line.title_ko}")
+            if line.resolution_preferences:
+                #: 🔴 **해결 시점의 선택을 따로 적는다** (6-AD §6). 발동
+                #: 기록의 대상이 비어 있는 것이 **정상**이므로, 그 칸만 보고
+                #: "아무것도 고르지 않았다" 로 읽히지 않게 한다.
+                wanted = " · ".join(
+                    f"`{card_id}`" for card_id in line.resolution_preferences
+                )
+                lines.append(
+                    f"  해결 중에 고르려는 카드: {wanted}"
+                    f" (후보 밖에서 끌어오지 않습니다)"
+                )
             lines.append(f"  {progress.describe_ko()}")
         #: 🔴 **미지원 사유를 요약 줄에 올린다** (Phase 6-AB 최종 보완 ④).
         #: 걸음 기록 안에만 두면 묻힌다 — 실행에 영향을 준 사실이고,

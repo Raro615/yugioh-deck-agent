@@ -84,6 +84,26 @@ class PlannedAction:
     """대상들의 카드 ID. **다중집합으로 비교한다** (순서는 보지 않는다)."""
     material_card_ids: tuple[int, ...] = ()
     """링크 소재들의 카드 ID. 같은 규칙으로 비교한다."""
+    resolution_card_ids: tuple[int, ...] = ()
+    """
+    **해결 시점에 고를** 카드들의 ID (Phase 6-AD).
+
+    🔴 :attr:`target_card_ids` 와 **다른 시점**이다. 저쪽은 "발동을 선언할 때
+    이미 정해져 있는 대상" 이고 (후보 행위에 실려 온다), 이쪽은 "규칙상 효과를
+    해결할 때 고르는 것" 이다 — 발동 시점의 후보에는 **아무것도 실려 있지
+    않다.** 그래서 저 칸으로 이쪽을 적으면 그 후보는 영원히 걸러지지 않는다
+    (6-AC 가 『성장』 ② 에 그렇게 적었고, 그것이 결함이었다).
+
+    두 가지에 쓰인다:
+
+    1. **의도를 해결 시점 선택 정책에 넘긴다** — 경로를 꽂는 자리가 이 목록
+       으로 :class:`~agent.choice.PreferredCardChoice` 를 만든다
+       (``app.main.opening_wiring``). 🔴 이 모듈이 그 정책을 만들지 않는다
+       (``deck`` 은 ``agent`` 를 import 하지 않는다).
+    2. **경로가 실제로 해결됐는지 대조한다** — :func:`line_progress` 가
+       실행 기록의 해결 시점 선택과 맞춰 본다. 발동이 수락됐다는 사실만으로
+       단계를 세지 않는다 (6-AD §6).
+    """
     label: str = ""
     """사람이 읽는 한 줄. 보고서와 설명에 그대로 쓴다."""
 
@@ -150,6 +170,11 @@ class PlannedAction:
             bits.append("대상 " + " · ".join(str(c) for c in self.target_card_ids))
         if self.material_card_ids:
             bits.append("소재 " + " · ".join(str(c) for c in self.material_card_ids))
+        if self.resolution_card_ids:
+            bits.append(
+                "해결 시 선택 "
+                + " · ".join(str(c) for c in self.resolution_card_ids)
+            )
         return " / ".join(bits)
 
     def canonical_state(self) -> tuple:
@@ -159,6 +184,7 @@ class PlannedAction:
             tuple(self.effect_ref) if self.effect_ref is not None else None,
             tuple(sorted(self.target_card_ids)),
             tuple(sorted(self.material_card_ids)),
+            tuple(sorted(self.resolution_card_ids)),
         )
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
@@ -211,6 +237,20 @@ class ComboLine:
                 f"{self.name}: 각 단계를 어디서 읽었는지 적어야 합니다 — "
                 "근거 없는 경로는 추측입니다."
             )
+
+    @property
+    def resolution_preferences(self) -> tuple[int, ...]:
+        """
+        이 경로가 **해결 시점에 고르려는** 카드들, 단계 순서대로 (Phase 6-AD).
+
+        🔴 **정책을 만들지 않고 목록만 준다.** 꽂는 자리가
+        :class:`~agent.choice.PreferredCardChoice` 를 만든다 — ``deck`` 은
+        ``agent`` 를 import 하지 않는다 (:attr:`PlannedAction.
+        resolution_card_ids` 의 설명).
+        """
+        return tuple(
+            card_id for step in self.steps for card_id in step.resolution_card_ids
+        )
 
     @property
     def reproduction_ready(self) -> bool:
@@ -387,6 +427,16 @@ def _step_matches(executed, planned: PlannedAction) -> bool:
         want = f"{planned.effect_ref[0]}:e[{planned.effect_ref[1]}]"
         if executed.effect_ref != want:
             return False
+    if planned.resolution_card_ids:
+        #: 🔴 **발동이 수락됐다는 사실만으로 세지 않는다** (6-AD §6). 이
+        #: 단계가 요구하는 것은 "해결 중에 그 카드를 골랐다" 이고, 그 사실은
+        #: 기록의 :attr:`~deck.opening.ExecutedStep.resolution_choices` 에만
+        #: 있다 — 발동 기록의 ``targets`` 는 **정당하게 비어 있다** (규칙상
+        #: 그때는 아무것도 정해지지 않는다).
+        if sorted(executed.resolution_choices) != sorted(
+            planned.resolution_card_ids
+        ):
+            return False
     return True
 
 
@@ -550,10 +600,18 @@ ORCUST_GIRSU_LINE = ComboLine(
             kind="activate_effect",
             card_id=93920420,
             effect_ref=(93920420, 1),
-            target_card_ids=(93920420,),
+            #: 🔴 **발동 시점에 고르지 않는다** (Phase 6-AD ②).
+            #:
+            #: 6-AC 는 여기에 ``target_card_ids=(93920420,)`` 를 적었는데,
+            #: 그러면 "발동을 선언할 때 패의 그 한 장이 이미 정해져 있다" 가
+            #: 된다. 공식 스크립트는 그렇지 않다 — ``c93920420.lua`` 의
+            #: ``s.sptg1`` 은 **빈 칸과 특수 소환할 수 있는 「성유물」 몬스터의
+            #: 존재**만 보고 아무 카드도 고르지 않으며, 고르는 것은
+            #: ``s.spop1`` 의 ``Duel.SelectMatchingCard`` 다 (해결 시점).
+            resolution_card_ids=(93920420,),
             label=(
                 "묘지로 보내진 『성장』 ② 발동 — 패의 「성유물－『성장』」 을 "
-                "특수 소환"
+                "특수 소환 (고르는 것은 해결 중이다)"
             ),
         ),
         PlannedAction(

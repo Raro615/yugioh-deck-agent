@@ -68,6 +68,7 @@ from engine.condition import (
     NotMonster,
     PhaseIs,
     PlayerRef,
+    SpecialSummonPermitted,
     UnimplementedRule,
     ZoneHasFreeSlot,
 )
@@ -715,9 +716,9 @@ def _link_summon(
         #: (실측 — ``engine/summon_restriction.py`` 머리말).
         #:
         #: 자리가 **소재 요구보다 앞**인 것이 뜻을 가진다 —
-        #: :class:`_SpecialSummonPermitted` 의 설명 참고.
+        #: :class:`~engine.condition.model.SpecialSummonPermitted` 의 설명 참고.
         Requirement(
-            _SpecialSummonPermitted(),
+            SpecialSummonPermitted(),
             ValidationCode.SPECIAL_SUMMON_FORBIDDEN,
             "이 판에서는 특수 소환이 금지되어 있습니다.",
         ),
@@ -2158,71 +2159,6 @@ class _NormalSpellActivation(Condition):
             "이번 Phase 가 판정할 수 있는 발동이다 (통상 · 속공 마법 · "
             "세트된 일반 함정 또는 기동 효과)"
         )
-
-
-@dataclass(frozen=True, slots=True)
-class _SpecialSummonPermitted(Condition):
-    """
-    지금 **특수 소환을 할 수 있는가** (Phase 6-AD). 소환되는 카드와 무관하다.
-
-    판정은 :func:`~engine.summon_restriction.assess_special_summon_permission`
-    하나가 한다 — :class:`_LinkMaterialsLegal` 이
-    ``assess_link_materials`` 에게 묻는 것과 **같은 자리**이고 같은 이유다.
-
-    세 갈래가 그대로 보존된다.
-
-    - ``ALLOWED`` → ``TRUE``
-    - ``FORBIDDEN`` → ``FALSE`` (확인된 금지 — ``INVALID`` 가 된다)
-    - ``UNDETERMINED`` → ``UNKNOWN`` (+ 없는 규칙 이름)
-
-    🔴 **왜 소재 요구보다 먼저 적는가.** :meth:`ActionValidator.
-    _check_requirements` 는 ``FALSE`` 를 만나면 그 자리에서 돌려주고
-    ``UNKNOWN`` 은 모아 둔다. 그래서 이 요구를 앞에 두면 **확인된 금지는
-    소재의 모름보다 먼저** 답하고 (규칙이 답한 것이 먼저다), **모르는
-    금지는 소재의 확정 위반을 가리지 않는다** (뒤의 ``FALSE`` 가 이긴다).
-    두 순서를 바꾸면 그 두 성질이 모두 깨진다.
-    """
-
-    def evaluate(self, view, context) -> ConditionResult:
-        assessment = self._assess(view, context)
-        if assessment.allowed:
-            return ConditionResult.TRUE
-        if assessment.forbidden:
-            return ConditionResult.FALSE
-        return ConditionResult.UNKNOWN
-
-    def unknown_reasons(self, view, context) -> tuple[str, ...]:
-        assessment = self._assess(view, context)
-        if assessment.allowed or assessment.forbidden:
-            return ()
-        return (assessment.reason,)
-
-    def missing_rules(self, view, context) -> tuple[str, ...]:
-        assessment = self._assess(view, context)
-        rule = assessment.missing_rule
-        return (rule,) if rule and not assessment.forbidden else ()
-
-    def refusal_reasons(self, view, context) -> tuple[str, ...]:
-        assessment = self._assess(view, context)
-        return (assessment.reason,) if assessment.forbidden else ()
-
-    def _assess(self, view, context):
-        #: 🔴 **순수 판정 모듈이다** — 등록소도 효과 계층도 읽지 않는다
-        #: (그쪽 머리말의 import 약속). 그래서 여기서 지연 import 할 이유가
-        #: 없지만, :class:`_LinkMaterialsLegal` 과 **같은 모양**으로 적어
-        #: 둔다: 두 요구가 같은 자리에서 같은 방식으로 판정을 읽는다.
-        from engine.summon_restriction import assess_special_summon_permission
-
-        return assess_special_summon_permission(view, context.player)
-
-    def canonical_state(self) -> tuple:
-        return ("special_summon_permitted",)
-
-    def to_dict(self) -> dict:
-        return {"kind": "special_summon_permitted"}
-
-    def describe_ko(self) -> str:
-        return "특수 소환이 금지되지 않았다"
 
 
 @dataclass(frozen=True, slots=True)

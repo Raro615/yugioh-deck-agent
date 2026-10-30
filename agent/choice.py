@@ -176,6 +176,103 @@ class DeclineChoice:
         return f"<{self.name}>"
 
 
+class PreferredCardChoice:
+    """
+    **적어 둔 카드 ID 를 먼저 집고**, 없으면 뒤의 정책에게 넘긴다 (6-AD).
+
+    왜 필요한가 — 어떤 검증 경로는 "이 카드를 고른다" 까지가 경로의 일부다.
+    6-AC 는 그 의도를 **고르는 시점의 행동**에 카드 ID 로 적어 두었는데
+    (``PlannedAction.target_card_ids``), 규칙상 **해결 시점에 고르는** 선택은
+    그 자리에 적을 수 없다 — 그 자리에는 아무것도 정해져 있지 않다. 그래서
+    의도를 **이 계층으로** 옮긴다: 해결 시점에 묻는 바로 그 자리다.
+
+    지키는 것 (6-AD §4)
+    -------------------
+    1. **받은 목록 안에서만 고른다.** ``offer.permitted`` 밖은 보지 않으므로
+       적어 둔 카드가 없으면 그 카드를 집는 길이 **구조적으로 없다.**
+    2. **매번 그 자리의 목록을 쓴다.** 앞서 무엇을 집었는지 기억하지 않는다
+       (``__slots__`` 에 센 횟수도 집은 것도 없다).
+    3. **없으면 조용히 메꾸지 않는다.** 적어 둔 것이 그 자리에 없으면
+       ``then`` 에게 그대로 넘기고, 무엇이 실제로 집혔는지는 조립 층의 기록이
+       말한다 (``PolicyChooser.records``) — 이 정책이 "원하는 것을 집었다" 고
+       주장하지 않는다.
+    4. **사본에 상태가 새지 않는다.** :meth:`forked` 가 ``then`` 의 사본을
+       받아 **새 정책**을 만든다.
+
+    🔴 **전략이 아니다.** 어느 카드가 좋은지 모르고, 적어 둔 목록은 사람이
+    경로에 적은 것이다 — 이 파일의 다른 정책들과 같은 기준점이다.
+    """
+
+    __slots__ = ("name", "preferred", "then")
+
+    def __init__(self, preferred, then, name: str = "preferred-card"):
+        ids = tuple(preferred)
+        for card_id in ids:
+            if not isinstance(card_id, int) or isinstance(card_id, bool):
+                raise ChoiceError(f"카드 ID 는 정수입니다: {card_id!r}")
+        if not hasattr(then, "choose_cards") or not hasattr(then, "accept_offer"):
+            raise ChoiceError(
+                "뒤에 둘 정책이 필요합니다 — 적어 둔 카드가 그 자리에 없을 때"
+                " 누가 답하는지를 기본값으로 메꾸지 않습니다: "
+                f"{type(then).__name__}"
+            )
+        #: 🔴 **사본에서도 쓸 수 있어야 한다.** 뒤의 정책이 상태를 들고
+        #: 있으면서 ``forked`` 가 없으면, 사본의 물음이 진짜 듀얼의 정책을
+        #: 앞으로 민다 (:class:`ForkablePolicy` 의 실측). 그것을 나중에
+        #: 발견하지 않도록 **만들 때** 막는다.
+        if not callable(getattr(then, "forked", None)):
+            raise ChoiceError(
+                "뒤에 둘 정책은 forked() 를 가져야 합니다 — 사본이 쓸 수 "
+                f"없는 정책을 감싸면 그 사실이 가려집니다: {type(then).__name__}"
+            )
+        self.name = name
+        self.preferred = ids
+        self.then = then
+
+    def accept_offer(self, offer) -> bool:
+        """**뒤의 정책이 답한다.** 이 정책은 *무엇을* 집을지만 안다."""
+        return self.then.accept_offer(offer)
+
+    def choose_cards(self, offer) -> "tuple[InstanceId, ...]":
+        """
+        적어 둔 순서대로 집고, ``minimum`` 장을 채우지 못하면 넘긴다.
+
+        🔴 **반쯤 집은 것을 쓰지 않는다.** 모자란 채로 돌려주면 조립 층이
+        장수 때문에 거절하고, 그 거절은 "적어 둔 카드가 없다" 가 아니라
+        "정책이 장수를 틀렸다" 로 읽힌다.
+        """
+        picked: list = []
+        taken: set = set()
+        for card_id in self.preferred:
+            if len(picked) >= offer.minimum:
+                break
+            for candidate in offer.permitted:
+                if candidate.instance in taken:
+                    continue
+                if candidate.card_id == card_id:
+                    picked.append(candidate.instance)
+                    taken.add(candidate.instance)
+                    break
+        if len(picked) >= offer.minimum:
+            return tuple(picked[: offer.minimum])
+        return tuple(self.then.choose_cards(offer))
+
+    def forked(self) -> "PreferredCardChoice":
+        """
+        **적어 둔 목록은 같고, 뒤의 정책은 사본의 것**이다.
+
+        목록은 불변 튜플이므로 그대로 들고 가도 새지 않는다. 상태가 있을 수
+        있는 쪽은 ``then`` 하나이고, 그쪽에게 사본을 묻는다.
+        """
+        return PreferredCardChoice(
+            self.preferred, self.then.forked(), name=f"{self.name}-fork"
+        )
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        ids = " · ".join(str(c) for c in self.preferred) or "없음"
+        return f"<{self.name} {ids} → {self.then!r}>"
+
+
 class RandomChoice:
     """
     허용된 후보 중 **무작위로** 집는다. 제 난수원을 쓴다.
@@ -257,5 +354,6 @@ __all__ = [
     "ForkablePolicy",
     "FirstPermittedChoice",
     "DeclineChoice",
+    "PreferredCardChoice",
     "RandomChoice",
 ]

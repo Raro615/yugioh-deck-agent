@@ -208,6 +208,19 @@ def decided_at_resolution(spec) -> bool:
     보는 효과가 조용히 미뤄진다 (등재된 효과에 그런 모양은 **0건**이지만
     조건을 적어 둔다).
 
+    🔴 **그리고 셋째가 있다 — 정의가 그렇게 선언했는가** (Phase 6-AD,
+    :attr:`~engine.effect.target.TargetSpec.chosen_at_resolution`).
+
+    2번은 **관측의 축**이고, 규칙상 언제 고르는가는 **다른 축**이다. 6-AC
+    까지 이 함수는 앞의 것으로 뒤의 것을 짐작했고, 그 짐작이 성유물－
+    『성장』 ② 에서 틀렸다 — 자기 패는 보이므로 미루지 않았는데, 공식
+    스크립트는 ``s.sptg1`` 에서 후보의 **존재만** 확인하고 ``s.spop1`` 의
+    ``Duel.SelectMatchingCard`` 로 **그때의 패에서** 고른다.
+
+    그래서 선언이 **먼저**다 — 짐작보다 읽은 것이 이긴다. 선언하지 않은
+    효과는 예전 그대로 가려진 존 기준으로 갈린다 (ADR-006: 없는 것을
+    기본값으로 메꾸지 않는다).
+
     🔴 **이것은 규칙 판정이 아니라 전달 방식의 결정이다.** 미뤄진 선택도
     같은 ``TargetResolver`` 가 같은 ``looked_at`` 으로 세고 같은 규칙으로
     검증한다 — 바뀌는 것은 **언제 묻는가**뿐이다.
@@ -216,6 +229,8 @@ def decided_at_resolution(spec) -> bool:
         return False
     if spec.choice is None:
         return False
+    if getattr(spec, "chosen_at_resolution", False):
+        return True
     return bool(spec.looked_at_zones() & CONCEALED_ZONES)
 
 

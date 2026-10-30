@@ -111,6 +111,20 @@ class OpeningSetup:
     """만들어진 ``Duel``. 만들지 못했으면 ``None``."""
     journal: object | None = None
     """그 듀얼의 ``EventJournal``."""
+    chooser: object | None = None
+    """
+    이 듀얼에 꽂은 **해결 시점에 고르는 사람** (Phase 6-AD).
+
+    🔴 **들고만 있는다.** 이 모듈은 그것을 만들지 않고 (조립 층의 것이다 —
+    :func:`build_opening` 의 설명) 쓰지도 않는다. 꽂힌 객체가 ``duel`` 안에
+    들어가 버리면 **무엇을 물었고 무엇을 골랐는지**를 보고가 읽을 길이 없어
+    지므로, 받은 값을 이 칸에 그대로 남긴다.
+
+    :func:`execute_opening` 이 ``records`` 가 있으면 걸음마다 **그 걸음에서
+    새로 늘어난 기록**을 읽는다 (:attr:`ExecutedStep.resolution_choices`).
+    없으면 그 칸은 비어 있고, "선택이 없었다" 가 아니라 "읽을 기록이 없다"
+    는 뜻이다.
+    """
 
     @property
     def can_run(self) -> bool:
@@ -341,6 +355,7 @@ def build_opening(
         return setup
     setup.duel = duel
     setup.journal = duel.journal
+    setup.chooser = chooser
     setup.deck_rest = list(rest)
     return setup
 
@@ -424,17 +439,6 @@ class ExecutedStep:
     목록으로 보인다.
     """
     unsupported_during: tuple[str, ...] = ()
-    materials: tuple[str, ...] = ()
-    """
-    이 걸음이 **소재로 보낸** 카드들 (Phase 6-AC). 링크 소환만 채운다.
-
-    🔴 **``targets`` 와 다른 칸이다.** 링크 소재는 대상으로 지정되지 않으므로
-    (``PlayerAction.materials`` 의 설명) 한 칸에 넣으면 보고가 "대상 2개" 로
-    적힌다 — 그것은 거짓이다.
-
-    카드 이름을 담는다. 인스턴스 번호가 아니라 **무엇을 보냈는가**가
-    §7 이 요구하는 기록이고, 번호는 판마다 달라 재현에 쓸 수 없다.
-    """
     """
     이 걸음의 **자동 처리 도중** 지나간 자리에서 만난 미지원 사유
     (보완8 세 항목 ①).
@@ -446,6 +450,38 @@ class ExecutedStep:
 
     🔴 다른 자리의 기회에서 만난 것은 **어느 카드인지 적지 않는다**
     (:func:`unsupported_reasons_elsewhere`).
+    """
+    resolution_choices: tuple[int, ...] = ()
+    """
+    이 걸음의 **해결 중에 실제로 고른** 카드들의 ID (Phase 6-AD).
+
+    🔴 :attr:`targets` 와 **다른 시점**이다. 저쪽은 발동을 선언할 때 이미
+    정해져 있던 대상이고, 이쪽은 **규칙상 효과를 해결할 때** 고른 것이다.
+    해결 시점에 고르는 효과는 발동 기록의 ``targets`` 가 **정당하게 비어
+    있다** — 그때는 아무것도 정해지지 않는다. 그 칸을 채우려고 선택을
+    거꾸로 발동 시점에 고정하면 규칙이 틀어진다 (6-AD §6).
+
+    어디서 왔는가: 꽂힌 :attr:`OpeningSetup.chooser` 의 ``records`` 에서
+    **이 걸음이 늘린 만큼**만 읽는다. 기록이 없으면 비어 있고, 그것은
+    "고르지 않았다" 가 아니라 "읽을 기록이 없다" 다.
+    """
+    resolution_choice_text: tuple[str, ...] = ()
+    """
+    위 선택을 **사람이 읽는 한 줄**로 (Phase 6-AD). 보고가 쓴다.
+
+    카드 이름을 담는 이유는 :attr:`materials` 와 같다 — 보고를 만드는 자리에
+    카드 저장소가 없다.
+    """
+    materials: tuple[str, ...] = ()
+    """
+    이 걸음이 **소재로 보낸** 카드들 (Phase 6-AC). 링크 소환만 채운다.
+
+    🔴 **``targets`` 와 다른 칸이다.** 링크 소재는 대상으로 지정되지 않으므로
+    (``PlayerAction.materials`` 의 설명) 한 칸에 넣으면 보고가 "대상 2개" 로
+    적힌다 — 그것은 거짓이다.
+
+    카드 이름을 담는다. 인스턴스 번호가 아니라 **무엇을 보냈는가**가
+    §7 이 요구하는 기록이고, 번호는 판마다 달라 재현에 쓸 수 없다.
     """
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
@@ -733,6 +769,49 @@ def _settle_chain(duel, note=None) -> "tuple[object | None, bool]":
     return resolution, resolution.code is ValidationCode.OK
 
 
+def _resolution_choices(records, repository) -> tuple:
+    """
+    해결 시점 선택 기록 몇 개를 **카드 ID 와 한 줄**로 바꾼다 (Phase 6-AD).
+
+    🔴 **판을 읽지 않는다.** 기록에 실려 온 후보 목록이 인스턴스마다 카드
+    ID 를 들고 있으므로 (``ChoiceCandidate.card_id``) 그것만 쓴다 — 고른
+    카드는 이미 움직였을 수 있고, 움직인 뒤의 판에서 찾으면 "그때 무엇을
+    골랐는가" 가 아니라 "지금 어디 있는가" 가 된다.
+
+    🔴 **고르지 않은 기록도 지나간다.** 아무것도 고르지 않은 요청
+    (``chosen`` 이 비어 있다)은 ID 를 남기지 않지만, 물었다는 사실은 한 줄로
+    적는다 — 물었는데 고르지 않은 것과 아예 묻지 않은 것은 다르다.
+    """
+    ids: list[int] = []
+    text: list[str] = []
+    for record in records:
+        by_instance = {c.instance: c.card_id for c in record.offer.candidates}
+        offered = len(record.offer.permitted)
+        if not record.chosen:
+            text.append(
+                f"{record.effect_ref} · 고르지 않았습니다 (후보 {offered}장)"
+            )
+            continue
+        names = []
+        for instance in record.chosen:
+            card_id = by_instance.get(instance)
+            if card_id is None:
+                #: 후보 목록 밖의 인스턴스는 엔진이 거절한다
+                #: (``CANDIDATE_NOT_ELIGIBLE``). 기록에는 남으므로 적는다.
+                names.append("후보 목록에 없던 인스턴스")
+                continue
+            ids.append(card_id)
+            card = repository.get(card_id) if repository is not None else None
+            names.append(
+                f"{card.display_name()} [{card_id}]" if card is not None
+                else f"[{card_id}]"
+            )
+        text.append(
+            f"{record.effect_ref} · {' · '.join(names)} (후보 {offered}장)"
+        )
+    return tuple(ids), tuple(text)
+
+
 def execute_opening(
     setup: OpeningSetup, repository, *, choose=None,
     max_actions: int = MAX_EXECUTED_ACTIONS,
@@ -766,6 +845,15 @@ def execute_opening(
     journal = setup.journal
     picker = choose or first_meaningful
     seen_events = len(list(journal)) if journal is not None else 0
+
+    #: 🔴 **해결 시점의 선택을 걸음마다 읽는다** (Phase 6-AD).
+    #:
+    #: 꽂힌 것이 ``records`` 를 갖고 있지 않으면 ``None`` 이고, 그때 걸음의
+    #: 그 칸은 비어 있다 — "고르지 않았다" 가 아니라 **읽을 기록이 없다** 는
+    #: 뜻이다 (:attr:`OpeningSetup.chooser` 의 설명). 없는 것을 성공으로도
+    #: 실패로도 바꾸지 않는다.
+    choice_log = setup.chooser if hasattr(setup.chooser, "records") else None
+    seen_choices = len(choice_log.records) if choice_log is not None else 0
 
     #: 전개를 고르는 자리 — 보고가 **누구의 눈으로** 읽히는가.
     actor_seat = duel.to_act
@@ -908,6 +996,15 @@ def execute_opening(
         during = tuple(run.unsupported[seen_unsupported:])
         after_hash = duel.state.state_hash()
 
+        #: 🔴 **이 걸음이 늘린 기록만** 잘라 읽는다. 전체를 적으면 앞 걸음의
+        #: 선택이 이 걸음의 것으로 보인다.
+        picked_ids: tuple[int, ...] = ()
+        picked_text: tuple[str, ...] = ()
+        if choice_log is not None:
+            fresh = choice_log.records[seen_choices:]
+            seen_choices = len(choice_log.records)
+            picked_ids, picked_text = _resolution_choices(fresh, repository)
+
         events = []
         if journal is not None:
             all_events = list(journal)
@@ -939,6 +1036,8 @@ def execute_opening(
                   and not resolved else ""),
             unsupported=note_unsupported(duel.legal_actions(duel.to_act)),
             unsupported_during=during,
+            resolution_choices=picked_ids,
+            resolution_choice_text=picked_text,
             materials=materials,
         ))
         if not step.accepted:

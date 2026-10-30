@@ -209,9 +209,21 @@ def test_a02_every_step_records_its_choice_cost_and_resolution(repository):
     assert steps[1].effect_events == (f"{GIRSU}:e[0]",)
     assert steps[1].resolved is True
 
-    #: ③ 『성장』 ② — 대상은 **발동 시점에** 고른다 (자기 패는 보인다).
+    #: ③ 『성장』 ② — 대상은 **해결 중에** 고른다 (Phase 6-AD 가 정정).
+    #:
+    #: 🔴 **6-AC 는 여기를 "자기 패는 보이므로 발동 시점에 고른다" 로
+    #: 적었고, 그것이 틀렸다.** 볼 수 있는지와 규칙상 언제 고르는지는 다른
+    #: 축이다 — ``c93920420.lua`` 의 ``s.sptg1`` 은 후보의 **존재만**
+    #: 확인하고 (``IsExistingMatchingCard``) 아무 카드도 고르지 않으며,
+    #: 고르는 것은 ``s.spop1`` 의 ``Duel.SelectMatchingCard`` 다.
+    #:
+    #: 그래서 발동 기록의 ``targets`` 가 **비어 있는 것이 정상**이고, 실제로
+    #: 무엇을 골랐는가는 **해결 시점 선택 기록**에 있다.
     assert steps[2].effect_ref == f"{WAND}:e[1]"
-    assert len(steps[2].targets) == 1
+    assert steps[2].targets == ()
+    assert steps[2].resolution_choices == (WAND,)
+    assert len(steps[2].resolution_choice_text) == 1
+    assert f"{WAND}:e[1]" in steps[2].resolution_choice_text[0]
     assert steps[2].effect_events == (f"{WAND}:e[1]",)
     assert steps[2].resolved is True
 
