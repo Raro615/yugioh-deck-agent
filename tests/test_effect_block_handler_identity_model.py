@@ -1043,7 +1043,12 @@ def test_51_engine_v1_library_is_untouched():
     # 아니라 그 시점에 실제로 17건이었다.
     #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
     assert len(EFFECT_LIBRARY) == 19
-    assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0}
+    #: 🔴 **Phase 6-AC 가 "등재한 ordinal 은 전부 0" 을 끝냈다** —
+    #: 성유물－『성장』 은 공식 **②**를 등재했으므로 1 이다. 억지로 0 에
+    #: 맞추지 않고 실제 사실을 적는다: 집합이 {0, 1} 이고, 1 인 것은
+    #: **정확히 한 장**이다.
+    assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0, 1}
+    assert sum(1 for e in EFFECT_LIBRARY if e.effect_ref.ordinal == 1) == 1
 
 
 # ===========================================================================

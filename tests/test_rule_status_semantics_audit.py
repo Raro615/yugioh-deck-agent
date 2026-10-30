@@ -176,7 +176,12 @@ def test_02_the_validator_splits_false_from_unknown_and_unknown_from_unimplement
     body = source.split("def _check_requirements")[1].split("\n    def ")[0]
 
     assert "if verdict.result is ConditionResult.FALSE:" in body
-    assert "return ValidationResult.invalid(requirement.code, requirement.detail)" in body
+    #: 🔴 Phase 6-AC 가 이 호출을 여러 줄로 바꿨다 — 거절 사유
+    #: (``refusal_reasons``)를 ``detail`` 뒤에 괄호로 덧붙이기 때문이다.
+    #: 고정하는 사실(``FALSE`` 는 **그 요구의 코드**로 간다)은 그대로이므로
+    #: 모양만 새 계약에 맞춘다.
+    assert "return ValidationResult.invalid(\n                    requirement.code," in body
+    assert 'f"{requirement.detail} ({why})" if why else requirement.detail' in body
     assert "if verdict.result is ConditionResult.UNKNOWN:" in body
     assert "missing_rules(self._view, context)" in body
     assert "ValidationCode.RULE_NOT_IMPLEMENTED" in body

@@ -936,13 +936,20 @@ def test_f04_the_existing_combo_call_still_works(repository):
     from app.discord_bot import SearchService, combo_messages
 
     params = list(inspect.signature(combo_messages).parameters)
+    #: 🔴 Phase 6-AC 가 ``line_text`` 를 **맨 뒤에** 더했다 (검증용 전개
+    #: 정책의 이름). 자리가 마지막이므로 예전 호출은 그대로 돈다 — 이
+    #: 시험이 지키는 사실이 그것이고, 아래 기본값 검사가 그것을 센다.
     assert params == ["agent", "hand_text", "board_text", "deck_text",
-                      "recipe_text"]
-    for name in ("board_text", "deck_text", "recipe_text"):
+                      "recipe_text", "line_text"]
+    for name in ("board_text", "deck_text", "recipe_text", "line_text"):
         assert inspect.signature(combo_messages).parameters[name].default == ""
     service = list(inspect.signature(SearchService.combo_texts).parameters)
     assert service == ["self", "hand_text", "board_text", "deck_text",
-                       "recipe_text"]
+                       "recipe_text", "line_text"]
+    assert (
+        inspect.signature(SearchService.combo_texts).parameters["line_text"].default
+        == ""
+    )
     #: 예전과 같은 인수 하나로 부른다.
     assert combo_messages(repository and DeckAgentFor(repository),
                           str(POT))

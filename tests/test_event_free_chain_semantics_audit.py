@@ -301,7 +301,10 @@ def test_07_no_field_in_the_definition_can_hold_the_timing_code():
     # 왜 그 칸이 필요했나: ``TRAP_TRIGGER_MISSING`` 이 *"공식 스크립트의
     # SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 **스스로 적고 있었고**,
     # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
-    assert len(fields) == 12
+    # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
+    # 아니다** — "1턴에 몇 번까지인가" 이고 그 카드 텍스트에서 옮긴 값이다.
+    # 아래 교집합이 여전히 비어 있는 것이 그 증거다.
+    assert len(fields) == 13
     assert fields & {"code", "trigger_event", "timing", "point", "event"} == set()
 
     #: ``TriggerSpec`` 에도 없다 — 3-E-31 이 측정한 그대로다.
@@ -336,8 +339,14 @@ def test_08_the_code_carries_no_discriminating_information_here(repository):
     #: 가질 수 있는 것은 **하나의** 상수 아니면 없음" 이고, 그것은 블록마다
     #: 하나라는 뜻이므로 **그대로다** — 등재 전체의 상수가 하나라는 뜻이
     #: 아니었다.
-    assert codes == {"EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", None}, codes
-    assert len([c for c in codes if c]) == 2, codes
+    #: 🔴 Phase 6-AC 에서 상수가 **셋**이 됐다 (성유물－『성장』 ② 의
+    #: ``EVENT_TO_GRAVE``). 지키는 사실은 그대로다 — 한 블록이 가질 수
+    #: 있는 것은 **하나의** 상수 아니면 없음이고, 등재 전체의 상수 수가
+    #: 하나라는 뜻이 아니었다.
+    assert codes == {
+        "EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE", None
+    }, codes
+    assert len([c for c in codes if c]) == 3, codes
     # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
@@ -519,7 +528,10 @@ def test_12_this_audit_added_no_production_structure():
     # 왜 그 칸이 필요했나: ``TRAP_TRIGGER_MISSING`` 이 *"공식 스크립트의
     # SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 **스스로 적고 있었고**,
     # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
-    assert len(dataclasses.fields(EffectDefinition)) == 12
+    # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
+    # 아니다** — "1턴에 몇 번까지인가" 이고 그 카드 텍스트에서 옮긴 값이다.
+    # 아래 교집합이 여전히 비어 있는 것이 그 증거다.
+    assert len(dataclasses.fields(EffectDefinition)) == 13
     #: 🔴 칸 수는 3-E-19 9 → 6-E 10 (``summons``) → **6-F 11**
     #: (``subject``) 로 움직였다. 이 감사가 production 을 늘리지
     #: 않았다는 사실은 그대로이고, 늘린 주체는 6-E · 6-F 다.

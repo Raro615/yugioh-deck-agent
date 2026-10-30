@@ -206,7 +206,10 @@ def test_01_the_engine_condition_vocabulary_only_asks_about_the_board():
     assert len(board_predicates) == 16
     assert vocabulary == combinators | board_predicates, sorted(vocabulary)
     gates = by_module["engine.action_validation"]
-    assert len(gates) == 8, sorted(gates)
+    #: 🔴 8 → **9** (Phase 6-AC, ``_LinkMaterialsLegal``). 그 조건도 판만
+    #: 묻는다 — 엑스트라 덱의 소재 조건과 필드의 몬스터이고, 문맥에서
+    #: 사건을 읽지 않는다. 아래 "이름에도 사건이 없다" 가 그것을 센다.
+    assert len(gates) == 9, sorted(gates)
 
     #: 이름에도 사건이 없다.
     for forbidden in ("Previous", "Reason", "Event", "Chain", "Battle", "Summoned"):
@@ -487,7 +490,12 @@ def test_11_event_free_chain_is_not_an_event_dependent_condition():
     for entry in EFFECT_LIBRARY:
         activation = entry.definition.activation
         kinds.add(type(activation).__name__ if activation is not None else "None")
-    assert kinds <= {"None", "ZoneCountAtLeast", "And"}, kinds
+    #: 🔴 Phase 6-AC 가 ``ZoneHasFreeSlot`` 를 더했다 (성유물－『성장』 ②
+    #: 의 발동 조건 — 자신 몬스터 존에 빈 자리가 있다). 그것도 **판만**
+    #: 묻는 조건이고, 그것이 이 시험이 지키는 사실이다.
+    assert kinds <= {
+        "None", "ZoneCountAtLeast", "ZoneHasFreeSlot", "And"
+    }, kinds
 
     #: 그리고 그 조건들은 문맥에서 사건을 읽지 않는다 (test_01 이 어휘를 고정).
     for entry in EFFECT_LIBRARY:

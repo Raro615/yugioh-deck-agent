@@ -149,6 +149,12 @@ ACTIVATION_FROM_SET_TARGET = (
     #: ``IsExistingMatchingCard(s.tgfilter,tp,LOCATION_DECK,0,1,nil)`` 이고,
     #: 조건 함수(``SetCondition``)는 **없다** — 어리석은 매장과 같은 모양이다.
     69811710,  # 기르수          — IsExistingMatchingCard(... LOCATION_DECK ... 1 ...)
+    #: 🔴 Phase 6-AC — 성유물－『성장』 ②. ``s.sptg1`` 의 ``chk==0`` 갈래가
+    #: ``Duel.GetLocationCount(tp,LOCATION_MZONE)>0`` 이고, 그 블록에
+    #: 조건 함수(``SetCondition``)는 **없다** (``e1`` 만 가지고 있다).
+    #: 기르수 · 어리석은 매장과 같은 모양이다 — 발동 조건이 ``SetTarget``
+    #: 의 ``chk==0`` 갈래에서 나온다.
+    93920420,  # 성유물－『성장』 — GetLocationCount(tp,LOCATION_MZONE)>0
 )
 
 
@@ -688,7 +694,9 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: Phase 6-AC 가 성유물－『성장』 ① 을 더했다 (18 → 19).
     assert len(EFFECT_LIBRARY) == 19
     #: 🔴 8 → **9** (Phase 6-V, 기르수 ①).
-    assert len(with_activation) == 9
+    #: 🔴 9 → **10** (Phase 6-AC, 성유물－『성장』 ②). 그 조건도 상태
+    #: 조건이다 (``ZoneHasFreeSlot`` — 자신 몬스터 존에 빈 자리가 있다).
+    assert len(with_activation) == 10
 
     from_target = [
         entry.definition.effect_ref.card_id
@@ -696,12 +704,19 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
         if not analyses[entry.definition.effect_ref].activation.has_condition_function
     ]
     assert sorted(from_target) == sorted(ACTIVATION_FROM_SET_TARGET)
-    #: 🔴 7 → **8** (Phase 6-V).
-    assert len(from_target) == 8
+    #: 🔴 7 → **8** (Phase 6-V) → **9** (Phase 6-AC).
+    assert len(from_target) == 9
 
-    #: 일곱 장 모두 ``SetTarget`` 이 있고 ``chk==0`` 분기를 가진다.
+    #: 아홉 장 모두 ``SetTarget`` 이 있고 ``chk==0`` 분기를 가진다.
+    #: 🔴 Phase 6-AC — **등재한 블록의 ordinal 로** 묻는다. 성유물－
+    #: 『성장』 은 ②를 등재했으므로 0 번 블록을 물으면 **다른 효과**를
+    #: 검사하게 된다 (그쪽은 ``e1`` 이고 조건 함수를 가지고 있다).
+    ordinal_of = {
+        e.definition.effect_ref.card_id: e.definition.effect_ref.ordinal
+        for e in EFFECT_LIBRARY
+    }
     for card_id in ACTIVATION_FROM_SET_TARGET:
-        has_condition, has_target, _ = slot_flags(card_id, 0)
+        has_condition, has_target, _ = slot_flags(card_id, ordinal_of[card_id])
         assert has_condition is False
         assert has_target is True
         assert "chk==0" in lua_of(card_id)

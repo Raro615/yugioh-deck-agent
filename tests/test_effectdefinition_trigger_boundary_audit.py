@@ -586,7 +586,10 @@ def test_16_this_audit_changed_no_production_file():
     # 왜 그 칸이 필요했나: ``TRAP_TRIGGER_MISSING`` 이 *"공식 스크립트의
     # SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 **스스로 적고 있었고**,
     # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
-    assert len(dataclasses.fields(EffectDefinition)) == 12
+    # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
+    # 아니다** — 담는 것은 "1턴에 몇 번까지인가" 이고 그 카드 텍스트에서
+    # 옮긴 값이다. 아래 교집합이 여전히 비어 있는 것이 그 증거다.
+    assert len(dataclasses.fields(EffectDefinition)) == 13
     #: ``TriggerSpec`` 의 칸은 3-E-39 의 9 에서 6-E 의 10 으로 움직였다
     #: (``summons``: 통상소환과 특수소환이 같은 ``MONSTER_SUMMONED`` 시점으로
     #: 번역되므로, 칸이 없으면 통상소환 사건이 특수소환 전용 효과를 후보로
@@ -600,4 +603,10 @@ def test_16_this_audit_changed_no_production_file():
     definition = {f.name for f in dataclasses.fields(EffectDefinition)}
     assert definition & {"code", "point", "event", "trigger", "timing"} == set()
     #: 새 ActionKind 도 없다 (3-E-30 측정값 11개).
-    assert len(list(PlayerActionKind)) == 11
+    #: 🔴 Phase 6-AC 에서 11 → **12** (``LINK_SUMMON``). 유발 때문이 아니라
+    #: **링크 소환 절차**를 구현해서 늘었다 — 이 감사가 재는 사실(유발을
+    #: 위해 새 종류가 생기지 않았다)은 그대로이고, 바로 위의 "사건을 적는
+    #: 칸이 정의 쪽에 생기지 않았다" 가 그것을 센다.
+    assert len(list(PlayerActionKind)) == 12
+    assert "LINK_SUMMON" in PlayerActionKind.__members__
+    assert not [k for k in PlayerActionKind.__members__ if "TRIGGER" in k]

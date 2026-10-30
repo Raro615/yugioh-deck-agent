@@ -358,11 +358,12 @@ def test_04_the_monster_effect_activation_maps_to_the_same_action_kind(repositor
         if (repository.get(entry.definition.effect_ref.card_id) or None) is not None
         and repository.get(entry.definition.effect_ref.card_id).is_monster
     ]
-    #: 🔴 1 → **2** (Phase 6-V, 기르수 ①). 이 테스트가 재는 것은 아래 줄
-    #: — **새 ActionKind 가 없다** — 이고, 몬스터 효과가 둘이 되어도 그대로다.
-    assert len(monsters) == 2, monsters
-    #: 🔴 Phase 6-L · 6-V — 둘 다 실행된다. 6-K 에서는 ``False`` 였다.
-    assert [entry.executable for entry in monsters] == [True, True], monsters
+    #: 🔴 1 → **2** (Phase 6-V, 기르수 ①) → **3** (Phase 6-AC, 성유물－
+    #: 『성장』 ②). 이 테스트가 재는 것은 아래 줄 — **새 ActionKind 가
+    #: 없다** — 이고, 몬스터 효과가 셋이 되어도 그대로다.
+    assert len(monsters) == 3, monsters
+    #: 🔴 Phase 6-L · 6-V · 6-AC — 셋 다 실행된다.
+    assert [entry.executable for entry in monsters] == [True] * 3, monsters
     #: 공식 용어와 엔진 종류의 대응이 **그대로**다 — 새 ActionKind 가 없다.
     from engine.action import PlayerActionKind, _NEEDS_EFFECT_REF
 
@@ -523,9 +524,12 @@ def test_11_the_effect_choice_never_actually_varies(repository):
             ordinals[ref.ordinal] += 1
 
     assert per_card, "executable 효과가 없다"
-    #: 🔴 카드마다 하나씩, 전부 ordinal 0.
+    #: 🔴 카드마다 하나씩 — 그것은 그대로다.
     assert set(per_card.values()) == {1}, dict(per_card)
-    assert set(ordinals) == {0}, dict(ordinals)
+    #: 🔴 **Phase 6-AC 가 "전부 ordinal 0" 을 끝냈다** — 성유물－『성장』 은
+    #: 공식 ②를 등재했다. 억지로 0 에 맞추지 않고 분포를 적는다: 0 이
+    #: 열다섯, 1 이 **하나**다.
+    assert dict(ordinals) == {0: 15, 1: 1}, dict(ordinals)
 
     #: 그리고 후보를 여럿으로 만드는 것은 대상이다.
     duel_code = code_only("engine/duel.py")
@@ -800,12 +804,19 @@ def test_23_engine_v1_was_not_widened():
     §6 금지 항목 — 구현·확장·병합이 **하나도** 없다.
 
     enum 11개 그대로, 실행기 등록 그대로, 생성기 넷 그대로, 활성기 입구 그대로.
+
+    🔴 **Phase 6-AC 가 enum 과 실행기 등록을 넓혔다** (``LINK_SUMMON``).
+    이 Phase(3-F-16)가 넓히지 않았다는 사실은 그대로이고, 넓힌 주체는
+    6-AC 다 — **링크 소환 절차를 구현해서**이고 카드 발동과 무관하다.
+    아래 금지 항목 셋(``_activate_card_actions`` ·
+    ``ActivationTimingRule`` · ``ActivationRouter``)은 여전히 **없다**.
     """
-    assert len(list(PlayerActionKind)) == 11
+    assert len(list(PlayerActionKind)) == 12
     assert duel_executor().supported == frozenset(
         {
             PlayerActionKind.NORMAL_SUMMON,
             PlayerActionKind.SPECIAL_SUMMON,
+            PlayerActionKind.LINK_SUMMON,
             PlayerActionKind.SET_MONSTER,
             PlayerActionKind.SET_SPELL_TRAP,
             PlayerActionKind.ATTACK,

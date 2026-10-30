@@ -937,7 +937,10 @@ def test_25_this_phase_defined_no_new_semantics():
     # 왜 그 칸이 필요했나: ``TRAP_TRIGGER_MISSING`` 이 *"공식 스크립트의
     # SetCode(EVENT_*) 가 EffectDefinition 에 없다"* 고 **스스로 적고 있었고**,
     # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
-    assert len(definition) == 12
+    # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
+    # 아니다** — "1턴에 몇 번까지인가" 이고 그 카드 텍스트에서 옮긴 값이다.
+    # 아래 교집합이 여전히 비어 있는 것이 그 증거다.
+    assert len(definition) == 13
     assert "effect_types" not in definition
 
 
