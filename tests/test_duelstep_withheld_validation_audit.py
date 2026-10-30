@@ -268,7 +268,10 @@ def test_06_the_validity_is_not_stored_but_is_derivable_from_the_code():
     #: 그래서 ``DuelStep`` 에 ``validity`` 를 더할 이유가 생기지 않았다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
     assert len(recoverable) == 53
-    assert sum(1 for v in recoverable.values() if v is not None) == 50
+    #: 🔴 Phase 6-AC 가 둘을 더했다 — ``EFFECT_USE_LIMIT_REACHED`` ·
+    #: ``LINK_MATERIAL_INVALID``. **둘 다 ``INVALID``** 이므로 모름 쪽은
+    #: 그대로이고 확정 거부 쪽만 늘었다 (보완8 과 같은 결).
+    assert sum(1 for v in recoverable.values() if v is not None) == 52
     assert [n for n, v in recoverable.items() if v is None] == [
         "CHAIN_DEFINITION_UNAVAILABLE"
     ]
@@ -435,7 +438,21 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     #: 대상 조합을 끝까지 세지 못한 범위(가려진 후보 · 들여다보지 못한 자리)를
     #: 전에는 아무 데도 적지 않았다. 둘 다 **모듈 상수**에서 채우므로
     #: 아래 ``kinds`` 는 셋 그대로다 — 출처의 종류는 늘지 않았다.
-    assert len(filled) == 12, len(filled)
+    #:
+    #: 🔴 열둘 → **열여섯** (Phase 6-AC). 늘어난 넷:
+    #:
+    #:   ``_link_summon_actions``  소재 조건을 읽지 못했다 (모듈 상수)
+    #:   ``_link_summon_actions``  소재 조합이 전부 막혔다 (지역 변수)
+    #:   ``_trigger_actions``      응답 창이 닫혔다 vs 「때」 를 못 읽었다
+    #:   ``_trigger_actions``      규칙이 답한 0건 vs 어휘를 못 연 0건
+    #:
+    #: 🔴 **그리고 출처의 종류가 셋 → 다섯이 되었다.** 뒤의 둘이 각각 새
+    #: 조건식이기 때문이다. 숨기지 않고 적는다 — 다만 **성질은 셋이다**:
+    #: 뒤의 세 조건식은 모두 "판정한 계층의 답을 **조건부로 옮긴다**" 이고,
+    #: 그것이 추가 보완이 만든 다섯 번째 종류와 같은 성질이다. 아래에서
+    #: 그 셋을 **성질로 묶고 식으로 못박는다** — 묶어서 수를 줄이는 것이
+    #: 아니라, 묶은 뒤에도 각 식을 그대로 센다.
+    assert len(filled) == 16, len(filled)
 
     def source_kind(keyword) -> str:
         value = keyword.value
@@ -474,14 +491,20 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     #: 둘(지역 변수 · 관문의 답)은 판정한 계층의 답을 **옮기는** 자리이고,
     #: 모듈 상수 다섯 자리만 이 자리가 값을 **고른다** — 느슨함을 더 줄이려면
     #: 그쪽을 모으는 것이 방향이다 (경계 재설계는 여전히 범위 밖이다).
-    assert len(kinds) == 3, kinds
+    assert len(kinds) == 5, kinds
     assert "손으로 쓴 문자열" not in kinds
     assert "모듈 상수" in kinds
     assert "판정 계층의 값 (지역 변수)" in kinds
-    #: 셋째 — 관문의 답을 조건부로 옮기는 자리.
-    forwarded = [k for k in kinds if "gate.missing_rule" in k]
-    assert len(forwarded) == 1, kinds
-    assert "UNKNOWN" in forwarded[0]
+    #: 셋째 성질 — 판정한 계층의 답을 **조건부로** 옮기는 자리. 🔴 Phase
+    #: 6-AC 가 둘을 더해 **셋**이 되었다. 성질로 묶되 식을 그대로 적는다.
+    forwarded = sorted(k for k in kinds if " if " in k and " else " in k)
+    assert forwarded == [
+        "None if admits is False else TRIGGER_WORDING_MISSING",
+        "TRIGGER_IMPLEMENTATION_MISSING if shape is not None else None",
+        "gate.missing_rule if gate.validity is ActionValidity.UNKNOWN else None",
+    ], forwarded
+    #: 성질로 묶으면 **셋**이다 — 그 수는 보완8 이 줄여 놓은 그대로다.
+    assert len({"모듈 상수", "판정 계층의 값 (지역 변수)", "조건부 전달"}) == 3
 
     #: 🔴 그리고 **비우는 자리가 둘 → 넷 → 일곱으로 늘었다** (추가 보완이
     #: ``_trigger_actions`` 의 "기회가 끝났다" 를 더해 일곱을 유지한다 —
@@ -521,8 +544,13 @@ def test_09_the_withheld_sites_fill_missing_from_four_different_sources():
     #: 🔴 **보완8 세 항목 ②는 비우는 쪽을 늘리지 않았다** — 더한 두 자리는
     #: 둘 다 ``missing`` 을 **채운다** (정보가 없어서 모르는 쪽이다). 그래서
     #: 비우는 자리는 열둘 그대로이고 채우는 쪽만 열 → 열둘이 되었다.
+    #: 🔴 **Phase 6-AC 도 비우는 쪽을 늘리지 않았다** — 더한 네 자리는 넷
+    #: 다 ``missing`` 을 **채운다** (읽지 못한 소재 규칙 · 막힌 소재 조합 ·
+    #: 닫힌 응답 창 · 열지 못한 어휘). 그래서 비우는 자리는 **열둘 그대로**
+    #: 이고 채우는 쪽만 열둘 → 열여섯이 되었다. 전체 자리는 24 → 28 이다.
     empty = len(calls) - len(filled)
-    assert empty == len(calls) - 12
+    assert len(calls) == 28, len(calls)
+    assert empty == len(calls) - 16
     assert empty == 12, empty
 
 
@@ -1282,7 +1310,9 @@ def test_32_adding_validity_to_the_step_would_recreate_the_copy_3e40_removed():
     #: 🔴 39 → **42** (Phase 6-AB 보완8 의 셋). 🔴 **모름 · 통과 · 미분류는
     #: 그대로다** — 늘어난 셋이 전부 확정 거부이므로, 이 변경이 "모름을 늘려
     #: 문제를 덮은 것" 이 아니라는 사실이 이 네 줄에 함께 적힌다.
-    assert len(codes_declaring(ActionValidity.INVALID)) == 42
+    #: 🔴 42 → **44** (Phase 6-AC 의 둘). 모름 · 통과 · 미분류는 **또**
+    #: 그대로다 — 같은 이유로 늘어난 둘이 전부 확정 거부다.
+    assert len(codes_declaring(ActionValidity.INVALID)) == 44
     assert len(codes_declaring(ActionValidity.UNKNOWN)) == 7
     assert len(codes_declaring(ActionValidity.VALID)) == 1
     assert len(codes_declaring(None)) == 1

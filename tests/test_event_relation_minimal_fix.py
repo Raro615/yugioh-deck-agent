@@ -535,6 +535,10 @@ def test_14_no_validation_code_was_added_or_redefined():
         "STAGE_FORBIDS_ACTION",
         "MANDATORY_TRIGGER_PENDING",
         "TRIGGER_TIMING_MISSED",
+        #: 🔴 Phase 6-AC 가 둘을 더했다 — 아래 루프가 둘도 ``INVALID`` 임을
+        #: 함께 센다. 모름 쪽은 늘지 않았다.
+        "EFFECT_USE_LIMIT_REACHED",
+        "LINK_MATERIAL_INVALID",
     }
     assert added <= set(ValidationCode.__members__)
     assert len(ValidationCode) - len(added) == 48

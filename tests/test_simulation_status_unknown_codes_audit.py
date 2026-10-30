@@ -674,6 +674,9 @@ def test_25_no_new_enum_member_was_added_anywhere():
         "STAGE_FORBIDS_ACTION",
         "MANDATORY_TRIGGER_PENDING",
         "TRIGGER_TIMING_MISSED",
+        #: 🔴 Phase 6-AC 가 둘을 더했다 — 둘 다 ``INVALID`` 다.
+        "EFFECT_USE_LIMIT_REACHED",
+        "LINK_MATERIAL_INVALID",
     }
     assert added <= set(ValidationCode.__members__)
     assert len(ValidationCode) - len(added) == 48
@@ -942,7 +945,10 @@ def test_33_the_forty_eight_codes_partition_without_a_remainder():
     assert len(named) == 1 + len(unknown) + 2 + len(context_dependent) == 12
     #: 나머지가 전부 확정 거부 쪽이다.
     rest = all_names - named
-    assert len(rest) == 39
+    #: 🔴 Phase 6-AC 가 둘을 더했다 — ``EFFECT_USE_LIMIT_REACHED`` ·
+    #: ``LINK_MATERIAL_INVALID``. **둘 다 ``INVALID``** 이므로 모름 쪽은
+    #: 그대로이고 확정 거부 쪽만 늘었다 (보완8 과 같은 결).
+    assert len(rest) == 41
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
     assert len(named) + len(rest) == len(ValidationCode) == 53
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).

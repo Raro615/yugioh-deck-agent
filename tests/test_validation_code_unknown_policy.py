@@ -455,7 +455,13 @@ def test_16_unknown_is_not_invalid():
     #: ``TRIGGER_TIMING_MISSED`` 이고 **셋 다 ``INVALID``** 다. 그래서 모름
     #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
     #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
-    assert len(invalid_set) == 42
+    #:
+    #: 🔴 51 → **53** (Phase 6-AC). 늘어난 둘도 **``INVALID``** 다
+    #: (``EFFECT_USE_LIMIT_REACHED`` · ``LINK_MATERIAL_INVALID``) — 모름 쪽은
+    #: 7 그대로이고 ``INVALID`` 가 42 → 44 다. 둘 다 **확인된** 제한 ·
+    #: 확인된 소재 조건의 위반에만 쓰고, 읽지 못한 쪽은
+    #: ``RULE_NOT_IMPLEMENTED`` 로 모름에 남는다.
+    assert len(invalid_set) == 44
 
 
 def test_17_unknown_is_not_a_loss_and_not_a_zero_score():
@@ -610,7 +616,10 @@ def test_24_the_four_buckets_partition_the_enum_without_a_remainder():
     invalid = codes_declaring(ActionValidity.INVALID)
     unknown = codes_declaring(ActionValidity.UNKNOWN)
     undecided = codes_declaring(None)
-    assert (len(valid), len(invalid), len(unknown), len(undecided)) == (1, 42, 7, 1)
+    #: 🔴 Phase 6-AC 가 둘을 더했다 — ``EFFECT_USE_LIMIT_REACHED`` ·
+    #: ``LINK_MATERIAL_INVALID``. **둘 다 ``INVALID``** 이므로 모름 쪽은
+    #: 그대로이고 확정 거부 쪽만 늘었다 (보완8 과 같은 결).
+    assert (len(valid), len(invalid), len(unknown), len(undecided)) == (1, 44, 7, 1)
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
     assert len(valid | invalid | unknown | undecided) == 53 == len(ValidationCode)
     assert valid == frozenset({ValidationCode.OK})

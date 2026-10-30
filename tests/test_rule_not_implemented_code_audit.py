@@ -169,7 +169,14 @@ MINE = 0
 #: ``Duel._refusal_sentence`` 의 설명이 *"검증기가 UNKNOWN /
 #: RULE_NOT_IMPLEMENTED 로 답하면서 들고 있던 missing_rule 이 apply 경계에서
 #: 사라졌다"* 는 실측을 인용한다.
-STRING_OCCURRENCES = 111
+#: 🔴 111 → **117** (Phase 6-AC). 늘어난 여섯 중 **셋이 코드**이고
+#: (``engine/duel.py`` 의 후보 생성 자리 — 읽지 못한 소재 규칙, 그리고
+#: 유발 후보 0건을 "규칙이 답했다" 와 "어휘를 열지 못했다" 로 가르는 두
+#: 자리) **셋은 산문**이다 (``engine/validation.py`` 의 새 코드 설명 둘과
+#: ``engine/duel.py`` 의 갈래 표). 새로 이 코드로 거절하게 된 자리는
+#: 하나다 — 소재 조건을 **읽지 못한** 링크 몬스터이고, 그것은 모름이
+#: 맞다 (읽은 조건의 위반은 ``LINK_MATERIAL_INVALID`` 로 간다).
+STRING_OCCURRENCES = 117
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -216,22 +223,29 @@ PROSE_OCCURRENCES = {
     # 과 무관하고, 산문과 코드를 구분하지 않으면 "이 코드가 몇 번 쓰이는가"
     # 를 알 수 없다. 좌표를 적는 이유도 그것이다 — 어느 쪽이 설명이고 어느
     # 쪽이 실제 사용인지 고정한다.
-    ("engine/activation.py", 732),
-    ("engine/activation.py", 770),
+    #
+    # 🔴 **Phase 6-AC 가 다시 실측값으로 적었다** (31 → 34). 늘어난 셋은
+    # ``engine/validation.py`` 의 새 코드 둘이 "읽지 못한 쪽은 이 코드로
+    # 남는다" 를 적은 설명과 ``engine/duel.py`` 의 갈래 표다. 나머지는
+    # 좌표만 밀렸다 — ``_check_use_limit`` · 지연 접근자 · 링크 소환
+    # 분기가 전부 그 자리들보다 **위**에 들어갔기 때문이다. 보완8 과 같은
+    # 이유로 밀린 좌표를 손으로 옮기지 않고 실측값으로 다시 적는다.
+    ("engine/activation.py", 803),
+    ("engine/activation.py", 841),
     ("engine/activation_timing.py", 511),
-    ("engine/duel.py", 175),
-    ("engine/duel.py", 969),
-    ("engine/duel.py", 1166),
-    ("engine/duel.py", 2694),
-    ("engine/duel.py", 2875),
-    ("engine/duel.py", 2881),
-    ("engine/duel.py", 2904),
-    ("engine/duel.py", 2906),
-    #: 🔴 보완8 마무리가 더한 자리 — ``_refusal_sentence`` 의 설명이다.
-    ("engine/duel.py", 2972),
-    ("engine/duel.py", 3213),
-    ("engine/effect/definition.py", 896),
-    ("engine/effect/executor.py", 1147),
+    ("engine/duel.py", 176),
+    ("engine/duel.py", 979),
+    ("engine/duel.py", 1176),
+    ("engine/duel.py", 2587),
+    ("engine/duel.py", 2970),
+    ("engine/duel.py", 3151),
+    ("engine/duel.py", 3157),
+    ("engine/duel.py", 3180),
+    ("engine/duel.py", 3182),
+    ("engine/duel.py", 3248),
+    ("engine/duel.py", 3489),
+    ("engine/effect/definition.py", 926),
+    ("engine/effect/executor.py", 1185),
     ("engine/special_summon.py", 77),
     ("engine/trigger.py", 811),
     ("engine/trigger.py", 839),
@@ -246,8 +260,10 @@ PROSE_OCCURRENCES = {
     ("engine/validation.py", 215),
     ("engine/validation.py", 231),
     ("engine/validation.py", 239),
-    ("engine/validation.py", 362),
-    ("engine/validation.py", 368),
+    ("engine/validation.py", 265),
+    ("engine/validation.py", 387),
+    ("engine/validation.py", 393),
+    ("engine/validation.py", 398),
 }
 
 #: 실제 코드 등장 = 79 - 12. (3-E-38 전에는 69 = 75 - 6, 3-E-38 뒤 67 = 76 - 9.)
@@ -289,7 +305,10 @@ PROSE_OCCURRENCES = {
 #: 코드를 명시하게 된 것**이다 (``STRING_OCCURRENCES`` 의 설명 참고).
 #: 새로 이 코드로 거절하게 된 자리는 **없다** — 오히려 흐름 거절 넷이
 #: 이 코드에서 빠져나갔다.
-CODE_OCCURRENCES = 80
+#: 🔴 80 → **83** (Phase 6-AC). 위 ``STRING_OCCURRENCES`` 의 설명에 있는
+#: **코드 쪽 셋**이다. 산문 셋은 이 수에 들어오지 않는다 — 두 수가 같은
+#: 만큼 늘지 않았다는 것이 그 구분이 살아 있다는 증거다.
+CODE_OCCURRENCES = 83
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {
@@ -335,11 +354,20 @@ FIELD_DEFAULT_OWNERS = {
 #:    **자리의 성격도, 개수도 바뀌지 않았다** — 13곳 그대로이고 짝지은 상태도
 #:    그대로다. 문자열 리터럴을 지운 AST 가 전후 동일함이 그 증거다
 #:    (:mod:`tests.test_result_actor_provenance_contract` 의 ``test_20``).
+#: 🔴 **Phase 6-AC 에서 열 자리가 밀렸다 — 위반 13 · 적합 19 는 그대로다.**
+#: 자리의 성격도 개수도 짝지은 상태도 바뀌지 않았고, 바뀐 것이 줄 번호뿐이라는
+#: 것이 그 증거다. 원인은 셋이고 전부 **그 자리보다 위에** 들어간 설명이다:
+#:
+#:   ``action_execution.py``  339 → 342 (+3 · ``LINK_SUMMON`` 분기와 설명)
+#:   ``activation.py``        647 → 718 · 679 → 750 (+71 · ``_check_use_limit``
+#:                            과 ``USE_LIMIT_REACHED`` 의 설명)
+#:   ``effect/executor.py``   일곱 자리 전부 +38 (지연 접근자 둘과
+#:                            ``_summon_ruling`` · 특수 소환 관문의 설명)
 CONTRACT_VIOLATIONS = {
     # 🔴 Phase 6-B 가 ``ActionExecutor.__init__`` 에 ``journal`` 인자와
     # 설명(+23줄)을 더해 **그 아래가 밀렸다** (316 → 339). 거부 자리와
     # 짝지은 상태는 그대로다.
-    ("engine/action_execution.py", 339, "ActionStatus.EXECUTION_ERROR"),
+    ("engine/action_execution.py", 342, "ActionStatus.EXECUTION_ERROR"),
     # 🔴 **Phase 6-AB 보완5 에서 ``response.py`` 의 한 자리가 +9 밀렸다**
     # (476 → 485). 원인 하나다 — :data:`AFTER_FAST_WINDOW_RULE` 과 그
     # 설명(+9줄)이 이 자리보다 **위**에 들어갔다. 빈 체인의 빠른 효과
@@ -386,14 +414,14 @@ CONTRACT_VIOLATIONS = {
     #
     # **위반 13 · 적합 19 는 그대로다** — 자리의 성격도 개수도 짝지은
     # 상태도 바뀌지 않았고, 바뀐 것이 줄 번호뿐이다.
-    ("engine/activation.py", 647, "ActivationStatus.INVALID_ACTION"),
-    ("engine/activation.py", 679, "ActivationStatus.CHAIN_REFUSED"),
-    ("engine/effect/executor.py", 606, "ResolutionStatus.EXECUTION_ERROR"),
-    ("engine/effect/executor.py", 754, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 767, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 890, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1090, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1366, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/activation.py", 718, "ActivationStatus.INVALID_ACTION"),
+    ("engine/activation.py", 750, "ActivationStatus.CHAIN_REFUSED"),
+    ("engine/effect/executor.py", 644, "ResolutionStatus.EXECUTION_ERROR"),
+    ("engine/effect/executor.py", 792, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 805, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 928, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1128, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1404, "ResolutionStatus.INVALID_CONTEXT"),
     # 🔴 **한 자리가 밀렸다** (Phase 6-L). ``engine/effect/executor.py``
     # 1336 → **1390**. 6-L 이 그 위에 ``_target_spec_of`` ·
     # ``_resolve_self_reference`` (+45) 와 ``_plan_card_operation`` 의
@@ -403,7 +431,7 @@ CONTRACT_VIOLATIONS = {
     # 더한 거절 자리(``_resolve_self_reference``)는 이 목록에 들어오지
     # 않는다: 그쪽은 ``INFORMATION_UNAVAILABLE`` 을 쓴다 — "규칙을 아직
     # 옮기지 않았다" 가 아니라 "이 문맥에 그 카드가 없다" 이기 때문이다.
-    ("engine/effect/executor.py", 1704, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1742, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/resolution.py", 520, "ResolutionStatus.FORBIDDEN"),
     ("engine/payment.py", 402, "PaymentStatus.EXECUTION_ERROR"),
     # 🔴 보완6 에서 +6 밀렸다 (485 → 491) — ``act`` 가 ``stage`` 를
@@ -678,7 +706,10 @@ def test_02_the_string_count_is_79_but_the_code_count_is_67():
     #: 모름이고 왜 다른 자리가 규칙 거절인지를 적었다.
     #: 🔴 30 → **31** (보완8 마무리). 늘어난 하나도 산문이다
     #: (``_refusal_sentence`` 의 설명). 코드 수는 80 그대로다.
-    assert strings - len(sites) == 31
+    #: 🔴 31 → **34** (Phase 6-AC). 늘어난 산문 셋과 늘어난 코드 셋이
+    #: **따로** 세어진다 — 그것이 이 등식이 지키는 사실이다 (문자열 117 ·
+    #: 코드 83 · 산문 34).
+    assert strings - len(sites) == 34
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()

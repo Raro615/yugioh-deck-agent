@@ -238,7 +238,12 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: 바로 "규칙이 막은 것" 과 "이 저장소에 그 규칙이 없는 것" 의 혼동이고,
 #: 보완8 도 ``UnimplementedRule`` 을 **하나도 만들지 않았다** (위
 #: ``production`` 자리 수는 그대로다).
-RULE_NOT_IMPLEMENTED_MENTIONS = 111
+#: 🔴 111 → **117** (Phase 6-AC). 셋은 코드이고 셋은 산문이다 —
+#: ``tests/test_rule_not_implemented_code_audit.py`` 의
+#: ``STRING_OCCURRENCES`` 가 그 갈래를 적는다. 늘어난 코드 셋 중 **이
+#: 파일이 재는 ``UnimplementedRule`` 과 관계된 것은 0건**이고, 그것이 이
+#: 상수가 지키는 사실이다 (아래 배수 검사가 그 비율을 센다).
+RULE_NOT_IMPLEMENTED_MENTIONS = 117
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
@@ -249,6 +254,12 @@ RULE_NOT_IMPLEMENTED_MENTIONS = 111
 #: 튜플을 주지만, 그 빈 값이 "아직 안 적었다" 가 아니라 **"없는 것이 규칙이
 #: 아니라 데이터다"** 라는 뜻임을 docstring 과 함께 못박는다. 이 테스트가
 #: 말하는 "protocol 이지 privilege 가 아니다" 가 양방향으로 성립한다.
+#:
+#: 🔴 8 → **9개** (Phase 6-AC). 아홉째 ``_LinkMaterialsLegal`` 은 앞의
+#: 일곱과 같은 쓰임이다 — 규칙 이름을 **내기 위해** override 하고,
+#: ``UnimplementedRule`` 이 아니면서 **조건부로** 낸다 (소재 조건을 읽은
+#: 링크 몬스터에는 이름을 내지 않고, 읽지 못한 쪽에만 낸다). 그래서 이
+#: 테스트가 지키는 사실은 그대로이고 그 근거가 하나 늘었다.
 MISSING_RULES_OVERRIDES = {
     ("engine/condition/model.py", "Condition"),
     ("engine/condition/model.py", "UnimplementedRule"),
@@ -258,6 +269,7 @@ MISSING_RULES_OVERRIDES = {
     ("engine/condition/model.py", "Not"),
     ("engine/action_validation.py", "_NormalSpellActivation"),
     ("engine/action_validation.py", "_NormalSummonProcedure"),
+    ("engine/action_validation.py", "_LinkMaterialsLegal"),
 }
 
 #: ``_NormalSummonProcedure`` · ``_NormalSpellActivation`` 이 실제로 내놓는
@@ -597,7 +609,8 @@ def test_04_four_different_things_share_a_similar_name():
 
 def test_05_missing_rules_is_a_protocol_not_a_privilege_of_unimplemented_rule():
     """
-    **``missing_rules()`` 를 구현하는 production 클래스는 8개다** (6-D 에서 +1).
+    **``missing_rules()`` 를 구현하는 production 클래스는 9개다** (6-D 에서
+    +1, 6-AC 에서 다시 +1).
 
     그중 둘(``_NormalSummonProcedure`` · ``_NormalSpellActivation``)은
     ``UnimplementedRule`` 이 **아니면서** 규칙 이름을 낸다. 그리고
@@ -965,7 +978,10 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: 🔴 8 → **9** (Phase 6-V). 기르수 ① 의 ``activation`` 도
     #: ``UnimplementedRule`` 이 아니다 (``ZoneCountAtLeast``) — 이 테스트가
     #: 지키는 사실이 그것이므로 그대로다.
-    assert len(activations) == 9
+    #: 🔴 9 → **10** (Phase 6-AC). 성유물－『성장』 ② 의 ``activation`` 도
+    #: ``UnimplementedRule`` 이 아니다 (``ZoneHasFreeSlot``) — 같은 이유로
+    #: 그대로다. 수만 움직이고 단언은 약해지지 않았다.
+    assert len(activations) == 10
     assert not any(isinstance(a, UnimplementedRule) for a in activations)
 
     #: 여덟 개 전부 **판정 가능한** 조건이다 — UNKNOWN 을 내지 않는다.
