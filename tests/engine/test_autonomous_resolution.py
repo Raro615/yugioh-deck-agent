@@ -728,7 +728,11 @@ def test_d04_the_engine_gate_is_not_bypassed(repository):
 
     #: 등록소는 6-X 그대로다 — 6-Y 가 허가를 넓히지 않았다.
     #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
-    assert len(OPERATION_RULINGS) == 21
+    #: 🔴 21 → **22** (Phase 6-AD 후속). 늘어난 하나는 파슬 다이너
+    #: 파키세팔로(42009836) 이고, 등재한 것은 그 카드 **자신**의
+    #: ``MAY_BE_SPECIAL_SUMMONED`` 다 (근거를 함께 적었다). 그 카드의
+    #: **금지**는 ``engine.summon_restriction`` 의 표가 들고 있다.
+    assert len(OPERATION_RULINGS) == 22
     _, _, _, runs = _drive(repository, FirstPermittedChoice())
     choice = runs[0].choice
     #: 제안이 들고 온 판정이 ``BoardRuling`` 의 것과 같은 질문이다.

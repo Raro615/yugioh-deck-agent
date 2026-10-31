@@ -1200,7 +1200,13 @@ def test_c07_the_ruling_registry_was_not_widened():
     from engine.effect.library import OPERATION_RULINGS
 
     #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
-    assert len(OPERATION_RULINGS) == 21
+    #: 🔴 21 → **22** (Phase 6-AD 후속). 늘어난 하나는 파슬 다이너
+    #: 파키세팔로(42009836) 이고, 등재한 것은 그 카드 **자신**의
+    #: ``MAY_BE_SPECIAL_SUMMONED`` 다 — 공식 텍스트 전문에 소환 조건이 없고
+    #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
+    #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
+    #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
+    assert len(OPERATION_RULINGS) == 22
 
 
 def test_c08_the_defaults_are_the_old_behaviour():

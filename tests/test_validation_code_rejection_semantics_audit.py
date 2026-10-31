@@ -156,7 +156,9 @@ CODE_MEMBER_COUNT = 54
 #: 0건일 때 "규칙이 답한 0건" 과 "어휘를 열지 못한 0건" 을 갈라내는 두
 #: 자리다. 거부 생성(``REJECTION_PRODUCTIONS`` 67 → 70)도 같은 수만큼
 #: 늘었으므로 아래 "차이가 13" 은 그대로다.
-CODE_OCCURRENCES = 83
+#: 🔴 83 → **85** (Phase 6-AD 후속). ``REJECTION_PRODUCTIONS`` 가 늘어난
+#: 둘과 **같은 자리**이므로 아래 "차이가 13" 은 그대로다.
+CODE_OCCURRENCES = 85
 
 #: 그중 **거부를 만드는** 자리.
 #:
@@ -221,7 +223,12 @@ CODE_OCCURRENCES = 83
 #: ``requirement.code`` 를 두 분기에서 쓰게 되었고(같은 코드, 두 생성 자리),
 #: ``_link_summon`` 의 ``LINK_MATERIAL_INVALID`` 요구 하나가 더해졌다.
 #: ``CODE_OCCURRENCES`` 도 같은 셋만큼 늘어 아래 "차이가 13" 은 그대로다.
-REJECTION_PRODUCTIONS = 70
+#: 🔴 70 → **72** (Phase 6-AD 후속). 늘어난 둘은 ``engine/activation.py`` 의
+#: 후보 존재 검사이고 (``_candidate_existence`` 의 두 모름 갈래), 둘 다
+#: ``RULE_NOT_IMPLEMENTED`` · ``INFORMATION_UNAVAILABLE`` 로 **모름**을
+#: 적는다 — 확정 거부가 늘어난 것이 아니다. ``CODE_OCCURRENCES`` 도 같은
+#: 둘만큼 늘어 아래 "차이가 13" 은 그대로다.
+REJECTION_PRODUCTIONS = 72
 
 #: enum 이 **섹션 주석으로 선언한** 묶음 → 멤버 수.
 DECLARED_SECTIONS = {

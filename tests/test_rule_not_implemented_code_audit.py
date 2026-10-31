@@ -183,7 +183,13 @@ MINE = 0
 #: ("누구에게 걸리는지 읽지 못한 카드는 이 코드가 아니라
 #: ``RULE_NOT_IMPLEMENTED`` 이고 모름 쪽에 남는다"). ``CODE_OCCURRENCES``
 #: 는 **83 그대로**다 — 새로 이 코드로 거절하게 된 자리는 없다.
-STRING_OCCURRENCES = 119
+#: 🔴 119 → **122** (Phase 6-AD 후속). 셋 다 ``engine/activation.py`` 이고
+#: **둘이 코드 · 하나가 산문**이다 — 발동 시점의 후보 존재 검사가 "후보는
+#: 보이는데 그 조작의 판정이 등재되지 않았다" 를 이 코드로 적고
+#: (``_candidate_existence``), 그 위의 주석이 **왜** 그 코드인지를 적는다
+#: ("코드가 생겨야 풀리는 모름이고 판이 바뀌어서 풀리는 모름이 아니다").
+#: 그래서 ``CODE_OCCURRENCES`` 도 83 → 85 다.
+STRING_OCCURRENCES = 122
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -237,8 +243,10 @@ PROSE_OCCURRENCES = {
     # 좌표만 밀렸다 — ``_check_use_limit`` · 지연 접근자 · 링크 소환
     # 분기가 전부 그 자리들보다 **위**에 들어갔기 때문이다. 보완8 과 같은
     # 이유로 밀린 좌표를 손으로 옮기지 않고 실측값으로 다시 적는다.
-    ("engine/activation.py", 803),
-    ("engine/activation.py", 841),
+    ("engine/activation.py", 846),
+    ("engine/activation.py", 884),
+    #: 🔴 Phase 6-AD 후속 — 후보 존재 검사의 모름 갈래를 가르는 주석이다.
+    ("engine/activation.py", 1190),
     ("engine/activation_timing.py", 511),
     ("engine/duel.py", 176),
     ("engine/duel.py", 979),
@@ -321,7 +329,7 @@ PROSE_OCCURRENCES = {
 #: 🔴 80 → **83** (Phase 6-AC). 위 ``STRING_OCCURRENCES`` 의 설명에 있는
 #: **코드 쪽 셋**이다. 산문 셋은 이 수에 들어오지 않는다 — 두 수가 같은
 #: 만큼 늘지 않았다는 것이 그 구분이 살아 있다는 증거다.
-CODE_OCCURRENCES = 83
+CODE_OCCURRENCES = 85
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {
@@ -427,8 +435,8 @@ CONTRACT_VIOLATIONS = {
     #
     # **위반 13 · 적합 19 는 그대로다** — 자리의 성격도 개수도 짝지은
     # 상태도 바뀌지 않았고, 바뀐 것이 줄 번호뿐이다.
-    ("engine/activation.py", 718, "ActivationStatus.INVALID_ACTION"),
-    ("engine/activation.py", 750, "ActivationStatus.CHAIN_REFUSED"),
+    ("engine/activation.py", 761, "ActivationStatus.INVALID_ACTION"),
+    ("engine/activation.py", 793, "ActivationStatus.CHAIN_REFUSED"),
     ("engine/effect/executor.py", 644, "ResolutionStatus.EXECUTION_ERROR"),
     ("engine/effect/executor.py", 792, "ResolutionStatus.INVALID_OPERATION"),
     ("engine/effect/executor.py", 805, "ResolutionStatus.INVALID_OPERATION"),
@@ -459,7 +467,11 @@ CONTRACT_VIOLATIONS = {
 #: ``UNSUPPORTED_OPERATION`` 은 상태 enum 이 "모른다" 쪽으로 묶어 둔
 #: 값이고, 두 거절은 실제로 "어디로 가는지 모른다" · "그 효과가
 #: 불발되는지 모른다" 다.
-CONFORMING_SITES = 19
+#: 🔴 19 → **21** (Phase 6-AD 후속). 늘어난 둘은 발동 시점의 후보 존재
+#: 검사가 내는 ``TargetLegality.UNKNOWN`` + ``RULE_NOT_IMPLEMENTED`` 이고,
+#: **적합** 쪽이다 — 그 enum 자신이 ``UNKNOWN`` 을 "판정할 수 없다" 로 적어
+#: 두었다. 위반 13 은 그대로다.
+CONFORMING_SITES = 21
 
 #: 해결 계층의 "모른다" 쪽 상태 — `resolution.py` 의 docstring 을 읽어 모았다.
 RESOLUTION_UNKNOWN_NAMES = {
@@ -623,6 +635,15 @@ def status_paired_sites() -> tuple[list, list]:
             elif owner == "ActionStatus" and name == "UNSUPPORTED_ACTION":
                 #: "할 줄 모른다" — docstring 이 그렇게 적는다. 적합하다.
                 unknown_side = True
+            elif owner == "TargetLegality" and name == "UNKNOWN":
+                #: 🔴 Phase 6-AD 후속 — 발동 시점의 후보 존재 검사가
+                #: ``_CandidateExistence`` 로 답하고, 그 첫 인자가
+                #: ``TargetLegality`` 다. ``UNKNOWN`` 은 그 enum **자신이**
+                #: "판정할 수 없다" 로 적어 둔 멤버이므로 (``engine.effect.
+                #: targeting.TargetLegality``) 이 짝은 **적합하다** — 다른
+                #: enum 의 모름 묶음과 같은 규율이고, 내가 새로 정한 기준이
+                #: 아니다.
+                unknown_side = True
             else:
                 unknown_side = False
             row = (rel, first.lineno, f"{owner}.{name}")
@@ -720,9 +741,9 @@ def test_02_the_string_count_is_79_but_the_code_count_is_67():
     #: 🔴 30 → **31** (보완8 마무리). 늘어난 하나도 산문이다
     #: (``_refusal_sentence`` 의 설명). 코드 수는 80 그대로다.
     #: 🔴 31 → **34** (Phase 6-AC). 늘어난 산문 셋과 늘어난 코드 셋이
-    #: **따로** 세어진다 — 그것이 이 등식이 지키는 사실이다 (문자열 119 ·
-    #: 코드 83 · 산문 **36** — Phase 6-AD 가 산문 둘을 더했다).
-    assert strings - len(sites) == 36
+    #: **따로** 세어진다 — 그것이 이 등식이 지키는 사실이다 (문자열 122 ·
+    #: 코드 85 · 산문 **37** — 6-AD 가 산문 둘, 그 후속이 하나를 더했다).
+    assert strings - len(sites) == 37
 
     #: 산문 자리를 정확히 집는다 — 어디가 설명이고 어디가 코드인지 고정한다.
     prose = set()

@@ -483,7 +483,7 @@ def duel_activator(journal=None, definitions=None, implementations=None):
     from engine.payment import CostPayer
 
     #: 🔴 **조작 판정 지식을 넘긴다** (Phase 6-AD 후속) — ``duel_resolver`` 가
-    #: ``build_executor(rulings=OPERATION_RULINGS)`` 로 넘기는 것과 **같은
+    #: ``build_executor`` 에 ``rulings=OPERATION_RULINGS`` 를 넘기는 것과 **같은
     #: 자리 · 같은 지식**이다. 발동 시점의 후보 존재 검사와 해결 시점의 관문이
     #: 같은 표를 읽어야 두 답이 갈리지 않는다.
     #:

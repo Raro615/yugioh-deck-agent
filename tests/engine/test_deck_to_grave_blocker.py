@@ -682,7 +682,13 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
 
     #: 등록소는 21장이고 그 안에 든 후보는 **그 한 장**이다.
     #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
-    assert len(OPERATION_RULINGS) == 21
+    #: 🔴 21 → **22** (Phase 6-AD 후속). 늘어난 하나는 파슬 다이너
+    #: 파키세팔로(42009836) 이고, 등재한 것은 그 카드 **자신**의
+    #: ``MAY_BE_SPECIAL_SUMMONED`` 다 — 공식 텍스트 전문에 소환 조건이 없고
+    #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
+    #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
+    #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
+    assert len(OPERATION_RULINGS) == 22
     assert set(OPERATION_RULINGS.card_ids) & set(pool) == {SELF_GRAVE_TRIGGER}
 
 
@@ -1037,7 +1043,13 @@ def test_i02_the_production_registry_is_untouched():
     잃는다 — 그래서 원본의 크기와 내용을 함께 고정한다.
     """
     #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
-    assert len(OPERATION_RULINGS) == 21
+    #: 🔴 21 → **22** (Phase 6-AD 후속). 늘어난 하나는 파슬 다이너
+    #: 파키세팔로(42009836) 이고, 등재한 것은 그 카드 **자신**의
+    #: ``MAY_BE_SPECIAL_SUMMONED`` 다 — 공식 텍스트 전문에 소환 조건이 없고
+    #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
+    #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
+    #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
+    assert len(OPERATION_RULINGS) == 22
     #: 🔴 **이 카드는 이제 원본에 있다** (Phase 6-AC). 그래서 "새지 않았다"
     #: 를 유무로는 더 이상 셀 수 없고, **사유로** 센다: 원본이 들고 있는
     #: 문장은 6-AC 가 적은 등재 사유이고, ``test_i01`` 이 사본에 적은

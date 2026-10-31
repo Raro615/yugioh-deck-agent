@@ -38,6 +38,7 @@ from engine.duel import Duel
 from engine.effect.executor import EffectExecutor, EffectImplementationRegistry
 from engine.effect.journal import EventJournal
 from engine.effect.library import (
+    PACHYCEPHALO,
     HONEST,
     OPERATION_RULINGS,
     definition_registry,
@@ -168,8 +169,15 @@ def test_a01_the_registry_holds_twenty_one_hand_written_cards():
     텍스트 전문을 읽은 것이고, 그래서 §14 의 "데이터 확장" 금지를 어긴
     것이 아니라 **이번 경로가 요구한 두 질문만** 읽었다.
     """
-    assert len(OPERATION_RULINGS) == 21
-    assert len(OPERATION_RULINGS.card_ids) == 21
+    #: 🔴 21 → **22** (Phase 6-AD 후속). 늘어난 하나는 파슬 다이너
+    #: 파키세팔로(42009836) 이고, 등재한 것은 그 카드 **자신**의
+    #: ``MAY_BE_SPECIAL_SUMMONED`` 다 — 공식 텍스트 전문에 소환 조건이 없고
+    #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
+    #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
+    #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
+    assert len(OPERATION_RULINGS) == 22
+    assert len(OPERATION_RULINGS.card_ids) == 22
+    assert PACHYCEPHALO in OPERATION_RULINGS.card_ids
     assert FEATHERMAN in OPERATION_RULINGS.card_ids
     assert HONEST in OPERATION_RULINGS.card_ids
     assert POT_OF_GREED in OPERATION_RULINGS.card_ids
@@ -862,7 +870,13 @@ def test_g02_the_registry_data_was_not_expanded():
     """
     library = source_of("engine/effect/library.py")
     #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
-    assert len(OPERATION_RULINGS) == 21
+    #: 🔴 21 → **22** (Phase 6-AD 후속). 늘어난 하나는 파슬 다이너
+    #: 파키세팔로(42009836) 이고, 등재한 것은 그 카드 **자신**의
+    #: ``MAY_BE_SPECIAL_SUMMONED`` 다 — 공식 텍스트 전문에 소환 조건이 없고
+    #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
+    #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
+    #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
+    assert len(OPERATION_RULINGS) == 22
     #: 라이브러리 쪽은 6-O 가 건드리지 않았다 — 유도는 ruling.py 에 있다.
     assert "rulebook_facts" not in library
 

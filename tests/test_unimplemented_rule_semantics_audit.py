@@ -247,7 +247,10 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: ``engine/validation.py`` 의 새 코드 설명이다 — 코드 자리는 83 그대로다
 #: (저쪽 파일의 ``CODE_OCCURRENCES``). 이 파일이 재는
 #: ``UnimplementedRule`` 과 관계된 것은 역시 **0건**이다.
-RULE_NOT_IMPLEMENTED_MENTIONS = 119
+#: 🔴 119 → **122** (Phase 6-AD 후속). 셋 다 ``engine/activation.py`` 의
+#: 후보 존재 검사이고 (코드 둘 · 산문 하나), 이 파일이 재는
+#: ``UnimplementedRule`` 과 관계된 것은 역시 **0건**이다.
+RULE_NOT_IMPLEMENTED_MENTIONS = 122
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
