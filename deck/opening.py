@@ -472,6 +472,16 @@ class ExecutedStep:
     카드 이름을 담는 이유는 :attr:`materials` 와 같다 — 보고를 만드는 자리에
     카드 저장소가 없다.
     """
+    material_card_ids: tuple = ()
+    """
+    같은 소재들의 **카드 ID** (Phase 6-AD 후속).
+
+    🔴 :attr:`materials` 와 **같은 순서 · 같은 시점**의 기록이다. 저쪽은
+    보고가 읽는 이름이고 이쪽은 **경로 대조가 읽는 값**이다 — 경로는 카드
+    ID 로 적혀 있으므로 (``deck.combo_policy.PlannedAction.
+    material_card_ids``) 이름만으로는 "계획이 요구한 소재였는가" 를 확인할
+    수 없었다.
+    """
     materials: tuple[str, ...] = ()
     """
     이 걸음이 **소재로 보낸** 카드들 (Phase 6-AC). 링크 소환만 채운다.
@@ -645,6 +655,25 @@ def _material_names(duel, action, repository) -> "tuple[str, ...]":
             definition.display_name() if definition is not None else str(instance)
         )
     return tuple(names)
+
+
+def _material_card_ids(duel, action, repository) -> "tuple[int, ...]":
+    """
+    그 행동이 소재로 보낸 카드의 **ID** 들 (Phase 6-AD 후속).
+
+    🔴 :func:`_material_names` 와 **같은 시점에 같은 순서로** 읽는다 (적용
+    전에). 이름은 사람이 읽는 칸이고 ID 는 **대조하는 칸**이다 — 경로가
+    카드 ID 로 적혀 있으므로 (``PlannedAction.material_card_ids``) 이름만
+    남기면 "계획이 요구한 소재를 확인한다" 를 실제로 할 수 없다.
+
+    번호를 읽을 수 없는 개체는 **건너뛰지 않고** 센다 — ``None`` 을 넣으면
+    대조에서 길이가 맞지 않아 드러난다.
+    """
+    found: list = []
+    for instance in getattr(action, "materials", ()):
+        card = duel.state.find_instance(instance)
+        found.append(card.card_id if card is not None else None)
+    return tuple(found)
 
 
 def unsupported_reasons(legal, *, with_scope: bool = True) -> tuple[str, ...]:
@@ -983,6 +1012,7 @@ def execute_opening(
         gate = _gate_code(duel, action, repository)
         #: 🔴 **적용 전에** 읽는다 (``_material_names`` 의 설명).
         materials = _material_names(duel, action, repository)
+        material_ids = _material_card_ids(duel, action, repository)
 
         before_hash = duel.state.state_hash()
         #: 🔴 **자동 처리 도중 새로 만난 사유만 따로 센다** (보완8 세
@@ -1038,6 +1068,7 @@ def execute_opening(
             unsupported_during=during,
             resolution_choices=picked_ids,
             resolution_choice_text=picked_text,
+            material_card_ids=material_ids,
             materials=materials,
         ))
         if not step.accepted:

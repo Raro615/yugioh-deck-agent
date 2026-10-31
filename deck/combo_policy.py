@@ -410,14 +410,43 @@ def line_progress(run, line: ComboLine) -> LineProgress:
     return LineProgress(line=line, done=done, orders=tuple(orders))
 
 
+#: 효과 발동 걸음의 **종류 이름**. 성공 근거가 다른 쪽과 가르는 데 쓴다.
+_EFFECT_KIND = "activate_effect"
+
+
 def _step_matches(executed, planned: PlannedAction) -> bool:
     """
-    기록된 걸음 하나가 그 단계인가.
+    기록된 걸음 하나가 **그 단계를 실제로 해냈는가.**
 
     :meth:`PlannedAction.matches` 와 **다른 입력**을 본다 — 저쪽은
     ``PlayerAction``(지금의 의도)이고 이쪽은 ``ExecutedStep``(지난 사실)이다.
     기록에는 인스턴스가 아니라 **카드 ID 와 문자열**이 남으므로 판을 다시
     읽지 않는다 (판은 이미 바뀌어 있다).
+
+    🔴 **세 사실을 가른다** (Phase 6-AD 후속). 6-AD 까지 이 함수는
+    ``kind`` · ``card_id`` · ``effect_ref`` 만 보았고, 바깥의
+    :func:`line_progress` 가 ``accepted`` 만으로 걸음을 걸렀다. 그래서
+    **요청이 수락되었다**는 사실 하나로 단계가 세어졌다 — 외부 검토자가
+    종류 · 카드 · 효과 · 해결 시점 선택이 전부 맞고 ``resolved=False`` 인
+    기록을 넣어 ``completed=True`` · ``done=4`` 를 재현했다 (보고 함수의
+    합성 입력 반례이고, 실제 듀얼에서 네 단계가 실패하고도 완료로 적혔다는
+    뜻이 아니다 — 보고서 §14.2).
+
+    ==================  ====================================================
+    요청이 수락됨          ``accepted`` — 관문을 지났다
+    선택함               ``resolution_choices`` — 해결 중에 무엇을 골랐는가
+    **효과가 적용됨**      ``resolved`` + 그 효과의 ``EffectEvent``
+    ==================  ====================================================
+
+    🔴 **성공 근거가 종류마다 다르다.** 효과 발동은 **그 효과의**
+    ``EffectEvent`` 가 이 걸음에 적혔는지 보고, 일반 소환 · 링크 소환은
+    **소환이 효과가 아니므로** 그 기록이 없다 — 그쪽은 판이 바뀌었는지와
+    (``state_changed``) 계획이 요구한 소재가 맞는지로 본다. 둘을 한 조건으로
+    합치면 정상 소환이 ``EffectEvent`` 부재만으로 실패 처리된다.
+
+    🔴 **다른 효과의 성공을 가져다 쓰지 않는다.** ``effect_events`` 는
+    **이 걸음에서 새로 적힌** 참조만 담으므로 (``ExecutedStep`` 의 설명),
+    전체 기록에 어딘가 사건이 하나 있다는 이유로 이 단계가 성공하지 않는다.
     """
     if executed.kind != planned.kind:
         return False
@@ -426,6 +455,28 @@ def _step_matches(executed, planned: PlannedAction) -> bool:
     if planned.effect_ref is not None:
         want = f"{planned.effect_ref[0]}:e[{planned.effect_ref[1]}]"
         if executed.effect_ref != want:
+            return False
+    #: ① 수락 — :func:`line_progress` 도 이미 걸렀지만, 이 함수만으로도
+    #: 참이어야 한다 (합성 입력이 바로 이 함수에 들어온다).
+    if not executed.accepted:
+        return False
+    #: ② 막히지 않고 끝났는가. 체인이 중간에 멈춘 걸음은 단계가 아니다.
+    if not executed.resolved:
+        return False
+    #: ③ **그 단계가 요구한 일이 실제로 일어났는가.**
+    if executed.kind == _EFFECT_KIND:
+        ref = executed.effect_ref
+        if ref is None or ref not in executed.effect_events:
+            return False
+    elif not executed.state_changed:
+        return False
+    if planned.material_card_ids:
+        #: 🔴 **계획이 요구한 소재를 실제로 확인한다** (문서가 그렇게 적었다).
+        #: 이름 칸으로는 카드 ID 와 대조할 수 없어 6-AD 까지 확인하지
+        #: 못했고, 그래서 ``ExecutedStep.material_card_ids`` 를 더했다.
+        if sorted(executed.material_card_ids) != sorted(
+            planned.material_card_ids
+        ):
             return False
     if planned.resolution_card_ids:
         #: 🔴 **발동이 수락됐다는 사실만으로 세지 않는다** (6-AD §6). 이
