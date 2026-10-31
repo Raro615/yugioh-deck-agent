@@ -475,13 +475,25 @@ def duel_activator(journal=None, definitions=None, implementations=None):
     ``engine.normal_summon`` 을 그렇게 읽는 것과 같은 자리다).
     """
     from engine.activation import EffectActivator
-    from engine.effect.library import definition_registry, implementation_registry
+    from engine.effect.library import (
+        OPERATION_RULINGS,
+        definition_registry,
+        implementation_registry,
+    )
     from engine.payment import CostPayer
 
+    #: 🔴 **조작 판정 지식을 넘긴다** (Phase 6-AD 후속) — ``duel_resolver`` 가
+    #: ``build_executor(rulings=OPERATION_RULINGS)`` 로 넘기는 것과 **같은
+    #: 자리 · 같은 지식**이다. 발동 시점의 후보 존재 검사와 해결 시점의 관문이
+    #: 같은 표를 읽어야 두 답이 갈리지 않는다.
+    #:
+    #: 🔴 넘기지 않으면 관문 질문의 답이 ``UNKNOWN`` 이고, 그러면 해결 시점에
+    #: 고르는 선택의 발동이 **모름으로 보류된다** — 허가로 메꾸지 않는다.
     return EffectActivator(
         definition_registry() if definitions is None else definitions,
         implementation_registry() if implementations is None else implementations,
         payer=CostPayer(journal=journal),
+        rulings=OPERATION_RULINGS,
     )
 
 

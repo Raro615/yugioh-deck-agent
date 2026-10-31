@@ -610,8 +610,41 @@ class TargetSpec:
     선언하는 것이고 (``EFFECT_FLAG_CARD_TARGET``), 그것을 미루면 무효화 ·
     회피의 대상이 사라진다.
     """
+    existence_requires_gate: bool = False
+    """
+    🔴 **공식 스크립트가 후보 조건 **안에** 관문 술어를 적었는가**
+    (Phase 6-AD 후속).
+
+    그렇다면 "후보가 있는가" 는 "**지금 그 조작을 할 수 있는** 후보가
+    있는가" 이고, 발동 시점의 존재 검사가 그 관문까지 보아야 한다::
+
+        c93920420.lua
+            s.spfilter1 = c:IsSetCard(SET_WORLD_LEGACY)
+                          and c:IsCanBeSpecialSummoned(e,0,tp,false,false)
+            s.sptg1     = … and Duel.IsExistingMatchingCard(s.spfilter1, …)
+
+    ``IsExistingMatchingCard`` 가 **그 필터로** 묻는다. 6-AD 는 존재 검사를
+    선택 명세의 조건 필터(「성유물」 몬스터)로만 했고, 그래서 **아직 확인하지
+    못한 발동 자격을 허가했다** (보고서 §14.1 의 실측).
+
+    🔴 **기본값이 거짓인 것은 ADR-006 이다.** 공식 스크립트에서 그 사실을
+    **읽은** 효과에만 적는다 — 적지 않은 효과의 발동 조건은 한 글자도
+    강해지지 않는다. 관문 술어를 후보 조건에 적는 카드는 실제로 많지만
+    (기르수 ① 의 ``s.tgfilter`` 도 ``IsAbleToGrave`` 를 적는다) **읽고
+    선언한 것만** 걸린다.
+
+    🔴 **어떤 질문인가는 여기 적지 않는다.** 그것은 그 선택을 **쓰는 일**의
+    선언에서 나온다 (:func:`~engine.effect.semantics.
+    operation_gate_question`) — 해결 시점과 실행 시점이 묻는 바로 그
+    질문이고, 두 벌로 적으면 세 자리의 답이 갈릴 수 있다.
+    """
 
     def __post_init__(self) -> None:
+        if self.existence_requires_gate and self.choice is None:
+            raise ValueError(
+                "고를 것이 없는 규칙에 후보 존재 관문을 적을 수 없습니다 — "
+                f"{self.requirement.value} 에는 후보 조건이 없습니다."
+            )
         if self.chosen_at_resolution and self.requirement is not (
             TargetRequirement.CHOOSING
         ):
@@ -665,19 +698,25 @@ class TargetSpec:
 
     @classmethod
     def choosing(
-        cls, choice: ChoiceSpec, *, chosen_at_resolution: bool = False
+        cls,
+        choice: ChoiceSpec,
+        *,
+        chosen_at_resolution: bool = False,
+        existence_requires_gate: bool = False,
     ) -> "TargetSpec":
         """
         고르지만 대상 지정은 아닌 효과.
 
-        ``chosen_at_resolution`` 은 **규칙상 해결 중에 고른다**는 선언이다
-        (:attr:`chosen_at_resolution`). 기본값이 거짓인 것은 ADR-006 이다 —
+        ``chosen_at_resolution`` 은 **규칙상 해결 중에 고른다**는 선언이고
+        ``existence_requires_gate`` 는 **후보 조건에 관문 술어가 들어 있다**
+        는 선언이다 (각 칸의 설명). 둘 다 기본값이 거짓인 것은 ADR-006 이다 —
         공식 스크립트에서 그 사실을 **읽은** 효과에만 적는다.
         """
         return cls(
             requirement=TargetRequirement.CHOOSING,
             choice=choice,
             chosen_at_resolution=chosen_at_resolution,
+            existence_requires_gate=existence_requires_gate,
         )
 
     @classmethod
@@ -753,6 +792,7 @@ class TargetSpec:
             self.requirement.value,
             self.choice.canonical_state() if self.choice is not None else None,
             self.chosen_at_resolution,
+            self.existence_requires_gate,
         )
 
     def to_dict(self) -> dict:
@@ -761,6 +801,8 @@ class TargetSpec:
             data["choice"] = self.choice.to_dict()
         if self.chosen_at_resolution:
             data["chosen_at_resolution"] = True
+        if self.existence_requires_gate:
+            data["existence_requires_gate"] = True
         return data
 
     def describe_ko(self) -> str:

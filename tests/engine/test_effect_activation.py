@@ -1189,7 +1189,17 @@ def test_f_no_second_priority_system_was_built():
         node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
     }
 
-    assert defined == {"ActivationStatus", "ActivationError", "ActivationResult", "EffectActivator"}
+    #: 🔴 Phase 6-AD 후속이 ``_CandidateExistence`` 를 더했다 — **우선권
+    #: 체계가 아니라** "고를 수 있는 후보가 충분히 있는가" 의 답 하나다
+    #: (frozen dataclass, 칸 넷). 이름 앞의 밑줄이 그것이 이 모듈 안의
+    #: 값이라는 뜻이고, 아래 금지 낱말 검사가 그것도 함께 센다.
+    assert defined == {
+        "ActivationStatus",
+        "ActivationError",
+        "ActivationResult",
+        "EffectActivator",
+        "_CandidateExistence",
+    }
 
 
 # ======================================================================

@@ -662,22 +662,25 @@ def test_j03_two_candidates_in_hand_and_exactly_one_is_summoned(repository):
 
 
 @pytest.mark.real_card
-def test_j04_an_unregistered_candidate_is_not_turned_into_a_success(
+def test_j04_an_unconfirmed_eligibility_is_not_approved_as_a_success(
     repository,
 ):
     """
-    §4 · §6 — **후보에 없는 카드를 강제하지 않고, 모름을 성공으로 바꾸지
-    않는다.**
+    §2 — **아직 확인하지 못한 발동 자격을 허가하지 않는다.**
 
     패에 『성장』 이 **없고** 「성유물－『성건』」(40441990) 만 있는 판이다.
-    경로가 적어 둔 선호는 여전히 『성장』 이고, 정책은 그것을 **끌어오지
-    않는다.** 그러면 남은 후보는 『성건』 뿐인데, 그 카드에는 "특수 소환할
-    수 있는가" 가 **등재되지 않았다** — 그래서 ``UNKNOWN`` 이고 허가가
-    아니다 (ADR-006).
+    『성건』 은 「성유물」 몬스터이므로 조건 필터는 통과하는데, 그 카드에는
+    "지금 특수 소환할 수 있는가" 가 **등재되지 않았다** — 그래서 ``UNKNOWN``
+    이다.
 
-    🔴 **이 자리가 §6 의 "발동 수락 ≠ 경로 성공" 이다.** 발동은 수락됐지만
-    (후보가 **존재**하고 빈 칸도 있다) 해결이 특수 소환을 만들지 못했고,
-    경로 대조는 그 단계를 **세지 않는다.**
+    🔴 **이것을 "『성건』 은 규칙상 소환 불가능하다" 로 읽지 마라.** 실제
+    규칙에서는 소환할 수 있다. 문제는 **엔진이 그것을 확인하지 못했다**는
+    것이고, 확인하지 못한 자격을 발동 허가로 바꾸면 안 된다 (ADR-006).
+
+    🔴 **6-AD 는 이 자리를 수락했다.** ``s.sptg1`` 의
+    ``IsExistingMatchingCard`` 를 조건 필터만으로 세었기 때문이다 — 그
+    필터(``s.spfilter1``)에는 ``IsCanBeSpecialSummoned`` 가 **함께** 들어
+    있다. 그래서 발동이 수락되고 해결 시점에 멈췄다.
     """
     setup, run, chooser, plan = _run_wand(
         repository,
@@ -685,37 +688,88 @@ def test_j04_an_unregistered_candidate_is_not_turned_into_a_success(
         preferred=(WAND,),
     )
     from deck.combo_policy import line_progress
+    from engine.effect.semantics import GATED_CANDIDATE_RULE_MISSING
+    from engine.ids import EffectRef
+    from engine.validation import ValidationResult
 
-    record = _wand_record(chooser)
-    assert record is not None
-    #: ① 선호한 『성장』 은 후보에 없다 — 패에 없으므로.
-    assert WAND not in {c.card_id for c in record.offer.candidates}
-    #: ② 그 자리의 유일한 후보는 『성건』 이고 **허가되지 않았다.**
-    assert [c.card_id for c in record.offer.candidates] == [
-        WORLD_ARTIFACT_SWORD
-    ]
-    assert record.offer.permitted == ()
-    #: ③ 왜 안 되는지가 **이유로 남는다** — 모름을 허가로 접지 않았다.
-    reason = record.offer.candidates[0].reason
-    assert str(WORLD_ARTIFACT_SWORD) in reason
-    #: ④ 아무것도 고르지 않았고 특수 소환도 없다.
-    assert record.chosen == ()
+    #: ① 해결 시점 선택을 **아예 묻지 않았다** — 발동이 서지 않았으므로.
+    assert _wand_record(chooser) is None
+    #: ② 특수 소환도 없다. 필드에는 기르수뿐이다.
     state = setup.duel.state
     assert [c.card_id for c in state.zone(P0, Zone.MZONE)] == [GIRSU]
     assert WORLD_ARTIFACT_SWORD in [
         c.card_id for c in state.zone(P0, Zone.HAND)
     ]
-    #: ⑤ 발동은 **수락**됐지만 해결되지 않았다 — 두 사실이 따로 적힌다.
-    step = _wand_step(run)
-    assert step is not None
-    assert step.accepted is True
-    assert step.resolved is False
-    assert step.resolution_choices == ()
-    assert "고르지 않았습니다" in step.resolution_choice_text[0]
-    #: ⑥ 그래서 경로는 **끝까지 가지 않았다.**
+    #: ③ 경로는 둘째 단계까지만 갔다.
     progress = line_progress(run, plan)
     assert progress.completed is False
     assert progress.done == 2
+    assert progress.blocked_at is plan.steps[2]
+
+    #: ④ **거절이 모름이다** — 확정 금지가 아니다. 그리고 **무엇이 없어서**
+    #: 모르는지 이름이 붙는다 (보완8 의 계약).
+    buried = next(
+        card for card in state.zone(P0, Zone.GRAVE) if card.card_id == WAND
+    )
+    before = state.state_hash()
+    result = setup.duel._activator.can_activate(
+        state,
+        setup.duel.chain,
+        PlayerAction.activate_effect(
+            actor=P0, source=buried.instance_id, effect_ref=EffectRef(WAND, 1)
+        ),
+        authorization=ValidationResult.valid("시험이 첫 관문을 대신한다"),
+    )
+    assert result.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert CODE_VALIDITY[result.code] is ActionValidity.UNKNOWN
+    assert result.missing_rule == GATED_CANDIDATE_RULE_MISSING
+    assert str(WORLD_ARTIFACT_SWORD) in result.reason
+    #: ⑤ 묻는 것만으로 판도 사용 기록도 체인도 바뀌지 않는다.
+    assert state.state_hash() == before
+    assert len(setup.duel.chain.links) == 0
+    #: ⑥ 전개 기록에도 **미지원 사유**로 남는다 — 조용히 사라지지 않는다.
+    assert any(
+        GATED_CANDIDATE_RULE_MISSING in line for line in run.unsupported
+    ), run.unsupported
+
+
+@pytest.mark.real_card
+def test_j04a_a_legal_candidate_is_not_covered_by_an_unknown_one(repository):
+    """
+    §2 — **확정 가능한 한 장이 있으면 모름이 그것을 덮지 않는다.**
+
+    패에 『성장』(등재됨 · 확정 가능) 과 『성건』(미등재 · 모름) 을 함께
+    둔다. 최소 장수는 1이므로 **확정 한 장이면 발동 자격이 충족된다** —
+    옆에 모르는 후보가 있다는 이유로 모름이 되면, 실제로 할 수 있는 발동이
+    막힌다.
+
+    그리고 해결 시점 선택은 **허가된 후보 안에서만** 일어난다: 『성건』 은
+    후보 목록에 남지만 ``permitted`` 가 아니다 (왜 못 고르는지가 정책에게도
+    보여야 한다 — ``ChoiceCandidate`` 의 설명).
+    """
+    setup, run, chooser, plan = _run_wand(
+        repository,
+        [GIRSU, CLIMAX, KEY, WORLD_ARTIFACT_SWORD, WAND],
+        preferred=(WAND,),
+    )
+    from deck.combo_policy import line_progress
+
+    #: ① 발동 자격이 충족되고 경로가 끝까지 간다.
+    assert line_progress(run, plan).completed, run.stopped_reason
+    record = _wand_record(chooser)
+    assert record is not None
+    #: ② 후보 목록에는 둘이 있고, 허가된 것은 『성장』 하나다.
+    offered = {c.card_id for c in record.offer.candidates}
+    assert offered == {WAND, WORLD_ARTIFACT_SWORD}
+    assert [c.card_id for c in record.offer.permitted] == [WAND]
+    #: ③ 소환된 것은 『성장』 이고 『성건』 은 패에 남는다.
+    state = setup.duel.state
+    assert sorted(c.card_id for c in state.zone(P0, Zone.MZONE)) == sorted(
+        [GIRSU, WAND]
+    )
+    assert WORLD_ARTIFACT_SWORD in [
+        c.card_id for c in state.zone(P0, Zone.HAND)
+    ]
 
 
 @pytest.mark.real_card

@@ -1388,6 +1388,17 @@ _WORLD_WAND_TRIGGER_ENTRY = LibraryEntry(
                 #: 공식 카드는 **그때의 패**에서 고르고, 발동 시점에
                 #: 고정하면 사라진 카드를 특수 소환하려 한다.
                 chosen_at_resolution=True,
+                #: 🔴 **후보 조건에 관문 술어가 들어 있다** (Phase 6-AD 후속).
+                #:
+                #: ``s.spfilter1`` 은 ``IsSetCard(SET_WORLD_LEGACY) and
+                #: IsCanBeSpecialSummoned(e,0,tp,false,false)`` 이고,
+                #: ``s.sptg1`` 의 ``Duel.IsExistingMatchingCard`` 가 **그
+                #: 필터로** 묻는다. 즉 "후보가 있는가" 는 "**지금 소환할 수
+                #: 있는** 후보가 있는가" 다.
+                #:
+                #: 6-AD 는 존재 검사를 선택 명세의 조건 필터로만 했고, 그래서
+                #: 아직 확인하지 못한 발동 자격을 허가했다 (보고서 §14.1).
+                existence_requires_gate=True,
             )
         ),
         operations=(SpecialSummonOperation(PRIMARY_TARGET),),
@@ -1432,6 +1443,11 @@ _WORLD_WAND_TRIGGER_ENTRY = LibraryEntry(
             "(Phase 6-AD): 후보의 존재는 발동 관문이 선택 명세로 확인하고, "
             "s.spfilter1 안의 IsCanBeSpecialSummoned 중 '판이 특수 소환을 "
             "금지하는가' 는 SpecialSummonPermitted 로 발동 조건에 옮겼다. "
+            "🔴 **그리고 s.spfilter1 의 IsCanBeSpecialSummoned 자체가 후보 "
+            "조건이다** (6-AD 후속): existence_requires_gate 로 선언해 "
+            "발동 시점의 존재 검사가 MAY_BE_SPECIAL_SUMMONED 관문까지 "
+            "보게 했다 — 그 질문은 해결 시점과 실행 시점이 묻는 것과 "
+            "같은 것이다. "
             "🔴 **고르는 시점도 그 둘의 자리에서 읽었다** (Phase 6-AD): "
             "s.sptg1 은 Duel.IsExistingMatchingCard 로 후보의 존재만 "
             "확인하고 특정 카드를 고르지 않으며, 고르는 것은 s.spop1 의 "
@@ -1527,6 +1543,10 @@ _SPELL_TRAP_READ = (
 #: 시험과 실제 실행에 쓰이는 통상 몬스터.
 FEATHERMAN = 21844576
 
+#: 파슬 다이너 파키세팔로 — 6-AD 가 **금지**를 등재한 카드 (아래는 그
+#: 카드 **자신**의 특수 소환 가능성이고 다른 질문이다).
+PACHYCEPHALO = 42009836
+
 OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
     (
         normal_monster_facts(FEATHERMAN, "엘리멘틀 히어로 페더맨"),
@@ -1589,6 +1609,34 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
         #: 카드**에 ``MAY_BE_SENT_TO_GRAVE`` 를 묻고 (6-V 보고서 §11 이 그
         #: 자리를 적어 두었다), 성장 ② 가 **패에서 고른 카드**에
         #: ``MAY_BE_SPECIAL_SUMMONED`` 를 묻는다. 두 질문을 **각각** 읽었다.
+        #: 🔴 **파슬 다이너 파키세팔로** (Phase 6-AD 후속). 6-AD 는 이 카드의
+        #: **금지**를 ``engine.summon_restriction`` 의 표에 등재했고, 여기
+        #: 등재하는 것은 **다른 질문**이다 — "이 카드 **자신**을 특수 소환할
+        #: 수 있는가". 둘을 섞지 않는다: 저쪽은 "이 카드가 필드에 있으면
+        #: 서로 특수 소환할 수 없다" 이고, 이쪽은 "이 카드를 패에서 특수
+        #: 소환할 수 있다" 다 (필드에 나오기 **전**의 질문이다).
+        #:
+        #: 🔴 ``restricts_others`` 는 **기본값 ``True``** 다 — ② 가 실제로
+        #: 다른 카드의 특수 소환을 막는다. 그래서 이 카드가 앞면으로 있는
+        #: 판에서는 다른 질문의 답이 ``UNKNOWN`` 이 되고, 그것이 맞다.
+        CardRuleFacts(
+            card_id=PACHYCEPHALO,
+            answers={
+                RuleQuestion.MAY_BE_SPECIAL_SUMMONED: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "파슬 다이너 파키세팔로: 공식 텍스트 전문을 읽었고 "
+                    "소환 조건이 **없다** — 「일반 소환할 수 없다」 도 "
+                    "「특수 소환으로만 특수 소환할 수 있다」 도 적혀 있지 "
+                    "않은 레벨 4 메인 덱 효과 몬스터다 (① 리버스 파괴 · "
+                    "② 서로의 특수 소환 금지). 기계로 읽은 근거도 같은 "
+                    "방향이다: normal_summon_restriction_signals 가 () 다. "
+                    "🔴 ② 의 **금지**는 이 답과 다른 축이고 "
+                    "engine.summon_restriction 의 표가 들고 있다 — 그 금지는 "
+                    "이 카드가 몬스터 존에 **있을 때** 걸린다.",
+                ),
+            },
+        ),
         CardRuleFacts(
             card_id=WORLD_WAND,
             answers={

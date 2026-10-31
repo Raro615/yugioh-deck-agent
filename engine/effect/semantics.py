@@ -655,6 +655,46 @@ def declared_gate_question(operation) -> "RuleQuestion | None":
     return DECLARED_GATE_RULINGS.get(operation.kind)
 
 
+#: 발동 시점에 **후보를 그 조작으로 움직일 수 있는지** 확인하지 못했을 때의
+#: 규칙 이름 (Phase 6-AD 후속).
+#:
+#: 🔴 **왜 이 이름이 따로 필요한가.** 후보가 "있는지 모른다" 와 후보를
+#: "움직일 수 있는지 모른다" 는 다른 공백이다. 앞은 판이 바뀌면 풀리고
+#: (가려진 자리를 보게 된다), 뒤는 **그 카드의 판정이 등재되어야** 풀린다.
+#: 한 이름으로 적으면 고칠 자리가 어디인지 알 수 없다.
+GATED_CANDIDATE_RULE_MISSING: str = (
+    "gated-candidate-eligibility (후보를 그 조작으로 움직일 수 있는지 "
+    "확인되지 않았다)"
+)
+
+
+def operation_gate_question(definition, ref) -> "RuleQuestion | None":
+    """
+    그 **선택을 쓰는 일들**이 받는 관문의 질문. 없으면 ``None`` (6-AD 후속).
+
+    왜 필요한가 — 공식 스크립트는 후보 조건에 관문 술어를 **함께** 적는다.
+    ``c93920420.lua`` 의 ``s.spfilter1`` 은
+    ``IsSetCard(SET_WORLD_LEGACY) and IsCanBeSpecialSummoned(...)`` 이고,
+    ``s.sptg1`` 의 ``IsExistingMatchingCard`` 가 **그 필터로** 존재를 묻는다.
+    즉 "후보가 있는가" 는 "**지금 소환할 수 있는** 후보가 있는가" 다.
+
+    🔴 **이 함수는 아무것도 추론하지 않는다.** 일이 스스로 선언한 관문
+    (:func:`declared_gate_question`) 과 종류가 언제나 받는 관문
+    (:func:`rule_gate_question`) 만 읽고, **그 선택을 실제로 쓰는 일**만
+    본다 (``target_ref`` 가 그 이름을 가리키는 일). 그래서 관문이 없는
+    효과의 발동 조건은 한 글자도 강해지지 않는다.
+    """
+    for operation in getattr(definition, "operations", ()):
+        if getattr(operation, "target_ref", None) != ref:
+            continue
+        question = declared_gate_question(operation)
+        if question is None:
+            question = rule_gate_question(operation)
+        if question is not None:
+            return question
+    return None
+
+
 def rule_gate_question(operation) -> "RuleQuestion | None":
     """
     **종류**로 걸리는 관문의 질문. 그런 관문이 없으면 ``None`` (Phase 6-AD).
@@ -762,6 +802,8 @@ __all__ = [
     "is_rule_gated",
     "RULE_GATED_QUESTIONS",
     "rule_gate_question",
+    "operation_gate_question",
+    "GATED_CANDIDATE_RULE_MISSING",
     "gating_rules",
     "SEMANTIC_KINDS",
     "UNCHECKED_SEMANTIC_RULES",

@@ -319,6 +319,34 @@ MISSING_ACTIVATION_RULES: dict[ActivationStatus, str] = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class _CandidateExistence:
+    """
+    **고를 수 있는 후보가 충분히 있는가** 의 답 (Phase 6-AD 후속).
+
+    :class:`~engine.effect.targeting.TargetValidation` 과 **다른 것**이다 —
+    저쪽의 ``unchecked`` 는 후보를 찾을 때 못 본 **자리 이름**에서 파생되고
+    (``CandidateSet.unchecked``), 이쪽은 "그 조작의 판정이 등재되지 않았다"
+    는 **빠진 규칙의 이름**도 실어야 한다. 둘을 한 타입에 넣으면 "저기를 못
+    봤다" 와 "이 카드의 판정이 없다" 가 같은 칸에 섞인다.
+
+    🔴 ``UNKNOWN`` 이면 :attr:`unchecked` 가 **비지 않는다** — 보류를 만드는
+    자리가 그것을 요구한다 (보완8 의 ``WithheldAction.__post_init__``).
+    """
+
+    legality: TargetLegality
+    code: ValidationCode
+    reason: str
+    unchecked: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.legality is TargetLegality.UNKNOWN and not self.unchecked:
+            raise ValueError(
+                "판정하지 못했다면 **무엇이 없어서인지** 적어야 합니다 — "
+                f"그러지 않으면 고칠 자리를 알 수 없습니다: {self.reason!r}"
+            )
+
+
 class EffectActivator:
     """
     ``ACTIVATE_EFFECT`` 를 **체인 링크 하나**로 바꾼다.
@@ -332,19 +360,29 @@ class EffectActivator:
     아무 효과도 발동되지 않는다 — 그것이 기본 상태다 (ADR-006).
     """
 
-    __slots__ = ("_definitions", "_lookup", "_payer")
+    __slots__ = ("_definitions", "_lookup", "_payer", "_rulings")
 
     def __init__(
         self,
         definitions: EffectDefinitionSource,
         lookup: EffectImplementationLookup | None = None,
         payer: CostPayer | None = None,
+        rulings: object | None = None,
     ):
         self._definitions = definitions
         self._lookup = lookup if lookup is not None else EmptyImplementationLookup()
         # 비용 지불기는 **기존 것을 그대로 쓴다** (Phase 2-E). 여기서 비용을
         # 다시 구현하면 두 경로가 갈린다.
         self._payer = payer if payer is not None else CostPayer()
+        #: 🔴 **조작 판정 지식** (Phase 6-AD 후속). ``build_executor`` 가
+        #: ``rulings`` 를 받는 것과 **같은 자리 · 같은 규율**이다 — 부르는
+        #: 쪽이 고르고, 주지 않으면 관문 질문의 답이 ``UNKNOWN`` 이다
+        #: (ADR-006: 없는 것을 허가로 메꾸지 않는다).
+        #:
+        #: 쓰는 데는 한 곳이다 — 해결 시점에 고르는 선택의 **발동 시점
+        #: 존재 검사**가 "지금 그 조작을 할 수 있는 후보" 를 센다
+        #: (:meth:`_gated_candidates`).
+        self._rulings = rulings
 
     @property
     def definitions(self) -> EffectDefinitionSource:
@@ -368,6 +406,11 @@ class EffectActivator:
     @property
     def payer(self) -> CostPayer:
         return self._payer
+
+    @property
+    def rulings(self) -> object | None:
+        """조작 판정 지식. 없으면 ``None`` — 그때 관문 질문은 ``UNKNOWN``."""
+        return self._rulings
 
     # ==================================================================
     # 읽기만 하는 질문
@@ -975,7 +1018,14 @@ class EffectActivator:
                         looked_at=binding.spec.looked_at_zones(),
                     )
                 )
-                enough = resolver.availability(binding.spec, context)
+                #: 🔴 **"후보가 있는가" 는 "그 조작을 할 수 있는 후보가
+                #: 있는가" 다** (Phase 6-AD 후속). 공식 스크립트가 후보
+                #: 조건에 관문 술어를 함께 적으므로 (``s.spfilter1`` 의
+                #: ``IsCanBeSpecialSummoned``), 조건 필터만 세면 발동 자격을
+                #: 아직 확인하지 못한 채 허가하게 된다.
+                enough = self._candidate_existence(
+                    definition, binding, resolver, context
+                )
                 if enough.legality is TargetLegality.LEGAL:
                     continue
                 return self._fail(
@@ -1022,6 +1072,142 @@ class EffectActivator:
                 authorization=verdict,
             )
         return None
+
+    # ------------------------------------------------------------------
+    def _candidate_existence(
+        self,
+        definition: EffectDefinition,
+        binding,
+        resolver: TargetResolver,
+        context: ConditionContext,
+    ):
+        """
+        **지금 고를 수 있는 후보가 최소 장수만큼 있는가** (Phase 6-AD 후속).
+
+        세 질문을 가른다 (``c93920420.lua`` 의 세 자리와 같은 구분):
+
+        ===========  ========================================================
+        **발동할 때**  지금 소환 가능한 후보가 **최소 한 장 있는가** — 이 함수
+        **해결할 때**  그 자리에서 **어느 후보를 고를 수 있는가** —
+                     ``integration.autonomy`` 가 같은 질문으로 후보마다 판정
+        **실행할 때**  고른 개체를 **실제로** 그 조작으로 움직일 수 있는가 —
+                     ``EffectExecutor._check_rule_gate``
+        ===========  ========================================================
+
+        🔴 **발동 시점에 특정 카드를 고르거나 고정하지 않는다.** 이 함수는
+        세기만 하고, 어느 개체인지는 돌려주지도 않는다.
+
+        🔴 **같은 규칙 질문을 쓴다.** 관문 질문은
+        :func:`~engine.effect.semantics.operation_gate_question` 이
+        **정의에서** 읽고 (그 선택을 쓰는 일의 선언), 답은
+        :class:`~engine.effect.ruling.BoardRuling` 이 낸다 — 해결 시점과
+        실행 시점이 묻는 바로 그 둘이다. 그래서 세 자리의 답이 갈릴 수 없다.
+
+        🔴 **세 값을 보존한다.**
+
+        - 확정 후보 중 관문이 ``TRUE`` 인 것이 최소 장수 이상 → ``LEGAL``
+        - 가장 좋게 봐도 모자라고 **전부 확인했다** → ``ILLEGAL``
+        - 그 밖 → ``UNKNOWN``
+
+        확정 가능한 한 장이 있으면 **모름이 그것을 덮지 않는다** (첫 갈래가
+        먼저다). 반대로 전부 확정 불가능이면 모름으로 미루지 않는다.
+        """
+        spec = binding.spec
+        enough = resolver.availability(spec, context)
+        plain = _CandidateExistence(
+            enough.legality, enough.code, enough.reason, enough.unchecked
+        )
+        from engine.effect.semantics import (
+            GATED_CANDIDATE_RULE_MISSING,
+            operation_gate_question,
+        )
+
+        if not getattr(spec, "existence_requires_gate", False):
+            #: 🔴 **선언하지 않은 효과는 한 글자도 달라지지 않는다.** 후보
+            #: 조건에 관문 술어가 들어 있다는 사실은 **공식 스크립트에서
+            #: 읽어 정의에 적는다** (``TargetSpec.existence_requires_gate``) —
+            #: 종류만 보고 일괄로 강화하면 읽지 않은 카드의 발동 조건까지
+            #: 바뀐다 (실측: 등재된 판정이 22장뿐이라 많은 판의 발동이
+            #: 모름으로 보류됐다).
+            return plain
+        question = operation_gate_question(definition, binding.ref)
+        if question is None or spec.choice is None:
+            #: 선언은 있는데 그 선택을 쓰는 일이 관문을 받지 않는다 — 정의가
+            #: 모순이다. 조용히 통과시키지 않고 **모름**으로 적는다.
+            return _CandidateExistence(
+                TargetLegality.UNKNOWN,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{binding.ref} 의 후보 조건이 관문 술어를 요구한다고 "
+                "적혀 있는데, 그 선택을 쓰는 일에 관문이 선언되어 "
+                "있지 않습니다.",
+                (GATED_CANDIDATE_RULE_MISSING,),
+            )
+        if enough.legality is TargetLegality.ILLEGAL:
+            #: 조건 필터만으로 이미 모자라다. 관문을 더 물어도 늘지 않는다.
+            return plain
+
+        from engine.effect.ruling import BoardRuling
+        from engine.effect.ruling import OperationRulingRegistry
+
+        found = resolver.candidates(spec, context)
+        minimum = spec.choice.minimum
+        ruling = BoardRuling(
+            resolver.view,
+            self._rulings if self._rulings is not None
+            else OperationRulingRegistry(()),
+        )
+        certain: list = []
+        possible: list = []
+        notes: list[str] = []
+        for instance in (*found.eligible, *found.undecided):
+            told = ruling.explain(question, instance)
+            if told.answer is ConditionResult.FALSE:
+                notes.append(f"{instance}: {told.reason}")
+                continue
+            possible.append(instance)
+            if told.answer is ConditionResult.TRUE and instance in found.eligible:
+                certain.append(instance)
+            else:
+                notes.append(f"{instance}: {told.reason}")
+        if len(certain) >= minimum:
+            return _CandidateExistence(
+                TargetLegality.LEGAL,
+                ValidationCode.OK,
+                f"지금 {question.value} 가 참인 확실한 후보 "
+                f"{len(certain)}장 (필요 {minimum}장).",
+            )
+        if len(possible) < minimum and found.fully_checked:
+            return _CandidateExistence(
+                TargetLegality.ILLEGAL,
+                ValidationCode.NO_CANDIDATES,
+                f"후보 {found.possible_count}장을 전부 보았고 그중 지금 "
+                f"{question.value} 가 참일 수 있는 것은 {len(possible)}장 "
+                f"입니다 (필요 {minimum}장): {'; '.join(notes) or '사유 없음'}",
+            )
+        #: 🔴 **모름의 이유를 가른다.** 후보 자체가 미확정 · 못 본 자리면
+        #: 판이 바뀌면 풀리고 (``INFORMATION_UNAVAILABLE``), 후보는 보이는데
+        #: 그 조작의 판정이 등재되지 않았으면 **코드가 생겨야** 풀린다
+        #: (``RULE_NOT_IMPLEMENTED``).
+        if found.certain_count >= minimum:
+            return _CandidateExistence(
+                TargetLegality.UNKNOWN,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"후보 {found.certain_count}장이 있지만 그중 지금 "
+                f"{question.value} 가 참인 것을 확인하지 못했습니다: "
+                f"{'; '.join(notes) or '사유 없음'}",
+                (GATED_CANDIDATE_RULE_MISSING,),
+            )
+        return _CandidateExistence(
+            TargetLegality.UNKNOWN,
+            ValidationCode.INFORMATION_UNAVAILABLE,
+            "후보가 충분한지 판정할 수 없습니다: "
+            + (
+                "; ".join(found.unchecked)
+                if found.unchecked
+                else f"미확정 {len(found.undecided)}장"
+            ),
+            found.unchecked or (GATED_CANDIDATE_RULE_MISSING,),
+        )
 
     # ------------------------------------------------------------------
     def _condition_context(self, action: PlayerAction, targets) -> ConditionContext:
