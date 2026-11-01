@@ -802,6 +802,23 @@ class ComboResponse:
 
     messages: tuple[str, ...] = ()
     attachments: tuple[ComboAttachment, ...] = ()
+    detail_notice: str = ""
+    """
+    🔴 **파일 안에 넣을 수 없었던 전달 상태 안내** (Phase 6-AE 보완).
+
+    :attr:`ComboDetail.notice` 를 그대로 들고 온다. **이미
+    :attr:`messages` 안에 적혀 있다** — 보내는 쪽이 다시 보내면 같은 말이
+    두 번 간다. 이 칸은 "전달 상태가 이랬다" 를 **검사할 수 있게** 두는
+    자리다 (상한 안에 들어간다는 보장은 ``paginate`` 가 한다).
+    """
+
+    detail_omitted: int = 0
+    """담지 못한 줄 수 (:attr:`ComboDetail.omitted_lines`)."""
+
+    @property
+    def complete_detail(self) -> bool:
+        """🔴 **상세 기록을 전부 첨부했는가.** 거짓이면 일부만 갔다."""
+        return not self.detail_omitted
 
     @property
     def missing(self) -> bool:
@@ -809,62 +826,264 @@ class ComboResponse:
         return not self.messages
 
 
+@dataclass(frozen=True, slots=True)
+class ComboDetail:
+    """
+    상세 기록을 **첨부로 나눈 결과**와 그 전달 상태 (Phase 6-AE 보완).
+
+    🔴 **왜 튜플 하나로는 안 되는가.** 외부 검토가 찾은 오류 A 가 그 자리다 —
+    상한 때문에 **일부를 담지 못할 수 있는데** 부르는 쪽이 그것을 알 길이
+    없었고, 그래서 기본 메시지가 "전체 기록은 첨부에 있습니다" 로 적혔다.
+    담은 것과 **담지 못한 것**을 함께 돌려준다.
+    """
+
+    attachments: tuple[ComboAttachment, ...] = ()
+    omitted_lines: int = 0
+    """담지 못한 줄 수. 0 이면 전부 담았다."""
+    notice: str = ""
+    """
+    🔴 **파일 안에 넣을 수 없었던 전달 상태 안내.**
+
+    상한이 너무 작아 안내문이 마지막 첨부에 들어가지 못하면 (그러면 그
+    첨부가 상한을 넘는다) 그 문장을 여기로 내보낸다 — 부르는 쪽이 **기본
+    메시지에** 적는다. 조용히 누락하지 않는다.
+
+    파일 안에 적었으면 비어 있다 (같은 말을 두 번 하지 않는다).
+    """
+
+    @property
+    def complete(self) -> bool:
+        """전체 기록을 담았는가."""
+        return self.omitted_lines == 0
+
+
+def _positive_int(name: str, value) -> int:
+    """
+    🔴 **쓸 수 없는 상한을 조용히 고치지 않는다** (Phase 6-AE 보완).
+
+    ``bool`` 을 거절하는 이유: ``True`` 는 ``1`` 로 통과해 "첨부 한 개" 가
+    되는데, 그것을 적은 사람은 켜고 끄는 값을 넘긴 것이다.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} 은 정수여야 합니다: {value!r}")
+    if value < 1:
+        raise ValueError(f"{name} 은 1 이상이어야 합니다: {value!r}")
+    return value
+
+
+def _detail_pieces(lines: "list[str]",
+                   limit: int) -> "tuple[list[tuple[int, str]], set[int]]":
+    """
+    줄들을 **상한을 넘지 않는 조각들**로 자른다 (Phase 6-AE 보완).
+
+    조각마다 **어느 줄에서 왔는지**를 함께 들고 온다 — 그래야 "몇 줄을 담지
+    못했는가" 를 셀 수 있다.
+
+    🔴 **글자 중간에서 끊지 않는다.** 바이트가 아니라 글자를 더해 가며 재므로
+    UTF-8 이 깨질 수 없다. 한 글자가 그 자체로 상한을 넘으면 (아주 작은
+    상한) 담을 수 없으므로 **그 줄을 손실로 적는다** — 조용히 버리지 않는다.
+    """
+    pieces: list[tuple[int, str]] = []
+    lossy: set[int] = set()
+    for index, line in enumerate(lines):
+        if len(line.encode("utf-8")) <= limit:
+            pieces.append((index, line))
+            continue
+        buffer = ""
+        for char in line:
+            if len(char.encode("utf-8")) > limit:
+                #: 🔴 이 글자는 어떤 첨부에도 들어갈 수 없다.
+                lossy.add(index)
+                continue
+            if len((buffer + char).encode("utf-8")) > limit:
+                pieces.append((index, buffer))
+                buffer = char
+            else:
+                buffer += char
+        if buffer:
+            pieces.append((index, buffer))
+        elif index not in lossy:
+            #: 빈 조각을 만들지 않는다 — 담을 글자가 없었다.
+            lossy.add(index)
+    return pieces, lossy
+
+
+def _pack_pieces(pieces: "list[tuple[int, str]]", limit: int,
+                 count_limit: int, reserve: int = 0,
+                 ) -> "tuple[list[list[str]], int]":
+    """
+    조각들을 **첨부 칸에** 채운다. ``(칸들, 쓴 조각 수)`` 를 돌려준다.
+
+    ``reserve`` 는 **마지막 칸에만** 비워 두는 바이트다 — 그 자리에 누락
+    안내가 들어간다 (Phase 6-AE 보완). 🔴 비워 둘 자리가 내용보다 커서 한
+    조각도 못 넣게 되면 그 칸을 **만들지 않는다** (빈 첨부를 만들지 않는다).
+    """
+    chunks: list[list[str]] = []
+    used = 0
+    while used < len(pieces) and len(chunks) < count_limit:
+        capacity = limit - reserve if len(chunks) == count_limit - 1 else limit
+        if capacity <= 0:
+            break
+        current: list[str] = []
+        size = 0
+        while used < len(pieces):
+            piece = pieces[used][1]
+            need = len(piece.encode("utf-8")) + (1 if current else 0)
+            if size + need > capacity:
+                break
+            current.append(piece)
+            size += need
+            used += 1
+        if not current:
+            break
+        chunks.append(current)
+    return chunks, used
+
+
+def _omitted_notice(count: int, limit: int, count_limit: int) -> str:
+    """담지 못한 줄이 있다는 **한 문장**. 🔴 수와 상한을 함께 적는다."""
+    return (f"🔴 상세 기록 {count}줄을 첨부 상한 ({count_limit}개 · 각"
+            f" {limit}바이트) 때문에 담지 못했습니다 — CLI 의"
+            f" `python3 -m app.main combo … --recipe …` 로 전체를 볼 수"
+            f" 있습니다.")
+
+
 def combo_attachments(text: str,
                       filename: str = COMBO_DETAIL_FILENAME,
                       limit: int = COMBO_ATTACHMENT_LIMIT,
                       count_limit: int = COMBO_ATTACHMENT_COUNT_LIMIT,
-                      ) -> "tuple[ComboAttachment, ...]":
+                      ) -> ComboDetail:
     """
     상세 기록을 **상한을 넘지 않는 첨부 여러 개**로 나눈다 (Phase 6-AE).
 
     🔴 **버리지 않는다.** 줄 단위로 나누고, 한 줄이 그 자체로 상한을 넘으면
-    그 줄만 바이트 경계에서 쪼갠다 (UTF-8 이므로 글자 중간에서 끊지 않게
-    ``errors="ignore"`` 로 되돌리지 않고 **글자 단위로** 센다).
+    그 줄만 **글자 단위로** 쪼갠다 (바이트로 자르면 UTF-8 이 깨진다).
 
-    ``count_limit`` 를 넘으면 마지막 첨부에 **몇 줄을 담지 못했는지** 적는다
-    — 조용히 끊지 않는다. 실측 범위(상세 15KB)에서는 언제나 1개다.
+    🔴 **상한을 다시 본다** (6-AE 보완 — 외부 검토 A). 전에는 ``count_limit``
+    에 닿으면 마지막 첨부에 안내문을 **덧붙이기만** 하고 크기를 다시 세지
+    않았다. 실측: ``limit=100`` · ``count_limit=1`` 에서 마지막 파일이
+    **277바이트**였다. 지금은 안내문이 들어갈 자리를 **미리 비워 두고**
+    채우므로, 안내문 · 구분자 · 줄바꿈까지 포함한 최종 크기가 상한 안이다.
+
+    🔴 **비워 둘 크기는 추정하지 않는다.** 안내문의 길이는 "담지 못한 줄 수"
+    에 따라 달라지는데, 그 수는 채워 본 뒤에야 안다. 그래서 **전체 줄 수**
+    (담지 못한 수의 상한) 로 안내문을 만들어 그 길이를 비워 둔다 — 실제
+    안내문은 그보다 짧거나 같으므로 상한을 넘을 수 없다.
+
+    안내문이 그 자리에도 들어가지 못하는 작은 상한에서는 파일 **밖**으로
+    내보낸다 (:attr:`ComboDetail.notice`) — 부르는 쪽이 기본 메시지에
+    적는다. 상한을 어기지도, 조용히 누락하지도 않는다.
     """
-    lines = text.splitlines()
-    parts: list[list[str]] = [[]]
-    size = 0
-    for line in lines:
-        piece = line
-        chunk = len(piece.encode("utf-8")) + 1
-        if chunk > limit:
-            #: 🔴 한 줄이 상한을 넘는다 — 글자 단위로 쪼갠다.
-            buffer = ""
-            for char in piece:
-                if len((buffer + char).encode("utf-8")) + 1 > limit:
-                    parts.append([buffer])
-                    buffer = char
-                else:
-                    buffer += char
-            piece = buffer
-            chunk = len(piece.encode("utf-8")) + 1
-            size = limit  # 다음 줄은 새 첨부로 보낸다
-        if parts[-1] and size + chunk > limit:
-            parts.append([])
-            size = 0
-        parts[-1].append(piece)
-        size += chunk
+    _positive_int("limit", limit)
+    _positive_int("count_limit", count_limit)
 
-    made: list[ComboAttachment] = []
+    lines = text.splitlines()
+    if not lines:
+        #: 🔴 담을 것이 없으면 **빈 첨부를 만들지 않는다.** 그리고 그것은
+        #: 누락이 아니다 — 기록 자체가 비어 있었다.
+        return ComboDetail()
+
+    pieces, lossy = _detail_pieces(lines, limit)
+    chunks, used = _pack_pieces(pieces, limit, count_limit)
+
+    def _kept(upto: int) -> int:
+        """앞 ``upto`` 조각으로 **온전히** 담긴 줄 수."""
+        done = {index for index, _ in pieces[:upto]}
+        left = {index for index, _ in pieces[upto:]}
+        return len(done - left - lossy)
+
+    omitted = len(lines) - _kept(used)
+    notice = ""
+    if omitted:
+        #: 🔴 전체 줄 수로 안내문을 만들어 **그 길이를 비워 둔다.**
+        budget = len(
+            _omitted_notice(len(lines), limit, count_limit).encode("utf-8")
+        ) + 1
+        chunks, used = _pack_pieces(pieces, limit, count_limit, reserve=budget)
+        omitted = len(lines) - _kept(used)
+        said = _omitted_notice(omitted, limit, count_limit)
+        if chunks:
+            chunks[-1] = chunks[-1] + [said]
+        else:
+            #: 🔴 비워 둘 자리조차 없다 — 파일 밖으로 내보낸다.
+            chunks, used = _pack_pieces(pieces, limit, count_limit)
+            omitted = len(lines) - _kept(used)
+            notice = _omitted_notice(omitted, limit, count_limit)
+
     stem, _, suffix = filename.rpartition(".")
     stem = stem or filename
     suffix = suffix or "txt"
-    for index, part in enumerate(parts, start=1):
-        if len(made) >= count_limit:
-            left = sum(len(rest) for rest in parts[index - 1:])
-            notice = (f"\n🔴 상세 기록 {left}줄을 첨부 수 상한"
-                      f" ({count_limit}개) 때문에 담지 못했습니다 —"
-                      f" CLI 의 `python3 -m app.main combo … --recipe …` 로"
-                      f" 전체를 볼 수 있습니다.")
-            made[-1] = ComboAttachment(made[-1].filename,
-                                       made[-1].text + notice)
-            break
-        name = filename if len(parts) == 1 else f"{stem}-{index}.{suffix}"
-        made.append(ComboAttachment(name, "\n".join(part)))
-    return tuple(made)
+    made = tuple(
+        ComboAttachment(
+            filename if len(chunks) == 1 else f"{stem}-{index}.{suffix}",
+            "\n".join(chunk),
+        )
+        for index, chunk in enumerate(chunks, start=1)
+    )
+    #: 🔴 **만든 것을 다시 센다.** 이 단정이 오류 A 를 다시 들여보내지
+    #: 않는다 — 계산이 어디서 틀려도 여기서 멈춘다.
+    for item in made:
+        if item.size > limit:  # pragma: no cover - 방어선
+            raise AssertionError(
+                f"첨부 {item.filename} 가 상한을 넘었습니다:"
+                f" {item.size} > {limit}"
+            )
+    if len(made) > count_limit:  # pragma: no cover - 방어선
+        raise AssertionError(f"첨부 {len(made)}개 > 상한 {count_limit}개")
+    return ComboDetail(attachments=made, omitted_lines=omitted, notice=notice)
+
+
+def _detail_pointer_lines(detail: ComboDetail,
+                          with_plan: bool = True) -> "list[str]":
+    """
+    기본 메시지가 **첨부를 가리키는 줄** (Phase 6-AE 보완 — 외부 검토 A).
+
+    🔴 **실제로 일부가 빠졌는데 "전체가 첨부에 있다" 고 쓰지 않는다.** 전에는
+    이 줄이 언제나 "전체 기록은 첨부에 있습니다" 였고, 상한 때문에 잘렸는지는
+    부르는 쪽이 알 수 없었다. 지금은 :class:`ComboDetail` 이 들고 온 전달
+    상태를 그대로 읽는다.
+
+    🔴 **파일에 없는 것을 적지 않는다.** ``with_plan`` 이 거짓이면 그 첨부에
+    정적 계획이 **들어 있지 않다** — 입력을 거절한 응답이 그렇다 (6-AA 의
+    계약: 거절한 입력에는 전개를 추천하지 않는다). 그때 "정적 계획" 이라는
+    낱말을 적으면 그 계약이 글자로 깨진다 (``test_01`` 이 그것을 잡았다).
+    """
+    inside = ("걸음마다의 판정 · 해결 결과 · 미지원 사유 · 모든 검증 한계"
+              + (" · 정적 계획" if with_plan else ""))
+    if not detail.attachments:
+        if detail.notice:
+            #: 🔴 한 줄도 담지 못했다 — 그 사실을 적는다.
+            return [f"📎 **상세 기록을 첨부하지 못했습니다.** {detail.notice}"]
+        return []
+    if detail.complete:
+        return [f"📎 **전체 기록은 첨부 `{detail.attachments[0].filename}`**"
+                f" 에 있습니다 ({inside})."]
+    said = [
+        f"📎 🔴 **상세 기록의 일부만 첨부했습니다** —"
+        f" {detail.omitted_lines}줄을 담지 못했습니다"
+        f" (첨부 {len(detail.attachments)}개)."
+    ]
+    if detail.notice:
+        #: 🔴 파일 안에 넣을 수 없었던 안내를 **여기에** 적는다 — 그래야
+        #: 조용한 누락이 되지 않는다 (``ComboDetail.notice`` 의 설명).
+        said.append(detail.notice)
+    else:
+        said.append("  전체 기록은 CLI 의"
+                    " `python3 -m app.main combo … --recipe …` 로 볼 수"
+                    " 있습니다 (첨부 마지막 줄에도 적었습니다).")
+    return said
+
+
+def _overflow_notice(detail: ComboDetail) -> str:
+    """
+    :func:`paginate` 가 메시지를 끊을 때 **어디서 전체를 볼 수 있는가**.
+
+    🔴 첨부가 완전하지 않으면 "첨부에 전부 있다" 고 적지 않는다.
+    """
+    if detail.attachments and detail.complete:
+        return f"빠진 줄은 첨부 `{detail.attachments[0].filename}` 에 전부 있습니다."
+    return ("빠진 줄은 CLI 의 `python3 -m app.main combo … --recipe …` 로"
+            " 볼 수 있습니다 (첨부도 일부만 담았습니다).")
 
 
 def combo_response(agent, hand_text: str, board_text: str = "",
@@ -977,11 +1196,22 @@ def combo_response(agent, hand_text: str, board_text: str = "",
         lines.append("거절한 입력에 대해 전개를 추천하면 그 입력이 통과한"
                      " 것으로 읽힙니다. 위에 적힌 위반을 고쳐서 다시"
                      " 보내 주세요.")
-        detail = _combo_detail_text(agent, executed, plan=None, verdict=None)
+        detail = combo_attachments(
+            _combo_detail_text(agent, executed, plan=None, verdict=None)
+        )
+        lines.append("")
+        #: 🔴 **이 첨부에는 정적 계획이 없다** — 거절한 입력에 전개를
+        #: 추천하지 않는다는 계약이 그렇다 (위 설명). 가리키는 줄도 그
+        #: 낱말을 쓰지 않는다.
+        lines.extend(_detail_pointer_lines(detail, with_plan=False))
         return ComboResponse(
-            messages=tuple(paginate(lines,
-                                    max_messages=COMBO_MESSAGE_LIMIT)),
-            attachments=combo_attachments(detail),
+            messages=tuple(paginate(
+                lines, max_messages=COMBO_MESSAGE_LIMIT,
+                overflow_notice=_overflow_notice(detail),
+            )),
+            attachments=detail.attachments,
+            detail_notice=detail.notice,
+            detail_omitted=detail.omitted_lines,
         )
 
     plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
@@ -1066,21 +1296,22 @@ def combo_response(agent, hand_text: str, board_text: str = "",
                          " 판정입니다. (정적 계획은 자연어 `deck:` 초안을"
                          " 받는 별도 경로여서 그 검사를 따로 하지 않습니다.)")
 
+    detail = combo_attachments(
+        _combo_detail_text(agent, executed, plan=plan, verdict=verdict,
+                           manual_checks=tuple(shown_checks),
+                           hidden_checks=hidden_checks)
+    )
     lines.append("")
-    lines.append(f"📎 **전체 기록은 첨부 `{COMBO_DETAIL_FILENAME}`** 에"
-                 f" 있습니다 (걸음마다의 판정 · 해결 결과 · 미지원 사유 ·"
-                 f" 모든 검증 한계 · 정적 계획).")
+    lines.extend(_detail_pointer_lines(detail))
 
-    detail = _combo_detail_text(agent, executed, plan=plan, verdict=verdict,
-                                manual_checks=tuple(shown_checks),
-                                hidden_checks=hidden_checks)
     return ComboResponse(
         messages=tuple(paginate(
             lines, max_messages=COMBO_MESSAGE_LIMIT,
-            overflow_notice=f"빠진 줄은 첨부 `{COMBO_DETAIL_FILENAME}` 에"
-                            f" 전부 있습니다.",
+            overflow_notice=_overflow_notice(detail),
         )),
-        attachments=combo_attachments(detail),
+        attachments=detail.attachments,
+        detail_notice=detail.notice,
+        detail_omitted=detail.omitted_lines,
     )
 
 
@@ -1104,10 +1335,17 @@ def _combo_detail_text(agent, executed: OpeningReport,
         "=" * 68,
         "🔴 이 파일은 Discord 기본 응답의 요약이 가리키는 **전체 기록**"
         "입니다.",
-        "🔴 아래 두 절은 서로 다른 것입니다 — 앞은 **실제로 돌린 것**,"
-        " 뒤는 **돌리지 않은 정적 계획**입니다.",
-        "",
     ]
+    if plan is not None:
+        lines.append("🔴 아래 두 절은 서로 다른 것입니다 — 앞은 **실제로"
+                     " 돌린 것**, 뒤는 **돌리지 않은 정적 계획**입니다.")
+    else:
+        #: 🔴 **없는 절을 머리말이 예고하지 않는다** (6-AE 보완). 입력을
+        #: 거절한 응답에는 정적 계획 절이 아예 없으므로 (6-AA 의 계약),
+        #: 머리말이 그것을 적으면 파일이 제 내용을 잘못 말한다.
+        lines.append("🔴 이 파일에는 **실제로 돌린 것**만 있습니다 — 정적"
+                     " 전개 추천은 내지 않았습니다.")
+    lines.append("")
     lines.extend(executed.detail)
     if plan is not None:
         lines.append("")
@@ -1467,7 +1705,22 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
     return client, tree
 
 
-async def send_combo_response(sender, response: ComboResponse) -> int:
+#: 첨부 전송이 실패했을 때 사용자에게 적는 한 줄 (Phase 6-AE 보완).
+#:
+#: 🔴 **원인을 단정하지 않는다.** 예외는 상한 거절일 수도, 끊긴 연결일
+#: 수도, 권한 문제일 수도 있다 — 그것을 "첨부가 너무 큽니다" 로 적으면
+#: 사용자가 엉뚱한 것을 고치려 한다. 무엇이 일어났는지는 로그에 있다.
+#:
+#: 🔴 **첨부를 받았다고 오해하게 하지 않는다** — 받지 못했다고 먼저 적는다.
+COMBO_ATTACHMENT_FAILED_NOTICE = (
+    "🔴 **상세 기록 첨부를 보내지 못했습니다** (원인은 봇 로그에 있습니다)."
+    " 위 요약 말고는 전달된 것이 없습니다 — 전체 기록은 CLI 의"
+    " `python3 -m app.main combo … --recipe …` 로 볼 수 있습니다."
+)
+
+
+async def send_combo_response(sender, response: ComboResponse,
+                              limit: int = DISCORD_MESSAGE_LIMIT) -> int:
     """
     ``/combo`` 응답을 보낸다 — **요약 메시지들과 상세 첨부** (Phase 6-AE).
 
@@ -1478,11 +1731,20 @@ async def send_combo_response(sender, response: ComboResponse) -> int:
     그래서 응답을 만드는 순수 함수들은 라이브러리 없이 테스트된다.
 
     🔴 **메모리 버퍼를 쓴다.** 임시 파일을 만들지 않으므로 디스크에 남는
-    것이 없고, 사용자 입력이 경로가 되는 길도 없다.
+    것이 없고, 사용자 입력이 경로가 되는 길도 없다. 버퍼는 **성공 · 실패
+    양쪽에서** 닫는다 (``finally``).
 
-    🔴 **전송 실패를 성공으로 보고하지 않는다.** 첨부를 붙인 전송이 실패하면
-    로그에 남기고, **그 사실을 사용자에게 한 줄로 알린 뒤** 요약만이라도
-    보낸다 — 조용히 삼키면 사용자는 상세 기록이 있다고 믿는다.
+    🔴 **실패 안내도 상한을 지킨다** (6-AE 보완 — 외부 검토 B). 전에는 실패한
+    메시지 뒤에 안내를 **덧붙여** 다시 보내고 길이를 다시 세지 않았다. 실측:
+    2,000자 + 안내 = **2,052자**, 상한을 거절하는 전송에서 재전송도 실패.
+    지금은 자리가 있으면 붙이고, 없으면 **안내를 따로 한 번** 보낸다 —
+    안내가 잘려 사라지지 않고, 메시지를 무제한 늘리지도 않는다 (최대 하나).
+
+    🔴 **이미 보낸 메시지를 다시 보내지 않는다.** 되돌리는 것은 실패한 그
+    한 번뿐이다.
+
+    🔴 **fallback 까지 실패하면 성공으로 보고하지 않는다** — 오류를 로그에
+    남기고 예외를 그대로 올린다.
     """
     import io
 
@@ -1498,31 +1760,92 @@ async def send_combo_response(sender, response: ComboResponse) -> int:
     sent = 0
     for index, text in enumerate(messages):
         last = index == len(messages) - 1
-        files = None
-        if last and response.attachments:
-            files = [
-                discord.File(io.BytesIO(item.data), filename=item.filename)
-                for item in response.attachments
-            ]
+        if not (last and response.attachments):
+            await sender.send(text)
+            sent += 1
+            continue
+
+        #: 🔴 버퍼를 따로 들고 있는다 — ``discord.File`` 은 **``fp.close``
+        #: 를 무해한 함수로 덮어쓰고** (언제 닫을지 제가 정하려고), 제가
+        #: 만든 파일만 닫는다 (``_owner``). 우리가 넘긴 ``BytesIO`` 는
+        #: :func:`_close_attachment_files` 가 닫는다.
+        buffers = [io.BytesIO(item.data) for item in response.attachments]
+        files = [
+            discord.File(buffer, filename=item.filename)
+            for buffer, item in zip(buffers, response.attachments)
+        ]
         try:
-            if files:
-                await sender.send(text, files=files)
-            else:
-                await sender.send(text)
+            await sender.send(text, files=files)
+            sent += 1
         except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
             logger.exception(
-                "/combo 응답 전송에 실패했습니다 (메시지 %d/%d, 첨부 %d개).",
-                index + 1, len(messages), len(files or ()),
+                "/combo 첨부 전송에 실패했습니다 (메시지 %d/%d, 첨부 %d개)."
+                " 첨부 없이 다시 보냅니다.",
+                index + 1, len(messages), len(files),
             )
-            if not files:
-                raise
-            #: 🔴 첨부 때문에 실패했을 수 있다 — 요약만이라도 보내고
-            #: **첨부가 가지 않았다는 사실을 적는다.**
-            await sender.send(
-                text + "\n🔴 상세 기록 첨부를 보내지 못했습니다 —"
-                " 봇 로그를 확인해 주세요. 위 요약은 전부입니다."
+            sent += await _send_without_attachment(sender, text, limit)
+        finally:
+            _close_attachment_files(files, buffers)
+    return sent
+
+
+def _close_attachment_files(files, buffers) -> None:
+    """
+    첨부 파일과 **그 버퍼**를 닫는다 (Phase 6-AE 보완 — 외부 검토 B).
+
+    🔴 **순서가 중요하다.** ``discord.File.__init__`` 은 ``fp.close`` 를
+    아무 일도 하지 않는 함수로 **덮어쓴다** (전송 중에 닫히지 않게 하려고).
+    그래서 ``BytesIO.close()`` 를 먼저 부르면 아무 일도 일어나지 않는다 —
+    ``File.close()`` 가 원래 함수를 되돌려 놓은 **뒤에** 닫아야 한다.
+
+    🔴 **정리 실패로 죽지 않는다.** 닫지 못하면 로그에 남기고 넘어간다 —
+    전송 결과를 정리 실패로 뒤집지 않는다.
+    """
+    for item in files:
+        try:
+            item.close()
+        except Exception:  # noqa: BLE001 - 정리 실패로 죽지 않는다
+            logger.debug("첨부 파일을 닫지 못했습니다.", exc_info=True)
+    for buffer in buffers:
+        try:
+            buffer.close()
+        except Exception:  # noqa: BLE001
+            logger.debug("첨부 버퍼를 닫지 못했습니다.", exc_info=True)
+
+
+async def _send_without_attachment(sender, text: str, limit: int) -> int:
+    """
+    첨부 없이 **다시 한 번** 보낸다 (Phase 6-AE 보완 — 외부 검토 B).
+
+    보낸 메시지 수를 돌려준다.
+
+    🔴 **상한을 다시 센다.** 안내를 붙여도 상한 안이면 한 메시지로, 아니면
+    **원문과 안내를 따로** 보낸다 — 안내를 잘라 없애지 않는다.
+
+    🔴 **한 번만 되돌린다.** 이 전송이 또 실패하면 로그에 오류를 남기고
+    예외를 올린다 — 성공으로 보고하지 않는다.
+    """
+    joined = f"{text}\n{COMBO_ATTACHMENT_FAILED_NOTICE}"
+    plan = ([joined] if len(joined) <= limit
+            else [text, COMBO_ATTACHMENT_FAILED_NOTICE])
+    #: 🔴 안내 자체가 상한을 넘는 일은 없다 (상수이고 짧다). 혹시 그렇다면
+    #: 그것은 코드의 잘못이므로 조용히 자르지 않고 멈춘다.
+    for piece in plan:
+        if len(piece) > limit:  # pragma: no cover - 방어선
+            raise AssertionError(
+                f"되돌린 메시지가 상한을 넘었습니다: {len(piece)} > {limit}"
             )
-        sent += 1
+    sent = 0
+    try:
+        for piece in plan:
+            await sender.send(piece)
+            sent += 1
+    except Exception:
+        logger.error(
+            "/combo 첨부 없이 다시 보내는 것도 실패했습니다 — 이 응답은"
+            " 전달되지 않았습니다 (보낸 메시지 %d개).", sent, exc_info=True,
+        )
+        raise
     return sent
 
 
