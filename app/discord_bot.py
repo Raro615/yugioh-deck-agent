@@ -1067,9 +1067,9 @@ def combo_response(agent, hand_text: str, board_text: str = "",
                          " 받는 별도 경로여서 그 검사를 따로 하지 않습니다.)")
 
     lines.append("")
-    lines.append(f"📎 **전체 상세 기록은 첨부 `{COMBO_DETAIL_FILENAME}`**"
-                 f" 에 있습니다 — 걸음마다의 판정 코드 · 해결 결과 ·"
-                 f" 미지원 사유 · 모든 검증 한계 · 정적 계획 전체.")
+    lines.append(f"📎 **전체 기록은 첨부 `{COMBO_DETAIL_FILENAME}`** 에"
+                 f" 있습니다 (걸음마다의 판정 · 해결 결과 · 미지원 사유 ·"
+                 f" 모든 검증 한계 · 정적 계획).")
 
     detail = _combo_detail_text(agent, executed, plan=plan, verdict=verdict,
                                 manual_checks=tuple(shown_checks),

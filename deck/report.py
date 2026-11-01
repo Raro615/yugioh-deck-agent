@@ -540,13 +540,19 @@ def _brief_board(setup, repository=None) -> "list[str]":
                            ("마법·함정 존", Zone.SZONE)):
         cards = [c for c in state.player(0).zone(zone) if c]
         lines.append(f"  {label_ko}: {_names(cards)}")
-    for label_ko, zone in (("패", Zone.HAND), ("묘지", Zone.GRAVE),
-                           ("제외", Zone.REMOVED)):
+    for label_ko, zone in (("패", Zone.HAND), ("묘지", Zone.GRAVE)):
         cards = [c for c in state.player(0).zone(zone) if c]
         lines.append(f"  {label_ko} {len(cards)}장: {_names(cards)}")
+    #: 🔴 **제외는 비었을 때도 적는다** — 수를 적지 않으면 읽는 쪽이 "거기에
+    #: 무엇이 있는가" 를 알 수 없다. 다만 이름까지 필요한 자리가 아니므로
+    #: 덱 · 엑스트라와 한 줄로 묶어 **수만** 적는다 (이름은 상세 기록).
+    removed = [c for c in state.player(0).zone(Zone.REMOVED) if c]
     deck = [c for c in state.player(0).zone(Zone.DECK) if c]
     extra = [c for c in state.player(0).zone(Zone.EXTRA) if c]
-    lines.append(f"  남은 덱 {len(deck)}장 · 엑스트라 덱 {len(extra)}장")
+    lines.append(f"  제외 {len(removed)}장 · 남은 덱 {len(deck)}장"
+                 f" · 엑스트라 덱 {len(extra)}장")
+    if removed:
+        lines.append(f"  제외: {_names(removed)}")
     return lines
 
 
@@ -596,12 +602,21 @@ def _support_lines(run) -> "list[str]":
     한 번씩만 모아 둔 것이다 (``WithheldAction.scope`` 의 설명). 그래서 여기서
     문장을 다시 묶거나 쪼개지 않는다: 종류 · 빠진 규칙의 이름 · 사유가
     다르면 다른 줄로 남는다.
+
+    🔴 **세 사실을 함께 적는다** (6-AE §2-④).
+
+    1. 몇 건을 지나왔는가, 그리고 **어디서** 만났는가 (걸음이 끝난 자리와
+       자동 처리 도중을 가른다 — 같은 사유라도 시점이 다르다).
+    2. 그것이 **규칙 거절이 아니다** — 이 저장소에 그 규칙이 없는 것이다.
+    3. 그래서 위의 걸음 수를 **"이 패의 전개를 다 했다"** 로 읽을 수 없다.
+
+    🔴 **"더 고를 행동이 없다" 와 "끝까지 검증했다" 는 다른 질문이다**
+    (보완8 세 항목 ①). 멈춘 자리가 깨끗해도 도중에 미지원을 지나왔으면
+    전체를 검증한 것이 아니므로, 그 경우를 한 줄로 더 적는다.
     """
-    lines: list[str] = []
     if run.fully_supported:
-        lines.append("  ✅ 이 실행 중에 **미지원으로 보류된 후보는"
-                     " 없었습니다.**")
-        return lines
+        return ["  ✅ 이 실행 중에 **미지원으로 보류된 후보는 없었습니다.**"]
+
     at_place = sum(1 for s in run.steps if s.unsupported)
     during = sum(1 for s in run.steps if s.unsupported_during)
     where = []
@@ -609,13 +624,22 @@ def _support_lines(run) -> "list[str]":
         where.append(f"걸음이 끝난 자리 {at_place}곳")
     if during:
         where.append(f"자동 처리 도중 {during}걸음")
-    lines.append(
-        f"  🔴 **엔진이 지원하지 않아 후보가 되지 못한 사유"
-        f" {len(run.unsupported)}건**을 지나왔습니다"
+    lines = [
+        f"  🔴 **엔진이 지원하지 않아 후보가 되지 못한 것이"
+        f" {len(run.unsupported)}건** 있었습니다"
         + (f" ({' · '.join(where)})" if where else "")
         + " — 규칙이 막은 것이 아니라 **이 저장소에 그 규칙이 없다**는"
-        " 뜻입니다. 같은 사유는 한 번씩만 적었습니다."
-    )
+        " 뜻입니다. 그래서 위의 걸음 수를 **이 패의 전개를 다 했다**로"
+        " 읽을 수 없습니다."
+    ]
+    #: 🔴 멈춘 자리는 깨끗했는데 도중에 지나온 것이 있다 — 그 구분을 적는다.
+    if run.stopped_kind == "flow_only":
+        lines.append(
+            "  🔴 멈춘 자리에는 미지원이 없었지만 **전개 도중에 지나온"
+            " 미지원이 있습니다** — 그래서 **더 고를 행동이 없다**는 것과"
+            " **전개 전체를 지원 범위 안에서 검증했다**는 것은 다릅니다."
+        )
+    lines.append(f"  미지원 사유 (같은 사유는 한 번씩만 적었습니다):")
     shown = run.unsupported[:BRIEF_UNSUPPORTED_LIMIT]
     lines.extend(f"    - {item}" for item in shown)
     rest = len(run.unsupported) - len(shown)
