@@ -215,8 +215,11 @@ def test_b01_route_completion_and_unsupported_scope_stay_separate(repository):
     """
     summary = _summary(_response(repository))
     assert "✅" in summary and "경로를 끝까지 실행했습니다" in summary
-    assert "엔진이 지원하지 않아 후보가 되지 못한 사유 2건" in summary
+    assert "엔진이 지원하지 않아 후보가 되지 못한 것이 2건" in summary
+    #: 🔴 **두 문장이 따로 있다** — 경로 완료는 "이 패의 전개를 다 했다" 가
+    #: 아니고, 미지원은 "규칙이 막았다" 가 아니다.
     assert "이 패로 가능한 전개를 다 보았다는 뜻이 아닙니다" in summary
+    assert "이 패의 전개를 다 했다**로 읽을 수 없습니다" in summary
     #: 🔴 경로 완료 줄에 실패 표시가 붙지 않는다.
     completion = next(l for l in summary.splitlines()
                       if "경로를 끝까지 실행했습니다" in l)
