@@ -833,7 +833,10 @@ def test_33_the_only_thing_this_phase_changed_is_where_the_policy_lives():
     assert len(ValidationCode) == 54
     assert len(SimulationStatus) == 5
     assert len(ActionValidity) == 3
-    assert len(ResolutionStatus) == 14
+    #: 🔴 14 → **15** (Phase 6-AD 후속2): ``RESOLVED_WITHOUT_EFFECT`` 하나가
+    #: 늘었고 **``ValidationCode`` 는 늘지 않았다** — 그 상태의 코드는 ``OK``
+    #: 다 (정상 해결이므로). 모름 쪽도 그대로다 (보고서 §15.1).
+    assert len(ResolutionStatus) == 15
 
     simulation = source_of("agent/simulation.py")
     #: 분기가 여전히 한 자리이고, 여전히 집합 멤버십으로 가른다.

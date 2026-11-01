@@ -234,13 +234,27 @@ def test_a_result_that_is_not_resolved_never_claims_a_state_change():
 
     해결되지 않은 결과는 둘 다 거짓이다. 해결된 결과라도 바꾼 것이 없으면
     (하는 일이 적혀 있지 않은 정의) 변화는 없다.
+
+    🔴 **해결이 끝난 상태가 둘이다** (Phase 6-AD 후속2).
+    ``RESOLVED_WITHOUT_EFFECT`` 는 "효과는 정상 해결되었고 확인된 사유로 일을
+    하지 않았다" 이므로 ``resolved`` 가 **참**이고, 판을 바꾸지 않았으므로
+    ``changed_state`` 는 **거짓**이다 — 이 시험이 가르려던 바로 그 두 질문이
+    실제로 갈라지는 자리다. 집합을 **이름으로** 적는다 (수로 적으면 다음에
+    조용히 늘어난 것을 잡지 못한다).
     """
+    finished = {
+        ResolutionStatus.RESOLVED,
+        ResolutionStatus.RESOLVED_WITHOUT_EFFECT,
+    }
     for status in ResolutionStatus:
         result = EffectResult(status)
-        assert result.resolved is (status is ResolutionStatus.RESOLVED)
+        assert result.resolved is (status in finished)
         # 변화 기록이 없으므로 어느 상태든 "판이 달라졌다" 고 말하지 않는다.
         assert result.changed_state is False
         assert result.deltas == ()
+        #: 🔴 **일을 했다고 말하는 상태는 하나도 없다** — ``applied`` 가
+        #: 비어 있으면 어느 상태든 거짓이다.
+        assert result.applied_any is False
 
 
 def test_only_a_resolved_result_may_carry_changes():
@@ -254,6 +268,9 @@ def test_only_a_resolved_result_may_carry_changes():
     for status in ResolutionStatus:
         if status is ResolutionStatus.RESOLVED:
             continue
+        #: 🔴 ``RESOLVED_WITHOUT_EFFECT`` 도 여기 포함된다 (6-AD 후속2) —
+        #: **일을 하지 않았다** 는 상태가 변화 기록을 들 수는 없다. 이름이
+        #: 거짓이 되지 않게 생성 자체를 막는다.
         with pytest.raises(ValueError):
             EffectResult(status, deltas=drawn)
 

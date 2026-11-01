@@ -84,6 +84,9 @@ from tests.conftest import requires_official_db
 GIRSU = 69811710
 WAND = 93920420
 PACHY = 42009836
+SWORD = 40441990
+"""「성유물－『성건』」 — 「성유물」 몬스터인데 **특수 소환 가능 여부가
+등재되지 않았다.** 그래서 후보 자격이 ``UNKNOWN`` 이다 (``test_m08``)."""
 P0, P1 = 0, 1
 
 pytestmark = requires_official_db
@@ -187,7 +190,9 @@ class _ChainResponse:
 
     def __init__(self, repository, ref):
         self.repository = repository
-        self.ref = ref
+        #: 하나든 여럿이든 받는다 — 링크 셋을 쌓는 시험이 **뒤에 남은 링크**를
+        #: 재려면 합성 선언이 둘 필요하다 (``test_m09``).
+        self.refs = (ref,) if isinstance(ref, EffectRef) else tuple(ref)
         self.source = None
 
     def offers(self, duel, seat):
@@ -201,18 +206,19 @@ class _ChainResponse:
                 if event.point.value != "card_moved" or event in seen:
                     continue
                 seen.add(event)
-                extra.append(
-                    TriggerOffer(
-                        event=event,
-                        effect_ref=self.ref,
-                        source=self.source,
-                        controller=P0,
-                        requirement=TriggerRequirement.OPTIONAL,
-                        reason="합성 선언 (시험 전용)",
-                        wording=TriggerWording.IF,
-                        event_sequence=recorded.sequence,
+                for ref in self.refs:
+                    extra.append(
+                        TriggerOffer(
+                            event=event,
+                            effect_ref=ref,
+                            source=self.source,
+                            controller=P0,
+                            requirement=TriggerRequirement.OPTIONAL,
+                            reason="합성 선언 (시험 전용)",
+                            wording=TriggerWording.IF,
+                            event_sequence=recorded.sequence,
+                        )
                     )
-                )
         return (*real, *extra)
 
 
@@ -377,6 +383,53 @@ def _record(chooser, ref):
     )
 
 
+def _instances(duel):
+    """판 위의 **모든 개체 번호** — 개체가 사라지거나 늘어났는지 본다."""
+    return [card.instance_id for card in duel.state.all_instances()]
+
+
+def _resolution_step(steps, ref=EffectRef(WAND, 1)):
+    """
+    ``_settle`` 의 걸음 중 **그 링크의 해결을 보고한 것**을 집는다.
+
+    🔴 체인 해결은 패스 행동의 결과로 보고되므로, 이유에 그 효과의 주소가
+    적힌 걸음을 찾는다 (``ChainResolver`` 가 ``link.describe_ko()`` 를 넣는다).
+    """
+    return next((s for s in steps if str(ref) in s.reason), None)
+
+
+def _resolve_one_by_one(duel, limit=8):
+    """
+    **링크마다** 해결 결과를 본다 — 듀얼의 해결기를 그대로 쓴다.
+
+    🔴 왜 ``_settle`` 로는 안 되는가. 우선권을 넘기면 ``resolve_all`` 이
+    체인을 **끝까지** 풀고, 행동 결과에는 **마지막으로 해결된 링크**의
+    보고 하나만 실린다 (실측: 링크 셋을 쌓으면 체인1 의 문장만 남는다).
+    링크마다의 결과를 재려면 링크마다 물어야 한다.
+
+    🔴 **판정도 해결도 대신하지 않는다** — ``ChainResolver`` 가 전부 한다.
+    해결되지 않은 링크에서 멈추는 것도 ``resolve_all`` 과 같다.
+    """
+    seen = []
+    for _ in range(limit):
+        if duel.chain.is_empty:
+            break
+        step = duel._resolver.resolve_top(duel.state, duel.chain)
+        duel.chain = step.chain
+        seen.append(step)
+        if not step.resolved:
+            break
+    return seen
+
+
+def _link(seen, ref):
+    """``_resolve_one_by_one`` 의 결과에서 그 링크의 보고."""
+    return next(
+        (s for s in seen if s.link is not None and s.link.effect_ref == ref),
+        None,
+    )
+
+
 # ======================================================================
 # M. 한 실행 안에서 상태가 변한다
 # ======================================================================
@@ -483,24 +536,23 @@ def test_m02_a_candidate_that_entered_the_hand_is_offered(repository):
 
 
 @pytest.mark.real_card
-def test_m03_no_candidate_left_means_no_wrong_summon(repository):
+def test_m03_no_candidate_left_resolves_without_a_summon(repository):
     """
-    §4-C — **해결 전에 후보가 전부 사라진다.**
+    §3-A — **해결 전에 후보가 전부 사라진다 → 소환 없이 정상 해결된다.**
 
-    → 잘못된 소환이 일어나지 않고 결과가 정확히 기록된다.
-
-    🔴 **규칙과 엔진의 차이를 적는다.** 공식 ``s.spop1`` 은
-    ``if #g>0 then SpecialSummon`` 이므로 후보가 없으면 **효과가 해결되고
-    아무 일도 일어나지 않는다.** 이 엔진은 선택의 최소 장수를 못 채운 것으로
-    보아 **거절**을 적는다 (``too_few_selected``). 둘은 "잘못된 소환이 없다"
-    에서 같고, "해결로 적는가 거절로 적는가" 에서 다르다 — 그 차이를
-    숨기지 않고 여기서 고정한다 (보고서 §14.4 의 남은 한계).
+    🔴 **6-AD 후속까지 이 자리를 실패로 적었다.** 선택의 최소 장수를 못
+    채운 것으로 보아 ``too_few_selected`` · *"해결하지 못했습니다"* 였다.
+    공식 스크립트는 그렇지 않다 — ``s.spop1`` 은
+    ``if #g>0 then Duel.SpecialSummon(...) end`` 이므로 **고른 카드가 없으면
+    소환하지 않고 끝난다.** 발동은 그때의 판에서 적법했고, 해결 시점에
+    할 일이 없어진 것이다.
     """
     duel, chooser, _t, _h, _f, _b = _open_the_window(
         repository, SEND_REF, hand=(GIRSU, WAND), preferred=(WAND,)
     )
     only = _hand_ids(duel)
     assert len(only) == 1
+    before_instances = _instances(duel)
 
     assert _activate(duel, EffectRef(WAND, 1)).accepted is True
     assert _activate(duel, SEND_REF).accepted is True
@@ -511,15 +563,58 @@ def test_m03_no_candidate_left_means_no_wrong_summon(repository):
     #: ② 특수 소환이 없다 — 필드에는 기르수 둘뿐이다 (시작 필드 하나 +
     #: 일반 소환 하나).
     assert [card_id for card_id, _ in _mzone(duel)] == [GIRSU, GIRSU]
-    #: ③ 고르지 않았다는 사실이 기록에 남는다.
+    #: ③ **개체가 보존된다** — 사라지거나 늘어난 번호가 없다.
+    assert set(_instances(duel)) == set(before_instances)
+    #: ④ 고르지 않았다는 사실이 기록에 남는다.
     summoned = _record(chooser, EffectRef(WAND, 1))
     assert summoned is not None
     assert summoned.chosen == ()
     assert summoned.offer.candidates == ()
-    #: ④ 엔진이 **이유를 적고** 끝났다 — 조용히 성공으로 넘어가지 않았다.
-    reasons = [s.reason for s in steps]
-    assert any("해결하지 못했습니다" in r for r in reasons), reasons
-    assert any("최소 1장" in r for r in reasons), reasons
+    #: ⑤ 🔴 **정상 해결이다.** 코드는 ``OK`` 이고, 이유가 "해결되었지만 일을
+    #: 하지 않았습니다" 와 **확인된 사유**를 함께 적는다.
+    said = _resolution_step(steps)
+    assert said is not None
+    assert said.code is ValidationCode.OK
+    assert "를 해결했습니다" in said.reason
+    assert "일을 하지 않았습니다" in said.reason
+    assert "고를 수 있는 후보가 없습니다" in said.reason
+    #: ⑥ 실패 어휘가 **없다** — 미지원도 오류도 아니다.
+    assert "해결하지 못했습니다" not in said.reason
+    for step in steps:
+        assert CODE_VALIDITY[step.code] is not ActionValidity.UNKNOWN
+
+
+@pytest.mark.real_card
+def test_m03b_the_engine_result_says_resolved_without_effect(repository):
+    """
+    §2-B — 같은 사례를 **실행기의 결과값**으로 고정한다.
+
+    체인 계층의 답은 ``RESOLVED`` 이고 (링크는 끝났다), 실행기의 답은
+    ``RESOLVED_WITHOUT_EFFECT`` 다 (일은 하지 않았다). 두 계층이 **다른
+    질문**에 답한다는 것이 이 구분의 요점이다.
+    """
+    from engine.chain import ChainResolutionStatus
+    from engine.effect.resolution import ResolutionStatus
+
+    duel, _c, _t, _h, _f, _b = _open_the_window(
+        repository, SEND_REF, hand=(GIRSU, WAND), preferred=(WAND,)
+    )
+    assert _activate(duel, EffectRef(WAND, 1)).accepted is True
+    assert _activate(duel, SEND_REF).accepted is True
+
+    #: 🔴 **체인을 손으로 풀지 않는다** — 듀얼의 해결기를 그대로 쓴다.
+    seen = _resolve_one_by_one(duel)
+    wand = _link(seen, EffectRef(WAND, 1))
+    assert wand is not None
+    assert wand.status is ChainResolutionStatus.RESOLVED
+    assert wand.resolved is True
+    assert wand.result is not None
+    assert wand.result.status is ResolutionStatus.RESOLVED_WITHOUT_EFFECT
+    #: 🔴 **해결은 끝났고 일은 하지 않았다** — 두 칸이 그것을 가른다.
+    assert wand.result.resolved is True
+    assert wand.result.applied_any is False
+    assert wand.result.changed_state is False
+    assert wand.result.deltas == ()
 
 
 @pytest.mark.real_card
@@ -557,9 +652,17 @@ def test_m04_a_full_zone_before_activation_is_an_activation_refusal(
 
 
 @pytest.mark.real_card
-def test_m05_the_zone_filled_during_the_chain_is_not_overwritten(repository):
+def test_m05_the_zone_filled_during_the_chain_resolves_without_a_summon(
+    repository,
+):
     """
-    §4-D — **체인 도중에** 마지막 칸이 찬다.
+    §3-B — **체인 도중에** 마지막 칸이 찬다 → 정상 불발이고 덮어쓰기가 없다.
+
+    🔴 **6-AD 후속까지 이 자리를 ``CONDITION_FALSE`` 로 적었다.** 공식
+    ``s.spop1`` 의 첫 줄은
+    ``if Duel.GetLocationCount(tp,LOCATION_MZONE)<=0 then return end`` 이고,
+    그것은 **해결 함수 안의 조기 종료**다 — 발동 조건이 거짓이었다는 뜻이
+    아니다.
 
     필드에 셋을 놓고 기르수를 일반 소환하면 넷이 차고 **한 칸이 남는다.**
     『성장』 ② 의 발동 조건은 그 한 칸으로 참이 되고, 합성 효과가 링크 2 로
@@ -582,18 +685,20 @@ def test_m05_the_zone_filled_during_the_chain_is_not_overwritten(repository):
     assert filled is not None and filled.chosen
     #: ① 합성 효과가 마지막 칸을 채웠다 — 다섯 칸이 전부 찼다.
     assert len(_mzone(duel)) == 5
-    #: ② 개체가 겹치지 않는다 — **덮어쓰기가 없다.**
+    #: ② 개체가 겹치지 않는다 — **덮어쓰기도 초과 배치도 없다.**
     summoned_ids = [instance for _c, instance in _mzone(duel)]
     assert len(set(summoned_ids)) == 5
-    #: ③ 『성장』 ② 는 고르는 자리에 닿지 못했다 — 해결 시점에 **빈 칸이
-    #: 없다**는 것이 발동 조건의 재검사에서 걸린다.
+    #: ③ 『성장』 ② 는 고르는 자리에 닿지 못했다 — 조기 종료다.
     assert _record(chooser, EffectRef(WAND, 1)) is None
-    reasons = [s.reason for s in steps]
-    assert any(
-        "93920420:e[1]" in r and "해결하지 못했습니다" in r for r in reasons
-    ), reasons
-    assert any("빈 칸" in r for r in reasons), reasons
-    #: ④ 남은 『성장』 은 패에 그대로 있다 — 허위 성공이 없다.
+    #: ④ 🔴 **정상 해결이고 사유가 빈 칸을 가리킨다.**
+    said = _resolution_step(steps)
+    assert said is not None
+    assert said.code is ValidationCode.OK
+    assert "일을 하지 않았습니다" in said.reason
+    assert "빈 칸이 없습니다" in said.reason
+    assert "5/5" in said.reason
+    assert "해결하지 못했습니다" not in said.reason
+    #: ⑤ 남은 『성장』 은 패에 그대로 있다 — 허위 성공이 없다.
     assert len(_hand_ids(duel)) == 1
 
 
@@ -602,13 +707,14 @@ def test_m06_a_prohibition_raised_during_the_chain_blocks_the_summon(
     repository,
 ):
     """
-    §4-E — **해결 전에 파키세팔로의 금지가 적용된다.**
+    §3-C — **해결 전에 파키세팔로의 금지가 적용된다** → 소환 없음 · 확인된
+    사유 · 올바른 해결 결과.
 
-    → 『성장』 의 소환도 **공유 금지 판정**으로 막힌다.
-
-    합성 효과가 패의 파키세팔로를 특수 소환한다 (그 카드 자신의 소환
-    가능성은 ``OPERATION_RULINGS`` 에 근거와 함께 등재되어 있다). 그것이
-    몬스터 존에 서면 ② 의 「서로 몬스터를 특수 소환할 수 없다」 가 걸린다.
+    공식 스크립트에서 이 금지는 ``s.spfilter1`` 의
+    ``IsCanBeSpecialSummoned`` 가 **후보를 전부 걸러** ``#g == 0`` 이 되는
+    길로 나타난다. 이 엔진에서는 같은 판정(``SpecialSummonPermitted``)이
+    발동 조건에 있고, 그 조건의 해결 시점 재검사에서 걸린다 — **결과는
+    같다**: 소환하지 않고 정상 해결.
     """
     duel, chooser, _t, _h, _f, _b = _open_the_window(
         repository, SUMMON_REF, hand=(GIRSU, WAND, PACHY), preferred=(PACHY,)
@@ -621,25 +727,20 @@ def test_m06_a_prohibition_raised_during_the_chain_blocks_the_summon(
     assert raised is not None and raised.chosen
     #: ① 파키세팔로가 앞면으로 몬스터 존에 섰다.
     assert PACHY in [card_id for card_id, _ in _mzone(duel)]
-    #: ② **해결 시점에 다시 본다.** 금지가 걸린 뒤라 발동 조건이 거짓이고,
-    #: 그 판정은 6-AD 가 더한 ``SpecialSummonPermitted`` — **링크 소환
-    #: 거절과 같은 함수**다. 그래서 고르는 자리에 닿지도 못한다.
-    assert _record(chooser, EffectRef(WAND, 1)) is None
-    reasons = [s.reason for s in steps]
-    assert any(
-        "93920420:e[1]" in r and "해결하지 못했습니다" in r for r in reasons
-    ), reasons
-    assert any("특수 소환이 금지되지 않았다" in r for r in reasons), reasons
+    #: ② 🔴 **같은 금지 판정이 소환을 막는다** — 링크 소환 거절과 같은
+    #: 함수이고, 사유가 그 카드를 가리킨다.
+    said = _resolution_step(steps)
+    assert said is not None
+    assert said.code is ValidationCode.OK
+    assert "일을 하지 않았습니다" in said.reason
+    assert str(PACHY) in said.reason
+    assert "특수 소환을 막습니다" in said.reason
+    assert "해결하지 못했습니다" not in said.reason
     #: ③ 소환되지 않았다 — 『성장』 은 패에 남는다.
     assert len(_hand_ids(duel)) == 1
     assert WAND not in [card_id for card_id, _ in _mzone(duel)]
-    #: ④ 그리고 그 거절은 **확정 거부**다 (모름이 아니다) — 코드가 말한다.
-    assert any(
-        s.code is ValidationCode.CANDIDATE_NOT_ELIGIBLE for s in steps
-    ), [s.code.value for s in steps]
-    assert all(
-        CODE_VALIDITY[s.code] is not ActionValidity.UNKNOWN for s in steps
-    )
+    #: ④ 고르는 자리에 닿지 않았다 (조기 종료).
+    assert _record(chooser, EffectRef(WAND, 1)) is None
 
 
 @pytest.mark.real_card
@@ -680,3 +781,181 @@ def test_m07_the_change_happens_in_one_copy_only(repository):
     assert [card_id for card_id, _ in _mzone(duel)] == [GIRSU, GIRSU]
     #: ③ 선택 기록도 새지 않는다 — 사본의 선택이 원본 목록에 없다.
     assert len(chooser.records) == before_records
+
+
+# ======================================================================
+# M8~M10. **네 결과가 섞이지 않는다** (Phase 6-AD 후속2)
+# ======================================================================
+@pytest.mark.real_card
+def test_m08_an_unknown_candidate_is_not_disguised_as_a_normal_no_op(
+    repository,
+):
+    """
+    §2-C — **모르는 후보가 남으면 정상 불발이 아니다.**
+
+    🔴 이것이 ``test_m03`` 과 갈라지는 자리다. m03 은 후보가 **하나도 없다**
+    (확인이 끝났다). 여기는 「성유물－『성건』」(40441990) 이 패에 남아 있고,
+    그 카드에는 "지금 특수 소환할 수 있는가" 가 **등재되지 않았다** — 그래서
+    "소환할 후보가 없다" 가 **아직 참이 아니다.**
+
+    🔴 **선언이 모름을 덮지 않는다.** ``ResolutionSkip`` 을 선언한 효과라도
+    확인하지 못한 후보가 남으면 ``UNCHECKED_RULES`` 다 (ADR-006).
+    """
+    from engine.chain import ChainResolutionStatus
+    from engine.effect.resolution import ResolutionStatus
+    from engine.effect.semantics import GATED_CANDIDATE_RULE_MISSING
+
+    duel, chooser, _t, _h, _f, _b = _open_the_window(
+        repository, SEND_REF, hand=(GIRSU, WAND, SWORD), preferred=(WAND,)
+    )
+    #: 발동 시점에는 **확정 가능한** 『성장』 이 패에 있다 — 그래서 적법하다.
+    assert _activate(duel, EffectRef(WAND, 1)).accepted is True
+    #: 합성 효과가 그 『성장』 을 묘지로 보낸다. 남는 것은 『성건』 하나다.
+    assert _activate(duel, SEND_REF).accepted is True
+    seen = _resolve_one_by_one(duel)
+
+    assert _hand_ids(duel) == []
+    assert SWORD in [card.card_id for card in duel.state.zone(P0, Zone.HAND)]
+    #: ① 소환은 없다.
+    assert [card_id for card_id, _ in _mzone(duel)] == [GIRSU, GIRSU]
+    #: ② 🔴 **모름이다** — 정상 불발도 성공도 아니다.
+    said = _link(seen, EffectRef(WAND, 1))
+    assert said is not None
+    assert said.status is not ChainResolutionStatus.RESOLVED
+    assert said.resolved is False
+    assert said.result is not None
+    assert said.result.status is ResolutionStatus.UNCHECKED_RULES
+    assert said.result.code is ValidationCode.RULE_NOT_IMPLEMENTED
+    assert CODE_VALIDITY[said.result.code] is ActionValidity.UNKNOWN
+    assert said.result.resolved is False
+    assert "일을 하지 않았습니다" not in said.result.reason
+    #: ③ **무엇이 없어서** 모르는지 이름이 붙는다 (보완8 의 계약).
+    assert said.result.missing == GATED_CANDIDATE_RULE_MISSING
+    assert GATED_CANDIDATE_RULE_MISSING in said.result.unchecked_rules
+    assert str(SWORD) in said.result.reason
+    #: ④ 물어보기는 했고, 허용 후보가 없어 고르지 못했다는 사실이 남는다.
+    record = _record(chooser, EffectRef(WAND, 1))
+    assert record is not None
+    assert record.chosen == ()
+    assert [c.card_id for c in record.offer.candidates] == [SWORD]
+    assert record.offer.permitted == ()
+
+
+@pytest.mark.real_card
+def test_m09_the_links_below_a_normal_no_op_still_resolve(repository):
+    """
+    §4 — **정상 불발 뒤에도 남은 체인 링크가 해결된다.**
+
+    링크 셋을 쌓는다 (합성 드로우 → 『성장』 ② → 합성 묘지행). 체인은
+    거꾸로 풀리므로 순서가 이렇게 된다.
+
+    1. 링크 3 (합성 묘지행) — 『성장』 ② 의 **후보를 없앤다**.
+    2. 링크 2 (『성장』 ②) — 🔴 **정상 불발** (B).
+    3. 링크 1 (합성 드로우) — 🔴 **그 뒤에도 해결된다** · 패가 한 장 늘어난다.
+
+    🔴 **이것이 "정상 불발도 링크 해결이 끝났다" 의 관측 가능한 결과다.**
+    6-AD 후속까지 링크 2 는 실패였고, ``resolve_all`` 은 해결되지 않은
+    링크에서 **멈춘다** — 그래서 링크 1 은 돌지 못했다.
+    """
+    from engine.chain import ChainResolutionStatus
+    from engine.effect.journal import EffectEvent
+    from engine.effect.resolution import ResolutionStatus
+
+    duel, _c, _t, _h, _f, _b = _open_the_window(
+        repository,
+        (DRAW_REF, SEND_REF),
+        hand=(GIRSU, WAND),
+        preferred=(WAND,),
+    )
+    hand_before = len(duel.state.zone(P0, Zone.HAND))
+
+    assert _activate(duel, DRAW_REF).accepted is True
+    assert _activate(duel, EffectRef(WAND, 1)).accepted is True
+    assert _activate(duel, SEND_REF).accepted is True
+    assert [str(link.effect_ref) for link in duel.chain.links] == [
+        str(DRAW_REF),
+        str(EffectRef(WAND, 1)),
+        str(SEND_REF),
+    ]
+    seen = _resolve_one_by_one(duel)
+
+    #: ① 🔴 **세 링크가 전부 해결되었다** — 멈추지 않았다.
+    #: (마지막 걸음은 링크가 아니라 "체인을 다 풀었다" 는 보고다.)
+    links = [step for step in seen if step.link is not None]
+    assert [str(step.link.effect_ref) for step in links] == [
+        str(SEND_REF),
+        str(EffectRef(WAND, 1)),
+        str(DRAW_REF),
+    ]
+    assert all(s.status is ChainResolutionStatus.RESOLVED for s in links)
+    assert seen[-1].status is ChainResolutionStatus.CHAIN_COMPLETE
+    #: 🔴 **셋을 다 센다** — 정상 불발도 "해결된 링크" 로 센다.
+    assert duel.chain.resolved_count == len(duel.chain.links) == 3
+    #: ② 가운데 링크는 **정상 불발**이고, 아래 링크는 **조작을 수행했다**.
+    middle = _link(seen, EffectRef(WAND, 1))
+    assert middle.result.status is ResolutionStatus.RESOLVED_WITHOUT_EFFECT
+    assert middle.result.applied_any is False
+    assert "일을 하지 않았습니다" in middle.reason
+    below = _link(seen, DRAW_REF)
+    assert below.result.status is ResolutionStatus.RESOLVED
+    assert below.result.applied_any is True
+    #: ③ 소환은 없다.
+    assert [card_id for card_id, _ in _mzone(duel)] == [GIRSU, GIRSU]
+    #: ④ 🔴 **드로우가 실제로 일어났다** — 보낸 한 장이 빠지고 한 장 들어왔다.
+    assert len(duel.state.zone(P0, Zone.HAND)) == hand_before
+    assert _hand_ids(duel) == []
+    #: ⑤ 판을 바꾼 해결만 사건으로 남는다 — 정상 불발은 **허위 사건이 없다**.
+    written = [
+        recorded.effect_ref
+        for recorded in duel.journal
+        if isinstance(recorded, EffectEvent)
+    ]
+    assert DRAW_REF in written
+    assert SEND_REF in written
+    assert EffectRef(WAND, 1) not in written
+
+
+@pytest.mark.real_card
+def test_m10_a_normal_no_op_keeps_the_record_it_earned(repository):
+    """
+    §4 — 정상 불발이 **되돌리는 것도 지어내는 것도** 없다.
+
+    고정하는 것 넷.
+
+    1. 사용 횟수가 되돌아가지 않는다 (발동은 실제로 있었다).
+    2. 같은 링크가 두 번 해결되지 않는다.
+    3. 판을 바꾸지 않았으므로 :class:`~engine.effect.journal.EffectEvent`
+       가 **없다** — 그것이 "해결과 조작 수행을 가르는 근거" 다.
+    4. 물어본 기록은 남는다 (해결 중에 물었다는 증거).
+    """
+    from engine.effect.journal import EffectEvent
+
+    duel, chooser, _t, _h, _f, _b = _open_the_window(
+        repository, SEND_REF, hand=(GIRSU, WAND), preferred=(WAND,)
+    )
+    assert _activate(duel, EffectRef(WAND, 1)).accepted is True
+    assert _activate(duel, SEND_REF).accepted is True
+    steps = _settle(duel)
+
+    #: ① 🔴 **사용 횟수가 남아 있다** — 발동을 되돌리지 않는다.
+    #: (실측: 이 효과의 제한은 **카드명 범위**로 기록된다 — "1턴에 1번" 이
+    #: 카드 이름에 걸리기 때문이다.)
+    assert duel.state.uses.card_name_used(P0, WAND) is True
+    #: ② 그 링크의 해결 보고가 **한 번만** 있다.
+    resolved = [s for s in steps if str(EffectRef(WAND, 1)) in s.reason]
+    assert len(resolved) == 1
+    assert duel.chain.is_empty
+    #: ③ 🔴 **사건이 없다** — 조작이 없었으므로.
+    assert not [
+        recorded
+        for recorded in duel.journal
+        if isinstance(recorded, EffectEvent)
+        and recorded.effect_ref == EffectRef(WAND, 1)
+    ]
+    #: ④ 물어본 기록은 남는다.
+    record = _record(chooser, EffectRef(WAND, 1))
+    assert record is not None
+    assert record.chosen == ()
+    #: ⑤ 묘지로 간 『성장』 은 묘지에 **그대로** 있다 — 차용도 취소도 없다.
+    grave = [card.card_id for card in duel.state.zone(P0, Zone.GRAVE)]
+    assert grave.count(WAND) == 2

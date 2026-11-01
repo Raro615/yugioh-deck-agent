@@ -56,6 +56,7 @@ def _step(
     effect_events=(),
     resolution_choices=(),
     material_card_ids=(),
+    resolved_without_operation: bool = False,
 ) -> ExecutedStep:
     """
     합성 걸음 하나. **기본값은 "성공한 걸음"** 이다.
@@ -83,6 +84,7 @@ def _step(
         next_candidates=0,
         resolution_choices=tuple(resolution_choices),
         material_card_ids=tuple(material_card_ids),
+        resolved_without_operation=resolved_without_operation,
     )
 
 
@@ -265,3 +267,95 @@ def test_l08_a_step_without_a_declared_choice_is_not_asked_for_one():
     )
     steps = _girsu_steps()[:2]
     assert line_progress(_run(steps), line).done == 2
+
+
+# ======================================================================
+# L9~L11. **정상 불발을 성공으로도 오류로도 세지 않는다** (6-AD 후속2)
+# ======================================================================
+def test_l09_a_normal_no_op_is_not_a_completed_step():
+    """
+    🔴 **정상 해결이지만 조작이 없었던 걸음은 그 단계를 채우지 않는다.**
+
+    규칙상 그 효과는 **정상 해결**되었다 (``RESOLVED_WITHOUT_EFFECT``).
+    그러나 경로가 셋째 단계에 적은 것은 "패에서 「성유물」 몬스터를 특수
+    소환한다" 이고, **그 일이 일어나지 않았다.** 그래서 전개 완료가 아니다.
+
+    🔴 **이것이 "이벤트를 추가하는 것만으로 성공이 되는 회귀" 를 막는
+    자리의 반대쪽이다** — 상태가 아니라 **조작의 근거**(``EffectEvent``)로
+    센다. ``resolved=True`` 하나로는 세지 않는다.
+    """
+    steps = _girsu_steps(
+        {
+            3: {
+                "resolved": True,
+                "state_changed": False,
+                "effect_events": (),
+                "resolved_without_operation": True,
+            }
+        }
+    )
+    progress = line_progress(_run(steps), ORCUST_GIRSU_LINE)
+    assert progress.completed is False
+    assert progress.done == 2
+    assert progress.blocked_at is ORCUST_GIRSU_LINE.steps[2]
+
+
+def test_l10_the_two_counts_are_not_mixed():
+    """
+    🔴 **"해결된 효과 수" 와 "조작이 수행된 수" 를 섞지 않는다** (§5).
+
+    같은 기록에 A 걸음 하나와 B 걸음 하나를 둔다. 조작이 수행된 수는
+    **하나**이고, 조작 없이 해결된 수가 **하나**다. 둘을 더한 수를 "소환이
+    두 번 일어났다" 로 읽을 수 없게 칸이 둘로 나뉘어 있다.
+    """
+    steps = _girsu_steps(
+        {
+            3: {
+                "resolved": True,
+                "state_changed": False,
+                "effect_events": (),
+                "resolved_without_operation": True,
+            }
+        }
+    )
+    run = _run(steps)
+    #: 둘째 걸음(기르수 ①)만 조작을 수행했다.
+    assert run.effects_resolved == 1
+    assert run.effects_resolved_without_operation == 1
+    #: 🔴 **"막히지 않고 끝난 걸음" 과 다르다** — 그 수는 효과 수가 아니다.
+    assert run.resolved == 4
+
+
+def test_l11_the_report_separates_the_four_outcomes():
+    """
+    §5 — **공용 출력이 넷을 구별한다.** CLI 와 Discord 가 같은 함수를 쓴다.
+
+    🔴 **문구만 "정상 해결" 로 바꾼 것이 아니다** — 걸음 줄과 집계 줄이
+    따로 있고, 집계 줄은 "미지원도 오류도 아니다" 를 **명시**한다.
+    """
+    from deck.report import render_opening_run
+
+    b_step = {
+        "resolved": True,
+        "state_changed": False,
+        "effect_events": (),
+        "resolved_without_operation": True,
+    }
+    said = render_opening_run(_run(_girsu_steps({3: b_step})))
+    #: ① B 걸음은 "해결됐지만 조작 없음" 으로 적힌다.
+    assert "해결됐지만 조작 없음" in said
+    #: ② A 걸음은 "조작 수행" 으로 적힌다 — 같은 모양이 아니다.
+    assert "조작 수행" in said
+    #: ③ 집계가 두 줄로 갈린다.
+    assert "효과의 조작이 실제로 수행된 걸음** 1걸음" in said
+    assert "해결됐지만 조작이 없었던 걸음** 1걸음" in said
+    assert "미지원도 오류도 아닙니다" in said
+
+    #: ④ 🔴 **해결되지 않은 걸음은 여전히 그렇게 적힌다** — 정상 불발의
+    #: 문구를 빌려 쓰지 않는다.
+    failed = render_opening_run(
+        _run(_girsu_steps({3: {"resolved": False, "effect_events": ()}}))
+    )
+    assert "해결되지 않음" in failed
+    assert "해결됐지만 조작 없음" not in failed
+    assert "해결됐지만 조작이 없었던 걸음" not in failed

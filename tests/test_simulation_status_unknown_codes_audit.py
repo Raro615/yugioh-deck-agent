@@ -689,7 +689,12 @@ def test_25_no_new_enum_member_was_added_anywhere():
     assert len(SimulationStatus) == 5
     assert len(ActionValidity) == 3
     assert len(ConditionResult) == 3
-    assert len(ResolutionStatus) == 14
+    #: 🔴 14 → **15** (Phase 6-AD 후속2). 늘어난 것은
+    #: ``RESOLVED_WITHOUT_EFFECT`` 하나이고, **실패가 아니라 해결** 쪽이다 —
+    #: 공식 스크립트가 조작 없이 끝내는 자리를 거절로 적지 않기 위한 값이다
+    #: (보고서 §15.1). 이 파일의 모름 집합과는 무관하다.
+    assert len(ResolutionStatus) == 15
+    assert "RESOLVED_WITHOUT_EFFECT" in ResolutionStatus.__members__
 
 
 def test_26_is_usable_does_not_exist_anywhere_in_the_repository():

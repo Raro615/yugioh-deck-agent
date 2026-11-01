@@ -282,9 +282,18 @@ def test_08_the_output_says_what_resolved_means(repository):
     assert "막히지 않고 끝난 걸음" in blob
     assert "효과를 그만큼 해결했다는 뜻이 **아닙니다**" in blob
     #: Phase 6-AC 에서 1 → 2 (위 ``test_07`` 의 설명).
-    assert "효과가 실제로 해결된 걸음** 2걸음" in blob
+    #: 🔴 **Phase 6-AD 후속2 가 이 줄의 낱말을 고쳤다.** "해결된 걸음" 은
+    #: 규칙상 **해결됐지만 아무 일도 하지 않은 걸음**까지 포함하는 말이고
+    #: (공식 ``s.spop1`` 의 조기 종료), 그러면 이 수가 "소환이 N번
+    #: 일어났다" 로 읽힌다. 세는 것은 **조작이 실제로 수행된** 걸음이므로
+    #: 글자도 그렇게 적는다 (보고서 §15.3).
+    assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in blob
     #: 한 줄 요약도 같은 수를 쓴다 — 두 수가 갈라지지 않는다.
-    assert "효과 해결 2걸음" in blob
+    assert "효과의 조작 수행 2걸음" in blob
+    #: 🔴 **이 전개에는 그런 걸음이 없으므로 그 줄이 아예 없다** — 정상
+    #: 경로의 출력이 새 줄로 늘지 않는다.
+    assert "해결됐지만 조작이 없었던 걸음" not in blob
+    assert "해결됐지만 조작 없음" not in blob
 
 
 def test_09_the_run_cannot_count_chains_from_the_steps():
