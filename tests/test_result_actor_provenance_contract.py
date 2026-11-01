@@ -826,8 +826,27 @@ def test_20_this_phase_changed_only_docstrings():
        그래서 **고정된 base SHA** (``0227765`` — 3-F-16 보고서 commit) 와 비교한다.
        그 commit 은 변하지 않으므로 이 단정은 뒤의 어떤 Phase 에도 흔들리지 않고,
        **이 Phase 가 무엇을 바꿨는지**를 정확히 잰다.
+
+    .. note::
+       🔴 **작업 트리와 비교하던 것을 ``3a98c49`` 와 비교하도록 고쳤다**
+       (Phase 6-AD 후속2). 이유는 이 시험이 재려는 사실 그대로다 — 재는
+       것은 *"3-F-17 이 무엇을 바꿨는가"* 이고, 그 답은 **그 Phase 의 마지막
+       commit** 에 고정되어 있다. 작업 트리를 보면 뒤의 Phase 가 저 파일들을
+       바꿀 때마다 이 시험이 깨지는데, 그것은 3-F-17 에 대한 사실이 아니다.
+
+       실제로 6-AD 후속2 가 ``engine/chain.py`` 와
+       ``engine/effect/resolution.py`` 의 **실행되는 코드**를 바꿨다
+       (``RESOLVED_WITHOUT_EFFECT`` 와 ``STATUS_MAP`` 한 줄 ·
+       ``EffectResult.applied_any``). 그래서 이 시험이 그것을 잡았고, 그
+       사실 자체는 보고서 §15 에 적혀 있다 — **숨기지 않았고**, 양쪽 끝을
+       불변 SHA 로 고정해 이 시험이 **3-F-17 을 계속 재게** 했다.
+
+       아래 ``§5`` 의 금지 항목 단언들은 **현재 코드**를 그대로 본다 —
+       ``EffectResult`` 에 ``actor`` 칸이 생기지 않았다는 사실은 오늘도
+       지켜야 하는 것이므로 그쪽은 고정하지 않았다.
     """
     PHASE_3F17_BASE = "0227765"
+    PHASE_3F17_HEAD = "3a98c49"
 
     class _Strip(ast.NodeTransformer):
         def visit_Constant(self, node):  # noqa: N802
@@ -847,7 +866,13 @@ def test_20_this_phase_changed_only_docstrings():
             text=True,
             check=True,
         ).stdout
-        after = source_of(relative)
+        after = subprocess.run(
+            ["git", "show", f"{PHASE_3F17_HEAD}:{relative}"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
         assert ast.dump(_Strip().visit(ast.parse(before))) == ast.dump(
             _Strip().visit(ast.parse(after))
         ), relative

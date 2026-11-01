@@ -158,7 +158,9 @@ CODE_MEMBER_COUNT = 54
 #: 늘었으므로 아래 "차이가 13" 은 그대로다.
 #: 🔴 83 → **85** (Phase 6-AD 후속). ``REJECTION_PRODUCTIONS`` 가 늘어난
 #: 둘과 **같은 자리**이므로 아래 "차이가 13" 은 그대로다.
-CODE_OCCURRENCES = 85
+#: 🔴 85 → **86** (Phase 6-AD 후속2). ``REJECTION_PRODUCTIONS`` 가 늘어난
+#: 하나와 **같은 자리**이므로 아래 "차이가 13" 은 그대로다.
+CODE_OCCURRENCES = 86
 
 #: 그중 **거부를 만드는** 자리.
 #:
@@ -228,7 +230,12 @@ CODE_OCCURRENCES = 85
 #: ``RULE_NOT_IMPLEMENTED`` · ``INFORMATION_UNAVAILABLE`` 로 **모름**을
 #: 적는다 — 확정 거부가 늘어난 것이 아니다. ``CODE_OCCURRENCES`` 도 같은
 #: 둘만큼 늘어 아래 "차이가 13" 은 그대로다.
-REJECTION_PRODUCTIONS = 72
+#: 🔴 72 → **73** (Phase 6-AD 후속2). 늘어난 하나는
+#: ``engine/effect/executor.py`` 의 ``_short_selection`` 이고
+#: ``RULE_NOT_IMPLEMENTED`` 로 **모름**을 적는다 — 해결 시점에 후보 자격을
+#: 판정하지 못한 자리이고, 확정 거부가 늘어난 것이 아니다.
+#: ``CODE_OCCURRENCES`` 도 같은 하나만큼 늘어 아래 "차이가 13" 은 그대로다.
+REJECTION_PRODUCTIONS = 73
 
 #: enum 이 **섹션 주석으로 선언한** 묶음 → 멤버 수.
 DECLARED_SECTIONS = {

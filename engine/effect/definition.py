@@ -353,18 +353,6 @@ class EffectDefinition:
     ``requirements`` 와 나란히 있고 하는 일이 다르다 — 저쪽은 못 하면
     거절이고 이쪽은 안 하면 건너뜀이다.
     """
-    resolution_skip: "ResolutionSkip | None" = None
-    """
-    🔴 **해결 시점에 일을 생략하고도 정상 해결되는 조건** (6-AD 후속2).
-
-    ``None`` 은 **"그런 조건이 없다" 가 아니라 "적지 않았다"** 다 —
-    ``activation`` · ``activation_kind`` 와 같은 태도이고, 적지 않은 효과는
-    예전 그대로 거절된다 (ADR-006).
-
-    왜 정의에 적는가 — 공식 스크립트가 그 모양을 **그 카드의 해결 함수**에
-    적기 때문이다 (:class:`ResolutionSkip` 의 설명). 실행기가 카드 ID 로
-    특례를 두면 그것은 규칙이 아니라 코드의 예외가 된다.
-    """
     activation_kind: ActivationKind | None = None
     """
     이 효과가 **어떻게 발동하는가** — 기동 · 유발 · 플립 · 유발즉시
@@ -449,6 +437,18 @@ class EffectDefinition:
 
     **손으로 적는다.** ``EffectSpec`` 에서 자동으로 옮기지 않는다 —
     ``activation_kind`` · ``activation_waits_for_event`` 와 같은 규율이다.
+    """
+    resolution_skip: "ResolutionSkip | None" = None
+    """
+    🔴 **해결 시점에 일을 생략하고도 정상 해결되는 조건** (6-AD 후속2).
+
+    ``None`` 은 **"그런 조건이 없다" 가 아니라 "적지 않았다"** 다 —
+    ``activation`` · ``activation_kind`` 와 같은 태도이고, 적지 않은 효과는
+    예전 그대로 거절된다 (ADR-006).
+
+    왜 정의에 적는가 — 공식 스크립트가 그 모양을 **그 카드의 해결 함수**에
+    적기 때문이다 (:class:`ResolutionSkip` 의 설명). 실행기가 카드 ID 로
+    특례를 두면 그것은 규칙이 아니라 코드의 예외가 된다.
     """
     provenance: EffectProvenance = field(default_factory=EffectProvenance)
 

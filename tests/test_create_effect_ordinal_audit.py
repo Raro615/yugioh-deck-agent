@@ -1359,7 +1359,10 @@ def test_36_the_production_change_is_confined_to_the_parser_and_the_analyzer():
     # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
     # 아니다** — "1턴에 몇 번까지인가" 이고 그 카드 텍스트에서 옮긴 값이다.
     # 바로 아래 줄이 그 사실을 센다 (``code`` 칸은 여전히 없다).
-    assert len(dataclasses.fields(EffectDefinition)) == 13
+    # 🔴 Phase 6-AD 후속2 에서 13 → 14 칸 (``resolution_skip``). 그 칸도
+    # **사건 칸이 아니다** — 공식 스크립트의 해결 함수가 조작 없이 끝내는 두
+    # 자리와 그 근거만 담는다 (``code`` 칸은 여전히 없다).
+    assert len(dataclasses.fields(EffectDefinition)) == 14
     assert "code" not in {f.name for f in dataclasses.fields(EffectDefinition)}
 
     #: ``LuaScriptInfo`` 의 칸도 그대로다.

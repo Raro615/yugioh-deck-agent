@@ -303,6 +303,11 @@ def test_01_the_three_layers_hold_different_fields():
         "declarations",
         "requirements",
         "guards",
+        #: 🔴 Phase 6-AD 후속2 — 「해결 시점에 일을 생략하고도 정상 해결되는
+        #: 조건」 (``ResolutionSkip``). ``code`` 와도 **다른 칸이다** — 사건을
+        #: 담지 않고, 공식 스크립트의 **해결 함수**가 조작 없이 끝내는 두
+        #: 자리와 그 근거만 담는다. 위의 세 단언도 그대로 참이다.
+        "resolution_skip",
         "provenance",
     }, definition_fields
     #: 🔴 ``EffectDefinition`` 에 **사건 칸이 없다** — 유발 조건을 적을 자리가 없다.
@@ -987,7 +992,9 @@ def test_24_engine_v1_was_not_widened():
     # 그 빈 칸이 등재된 함정 다섯 장을 전부 막고 있었다 (docs/phase6q-…md §2).
     #: 🔴 Phase 6-AC 에서 12 → **13** 칸 (``use_limit``). 그 칸도 사건
     #: 칸이 아니고, 아래 교집합 검사가 그 사실을 센다.
-    assert len(dataclasses.fields(EffectDefinition)) == 13
+    #: 🔴 Phase 6-AD 후속2 에서 13 → **14** 칸 (``resolution_skip``). 그 칸도
+    #: 사건 칸이 아니다 — 담는 것은 해결 시점의 생략 조건 둘과 그 근거다.
+    assert len(dataclasses.fields(EffectDefinition)) == 14
     #: ``TimingPoint`` 도 8개 그대로다.
     assert len(list(TimingPoint)) == 8
 

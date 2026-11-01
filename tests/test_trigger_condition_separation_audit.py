@@ -194,6 +194,12 @@ def test_01_the_effect_definition_has_no_event_field():
         #: 옮긴 값이고 사건이 아니다. 담는 자리는 :mod:`engine.use_limit`
         #: 이며, **판의 기록**(``UseRegistry``)과 일부러 갈라 두었다.
         "use_limit",
+        #: 🔴 Phase 6-AD 후속2 — 「해결 시점에 일을 생략하고도 정상 해결되는
+        #: 조건」 (``ResolutionSkip``). 공식 스크립트의 **해결 함수**에서 읽은
+        #: 값이고 사건이 아니다 — 담는 것은 "조건이 거짓일 때" · "후보가 없을
+        #: 때" 두 불 값과 그 근거 문장이다. 아래의 ``absent`` 목록과
+        #: ``"EVENT" not in source`` 가 그 사실을 그대로 센다.
+        "resolution_skip",
         "provenance",
     ]
     for absent in ("code", "event", "point", "trigger", "setcode", "timing"):

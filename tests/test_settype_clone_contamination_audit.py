@@ -940,7 +940,10 @@ def test_25_this_phase_defined_no_new_semantics():
     # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
     # 아니다** — "1턴에 몇 번까지인가" 이고 그 카드 텍스트에서 옮긴 값이다.
     # 아래 교집합이 여전히 비어 있는 것이 그 증거다.
-    assert len(definition) == 13
+    # 🔴 Phase 6-AD 후속2 에서 13 → 14 칸 (``resolution_skip``). 그 칸도
+    # **사건 칸이 아니다** — 공식 스크립트의 해결 함수가 조작 없이 끝내는 두
+    # 자리와 그 근거만 담는다. 아래 교집합이 여전히 비어 있다.
+    assert len(definition) == 14
     assert "effect_types" not in definition
 
 

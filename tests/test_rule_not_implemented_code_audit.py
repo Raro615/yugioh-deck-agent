@@ -189,7 +189,13 @@ MINE = 0
 #: (``_candidate_existence``), 그 위의 주석이 **왜** 그 코드인지를 적는다
 #: ("코드가 생겨야 풀리는 모름이고 판이 바뀌어서 풀리는 모름이 아니다").
 #: 그래서 ``CODE_OCCURRENCES`` 도 83 → 85 다.
-STRING_OCCURRENCES = 122
+#: 🔴 122 → **123** (Phase 6-AD 후속2). 늘어난 하나는 ``engine/effect/
+#: executor.py`` 의 **코드**다 — ``_short_selection`` 이 "후보 자격을 판정
+#: 하지 못했다" 를 이 코드로 적는다 (해결 시점의 모름이고, 정상 불발로
+#: 바꾸지 않는다). 그래서 ``CODE_OCCURRENCES`` 도 85 → 86 이고 **산문 37 은
+#: 그대로다** — 두 수가 같은 만큼 늘었다는 것이 "새 설명이 아니라 새 거절
+#: 자리" 라는 증거다.
+STRING_OCCURRENCES = 123
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -259,8 +265,8 @@ PROSE_OCCURRENCES = {
     ("engine/duel.py", 3182),
     ("engine/duel.py", 3248),
     ("engine/duel.py", 3489),
-    ("engine/effect/definition.py", 926),
-    ("engine/effect/executor.py", 1185),
+    ("engine/effect/definition.py", 1024),
+    ("engine/effect/executor.py", 1291),
     ("engine/special_summon.py", 77),
     ("engine/trigger.py", 811),
     ("engine/trigger.py", 839),
@@ -329,7 +335,11 @@ PROSE_OCCURRENCES = {
 #: 🔴 80 → **83** (Phase 6-AC). 위 ``STRING_OCCURRENCES`` 의 설명에 있는
 #: **코드 쪽 셋**이다. 산문 셋은 이 수에 들어오지 않는다 — 두 수가 같은
 #: 만큼 늘지 않았다는 것이 그 구분이 살아 있다는 증거다.
-CODE_OCCURRENCES = 85
+#: 🔴 85 → **86** (Phase 6-AD 후속2). 늘어난 하나가 위
+#: ``STRING_OCCURRENCES`` 의 설명에 있는 그 자리다 — 해결 시점에 후보
+#: 자격을 판정하지 못한 경우의 ``UNCHECKED_RULES`` 거절이고, 상태가 모름
+#: 쪽이므로 ``test_05`` 의 **적합** 집합에 들어간다 (21 → 22).
+CODE_OCCURRENCES = 86
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {
@@ -384,6 +394,18 @@ FIELD_DEFAULT_OWNERS = {
 #:                            과 ``USE_LIMIT_REACHED`` 의 설명)
 #:   ``effect/executor.py``   일곱 자리 전부 +38 (지연 접근자 둘과
 #:                            ``_summon_ruling`` · 특수 소환 관문의 설명)
+#: 🔴 **Phase 6-AD 후속2 에서 여덟 자리가 밀렸다 — 위반 13 은 그대로다.**
+#: 자리의 성격도 개수도 짝지은 상태도 바뀌지 않았고, 바뀐 것이 줄 번호뿐이라는
+#: 것이 그 증거다. 원인은 둘이고 전부 **그 자리보다 위에** 들어갔다:
+#:
+#:   ``effect/resolution.py``  520 → 581 (+61 · ``RESOLVED_WITHOUT_EFFECT``
+#:                             의 설명과 ``applied_any``)
+#:   ``effect/executor.py``    앞 네 자리 +2 (import 한 줄과 설명) ·
+#:                             뒤 세 자리 +106/+136 (``_short_selection``
+#:                             과 해결 시점 조건 거짓의 생략 가지)
+#:
+#: **적합은 21 → 22 로 늘었다** — 그 하나가 ``_short_selection`` 의 모름
+#: 거절이고, 모름 쪽 상태와 짝지었으므로 적합이다.
 CONTRACT_VIOLATIONS = {
     # 🔴 Phase 6-B 가 ``ActionExecutor.__init__`` 에 ``journal`` 인자와
     # 설명(+23줄)을 더해 **그 아래가 밀렸다** (316 → 339). 거부 자리와
@@ -437,12 +459,12 @@ CONTRACT_VIOLATIONS = {
     # 상태도 바뀌지 않았고, 바뀐 것이 줄 번호뿐이다.
     ("engine/activation.py", 761, "ActivationStatus.INVALID_ACTION"),
     ("engine/activation.py", 793, "ActivationStatus.CHAIN_REFUSED"),
-    ("engine/effect/executor.py", 644, "ResolutionStatus.EXECUTION_ERROR"),
-    ("engine/effect/executor.py", 792, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 805, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 928, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1128, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1404, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 646, "ResolutionStatus.EXECUTION_ERROR"),
+    ("engine/effect/executor.py", 794, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 807, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 930, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1234, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1540, "ResolutionStatus.INVALID_CONTEXT"),
     # 🔴 **한 자리가 밀렸다** (Phase 6-L). ``engine/effect/executor.py``
     # 1336 → **1390**. 6-L 이 그 위에 ``_target_spec_of`` ·
     # ``_resolve_self_reference`` (+45) 와 ``_plan_card_operation`` 의
@@ -452,8 +474,8 @@ CONTRACT_VIOLATIONS = {
     # 더한 거절 자리(``_resolve_self_reference``)는 이 목록에 들어오지
     # 않는다: 그쪽은 ``INFORMATION_UNAVAILABLE`` 을 쓴다 — "규칙을 아직
     # 옮기지 않았다" 가 아니라 "이 문맥에 그 카드가 없다" 이기 때문이다.
-    ("engine/effect/executor.py", 1742, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/resolution.py", 520, "ResolutionStatus.FORBIDDEN"),
+    ("engine/effect/executor.py", 1878, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/resolution.py", 581, "ResolutionStatus.FORBIDDEN"),
     ("engine/payment.py", 402, "PaymentStatus.EXECUTION_ERROR"),
     # 🔴 보완6 에서 +6 밀렸다 (485 → 491) — ``act`` 가 ``stage`` 를
     # 키워드로 받게 되면서 그 자리보다 **위**에 줄이 늘었다. 위반 13 ·
@@ -471,7 +493,11 @@ CONTRACT_VIOLATIONS = {
 #: 검사가 내는 ``TargetLegality.UNKNOWN`` + ``RULE_NOT_IMPLEMENTED`` 이고,
 #: **적합** 쪽이다 — 그 enum 자신이 ``UNKNOWN`` 을 "판정할 수 없다" 로 적어
 #: 두었다. 위반 13 은 그대로다.
-CONFORMING_SITES = 21
+#: 🔴 21 → **22** (Phase 6-AD 후속2). 늘어난 하나는
+#: ``EffectExecutor._short_selection`` 의 ``UNCHECKED_RULES`` ·
+#: ``RULE_NOT_IMPLEMENTED`` 짝이다 — 상태가 ``_UNKNOWN_STATUSES`` 쪽이므로
+#: **적합**이다. 위반 13 은 그대로다.
+CONFORMING_SITES = 22
 
 #: 해결 계층의 "모른다" 쪽 상태 — `resolution.py` 의 docstring 을 읽어 모았다.
 RESOLUTION_UNKNOWN_NAMES = {

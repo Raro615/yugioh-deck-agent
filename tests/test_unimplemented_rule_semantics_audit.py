@@ -250,7 +250,11 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: 🔴 119 → **122** (Phase 6-AD 후속). 셋 다 ``engine/activation.py`` 의
 #: 후보 존재 검사이고 (코드 둘 · 산문 하나), 이 파일이 재는
 #: ``UnimplementedRule`` 과 관계된 것은 역시 **0건**이다.
-RULE_NOT_IMPLEMENTED_MENTIONS = 122
+#: 🔴 122 → **123** (Phase 6-AD 후속2). 늘어난 하나는
+#: ``engine/effect/executor.py`` 의 해결 시점 모름 거절이고 (코드 한 자리 ·
+#: 산문 0), 이 파일이 재는 ``UnimplementedRule`` 과 관계된 것은 역시
+#: **0건**이다.
+RULE_NOT_IMPLEMENTED_MENTIONS = 123
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
