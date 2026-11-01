@@ -56,6 +56,7 @@ import asyncio
 import logging
 import os
 import sys
+from dataclasses import dataclass, field
 from enum import Enum
 
 #: 🔴 **검색 파이프라인을 다시 쓰지 않는다.** CLI 와 같은 함수를 부른다.
@@ -129,6 +130,32 @@ COMBO_ERROR_MESSAGE = (
 #: 덱의 뒷부분을 버리지 않고 **나눠 보낸다** — 덱은 일부만 보여 주면 되는
 #: 목록이 아니다. 상한을 두는 이유는 사고로 수십 개를 쏟지 않기 위해서다.
 DECK_MESSAGE_LIMIT = 4
+
+#: 🔴 ``/combo`` 기본 응답의 최대 메시지 수 (Phase 6-AE).
+#:
+#: 6-AD 까지는 이 네 개를 다 쓰고도 모자라서 마지막 메시지에 *"길이 제한으로
+#: 10줄을 보내지 못했습니다"* 가 붙었다 (실측: 사용자가 보낸 지정 패와
+#: 검증용 레시피 · ``line:orcust-girsu`` → 4메시지 7,749자 + 10줄 누락.
+#: 그 입력은 ``tests/test_combo_brief_and_detail.py`` 가 들고 있다 — 🔴 이
+#: 모듈은 레시피를 **상수로 들고 있지 않는다**,
+#: ``test_orcust_girsu_line::test_g03`` 이 그것을 고정한다).
+#:
+#: 🔴 **그래서 이 수를 늘리지 않았다.** 메시지를 늘리면 읽을 수 없는 응답이
+#: 길어질 뿐이다 — 고친 것은 **요약을 짧게 만들고 전체 기록을 첨부로
+#: 보내는** 쪽이다 (실측: 같은 입력이 1메시지 1,815자 + 첨부 14,715바이트).
+COMBO_MESSAGE_LIMIT = DECK_MESSAGE_LIMIT
+
+#: 첨부 하나의 최대 바이트. Discord 의 기본 업로드 상한은 바뀌어 왔으므로
+#: (8 MiB → 25 MB → 10 MiB) **가장 좁았던 값**을 쓴다. 넘으면 버리지 않고
+#: 나눈다 (:func:`combo_attachments`).
+COMBO_ATTACHMENT_LIMIT = 8 * 1024 * 1024
+
+#: 한 메시지에 붙일 수 있는 첨부 수. Discord 의 상한이 10이다.
+COMBO_ATTACHMENT_COUNT_LIMIT = 10
+
+#: 상세 기록 첨부의 **고정 파일명**. 🔴 사용자 입력으로 만들지 않는다 —
+#: 패 · 레시피 문자열이 파일명이나 경로가 되면 그 자체가 주입 경로다.
+COMBO_DETAIL_FILENAME = "combo-detail.txt"
 
 
 class MissingTokenError(RuntimeError):
@@ -234,7 +261,8 @@ _OUTCOME_MARK = {
 
 def paginate(lines: "list[str]",
              limit: int = DISCORD_MESSAGE_LIMIT,
-             max_messages: int = DECK_MESSAGE_LIMIT) -> "list[str]":
+             max_messages: int = DECK_MESSAGE_LIMIT,
+             overflow_notice: "str | None" = None) -> "list[str]":
     """
     줄 목록을 **상한을 넘지 않는 메시지 여러 개**로 묶는다.
 
@@ -248,6 +276,11 @@ def paginate(lines: "list[str]",
 
     ``max_messages`` 를 넘으면 마지막 메시지에 **몇 줄을 못 보냈는지**
     적는다. 조용히 끊지 않는다.
+
+    ``overflow_notice`` (Phase 6-AE) 를 주면 그 문장을 **함께** 적는다 —
+    "어디서 전체를 볼 수 있는가" 를 가리키는 자리다 (``/combo`` 는 상세
+    기록 첨부를 가리킨다). 🔴 **몇 줄이 빠졌는지는 그대로 적는다** — 가리킬
+    곳이 있다는 사실이 누락을 지우지 않는다.
     """
     pages: list[str] = []
     current: list[str] = []
@@ -269,6 +302,8 @@ def paginate(lines: "list[str]",
             if len(pages) >= max_messages:
                 remaining = len(lines) - index
                 notice = f"… (길이 제한으로 {remaining}줄을 보내지 못했습니다)"
+                if overflow_notice:
+                    notice += f" {overflow_notice}"
                 pages[-1] = clamp_to_discord_limit(
                     pages[-1] + "\n" + notice, limit)
                 return pages
@@ -571,18 +606,47 @@ def _combo_step_lines(agent, plan) -> "list[str]":
     return lines
 
 
-def _executed_lines(agent, recipe_text: str,
-                    hand_ids: "list[int]",
-                    line_text: str = "") -> "tuple[list[str], bool]":
+@dataclass(frozen=True, slots=True)
+class OpeningReport:
     """
-    🔴 **실제 엔진 실행 절** (Phase 6-T). 레시피가 없으면 빈 목록이 아니라
-    **무엇이 부족한지** 적는다 (§5 · §15).
+    ``/combo`` 의 **실제 엔진 실행 한 번**에 대한 보고 조각들 (Phase 6-AE).
 
-    돌려주는 것은 ``(줄들, 입력이 거절되었는가)`` 짝이다 (Phase 6-AA).
-    둘째 값이 참이면 **이번 요청의 입력이 규칙에 어긋났다**는 뜻이고, 그때
-    부르는 쪽은 정적 전개 추천을 **내지 않는다** — 거절한 입력에 대해
-    "이렇게 전개하면 된다" 를 보여 주면 사용자는 자기 입력이 통과한 줄로
-    읽는다 (사용자 실험 ③ 이 그것을 잡았다).
+    🔴 **판정을 들고 오지 않는다 — 이미 난 판정을 옮긴다.** ``refused`` 는
+    실행 절이 직접 말하는 값이고 (``not setup.can_run``), 부르는 쪽은 그것을
+    다시 계산하지 않는다. 두 번 판정하면 두 답이 갈라질 수 있고, 그것이 이
+    저장소가 반복해서 고쳐 온 모양이다 (STRUCTURAL-134).
+
+    ``brief`` 와 ``detail`` 은 **같은 실행 기록**에서 나온 두 표현이다 —
+    엔진을 두 번 돌리지 않는다. ``ran`` 이 거짓이면 실행 자체가 없었다
+    (레시피 없음 · 레시피를 읽지 못함).
+    """
+
+    brief: tuple[str, ...] = ()
+    """기본 응답에 넣을 줄들. 짧다."""
+    detail: tuple[str, ...] = ()
+    """첨부에 넣을 줄들. **전체 기록**이다 — CLI 가 보는 것과 같다."""
+    refused: bool = False
+    """🔴 **이번 요청의 입력이 규칙 검증에 걸렸는가.**"""
+    ran: bool = False
+    """엔진을 실제로 돌렸는가 (레시피가 있었고 읽혔는가)."""
+
+
+def _run_opening(agent, recipe_text: str,
+                 hand_ids: "list[int]",
+                 line_text: str = "") -> OpeningReport:
+    """
+    🔴 **실제 엔진 실행 절** (Phase 6-T · 6-AE). 레시피가 없으면 빈 목록이
+    아니라 **무엇이 부족한지** 적는다 (§5 · §15).
+
+    돌려주는 것은 :class:`OpeningReport` 다 (6-AE). 그 안의 ``refused`` 가
+    참이면 **이번 요청의 입력이 규칙에 어긋났다**는 뜻이고, 그때 부르는 쪽은
+    정적 전개 추천을 **내지 않는다** — 거절한 입력에 대해 "이렇게 전개하면
+    된다" 를 보여 주면 사용자는 자기 입력이 통과한 줄로 읽는다 (사용자 실험
+    ③ 이 그것을 잡았다).
+
+    🔴 **엔진을 한 번만 돌린다.** ``brief`` 와 ``detail`` 은 그 한 번의
+    기록에서 만든 두 표현이고, 표시를 위해 다시 실행하거나 상태를 건드리지
+    않는다 (6-AE §5).
 
     ``deck:`` 초안을 실제 덱으로 쓰지 않는 이유가 여기에 적혀 있어야 한다 —
     출력에 없으면 사용자는 초안으로 검증했다고 믿는다.
@@ -593,13 +657,14 @@ def _executed_lines(agent, recipe_text: str,
     from deck.recipe import parse_recipe
     from deck.report import (
         render_opening_board,
+        render_opening_brief,
         render_opening_run,
         render_opening_setup,
     )
 
     expected = opening_hand_size()
     if not recipe_text or not recipe_text.strip():
-        return [
+        said = (
             "**[실제 엔진 실행]**",
             "🔴 **하지 않았습니다** — 실제 덱 레시피가 없습니다.",
             f"선공 전개를 엔진으로 검증하려면 패 {expected}장만으로는"
@@ -612,23 +677,24 @@ def _executed_lines(agent, recipe_text: str,
             "넘기는 방법 (`recipe:`):",
             "  `recipe:욕망의 항아리 x3, 11091375 x37`",
             "  또는 YDK 그대로 (`#main` 아래 패스코드 한 줄에 하나)",
-        ], False
+        )
+        return OpeningReport(brief=said, detail=said, refused=False, ran=False)
 
     parsed = parse_recipe(recipe_text, agent.repository)
-    lines = ["**[실제 엔진 실행]**"]
+    head = ["**[실제 엔진 실행]**"]
     if parsed.unresolved:
         names = ", ".join(f"`{t}`" for t in parsed.unresolved[:10])
-        lines.append(f"⚠️ 레시피에서 카드를 찾지 못했습니다: {names}"
-                     " — **덱에 넣지 않았습니다.**")
-    for note in parsed.notes:
-        lines.append(f"  {note}")
+        head.append(f"⚠️ 레시피에서 카드를 찾지 못했습니다: {names}"
+                    " — **덱에 넣지 않았습니다.**")
+    notes = [f"  {note}" for note in parsed.notes]
     if parsed.draft is None:
-        lines.append("🔴 레시피에서 카드를 하나도 읽지 못해 **실행하지"
-                     " 않았습니다.**")
+        head.append("🔴 레시피에서 카드를 하나도 읽지 못해 **실행하지"
+                    " 않았습니다.**")
         #: 레시피를 읽지 못한 것은 **입력 거절이 아니다** — 규칙 위반을
         #: 판정한 것이 아니라 글자를 못 읽은 것이므로, 정적 계획은 그대로
         #: 보여 준다 (그쪽은 레시피를 쓰지 않는다).
-        return lines, False
+        return OpeningReport(brief=tuple(head), detail=tuple(head + notes),
+                             refused=False, ran=False)
 
     #: 🔴 **유발 발동과 해결 시점 선택을 꽂는다** (Phase 6-Z).
     #:
@@ -649,7 +715,7 @@ def _executed_lines(agent, recipe_text: str,
     line = line_named(line_text)
     if line_text and line_text.strip() and line is None:
         names = " · ".join(f"`{name}`" for name in sorted(COMBO_LINES))
-        lines.append(
+        head.append(
             f"⚠️ `line:{line_text}` 라는 검증용 전개 경로가 없습니다 —"
             f" **기본 선택 방식(`first_meaningful`)으로 실행했습니다.**"
             f" 있는 경로: {names}"
@@ -670,96 +736,142 @@ def _executed_lines(agent, recipe_text: str,
         agent.repository,
         **({"choose": line.policy()} if line is not None else {}),
     )
-    #: 🔴 **한 줄 요약은 실측에서만 나온다.** 실행한 걸음 · 해결된 걸음 ·
-    #: 상태가 바뀐 걸음을 각각 센다 (세 사실을 묶지 않는다 — 6-R).
-    if setup.can_run:
-        #: 🔴 **"조작 수행" 과 "해결" 을 섞지 않는다** (6-AD 후속2).
-        #: ``effects_resolved`` 는 기록에 ``EffectEvent`` 가 남은 걸음, 즉
-        #: **조작이 실제로 수행된** 걸음이다. 규칙대로 해결됐지만 할 일이
-        #: 없었던 걸음은 따로 적는다 — 미지원도 오류도 아니다.
-        idle = run.effects_resolved_without_operation
-        lines.append(
-            f"✅ **엔진이 실제로 {run.executed}걸음 실행**했습니다"
-            f" (효과의 조작 수행 {run.effects_resolved}걸음"
-            + (f" · 해결됐지만 조작 없음 {idle}걸음" if idle else "")
-            + f" · 상태 변경 {run.state_changes}걸음)."
-            f" 아래는 실측 기록입니다."
-        )
-        if line is None:
-            lines.append(
-                "🔴 고른 방식은 **검증용 기준점**입니다 — 행동은"
-                " `first_meaningful` (판을 바꾸는 후보의 첫 번째), 해결 중의"
-                " 카드 선택은 `first-permitted` (허용된 후보의 앞쪽). **최선의"
-                " 전개가 아닙니다.**"
-            )
-        else:
-            #: 🔴 **무엇으로 실행했는지 그대로 적는다** (Phase 6-AC §5).
-            #: "경로를 따라갔다" 와 "최선을 찾았다" 를 섞지 않는다.
-            progress = line_progress(run, line)
-            lines.append(
-                f"🔴 고른 방식은 **검증용 전개 정책 `{line.name}`** 입니다 —"
-                f" 사람이 적어 둔 경로를 따라갔을 뿐이고 **최선 전개 탐색도,"
-                f" 범용 AI 도, 엔진이 스스로 찾은 전개도 아닙니다.**"
-                f" 해결 중의 카드 선택은 `first-permitted` 이고, 경로가"
-                f" 적어 둔 카드가 있으면 **엔진이 낸 허용 후보 안에서** 그것을"
-                f" 먼저 집습니다."
-            )
-            lines.append(f"  경로: {line.title_ko}")
-            if line.resolution_preferences:
-                #: 🔴 **해결 시점의 선택을 따로 적는다** (6-AD §6). 발동
-                #: 기록의 대상이 비어 있는 것이 **정상**이므로, 그 칸만 보고
-                #: "아무것도 고르지 않았다" 로 읽히지 않게 한다.
-                wanted = " · ".join(
-                    f"`{card_id}`" for card_id in line.resolution_preferences
-                )
-                lines.append(
-                    f"  해결 중에 고르려는 카드: {wanted}"
-                    f" (후보 밖에서 끌어오지 않습니다)"
-                )
-            lines.append(f"  {progress.describe_ko()}")
-        #: 🔴 **미지원 사유를 요약 줄에 올린다** (Phase 6-AB 최종 보완 ④).
-        #: 걸음 기록 안에만 두면 묻힌다 — 실행에 영향을 준 사실이고,
-        #: 이것이 있으면 위의 "N걸음 실행" 을 "이 패로 할 수 있는 것을 다
-        #: 했다" 로 읽어서는 안 된다.
-        if run.unsupported:
-            lines.append(
-                f"🔴 **엔진이 지원하지 않아 후보가 되지 못한 것이"
-                f" {len(run.unsupported)}건** 있었습니다 — 아래 `미지원"
-                f" 사유` 를 보세요. 규칙이 막은 것이 아니라 **이 저장소에"
-                f" 그 규칙이 없다**는 뜻이고, 그래서 위의 걸음 수를 **이"
-                f" 패의 전개를 다 했다**로 읽을 수 없습니다."
-            )
-        if run.stopped_kind == "unsupported":
-            lines.append(
-                "🔴 멈춘 자리가 **미지원 때문**입니다 — 남은 후보가"
-                " 흐름뿐이었지만 같은 자리에 지원하지 않아 오르지 못한"
-                " 후보가 있었습니다. **정상 전개 종료가 아닙니다.**"
-            )
-        #: 🔴 **"더 고를 행동이 없다" 와 "끝까지 검증했다" 를 가른다**
-        #: (보완8 세 항목 ①). 멈춘 자리가 깨끗해도 전개 도중에 미지원을
-        #: 지나왔으면 전체를 검증한 것이 아니다 — 그 자리를 ``flow_only``
-        #: 하나로 읽으면 "정상 검증 완료" 가 된다.
-        elif run.stopped_kind == "flow_only" and not run.fully_supported:
-            lines.append(
-                "🔴 멈춘 자리에는 미지원이 없었지만, **전개 도중에 지나온"
-                " 미지원이 있습니다** — 그래서 **더 고를 행동이 없다**는"
-                " 것과 **전개 전체를 지원 범위 안에서 검증했다**는 것은"
-                " 다릅니다. 위 `미지원 사유` 목록이 그 한계입니다."
-            )
-    else:
-        lines.append("🔴 **실행하지 않았습니다** — 입력 검증을 통과하지"
-                     " 못했습니다 (아래 참조).")
-    lines.extend(render_opening_setup(setup).splitlines())
-    lines.extend(render_opening_run(run).splitlines())
-    lines.extend(render_opening_board(setup, agent.repository).splitlines())
-    return lines, not setup.can_run
+    progress = line_progress(run, line) if line is not None else None
+
+    #: 🔴 **요약은 공용 보고 함수가 만든다** (6-AE). Discord 가 제 손으로
+    #: 문장을 만들면 CLI 와 다른 답이 나오고, 어느 쪽이 맞는지 알 수 없다.
+    brief = list(head)
+    brief.extend(render_opening_brief(
+        setup, run, agent.repository, line=line, progress=progress
+    ).splitlines())
+    #: 🔴 **상세는 기존 전체 기록 그대로다** — CLI 가 보는 것과 같은 세 함수
+    #: 이고, 한 줄도 줄이지 않는다 (6-AE §3).
+    detail = list(head) + notes
+    if not setup.can_run:
+        detail.append("🔴 **실행하지 않았습니다** — 입력 검증을 통과하지"
+                      " 못했습니다 (아래 참조).")
+    detail.extend(render_opening_setup(setup).splitlines())
+    detail.extend(render_opening_run(run).splitlines())
+    detail.extend(render_opening_board(setup, agent.repository).splitlines())
+    return OpeningReport(brief=tuple(brief), detail=tuple(detail),
+                         refused=not setup.can_run, ran=True)
 
 
-def combo_messages(agent, hand_text: str, board_text: str = "",
-                   deck_text: str = "", recipe_text: str = "",
-                   line_text: str = "") -> "list[str]":
+@dataclass(frozen=True, slots=True)
+class ComboAttachment:
     """
-    ``/combo`` 의 응답. **discord 를 모른다.** 메시지 여러 개를 돌려준다.
+    기본 응답과 함께 보내는 **상세 기록 파일 하나** (Phase 6-AE).
+
+    🔴 **discord 를 모른다.** 이름과 UTF-8 바이트만 들고 있고, 그것을
+    ``discord.File`` 로 바꾸는 일은 :func:`build_client` 안에서만 한다 —
+    이 모듈의 순수 함수들은 라이브러리 없이 테스트된다 (모듈 설명).
+
+    🔴 **파일명은 고정값에서 만든다.** 사용자 입력(패 · 레시피 · 경로
+    이름)이 파일명이나 경로에 들어가지 않는다.
+
+    🔴 **디스크를 쓰지 않는다.** 바이트를 들고 있고, 보내는 쪽이 메모리
+    버퍼로 감싼다 — 임시 파일을 남기지 않는다.
+    """
+
+    filename: str
+    text: str
+
+    @property
+    def data(self) -> bytes:
+        return self.text.encode("utf-8")
+
+    @property
+    def size(self) -> int:
+        return len(self.data)
+
+
+@dataclass(frozen=True, slots=True)
+class ComboResponse:
+    """
+    ``/combo`` 한 번의 응답 — **기본 메시지들과 첨부들** (Phase 6-AE).
+
+    🔴 **둘을 가르는 이유가 측정에서 나왔다.** 6-AD 까지 이 명령은 전체
+    기록을 메시지로만 보냈고, 실측으로 네 메시지를 다 쓰고도 **10줄이
+    잘렸다** (``COMBO_MESSAGE_LIMIT`` 의 설명). 메시지를 늘리는 쪽으로
+    풀면 읽을 수 없는 응답이 길어질 뿐이므로, 요약을 짧게 만들고 **전체를
+    첨부로** 보낸다.
+
+    🔴 **첨부가 요약의 사본이 아니다.** 요약에서 상한 때문에 뺀 줄은 전부
+    첨부에 있고, 요약은 몇 줄을 뺐는지 적는다.
+    """
+
+    messages: tuple[str, ...] = ()
+    attachments: tuple[ComboAttachment, ...] = ()
+
+    @property
+    def missing(self) -> bool:
+        """🔴 **내용이 조용히 사라졌는가.** 참이면 전달 실패로 다뤄야 한다."""
+        return not self.messages
+
+
+def combo_attachments(text: str,
+                      filename: str = COMBO_DETAIL_FILENAME,
+                      limit: int = COMBO_ATTACHMENT_LIMIT,
+                      count_limit: int = COMBO_ATTACHMENT_COUNT_LIMIT,
+                      ) -> "tuple[ComboAttachment, ...]":
+    """
+    상세 기록을 **상한을 넘지 않는 첨부 여러 개**로 나눈다 (Phase 6-AE).
+
+    🔴 **버리지 않는다.** 줄 단위로 나누고, 한 줄이 그 자체로 상한을 넘으면
+    그 줄만 바이트 경계에서 쪼갠다 (UTF-8 이므로 글자 중간에서 끊지 않게
+    ``errors="ignore"`` 로 되돌리지 않고 **글자 단위로** 센다).
+
+    ``count_limit`` 를 넘으면 마지막 첨부에 **몇 줄을 담지 못했는지** 적는다
+    — 조용히 끊지 않는다. 실측 범위(상세 15KB)에서는 언제나 1개다.
+    """
+    lines = text.splitlines()
+    parts: list[list[str]] = [[]]
+    size = 0
+    for line in lines:
+        piece = line
+        chunk = len(piece.encode("utf-8")) + 1
+        if chunk > limit:
+            #: 🔴 한 줄이 상한을 넘는다 — 글자 단위로 쪼갠다.
+            buffer = ""
+            for char in piece:
+                if len((buffer + char).encode("utf-8")) + 1 > limit:
+                    parts.append([buffer])
+                    buffer = char
+                else:
+                    buffer += char
+            piece = buffer
+            chunk = len(piece.encode("utf-8")) + 1
+            size = limit  # 다음 줄은 새 첨부로 보낸다
+        if parts[-1] and size + chunk > limit:
+            parts.append([])
+            size = 0
+        parts[-1].append(piece)
+        size += chunk
+
+    made: list[ComboAttachment] = []
+    stem, _, suffix = filename.rpartition(".")
+    stem = stem or filename
+    suffix = suffix or "txt"
+    for index, part in enumerate(parts, start=1):
+        if len(made) >= count_limit:
+            left = sum(len(rest) for rest in parts[index - 1:])
+            notice = (f"\n🔴 상세 기록 {left}줄을 첨부 수 상한"
+                      f" ({count_limit}개) 때문에 담지 못했습니다 —"
+                      f" CLI 의 `python3 -m app.main combo … --recipe …` 로"
+                      f" 전체를 볼 수 있습니다.")
+            made[-1] = ComboAttachment(made[-1].filename,
+                                       made[-1].text + notice)
+            break
+        name = filename if len(parts) == 1 else f"{stem}-{index}.{suffix}"
+        made.append(ComboAttachment(name, "\n".join(part)))
+    return tuple(made)
+
+
+def combo_response(agent, hand_text: str, board_text: str = "",
+                   deck_text: str = "", recipe_text: str = "",
+                   line_text: str = "") -> ComboResponse:
+    """
+    ``/combo`` 의 응답. **discord 를 모른다.** 메시지들과 첨부들을 돌려준다.
 
     기존 콤보 플래너를 그대로 부른다 — 새 전개 엔진을 만들지 않는다:
     :func:`app.main._parse_card_ids` →
@@ -778,6 +890,17 @@ def combo_messages(agent, hand_text: str, board_text: str = "",
     ``line_text`` (Phase 6-AC) 는 **검증용 전개 정책의 이름**이다. 주면 그
     경로를 따라가고, 주지 않으면 ``first_meaningful`` 그대로다 — 사용자가
     고르지 않은 정책이 조용히 행동 선택을 바꾸지 않는다 (§5).
+
+    출력의 모양 (Phase 6-AE)
+    -------------------------
+    * **실제 실행이 있으면** 기본 응답은 요약뿐이고, 정적 계획은 한 줄짜리
+      안내로 줄인다 — 실제 실행 뒤에 길게 붙이면 "실행 이후의 추가 행동"
+      으로 읽힌다 (§3).
+    * **실제 실행이 없으면** 그 사실을 먼저 적고, 정적 계획을 **"실행하지
+      않은 참고 계획"** 으로 한 줄씩 적는다. 실행 걸음 수나 성공 표시를
+      만들지 않는다.
+    * 전체 기록은 언제나 첨부로 간다 (실행 기록 + 정적 계획을 **분리된
+      절**로).
     """
     from app.main import _parse_card_ids
     from deck.hand import FixedHand
@@ -818,7 +941,8 @@ def combo_messages(agent, hand_text: str, board_text: str = "",
         lines.append("  `/combo hand:55144522`")
         lines.append("🔴 무작위 패 생성은 구현되어 있지 않습니다 — 패는"
                      " 직접 지정해야 합니다.")
-        return paginate(lines)
+        return ComboResponse(messages=tuple(paginate(
+            lines, max_messages=COMBO_MESSAGE_LIMIT)))
 
     draft = None
     if deck_text and deck_text.strip():
@@ -837,93 +961,203 @@ def combo_messages(agent, hand_text: str, board_text: str = "",
     #: 🔴 **실제 레시피를 주면 엔진으로 돌린다** (Phase 6-T). 자연어
     #: ``deck:`` 초안과 **가르는 것이 요점**이다 — 초안은 이 저장소가 추천한
     #: 구성이고 사용자가 확정한 덱이 아니다 (§5).
-    executed_lines, input_refused = _executed_lines(
-        agent, recipe_text, hand_ids, line_text
-    )
+    executed = _run_opening(agent, recipe_text, hand_ids, line_text)
 
     #: 🔴 **입력이 거절되면 정적 전개 추천을 내지 않는다** (Phase 6-AA —
     #: 사용자 실험 ③). 실측으로, 「기르수: 패 4장 > 덱 3장」으로 거절한
     #: 요청에 대해 아래 정적 계획이 기르수 소환과 효과를 나열하고 "확정" ·
     #: "엔진이 허가함" 으로 적었다. 그 두 문장이 한 응답 안에 같이 있으면
     #: 사용자는 입력이 통과한 줄로 읽는다.
-    if input_refused:
-        if executed_lines:
-            lines.append("")
-            lines.extend(executed_lines)
+    if executed.refused:
+        lines.append("")
+        lines.extend(executed.brief)
         lines.append("")
         lines.append("🔴 **정적 전개 추천은 내지 않았습니다** — 이번 요청의"
                      " 입력이 규칙 검증을 통과하지 못했습니다.")
         lines.append("거절한 입력에 대해 전개를 추천하면 그 입력이 통과한"
                      " 것으로 읽힙니다. 위에 적힌 위반을 고쳐서 다시"
                      " 보내 주세요.")
-        return paginate(lines)
+        detail = _combo_detail_text(agent, executed, plan=None, verdict=None)
+        return ComboResponse(
+            messages=tuple(paginate(lines,
+                                    max_messages=COMBO_MESSAGE_LIMIT)),
+            attachments=combo_attachments(detail),
+        )
 
     plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
                                                board=board_ids, draft=draft)
 
     verdict = combo_verdict(plan)
 
-    #: 🔴 **실제 실행을 정적 계획보다 앞에 둔다.** 둘을 같은 목록에 섞지
-    #: 않고, 먼저 "실제로 돌린 것" 을 보여 준 다음 "돌리지 않은 계획" 을
-    #: 보여 준다 (§13 "사용자에게 혼동시키지 않는다").
-    if executed_lines:
-        lines.append("")
-        lines.extend(executed_lines)
-
-    lines.append("")
-    lines.append("**[아래는 실행하지 않은 정적 계획입니다]**")
-    lines.append("🔴 카드 데이터를 읽어 만든 계획이고 **엔진으로 돌린 것이"
-                 " 아닙니다.**")
-    #: 🔴 **``ComboVerdict`` 는 이 정적 계획의 판정이다** (Phase 6-T §13).
-    #: 맨 위에 두면 위의 "실제 엔진 실행" 결과의 판정처럼 읽힌다 — 그래서
-    #: 이 절 안으로 옮겼다. 판정 자체는 바꾸지 않았다 (그것은 옳다).
-    lines.append(f"**정적 계획의 판정: {verdict.describe_ko()}**")
-    lines.append(verdict.detail_ko())
-    lines.extend(_combo_step_lines(agent, plan))
-
-    if plan.stopped_reason:
-        lines.append("")
-        lines.append(f"🔴 중단: {plan.stopped_reason}")
-
-    if plan.unsupported:
-        lines.append("")
-        lines.append("**[엔진이 지원하지 않아 계획에 넣지 않은 절차]**")
-        lines.extend(f"  - {item}" for item in plan.unsupported)
-
     #: 🔴 **같은 검사를 두 번 다르게 말하지 않는다** (Phase 6-AB 보완8).
     #:
-    #: 6-AA 는 플래너의 *"덱 초안을 주지 않아 검증하지 않았습니다"* 를
-    #: 그대로 보여 주고 **그 아래에 해명 두 줄**을 붙였다. 그 해명은 참이지만,
-    #: 사용자가 읽는 것은 **상충하는 검사 결과 두 개와 변명**이다 — 플래너가
-    #: 별도 입력을 받지 않았다는 것은 **내부 사정**이고 그 자체가 검사 결과로
-    #: 전달될 일이 아니다.
+    #: ``recipe:`` 가 이미 답한 줄은 플래너의 "사람이 확인할 것" 목록에서
+    #: 빼고, 그 사실을 한 번 적는다. 🔴 **플래너의 판정을 바꾸지 않는다** —
+    #: ``plan.manual_checks`` 는 그대로이고, 바뀌는 것은 보여 줄 때 어느
+    #: 줄이 이미 답을 받았는지 가리는 일뿐이다.
     #:
-    #: 그래서 이미 ``recipe:`` 가 검사한 항목은 **그 목록에서 빼고**, 실제
-    #: 결과를 **한 번** 적는다. 🔴 **플래너의 판정을 바꾸지 않는다** —
-    #: ``plan.manual_checks`` 는 그대로이고, 바뀌는 것은 사용자에게 보여 줄
-    #: 때 어느 줄이 이미 답을 받았는지 가리는 일뿐이다.
+    #: 🔴 **요약과 첨부가 같은 값을 쓴다** (6-AE). 두 자리에서 따로 걸러
+    #: 내면 첨부가 요약과 다른 말을 하게 된다 — 실제로 6-AE 작업 중에
+    #: 첨부 쪽에만 거르지 않은 목록이 들어갔고 시험이 그것을 잡았다.
     answered_by_recipe = bool(recipe_text and recipe_text.strip())
     shown_checks = [
         item for item in plan.manual_checks
         if not (answered_by_recipe and draft is None
                 and "패가 덱에서 나올 수" in item)
     ]
-    hidden = len(plan.manual_checks) - len(shown_checks)
+    hidden_checks = len(plan.manual_checks) - len(shown_checks)
 
-    if shown_checks:
+    #: 🔴 **실제 실행을 정적 계획보다 앞에 둔다.** 둘을 같은 목록에 섞지
+    #: 않고, 먼저 "실제로 돌린 것" 을 보여 준 다음 "돌리지 않은 계획" 을
+    #: 보여 준다 (§13 "사용자에게 혼동시키지 않는다").
+    lines.append("")
+    lines.extend(executed.brief)
+
+    lines.append("")
+    if executed.ran:
+        #: 🔴 **실제 실행이 있으면 정적 계획을 길게 붙이지 않는다** (6-AE
+        #: §3). 실행 기록 바로 아래에 일곱 걸음짜리 계획이 붙으면 "실행
+        #: 이후의 추가 행동" 으로 읽힌다 — 실측으로 그 절이 응답의 절반을
+        #: 차지했고 마지막에 잘림 안내가 붙었다.
+        lines.append(
+            f"**[정적 계획은 첨부에 있습니다]** 🔴 엔진으로 돌린 것이"
+            f" **아니고**, 위 실행의 다음 행동도 아닙니다"
+            f" (판정: {verdict.describe_ko()} · {len(plan.steps)}걸음)."
+        )
+        if hidden_checks:
+            #: 🔴 **이 한 줄은 요약에 남긴다** (보완8 이 세운 계약). 첨부로
+            #: 밀면 사용자는 플래너의 "검증하지 않았습니다" 와 실행의 판정
+            #: 둘 중 어느 것이 답인지 알 수 없다.
+            lines.append("🔴 **패가 덱에서 나올 수 있는지는 이 요청에서 이미"
+                         " 검사했습니다** — 위 `[실제 엔진 실행]` 절이"
+                         " `recipe:` 로 판정했고, 그 결과가 이 응답의"
+                         " 판정입니다.")
+    else:
+        #: 🔴 **실행이 없으면 그 사실이 먼저다** (6-AE §3). 위의
+        #: ``executed.brief`` 가 *"하지 않았습니다 — 레시피가 없습니다"* 를
+        #: 이미 적었고, 그 아래에 오는 계획은 **참고**다.
+        #:
+        #: 🔴 **이때는 줄이지 않는다.** 실제 실행이 없으면 이 계획이
+        #: 응답의 내용 전부이고, 요약으로 줄이면 사용자가 아무것도 받지
+        #: 못한다. 줄이는 것은 **실제 실행이 있을 때**뿐이다 (위 가지).
+        lines.append("**[실행하지 않은 참고 계획]**")
+        lines.append("🔴 카드 데이터를 읽어 만든 계획이고 **엔진으로 돌린"
+                     " 것이 아닙니다.** 아래 걸음 수는 실행 걸음이"
+                     " **아닙니다.**")
+        lines.append(f"**정적 계획의 판정: {verdict.describe_ko()}**")
+        lines.append(verdict.detail_ko())
+        lines.extend(_combo_step_lines(agent, plan))
+        if plan.stopped_reason:
+            lines.append("")
+            lines.append(f"🔴 중단: {plan.stopped_reason}")
+        if plan.unsupported:
+            lines.append("")
+            lines.append("**[엔진이 지원하지 않아 계획에 넣지 않은 절차]**")
+            lines.extend(f"  - {item}" for item in plan.unsupported)
+        if shown_checks:
+            lines.append("")
+            lines.append("**[사람이 직접 확인할 것]**")
+            lines.extend(f"  - {item}" for item in shown_checks)
+        if hidden_checks:
+            lines.append("")
+            lines.append("🔴 **패가 덱에서 나올 수 있는지는 이 요청에서 이미"
+                         " 검사했습니다** — 위쪽 `[실제 엔진 실행]` 절이"
+                         " `recipe:` 로 판정했고, 그 결과가 이 응답의"
+                         " 판정입니다. (정적 계획은 자연어 `deck:` 초안을"
+                         " 받는 별도 경로여서 그 검사를 따로 하지 않습니다.)")
+
+    lines.append("")
+    lines.append(f"📎 **전체 상세 기록은 첨부 `{COMBO_DETAIL_FILENAME}`**"
+                 f" 에 있습니다 — 걸음마다의 판정 코드 · 해결 결과 ·"
+                 f" 미지원 사유 · 모든 검증 한계 · 정적 계획 전체.")
+
+    detail = _combo_detail_text(agent, executed, plan=plan, verdict=verdict,
+                                manual_checks=tuple(shown_checks),
+                                hidden_checks=hidden_checks)
+    return ComboResponse(
+        messages=tuple(paginate(
+            lines, max_messages=COMBO_MESSAGE_LIMIT,
+            overflow_notice=f"빠진 줄은 첨부 `{COMBO_DETAIL_FILENAME}` 에"
+                            f" 전부 있습니다.",
+        )),
+        attachments=combo_attachments(detail),
+    )
+
+
+def _combo_detail_text(agent, executed: OpeningReport,
+                       plan=None, verdict=None,
+                       manual_checks: "tuple[str, ...] | None" = None,
+                       hidden_checks: int = 0) -> str:
+    """
+    첨부에 담을 **전체 상세 기록** (Phase 6-AE).
+
+    🔴 **실제 실행과 정적 계획을 명확히 분리한다.** 두 절의 머리말이 서로
+    다르고, 정적 계획 절은 "돌리지 않았다" 를 제 머리말에 적는다 — 실행
+    기록 뒤에 이어 붙여 "실행 이후의 행동" 으로 읽히지 않게 한다 (§3).
+
+    🔴 **줄이지 않는다.** 실행 기록은 CLI 가 보는 세 함수의 출력 그대로이고
+    (``render_opening_setup`` · ``render_opening_run`` ·
+    ``render_opening_board``), 정적 계획도 전부 적는다.
+    """
+    lines = [
+        f"{BOT_NAME} /combo 상세 기록",
+        "=" * 68,
+        "🔴 이 파일은 Discord 기본 응답의 요약이 가리키는 **전체 기록**"
+        "입니다.",
+        "🔴 아래 두 절은 서로 다른 것입니다 — 앞은 **실제로 돌린 것**,"
+        " 뒤는 **돌리지 않은 정적 계획**입니다.",
+        "",
+    ]
+    lines.extend(executed.detail)
+    if plan is not None:
         lines.append("")
-        lines.append("**[사람이 직접 확인할 것]**")
-        lines.extend(f"  - {item}" for item in shown_checks)
+        lines.append("=" * 68)
+        lines.append("[아래는 실행하지 않은 정적 계획입니다]")
+        lines.append("=" * 68)
+        lines.append("🔴 카드 데이터를 읽어 만든 계획이고 **엔진으로 돌린"
+                     " 것이 아닙니다.** 위 실행의 다음 행동도 아닙니다.")
+        if verdict is not None:
+            lines.append(f"정적 계획의 판정: {verdict.describe_ko()}")
+            lines.append(verdict.detail_ko())
+        lines.extend(_combo_step_lines(agent, plan))
+        if plan.stopped_reason:
+            lines.append("")
+            lines.append(f"🔴 중단: {plan.stopped_reason}")
+        if plan.unsupported:
+            lines.append("")
+            lines.append("[엔진이 지원하지 않아 계획에 넣지 않은 절차]")
+            lines.extend(f"  - {item}" for item in plan.unsupported)
+        #: 🔴 **요약과 같은 목록을 쓴다** — ``recipe:`` 가 이미 답한 줄은
+        #: 부르는 쪽이 걸러서 넘긴다 (``combo_response`` 의 설명).
+        shown = (plan.manual_checks if manual_checks is None
+                 else manual_checks)
+        if shown:
+            lines.append("")
+            lines.append("[사람이 직접 확인할 것]")
+            lines.extend(f"  - {item}" for item in shown)
+        if hidden_checks:
+            lines.append("")
+            lines.append("🔴 패가 덱에서 나올 수 있는지는 이 요청에서 이미"
+                         " 검사했습니다 — 위 실행 절이 `recipe:` 로"
+                         " 판정했고, 그 결과가 이 응답의 판정입니다."
+                         " (정적 계획은 자연어 `deck:` 초안을 받는 별도"
+                         " 경로여서 그 검사를 따로 하지 않습니다.)")
+    return "\n".join(lines)
 
-    if hidden:
-        lines.append("")
-        lines.append("🔴 **패가 덱에서 나올 수 있는지는 이 요청에서 이미"
-                     " 검사했습니다** — 위쪽 `[실제 엔진 실행]` 절이"
-                     " `recipe:` 로 판정했고, 그 결과가 이 응답의 판정입니다."
-                     " (정적 계획은 자연어 `deck:` 초안을 받는 별도 경로여서"
-                     " 그 검사를 따로 하지 않습니다.)")
 
-    return paginate(lines)
+def combo_messages(agent, hand_text: str, board_text: str = "",
+                   deck_text: str = "", recipe_text: str = "",
+                   line_text: str = "") -> "list[str]":
+    """
+    ``/combo`` 의 **기본 메시지들**만. 첨부가 필요하면
+    :func:`combo_response` 를 쓴다 (Phase 6-AE).
+
+    🔴 **엔진을 다시 돌리지 않는다** — :func:`combo_response` 를 한 번 부르고
+    그 메시지만 꺼낸다. 기존 호출부와 시험이 이 이름을 쓰고 있어서 남겨
+    두었고, 첨부를 보내는 자리는 :class:`SearchService` 쪽이다.
+    """
+    return list(combo_response(agent, hand_text, board_text, deck_text,
+                               recipe_text, line_text).messages)
 
 
 class SearchService:
@@ -1013,16 +1247,33 @@ class SearchService:
 
         🔴 **예외를 밖으로 내보내지 않는다** (``deck_texts`` 와 같은 이유).
         """
+        return list(self.combo_response(hand_text, board_text, deck_text,
+                                        recipe_text, line_text).messages)
+
+    def combo_response(self, hand_text: str, board_text: str = "",
+                       deck_text: str = "", recipe_text: str = "",
+                       line_text: str = "") -> ComboResponse:
+        """
+        전개 계획을 세워 **메시지들과 첨부들**을 돌려준다 (Phase 6-AE).
+
+        🔴 ``/search`` · ``/deck`` 과 **같은 카드 데이터를 쓴다.** 콤보
+        플래너가 요구하는 것은 ``repository`` 하나이고 그것은 이미 여기
+        있다.
+
+        🔴 **예외를 밖으로 내보내지 않는다** (``deck_texts`` 와 같은 이유).
+        실패했을 때 첨부를 붙이지 않는다 — 없는 것을 있는 것처럼 보내지
+        않는다.
+        """
         if self._agent is None:
-            return [COMBO_UNAVAILABLE_MESSAGE]
+            return ComboResponse(messages=(COMBO_UNAVAILABLE_MESSAGE,))
         try:
-            return combo_messages(self._agent, hand_text, board_text,
+            return combo_response(self._agent, hand_text, board_text,
                                   deck_text, recipe_text, line_text)
         except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
             logger.exception("전개 계획 생성에 실패했습니다. 패=%r 필드=%r"
                              " 덱=%r 레시피=%r 경로=%r", hand_text, board_text,
                              deck_text, recipe_text, line_text)
-            return [COMBO_ERROR_MESSAGE]
+            return ComboResponse(messages=(COMBO_ERROR_MESSAGE,))
 
     def deck_texts(self, request_text: str) -> "list[str]":
         """
@@ -1196,10 +1447,9 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
                             line: str = "") -> None:
         #: 🔴 ``/search`` · ``/deck`` 과 같은 순서다.
         await interaction.response.defer()
-        texts = await asyncio.to_thread(
-            combo_service.combo_texts, hand, board, deck, recipe, line)
-        for text in texts:
-            await interaction.followup.send(text)
+        response = await asyncio.to_thread(
+            combo_service.combo_response, hand, board, deck, recipe, line)
+        await send_combo_response(interaction.followup, response)
 
     @client.event
     async def on_ready() -> None:
@@ -1215,6 +1465,65 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         await sync_commands(tree, dev_guild_id)
 
     return client, tree
+
+
+async def send_combo_response(sender, response: ComboResponse) -> int:
+    """
+    ``/combo`` 응답을 보낸다 — **요약 메시지들과 상세 첨부** (Phase 6-AE).
+
+    보낸 메시지 수를 돌려준다.
+
+    🔴 **여기서만 ``discord`` 를 만진다.** :class:`ComboAttachment` 는
+    이름과 바이트만 들고 있고, ``discord.File`` 로 감싸는 일이 이 함수다 —
+    그래서 응답을 만드는 순수 함수들은 라이브러리 없이 테스트된다.
+
+    🔴 **메모리 버퍼를 쓴다.** 임시 파일을 만들지 않으므로 디스크에 남는
+    것이 없고, 사용자 입력이 경로가 되는 길도 없다.
+
+    🔴 **전송 실패를 성공으로 보고하지 않는다.** 첨부를 붙인 전송이 실패하면
+    로그에 남기고, **그 사실을 사용자에게 한 줄로 알린 뒤** 요약만이라도
+    보낸다 — 조용히 삼키면 사용자는 상세 기록이 있다고 믿는다.
+    """
+    import io
+
+    import discord
+
+    messages = list(response.messages)
+    if not messages:
+        #: 🔴 내용이 없는 응답을 성공으로 보내지 않는다.
+        logger.error("/combo 응답에 메시지가 없습니다 — 보내지 않았습니다.")
+        await sender.send(COMBO_ERROR_MESSAGE)
+        return 1
+
+    sent = 0
+    for index, text in enumerate(messages):
+        last = index == len(messages) - 1
+        files = None
+        if last and response.attachments:
+            files = [
+                discord.File(io.BytesIO(item.data), filename=item.filename)
+                for item in response.attachments
+            ]
+        try:
+            if files:
+                await sender.send(text, files=files)
+            else:
+                await sender.send(text)
+        except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
+            logger.exception(
+                "/combo 응답 전송에 실패했습니다 (메시지 %d/%d, 첨부 %d개).",
+                index + 1, len(messages), len(files or ()),
+            )
+            if not files:
+                raise
+            #: 🔴 첨부 때문에 실패했을 수 있다 — 요약만이라도 보내고
+            #: **첨부가 가지 않았다는 사실을 적는다.**
+            await sender.send(
+                text + "\n🔴 상세 기록 첨부를 보내지 못했습니다 —"
+                " 봇 로그를 확인해 주세요. 위 요약은 전부입니다."
+            )
+        sent += 1
+    return sent
 
 
 async def sync_commands(tree, dev_guild_id: "int | None") -> int:
