@@ -877,26 +877,35 @@ def test_f02_the_discord_output_separates_executed_from_planned(repository):
     레시피를 주면 **실행 절이 먼저** 나오고, 정적 계획 절에 "실행하지
     않았다" 가 적힌다.
     """
-    from app.discord_bot import combo_messages
+    from app.discord_bot import combo_response
     from app.main import DeckAgent
 
     agent = DeckAgent(repository)
     hand_text = ", ".join(str(c) for c in HAND_5)
-    text = "\n".join(combo_messages(agent, hand_text,
-                                    recipe_text=RECIPE_40))
+    #: 🔴 **Phase 6-AE** — 기본 응답은 요약이고 전체 기록은 첨부다. 이
+    #: 시험이 재는 "둘을 가른다" 는 양쪽에서 그대로 유지된다.
+    response = combo_response(agent, hand_text, recipe_text=RECIPE_40)
+    text = "\n".join(response.messages)
+    detail = "\n".join(item.text for item in response.attachments)
 
     #: ① 실제 실행 절이 있고 걸음 수를 **실측으로** 말한다.
     assert "**[실제 엔진 실행]**" in text
-    assert "엔진이 실제로" in text and "걸음 실행" in text
-    #: ② 정적 계획 절이 "실행하지 않았다" 를 적는다.
-    assert "**[아래는 실행하지 않은 정적 계획입니다]**" in text
-    assert "엔진으로 돌린 것이 아닙니다" in text
-    #: ③ 🔴 그리고 그 둘의 순서가 정해져 있다.
+    assert "전개 실행 요약" in text
+    assert "걸음 · 상태 변경" in text
+    #: ② 정적 계획이 **실행이 아니라는 사실**을 적는다 — 요약에 한 줄,
+    #: 첨부에 그 절 전체.
+    assert "**[정적 계획은 첨부에 있습니다]**" in text
+    assert "엔진으로 돌린 것이 **아니고**" in text
+    assert "[아래는 실행하지 않은 정적 계획입니다]" in detail
+    assert "**엔진으로 돌린 것이 아닙니다.**" in detail
+    #: ③ 🔴 그리고 그 둘의 순서가 정해져 있다 (두 자리 모두에서).
     assert text.index("**[실제 엔진 실행]**") < text.index(
-        "**[아래는 실행하지 않은 정적 계획입니다]**")
+        "**[정적 계획은 첨부에 있습니다]**")
+    assert detail.index("[실제 엔진 실행]") < detail.index(
+        "[아래는 실행하지 않은 정적 계획입니다]")
     #: ④ 정적 계획의 판정이 **그 절 안**에 있다 (맨 위가 아니다).
-    assert "정적 계획의 판정:" in text
-    assert text.index("**[실제 엔진 실행]**") < text.index("정적 계획의 판정:")
+    assert "정적 계획의 판정:" in detail
+    assert detail.index("[실제 엔진 실행]") < detail.index("정적 계획의 판정:")
 
 
 @pytest.mark.real_card

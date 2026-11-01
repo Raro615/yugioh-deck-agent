@@ -680,10 +680,10 @@ def test_d03_a_forks_auto_passes_do_not_spend_the_parent(repository):
 # ======================================================================
 # E. /combo 전달 — 토큰 없는 문자열 검사다
 # ======================================================================
-def _combo_blob(repository, hand: str, recipe: str) -> str:
+def _combo_response(repository, hand: str, recipe: str):
     """
     🔴 **토큰 없는 응답 생성 검사다.** Discord 에 접속하지 않고, 접속했다고
-    적지도 않는다 — ``combo_messages`` 가 돌려주는 문자열을 센다.
+    적지도 않는다 — ``combo_response`` 가 돌려주는 값을 센다.
     """
     import app.discord_bot as bot
 
@@ -691,9 +691,24 @@ def _combo_blob(repository, hand: str, recipe: str) -> str:
         def __init__(self, repo):
             self.repository = repo
 
-    return "\n".join(
-        bot.combo_messages(_Agent(repository), hand, recipe_text=recipe)
-    )
+    return bot.combo_response(_Agent(repository), hand, recipe_text=recipe)
+
+
+def _combo_blob(repository, hand: str, recipe: str) -> str:
+    """**기본 응답**(요약) 만. 전체 기록은 :func:`_combo_detail` 이다."""
+    return "\n".join(_combo_response(repository, hand, recipe).messages)
+
+
+def _combo_detail(repository, hand: str, recipe: str) -> str:
+    """
+    **상세 기록 첨부**의 본문 (Phase 6-AE).
+
+    🔴 요약과 **따로** 본다 — 이어 붙여 하나로 읽으면 "요약에서 빠졌다" 와
+    "어디에도 없다" 를 가를 수 없다.
+    """
+    response = _combo_response(repository, hand, recipe)
+    assert response.attachments, "상세 기록 첨부가 없습니다"
+    return "\n".join(item.text for item in response.attachments)
 
 
 USER_HAND = "69811710,703897,2930675,12989604,93920420"
@@ -713,6 +728,7 @@ def test_e01_the_user_five_card_run_is_preserved(repository):
     레시피에 포함되는가* 이고, 금제 · 동명 카드 매수 제한은 **다른 검사**다.
     """
     blob = _combo_blob(repository, USER_HAND, USER_RECIPE)
+    detail = _combo_detail(repository, USER_HAND, USER_RECIPE)
 
     #: ① 실행 걸음과 해결 걸음.
     #:
@@ -722,30 +738,41 @@ def test_e01_the_user_five_card_run_is_preserved(repository):
     #: 보존하는 대상은 "사용자가 확인한 결과" 이므로, 수를 그대로 두면 이
     #: 시험이 **사라진 출력을 찾는** 셈이 된다. 수를 고치고 **무엇이 늘었는지**
     #: 를 함께 센다 (아래 ② 의 묘지 · 몬스터 존이 그 걸음의 결과다).
-    assert "엔진이 실제로 6걸음 실행" in blob
+    #: 🔴 **Phase 6-AE 가 두 자리로 갈랐다** — 수는 **요약**에, 걸음마다의
+    #: 기록은 **상세 첨부**에 있다. 보존하는 대상은 "사용자가 확인한 결과"
+    #: 이므로 양쪽을 다 센다.
     assert "실행 6걸음 · 상태 변경 6걸음" in blob
+    assert "실행 6걸음 · 상태 변경 6걸음" in detail
     #: 🔴 **Phase 6-AD 후속2 가 이 낱말을 고쳤다** — 세는 것은 "조작이
     #: 실제로 수행된 걸음" 이고, "해결된 걸음" 에는 규칙상 해결됐지만 아무
     #: 일도 하지 않은 걸음까지 들어온다 (보고서 §15.3).
-    assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in blob
+    assert "**효과의 조작 수행 2걸음**" in blob
+    assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in detail
 
     #: ② 판 — 🔴 **한 걸음이 늘어난 만큼 달라졌다.** 패에 있던 성유물－
     #: 『성장』 이 **특수 소환되어** 몬스터 존으로 갔다 (1장 → 2장, 패 1장
     #: → 0장). 묘지의 한 장은 덱에서 보내진 **다른** 사본이고 그대로다.
-    assert "몬스터 존: 2장" in blob
-    assert "잭나이츠 오르페골 기르수 [69811710]" in blob
-    assert "마법·함정 존: 3장" in blob
+    assert "몬스터 존: 2장" in detail
+    assert "잭나이츠 오르페골 기르수 [69811710]" in detail
+    assert "마법·함정 존: 3장" in detail
     for card in ("703897", "2930675", "12989604"):
-        assert card in blob
-    assert "묘지: 1장 — 성유물－『성장』 [93920420]" in blob
-    assert "남은 덱: 34장" in blob
+        assert card in detail
+    assert "묘지: 1장 — 성유물－『성장』 [93920420]" in detail
+    assert "남은 덱: 34장" in detail
+    #: 🔴 **요약에도 그 판이 보인다** — 이름으로 (6-AE §2-③).
+    assert "몬스터 존: 잭나이츠 오르페골 기르수, 성유물－『성장』" in blob
+    assert "묘지 1장: 성유물－『성장』" in blob
+    assert "남은 덱 34장" in blob
 
     #: ③ 멈춘 자리 — 🔴 **흐름만 남았고, 그 자리의 보류는 0건이다**
     #: (Phase 6-AC). 세트를 모두 끝낸 뒤라 패에 발동 후보가 남지 않는다.
     #: 도중에 지나온 미지원은 **그대로 1건**이고 보고가 그것을 적는다 —
     #: 그 구분이 보완8 이 세운 것이다.
-    assert "end_phase" in blob
-    assert "activate_card [activation-timing" in blob
+    assert "end_phase" in detail
+    assert "activate_card [activation-timing" in detail
+    #: 🔴 요약은 그 사유를 **한 번** 적고, 남은 후보를 뜻으로 적는다.
+    assert blob.count("activate_card [activation-timing") == 1
+    assert "턴 종료" in blob
 
 
 @pytest.mark.real_card
@@ -835,28 +862,35 @@ def test_e03_the_output_separates_what_ran_from_what_did_not(repository):
     * 실행하지 않은 걸음에 "확정" · "엔진이 허가함" 이 붙지 않는다.
     """
     blob = _combo_blob(repository, USER_HAND, USER_RECIPE)
+    detail = _combo_detail(repository, USER_HAND, USER_RECIPE)
 
-    #: ① 실제 실행 절과 정적 계획 절이 갈려 있다.
+    #: ① 실제 실행 절과 정적 계획 절이 갈려 있다 — 🔴 **Phase 6-AE 뒤에는
+    #: 요약과 첨부 두 자리에서 각각 갈린다.** 요약은 "정적 계획은 첨부에
+    #: 있고 실행이 아니다" 를 한 줄로 적고, 첨부는 두 절을 머리말로 가른다.
     assert "실제 엔진 실행" in blob
-    assert "아래는 실행하지 않은 정적 계획입니다" in blob
-    assert "엔진으로 돌린 것이 아닙니다" in blob
+    assert "**[정적 계획은 첨부에 있습니다]**" in blob
+    assert "엔진으로 돌린 것이 **아니고**" in blob
+    assert "[아래는 실행하지 않은 정적 계획입니다]" in detail
+    assert "**엔진으로 돌린 것이 아닙니다.**" in detail
 
-    #: ② 🔴 상충하는 검사 결과가 가지 않는다.
-    assert "검증하지 않았습니다" not in blob
-    assert "덱에서 나올 수 있는가" not in blob
-    assert blob.count("이미 검사했습니다") == 1
+    #: ② 🔴 상충하는 검사 결과가 가지 않는다 — **두 자리 모두에서**.
+    for text in (blob, detail):
+        assert "검증하지 않았습니다" not in text
+        assert "덱에서 나올 수 있는가" not in text
+        assert text.count("이미 검사했습니다") == 1
 
     #: ③ 🔴 실행하지 않은 걸음에 실행 허가의 말이 붙지 않는다.
-    assert "엔진이 이 행위를 허가함" not in blob
-    assert "상태: 확정" not in blob
-    #: 대신 정적 확인임을 적는다.
-    assert "돌려볼 수 있음 (정적 확인)" in blob
-    assert "엔진의 행위 계층이 판정할 수 있음 (정적 확인)" in blob
+    for text in (blob, detail):
+        assert "엔진이 이 행위를 허가함" not in text
+        assert "상태: 확정" not in text
+    #: 대신 정적 확인임을 적는다 (그 절이 있는 첨부에서).
+    assert "돌려볼 수 있음 (정적 확인)" in detail
+    assert "엔진의 행위 계층이 판정할 수 있음 (정적 확인)" in detail
 
     #: ③-2 🔴 **비고 · 기대에 남아 있던 허가 표현도 사라졌다** (보완8 세
     #: 항목 ③). ``StepStatus`` · ``StepBasis`` 만 고쳤을 때 ``note`` 가
     #: *"엔진이 일반 소환을 허가합니다"* 를 그대로 들고 있었다 (실측).
-    plan = blob[blob.index("아래는 실행하지 않은 정적 계획입니다"):]
+    plan = detail[detail.index("[아래는 실행하지 않은 정적 계획입니다]"):]
     assert "허가합니다" not in plan
     assert "엔진이 일반 소환을 허가" not in plan
     #: 있는 것은 **종류의 판정 기능**이고, 이 판의 허가가 아니다.
@@ -869,8 +903,8 @@ def test_e03_the_output_separates_what_ran_from_what_did_not(repository):
 
     #: ③-3 🔴 **실행 기록 쪽의 수락 · 해결 표현은 그대로다** — 문구 하나의
     #: 부재가 아니라 **두 절의 뜻이 갈리는지**를 본다.
-    executed = blob[blob.index("🔴 실제 엔진 실행"):blob.index(
-        "아래는 실행하지 않은 정적 계획입니다")]
+    executed = detail[detail.index("🔴 실제 엔진 실행"):detail.index(
+        "[아래는 실행하지 않은 정적 계획입니다]")]
     assert "수락 예" in executed
     assert "적용된 효과 기록:" in executed
     assert "를 해결했습니다" in executed
@@ -879,8 +913,13 @@ def test_e03_the_output_separates_what_ran_from_what_did_not(repository):
     assert "적용된 효과 기록" not in plan
 
     #: ④ 지원 범위 내 실행을 전체 합법성 보장으로 적지 않는다.
+    #: 🔴 요약은 그 한 줄을 들고 (6-AE §2-① 의 "한 번만"), 자세한 한계는
+    #: 첨부에 있다 — **"검증 불가" 를 "검증 통과" 로 바꾸지 않았다.**
+    assert "최선 전개 탐색도" in blob
     assert "최선의 전개가 아닙니다" in blob
-    assert "사람이 확인해야" in blob
+    assert "`first-permitted`" in blob
+    assert "검증 불가" in blob and "문제 없음이 아닙니다" in blob
+    assert "사람이 확인해야" in detail
 
 
 @pytest.mark.real_card

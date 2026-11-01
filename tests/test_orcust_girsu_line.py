@@ -958,30 +958,41 @@ def test_e03_the_combo_answer_marks_the_execution_as_a_verification_policy(
         def __init__(self, repository):
             self.repository = repository
 
-    blob = "\n".join(
-        bot.combo_messages(
-            _Agent(repository),
-            ORCUST_GIRSU_LINE.hand_text(),
-            recipe_text=ORCUST_VERIFICATION_RECIPE,
-            line_text=ORCUST_GIRSU_LINE.name,
-        )
+    #: 🔴 **Phase 6-AE 가 두 자리로 갈랐다** — 기본 응답은 **요약**이고,
+    #: 걸음마다의 전체 기록은 **상세 첨부**다. 그래서 이 묶음은 둘을 따로
+    #: 본다: 어느 쪽에도 없으면 사라진 것이고, 요약에만 없으면 옮겨진 것이다.
+    response = bot.combo_response(
+        _Agent(repository),
+        ORCUST_GIRSU_LINE.hand_text(),
+        recipe_text=ORCUST_VERIFICATION_RECIPE,
+        line_text=ORCUST_GIRSU_LINE.name,
     )
-    assert "검증용 전개 정책" in blob
+    blob = "\n".join(response.messages)
+    detail = "\n".join(item.text for item in response.attachments)
+
+    assert "검증용 전개 경로 `orcust-girsu`" in blob
     assert "최선 전개 탐색도" in blob
-    assert "엔진이 스스로 찾은 전개도 아닙니다" in blob
     assert "경로를 끝까지 실행했습니다 (4/4단계)" in blob
-    #: 🔴 소재가 **이름으로** 보고에 남는다 (§7 — 무엇을 보냈는가).
-    assert "소재 2장: 잭나이츠 오르페골 기르수 · 성유물－『성장』" in blob
+    #: 🔴 소재가 **이름으로** 남는다 (§7 — 무엇을 보냈는가). 요약은 짧은
+    #: 모양으로, 상세는 그 전의 모양 그대로.
+    assert "소재: 잭나이츠 오르페골 기르수 · 성유물－『성장』" in blob
+    assert "소재 2장: 잭나이츠 오르페골 기르수 · 성유물－『성장』" in detail
     #: 🔴 **링크 몬스터가 보고의 판에 보인다** (Phase 6-AC 가 고친 결함).
     #: 실측: 그 전까지 이 표에 엑스트라 몬스터 존이 없어서 갈라테아가
     #: **보고에서 사라졌다** — 몬스터 존 0장으로 적히고 엑스트라 덱만 한 장
     #: 줄어 있어서, 읽는 쪽이 카드가 어디로 갔는지 알 수 없었다. 링크
     #: 소환이 실행되기 전에는 그 자리가 언제나 비어 있어 결함이 보이지
-    #: 않았다.
-    assert "엑스트라 몬스터 존: 1장 — 오르페골 갈라테아 [30741503]" in blob
-    assert "몬스터 존: 0장 — 없음" in blob
-    #: 🔴 실제 실행과 정적 계획이 갈린다 — 그 경계 문장도 그대로다.
-    assert "아래는 실행하지 않은 정적 계획입니다" in blob
+    #: 않았다. 🔴 **그 자리가 요약에도 있다** (6-AE §2-③).
+    assert "엑스트라 몬스터 존: 오르페골 갈라테아" in blob
+    assert "몬스터 존: 없음" in blob
+    assert "엑스트라 몬스터 존: 1장 — 오르페골 갈라테아 [30741503]" in detail
+    assert "몬스터 존: 0장 — 없음" in detail
+    #: 🔴 **"자율 전략 AI 가 아니다" 를 기본 응답이 한 번 적는다** — 이
+    #: 묶음의 제목이 재려는 것이 그 한 줄이다 (6-AE §2-① 의 "한 번만").
+    assert blob.count("최선 전개 탐색도, 자율 탐색도, 범용 AI 도 아닙니다") == 1
+    #: 🔴 실제 실행과 정적 계획이 갈린다 — 그 경계가 첨부 안에 있다.
+    assert "[아래는 실행하지 않은 정적 계획입니다]" in detail
+    assert "**[정적 계획은 첨부에 있습니다]**" in blob
 
 
 @pytest.mark.real_card
@@ -1006,7 +1017,7 @@ def test_e04_an_unknown_line_name_is_not_silently_replaced(repository):
     )
     assert "라는 검증용 전개 경로가 없습니다" in blob
     assert "기본 선택 방식" in blob
-    assert "검증용 전개 정책 `orcust-girsu`" not in blob
+    assert "검증용 전개 경로 `orcust-girsu`" not in blob
     assert line_named("orcust") is None
     assert line_named(ORCUST_GIRSU_LINE.name) is ORCUST_GIRSU_LINE
 

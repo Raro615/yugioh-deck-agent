@@ -45,7 +45,23 @@ class _Agent:
 
 
 def _blob(repository, hand: str) -> str:
-    return "\n".join(bot.combo_messages(_Agent(repository), hand, recipe_text=RECIPE))
+    """**기본 응답**(Discord 메시지)만 이어 붙인다. 첨부는 들어오지 않는다."""
+    return "\n".join(bot.combo_messages(_Agent(repository), hand,
+                                        recipe_text=RECIPE))
+
+
+def _detail(repository, hand: str) -> str:
+    """
+    **상세 기록 첨부**의 본문 (Phase 6-AE).
+
+    🔴 요약과 첨부를 **따로** 본다 — 이어 붙여 하나로 읽으면 "요약에서
+    빠졌다" 와 "어디에도 없다" 를 가를 수 없다. 이 파일이 재려는 것이
+    바로 그 구분이다.
+    """
+    response = bot.combo_response(_Agent(repository), hand,
+                                  recipe_text=RECIPE)
+    assert response.attachments, "상세 기록 첨부가 없습니다"
+    return "\n".join(item.text for item in response.attachments)
 
 
 def _opened(repository, hand: "list[int]"):
@@ -104,9 +120,20 @@ def test_02_a_valid_input_still_gets_the_static_plan(repository):
     🔴 **정상 입력에서는 그대로 보여 준다** — 기능을 없앤 것이 아니다.
     """
     blob = _blob(repository, HAND_OK)
-    assert "아래는 실행하지 않은 정적 계획입니다" in blob
-    assert "정적 계획의 판정" in blob
-    assert "엔진으로 돌린 것이 아닙니다" in blob
+    #: 🔴 **Phase 6-AE** — 실제 실행이 있으면 정적 계획은 **첨부**로 간다.
+    #: 요약에는 "첨부에 있다 · 엔진으로 돌린 것이 아니다 · 위 실행의 다음
+    #: 행동도 아니다" 가 한 줄로 남는다 (6-AE §3).
+    assert "**[정적 계획은 첨부에 있습니다]**" in blob
+    assert "엔진으로 돌린 것이 **아니고**" in blob
+    assert "위 실행의 다음 행동도 아닙니다" in blob
+    #: 🔴 **기능을 없앤 것이 아니다** — 첨부에 전부 있다.
+    detail = _detail(repository, HAND_OK)
+    assert "[아래는 실행하지 않은 정적 계획입니다]" in detail
+    assert "정적 계획의 판정" in detail
+    assert "**엔진으로 돌린 것이 아닙니다.**" in detail
+    #: 🔴 그리고 그 절이 실행 기록 **뒤에** 있고 머리말로 갈라져 있다.
+    assert detail.index("[실제 엔진 실행]") < detail.index(
+        "[아래는 실행하지 않은 정적 계획입니다]")
 
 
 def test_03_the_runner_reports_whether_the_input_was_refused():
@@ -118,12 +145,22 @@ def test_03_the_runner_reports_whether_the_input_was_refused():
     """
     import inspect
 
-    signature = inspect.signature(bot._executed_lines)
-    assert "tuple" in str(signature.return_annotation)
-    source = inspect.getsource(bot.combo_messages)
-    assert "executed_lines, input_refused = _executed_lines(" in source
+    #: 🔴 **Phase 6-AE 가 이름과 반환형을 바꿨다** — 줄 목록 두 개가 아니라
+    #: :class:`~app.discord_bot.OpeningReport` 하나를 돌려준다 (요약 · 상세 ·
+    #: 거절 여부 · 실행 여부). 재는 계약은 그대로다: **실행 절이 거절
+    #: 여부를 직접 말하고, 부르는 쪽은 다시 판정하지 않는다.**
+    signature = inspect.signature(bot._run_opening)
+    #: ``from __future__ import annotations`` 때문에 주석은 **문자열**이다.
+    assert signature.return_annotation == "OpeningReport"
+    assert "refused" in bot.OpeningReport.__dataclass_fields__
+    source = inspect.getsource(bot.combo_response)
+    assert "executed = _run_opening(" in source
+    assert "if executed.refused:" in source
     #: 🔴 부르는 쪽이 ``setup`` 을 다시 만들어 판정하지 않는다.
     assert "build_opening" not in source
+    #: 🔴 **엔진을 한 번만 돌린다** — 요약과 첨부가 같은 기록에서 나온다.
+    assert source.count("_run_opening(") == 1
+    assert "execute_opening" not in source
 
 
 # ======================================================================
@@ -277,23 +314,33 @@ def test_07_resolved_steps_and_resolved_effects_are_different_numbers(repository
 @pytest.mark.real_card
 @requires_official_db
 def test_08_the_output_says_what_resolved_means(repository):
-    """출력이 그 구분을 **글자로** 적는다 — 읽는 쪽이 세어 보지 않아도 된다."""
+    """
+    출력이 그 구분을 **글자로** 적는다 — 읽는 쪽이 세어 보지 않아도 된다.
+
+    🔴 **Phase 6-AE 가 두 자리를 가른다.** "막히지 않고 끝난 걸음" 과 그
+    경고는 **상세 기록**에 있고 (그 수를 쓰는 사람이 보는 자리), 기본
+    응답에는 **조작이 실제로 수행된 걸음**만 적는다 — 요약에 세 수를 함께
+    올리면 읽는 쪽이 어느 것이 "소환이 몇 번 일어났나" 인지 알 수 없다.
+    """
     blob = _blob(repository, HAND_OK)
-    assert "막히지 않고 끝난 걸음" in blob
-    assert "효과를 그만큼 해결했다는 뜻이 **아닙니다**" in blob
+    detail = _detail(repository, HAND_OK)
+    #: ① 🔴 **상세 기록이 세 수를 전부 들고 있다** — 하나도 사라지지 않았다.
+    assert "막히지 않고 끝난 걸음" in detail
+    assert "효과를 그만큼 해결했다는 뜻이 **아닙니다**" in detail
+    assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in detail
+    #: ② 기본 응답은 **조작이 수행된 수 하나**만 적는다.
+    assert "**효과의 조작 수행 2걸음**" in blob
+    assert "막히지 않고 끝난 걸음" not in blob
     #: Phase 6-AC 에서 1 → 2 (위 ``test_07`` 의 설명).
-    #: 🔴 **Phase 6-AD 후속2 가 이 줄의 낱말을 고쳤다.** "해결된 걸음" 은
-    #: 규칙상 **해결됐지만 아무 일도 하지 않은 걸음**까지 포함하는 말이고
-    #: (공식 ``s.spop1`` 의 조기 종료), 그러면 이 수가 "소환이 N번
-    #: 일어났다" 로 읽힌다. 세는 것은 **조작이 실제로 수행된** 걸음이므로
-    #: 글자도 그렇게 적는다 (보고서 §15.3).
-    assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in blob
-    #: 한 줄 요약도 같은 수를 쓴다 — 두 수가 갈라지지 않는다.
-    assert "효과의 조작 수행 2걸음" in blob
-    #: 🔴 **이 전개에는 그런 걸음이 없으므로 그 줄이 아예 없다** — 정상
-    #: 경로의 출력이 새 줄로 늘지 않는다.
-    assert "해결됐지만 조작이 없었던 걸음" not in blob
-    assert "해결됐지만 조작 없음" not in blob
+    #: ③ 🔴 **Phase 6-AD 후속2 의 낱말이 두 자리에 그대로 있다.** "해결된
+    #: 걸음" 은 규칙상 **해결됐지만 아무 일도 하지 않은 걸음**까지 포함하는
+    #: 말이고 (공식 ``s.spop1`` 의 조기 종료), 그러면 그 수가 "소환이 N번
+    #: 일어났다" 로 읽힌다 (보고서 §15.3).
+    assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in detail
+    #: ④ 🔴 **이 전개에는 조작 없는 걸음이 없으므로 그 줄이 어디에도 없다.**
+    for text in (blob, detail):
+        assert "해결됐지만 조작이 없었던 걸음" not in text
+        assert "해결됐지만 조작 없음" not in text
 
 
 def test_09_the_run_cannot_count_chains_from_the_steps():

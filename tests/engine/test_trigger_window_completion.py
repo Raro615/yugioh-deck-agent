@@ -1290,7 +1290,10 @@ def test_f02_the_combo_answer_keeps_both_inputs(repository):
     )
     #: Phase 6-AC 에서 5 → 6걸음 · 효과 해결 1 → 2
     #: (``test_combo_output_consistency`` 의 ``test_07`` 이 그 변화를 적는다).
-    assert "엔진이 실제로 6걸음 실행" in good
+    #: 🔴 **Phase 6-AE 가 이 줄의 모양을 고쳤다** — 기본 응답은 요약이고,
+    #: 걸음 수는 "실행 N걸음 · 상태 변경 M걸음" 한 줄에 있다 (전체 기록은
+    #: 상세 첨부로 간다 — 보고서 §16.1).
+    assert "실행 6걸음 · 상태 변경 6걸음" in good
     #: 🔴 **Phase 6-AD 후속2 가 이 낱말을 고쳤다** — "효과 해결" 은 규칙상
     #: 해결됐지만 아무 일도 하지 않은 걸음까지 포함하는 말이고, 그러면 이 수가
     #: "소환이 N번 일어났다" 로 읽힌다. 세는 것은 **조작이 실제로 수행된**

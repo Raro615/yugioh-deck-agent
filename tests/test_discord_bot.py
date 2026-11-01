@@ -1446,7 +1446,11 @@ def test_46_the_plan_becomes_a_discord_answer_with_every_field(monkeypatch):
     assert "상태: 확정" not in text
     assert "엔진이 이 행위를 허가함" not in text
     #: 🔴 그리고 이 절이 실행이 아니라는 것을 그 머리글이 말한다.
-    assert "**[아래는 실행하지 않은 정적 계획입니다]**" in text
+    #: 🔴 **Phase 6-AE 가 머리글을 고쳤다** — 실제 실행이 없는 응답에서는
+    #: 이 계획이 내용 전부이므로 "참고 계획" 으로 적고, 실행 걸음 수나
+    #: 성공 표시를 만들지 않는다 (6-AE §3).
+    assert "**[실행하지 않은 참고 계획]**" in text
+    assert "아래 걸음 수는 실행 걸음이 **아닙니다.**" in text
     assert "필요: 조건 1" in text
     assert "기대: 기대 1" in text
     assert "비고: 비고 1" in text
@@ -1608,7 +1612,7 @@ def test_51_an_unsupported_only_plan_is_not_called_a_candidate(monkeypatch):
     #: 성공으로 보이게 하는 표시가 없다
     assert "✔" not in text
     #: 🔴 그리고 그 판정이 **정적 계획 절 안**에 있다 — 맨 위가 아니다.
-    assert text.index("**[아래는 실행하지 않은 정적 계획입니다]**") < text.index(
+    assert text.index("**[실행하지 않은 참고 계획]**") < text.index(
         "**정적 계획의 판정:")
     #: 🔴 레시피를 주지 않았으므로 실행했다고 적지 않는다.
     assert "엔진이 실제로" not in text
@@ -1831,13 +1835,20 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
         #: 6-AC 에서 붙었다 — 가짜 구현도 같은 서명을 받아야 한다. 서명을
         #: 안 맞추면 이 시험은 "defer 가 먼저" 가 아니라 ``TypeError`` 를
         #: 본다 (``test_08`` 의 주석과 같은 결 — 실제로 그렇게 깨졌다).
-        def combo_texts(self, hand_text, board_text="", deck_text="",
-                        recipe_text="", line_text=""):
+        #: 🔴 Phase 6-AE — 핸들러가 부르는 것은 ``combo_response`` 다
+        #: (메시지와 **첨부**를 함께 받아야 하므로). 가짜 구현도 같은
+        #: 서명과 같은 반환형을 내놓아야 한다.
+        def combo_response(self, hand_text, board_text="", deck_text="",
+                           recipe_text="", line_text=""):
             order.append("combo")
             worker.append(threading.get_ident())
             received.append((hand_text, board_text, deck_text, recipe_text,
                              line_text))
-            return ["첫 번째", "두 번째", "세 번째"]
+            return bot.ComboResponse(
+                messages=("첫 번째", "두 번째", "세 번째"),
+                attachments=(bot.ComboAttachment("combo-detail.txt",
+                                                 "상세 기록"),),
+            )
 
         def prepare(self):  # pragma: no cover - on_ready 전용
             return True
@@ -1849,10 +1860,13 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
         async def send_message(self, content, **kwargs):  # pragma: no cover
             raise AssertionError("defer 한 뒤에는 followup 으로 보낸다")
 
+    files: list = []
+
     class _Followup:
         async def send(self, content, **kwargs):
             order.append("send")
             sent.append(content)
+            files.append(kwargs.get("files"))
 
     class _Interaction:
         def __init__(self):
@@ -1882,3 +1896,9 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
     ]
     #: 🔴 동기 작업이 이벤트 루프 밖에서 돌았다
     assert worker and worker[0] != loop_thread
+    #: 🔴 **첨부가 실제로 전달됐다** (Phase 6-AE) — 마지막 메시지에 한 번만
+    #: 붙고, 앞의 메시지에는 붙지 않는다. 파일명은 고정값이고 사용자 입력이
+    #: 들어가지 않는다.
+    assert files[0] is None and files[1] is None
+    assert files[2] is not None and len(files[2]) == 1
+    assert files[2][0].filename == "combo-detail.txt"

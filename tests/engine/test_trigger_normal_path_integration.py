@@ -1386,7 +1386,13 @@ def test_c12_the_discord_and_cli_paths_share_the_same_wiring():
             assert forbidden not in line, (line, forbidden)
 
     #: 🔴 **사용자에게 보이는 출력이 기준점임을 말한다.**
-    assert "기준점" in _source("app/discord_bot.py")
+    #:
+    #: 🔴 **Phase 6-AE 가 그 문장을 공용 보고 함수로 옮겼다** — 어댑터가
+    #: 제 손으로 문구를 만들면 CLI 와 다른 답이 나오므로, 요약을 만드는
+    #: 자리가 ``deck/report.py`` 하나다. 그래서 **그 자리**에서 문장을
+    #: 세고, 어댑터가 그것을 부르는지 따로 센다.
+    assert "기준점" in _source("deck/report.py")
+    assert "render_opening_brief(" in _source("app/discord_bot.py")
 
     #: ``deck`` 은 조립 층을 읽지 않는다 — 받아서 넘기기만 한다.
     opening = _source("deck/opening.py")
