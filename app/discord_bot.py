@@ -673,10 +673,17 @@ def _executed_lines(agent, recipe_text: str,
     #: 🔴 **한 줄 요약은 실측에서만 나온다.** 실행한 걸음 · 해결된 걸음 ·
     #: 상태가 바뀐 걸음을 각각 센다 (세 사실을 묶지 않는다 — 6-R).
     if setup.can_run:
+        #: 🔴 **"조작 수행" 과 "해결" 을 섞지 않는다** (6-AD 후속2).
+        #: ``effects_resolved`` 는 기록에 ``EffectEvent`` 가 남은 걸음, 즉
+        #: **조작이 실제로 수행된** 걸음이다. 규칙대로 해결됐지만 할 일이
+        #: 없었던 걸음은 따로 적는다 — 미지원도 오류도 아니다.
+        idle = run.effects_resolved_without_operation
         lines.append(
             f"✅ **엔진이 실제로 {run.executed}걸음 실행**했습니다"
-            f" (효과 해결 {run.effects_resolved}걸음 · 상태 변경"
-            f" {run.state_changes}걸음). 아래는 실측 기록입니다."
+            f" (효과의 조작 수행 {run.effects_resolved}걸음"
+            + (f" · 해결됐지만 조작 없음 {idle}걸음" if idle else "")
+            + f" · 상태 변경 {run.state_changes}걸음)."
+            f" 아래는 실측 기록입니다."
         )
         if line is None:
             lines.append(

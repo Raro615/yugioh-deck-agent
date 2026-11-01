@@ -223,7 +223,17 @@ def render_opening_run(run) -> str:
         bits.append("상태 변경 " + ("있음" if step.state_changed else "없음"))
         lines.append(f"      {' · '.join(bits)}")
         if step.effect_ref:
-            lines.append(f"      효과 {step.effect_ref}"
+            #: 🔴 **네 가지를 가른다** (Phase 6-AD 후속2). "효과 … " 한 줄만
+            #: 적으면 해결 + 조작 수행 · 해결 + 조작 없음 · 미지원 · 잘못된
+            #: 선택이 같은 모양으로 보인다.
+            outcome = (
+                "조작 수행"
+                if step.effect_ref in step.effect_events
+                else "🔴 해결됐지만 조작 없음 (확인된 사유 — 아래 `이유`)"
+                if step.resolved_without_operation
+                else "🔴 해결되지 않음 (아래 `결과` 코드와 `이유`)"
+            )
+            lines.append(f"      효과 {step.effect_ref} · {outcome}"
                          + (f" · 대상 {len(step.targets)}개"
                             if step.targets else ""))
         #: 🔴 **소재를 이름으로 적는다** (Phase 6-AC). 대상과 **다른 줄**이다 —
@@ -276,8 +286,20 @@ def render_opening_run(run) -> str:
     lines.append(f"  실행 {run.executed}걸음 · 상태 변경 {run.state_changes}걸음")
     lines.append(f"  막히지 않고 끝난 걸음 {run.resolved} / {run.executed}"
                  f" (🔴 효과를 그만큼 해결했다는 뜻이 **아닙니다**)")
-    lines.append(f"  그중 **효과가 실제로 해결된 걸음** {run.effects_resolved}걸음"
+    #: 🔴 **"해결된 효과 수" 와 "실제 조작이 수행된 수" 를 섞지 않는다**
+    #: (Phase 6-AD 후속2). 효과가 **해결됐지만 일을 하지 않는** 경우가 규칙에
+    #: 있고 (``s.spop1`` 의 조기 return), 그것을 앞 수에 더하면 "소환이
+    #: N번 일어났다" 로 읽힌다. 두 줄로 적는다.
+    lines.append(f"  그중 **효과의 조작이 실제로 수행된 걸음**"
+                 f" {run.effects_resolved}걸음"
                  f" (기록에 EffectEvent 가 남은 걸음)")
+    if run.effects_resolved_without_operation:
+        lines.append(
+            f"  그리고 **해결됐지만 조작이 없었던 걸음**"
+            f" {run.effects_resolved_without_operation}걸음"
+            f" — 🔴 미지원도 오류도 아닙니다 (규칙대로 해결되고 할 일이"
+            f" 없었습니다). 사유는 각 걸음의 `이유` 줄에 있습니다"
+        )
     if run.stopped_reason:
         lines.append(f"  멈춘 이유: {run.stopped_reason}"
                      + (f" [{run.stopped_kind}]" if run.stopped_kind else ""))

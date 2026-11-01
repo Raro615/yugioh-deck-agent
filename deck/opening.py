@@ -451,6 +451,24 @@ class ExecutedStep:
     🔴 다른 자리의 기회에서 만난 것은 **어느 카드인지 적지 않는다**
     (:func:`unsupported_reasons_elsewhere`).
     """
+    resolved_without_operation: bool = False
+    """
+    🔴 **효과는 해결됐고 일을 하나도 하지 않았다** (Phase 6-AD 후속2).
+
+    ``accepted`` · ``resolved`` 와 **다른 사실**이다. 셋을 함께 읽어야 네
+    가지가 갈린다.
+
+    ====================================  ====================================
+    해결 + 조작 수행                        ``resolved`` · ``effect_events`` 있음
+    **해결 + 조작 없음** (확인된 사유)       ``resolved`` · 이 칸 · 사건 없음
+    엔진이 해결을 확정하지 못함               ``resolved`` 거짓 · 모름 코드
+    잘못된 선택 · 실행 오류                  ``resolved`` 거짓 · 거부 코드
+    ====================================  ====================================
+
+    근거는 **기록**이다 — 이 걸음이 발동한 효과의 ``EffectEvent`` 가 이
+    걸음에 적히지 않았다는 사실 (``EventJournal`` 은 판을 바꾼 해결만
+    적는다). 왜 하지 않았는지는 :attr:`reason` 이 들고 온다.
+    """
     resolution_choices: tuple[int, ...] = ()
     """
     이 걸음의 **해결 중에 실제로 고른** 카드들의 ID (Phase 6-AD).
@@ -604,12 +622,27 @@ class OpeningRun:
     @property
     def effects_resolved(self) -> int:
         """
-        **실제로 효과가 해결된 걸음** 수 (Phase 6-AA).
+        **효과의 조작이 실제로 수행된 걸음** 수 (Phase 6-AA · 6-AD 후속2).
 
         기록에 ``EffectEvent`` 가 남은 걸음만 센다 — 적용된 링크만 그 사건을
         남기므로 (``EventJournal``) 이 수는 주장이 아니라 **실측**이다.
+
+        🔴 **이름이 말하는 것보다 좁다** (6-AD 후속2 가 그 사실을 적었다).
+        효과가 **해결됐지만 일을 하지 않은** 걸음은 그 사건을 남기지 않으므로
+        여기 들어오지 않는다 — 그쪽은 :attr:`effects_resolved_without_operation`
+        이 센다. 두 수를 더하면 "해결된 효과 수" 가 된다.
         """
         return sum(1 for s in self.steps if s.accepted and s.effect_events)
+
+    @property
+    def effects_resolved_without_operation(self) -> int:
+        """
+        **해결됐지만 일을 하지 않은** 걸음 수 (Phase 6-AD 후속2).
+
+        🔴 미지원도 오류도 아니다 — 규칙대로 해결되었고 할 일이 없었던
+        것이다 (``ExecutedStep.resolved_without_operation``).
+        """
+        return sum(1 for s in self.steps if s.resolved_without_operation)
 
     #: 🔴 **"체인에 링크가 몇 번 올랐는가" 는 여기서 셀 수 없다** (6-AA 가
     #: 한 번 그렇게 만들었다가 지웠다). ``ExecutedStep.chain_links_after``
@@ -1044,6 +1077,17 @@ def execute_opening(
             seen_events = len(all_events)
 
         final = settled or step
+        #: 🔴 **"해결됐지만 일을 하지 않았다" 를 기록에서 읽는다**
+        #: (Phase 6-AD 후속2). 근거는 두 사실의 조합이고 추측이 아니다 —
+        #: 체인이 막히지 않고 끝났는데 (``resolved``) 이 걸음이 발동한
+        #: 효과의 ``EffectEvent`` 가 **적히지 않았다** (``EventJournal`` 은
+        #: 판을 바꾼 해결만 적는다).
+        no_operation = bool(
+            step.accepted
+            and resolved
+            and ref is not None
+            and ref not in events
+        )
         run.steps.append(ExecutedStep(
             order=order,
             actor=action.actor,
@@ -1066,6 +1110,7 @@ def execute_opening(
                   and not resolved else ""),
             unsupported=note_unsupported(duel.legal_actions(duel.to_act)),
             unsupported_during=during,
+            resolved_without_operation=no_operation,
             resolution_choices=picked_ids,
             resolution_choice_text=picked_text,
             material_card_ids=material_ids,
