@@ -1477,6 +1477,16 @@ operation_gate_question(definition, ref)` 이 **정의에서** 읽는다 — 그
 | **체인 중** | 발동과 해결 사이에 상태가 바뀌는가 | `test_m00` ~ `test_m07` (§14.3) |
 | **해결 시 재검사** | 바뀐 상태로 다시 판정하는가 | `test_m01`(후보 목록) · `test_m03`(후보 0) · `test_m05`(빈 칸) · `test_m06`(금지) |
 
+> 🔴 **이 절의 마지막 단락과 표의 "해결 시 재검사" 줄을 후속2 가 정정했다
+> (§15.5).**
+>
+> | 이 절의 표기 | 정정 |
+> | --- | --- |
+> | "후보가 없는 해결 … 이 엔진은 **거절**(`too_few_selected`)을 적는다" | 🔴 **고쳤다** — 이제 `RESOLVED_WITHOUT_EFFECT` · `code OK` 이고 사유에 확인된 까닭이 붙는다 (§15.1 · §15.2) |
+> | "해결 시 재검사" 줄의 세 시험 | 같은 자리를 재지만 **결과가 B 로 바뀌었다**. 그 줄에 `test_m08`(**C** — 모르는 후보) · `test_m09`(정상 불발 뒤의 링크) 가 더해졌다 |
+>
+> 아래 단락은 **그때 무엇을 쟀는가**의 기록으로 남긴다 (지우지 않는다).
+
 🔴 **규칙상 정상 해결과 엔진 미지원을 가른다.** 후보가 없는 해결에서 공식
 `s.spop1` 은 `if #g>0 then SpecialSummon` 이므로 **효과가 해결되고 아무 일도
 일어나지 않는다.** 이 엔진은 선택의 최소 장수를 못 채운 것으로 보아
@@ -1559,7 +1569,7 @@ python3 -m app.main combo "69811710,703897,2930675,12989604,93920420" \
 
 | 한계 | 무엇이 없는가 |
 | --- | --- |
-| **후보 0 의 해결을 "거절" 로 적는다** | 공식 `s.spop1` 은 `if #g>0 then SpecialSummon` 이므로 **해결되고 아무 일도 없음**이다. 이 엔진은 선택의 최소 장수를 못 채운 것으로 보아 `too_few_selected` 를 적는다. "잘못된 소환이 없다" 는 같고, "해결로 적는가 거절로 적는가" 가 다르다 (`test_m03` 이 그 차이를 고정) |
+| ~~**후보 0 의 해결을 "거절" 로 적는다**~~ | 🔴 **후속2 가 고쳤으므로 더 이상 한계가 아니다 (§15).** 그때의 기록: 공식 `s.spop1` 은 `if #g>0 then SpecialSummon` 이므로 **해결되고 아무 일도 없음**인데, 이 엔진은 선택의 최소 장수를 못 채운 것으로 보아 `too_few_selected` 를 적었다. 지금은 `RESOLVED_WITHOUT_EFFECT` · `code OK` 다 (§15.1) |
 | **관문 선언이 하나뿐이다** | `existence_requires_gate` 를 적은 효과는 『성장』 ② 하나다. 기르수 ① 의 `s.tgfilter` 도 `IsAbleToGrave` 를 적으므로 같은 선언이 맞지만, 등재된 판정이 22장뿐이라 그 선언은 **측정이 필요한 별도 단계**다 (이번 범위에서 하지 않았다 — 위 59건이 그 측정이다). 그 자리의 모름은 지금도 **해결 시점 관문**이 잡는다 |
 | **링크 2 효과의 선언이 합성이다** | "다른 카드가 묘지로 갔을 때" 를 선언하는 실제 카드가 이 범위에 없다. 정의 · 선언만 합성이고 발동 · 체인 · 선택 · 실행은 실제 공용 경로다 (§14.3 의 계층 표) |
 | **지속 효과의 무효화 · 제거** | 6-AD 와 같다 — 금지가 무효화된 판에서도 금지를 그대로 읽는다 (거짓 금지 쪽이고 거짓 허가보다 안전하다) |
@@ -1571,3 +1581,300 @@ python3 -m app.main combo "69811710,703897,2930675,12989604,93920420" \
 🔴 **테스트 미완료를 "남은 한계" 로 옮겨 완료 처리한 항목은 없다.** 위
 표의 각 줄은 **지원하지 않는 범위**이고, §14.3 의 A~F 는 전부 실제로
 측정했다.
+
+## 15. Phase 6-AD 후속2 — 정상 불발과 미지원·오류를 가른다
+
+### 15.0 무엇이 틀렸는가
+
+6-AD 후속까지 이 엔진은 **『성장』 ② 가 적법하게 발동한 뒤 소환을 하지 못한
+모든 경우를 거절로 적었다** — `too_few_selected` · *"해결하지 못했습니다"* ·
+`CONDITION_FALSE`. §14.4 와 §14.6 이 그것을 "공식 스크립트와 다르다" 는
+한계로 적어 두었다. 🔴 **그 한계가 이번에 고쳐졌으므로 두 절을 정정했다**
+(아래 15.5).
+
+공식 스크립트를 다시 읽은 것이 출발점이다 (`c93920420.lua`).
+
+```lua
+function s.spfilter1(c,e,tp)
+  return c:IsSetCard(SET_WORLD_LEGACY) and c:IsCanBeSpecialSummoned(e,0,tp,false,false)
+end
+function s.sptg1(e,tp,eg,ep,ev,re,r,rp,chk)
+  if chk==0 then return Duel.GetLocationCount(tp,LOCATION_MZONE)>0
+    and Duel.IsExistingMatchingCard(s.spfilter1,tp,LOCATION_HAND,0,1,nil,e,tp) end
+  Duel.SetOperationInfo(0,CATEGORY_SPECIAL_SUMMON,nil,1,tp,LOCATION_HAND)
+end
+function s.spop1(e,tp,eg,ep,ev,re,r,rp)
+  if Duel.GetLocationCount(tp,LOCATION_MZONE)<=0 then return end        -- ①
+  local g=Duel.SelectMatchingCard(tp,s.spfilter1,tp,LOCATION_HAND,0,1,1,nil,e,tp)
+  if #g>0 then Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP) end -- ②
+end
+```
+
+**해결 함수(`s.spop1`)가 조작을 두 번 생략할 수 있다.** ① 몬스터 존이 없으면
+**조작 없이 끝낸다** (`return` — 발동이 불법이었다는 뜻이 아니다). ② 고른
+카드가 없으면 `SpecialSummon` 을 **부르지 않는다**. 둘 다 **효과는 정상
+해결된 것**이다. 발동 조건(`s.sptg1` 의 `chk==0`)이 거짓인 것과는 다른
+사실이다.
+
+### 15.1 결과 모델 — 네 가지를 서로 다른 값으로 적는다
+
+| | 무엇인가 | 이 엔진의 값 |
+| --- | --- | --- |
+| **A** | 해결되고 **조작도 수행**되었다 | `ResolutionStatus.RESOLVED` · `applied` 있음 · `deltas` 있음 · `EffectEvent` 기록됨 |
+| **B** | **정상 해결** · 확인된 사유로 조작 없음 | 🔴 `ResolutionStatus.RESOLVED_WITHOUT_EFFECT` (신설) · `code OK` · `applied_any False` · `deltas ()` · `EffectEvent` **없음** |
+| **C** | 규칙 · 정보가 없어 **확정 불가** | `UNCHECKED_RULES` · `rule_not_implemented` · `missing` = `gated-candidate-eligibility` (그대로) |
+| **D** | 정책의 잘못된 응답 · 실행 오류 | `too_few_selected` · `candidate_not_eligible` · `too_many_selected` · `duplicate_selection` (그대로) |
+
+🔴 **기존 구조를 최대한 다시 썼다.** 새로 만든 것은 **결과 상태 하나**
+(`RESOLVED_WITHOUT_EFFECT`) 와 **정의의 선언 하나**(`ResolutionSkip`) 다. 새
+"성공" 플래그를 만들지 않았고, 내부 결과를 실패로 남긴 채 문구만 바꾸지도
+않았다 — 소비자(체인 · 집계 · 보고)까지 전부 연결했다 (아래 15.3).
+
+**`EffectResult` 에 더한 두 칸** (`engine/effect/resolution.py`)
+
+| 칸 | 묻는 것 |
+| --- | --- |
+| `resolved` (뜻을 넓혔다) | **해결이 끝났는가** — `RESOLVED` 와 `RESOLVED_WITHOUT_EFFECT` 둘 다 참 |
+| `applied_any` (신설) | **일을 하나라도 했는가** — `bool(self.applied)` |
+
+이 둘을 가르는 것이 이 보완의 전부다. 한 칸으로 읽으면 "링크가 해결됐다" 가
+"소환이 일어났다" 로 집계된다.
+
+### 15.2 B 는 **선언한 자리에서만** 나온다
+
+`EffectDefinition.resolution_skip: ResolutionSkip | None` 을 더했다
+(`engine/effect/definition.py`).
+
+```python
+ResolutionSkip(
+    when_condition_false=True,   # s.spop1 의 ①
+    when_no_candidate=True,      # s.spop1 의 ②
+    basis="c93920420.lua 의 s.spop1 — ...",   # 🔴 비어 있으면 만들 수 없다
+)
+```
+
+🔴 **근거 없는 선언을 만들 수 없다.** `__post_init__` 이 두 가지를 거절한다 —
+생략 조건을 하나도 적지 않은 선언, 근거가 빈 선언 (`test_n06` 이 고정).
+
+🔴 **실행기에 카드 ID 비교가 없다.** 실행기가 보는 것은 "이 정의가
+선언했는가" 하나이고, 선언은 **공식 스크립트를 읽은 정의 쪽**에 있다.
+실측: 등재 목록 전체에서 `resolution_skip` 을 선언한 정의는 **『성장』 ②
+하나**이고, 그 근거 문자열은 `c93920420.lua` 와 `s.spop1` 을 가리킨다
+(`test_n05` 가 그 수와 내용을 고정).
+
+**어디서 갈라지는가** (`engine/effect/executor.py`)
+
+| 자리 | 공식 대응 | 무엇을 하는가 |
+| --- | --- | --- |
+| `_check_condition` 의 `FALSE` 가지 | `s.spop1` ① | 선언이 있으면 **B** (사유를 함께 적는다). 선언이 없으면 예전대로 `CONDITION_FALSE` |
+| `_short_selection` (신설) | `s.spop1` ② | 모자란 선택의 원인을 **셋으로** 가른다 (아래) |
+
+`_short_selection` 은 선택이 최소 장수를 못 채운 **원인**을 묻는다.
+
+| 사실 | 결과 |
+| --- | --- |
+| 합법 후보가 **최소 장수 이상** 있었다 | **D** — 평소 검사가 `too_few_selected` 로 거절한다 (`return None`) |
+| 후보 자격을 **판정하지 못한 것**이 남았다 | **C** — `UNCHECKED_RULES` · `gated-candidate-eligibility`. 🔴 선언이 있어도 이 길로 간다 |
+| 고를 후보가 **없고 전부 확인했다** | 선언이 있으면 **B**, 없으면 **D** |
+
+🔴 **후보 자격은 새로 묻지 않는다** — `operation_gate_question()` 이 그
+선택을 **쓰는 일**의 선언에서 질문을 읽고 `BoardRuling` 이 답한다. 발동
+시점의 존재 검사(`_candidate_existence`, §14.1)와 실행 시점의
+관문(`_check_rule_gate`)이 묻는 **같은 질문**이다.
+
+🔴 **`rulings` 를 받지 않은 호출은 이 자리에서 아무것도 새로 판정하지
+않는다.** "등록부가 없다 → 모름" 으로 답하면 관문을 선언한 모든 일의 모자란
+선택이 `too_few_selected` 에서 `rule_not_implemented` 로 바뀐다 — 배선 때문에
+답이 달라지는 것이고 이번 범위가 아니다. 그 호출에서도 관문은 실행
+시점(`_check_rule_gate`)이 생성자의 판정기로 그대로 묻는다
+(`_summon_ruling` 과 같은 되돌림).
+
+**사유가 사례를 가리킨다** — `And.refusal_reasons()` · `ZoneHasFreeSlot.
+refusal_reasons()` 를 더했다 (`engine/condition/model.py`). 실측: 더하기
+전에는 §15.4 의 B-2 와 B-3 의 거절 문장이 **글자까지 같았다** (조건 트리
+전체의 설명 하나뿐이었다).
+
+### 15.3 체인과 집계와 출력까지 연결했다
+
+| 계층 | 무엇을 바꿨는가 |
+| --- | --- |
+| `engine/chain.py` | `STATUS_MAP` 에 `RESOLVED_WITHOUT_EFFECT → ChainResolutionStatus.RESOLVED`. 🔴 **그 링크는 끝났다** — `chain.advanced()` 가 돌고, 남은 링크가 계속 해결된다. 정확한 사유는 `ChainResolution.result` 가 들고 오고, `applied_any` 가 거짓일 때 체인 문장에 그 이유를 덧붙인다 |
+| `deck/opening.py` | `ExecutedStep.resolved_without_operation` (신설) — **수락 + 해결 + 그 효과의 `EffectEvent` 없음**. `OpeningRun.effects_resolved_without_operation` 로 센다. `effects_resolved` 의 뜻을 "조작이 실제로 수행된 걸음" 으로 바로잡았다 |
+| `deck/combo_policy.py` | **바꾸지 않았다.** `_step_matches` 는 6-AD 후속 ② 이후 `EffectEvent` 를 요구하므로, B 는 **이미** 단계를 채우지 못한다 (`test_l09` 가 그것을 고정) |
+| `deck/report.py` · `app/discord_bot.py` | 걸음 줄이 `조작 수행` / `해결됐지만 조작 없음 (확인된 사유)` / `해결되지 않음` 셋으로 갈린다. 집계가 두 줄로 갈리고, 둘째 줄은 "🔴 미지원도 오류도 아닙니다" 를 **명시**한다 |
+
+🔴 **"해결된 효과 수" 와 "조작이 수행된 수" 를 섞지 않는다.** B 를 앞 수에
+더하면 "소환이 N번 일어났다" 로 읽힌다 (`test_l10` · `test_l11`).
+
+🔴 **사건을 더하는 것만으로 성공이 되는 회귀는 막혀 있다.** `EffectEvent` 는
+`result.deltas` 가 있을 때만 적히므로 (6-AD 후속 ②), B 는 **사건을 남기지
+않는다** — 집계가 쓰는 근거가 바로 그 사건이다 (`test_m09` ⑤ · `test_m10` ③).
+
+### 15.4 측정한 사례 — 무엇을 어떻게 재었는가
+
+🔴 **먼저 기존 시험 셋의 실제 결과를 재현하고 고쳤다.** `test_m03` ·
+`test_m05` · `test_m06` 은 6-AD 후속에서 **거절**을 정답으로 적어 두었다
+(`"해결하지 못했습니다"` · `too_few_selected` · `CANDIDATE_NOT_ELIGIBLE`).
+공식 스크립트를 다시 읽은 결과 그 기대값이 틀렸으므로, 실패 코드를 그대로
+고정하지 않고 **기대값을 정정**했다.
+
+| 사례 | 시험 | 결과 |
+| --- | --- | --- |
+| **A** 정상 경로 | `test_n00` · `/combo` (아래 15.6) | `RESOLVED` · `EffectEvent` 있음 · `resolved_without_operation False` |
+| **B-1** 해결 전에 후보가 전부 사라졌다 | `test_m03` · `test_m03b` | `RESOLVED_WITHOUT_EFFECT` · `code OK` · 체인 계층은 `RESOLVED` · 소환 없음 · 개체 보존 |
+| **B-2** 체인 도중 마지막 칸이 찼다 | `test_m05` | 같은 값 · 사유가 `자신 MZONE 에 빈 칸이 없습니다 (5/5).` · **덮어쓰기 없음** (다섯 개체가 서로 다르다) |
+| **B-3** 해결 전에 파키세팔로의 금지가 섰다 | `test_m06` | 같은 값 · 사유가 `MZONE 의 42009836 가 특수 소환을 막습니다` · 『성장』 은 패에 남는다 |
+| **C** 해결 시점에 **모르는 후보**만 남았다 | `test_m08` | `UNCHECKED_RULES` · `rule_not_implemented` · `missing` = `gated-candidate-eligibility` · 사유가 `40441990` 을 가리킨다 · 🔴 `"일을 하지 않았습니다"` 가 **없다** |
+| **C** 발동 시점의 모름 | `test_j04` · `test_j04a` (6-AD 후속) | 그대로 — 발동이 서지 않는다 |
+| **D** 합법 후보가 있는데 정책이 **빈 선택** | `test_n01` | `too_few_selected` · `resolved False` · `resolved_without_operation False` · 전개 미완료 |
+| **D** 후보 목록 **밖**의 개체 | `test_n02` | `candidate_not_eligible` |
+| **D** 허용 **장수 초과** | `test_n03` | `too_many_selected` |
+| **D** **중복** 선택 | `test_n04` | `too_many_selected` (INVALID) |
+| **체인** 정상 불발 **뒤의 링크**도 해결된다 | `test_m09` | 링크 셋을 쌓아 `[묘지행 → 『성장』 ②(B) → 드로우]` 순으로 전부 `RESOLVED` · `resolved_count == 3` · 드로우가 실제로 일어났다 |
+| **체인** 되돌림도 허위 사건도 없다 | `test_m10` | 사용 횟수가 남는다 (카드명 범위) · 같은 링크의 해결 보고가 **한 번** · `EffectEvent` **없음** · 선택 기록은 남는다 · 묘지의 두 장 그대로 |
+| **사본** 격리 | `test_m07` (6-AD 후속) | 그대로 |
+| **집계** B 는 단계를 채우지 않는다 | `test_l09` | `completed False` · `done 2` |
+| **집계** 두 수를 섞지 않는다 | `test_l10` | `effects_resolved 1` · `effects_resolved_without_operation 1` |
+| **출력** 넷을 구별한다 | `test_l11` | 걸음 줄 셋 · 집계 두 줄 · "미지원도 오류도 아닙니다" |
+| **선언** 규율 | `test_n05` · `test_n06` · `test_n07` | 선언한 정의는 하나 · 근거 없는 선언은 만들 수 없다 · "해결이 끝났다" 는 두 상태뿐 |
+
+**새 파일 하나 · 고친 파일 셋**
+
+| 파일 | 무엇 |
+| --- | --- |
+| `tests/test_resolution_outcome_four_cases.py` | 🔴 **신설** — A · D · 선언 규율 (8건). D 를 재기 위해 **그 효과의 자리에서만 잘못 답하는 시험 전용 정책**을 끼운다 (판정 · 해결 · 실행은 프로덕션 그대로) |
+| `tests/test_chain_state_change_between_links.py` | `test_m03` · `m05` · `m06` 기대값 정정 · `m03b` · `m08` · `m09` · `m10` 신설 (9 → 12건). 합성 선언을 **둘** 내놓을 수 있게 하고 (`_ChainResponse.refs`), 링크마다의 해결 결과를 보는 `_resolve_one_by_one` 을 더했다 |
+| `tests/test_line_progress_resolution_evidence.py` | `test_l09` · `l10` · `l11` 신설 (9 → 12건) |
+| `tests/test_summon_prohibition_and_resolution_choice.py` | **바꾸지 않았다** — C · D 의 기존 계약이 그대로 통과한다 |
+
+🔴 **판정도 결과도 monkeypatch 하지 않았고, 실행 중에 `state.move` 로 판을
+바꾸지도 않았다.** 상태는 **시작 상태**로만 구성하고, 체인 도중의 변화는
+6-AD 후속이 세운 **격리된 등록부 + 합성 유발 선언**을 그대로 다시 썼다
+(§14.3 의 계층 표).
+
+### 15.5 §14.4 · §14.6 의 정정
+
+| 어디 | 그때 적은 것 | 정정 |
+| --- | --- | --- |
+| §14.4 의 마지막 단락 | "후보가 없는 해결에서 … 이 엔진은 선택의 최소 장수를 못 채운 것으로 보아 **거절**(`too_few_selected`)을 적는다 … `test_m03` 의 docstring 과 아래 남은 한계에 그대로 적었다" | 🔴 **고쳤다.** 이제 그 자리는 `RESOLVED_WITHOUT_EFFECT` · `code OK` 이고, 사유에 확인된 까닭이 붙는다. `test_m03` 의 기대값도 정정했다 (§15.4) |
+| §14.4 의 표, "해결 시 재검사" 줄 | `test_m03`(후보 0) · `test_m05`(빈 칸) · `test_m06`(금지) | 그 셋은 **그대로 그 자리**를 재지만, 결과가 **B** 로 바뀌었다. 그리고 그 줄에 `test_m08`(**C**) 와 `test_m09`(뒤 링크) 가 더해졌다 |
+| §14.6 의 첫 줄, "후보 0 의 해결을 **거절** 로 적는다" | 한계로 적었다 | 🔴 **한계가 아니다 — 고쳤다.** 아래 15.7 의 표에서 그 줄을 지웠다 |
+
+🔴 **동작 미완료를 한계로 옮겨 완료 처리한 항목은 없다.** 반대 방향이다 —
+한계로 적어 두었던 것을 **구현하고**, 그 줄을 지웠다.
+
+### 15.6 정상 경로 재실행 — 이번 실행의 수치
+
+**실행한 명령** (이번에 돌린 것이다 — §13.7 · §14.5 의 수치를 옮겨 적지
+않았다)
+
+```
+python3 -m app.main combo "69811710,703897,2930675,12989604,93920420" \
+    --recipe <ORCUST_VERIFICATION_RECIPE 를 적은 .ydk> --line orcust-girsu
+```
+
+종료 코드 **0**.
+
+| 항목 | 결과 |
+| --- | --- |
+| 경로 | ✅ **4/4 단계** (`경로를 끝까지 실행했습니다 (4/4단계)`) |
+| 실행 걸음 · 상태 변경 | 5걸음 · 4걸음 |
+| **효과의 조작이 실제로 수행된 걸음** | **2** (`69811710:e[0]` · `93920420:e[1]` — 둘 다 `조작 수행`) |
+| **해결됐지만 조작이 없었던 걸음** | **0** — 🔴 그 줄이 **출력에 나타나지 않는다** (정상 경로에 B 가 없다) |
+| 해결 중 선택 | 2건 — 덱의 『성장』 (후보 2장) · 패의 『성장』 (후보 1장) |
+| 최종 엑스트라 몬스터 존 · 몬스터 존 | 갈라테아 [30741503] · 없음 |
+| 최종 묘지 · 패 · 덱 · 엑스트라 덱 | 3장 · 3장 · 34 · 5 |
+| 멈춘 이유 | `not_chosen` — 경로가 끝났고 남은 후보는 `end_phase` · `set_spell_trap` |
+
+🔴 **정상 경로의 출력이 늘지 않았다.** B 집계 줄은 **그 걸음이 있을 때만**
+적히므로, 이 실행의 요약은 6-AD 후속과 같은 모양에 "조작이 실제로 수행된
+걸음" 의 뜻이 또렷해진 것뿐이다.
+
+### 15.7 남은 한계 (이 작업이 **지원하지 않는** 것)
+
+| 한계 | 무엇이 없는가 |
+| --- | --- |
+| **선언한 효과가 하나뿐이다** | `ResolutionSkip` 을 적은 정의는 『성장』 ② 하나다. 다른 카드의 해결 함수에도 같은 조기 종료가 있을 수 있으나, **읽고 검증한 것만** 적는다는 규율에 따라 이번 범위에서 더하지 않았다 (`test_n05` 가 그 수를 고정하므로, 늘리면 그 시험이 먼저 말한다) |
+| **B 의 사유가 조건 트리에서만 나온다** | `And.refusal_reasons` 가 거짓인 자식의 이유를 모은다. 이유를 적지 않은 조건은 `describe_ko()` 로 대신하므로, 사유의 **정확도는 그 조건이 적어 둔 만큼**이다 |
+| **`rulings` 를 받지 않은 호출** | 그 자리에서는 후보 관문을 묻지 않고 예전 거절을 그대로 쓴다 (§15.2 의 마지막 🔴). 배선에 따라 B · C 의 구분이 생기지 않는 호출이 남아 있다 — 프로덕션 경로(`/combo` · Discord)는 받는다 |
+| **링크 2 효과의 선언이 합성이다** | §14.6 과 같다 — "다른 카드가 묘지로 갔을 때" 를 선언하는 실제 카드가 이 범위에 없다. 정의 · 선언만 합성이고 발동 · 체인 · 선택 · 실행은 실제 공용 경로다 |
+| **상대 쪽 체인 응답** | §14.6 과 같다 — 합성 선언은 자신 좌석만 내놓는다 |
+| **지속 효과의 무효화 · 제거** | 6-AD 와 같다 — 금지가 무효화된 판에서도 금지를 그대로 읽는다 |
+| **필드 밖 금지 · 범위가 좁혀진 금지 · 소생 제한** | 6-AD · 6-AD 후속과 같다 (§13.8 · §14.6) |
+| **파키세팔로의 리버스 파괴 효과** | 등재하지 않았다 |
+
+🔴 **`too_few_selected` 를 일괄 성공으로 바꾸지 않았고, 어떤 효과의 선택
+최소 장수도 0 으로 바꾸지 않았다.** 선언이 없는 효과의 모자란 선택은 예전
+그대로 거절이고, 그것을 엔진 묶음 전체가 재고 있다 (§15.8 의 수치).
+
+### 15.8 측정 결과
+
+🔴 **전부 이번 작업에서 돌린 것이다** — §10.3 · §13.7 · §14.5 의 수치를
+옮겨 적지 않았다. 실행기는 같다 (`runtests.sh` — pytest 의 종료 코드를 로그
+안에 적는다).
+
+| 묶음 | 명령 | passed | failed | skipped | 종료 코드 | 소요 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 새 파일 + 지정 파일 (청크 밖 넷) | `pytest tests/test_summon_prohibition_and_resolution_choice.py tests/test_line_progress_resolution_evidence.py tests/test_chain_state_change_between_links.py tests/test_resolution_outcome_four_cases.py` | **53** | **0** | 0 | **0** | 2:34 |
+| 엔진 · 룰 · 재정 | `pytest tests/engine tests/rules tests/rulings` | **4,096** | 1 | 1 | 1 | 18:01 |
+| 에이전트 | `pytest tests/agent` | **311** | 1 | 0 | 1 | 9:43 |
+| 루트 ① | `pytest <ck_aa 25개 파일>` | **716** | **0** | 0 | **0** | 42:15 |
+| 루트 ② | `pytest <ck_ab 23개 파일>` | **562** | 2 | 5 | 1 | 16:40 |
+| 루트 ③ | `pytest <ck_ac 24개 파일>` | **629** | 4 | 4 | 1 | 20:40 |
+| 루트 ④ | `pytest <ck_ad 22개 파일>` | **486** | 1 | 0 | 1 | 11:12 |
+
+🔴 **루트 테스트 전부를 덮었다** — 청크 넷(94개 파일)과 위의 넷을 합치면
+`tests/test_*.py` **98개 파일 전부**이고, 그것을 집합 차집합으로 확인했다.
+
+**남은 실패 9건은 전부 기존 실패이고, 그 근거를 이번 기준 커밋에서
+측정했다.** `3a7329f` 의 워크트리(+ git 이 추적하지 않는 `data/` 심볼릭
+링크)에서 **그 아홉 개만** 돌려 전부 실패하는 것을 확인했다 —
+`9 failed in 48.64s`.
+
+| 기존 실패 | 어디 |
+| --- | --- |
+| `rulings/test_data_audit::test_every_repository_card_can_reach_a_cid` | 재정 데이터의 cid 매핑 |
+| `agent/test_opponent_resource_weighting_audit::test_07` | 상대 자원 선택 전수 주사 |
+| `test_effect_type_quick_audit::test_29` | 공식 자료에 Lua 이름이 없다는 주장 |
+| `test_event_free_chain_semantic_audit::test_27` | 공식 코퍼스가 그 용어를 쓰지 않는다는 주장 |
+| `test_korean_overlay_unapplied_audit::test_01` · `test_13` · `test_21` · `test_25` | 한국어 오버레이 미적용 분포 |
+| `test_trigger_lifetime_audit::test_02` | `_activation_actions` 의 지역 변수가 그 감사의 금지 낱말에 걸린다 (보완8 이 만들었다) |
+
+**이번 변경의 회귀는 0건이다.**
+
+**회귀가 드러낸 것과 그 뒤의 정정**
+
+처음 돌린 묶음에서 **20건이 깨졌다** (기존 9 제외). 전부 고쳤고, 기대값을
+느슨하게 만든 곳은 없다 — 재는 사실은 하나도 바뀌지 않았다.
+
+| 무엇이 깨졌는가 | 왜 | 어떻게 고쳤는가 |
+| --- | --- | --- |
+| `EffectDefinition` 칸 수를 센 감사 **아홉** (`test_effect_type_quick_audit::test_10` · `test_event_free_chain_semantics_audit::test_07` · `test_12` · `test_effectdefinition_trigger_boundary_audit::test_16` · `test_activation_precondition_audit::test_01` · `test_24` · `test_create_effect_ordinal_audit::test_36` · `test_clone_sibling_contamination_audit::test_40` · `test_settype_clone_contamination_audit::test_25`) | `resolution_skip` 한 칸이 늘었다 (13 → 14) | 수를 고치고 **왜 늘었는지**를 그 자리에 적었다 (앞선 Phase 들이 같은 자리에 남긴 방식). 그 감사들이 재는 사실("사건 칸이 없다" · "effect_types 가 없다")은 교집합 단언으로 그대로 남아 있고 전부 비어 있다 |
+| `test_trigger_condition_separation_audit::test_01` (칸 **순서**) | 처음에 새 칸을 `guards` 다음에 넣었다 | 🔴 **코드를 고쳤다** — 새 칸을 `provenance` 바로 앞으로 옮겼다. 앞선 Phase 들이 새 칸을 전부 그 자리에 붙여 왔고, 이 감사가 그 관례를 고정하고 있었다. 그 뒤 칸 이름을 목록에 더했다 |
+| `RULE_NOT_IMPLEMENTED` 수를 센 감사 **넷** (`test_rule_not_implemented_code_audit::test_02` · `test_05` · `test_validation_code_rejection_semantics_audit::test_03` · `test_31` · `test_unimplemented_rule_semantics_audit::test_03`) | `_short_selection` 의 모름 거절 한 자리가 늘었다 | 문자열 122 → **123** · 코드 85 → **86** · **산문 37 그대로** · 거부 생성 72 → **73** · 적합 짝 21 → **22** · 위반 **13 그대로**(여덟 자리가 밀렸을 뿐이고 좌표를 갱신했다). 🔴 두 수가 **같은 만큼** 늘었다는 것이 "새 설명이 아니라 새 거절 자리" 라는 증거다 |
+| `tests/engine/test_effect_resolution.py::test_a_result_that_is_not_resolved_never_claims_a_state_change` | `EffectResult.resolved` 가 두 상태에서 참이 되었다 | "해결이 끝난 상태" 집합을 **이름으로** 적었다. 🔴 같은 파일의 `test_only_a_resolved_result_may_carry_changes` 는 **고치지 않았는데 그대로 통과한다** — `RESOLVED_WITHOUT_EFFECT` 가 변화 기록을 들면 생성 자체가 거절된다는 뜻이고, 그것이 이 상태의 이름이 거짓이 되지 않게 지키는 불변식이다 |
+| 출력 낱말을 쓰던 **셋** (`test_combo_output_consistency::test_08` · `tests/engine/test_trigger_window_completion::test_f02` · `test_withheld_reason_propagation::test_e01`) | "효과가 실제로 해결된 걸음" → "효과의 조작이 실제로 수행된 걸음" | 낱말을 고치고 **왜** 고쳤는지 적었다. 세 자리 전부 "이 전개에는 조작 없는 걸음이 없으므로 그 줄이 아예 없다" 를 함께 고정했다 |
+| `test_result_actor_provenance_contract::test_20` | 🔴 **이 Phase 가 `engine/chain.py` · `engine/effect/resolution.py` 의 실행되는 코드를 바꿨다** (3-F-17 base 와의 AST 비교가 그것을 잡았다) | 작업 트리와 비교하던 것을 **3-F-17 의 마지막 commit**(`3a98c49`)과 비교하도록 고쳤다. 재려는 것은 "3-F-17 이 무엇을 바꿨는가" 이고 그 답은 그 commit 에 고정되어 있다. 같은 시험의 §5 금지 항목 단언(새 칸 · 새 추상 없음)은 **현재 코드**를 그대로 본다 |
+
+🔴 **감사가 제 일을 했다.** 위 20건은 전부 "이 변경이 무엇을 건드렸는가" 를
+가리켰고, 그중 하나(`test_trigger_condition_separation_audit::test_01` 의 칸
+순서)는 **코드를 고치게** 만들었다.
+
+**미리 찾아 고친 둘** — `ResolutionStatus` 의 멤버 수를 센
+`test_simulation_status_unknown_codes_audit::test_25` 와
+`test_validation_code_unknown_policy::test_33` 은 묶음을 돌리기 **전에**
+찾아서 고쳤다 (14 → **15**). 🔴 그래서 위 20건에 들어 있지 않고, **이 둘이
+실패하는 것을 로그로 관측하지는 않았다** — 찾은 방법은 `ResolutionStatus` 를
+세는 자리를 코드에서 검색한 것이다. 고칠 때 수만 올리지 않고 늘어난 것이
+**실패가 아니라 해결** 쪽이라는 사실을 이름으로 적었고 (`"RESOLVED_WITHOUT_
+EFFECT" in ResolutionStatus.__members__`), `ValidationCode` 는 늘지 않았다는
+것도 함께 적었다 (그 상태의 코드는 `OK` 다).
+
+### 15.9 다음에 붙을 자리 (이번에 **시작하지 않았다**)
+
+* 다른 카드의 해결 함수를 읽어 `ResolutionSkip` 을 더하는 일 — 카드마다
+  스크립트를 읽어야 하므로 **별도 단계**다.
+* 상대가 끼어드는 체인 · 지속 효과의 무효화 — 위 표의 한계 그대로.
+
+🔴 **검색 · 자동 레시피 · 새 전개 · LLM 정책 · 외부 시뮬레이터 연동은
+시작하지 않았다.**
