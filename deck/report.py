@@ -370,3 +370,355 @@ def render_opening_board(setup, repository=None) -> str:
                  " 것은 검증된 현재 자원뿐이고, 방해 수단의 수를 카드"
                  " 텍스트만 보고 세지 않았습니다.")
     return "\n".join(lines)
+
+
+# ===========================================================================
+# Phase 6-AE — **기본 응답용 짧은 요약**
+# ===========================================================================
+#: 요약에 적는 걸음 수의 상한. 넘으면 **뒤를 버리지 않고** 몇 걸음을 요약에서
+#: 뺐는지 적고, 전부는 상세 기록에 있다고 가리킨다.
+BRIEF_STEP_LIMIT = 12
+
+#: 요약에 적는 미지원 사유의 상한. 같은 이유다.
+BRIEF_UNSUPPORTED_LIMIT = 6
+
+#: 한 구역에 이름을 몇 장까지 적는가. 넘으면 수를 적고 이름은 상세로 보낸다.
+BRIEF_ZONE_NAME_LIMIT = 8
+
+#: 걸음의 결과를 요약 한 줄에 적을 때의 낱말. ``ExecutedStep.outcome`` 의
+#: 다섯 낱말을 그대로 받는다 — 요약이 **새 분류를 만들지 않는다.**
+_OUTCOME_KO = {
+    "operated": "조작 수행",
+    "idle": "🔴 해결됐지만 조작 없음",
+    "unknown": "🔴 해결 미확정 (모름)",
+    "refused": "🔴 거절",
+    "flow": "",
+}
+
+#: 행동 종류를 사람이 읽는 낱말로. 🔴 **없는 종류는 그대로 적는다** —
+#: 모르는 낱말을 비슷한 것으로 바꾸면 읽는 쪽이 다른 행동으로 읽는다.
+_KIND_KO = {
+    "normal_summon": "일반 소환",
+    "special_summon": "특수 소환",
+    "link_summon": "링크 소환",
+    "activate_effect": "효과 발동",
+    "activate_card": "카드 발동",
+    "set_spell_trap": "마법·함정 세트",
+    "pass": "우선권 넘김",
+    "end_phase": "턴 종료",
+}
+
+#: 멈춘 종류를 **뜻으로** 적는다. 🔴 원문만 보여 주지 않는다 (6-AE §2-④).
+#: ``not_chosen`` 은 경로 완료 여부에 따라 달라지므로 여기 두지 않는다 —
+#: :func:`_stopped_lines` 가 그 둘을 가른다.
+_STOPPED_KO = {
+    "duel_over": "듀얼이 끝났습니다.",
+    "no_candidates": "그 자리에 허가된 후보가 하나도 없었습니다.",
+    "unsupported": "🔴 남은 후보가 흐름뿐인데 **그 자리에 엔진이 지원하지"
+                   " 않아 오르지 못한 후보**가 있었습니다 — 정상 전개"
+                   " 종료가 아닙니다.",
+    "flow_only": "판을 바꿀 후보가 더 없었고 남은 후보는 흐름뿐이었습니다"
+                 " — 이 저장소의 **현재 지원 범위와 선택 방식에서** 더"
+                 " 고를 것이 없다는 뜻입니다.",
+    "rejected": "🔴 행동이 거절되었습니다.",
+    "limit": "이 단계가 선언한 걸음 상한에 닿았습니다.",
+    "not_run": "🔴 입력 검증을 통과하지 못해 실행하지 않았습니다.",
+}
+
+
+def _kind_ko(kind: str) -> str:
+    return _KIND_KO.get(kind, kind)
+
+
+def _brief_step_line(step, repository=None) -> str:
+    """
+    걸음 하나를 **한 줄로**.
+
+    🔴 **핵심을 지우지 않는다** (6-AE §2-②) — 어느 효과인가
+    (:attr:`~deck.opening.ExecutedStep.effect_ref`) · 링크 소재 · 해결 중에
+    **무엇을 골랐는가**를 남긴다. 고른 카드의 이름은 저장소가 있을 때만
+    적고, 없으면 ID 로 적는다 (없는 이름을 만들지 않는다).
+    """
+    mark = "✔" if step.accepted and step.resolved else (
+        "~" if step.accepted else "✗")
+    where = f" — {step.card_name}" if step.card_name and step.card_id else ""
+    ref = f" `{step.effect_ref}`" if step.effect_ref else ""
+    bits = [f"  {mark} {step.order}. {_kind_ko(step.kind)}{where}{ref}"]
+    outcome = _OUTCOME_KO.get(step.outcome, step.outcome)
+    if outcome:
+        bits.append(f" · {outcome}")
+    if step.materials:
+        bits.append(f" · 소재: {' · '.join(step.materials)}")
+    if step.resolution_choices:
+        picked = []
+        for card_id in step.resolution_choices:
+            found = repository.get(card_id) if repository else None
+            picked.append(found.display_name() if found else f"[{card_id}]")
+        bits.append(f" · 해결 중 선택: {' · '.join(picked)}")
+    return "".join(bits)
+
+
+def _brief_steps(run, repository=None) -> "list[str]":
+    """
+    **실제로 실행한 주요 행동.** 🔴 흐름 행동은 묶고, 나머지는 남긴다.
+
+    묶는 것은 ``pass`` · ``end_phase`` 처럼 판을 바꾸지 않는 절차뿐이고,
+    그것도 **연속한 것만** 묶는다 — 묶어 버리면 "몇 걸음이었나" 가 사실과
+    달라지므로 수를 적는다.
+
+    🔴 **실패하거나 정상 불발한 걸음은 묶지 않고 이유를 함께 적는다**
+    (6-AE §2-②).
+    """
+    lines: list[str] = []
+    flow_run: list = []
+
+    def flush_flow() -> None:
+        if not flow_run:
+            return
+        kinds = " · ".join(sorted({_kind_ko(s.kind) for s in flow_run}))
+        orders = f"{flow_run[0].order}" if len(flow_run) == 1 else \
+            f"{flow_run[0].order}~{flow_run[-1].order}"
+        lines.append(f"  — {orders}. 흐름 {len(flow_run)}걸음 ({kinds})")
+        flow_run.clear()
+
+    for step in run.steps:
+        #: 흐름이면서 **아무 문제가 없는** 걸음만 묶는다.
+        if (step.kind in {"pass", "end_phase"} and step.accepted
+                and step.resolved and not step.note):
+            flow_run.append(step)
+            continue
+        flush_flow()
+        lines.append(_brief_step_line(step, repository))
+        #: 🔴 **이유를 생략하지 않는다** — 수행되지 않은 걸음만 적는다
+        #: (성공한 걸음의 이유까지 적으면 요약이 상세가 된다).
+        if step.outcome in {"idle", "unknown", "refused"} or not step.accepted:
+            lines.append(f"      이유: {step.reason}")
+        if step.note:
+            lines.append(f"      🔴 {step.note}")
+    flush_flow()
+
+    if len(lines) > BRIEF_STEP_LIMIT:
+        kept = lines[:BRIEF_STEP_LIMIT]
+        kept.append(f"  … 걸음 요약 {len(lines) - BRIEF_STEP_LIMIT}줄은"
+                    f" **상세 기록**에 있습니다 (버리지 않았습니다).")
+        return kept
+    return lines
+
+
+def _brief_board(setup, repository=None) -> "list[str]":
+    """
+    **최종 상태.** 🔴 필드의 카드 이름은 요약에서 보이게 한다 (6-AE §2-③).
+
+    :func:`render_opening_board` 와 **같은 자리를 읽는다** — 이름이 다른
+    표를 만들지 않는다. 다른 것은 긴 구역(패 · 묘지)의 이름을 상한까지만
+    적고 수를 함께 적는다는 점뿐이다.
+    """
+    from engine.vocabulary import Zone
+
+    if setup.duel is None:
+        return ["  상태가 없습니다."]
+    state = setup.duel.state
+
+    def _names(cards) -> str:
+        def label(card) -> str:
+            found = repository.get(card.card_id) if repository else None
+            return (f"{found.display_name()}" if found
+                    else f"[{card.card_id}]")
+
+        if not cards:
+            return "없음"
+        if len(cards) > BRIEF_ZONE_NAME_LIMIT:
+            head = ", ".join(label(c) for c in cards[:BRIEF_ZONE_NAME_LIMIT])
+            return f"{head} … (이름 전체는 상세 기록)"
+        return ", ".join(label(c) for c in cards)
+
+    lines: list[str] = []
+    #: 🔴 **몬스터 존과 엑스트라 몬스터 존을 가른다** (Phase 6-AC 의 실측 —
+    #: 합치면 링크 몬스터가 보고에서 사라진다).
+    for label_ko, zone in (("몬스터 존", Zone.MZONE),
+                           ("엑스트라 몬스터 존", Zone.EMZONE),
+                           ("마법·함정 존", Zone.SZONE)):
+        cards = [c for c in state.player(0).zone(zone) if c]
+        lines.append(f"  {label_ko}: {_names(cards)}")
+    for label_ko, zone in (("패", Zone.HAND), ("묘지", Zone.GRAVE),
+                           ("제외", Zone.REMOVED)):
+        cards = [c for c in state.player(0).zone(zone) if c]
+        lines.append(f"  {label_ko} {len(cards)}장: {_names(cards)}")
+    deck = [c for c in state.player(0).zone(Zone.DECK) if c]
+    extra = [c for c in state.player(0).zone(Zone.EXTRA) if c]
+    lines.append(f"  남은 덱 {len(deck)}장 · 엑스트라 덱 {len(extra)}장")
+    return lines
+
+
+def _stopped_lines(run, progress=None) -> "list[str]":
+    """
+    **멈춘 이유를 뜻으로 적는다** (6-AE §2-④).
+
+    🔴 ``not_chosen`` 하나를 두 가지로 가른다 — 경로를 끝까지 실행한 뒤
+    "그 경로에 다음 행동이 적혀 있지 않다" 인 경우와, 경로가 중간에 멈춘
+    경우다. 앞의 것을 **경로 미완료처럼** 적으면 성공한 실행이 실패로
+    읽히고, 뒤의 것을 **완료처럼** 적으면 거짓이 된다.
+    """
+    if not run.stopped_kind:
+        return []
+    left = (f" (남은 후보: {' · '.join(_kind_ko(k) for k in run.stopped_candidates)})"
+            if run.stopped_candidates else "")
+    if run.stopped_kind == "not_chosen":
+        if progress is not None and progress.completed:
+            return [
+                f"  ✅ **지정 경로를 완료했습니다.** 이후 행동은 이 검증"
+                f" 경로에 지정되지 않았습니다{left}.",
+                "  🔴 이것은 **이 경로를 끝까지 실행했다**는 뜻이고, 이 패로"
+                " 가능한 전개를 다 보았다는 뜻이 아닙니다.",
+            ]
+        if progress is not None:
+            return [
+                f"  🔴 **경로가 {progress.done}/{len(progress.line.steps)}"
+                f"단계에서 멈췄습니다** — 검증용 선택 방식이 다음 단계의"
+                f" 행동을 고르지 못했습니다{left}.",
+            ]
+        return [
+            f"  🔴 검증용 선택 방식이 고를 행동을 찾지 못했습니다{left}."
+        ]
+    said = _STOPPED_KO.get(run.stopped_kind)
+    if said is None:
+        #: 🔴 모르는 낱말을 뜻으로 바꾸지 않는다 — 원문을 그대로 적는다.
+        return [f"  멈춘 종류: `{run.stopped_kind}` · {run.stopped_reason}"]
+    return [f"  {said}{left}"]
+
+
+def _support_lines(run) -> "list[str]":
+    """
+    **지원 범위.** 🔴 "경로 완료" 와 "전개 전체를 검증했다" 를 가른다.
+
+    미지원 사유는 :attr:`~deck.opening.OpeningRun.unsupported` 를 그대로
+    쓴다 — 그 목록은 ``note_unsupported`` 가 **자리 메모를 뺀 열쇠로** 이미
+    한 번씩만 모아 둔 것이다 (``WithheldAction.scope`` 의 설명). 그래서 여기서
+    문장을 다시 묶거나 쪼개지 않는다: 종류 · 빠진 규칙의 이름 · 사유가
+    다르면 다른 줄로 남는다.
+    """
+    lines: list[str] = []
+    if run.fully_supported:
+        lines.append("  ✅ 이 실행 중에 **미지원으로 보류된 후보는"
+                     " 없었습니다.**")
+        return lines
+    at_place = sum(1 for s in run.steps if s.unsupported)
+    during = sum(1 for s in run.steps if s.unsupported_during)
+    where = []
+    if at_place:
+        where.append(f"걸음이 끝난 자리 {at_place}곳")
+    if during:
+        where.append(f"자동 처리 도중 {during}걸음")
+    lines.append(
+        f"  🔴 **엔진이 지원하지 않아 후보가 되지 못한 사유"
+        f" {len(run.unsupported)}건**을 지나왔습니다"
+        + (f" ({' · '.join(where)})" if where else "")
+        + " — 규칙이 막은 것이 아니라 **이 저장소에 그 규칙이 없다**는"
+        " 뜻입니다. 같은 사유는 한 번씩만 적었습니다."
+    )
+    shown = run.unsupported[:BRIEF_UNSUPPORTED_LIMIT]
+    lines.extend(f"    - {item}" for item in shown)
+    rest = len(run.unsupported) - len(shown)
+    if rest > 0:
+        lines.append(f"    … 남은 {rest}건은 **상세 기록**에 있습니다"
+                     f" (버리지 않았습니다).")
+    return lines
+
+
+def render_opening_brief(setup, run, repository=None, *,
+                         line=None, progress=None) -> str:
+    """
+    **기본 응답용 짧은 요약** (Phase 6-AE).
+
+    🔴 **판정하지 않는다.** 이미 기록된 :class:`~deck.opening.OpeningRun` ·
+    :class:`~deck.opening.OpeningSetup` 만 읽고, 엔진을 다시 돌리지도
+    상태를 건드리지도 않는다. ``line`` · ``progress`` 는 부르는 쪽이 이미
+    만든 값을 넘기는 자리다 — 여기서 다시 계산하면 두 계층의 답이 달라질 수
+    있다.
+
+    🔴 **짧게 적는 것과 숨기는 것은 다르다.** 상한에 걸려 뺀 줄은 **몇
+    줄인지 적고** 상세 기록을 가리킨다 (:func:`_brief_steps` ·
+    :func:`_support_lines`). 그리고 "검증 불가" 를 "검증 통과" 로 바꾸지
+    않는다 — 수와 규칙 이름을 그대로 적고 자세한 설명만 상세로 보낸다.
+
+    전체 기록은 :func:`render_opening_setup` · :func:`render_opening_run` ·
+    :func:`render_opening_board` 가 그대로 들고 있다 (CLI 와 첨부가 그것을
+    쓴다). 이 함수는 **그 기록을 대신하지 않는다.**
+    """
+    lines = ["", "전개 실행 요약", _RULE]
+    if not setup.can_run:
+        lines.append("  🔴 **실행하지 않았습니다** — 입력 검증을 통과하지"
+                     " 못했습니다.")
+        for blocker in setup.blockers:
+            lines.append(f"    - {blocker}")
+        for finding in setup.violations:
+            lines.append(f"    - 🔴 {finding.rule}: {finding.detail}")
+        lines.append("  🔴 실행하지 않았으므로 **걸음 수도 성공 표시도"
+                     " 없습니다.** 전체 검증 결과는 상세 기록에 있습니다.")
+        return "\n".join(lines)
+
+    #: ① 실행 결과 요약
+    if line is not None and progress is not None:
+        lines.append(f"  검증용 전개 경로 `{line.name}` — {progress.describe_ko()}")
+        lines.append(f"  경로: {line.title_ko}")
+    elif line is not None:
+        lines.append(f"  검증용 전개 경로 `{line.name}` 으로 실행했습니다.")
+    else:
+        lines.append("  검증용 기준점 `first_meaningful` 으로 실행했습니다"
+                     " (사람이 적어 둔 경로를 쓰지 않았습니다) —"
+                     " 판을 바꾸는 후보의 첫 번째를 집습니다.")
+    if line is not None and line.resolution_preferences:
+        #: 🔴 **해결 시점의 선택을 따로 적는다** (6-AD §6). 발동 기록의
+        #: 대상이 비어 있는 것이 **정상**이므로, 그 칸만 보고 "아무것도
+        #: 고르지 않았다" 로 읽히지 않게 한다.
+        wanted = " · ".join(
+            f"`{card_id}`" for card_id in line.resolution_preferences
+        )
+        lines.append(f"  경로가 해결 중에 고르려는 카드: {wanted}"
+                     f" (엔진이 낸 허용 후보 밖에서 끌어오지 않습니다)")
+    #: 🔴 **이 설명은 한 번만 적는다** (6-AE §2-①). 그래서 한 줄에
+    #: 두 사실을 함께 적는다 — **무엇이 아닌가**(최선 전개 · 자율 탐색 ·
+    #: 범용 AI) 와 **해결 중의 선택을 어떻게 했는가**(`first-permitted`).
+    lines.append("  🔴 사람이 적어 둔 경로를 따라갔을 뿐이고 **최선 전개"
+                 " 탐색도, 자율 탐색도, 범용 AI 도 아닙니다** — **최선의"
+                 " 전개가 아닙니다.** 해결 중의 카드 선택은"
+                 " `first-permitted` (허용된 후보의 앞쪽) 입니다.")
+    lines.append(f"  실행 {run.executed}걸음 · 상태 변경"
+                 f" {run.state_changes}걸음 · **효과의 조작 수행"
+                 f" {run.effects_resolved}걸음**")
+    if run.effects_resolved_without_operation:
+        lines.append(
+            f"  🔴 **해결됐지만 조작이 없었던 걸음"
+            f" {run.effects_resolved_without_operation}걸음** —"
+            f" 미지원도 오류도 아닙니다 (규칙대로 해결되고 할 일이"
+            f" 없었습니다). 사유는 아래 걸음 줄에 있습니다."
+        )
+
+    #: ② 실제 실행한 주요 행동
+    lines.append("")
+    lines.append("  실행한 행동")
+    lines.extend(_brief_steps(run, repository)
+                 or ["  실행한 걸음이 없습니다."])
+
+    #: ③ 최종 상태
+    lines.append("")
+    lines.append("  최종 상태 (실제 GameState)")
+    lines.extend(_brief_board(setup, repository))
+
+    #: ④ 멈춘 이유와 지원 범위
+    stopped = _stopped_lines(run, progress)
+    if stopped:
+        lines.append("")
+        lines.append("  멈춘 이유")
+        lines.extend(stopped)
+    lines.append("")
+    lines.append("  지원 범위")
+    lines.extend(_support_lines(run))
+
+    #: ⑤ 검증의 한계 — 🔴 **짧게 적지만 "검증 불가" 를 지우지 않는다.**
+    if setup.unverifiable:
+        lines.append("")
+        lines.append(f"  ⚠️ 검증 불가 {len(setup.unverifiable)}건"
+                     " — **문제 없음이 아닙니다**: "
+                     + " · ".join(f.rule for f in setup.unverifiable))
+    return "\n".join(lines)

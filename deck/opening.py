@@ -512,6 +512,55 @@ class ExecutedStep:
     §7 이 요구하는 기록이고, 번호는 판마다 달라 재현에 쓸 수 없다.
     """
 
+    @property
+    def step_validity(self):
+        """
+        이 걸음의 결과 코드가 **확정 거부인가 모름인가** (Phase 6-AE).
+
+        :data:`~engine.validation.CODE_VALIDITY` 에서 파생된다 — 보고가
+        코드 이름을 보고 짐작하지 않게 하려고 여기서 한 번 묻는다.
+        :attr:`step_code` 는 ``ValidationCode`` 의 **이름**이므로 조회이고
+        파싱이 아니다. 이름이 그 enum 에 없으면 ``None`` 이다 (그러면 읽는
+        쪽은 "알 수 없다" 로 다룬다 — 기본값을 만들지 않는다).
+        """
+        from engine.validation import CODE_VALIDITY, ValidationCode
+
+        code = ValidationCode.__members__.get(self.step_code)
+        return CODE_VALIDITY[code] if code is not None else None
+
+    @property
+    def outcome(self) -> str:
+        """
+        이 걸음이 **넷 중 무엇인가** (Phase 6-AE). 한 낱말이다.
+
+        ==================  ==================================================
+        ``"operated"``        수락 · 해결 · **이 효과의 조작이 수행되었다**
+        ``"idle"``            수락 · 해결 · 확인된 사유로 **조작 없음**
+                             (6-AD 후속2 의 정상 불발)
+        ``"unknown"``         해결을 **확정하지 못했다** (코드가 ``UNKNOWN``)
+        ``"refused"``         확정 거부 · 잘못된 선택 (코드가 ``INVALID``)
+        ``"flow"``            효과를 발동한 걸음이 아니다 (소환 · 흐름 등)
+        ==================  ==================================================
+
+        🔴 **새 판정을 하지 않는다.** 이미 기록된 네 칸
+        (:attr:`accepted` · :attr:`resolved` ·
+        :attr:`resolved_without_operation` · :attr:`effect_events`) 과
+        코드의 validity 만 읽는다 — 문장을 보지 않는다.
+        """
+        from engine.validation import ActionValidity
+
+        if self.effect_ref is None:
+            return "flow"
+        if self.accepted and self.resolved:
+            if self.effect_ref in self.effect_events:
+                return "operated"
+            if self.resolved_without_operation:
+                return "idle"
+        validity = self.step_validity
+        if validity is ActionValidity.UNKNOWN:
+            return "unknown"
+        return "refused"
+
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         mark = "✔" if self.accepted and self.resolved else (
             "~" if self.accepted else "✗")
@@ -568,6 +617,22 @@ class OpeningRun:
 
     Simulator 와 ``/combo`` 까지 가는 것이 이것이다 — 걸음별로도 남고
     (:attr:`ExecutedStep.unsupported`) 여기 모인다.
+    """
+    stopped_candidates: tuple[str, ...] = ()
+    """
+    멈춘 자리에 **남아 있던 행동 종류**들 (Phase 6-AE).
+
+    🔴 **보고가 문장을 다시 파싱하지 않게 하려고 둔다.** 이 사실은 이미
+    :attr:`stopped_reason` 의 문장 안에 들어 있는데, 읽는 쪽이 그것을 쓰려면
+    *"(후보 2건: ['end_phase', 'set_spell_trap'])"* 를 되파싱해야 한다 —
+    그러면 문구를 고칠 때마다 소비자가 조용히 깨진다. 그래서 **같은 자리에서
+    이미 계산한 값**을 그대로 적어 둔다.
+
+    🔴 **판정하지 않는다.** ``legal.allowed`` 의 ``kind.value`` 를 정렬해
+    옮긴 것뿐이고, 어느 카드인지는 담지 않는다 (``WithheldAction`` 이 식별자를
+    들지 않는 것과 같은 경계다).
+
+    멈춘 자리에서 후보를 세지 못한 경우(듀얼 종료 · 입력 거절)는 비어 있다.
     """
 
     @property
@@ -954,6 +1019,7 @@ def execute_opening(
             held = "; ".join(f"{w.kind.value}: {w.reason}"
                              for w in legal.withheld)
             run.stopped_kind = "no_candidates"
+            run.stopped_candidates = ()
             run.stopped_reason = (
                 f"P{duel.to_act} 의 후보가 없습니다 ({held or '보류 이유 없음'})"
             )
@@ -999,6 +1065,9 @@ def execute_opening(
                 "unsupported" if flow_only and missing_here
                 else "flow_only" if flow_only else "not_chosen"
             )
+            #: 🔴 **이미 센 것을 적어 둔다** (6-AE) — 보고가 위 문장을
+            #: 되파싱하지 않게 한다 (``OpeningRun.stopped_candidates``).
+            run.stopped_candidates = tuple(kinds)
             run.stopped_reason = (
                 f"판을 바꿀 후보가 없고 남은 후보는 흐름뿐이지만"
                 f" ({kinds}), 🔴 이 자리에 **지원하지 않아 후보가 되지"
