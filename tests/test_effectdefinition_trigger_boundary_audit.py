@@ -589,7 +589,12 @@ def test_16_this_audit_changed_no_production_file():
     # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
     # 아니다** — 담는 것은 "1턴에 몇 번까지인가" 이고 그 카드 텍스트에서
     # 옮긴 값이다. 아래 교집합이 여전히 비어 있는 것이 그 증거다.
-    assert len(dataclasses.fields(EffectDefinition)) == 13
+    # 🔴 Phase 6-AD 후속2 에서 13 → 14 칸 (``resolution_skip``). 그 칸도
+    # **사건 칸이 아니다** — 담는 것은 "해결 시점에 일을 생략하고도 정상
+    # 해결되는 조건" 둘과 그 근거이고, 유발과 아무 관계가 없다. 아래의
+    # ``{"code", "point", "event", "trigger", "timing"}`` 교집합이 여전히
+    # 비어 있는 것이 그 증거다.
+    assert len(dataclasses.fields(EffectDefinition)) == 14
     #: ``TriggerSpec`` 의 칸은 3-E-39 의 9 에서 6-E 의 10 으로 움직였다
     #: (``summons``: 통상소환과 특수소환이 같은 ``MONSTER_SUMMONED`` 시점으로
     #: 번역되므로, 칸이 없으면 통상소환 사건이 특수소환 전용 효과를 후보로

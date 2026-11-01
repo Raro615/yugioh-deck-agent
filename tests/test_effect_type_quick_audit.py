@@ -641,7 +641,13 @@ def test_10_effect_definition_has_no_effect_types_field():
     # 아니고 ``effect_types`` 도 아니다** — 담는 것은 "1턴에 몇 번까지인가"
     # 이고 그 카드 텍스트에서 옮긴 값이다. 아래 집합 비교가 그것을 이름으로
     # 고정하므로, 이름이 다른 칸이 끼어들면 여기서 깨진다.
-    assert len(definition) == 13
+    #
+    # 🔴 Phase 6-AD 후속2 에서 13 → 14 칸 (``resolution_skip``). 그 칸도
+    # **사건 칸이 아니고 ``effect_types`` 도 아니다** — 담는 것은 "해결 시점에
+    # 일을 생략하고도 정상 해결되는 조건" 둘과 그 근거이고, 공식 스크립트의
+    # 해결 함수에서 읽은 값이다 (``c93920420.lua`` 의 ``s.spop1``). **어떤
+    # 사건**인지도 **어떤 효과 종류**인지도 담지 않는다.
+    assert len(definition) == 14
     assert definition == {
         "effect_ref",
         "source_card_id",
@@ -655,6 +661,7 @@ def test_10_effect_definition_has_no_effect_types_field():
         "guards",
         "activation_waits_for_event",  # Phase 6-Q — 사건을 **기다리는가** (bool). 어떤 사건인지는 담지 않는다
         "use_limit",  # Phase 6-AC — 「1턴에 몇 번까지인가」. effect_types 가 아니다
+        "resolution_skip",  # Phase 6-AD 후속2 — 해결 시 생략 조건 + 근거. effect_types 가 아니다
         "provenance",
     }
 

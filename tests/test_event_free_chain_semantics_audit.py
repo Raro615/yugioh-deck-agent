@@ -304,7 +304,11 @@ def test_07_no_field_in_the_definition_can_hold_the_timing_code():
     # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
     # 아니다** — "1턴에 몇 번까지인가" 이고 그 카드 텍스트에서 옮긴 값이다.
     # 아래 교집합이 여전히 비어 있는 것이 그 증거다.
-    assert len(fields) == 13
+    # 🔴 Phase 6-AD 후속2 에서 13 → 14 칸 (``resolution_skip``). 그 칸도
+    # **사건 칸이 아니다** — 담는 것은 "해결 시점에 일을 생략하고도 정상
+    # 해결되는 조건" 둘과 그 근거이고, 공식 스크립트의 해결 함수에서 읽은
+    # 값이다. 아래 교집합이 여전히 비어 있는 것이 그 증거다.
+    assert len(fields) == 14
     assert fields & {"code", "trigger_event", "timing", "point", "event"} == set()
 
     #: ``TriggerSpec`` 에도 없다 — 3-E-31 이 측정한 그대로다.
@@ -531,7 +535,11 @@ def test_12_this_audit_added_no_production_structure():
     # 🔴 Phase 6-AC 에서 12 → 13 칸 (``use_limit``). 그 칸도 **사건 칸이
     # 아니다** — "1턴에 몇 번까지인가" 이고 그 카드 텍스트에서 옮긴 값이다.
     # 아래 교집합이 여전히 비어 있는 것이 그 증거다.
-    assert len(dataclasses.fields(EffectDefinition)) == 13
+    # 🔴 Phase 6-AD 후속2 에서 13 → 14 칸 (``resolution_skip``). 그 칸도
+    # **사건 칸이 아니다** — 담는 것은 "해결 시점에 일을 생략하고도 정상
+    # 해결되는 조건" 둘과 그 근거이고, 공식 스크립트의 해결 함수에서 읽은
+    # 값이다. 아래 교집합이 여전히 비어 있는 것이 그 증거다.
+    assert len(dataclasses.fields(EffectDefinition)) == 14
     #: 🔴 칸 수는 3-E-19 9 → 6-E 10 (``summons``) → **6-F 11**
     #: (``subject``) 로 움직였다. 이 감사가 production 을 늘리지
     #: 않았다는 사실은 그대로이고, 늘린 주체는 6-E · 6-F 다.
