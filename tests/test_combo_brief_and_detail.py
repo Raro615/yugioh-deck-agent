@@ -446,6 +446,11 @@ def test_h01_a_refused_input_is_not_the_same_as_a_missing_recipe(repository):
     assert "실행 5걸음" not in summary
     #: 🔴 그래도 전체 검증 결과는 첨부에 남는다.
     assert "선공 상태 구성" in _detail(response)
+    #: 🔴 **그 첨부에는 정적 계획이 없고, 가리키는 줄도 그렇게 적는다**
+    #: (6-AE 보완 — 이 줄에 "정적 계획" 을 적었다가 ``test_01`` 이 잡았다).
+    assert "정적 계획" not in summary
+    assert "정적 계획" not in _detail(response)
+    assert "📎" in summary
 
 
 # ======================================================================
@@ -527,15 +532,21 @@ def test_j02_rendering_does_not_touch_the_state():
 def test_k01_the_attachment_is_split_not_truncated():
     """
     **첨부가 상한을 넘으면 나눈다** — 버리지 않는다 (6-AE §4).
+
+    🔴 **Phase 6-AE 보완에서 돌려주는 값이 바뀌었다** —
+    :class:`~app.discord_bot.ComboDetail` 하나다 (담은 것 + **담지 못한
+    것**). 그 이유는 ``test_m01`` 의 설명에 있다.
     """
     text = "\n".join(f"줄 {index}" for index in range(1, 2001))
-    parts = bot.combo_attachments(text, limit=4096)
+    detail = bot.combo_attachments(text, limit=4096)
+    parts = detail.attachments
     assert len(parts) > 1
     for part in parts:
         assert part.size <= 4096, part.size
     #: 🔴 한 줄도 사라지지 않았다.
     rebuilt = "\n".join(part.text for part in parts)
     assert rebuilt.splitlines() == text.splitlines()
+    assert detail.complete is True
     #: 🔴 파일명이 갈라지고, 사용자 입력이 들어가지 않는다.
     assert [part.filename for part in parts[:2]] == [
         "combo-detail-1.txt", "combo-detail-2.txt",
@@ -544,30 +555,52 @@ def test_k01_the_attachment_is_split_not_truncated():
 
 def test_k02_one_file_keeps_the_plain_name():
     """상한 안에 들어가면 **나누지 않는다** — 이름도 그대로다."""
-    parts = bot.combo_attachments("짧은 기록")
-    assert [p.filename for p in parts] == [bot.COMBO_DETAIL_FILENAME]
-    assert parts[0].text == "짧은 기록"
+    detail = bot.combo_attachments("짧은 기록")
+    assert [p.filename for p in detail.attachments] == [
+        bot.COMBO_DETAIL_FILENAME]
+    assert detail.attachments[0].text == "짧은 기록"
+    assert detail.complete is True
+    assert detail.notice == ""
 
 
 def test_k03_a_line_longer_than_the_limit_is_split_by_characters():
     """한 줄이 상한을 넘어도 **버리지 않는다.**"""
-    parts = bot.combo_attachments("가" * 500, limit=256)
+    detail = bot.combo_attachments("가" * 500, limit=256)
+    parts = detail.attachments
     assert len(parts) > 1
     assert "".join(p.text for p in parts).replace("\n", "") == "가" * 500
     for part in parts:
         assert part.size <= 256, part.size
+    assert detail.complete is True
 
 
 def test_k04_too_many_parts_say_how_much_did_not_fit():
     """
     첨부 수 상한을 넘으면 **몇 줄을 담지 못했는지 적는다** — 조용히 끊지
     않는다. 🔴 실측 범위(상세 15KB)에서는 일어나지 않는다.
+
+    🔴 **Phase 6-AE 보완이 이 시험을 넓혔다.** 전에는 **안내 문구가 있는지만**
+    보았고 최종 파일 크기를 세지 않았다 — 그래서 외부 검토가 찾은 오류 A
+    (안내를 덧붙이고 크기를 다시 보지 않는다) 를 잡지 못했다. 지금은 안내
+    존재 · 최종 크기 · 개수 · **누락 사실**을 함께 센다.
     """
     text = "\n".join(f"줄 {index}" for index in range(1, 400))
-    parts = bot.combo_attachments(text, limit=256, count_limit=2)
+    detail = bot.combo_attachments(text, limit=256, count_limit=2)
+    parts = detail.attachments
+    #: ① 개수가 상한 안이다.
     assert len(parts) == 2
+    #: ② 🔴 **최종 크기가 상한 안이다** (안내문 · 줄바꿈까지 포함한 값).
+    for part in parts:
+        assert part.size <= 256, (part.filename, part.size)
+    #: ③ 안내가 있다.
     assert "담지 못했습니다" in parts[-1].text
     assert "CLI" in parts[-1].text
+    #: ④ 🔴 **안내의 수와 실제 누락이 같다** — 문구와 사실이 어긋나지 않는다.
+    assert detail.complete is False
+    assert f"{detail.omitted_lines}줄" in parts[-1].text
+    #: ⑤ 파일 안에 적었으므로 파일 밖 안내는 비어 있다 (같은 말을 두 번
+    #: 하지 않는다).
+    assert detail.notice == ""
 
 
 def test_k05_the_overflow_notice_points_at_the_attachment():
@@ -648,3 +681,381 @@ def test_l03_the_engine_layers_do_not_import_discord():
         for path in pathlib.Path(folder).rglob("*.py"):
             text = path.read_text(encoding="utf-8")
             assert "import discord" not in text, path
+
+
+# ======================================================================
+# M · N. Phase 6-AE 보완 — **상한을 지키는 경계** (외부 검토 A · B)
+# ======================================================================
+#
+# 외부 검토가 기존 시험이 보지 않던 두 자리를 찾았다. 🔴 **둘 다 합성 입력과
+# 전송 대역으로 재현한 것이고, 실제 Discord 장애가 있었다는 뜻이 아니다.**
+#
+# ==========  ===========================================================
+# **A**        첨부 수 초과 안내를 덧붙일 때 **바이트 상한을 다시 보지
+#             않았다** — 실측: ``limit=100`` · ``count_limit=1`` 에서
+#             마지막 파일이 **277바이트**
+# **B**        첨부 전송 실패 안내를 덧붙일 때 **메시지 상한을 다시 보지
+#             않았다** — 실측: 2,000자 + 안내 = **2,052자**, 상한을
+#             거절하는 대역에서 재전송도 실패
+# ==========  ===========================================================
+def _sizes(detail) -> "list[int]":
+    return [item.size for item in detail.attachments]
+
+
+def test_m01_the_count_limit_notice_stays_inside_the_byte_limit():
+    """
+    **A 재현** — 안내문까지 포함한 최종 크기가 상한 안이다.
+
+    🔴 **검토가 적어 준 그 입력 그대로 센다.** 그리고 안내가 사라지지 않고,
+    "전체를 담았다" 고 말하지 않는다.
+    """
+    detail = bot.combo_attachments(
+        "a" * 99 + "\n" + "b" * 99, limit=100, count_limit=1,
+    )
+    #: ① 🔴 모든 첨부가 상한 안이다 (안내문 · 구분자 · 줄바꿈까지 센다).
+    assert all(size <= 100 for size in _sizes(detail)), _sizes(detail)
+    #: ② 개수도 상한 안이다.
+    assert len(detail.attachments) <= 1
+    #: ③ 🔴 **누락 사실이 사라지지 않았다** — 파일 안이든 밖이든 적힌다.
+    assert detail.complete is False
+    assert detail.omitted_lines >= 1
+    said = "\n".join(item.text for item in detail.attachments) + detail.notice
+    assert "담지 못했습니다" in said
+    #: ④ 🔴 **담은 것은 보존된다** — 앞쪽 내용이 깨지지 않는다.
+    assert detail.attachments[0].text.startswith("a")
+    #: ⑤ UTF-8 이 깨지지 않는다.
+    for item in detail.attachments:
+        assert item.data.decode("utf-8") == item.text
+
+
+def test_m02_the_old_two_part_case_also_stays_inside_the_limit():
+    """**A** — 기존 ``test_k04`` 의 입력(256바이트 · 2개)도 같다."""
+    text = "\n".join(f"줄 {index}" for index in range(1, 400))
+    detail = bot.combo_attachments(text, limit=256, count_limit=2)
+    assert all(size <= 256 for size in _sizes(detail)), _sizes(detail)
+    assert len(detail.attachments) <= 2
+    assert detail.complete is False
+    said = "\n".join(i.text for i in detail.attachments) + detail.notice
+    assert "담지 못했습니다" in said
+    assert "CLI" in said
+
+
+def test_m03_multibyte_text_is_never_cut_in_the_middle_of_a_character():
+    """**A** — 한글 · 이모지가 섞여도 **글자 중간에서 끊지 않는다.**"""
+    text = "\n".join(["가나다라마바사" * 3, "🔴🟡🟢" * 5, "ascii" * 20])
+    detail = bot.combo_attachments(text, limit=64, count_limit=20)
+    for item in detail.attachments:
+        assert item.size <= 64, item.size
+        #: 🔴 깨진 바이트가 없다 — 되읽어도 같다.
+        assert item.data.decode("utf-8") == item.text
+    #: 🔴 **담겼으면 전부 담겼다** (상한 안에 들어가는 입력이다).
+    assert detail.complete is True
+    assert "".join(i.text for i in detail.attachments).replace("\n", "") == \
+        text.replace("\n", "")
+
+
+def test_m04_an_exact_fit_is_one_attachment_and_complete():
+    """**A** — 상한에 **정확히** 맞는 입력은 하나로 담기고 완전하다."""
+    text = "a" * 100
+    detail = bot.combo_attachments(text, limit=100, count_limit=1)
+    assert len(detail.attachments) == 1
+    assert detail.attachments[0].size == 100
+    assert detail.attachments[0].text == text
+    assert detail.complete is True
+    assert detail.notice == ""
+
+
+def test_m05_a_long_line_and_many_lines_lose_nothing_when_they_fit():
+    """**A** — 긴 한 줄과 여러 줄이 섞여도 **순서와 내용이 보존된다.**"""
+    text = "\n".join(["짧은 줄", "가" * 400, "또 짧은 줄", "나" * 50])
+    detail = bot.combo_attachments(text, limit=256, count_limit=50)
+    assert detail.complete is True
+    for item in detail.attachments:
+        assert item.size <= 256, item.size
+    rebuilt = "".join(item.text for item in detail.attachments)
+    assert rebuilt.replace("\n", "") == text.replace("\n", "")
+
+
+def test_m06_an_empty_record_makes_no_empty_attachment():
+    """
+    **A** — 빈 입력에 **빈 첨부를 만들지 않는다.**
+
+    🔴 그리고 "담지 못했다" 로도 적지 않는다 — 담을 것이 없었을 뿐이다.
+    """
+    detail = bot.combo_attachments("", limit=100, count_limit=3)
+    assert detail.attachments == ()
+    assert detail.complete is True
+    assert detail.omitted_lines == 0
+    assert detail.notice == ""
+
+
+def test_m07_a_notice_that_cannot_fit_goes_outside_the_file():
+    """
+    **A** — 안내문이 들어갈 수 없는 작은 상한에서도 **상한을 어기지 않고
+    조용히 누락하지 않는다.**
+
+    🔴 그때는 파일 밖의 짧은 전달 상태 안내로 내보낸다
+    (:attr:`~app.discord_bot.ComboDetail.notice`).
+    """
+    detail = bot.combo_attachments("가나다\n" * 20, limit=12, count_limit=1)
+    for item in detail.attachments:
+        assert item.size <= 12, item.size
+    assert len(detail.attachments) <= 1
+    assert detail.complete is False
+    #: 🔴 파일 안에 넣을 수 없었으므로 **밖으로** 나온다.
+    assert detail.notice
+    assert "담지 못했습니다" in detail.notice
+    #: 🔴 파일 안에는 안내가 들어가지 않았다 (들어갔다면 상한을 넘는다).
+    for item in detail.attachments:
+        assert "담지 못했습니다" not in item.text
+
+
+def test_m08_unusable_limits_are_refused():
+    """**A** — 쓸 수 없는 ``limit`` · ``count_limit`` 은 **명확히 거절한다.**"""
+    for bad in (0, -1):
+        with pytest.raises(ValueError):
+            bot.combo_attachments("기록", limit=bad)
+        with pytest.raises(ValueError):
+            bot.combo_attachments("기록", count_limit=bad)
+    with pytest.raises(ValueError):
+        bot.combo_attachments("기록", limit=1.5)
+    with pytest.raises(ValueError):
+        bot.combo_attachments("기록", count_limit=True)
+
+
+@pytest.mark.real_card
+@requires_official_db
+def test_m09_a_partial_attachment_is_not_called_the_whole_record(
+    repository, monkeypatch,
+):
+    """
+    **A** — 🔴 **일부만 담겼는데 "전체가 첨부에 있다" 고 쓰지 않는다.**
+
+    상한을 작게 **대역으로** 바꿔 자르게 만든다 — 바꾸는 것은 나누는 함수의
+    상한 둘뿐이고, 엔진 · 요약 구성은 그대로다.
+    """
+    real = bot.combo_attachments
+    seen: list = []
+
+    def _small(text, *args, **kwargs):
+        made = real(text, limit=600, count_limit=2)
+        seen.append(made)
+        return made
+
+    monkeypatch.setattr(bot, "combo_attachments", _small)
+    response = _response(repository)
+    summary = _summary(response)
+    assert seen, "나누는 함수가 불리지 않았습니다"
+    detail = seen[-1]
+    #: ① 잘렸다 — 그래서 "전체" 라고 쓰지 않는다.
+    assert detail.complete is False
+    assert "전체 기록은 첨부" not in summary
+    assert "일부만" in summary
+    #: ② 몇 줄을 담지 못했는지 요약과 첨부가 **같은 수**를 말한다.
+    assert f"{detail.omitted_lines}줄" in summary
+    #: ③ 첨부는 상한을 지킨다.
+    for item in response.attachments:
+        assert item.size <= 600, item.size
+    assert len(response.attachments) <= 2
+    #: ④ 전체를 어디서 볼 수 있는지 적는다.
+    assert "CLI" in summary
+
+
+# ======================================================================
+# N. 전송 — 🔴 **sender 대역으로만 확인한다** (실제 Discord 전송 없음)
+# ======================================================================
+class _Sender:
+    """
+    ``interaction.followup`` 자리의 대역.
+
+    🔴 **상한을 실제로 거절한다** — 그러지 않으면 "길이를 다시 보지 않았다"
+    를 잴 수 없다 (검토가 찾은 오류 B 가 바로 그 자리다).
+
+    ``fail_with_files`` 가 참이면 **첨부가 붙은 전송만** 실패한다.
+    """
+
+    def __init__(self, *, fail_with_files=False, fail_always=False,
+                 limit=None, error=None):
+        self.fail_with_files = fail_with_files
+        self.fail_always = fail_always
+        self.limit = limit if limit is not None else 2000
+        self.error = error or RuntimeError("합성 전송 실패")
+        self.sent: list[str] = []
+        self.files: list = []
+        self.attempts: list[tuple[str, int]] = []
+
+    async def send(self, content, **kwargs):
+        files = kwargs.get("files") or ([kwargs["file"]]
+                                        if kwargs.get("file") else [])
+        self.attempts.append((content, len(files)))
+        if len(content) > self.limit:
+            raise AssertionError(
+                f"전송 대역이 거절했습니다: {len(content)}자 > {self.limit}자"
+            )
+        if self.fail_always or (files and self.fail_with_files):
+            raise self.error
+        self.sent.append(content)
+        self.files.append(files)
+
+
+def _await(coro):
+    """
+    코루틴 하나를 돌린다.
+
+    🔴 이름을 ``_run`` 으로 두면 **위쪽의 합성 ``OpeningRun`` 만드는 helper**
+    를 가린다 (실제로 그렇게 깨졌다 — ``_run() got an unexpected keyword
+    argument 'stopped_kind'``).
+    """
+    import asyncio
+
+    return asyncio.run(coro)
+
+
+def _buffers(sender) -> list:
+    return [item.fp for group in sender.files for item in group]
+
+
+def test_n01_a_normal_send_attaches_once_and_closes_the_buffers():
+    """**B 기준선** — 정상 전송: 첨부는 마지막 메시지에 한 번, 버퍼는 닫힌다."""
+    pytest.importorskip("discord", reason="봇 전용 의존성")
+    sender = _Sender()
+    response = bot.ComboResponse(
+        messages=("첫 번째", "두 번째"),
+        attachments=(bot.ComboAttachment("combo-detail.txt", "상세"),),
+    )
+    assert _await(bot.send_combo_response(sender, response)) == 2
+    assert sender.sent == ["첫 번째", "두 번째"]
+    #: 🔴 첨부는 **마지막 메시지에만** 붙는다.
+    assert sender.files[0] == []
+    assert [item.filename for item in sender.files[1]] == [
+        "combo-detail.txt"]
+    #: 🔴 **버퍼가 남지 않는다.**
+    assert all(buffer.closed for buffer in _buffers(sender))
+
+
+def test_n02_a_failed_attachment_send_keeps_every_message_in_the_limit():
+    """
+    **B 재현** — 2,000자 메시지 + 첨부 전송 실패.
+
+    🔴 검토 당시: fallback 이 2,052자가 되어 **재전송도 실패**했다. 이제
+    모든 전송이 상한 안이고, 실패 안내가 사라지지 않는다.
+    """
+    pytest.importorskip("discord", reason="봇 전용 의존성")
+    sender = _Sender(fail_with_files=True)
+    full = "가" * bot.DISCORD_MESSAGE_LIMIT
+    response = bot.ComboResponse(
+        messages=(full,),
+        attachments=(bot.ComboAttachment("combo-detail.txt", "상세"),),
+    )
+    _await(bot.send_combo_response(sender, response))
+    #: ① 🔴 **모든 전송 시도**가 상한 안이다 (대역이 거절하지 않았다).
+    for content, _count in sender.attempts:
+        assert len(content) <= bot.DISCORD_MESSAGE_LIMIT, len(content)
+    #: ② 요약은 전달됐다.
+    assert any(full in text for text in sender.sent)
+    #: ③ 🔴 **실패 안내가 사라지지 않았다.**
+    said = "\n".join(sender.sent)
+    assert "첨부를 보내지 못했습니다" in said
+    #: ④ 🔴 첨부를 받았다고 오해하게 하지 않는다.
+    assert "전체 기록은 첨부" not in said
+    #: ⑤ 🔴 **원인을 단정하지 않는다** — 크기 문제라고 적지 않는다.
+    assert "크기" not in said
+    assert "봇 로그" in said
+    #: ⑥ 버퍼 정리는 ``test_n05`` 가 센다 (여기서는 전송 길이만 본다).
+
+
+def test_n03_only_the_last_message_is_retried_not_the_earlier_ones():
+    """**B** — 여러 메시지 중 **마지막 첨부 전송만** 실패한다 → 앞은 한 번만."""
+    pytest.importorskip("discord", reason="봇 전용 의존성")
+    sender = _Sender(fail_with_files=True)
+    response = bot.ComboResponse(
+        messages=("첫 번째", "두 번째", "세 번째"),
+        attachments=(bot.ComboAttachment("combo-detail.txt", "상세"),),
+    )
+    _await(bot.send_combo_response(sender, response))
+    #: 🔴 **앞의 두 메시지를 다시 보내지 않았다.**
+    assert sender.sent.count("첫 번째") == 1
+    assert sender.sent.count("두 번째") == 1
+    assert [content for content, _ in sender.attempts].count("첫 번째") == 1
+    #: 🔴 메시지를 무제한 늘리지 않았다 — 안내 하나만 더해진다.
+    assert len(sender.attempts) <= len(response.messages) + 2
+
+
+def test_n04_a_failing_fallback_is_not_reported_as_success(caplog):
+    """
+    **B** — fallback 까지 실패하면 **성공으로 보고하지 않고 오류를 남긴다.**
+    """
+    import logging
+
+    pytest.importorskip("discord", reason="봇 전용 의존성")
+    sender = _Sender(fail_always=True)
+    response = bot.ComboResponse(
+        messages=("요약",),
+        attachments=(bot.ComboAttachment("combo-detail.txt", "상세"),),
+    )
+    with caplog.at_level(logging.ERROR, logger=bot.LOGGER_NAME):
+        with pytest.raises(RuntimeError):
+            _await(bot.send_combo_response(sender, response))
+    assert sender.sent == []
+    #: 🔴 오류를 남겼다 (성공으로 보고하지 않았다).
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert any("전달되지 않았습니다" in record.getMessage()
+               for record in caplog.records)
+
+
+def test_n05_the_buffers_are_closed_on_the_failure_path_too():
+    """**B** — 🔴 **성공 · 실패 양쪽에서** 파일 버퍼가 정리된다."""
+    pytest.importorskip("discord", reason="봇 전용 의존성")
+    import io
+    import unittest.mock as mock
+
+    import discord
+
+    made: list = []
+
+    class _File(discord.File):
+        def __init__(self, fp, **kwargs):
+            super().__init__(fp, **kwargs)
+            made.append(fp)
+
+    sender = _Sender(fail_with_files=True)
+    response = bot.ComboResponse(
+        messages=("요약",),
+        attachments=(bot.ComboAttachment("combo-detail.txt", "상세"),
+                     bot.ComboAttachment("combo-detail-2.txt", "상세2")),
+    )
+    with mock.patch.object(discord, "File", _File):
+        _await(bot.send_combo_response(sender, response))
+    #: 🔴 첨부 둘의 버퍼가 **전송이 실패한 뒤에도** 닫혔다.
+    assert len(made) == 2
+    assert all(isinstance(fp, io.BytesIO) and fp.closed for fp in made)
+
+
+def test_n06_the_out_of_file_notice_is_already_in_the_message_text():
+    """
+    🔴 **파일 밖으로 나온 전달 상태 안내가 기본 메시지에 적힌다** (오류 A 의
+    마지막 요구).
+
+    보내는 쪽은 그것을 **다시 보내지 않는다** — 같은 말이 두 번 가면 읽는
+    쪽이 두 번 잘렸다고 읽는다. 여기서는 그 계약을 고정한다.
+    """
+    pytest.importorskip("discord", reason="봇 전용 의존성")
+    said = "🔴 상세 기록 7줄을 담지 못했습니다 — CLI 로 보세요."
+    sender = _Sender()
+    response = bot.ComboResponse(
+        messages=(f"요약\n{said}",),
+        attachments=(bot.ComboAttachment("combo-detail.txt", "앞부분"),),
+        detail_notice=said,
+        detail_omitted=7,
+    )
+    _await(bot.send_combo_response(sender, response))
+    joined = "\n".join(sender.sent)
+    #: ① 안내가 전달됐다 (메시지 안에 있었다).
+    assert said in joined
+    #: ② 🔴 **두 번 가지 않았다.**
+    assert joined.count("담지 못했습니다") == 1
+    #: ③ 모든 전송이 상한 안이다.
+    for content, _count in sender.attempts:
+        assert len(content) <= bot.DISCORD_MESSAGE_LIMIT
+    #: ④ 응답이 전달 상태를 들고 있다.
+    assert response.complete_detail is False
