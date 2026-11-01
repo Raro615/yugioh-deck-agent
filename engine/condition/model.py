@@ -218,6 +218,29 @@ class And(Condition):
             rules.extend(child.missing_rules(view, context))
         return tuple(rules)
 
+    def refusal_reasons(self, view, context) -> tuple[str, ...]:
+        """
+        **거짓인 자식들의 이유**를 모은다 (Phase 6-AD 후속2).
+
+        :meth:`unknown_reasons` 와 같은 모양이고 같은 이유다 — 모아 주지
+        않으면 부르는 쪽이 트리 **전체**의 한 문장밖에 전할 수 없고, 그러면
+        "빈 칸이 없다" 와 "특수 소환이 금지되었다" 가 **같은 문장**으로
+        보고된다 (실측: 두 사례의 거절 문장이 글자까지 같았다).
+
+        🔴 **참인 자식의 이유는 섞지 않는다.** 거짓인 자식만 묻고, 그 자식이
+        이유를 적지 않았으면 그 자식의 설명을 쓴다 — 둘 다 없는 자식은 아무
+        줄도 더하지 않는다.
+        """
+        if self.evaluate(view, context) is not ConditionResult.FALSE:
+            return ()
+        reasons: list[str] = []
+        for child in self.children:
+            if child.evaluate(view, context) is not ConditionResult.FALSE:
+                continue
+            said = child.refusal_reasons(view, context)
+            reasons.extend(said if said else (child.describe_ko(),))
+        return tuple(reasons)
+
     def canonical_state(self) -> tuple:
         return ("and", tuple(c.canonical_state() for c in self.children))
 
@@ -568,6 +591,21 @@ class ZoneHasFreeSlot(Condition):
             # 칸 수가 없는 존은 언제나 자리가 있다.
             return ConditionResult.TRUE
         return ConditionResult.from_bool(zone_view.size < capacity)
+
+    def refusal_reasons(self, view, context) -> tuple[str, ...]:
+        """
+        빈 칸이 없으면 **몇 칸이 찼는지**까지 적는다 (Phase 6-AD 후속2).
+
+        필드는 공개이므로 이 거절은 언제나 확정이다 — 모름이 아니다.
+        """
+        zone_view = view.player(self.who.resolve(context)).zone(self.zone)
+        capacity = zone_view.capacity
+        if capacity is None or zone_view.size < capacity:
+            return ()
+        return (
+            f"{self.who} {self.zone.value} 에 빈 칸이 없습니다 "
+            f"({zone_view.size}/{capacity}).",
+        )
 
     def canonical_state(self) -> tuple:
         return ("zone_has_free_slot", self.who.value, self.zone.value)

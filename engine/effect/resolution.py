@@ -192,6 +192,39 @@ class ResolutionStatus(str, Enum):
 
     RESOLVED = "resolved"
     """해결되었다. 판이 바뀌었다."""
+    RESOLVED_WITHOUT_EFFECT = "resolved_without_effect"
+    """
+    🔴 **효과는 정상 해결되었고, 확인된 사유로 일을 하나도 하지 않았다**
+    (Phase 6-AD 후속2). 판은 그대로다.
+
+    공식 스크립트에 그 모양이 적혀 있는 효과가 있다. ``c93920420.lua`` 의
+    ``s.spop1`` 이 그렇다::
+
+        if Duel.GetLocationCount(tp,LOCATION_MZONE)<=0 then return end
+        local g=Duel.SelectMatchingCard(tp,s.spfilter1,…)
+        if #g>0 then Duel.SpecialSummon(g,…) end
+
+    빈 칸이 없으면 **조작 없이 끝나고**, 고른 카드가 없으면 **소환하지
+    않는다.** 둘 다 "발동이 불법이었다" 도 "엔진이 못 했다" 도 아니다 —
+    규칙대로 해결된 것이고, 다만 할 일이 없었던 것이다.
+
+    🔴 **셋과 합치지 않는다.**
+
+    =========================  ============================================
+    :attr:`RESOLVED`             일을 **했다**
+    이 상태                      해결됐고 일을 **하지 않았다** (확인된 사유)
+    :attr:`CONDITION_FALSE`      **발동 조건이 거짓**이다 — 해결 자체가
+                                일어나지 않았다는 뜻으로 읽힌다
+    ``UNCHECKED_*`` ·            엔진이 **판정하지 못했다** (모름)
+    :attr:`CONDITION_UNKNOWN`
+    :attr:`INVALID_TARGET`       고른 것이 **틀렸다** (정책 · 호출의 잘못)
+    =========================  ============================================
+
+    🔴 **아무 효과에나 붙이지 않는다.** 정의가
+    :class:`~engine.effect.definition.ResolutionSkip` 으로 **근거와 함께
+    선언한** 조건에서만 나온다 — 선언하지 않은 효과는 예전 그대로 거절된다
+    (ADR-006: 읽지 않은 것을 기본값으로 바꾸지 않는다).
+    """
     NOT_IMPLEMENTED = "not_implemented"
     """이 효과의 실행 구현이 등록되어 있지 않다. 판은 그대로다."""
     UNSUPPORTED_OPERATION = "unsupported_operation"
@@ -268,6 +301,13 @@ class ResolutionStatus(str, Enum):
     """
     UNKNOWN = "unknown"
     """해결할 수 있는지 판단할 수 없다. 판은 그대로다."""
+
+
+#: 해결이 **끝난** 상태들 (Phase 6-AD 후속2). :attr:`EffectResult.resolved`
+#: 가 읽는다.
+_RESOLVED_STATUSES: frozenset = frozenset(
+    {ResolutionStatus.RESOLVED, ResolutionStatus.RESOLVED_WITHOUT_EFFECT}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -408,10 +448,31 @@ class EffectResult:
         """
         return bool(self.deltas)
 
+    #: 🔴 **해결이 끝난 상태들** (Phase 6-AD 후속2).
+    #:
+    #: 둘 다 "이 효과의 해결이 규칙대로 끝났다" 이고, 다른 것은 **일을
+    #: 했는가**뿐이다. 체인은 이 구분을 보고 다음 링크로 넘어간다.
     @property
     def resolved(self) -> bool:
-        """해결되었는가. 판을 바꿨는지와는 다른 질문이다."""
-        return self.status is ResolutionStatus.RESOLVED
+        """
+        해결이 **끝났는가.** 판을 바꿨는지 · 일을 했는지와는 다른 질문이다.
+
+        🔴 :attr:`ResolutionStatus.RESOLVED_WITHOUT_EFFECT` 도 참이다 —
+        효과는 해결됐고 확인된 사유로 일을 하지 않았을 뿐이다. "일을
+        했는가" 는 :attr:`applied_any` 가 답한다.
+        """
+        return self.status in _RESOLVED_STATUSES
+
+    @property
+    def applied_any(self) -> bool:
+        """
+        **일을 하나라도 했는가** (Phase 6-AD 후속2).
+
+        :attr:`resolved` 와 가르는 이유는 하나다 — 해결은 끝났는데 할 일이
+        없었던 경우가 있고 (``RESOLVED_WITHOUT_EFFECT``), 그 둘을 한 칸으로
+        읽으면 "효과가 해결됐다" 가 "소환이 일어났다" 로 집계된다.
+        """
+        return bool(self.applied)
 
     def __bool__(self) -> bool:
         raise TypeError(

@@ -118,6 +118,7 @@ from engine.randomness import RandomError, RandomOutcome, RandomPurpose
 from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.effect.semantics import (
     DECLARED_GATE_RULINGS,
+    GATED_CANDIDATE_RULE_MISSING,
     MAIN_DECK_ONLY_ZONES,
     MISSING_EXTRA_DECK_DESTINATION,
     MISSING_GATE,
@@ -134,6 +135,7 @@ from engine.effect.semantics import (
     declared_gate_question,
     gating_rules,
     is_rule_gated,
+    operation_gate_question,
     origin_rule,
     unchecked_rules,
 )
@@ -1087,6 +1089,14 @@ class EffectExecutor:
                     f"{ref} 에 후보가 아닌 카드가 들어왔습니다: "
                     + ", ".join(str(i) for i in outside),
                 )
+            if len(picked) < spec.choice.minimum:
+                #: 🔴 **세 사실을 가른다** (Phase 6-AD 후속2). 모자란 선택의
+                #: 원인이 셋이고, 셋이 **다른 결과**다.
+                short = self._short_selection(
+                    definition, binding, resolver, context, found, picked
+                )
+                if short is not None:
+                    return short
             selection = Selection(picked)
             checked = resolver.validate(spec, selection, context.condition_context(), ref)
             if not checked.permits_selection:
@@ -1103,6 +1113,102 @@ class EffectExecutor:
             added.append(TargetSelection(ref, selection))
 
         return replace(context, selections=context.selections + tuple(added))
+
+    def _short_selection(
+        self,
+        definition: EffectDefinition,
+        binding,
+        resolver: "TargetResolver",
+        context: ResolutionContext,
+        found,
+        picked: tuple,
+    ) -> "EffectResult | None":
+        """
+        **최소 장수를 못 채운 선택의 원인을 가른다** (Phase 6-AD 후속2).
+
+        ``None`` 을 돌려주면 아래의 평소 검사가 그대로 거절한다.
+
+        =====================================  ===============================
+        합법 후보가 **최소 장수 이상** 있었다      정책 · 호출의 잘못 → 거절
+        후보 자격을 **판정하지 못했다**            모름 → ``UNCHECKED_RULES``
+        고를 후보가 **없었다** (전부 확정 불가)    선언했으면 **정상 해결**
+        =====================================  ===============================
+
+        🔴 **모름을 정상 불발로 바꾸지 않는다.** 가운데 줄이 그 금지선이고,
+        선언(``ResolutionSkip``)이 있어도 이 줄은 생략으로 가지 않는다.
+
+        🔴 **후보 판정은 같은 질문으로 한다** —
+        :func:`~engine.effect.semantics.operation_gate_question` 이 그 선택을
+        **쓰는 일**의 선언에서 읽고 :class:`~engine.effect.ruling.BoardRuling`
+        이 답한다. 발동 시점의 존재 검사
+        (``EffectActivator._candidate_existence``) 와 실행 시점의 관문
+        (``_check_rule_gate``) 이 묻는 바로 그 질문이다.
+        """
+        ref = binding.ref
+        spec = binding.spec
+        minimum = spec.choice.minimum
+        question = operation_gate_question(definition, ref)
+        #: 🔴 **관문을 물을 수 있을 때만 묻는다.** 묻지 못하는 경우가 둘이고,
+        #: 둘 다 **여기서 새 판정을 만들지 않는다.**
+        #:
+        #: 1. 그 일이 관문을 선언하지 않았다 — 후보 조건이 전부다.
+        #: 2. ``rulings`` 를 받지 않은 호출이다 (옛 호출부 · 시험 대역).
+        #:    이 자리가 "등록부가 없다 → 모름" 으로 답하면, 관문을 선언한
+        #:    모든 일의 **모자란 선택**이 ``too_few_selected`` 에서
+        #:    ``rule_not_implemented`` 로 바뀐다 — 배선 때문에 답이 달라지는
+        #:    것이고, 이번 보완의 범위가 아니다. 관문은 그 호출에서도
+        #:    실행 시점(:meth:`_check_rule_gate`)이 생성자의 판정기로
+        #:    그대로 묻는다 (``_summon_ruling`` 과 같은 되돌림).
+        ruling = (
+            BoardRuling(resolver.view, self._rulings)
+            if question is not None and self._rulings is not None
+            else None
+        )
+        permitted: list = []
+        unknown: list[str] = []
+        for instance in found.eligible:
+            if ruling is None:
+                permitted.append(instance)
+                continue
+            told = ruling.explain(question, instance)
+            if told.answer is ConditionResult.TRUE:
+                permitted.append(instance)
+            elif told.answer is not ConditionResult.FALSE:
+                unknown.append(f"{instance}: {told.reason}")
+        for instance in found.undecided:
+            unknown.append(f"{instance}: 후보인지 판정하지 못했습니다.")
+        unknown.extend(found.unchecked)
+
+        if len(permitted) >= minimum:
+            #: 🔴 **합법 후보가 있었는데 고르지 않았다.** 정책 · 호출의
+            #: 잘못이고, 규칙의 정상 불발이 아니다 — 아래 평소 검사가
+            #: ``TOO_FEW_SELECTED`` 로 거절한다.
+            return None
+        if unknown:
+            #: 🔴 **모름이다.** 정상 불발로 위장하지 않는다.
+            return _fail(
+                ResolutionStatus.UNCHECKED_RULES,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{ref} 의 후보를 지금 쓸 수 있는지 판정하지 못했습니다 "
+                f"(확실한 후보 {len(permitted)}장 · 필요 {minimum}장): "
+                + "; ".join(unknown),
+                missing=GATED_CANDIDATE_RULE_MISSING,
+                unchecked=(GATED_CANDIDATE_RULE_MISSING,),
+            )
+        skip = definition.resolution_skip
+        if skip is None or not skip.when_no_candidate:
+            #: 선언하지 않은 효과는 예전 그대로 거절된다 (ADR-006).
+            return None
+        #: 🔴 **고를 후보가 하나도 없고 전부 확인했다** — 공식 스크립트가
+        #: 그때 조작 없이 끝내는 것을 읽어 선언해 둔 효과다.
+        return EffectResult(
+            ResolutionStatus.RESOLVED_WITHOUT_EFFECT,
+            ValidationCode.OK,
+            f"{definition.effect_ref} 는 해결되었지만 일을 하지 않았습니다 — "
+            f"{ref} 에 고를 수 있는 후보가 없습니다 (후보 "
+            f"{found.possible_count}장을 전부 확인했습니다, 필요 {minimum}장). "
+            f"공식 처리: {skip.basis}",
+        )
 
     def _check_declarations(
         self,
@@ -1242,6 +1348,36 @@ class EffectExecutor:
         if verdict.result is ConditionResult.TRUE:
             return None
         if verdict.result is ConditionResult.FALSE:
+            skip = definition.resolution_skip
+            if skip is not None and skip.when_condition_false:
+                # 🔴 **발동이 불법이었던 것이 아니다** (Phase 6-AD 후속2).
+                #
+                # 공식 스크립트가 **해결 함수 안에서** 그 조건을 다시 보고
+                # 조작 없이 return 하는 효과가 있다 (``s.spop1`` 의 첫 줄).
+                # 발동은 그때의 판에서 적법했고, 해결 시점에 상황이 달라져
+                # **할 일이 없어진** 것이다. 그것을 ``CONDITION_FALSE`` 로
+                # 적으면 "발동 조건이 거짓이다" 로 읽히고, 미지원 · 오류와
+                # 같은 묶음에 들어간다.
+                #
+                # 🔴 선언한 효과만 이 길을 탄다 (``ResolutionSkip``).
+                #: 🔴 **확인된 사유를 그대로 적는다.** 트리 전체의 설명만
+                #: 적으면 "빈 칸이 없다" 와 "특수 소환이 금지되었다" 가 같은
+                #: 문장이 된다 (``And.refusal_reasons`` 의 실측).
+                said = definition.activation.refusal_reasons(
+                    view, condition_context
+                )
+                return EffectResult(
+                    ResolutionStatus.RESOLVED_WITHOUT_EFFECT,
+                    ValidationCode.OK,
+                    f"{definition.effect_ref} 는 해결되었지만 일을 하지 "
+                    f"않았습니다 — "
+                    + (
+                        "; ".join(said)
+                        if said
+                        else f"해결 시점에 {verdict.description} 가 거짓입니다"
+                    )
+                    + f" (공식 처리: {skip.basis})",
+                )
             # **확실한 거부이고 미구현이 아니다** (Phase 3-E-38).
             # 발동기(:meth:`EffectActivator._check_condition`)와 **같은 코드**를
             # 쓴다 — 한쪽만 고치면 같은 정의가 두 계층에서 다른 이유를 낸다.

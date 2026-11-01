@@ -416,6 +416,15 @@ class ChainResolutionStatus(str, Enum):
 #: 여기서 뭉개는 것이 있으면 ``ChainResolution.result`` 를 보면 된다.
 STATUS_MAP: dict[ResolutionStatus, ChainResolutionStatus] = {
     ResolutionStatus.RESOLVED: ChainResolutionStatus.RESOLVED,
+    #: 🔴 **해결은 끝났다** (Phase 6-AD 후속2). 확인된 사유로 일을 하지
+    #: 않았을 뿐이므로 **체인 계층의 답은 ``RESOLVED``** 다 — 그 링크는
+    #: 끝났고, 남은 링크가 규칙대로 계속 해결되어야 한다.
+    #:
+    #: 🔴 "일을 했는가" 는 이 계층의 질문이 아니다. 그 사실은 언제나
+    #: :attr:`ChainResolution.result` 가 들고 있고 (이 표의 머리말),
+    #: ``EffectResult.applied_any`` 가 답한다. 이 둘을 한 칸으로 읽으면
+    #: "링크가 해결됐다" 가 "소환이 일어났다" 로 집계된다.
+    ResolutionStatus.RESOLVED_WITHOUT_EFFECT: ChainResolutionStatus.RESOLVED,
     ResolutionStatus.FORBIDDEN: ChainResolutionStatus.FORBIDDEN_EFFECT,
     ResolutionStatus.UNSUPPORTED_OPERATION: ChainResolutionStatus.UNSUPPORTED_EFFECT,
     ResolutionStatus.INVALID_OPERATION: ChainResolutionStatus.UNSUPPORTED_EFFECT,
@@ -667,11 +676,17 @@ class ChainResolver:
                 link=link,
                 result=result,
             )
+        #: 🔴 **해결했다는 사실과 일을 했다는 사실을 함께 적는다**
+        #: (Phase 6-AD 후속2). 일을 하지 않은 해결은 이유를 그대로 들고
+        #: 온다 — 읽는 쪽이 "해결됐으니 소환됐다" 로 읽지 않게 한다.
+        said = f"{link.describe_ko()} 를 해결했습니다."
+        if not result.applied_any and result.reason:
+            said += f" {result.reason}"
         return ChainResolution(
             ChainResolutionStatus.RESOLVED,
             chain.advanced(),
             ValidationCode.OK,
-            f"{link.describe_ko()} 를 해결했습니다.",
+            said,
             link=link,
             result=result,
         )

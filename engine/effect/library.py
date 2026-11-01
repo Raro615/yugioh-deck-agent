@@ -58,6 +58,7 @@ from engine.effect.definition import (
     EffectProvenance,
     EffectSource,
     ExecutionAvailability,
+    ResolutionSkip,
     execution_availability,
 )
 from engine.effect.executor import EffectExecutor, EffectImplementationRegistry
@@ -1431,6 +1432,27 @@ _WORLD_WAND_TRIGGER_ENTRY = LibraryEntry(
             )
         ),
         activation_kind=ActivationKind.TRIGGER,
+        #: 🔴 **해결 시점에 일을 생략하고도 정상 해결되는 자리** (6-AD 후속2).
+        #:
+        #: ``s.spop1`` 이 두 자리에서 조작 없이 끝낸다 — 빈 칸이 없으면 첫
+        #: 줄에서 ``return`` 하고, 고른 카드가 없으면 ``if #g>0`` 이 거짓이다.
+        #: 둘 다 **발동이 불법이었다**도 **엔진이 못 했다**도 아니다.
+        #:
+        #: 6-AD 후속까지 이 둘이 각각 ``CONDITION_FALSE`` ·
+        #: ``TOO_FEW_SELECTED`` 로 적혀 미지원 · 오류와 같은 묶음에 들어갔다
+        #: (보고서 §15.1 의 실측).
+        resolution_skip=ResolutionSkip(
+            when_condition_false=True,
+            when_no_candidate=True,
+            basis=(
+                "c93920420.lua 의 s.spop1 — "
+                "if Duel.GetLocationCount(tp,LOCATION_MZONE)<=0 then return end "
+                "과 if #g>0 then Duel.SpecialSummon(...) end. 빈 칸이 없으면 "
+                "조작 없이 끝나고, SelectMatchingCard 가 빈 묶음을 주면 "
+                "소환하지 않는다 (s.spfilter1 이 IsCanBeSpecialSummoned 로 "
+                "거르므로 금지된 판에서는 후보가 0장이 된다)."
+            ),
+        ),
         use_limit=UseLimit(LimitScope.PER_CARD_NAME),
         provenance=EffectProvenance.official_lua(
             "c93920420.lua 의 e2 (EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O, "

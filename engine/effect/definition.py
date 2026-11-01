@@ -162,6 +162,82 @@ class EffectDefinitionError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class ResolutionSkip:
+    """
+    🔴 **해결 시점에 일을 생략하고도 정상 해결되는 조건** (6-AD 후속2).
+
+    공식 스크립트의 해결 함수가 **조작 없이 return 하는 자리**를 옮긴 것이다.
+    ``c93920420.lua`` 의 ``s.spop1``::
+
+        if Duel.GetLocationCount(tp,LOCATION_MZONE)<=0 then return end
+        local g=Duel.SelectMatchingCard(tp,s.spfilter1,tp,LOCATION_HAND,0,1,1,…)
+        if #g>0 then
+            Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP)
+        end
+
+    두 자리다 — **조건이 거짓이면** 조작 없이 끝나고, **고른 카드가 없으면**
+    소환하지 않는다. 둘 다 "발동이 불법이었다" 도 "엔진이 못 했다" 도 아니다.
+
+    🔴 **근거가 필수다.** 적지 않으면 만들 때 거절한다 — 이 선언은 거절을
+    성공 쪽으로 옮기는 것이므로, 어느 스크립트의 어느 줄에서 읽었는지가
+    없으면 그냥 완화가 된다.
+
+    🔴 **쓰는 범위를 좁게 적는다.** 한 칸이라도 참이면 그 상황에서만
+    생략되고, 나머지 거절은 그대로다 (:attr:`when_condition_false` ·
+    :attr:`when_no_candidate` 의 설명).
+    """
+
+    when_condition_false: bool = False
+    """
+    해결 시점에 **발동 조건이 거짓**이면 일을 생략하고 정상 해결한다.
+
+    🔴 ``UNKNOWN`` 은 여기 들어오지 않는다 — 판정하지 못한 것은 생략의
+    근거가 될 수 없고, 그대로 ``CONDITION_UNKNOWN`` 이다.
+    """
+    when_no_candidate: bool = False
+    """
+    해결 시점에 **고를 수 있는 후보가 없으면** 일을 생략하고 정상 해결한다.
+
+    🔴 **"정책이 고르지 않았다" 와 다르다.** 합법 후보가 있는데 빈 선택이
+    돌아온 것은 정책 · 호출의 잘못이고 그대로 거절된다. 후보 자격을
+    **판정하지 못한** 경우도 생략이 아니다 — 모름이다.
+    """
+    basis: str = ""
+    """어느 스크립트의 어느 줄에서 읽었는가. **비울 수 없다.**"""
+
+    def __post_init__(self) -> None:
+        if not (self.when_condition_false or self.when_no_candidate):
+            raise ValueError(
+                "생략할 조건을 하나도 적지 않았습니다 — 그러면 이 선언은 "
+                "아무 뜻도 없고, 읽는 쪽은 '무언가 완화되었다' 고 읽습니다."
+            )
+        if not self.basis.strip():
+            raise ValueError(
+                "근거 없이 생략을 선언할 수 없습니다 — 어느 스크립트의 어느 "
+                "줄에서 읽었는지 적어야 합니다 (거절을 정상 해결로 옮기는 "
+                "선언이므로, 근거가 없으면 그냥 완화입니다)."
+            )
+
+    def canonical_state(self) -> tuple:
+        return (self.when_condition_false, self.when_no_candidate)
+
+    def to_dict(self) -> dict:
+        return {
+            "when_condition_false": self.when_condition_false,
+            "when_no_candidate": self.when_no_candidate,
+            "basis": self.basis,
+        }
+
+    def describe_ko(self) -> str:
+        bits = []
+        if self.when_condition_false:
+            bits.append("발동 조건이 거짓")
+        if self.when_no_candidate:
+            bits.append("고를 후보가 없음")
+        return "해결 시 생략: " + " · ".join(bits)
+
+
+@dataclass(frozen=True, slots=True)
 class OperationGuard:
     """
     **이 조작은 이 수가 이러할 때만 한다** (Phase 2-AG · STRUCTURAL-91).
@@ -276,6 +352,18 @@ class EffectDefinition:
 
     ``requirements`` 와 나란히 있고 하는 일이 다르다 — 저쪽은 못 하면
     거절이고 이쪽은 안 하면 건너뜀이다.
+    """
+    resolution_skip: "ResolutionSkip | None" = None
+    """
+    🔴 **해결 시점에 일을 생략하고도 정상 해결되는 조건** (6-AD 후속2).
+
+    ``None`` 은 **"그런 조건이 없다" 가 아니라 "적지 않았다"** 다 —
+    ``activation`` · ``activation_kind`` 와 같은 태도이고, 적지 않은 효과는
+    예전 그대로 거절된다 (ADR-006).
+
+    왜 정의에 적는가 — 공식 스크립트가 그 모양을 **그 카드의 해결 함수**에
+    적기 때문이다 (:class:`ResolutionSkip` 의 설명). 실행기가 카드 ID 로
+    특례를 두면 그것은 규칙이 아니라 코드의 예외가 된다.
     """
     activation_kind: ActivationKind | None = None
     """
@@ -679,6 +767,12 @@ class EffectDefinition:
             tuple(b.canonical_state() for b in self.declarations),
             tuple(r.canonical_state() for r in self.requirements),
             tuple(g.canonical_state() for g in self.guards),
+            #: 🔴 **정규 표현에 싣는다.** 이 선언은 같은 상황의 결과를
+            #: 거절에서 정상 해결로 옮기므로, 두 정의가 이 칸만 달라도
+            #: "같다" 고 말할 수 없다.
+            self.resolution_skip.canonical_state()
+            if self.resolution_skip is not None
+            else None,
             self.activation_kind.value if self.activation_kind is not None else None,
             #: 🔴 **정규 표현에 싣는다.** 이 값은 실제 판정을 바꾸므로
             #: (같은 효과를 두 번 발동할 수 있는지) 두 정의가 이 칸만
@@ -703,6 +797,8 @@ class EffectDefinition:
             data["activation"] = self.activation.to_dict()
         if self.activation_kind is not None:
             data["activation_kind"] = self.activation_kind.value
+        if self.resolution_skip is not None:
+            data["resolution_skip"] = self.resolution_skip.to_dict()
         if self.use_limit is not None:
             data["use_limit"] = {
                 "scope": self.use_limit.scope.value,
@@ -716,6 +812,8 @@ class EffectDefinition:
             parts.append(f"비용: {self.cost.describe_ko()}")
         if self.activation is not None:
             parts.append(f"조건: {self.activation.describe_ko()}")
+        if self.resolution_skip is not None:
+            parts.append(self.resolution_skip.describe_ko())
         if self.requires_target:
             parts.append(
                 "대상: " + ", ".join(b.describe_ko() for b in self.targets)
@@ -965,6 +1063,7 @@ __all__ = [
     "EffectDefinitionError",
     "EffectDefinition",
     "ExecutionAvailability",
+    "ResolutionSkip",
     "EffectDefinitionSource",
     "EffectDefinitionRegistry",
     "EffectImplementationLookup",
