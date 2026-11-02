@@ -728,6 +728,39 @@ def test_m01_the_count_limit_notice_stays_inside_the_byte_limit():
         assert item.data.decode("utf-8") == item.text
 
 
+@pytest.mark.parametrize("width,limit", [(999, 1000), (99, 100)])
+def test_m01b_a_full_earlier_chunk_never_receives_the_notice(width, limit):
+    """
+    **A 재현 ②** — 비워 둔 칸을 **만들지 못했을 때** 앞의 꽉 찬 첨부에
+    안내를 붙이지 않는다 (6-AE 보완2).
+
+    🔴 비워 두기는 **마지막 칸에만** 걸린다. 그 칸에 한 조각도 들어가지
+    못하면 그 칸은 만들어지지 않고, 남는 것은 **비워 두지 않은 앞의 꽉 찬
+    칸**이다. 전에는 "칸이 있다" 는 이유만으로 거기에 붙였고 그래서 상한을
+    넘었다 — 실측: ``limit=1000`` · ``count_limit=2`` · 999자 세 줄 →
+    **1,194바이트** (방어선의 ``AssertionError``).
+    """
+    detail = bot.combo_attachments(
+        "\n".join([("a" * width)] * 3), limit=limit, count_limit=2,
+    )
+    #: ① 🔴 모든 첨부가 상한 안이다 — 방어선이 터지지 않는다.
+    assert _sizes(detail) == [width, width], _sizes(detail)
+    assert all(size <= limit for size in _sizes(detail))
+    assert len(detail.attachments) <= 2
+    #: ② 🔴 **안내가 파일 밖으로 나갔다** — 들어갈 자리가 없었다.
+    assert detail.complete is False
+    assert detail.omitted_lines == 1
+    assert detail.notice
+    assert "담지 못했습니다" in detail.notice
+    for item in detail.attachments:
+        assert "담지 못했습니다" not in item.text
+    #: ③ 🔴 **비워 두기 때문에 내용을 더 잃지 않았다** — 앞의 두 줄이
+    #: 그대로 담겼다 (비워 둔 채움을 쓰면 둘째 칸이 비어 한 줄만 남는다).
+    assert [item.text for item in detail.attachments] == [
+        "a" * width, "a" * width,
+    ]
+
+
 def test_m02_the_old_two_part_case_also_stays_inside_the_limit():
     """**A** — 기존 ``test_k04`` 의 입력(256바이트 · 2개)도 같다."""
     text = "\n".join(f"줄 {index}" for index in range(1, 400))

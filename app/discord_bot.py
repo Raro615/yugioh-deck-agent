@@ -999,15 +999,39 @@ def combo_attachments(text: str,
         budget = len(
             _omitted_notice(len(lines), limit, count_limit).encode("utf-8")
         ) + 1
-        chunks, used = _pack_pieces(pieces, limit, count_limit, reserve=budget)
-        omitted = len(lines) - _kept(used)
-        said = _omitted_notice(omitted, limit, count_limit)
-        if chunks:
+        spared, spared_used = _pack_pieces(
+            pieces, limit, count_limit, reserve=budget
+        )
+        #: 🔴 **안내가 붙을 파일의 최종 크기를 본다** (6-AE 보완2).
+        #:
+        #: 비워 두기는 **마지막 칸에만** 걸린다. 그 칸에 한 조각도 들어가지
+        #: 못하면 :func:`_pack_pieces` 는 그 칸을 만들지 않고, 그러면 남는
+        #: 것은 **비워 두지 않은 앞의 꽉 찬 칸**이다 — 전에는 "칸이 있다"
+        #: 는 이유만으로 거기에 안내를 붙였고, 그래서 상한을 넘었다.
+        #: 실측: ``limit=1000`` · ``count_limit=2`` · 999자 세 줄 →
+        #: **1,194바이트** (방어선이 그것을 잡아 ``AssertionError``).
+        #:
+        #: 그래서 붙일 파일의 크기를 **직접 세어** 들어가는지 확인한다.
+        inside: "tuple[list[list[str]], int, int, str] | None" = None
+        if len(spared) == count_limit and spared[-1]:
+            said = _omitted_notice(
+                len(lines) - _kept(spared_used), limit, count_limit
+            )
+            body = "\n".join(spared[-1] + [said])
+            if len(body.encode("utf-8")) <= limit:
+                inside = (spared, spared_used,
+                          len(lines) - _kept(spared_used), said)
+        if inside is not None:
+            spared, spared_used, omitted, said = inside
+            chunks = [list(chunk) for chunk in spared]
             chunks[-1] = chunks[-1] + [said]
+            used = spared_used
         else:
-            #: 🔴 비워 둘 자리조차 없다 — 파일 밖으로 내보낸다.
-            chunks, used = _pack_pieces(pieces, limit, count_limit)
-            omitted = len(lines) - _kept(used)
+            #: 🔴 **파일 안에 넣을 수 없다 — 파일 밖으로 내보낸다.**
+            #:
+            #: 그리고 **비워 두지 않은 채움을 그대로 쓴다** (위 ``chunks`` ·
+            #: ``used``). 비워 두기는 자리를 만들지 못했으니 그 때문에
+            #: 내용을 더 잃을 이유가 없다.
             notice = _omitted_notice(omitted, limit, count_limit)
 
     stem, _, suffix = filename.rpartition(".")
