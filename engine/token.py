@@ -87,6 +87,8 @@ TOKEN_OPERATION_BLIND_SPOTS: tuple[str, ...] = (
     f"{TOKEN_AS_OVERLAY_RULE} 를 확인하지 않았습니다.",
     "토큰에 걸리는 「토큰을 특수 소환할 수 없다」 류의 카드명 · 종류 "
     "범위 제약을 확인하지 않았습니다 — 그 제약을 적는 계층이 없습니다.",
+    "주인과 컨트롤러가 다른 토큰(컨트롤 이동 뒤의 토큰)은 만들지 "
+    "않습니다 — :func:`create_token` 이 거절합니다.",
 )
 
 #: 토큰을 들일 수 **없는** 자리. :func:`token_operation_refusal` 이 본다.
@@ -379,8 +381,16 @@ def create_token(
         position=plan.position,
         index=plan.slot,
     )
-    if plan.controller != plan.owner:  # pragma: no cover - 지금 경로는 같다
-        instance.set_controller(plan.controller, remember_previous=False)
+    #: 🔴 **컨트롤러를 따로 세우는 길은 두지 않는다.** :func:`plan_token`
+    #: 이 ``owner`` 와 ``controller`` 를 같은 값으로 세우므로 (놓이는 쪽이
+    #: 주인이다) 여기서 컨트롤을 옮길 일이 없다. 「컨트롤이 주인과 다른
+    #: 토큰」은 이 Phase 의 **범위 밖**이고, 그것을 조용히 허용하는 대신
+    #: 여기서 막는다 — :data:`TOKEN_OPERATION_BLIND_SPOTS` 에 적혀 있다.
+    if plan.controller != plan.owner:  # pragma: no cover - 방어선
+        raise TokenError(
+            "주인과 컨트롤러가 다른 토큰은 아직 구현하지 않았습니다: "
+            f"owner=P{plan.owner} controller=P{plan.controller}."
+        )
 
     landed = state.zone(plan.controller, TOKEN_ZONE).slot(plan.slot)
     if landed is not instance:

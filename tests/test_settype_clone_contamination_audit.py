@@ -943,7 +943,14 @@ def test_25_this_phase_defined_no_new_semantics():
     # 🔴 Phase 6-AD 후속2 에서 13 → 14 칸 (``resolution_skip``). 그 칸도
     # **사건 칸이 아니다** — 공식 스크립트의 해결 함수가 조작 없이 끝내는 두
     # 자리와 그 근거만 담는다. 아래 교집합이 여전히 비어 있다.
-    assert len(definition) == 14
+    #: 🔴 Phase 6-AF 에서 14 → **16** 칸 (``activation_zones`` ·
+    #: ``resolution_condition``). 둘 다 **사건 칸이 아니다** —
+    #: ``activation_zones`` 는 공식 스크립트의 ``SetRange`` 를 옮긴 **자리**
+    #: 집합이고 (``c69811710.lua`` e3 의 ``LOCATION_MZONE``),
+    #: ``resolution_condition`` 은 해결 함수가 **다시 보는 조건**이다
+    #: (``s.tkop`` 이 ``s.tktg`` 와 같은 다섯 가지를 재검사한다). 어느 쪽도
+    #: "무엇이 일어났는가" 를 담지 않으므로 아래 교집합·부재 단언은 그대로다.
+    assert len(definition) == 16
     assert "effect_types" not in definition
 
 

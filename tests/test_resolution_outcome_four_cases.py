@@ -317,10 +317,25 @@ def test_n05_only_the_declared_effect_can_resolve_without_an_operation():
         for definition in definition_registry().definitions()
         if definition.resolution_skip is not None
     ]
-    assert [d.effect_ref for d in declared] == [WAND_REF], [
-        str(d.effect_ref) for d in declared
-    ]
-    skip = declared[0].resolution_skip
+    #: 🔴 **Phase 6-AF 에서 둘이 되었다** — 기르수 ③ 도 해결 시점의 생략을
+    #: 선언한다 (``s.tkop`` 이 ``s.tktg`` 와 같은 다섯 가지를 재검사하고,
+    #: 거짓이면 아무 일도 하지 않고 끝낸다). 일괄 완화가 아니라 **카드마다
+    #: 그 카드의 해결 함수에서 읽은 선언**이라는 것이 이 시험의 사실이고,
+    #: 그래서 둘을 각각 근거까지 센다.
+    from engine.effect.library import GIRSU
+
+    girsu_ref = EffectRef(GIRSU, 2)
+    assert sorted(str(d.effect_ref) for d in declared) == sorted(
+        [str(girsu_ref), str(WAND_REF)]
+    ), [str(d.effect_ref) for d in declared]
+    by_ref = {d.effect_ref: d for d in declared}
+    girsu_skip = by_ref[girsu_ref].resolution_skip
+    #: 기르수 ③ — 조건이 거짓이면 생략하고, **후보 고르기는 없다.**
+    assert girsu_skip.when_condition_false is True
+    assert girsu_skip.when_no_candidate is False
+    assert "c69811710.lua" in girsu_skip.basis
+    assert "s.tkop" in girsu_skip.basis
+    skip = by_ref[WAND_REF].resolution_skip
     assert skip.when_condition_false is True
     assert skip.when_no_candidate is True
     #: 🔴 **근거가 스크립트를 가리킨다** — 문구만 바꾼 것이 아니다.

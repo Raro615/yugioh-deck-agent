@@ -357,7 +357,9 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: 1장이므로 (``Duel.SelectMatchingCard(...,1,1,nil)``) ``bindings`` 가
     #: 10 → 11, ``exact_one`` 이 6 → 7 이다. 지키는 사실(``multi`` 하나 ·
     #: ``variable`` 0건)은 **그대로다.**
-    assert len(EFFECT_LIBRARY) == 19, "정의 수가 바뀌면 이 Phase 를 다시 읽는다"
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 아래 단언들은 하나도 약해지지 않았다 — 수만 움직였다.
+    assert len(EFFECT_LIBRARY) == 20, "정의 수가 바뀌면 이 Phase 를 다시 읽는다"
     assert bindings == 11
     assert multi == [FINE], multi
     assert len(exact_one) == 7, exact_one

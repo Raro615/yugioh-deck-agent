@@ -276,9 +276,22 @@ def test_03_exactly_one_compiled_trigger_has_a_definition(repository):
 
     definitions = definition_registry()
     #: Phase 6-AC 가 성유물－『성장』 ② 를 더했다 (18 → 19).
-    assert len(definitions) == len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(definitions) == len(EFFECT_LIBRARY) == 20
     #: 🔴 0 뿐이던 집합이 {0, 1} 이 되었다 — 공식 ②를 등재한 첫 자리다.
-    assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {0, 1}
+    #: 🔴 Phase 6-AF 가 **셋째 ordinal** 을 열었다 — 기르수 ③(토큰 생성)은
+    #: 공식 Lua 의 세 번째 블록이므로 2 다. 억지로 0 이나 1 에 맞추지 않고
+    #: **그 효과의 실제 사실**을 적는다 (``c69811710.lua`` e3,
+    #: ``EFFECT_TYPE_IGNITION``).
+    assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {
+        0,
+        1,
+        2,
+    }
     assert [
         e.effect_ref.ordinal for e in EFFECT_LIBRARY if e.card_id == WORLD_WAND
     ] == [1]

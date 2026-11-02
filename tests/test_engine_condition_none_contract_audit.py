@@ -112,6 +112,11 @@ CONDITION_OPTIONAL_FIELDS = {
     ("engine/effect/definition.py", "EffectDefinition", "activation"),
     ("engine/observation_grant.py", "ObservationGrant", "condition"),
     ("engine/trigger.py", "TriggerSpec", "condition"),
+    #: 🔴 **Phase 6-AF 가 여섯째를 더했다** — 해결 시점에 다시 보는
+    #: 조건이다. 그 자리의 ``None`` 뜻은 칸의 docstring 에 적혀 있다:
+    #: "``activation`` 을 그대로 다시 본다" 이고, 6-AD 후속2 까지의
+    #: 동작과 **같다**. 그래서 ``documented`` 쪽에 든다 (``test_06``).
+    ("engine/effect/definition.py", "EffectDefinition", "resolution_condition"),
 }
 
 #: ``Condition`` 을 **반드시** 받는 자리 (Optional 이 아니다).
@@ -153,7 +158,12 @@ CONDITION_REQUIRED_FIELDS = {
 #: 🔴 72 → **73** (Phase 6-AD). 늘어난 하나는 ``engine/summon_restriction.py``
 #: 이고, 특수 소환 금지를 판정하는 **순수** 모듈이다. ``Condition | None``
 #: 칸을 만들지 않았으므로 (아래 전수 주사가 센다) 다섯 자리는 그대로다.
-ENGINE_FILE_COUNT = 73
+#: 🔴 73 → **75** (Phase 6-AF). 늘어난 둘은 ``engine/token.py`` (토큰의
+#: 생성·소멸과 토큰 규칙 표) 과 ``engine/state/summon_usage.py``
+#: (어느 카드 이름을 이 턴에 어떤 소환으로 썼는가) 이다. 어느 쪽도
+#: ``Condition | None`` 칸을 더하지 않았고, 아래 전수 주사가 그 사실을
+#: 그대로 센다.
+ENGINE_FILE_COUNT = 75
 
 #: 조건·요구·발동 이름에 대한 ``None`` 검사 수. ``engine/`` **패키지만** 센다
 #: (``tests/engine/`` 까지 세면 분모가 오염된다 — 한 번 틀렸던 자리다).
@@ -162,7 +172,12 @@ NONE_CHECKS = {"is None": 4, "is not None": 23}
 #: ``None`` 을 **특별히 처리하는** 네 자리.
 NONE_BRANCHES = {
     ("engine/activation.py", "activation"),
-    ("engine/effect/executor.py", "activation"),
+    #: 🔴 **Phase 6-AF 에서 이름이 ``activation`` → ``condition`` 으로
+    #: 바뀌었다.** 해결 계층은 ``resolution_condition`` 이 있으면 그것을,
+    #: 없으면 ``activation`` 을 **골라** 지역 변수 ``condition`` 에 담고 그
+    #: 변수의 ``None`` 을 본다. **자리는 넷 그대로**이고 ``None`` 의 처리도
+    #: 그대로다 (조건 없이 통과) — 바뀐 것은 무엇을 골랐는지뿐이다.
+    ("engine/effect/executor.py", "condition"),
     ("engine/cost/resolver.py", "require"),
     ("engine/response.py", "activation"),
 }
@@ -363,6 +378,9 @@ def test_01_the_optional_condition_corpus_in_engine_is_exactly_five_fields():
         return "|None" in text or text.startswith("Optional[")
 
     found = {(r[0], r[1], r[2]) for r in annotated_fields(is_optional_condition)}
+    #: 🔴 Phase 6-AF 에서 5 → **6** 곳이다 (``resolution_condition``).
+    #: 여섯째가 생겼으므로 그 자리의 ``None`` 이 무슨 뜻인지 적었고,
+    #: 이 집합이 그것을 고정한다 — 단언은 약해지지 않았다.
     assert found == CONDITION_OPTIONAL_FIELDS
 
     #: 다섯 자리 **모두** 기본값이 ``None`` 이다 — 즉 적지 않으면 ``None`` 이다.
@@ -482,6 +500,8 @@ def test_03_three_of_the_five_document_what_none_means_and_two_do_not():
         ("engine/effect/definition.py", "EffectDefinition", "activation"),
         ("engine/observation_grant.py", "ObservationGrant", "condition"),
         ("engine/trigger.py", "TriggerSpec", "condition"),
+        #: 🔴 Phase 6-AF — 칸의 docstring 이 ``None`` 의 뜻을 적는다.
+        ("engine/effect/definition.py", "EffectDefinition", "resolution_condition"),
     }
     undocumented = {
         ("engine/cost/choice.py", "CandidateSource", "require"),
@@ -804,8 +824,16 @@ def test_12_every_consumer_of_activation_reads_none_the_same_way():
     아니라 **다른 관문**이 막는다.
     """
     #: 발동 · 해결 — 모두 ``None`` 을 통과로 읽는다.
-    for path in ("engine/activation.py", "engine/effect/executor.py"):
-        assert "if definition.activation is None:" in source_of(path)
+    #:
+    #: 🔴 **Phase 6-AF.** 해결 계층은 ``resolution_condition`` 이 있으면
+    #: 그것을, 없으면 ``activation`` 을 **골라** 본다 — 고른 뒤의 ``None``
+    #: 처리는 두 계층이 같다 (조건 없이 통과). 그래서 "같은 글자" 가 아니라
+    #: **같은 읽기**를 센다: 해결 쪽은 고르기 한 줄과 ``None`` 통과 한 줄을
+    #: 각각 확인한다.
+    assert "if definition.activation is None:" in source_of("engine/activation.py")
+    executor = source_of("engine/effect/executor.py")
+    assert "if definition.resolution_condition is None" in executor
+    assert "if condition is None:" in executor
 
     #: 그리고 **그 앞에** 정의 등록 / 실행 권위 관문이 있다.
     #:

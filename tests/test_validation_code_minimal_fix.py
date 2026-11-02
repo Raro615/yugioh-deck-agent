@@ -614,9 +614,18 @@ def test_17_legal_actions_and_search_are_unchanged(repository):
     while duel.advance() is not None:
         pass
 
-    #: 3-E-38 **전에** 측정한 값 그대로다.
+    #: 3-E-38 **전에** 측정한 값 그대로였다 (6-AF 까지).
+    #: 🔴 **Phase 6-AF 에서 이 해시가 움직였다.** 원인 하나다 —
+    #: :class:`~engine.state.game_state.GameState` 에 칸이 하나 생겼고
+    #: (``summon_uses``: 이 턴에 어느 카드 이름을 어떤 소환으로 몇 번
+    #: 썼는가) 그것을 ``canonical_state()`` 에 실었다. 갈라테아i 의
+    #: 「1턴에 1번」 제약이 그 기록을 요구하므로 **판의 사실**이고, 판의
+    #: 사실을 정규 표현에서 빼면 두 판이 다른데 같다고 말하게 된다.
+    #:
+    #: **이 시험이 재는 것은 그대로다** — 아래 합법 행동 · 보류 · 사유 ·
+    #: 난수 단언이 하나도 달라지지 않았다. 움직인 것은 해시 하나다.
     assert duel.state.state_hash() == (
-        "5adaf2a465ee9f3d7e2b1e229adbb7465202f18e3cd36e4dd947fd162927af9e"
+        "1bfa235c63271f3696c9ff13912e10abff9e2dced5f8ba90111dc2724222ebd5"
     )
     legal = duel.legal_actions()
     assert sorted(a.kind.value for a in legal.allowed) == ["end_phase"]
@@ -639,9 +648,11 @@ def test_17_legal_actions_and_search_are_unchanged(repository):
 
     #: **Q — 난수가 소비되지 않았다.**
     assert duel.state.rng.getstate() == rng_before
-    #: **P — 판이 바뀌지 않았다.**
+    #: **P — 판이 바뀌지 않았다.** (🔴 6-AF: ``summon_uses`` 가 정규 표현에
+    #: 실려 해시 값만 움직였다 — ``test_17`` 의 설명과 같은 원인이고, 이
+    #: 시험이 재는 "policy 가 판을 건드리지 않는다" 는 그대로다.)
     assert duel.state.state_hash() == (
-        "5adaf2a465ee9f3d7e2b1e229adbb7465202f18e3cd36e4dd947fd162927af9e"
+        "1bfa235c63271f3696c9ff13912e10abff9e2dced5f8ba90111dc2724222ebd5"
     )
 
 
@@ -812,7 +823,11 @@ def test_24_only_four_production_lines_changed_their_code():
     #: 고르는 사람이 **후보 목록 밖**을 골랐을 때 쓰는 자리다. "확실한 거부"
     #: 이므로 이 코드가 맞고, 그것이 이 단정이 지키는 구분이다 — 같은 파일이
     #: 이미 네 자리에서 같은 뜻으로 쓰고 있었다.
-    assert executor.count("ValidationCode.CANDIDATE_NOT_ELIGIBLE") == 5
+    #: 🔴 5 → **6** (Phase 6-AF). 늘어난 하나는 ``_plan_create_token`` 이
+    #: 토큰을 놓을 **칸이 없을 때** 쓰는 자리다 (``TokenError``).
+    #: "확실한 거부" 이므로 이 코드가 맞고, 적법성 위반이 아니라 지시를
+    #: 수행할 수 없다는 뜻이다 — ``_plan_summon_operation`` 과 같다.
+    assert executor.count("ValidationCode.CANDIDATE_NOT_ELIGIBLE") == 6
     for path, cls in (
         ("engine/activation.py", "EffectActivator"),
         ("engine/effect/executor.py", "EffectExecutor"),

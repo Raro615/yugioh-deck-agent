@@ -887,7 +887,11 @@ def test_21_every_real_card_in_the_library_declares_an_empty_cost():
     # 없다 — ``c93920420.lua`` 의 ``e2`` 에 ``SetCost`` 가 없다 (``e3`` 에만
     # ``Cost.SelfBanish`` 가 있고 ③ 은 등재하지 않았다). 그래서 아래
     # 단언(전부 빈 비용)은 약해지지 않았다.
-    assert len(entries) == 19, len(entries)
+    #: 🔴 Phase 6-AC 에서 19 → **20** 이 아니라 Phase 6-AF 에서다 — 기르수
+    #: ③(토큰 생성). 그 효과도 비용이 없다: ``c69811710.lua`` e3 에
+    #: ``SetCost`` 가 없다 (``s.tktg`` 는 target 이고 cost 가 아니다).
+    #: 그래서 아래 단언(전부 빈 비용)은 **약해지지 않았다**.
+    assert len(entries) == 20, len(entries)
     for entry in entries:
         assert entry.definition.cost.costs == (), entry.definition.source_card_id
 

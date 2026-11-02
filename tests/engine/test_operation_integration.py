@@ -309,6 +309,10 @@ def test_a_the_taxonomy_is_exactly_what_is_executable():
         "special_summon",
         # 무작위 (Phase 2-Z) — 카드가 움직이지 않는 유일한 일이다
         "shuffle",
+        #: 🔴 **생성 (Phase 6-AF).** 어느 자리에서도 오지 않는 개체를
+        #: 만들어 놓는 일이다 — 이동이 아니다. ``engine.token`` 이
+        #: 덱 · 패 · 엑스트라 덱의 장수가 변하지 않았음을 실제로 확인한다.
+        "create_token",
     }
 
 
@@ -910,6 +914,7 @@ def test_h_no_real_card_uses_move_yet():
         OperationKind.SHUFFLE,  # Phase 2-AI — 리로드
         OperationKind.RETURN_TO_HAND,  # Phase 2-AK — 강제 탈출 장치
         OperationKind.SPECIAL_SUMMON,  # Phase 6-AC — 성유물－『성장』
+        OperationKind.CREATE_TOKEN,  # Phase 6-AF — 기르수 ③
     }
     assert OperationKind.MOVE not in kinds
 

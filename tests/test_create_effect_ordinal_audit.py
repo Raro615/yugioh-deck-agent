@@ -632,7 +632,12 @@ def test_17_all_sixteen_effect_definitions_are_untouched(repository):
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     for entry in EFFECT_LIBRARY:
         ref = entry.definition.effect_ref
         card = repository.get(ref.card_id)
@@ -648,7 +653,10 @@ def test_17_all_sixteen_effect_definitions_are_untouched(repository):
             #: 🔴 **Phase 6-AC 가 "등재한 ordinal 은 0" 을 끝냈다** —
             #: 성유물－『성장』 은 공식 ②를 등재했으므로 1 이다. 억지로 0 에
             #: 맞추지 않고 **그 효과의 실제 사실**을 적는다.
-            assert ref.ordinal in (0, 1), ref
+            #: 🔴 Phase 6-AF 가 2 를 더했다 — 기르수 ③(토큰 생성)은 공식
+            #: Lua 의 **세 번째 블록**이다. 억지로 0·1 에 맞추지 않고 그
+            #: 효과의 실제 사실을 적는다.
+            assert ref.ordinal in (0, 1, 2), ref
             #: 블록이 **셋**이다 — ①기동 · ②유발 즉시, 그리고 ② 의 해결이
             #: 함수 안에서 만드는 ``EFFECT_UPDATE_ATTACK`` 까지 로더가 센다.
             #: 등재된 것은 **0번(기동)** 이다.
@@ -659,8 +667,16 @@ def test_17_all_sixteen_effect_definitions_are_untouched(repository):
 
             assert ref.resolve(card) is not None, ref
             if entry.definition.activation_kind is _Kind.IGNITION:
-                #: 어니스트 — 블록 셋, 등재된 ①은 ``SetCode`` 가 없다.
-                assert len(card.script.effects) == 3, ref
+                #: 🔴 **Phase 6-AF 에서 기동 효과가 둘이 됐다** —
+                #: 어니스트 ①(블록 셋)과 기르수 ③(블록 넷)이다. 분류로는
+                #: 더 갈 수 없으므로 **카드로** 가르고 각 카드의 실측한
+                #: 블록 수를 적는다. 두 효과의 **공통 사실**은 "등재된
+                #: 블록에 ``SetCode`` 가 없다" 이고 (기동은 사건이 아니라
+                #: 선언으로 발동한다) 아래 줄이 그것을 그대로 센다.
+                assert len(card.script.effects) == {
+                    37742478: 3,  # 어니스트 — ①기동 · ②유발즉시 · 내부 블록
+                    69811710: 4,  # 기르수   — ①유발 · ②클론 · ③기동 · 내부
+                }[ref.card_id], ref
                 assert ref.resolve(card).code is None, ref
             else:
                 #: 기르수 — 블록 넷 (①유발 · ②그 클론 · ③기동 · 해결 중
@@ -1362,7 +1378,14 @@ def test_36_the_production_change_is_confined_to_the_parser_and_the_analyzer():
     # 🔴 Phase 6-AD 후속2 에서 13 → 14 칸 (``resolution_skip``). 그 칸도
     # **사건 칸이 아니다** — 공식 스크립트의 해결 함수가 조작 없이 끝내는 두
     # 자리와 그 근거만 담는다 (``code`` 칸은 여전히 없다).
-    assert len(dataclasses.fields(EffectDefinition)) == 14
+    #: 🔴 Phase 6-AF 에서 14 → **16** 칸 (``activation_zones`` ·
+    #: ``resolution_condition``). 둘 다 **사건 칸이 아니다** —
+    #: ``activation_zones`` 는 공식 스크립트의 ``SetRange`` 를 옮긴 **자리**
+    #: 집합이고 (``c69811710.lua`` e3 의 ``LOCATION_MZONE``),
+    #: ``resolution_condition`` 은 해결 함수가 **다시 보는 조건**이다
+    #: (``s.tkop`` 이 ``s.tktg`` 와 같은 다섯 가지를 재검사한다). 어느 쪽도
+    #: "무엇이 일어났는가" 를 담지 않으므로 아래 교집합·부재 단언은 그대로다.
+    assert len(dataclasses.fields(EffectDefinition)) == 16
     assert "code" not in {f.name for f in dataclasses.fields(EffectDefinition)}
 
     #: ``LuaScriptInfo`` 의 칸도 그대로다.

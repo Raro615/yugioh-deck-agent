@@ -387,7 +387,11 @@ def test_06_the_duel_closure_excludes_the_assembly_and_two_part_modules():
     #:
     #: 🔴 **휴면 모듈 넷은 그대로 폐쇄 밖이다** — 아래 루프가 그것을
     #: 고정하고, 그것이 이 감사의 질문이다. 트리거 계층이 켜진 것이 아니다.
-    assert len(closure) == 63
+    #: 🔴 63 → **65** (Phase 6-AF). 늘어난 둘도 트리거 계층이 아니다:
+    #: ``engine.token`` (토큰의 생성·소멸) 과 ``engine.state.summon_usage``
+    #: (이 턴에 어느 카드 이름을 어떤 소환으로 썼는가) 이고, 둘 다 이
+    #: Phase 가 **구현한 것**이다. 휴면 모듈 넷은 그대로 폐쇄 밖이다.
+    assert len(closure) == 65
     for module in (
         "engine.trigger_chain",
         "engine.trigger_order",

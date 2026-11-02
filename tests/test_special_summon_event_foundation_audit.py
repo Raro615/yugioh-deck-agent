@@ -591,6 +591,10 @@ def test_12_exactly_one_registered_effect_performs_a_special_summon():
         "return_to_hand",
         "send_to_grave",
         "shuffle",
+        #: 🔴 Phase 6-AF — 기르수 ③ 의 토큰 생성. 특수 소환이 **아니다**:
+        #: 어느 자리에서도 오지 않는 개체를 만들어 놓는 일이고, 그래서 위
+        #: ``summoners`` 는 하나로 그대로다.
+        "create_token",
         #: 🔴 Phase 6-AC — 성유물－『성장』 ②.
         "special_summon",
     }

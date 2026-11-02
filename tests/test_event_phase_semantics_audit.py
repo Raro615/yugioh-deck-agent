@@ -440,7 +440,23 @@ def production_sources() -> list[tuple[pathlib.Path, str]]:
 #:    자신의 이름이기 때문이다. 그래서 설명을 지우는 대신 이 감사가 산문과
 #:    코드를 구분하게 고쳤다 (3-E-44 가 세운 규칙: 글자가 아니라 AST 를 센다).
 #:    구분이 없으면 "거부했다고 적은 것" 과 "읽는다" 가 같은 위반으로 보인다.
-PROSE_ONLY_MENTION = "engine/trigger_compiler.py"
+#: 🔴 **Phase 6-AF 에서 둘이 되었다.** ``engine/link_rules.py`` 가
+#: 갈라테아i 의 「1턴에 1번」 제약을 적으면서 **공식 Lua 를 그대로 인용**
+#: 한다 (``RESET_PHASE | PHASE_END``). 인용은 근거이고 코드가 아니다 —
+#: 아래가 그 파일에서도 **코드 자리는 0** 임을 따로 확인한다. 이름을
+#: 읽는 코드가 없다는 §8 의 사실은 그대로다.
+#: 🔴 **Phase 6-AF — 공식 Lua 를 그대로 인용하는 파일들.** 인용은 근거이고
+#: 읽는 코드가 아니다. 두 파일 다 갈라테아i 의 「그 턴」 제약을 적으면서
+#: ``RESET_PHASE|PHASE_END`` 가 든 한 줄을 인용한다 (``link_rules`` 는
+#: :class:`LinkSummonTurnLimit`, ``summon_restriction`` 은 그 제약을 특수
+#: 소환 금지 표에 ``prohibits=False`` 로 적은 자리의 근거). 아래가 두
+#: 파일에서 **이름으로 읽는 자리는 0** 임을 따로 확인한다.
+QUOTE_ONLY_MENTIONS = (
+    "engine/link_rules.py",
+    "engine/summon_restriction.py",
+)
+PROSE_ONLY_MENTIONS = ("engine/trigger_compiler.py",) + QUOTE_ONLY_MENTIONS
+PROSE_ONLY_MENTION = PROSE_ONLY_MENTIONS[0]
 
 
 def code_mentions(path: pathlib.Path, text: str, token: str) -> list[int]:
@@ -482,6 +498,40 @@ def code_mentions(path: pathlib.Path, text: str, token: str) -> list[int]:
     return hits
 
 
+def name_mentions(path: pathlib.Path, text: str, token: str) -> list[int]:
+    """
+    `token` 이 **식별자로** 등장하는 줄 번호. 문자열과 주석은 세지 않는다.
+
+    :func:`code_mentions` 보다 좁다 — "읽는 코드가 있는가" 만 묻는다.
+    """
+    import io
+    import tokenize
+
+    hits: list[int] = []
+    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+        if tok.type == tokenize.NAME and token in tok.string:
+            hits.append(tok.start[0])
+    return hits
+
+
+def string_only_mentions(path: pathlib.Path, text: str, token: str) -> bool:
+    """그 이름이 **문자열 리터럴 안에서만** 나타나는가."""
+    import io
+    import tokenize
+
+    seen = False
+    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+        if token not in tok.string:
+            continue
+        if tok.type == tokenize.STRING:
+            seen = True
+            continue
+        if tok.type == tokenize.COMMENT:
+            continue
+        return False
+    return seen
+
+
 def test_10_no_production_module_mentions_event_phase_or_its_modifiers():
     """
     **§8 — ``engine/`` · ``agent/`` 어디에도 그 이름을 읽는 코드가 없다.**
@@ -498,8 +548,18 @@ def test_10_no_production_module_mentions_event_phase_or_its_modifiers():
         for token in tokens:
             if token not in text:
                 continue
-            assert relative == PROSE_ONLY_MENTION, (relative, token)
+            assert relative in PROSE_ONLY_MENTIONS, (relative, token)
             prose_only_seen = True
+            if relative in QUOTE_ONLY_MENTIONS:
+                #: 🔴 **Phase 6-AF.** 여기 든 것은 공식 Lua 의 **인용**과 그
+                #: 한국어 설명이다 (``LinkSummonTurnLimit.lua_excerpt`` ·
+                #: ``note``). 인용은 근거이고 읽는 코드가 아니다 — 그래서
+                #: ``code_mentions`` 는 걸리지만(문자열 리터럴이다) **이름으로
+                #: 읽는 자리는 0** 이고, 그것이 §8 이 재는 사실이다. 느슨하게
+                #: 한 것이 아니라 **더 좁게** 센다.
+                assert name_mentions(path, text, token) == [], (relative, token)
+                assert string_only_mentions(path, text, token), (relative, token)
+                continue
             #: 산문일 뿐 코드가 아니다 — 읽지도, 자리를 비워 두지도 않았다.
             assert code_mentions(path, text, token) == [], (relative, token)
 

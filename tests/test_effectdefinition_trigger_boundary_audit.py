@@ -370,7 +370,12 @@ def test_10_the_registered_definitions_have_no_trigger_specs_today():
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     assert registry is not None
 
     #: production 에서 ``TriggerSpec`` 을 만드는 자리는 컴파일러 하나다.
@@ -594,7 +599,14 @@ def test_16_this_audit_changed_no_production_file():
     # 해결되는 조건" 둘과 그 근거이고, 유발과 아무 관계가 없다. 아래의
     # ``{"code", "point", "event", "trigger", "timing"}`` 교집합이 여전히
     # 비어 있는 것이 그 증거다.
-    assert len(dataclasses.fields(EffectDefinition)) == 14
+    #: 🔴 Phase 6-AF 에서 14 → **16** 칸 (``activation_zones`` ·
+    #: ``resolution_condition``). 둘 다 **사건 칸이 아니다** —
+    #: ``activation_zones`` 는 공식 스크립트의 ``SetRange`` 를 옮긴 **자리**
+    #: 집합이고 (``c69811710.lua`` e3 의 ``LOCATION_MZONE``),
+    #: ``resolution_condition`` 은 해결 함수가 **다시 보는 조건**이다
+    #: (``s.tkop`` 이 ``s.tktg`` 와 같은 다섯 가지를 재검사한다). 어느 쪽도
+    #: "무엇이 일어났는가" 를 담지 않으므로 아래 교집합·부재 단언은 그대로다.
+    assert len(dataclasses.fields(EffectDefinition)) == 16
     #: ``TriggerSpec`` 의 칸은 3-E-39 의 9 에서 6-E 의 10 으로 움직였다
     #: (``summons``: 통상소환과 특수소환이 같은 ``MONSTER_SUMMONED`` 시점으로
     #: 번역되므로, 칸이 없으면 통상소환 사건이 특수소환 전용 효과를 후보로

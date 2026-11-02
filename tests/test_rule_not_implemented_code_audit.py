@@ -195,7 +195,12 @@ MINE = 0
 #: 바꾸지 않는다). 그래서 ``CODE_OCCURRENCES`` 도 85 → 86 이고 **산문 37 은
 #: 그대로다** — 두 수가 같은 만큼 늘었다는 것이 "새 설명이 아니라 새 거절
 #: 자리" 라는 증거다.
-STRING_OCCURRENCES = 123
+#: 🔴 123 → **125** (Phase 6-AF). 늘어난 둘은
+#: ``engine/effect/executor.py`` 의 ``_plan_create_token`` 이 **토큰
+#: 규칙이 표에 없을 때** · **표와 카드 데이터가 어긋날 때** 내는
+#: 거부다. 둘 다 "규칙을 아직 구현하지 않았다" 가 맞는 자리이고,
+#: **코드 수(``CODE_OCCURRENCES``)는 움직이지 않았다.**
+STRING_OCCURRENCES = 125
 
 #: 그중 주석 · docstring (코드가 아니다). 3-E-38 이 셋을 더했다 —
 #: 왜 그 자리가 이제 다른 코드를 쓰는지 적은 주석이다.
@@ -228,6 +233,12 @@ STRING_OCCURRENCES = 123
 #:                   원인: ``graveyard_zone_for`` 와 ``_zone_from_grave``
 #:   ``duel.py``     +38 (2300→2338)
 #:                   원인: ``_apply_pass`` 의 빈 체인 가지
+#: 🔴 **Phase 6-AF 에서 두 자리가 밀렸다** —
+#: ``effect/definition.py`` 1024 → 1105 (새 칸 둘과 그 설명이 그 **위**에
+#: 들어갔다: ``activation_zones`` · ``resolution_condition``) 과
+#: ``effect/executor.py`` 1291 → 1339 (토큰 생성의 계획 · 적용이 그
+#: 위에 들어갔다). **산문 37 은 그대로다** — 자리의 성격도 개수도 바뀌지
+#: 않았고, 바뀐 것이 줄 번호뿐이라는 것이 그 증거다.
 PROSE_OCCURRENCES = {
     # 🔴 **Phase 6-AB 보완8 이 이 표를 실측값으로 다시 적었다.**
     #
@@ -265,8 +276,8 @@ PROSE_OCCURRENCES = {
     ("engine/duel.py", 3182),
     ("engine/duel.py", 3248),
     ("engine/duel.py", 3489),
-    ("engine/effect/definition.py", 1024),
-    ("engine/effect/executor.py", 1291),
+    ("engine/effect/definition.py", 1105),
+    ("engine/effect/executor.py", 1339),
     ("engine/special_summon.py", 77),
     ("engine/trigger.py", 811),
     ("engine/trigger.py", 839),
@@ -339,7 +350,12 @@ PROSE_OCCURRENCES = {
 #: ``STRING_OCCURRENCES`` 의 설명에 있는 그 자리다 — 해결 시점에 후보
 #: 자격을 판정하지 못한 경우의 ``UNCHECKED_RULES`` 거절이고, 상태가 모름
 #: 쪽이므로 ``test_05`` 의 **적합** 집합에 들어간다 (21 → 22).
-CODE_OCCURRENCES = 86
+#: 🔴 86 → **88** (Phase 6-AF). 늘어난 둘은
+#: ``engine/effect/executor.py`` 의 ``_plan_create_token`` 이 내는
+#: ``RULE_NOT_IMPLEMENTED`` 둘이다 (토큰 규칙이 표에 없을 때 · 표와
+#: 카드 데이터가 어긋날 때). 둘 다 **모름**을 적는 자리이고 확정
+#: 거부가 늘어난 것이 아니다. 아래 "차이가 13" 은 그대로다.
+CODE_OCCURRENCES = 88
 
 #: ``code: ValidationCode = ValidationCode.RULE_NOT_IMPLEMENTED`` 기본값 8곳.
 FIELD_DEFAULT_OWNERS = {
@@ -407,6 +423,18 @@ FIELD_DEFAULT_OWNERS = {
 #: **적합은 21 → 22 로 늘었다** — 그 하나가 ``_short_selection`` 의 모름
 #: 거절이고, 모름 쪽 상태와 짝지었으므로 적합이다.
 CONTRACT_VIOLATIONS = {
+    # 🔴 **Phase 6-AF 에서 ``effect/executor.py`` 의 일곱 자리가 밀렸다**
+    # (646 → 694 · 794 → 842 · 807 → 855 · 930 → 978 · 1234 → 1282 ·
+    # 1540 → 1594 · 1878 → 1932).
+    #
+    # 원인은 이 자리들보다 **위**에 들어간 것들이다 — ``CreateTokenOperation``
+    # 의 계획·적용 처리(``_plan_create_token`` · ``_apply_create_token``) 와
+    # ``engine.token`` 을 늦게 들여오는 ``_token_module()``, 그리고
+    # ``_check_condition`` 이 해결 시점 재검사 조건을 고르는 네 줄이다.
+    #
+    # **위반 13 은 그대로다** — 자리의 성격도 개수도 짝지은 상태도 바뀌지
+    # 않았고, 바뀐 것이 줄 번호뿐이라는 것이 그 증거다. 적합 쪽만 22 → 24
+    # 로 늘었다 (``CONFORMING_SITES``).
     # 🔴 Phase 6-B 가 ``ActionExecutor.__init__`` 에 ``journal`` 인자와
     # 설명(+23줄)을 더해 **그 아래가 밀렸다** (316 → 339). 거부 자리와
     # 짝지은 상태는 그대로다.
@@ -459,12 +487,12 @@ CONTRACT_VIOLATIONS = {
     # 상태도 바뀌지 않았고, 바뀐 것이 줄 번호뿐이다.
     ("engine/activation.py", 761, "ActivationStatus.INVALID_ACTION"),
     ("engine/activation.py", 793, "ActivationStatus.CHAIN_REFUSED"),
-    ("engine/effect/executor.py", 646, "ResolutionStatus.EXECUTION_ERROR"),
-    ("engine/effect/executor.py", 794, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 807, "ResolutionStatus.INVALID_OPERATION"),
-    ("engine/effect/executor.py", 930, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1234, "ResolutionStatus.INVALID_CONTEXT"),
-    ("engine/effect/executor.py", 1540, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 694, "ResolutionStatus.EXECUTION_ERROR"),
+    ("engine/effect/executor.py", 842, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 855, "ResolutionStatus.INVALID_OPERATION"),
+    ("engine/effect/executor.py", 978, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1282, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1594, "ResolutionStatus.INVALID_CONTEXT"),
     # 🔴 **한 자리가 밀렸다** (Phase 6-L). ``engine/effect/executor.py``
     # 1336 → **1390**. 6-L 이 그 위에 ``_target_spec_of`` ·
     # ``_resolve_self_reference`` (+45) 와 ``_plan_card_operation`` 의
@@ -474,7 +502,7 @@ CONTRACT_VIOLATIONS = {
     # 더한 거절 자리(``_resolve_self_reference``)는 이 목록에 들어오지
     # 않는다: 그쪽은 ``INFORMATION_UNAVAILABLE`` 을 쓴다 — "규칙을 아직
     # 옮기지 않았다" 가 아니라 "이 문맥에 그 카드가 없다" 이기 때문이다.
-    ("engine/effect/executor.py", 1878, "ResolutionStatus.INVALID_CONTEXT"),
+    ("engine/effect/executor.py", 1932, "ResolutionStatus.INVALID_CONTEXT"),
     ("engine/effect/resolution.py", 581, "ResolutionStatus.FORBIDDEN"),
     ("engine/payment.py", 402, "PaymentStatus.EXECUTION_ERROR"),
     # 🔴 보완6 에서 +6 밀렸다 (485 → 491) — ``act`` 가 ``stage`` 를
@@ -497,7 +525,11 @@ CONTRACT_VIOLATIONS = {
 #: ``EffectExecutor._short_selection`` 의 ``UNCHECKED_RULES`` ·
 #: ``RULE_NOT_IMPLEMENTED`` 짝이다 — 상태가 ``_UNKNOWN_STATUSES`` 쪽이므로
 #: **적합**이다. 위반 13 은 그대로다.
-CONFORMING_SITES = 22
+#: 🔴 22 → **24** (Phase 6-AF). 늘어난 둘은 ``_plan_create_token`` 이 내는
+#: ``UNSUPPORTED_OPERATION`` + ``RULE_NOT_IMPLEMENTED`` 짝이다 (토큰 규칙
+#: 부재 · 카드 데이터 불일치). 둘 다 **모른다 쪽 상태**와 짝지었으므로
+#: 적합이고, 위반 13 은 하나도 늘지 않았다.
+CONFORMING_SITES = 24
 
 #: 해결 계층의 "모른다" 쪽 상태 — `resolution.py` 의 docstring 을 읽어 모았다.
 RESOLUTION_UNKNOWN_NAMES = {

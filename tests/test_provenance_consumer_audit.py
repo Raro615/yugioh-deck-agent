@@ -770,6 +770,13 @@ def test_36_the_text_analyzer_was_not_wired_into_production():
 
     ``test_01`` 이 호출자 0개를 확인하고, 여기서는 **이 Phase 가 그것을
     바꾸지 않았다**는 사실을 diff 로 확인한다.
+
+    🔴 **Phase 6-AF 정정 — 범위를 ``HEAD`` 에서 이 Phase 의 commit 으로
+    좁혔다.** 전에는 ``git diff base HEAD`` 였고, 그것이 재는 것은 "이
+    Phase 가 바꾸지 않았다" 가 아니라 **"그 뒤로 아무도 바꾸지 않았다"**
+    였다. 6-AF 가 같은 파일에 토큰 표를 더하면서 그 차이가 드러났다 (토큰도
+    한국어 이름을 받아야 한다). 단언을 지우거나 파일을 목록에서 빼지 않고
+    **범위를 이 Phase 로 맞춘다** — 그래야 docstring 이 말하는 사실을 센다.
     """
     shas = subprocess.run(
         ["git", "log", "--format=%H", "--grep=^Phase 3-F-41:"],
@@ -782,7 +789,7 @@ def test_36_the_text_analyzer_was_not_wired_into_production():
         cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
     ).stdout.strip()
     diff = subprocess.run(
-        ["git", "diff", base, "HEAD", "--",
+        ["git", "diff", base, shas[0], "--",
          "analysis/text_effect_analyzer.py", "analysis/__init__.py",
          "core/card_repository.py"],
         cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,

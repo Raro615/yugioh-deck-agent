@@ -390,8 +390,14 @@ def test_16_build_discards_that_return_value():
                     and id(node) in bare):
                 discarded.append(f"{path.relative_to(PROJECT_ROOT)}: "
                                  f"{ast.unparse(node)}")
-    assert discarded == ["core/card_repository.py: korean_source.apply(cards)"], \
-        discarded
+    #: 🔴 **Phase 6-AF 에서 같은 파일에 한 자리가 더 생겼다** — 토큰도
+    #: 한국어 이름을 받아야 하므로 ``korean_source.apply(tokens)`` 을 부른다.
+    #: 경계는 그대로다: 자리는 여전히 ``core/card_repository.py`` **하나**이고
+    #: 둘 다 반환값을 버린다. 늘어난 것은 호출이고 경계가 아니다.
+    assert discarded == [
+        "core/card_repository.py: korean_source.apply(cards)",
+        "core/card_repository.py: korean_source.apply(tokens)",
+    ], discarded
 
 
 def test_17_no_production_consumer_reads_the_applied_count():

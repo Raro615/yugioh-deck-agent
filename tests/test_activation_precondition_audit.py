@@ -298,6 +298,15 @@ def test_01_the_three_layers_hold_different_fields():
         #: 도 **다른 칸이다** — 사건을 담지 않고 그 카드 텍스트에서 옮긴
         #: 횟수와 범위만 담는다. 위의 세 단언도 그대로 참이다.
         "use_limit",
+        #: 🔴 Phase 6-AF — 공식 스크립트의 ``SetRange`` 를 옮긴 **자리**
+        #: 집합 (``frozenset[Zone] | None``). 사건이 아니다 — "어디에 있을
+        #: 때 발동할 수 있는가" 이고, ``None`` 은 "적지 않았다" 다.
+        "activation_zones",
+        #: 🔴 Phase 6-AF — 해결 함수가 **다시 보는 조건**
+        #: (``Condition | None``). 사건이 아니다 — ``s.tkop`` 이
+        #: ``s.tktg`` 와 같은 다섯 가지를 재검사하는 것을 옮긴 값이고,
+        #: 담는 것은 "무엇이 참인가" 다.
+        "resolution_condition",
         "cost",
         "targets",
         "declarations",
@@ -359,7 +368,12 @@ def test_03_each_precondition_item_is_classified(repository):
     # ``executable=True``). 그 시점에 실제로 17건이었다.
     # 🔴 Phase 6-AC 에서 18 → **19** (성유물－『성장』 ②, 목록의 첫 특수
     # 소환 효과 · ``executable=True``). 그때마다 실제로 그 수였다.
-    assert len(rows) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(rows) == 20
 
     #: 발동 조건 — 실제로 들어 있다 (D).
     #: 🔴 8 → **9** (6-V). 기르수 ① 의 발동 조건은 ``s.tgtg`` 의 덱 장수
@@ -367,14 +381,19 @@ def test_03_each_precondition_item_is_classified(repository):
     #: 아래 ``test_11`` 이 지키는 "조건은 판을 읽는다" 가 그대로다.
     #: 🔴 9 → **10** (6-AC). 『성장』 ② 의 조건도 **상태**다
     #: (``ZoneHasFreeSlot``) — 사건이 아니다.
-    assert sum(1 for r in rows if r["activation"] is not None) == 10, [
+    #: 🔴 10 → **11** (Phase 6-AF, 기르수 ③). 그 조건도 **상태**다 —
+    #: 자기 필드에 기르수 외 몬스터가 없고 양쪽 몬스터 존에 빈 칸이
+    #: 있는지 묻는다. 사건이 아니다.
+    assert sum(1 for r in rows if r["activation"] is not None) == 11, [
         r["card_id"] for r in rows if r["activation"] is not None
     ]
     #: 비용 — 칸은 있고 값은 **전부 비어 있다** (STRUCTURAL-120).
     assert all(not r["has_cost"] for r in rows)
     #: effect_ref/ordinal — 있다. 🔴 **전부 0 이던 것이 끝났다** (6-AC) —
     #: 『성장』 은 공식 ②를 등재했으므로 1 이고, 1 인 것이 하나뿐이다.
-    assert {r["ordinal"] for r in rows} == {0, 1}
+    #: 🔴 **Phase 6-AF 가 2 를 더했다** — 기르수 ③(토큰 생성)은 공식 Lua
+    #: 의 세 번째 블록이다. 1 인 것이 정확히 하나라는 사실은 그대로다.
+    assert {r["ordinal"] for r in rows} == {0, 1, 2}
     assert sum(1 for r in rows if r["ordinal"] == 1) == 1
     #: 카드 종류 — 등재된 것은 마법 11 · 함정 5 · **몬스터 3**.
     #:
@@ -383,8 +402,10 @@ def test_03_each_precondition_item_is_classified(repository):
     #: 그대로 센다. 마법 · 함정 두 열은 **하나도 움직이지 않았다.**
     #: 🔴 2 → **3** (Phase 6-AC, 『성장』 ②). 마법 · 함정 두 열은 **또**
     #: 움직이지 않았고, 그것이 이 분포가 말하는 사실이다.
+    #: 🔴 3 → **4** (Phase 6-AF, 기르수 ③). 마법 · 함정 두 열은 **또**
+    #: 움직이지 않았고, 그것이 이 분포가 말하는 사실이다.
     assert collections.Counter(r["kind"] for r in rows) == {
-        "spell": 11, "trap": 5, "monster": 3
+        "spell": 11, "trap": 5, "monster": 4
     }
 
 
@@ -594,7 +615,10 @@ def test_11_the_can_activate_condition_lives_in_the_definition(repository):
     with_condition = [r for r in rows if r["activation"] is not None]
     #: 🔴 9 → **10** (Phase 6-AC). 『성장』 ② 의 조건도 **상태 조건**이다
     #: (``ZoneHasFreeSlot`` — 자신 몬스터 존에 빈 자리) — 사건을 묻지 않는다.
-    assert len(with_condition) == 10, [r["card_id"] for r in with_condition]
+    #: 🔴 10 → **11** (Phase 6-AF, 기르수 ③). 그 조건도 **상태**다 —
+    #: 자기 필드에 기르수 외 몬스터가 없고 양쪽 몬스터 존에 빈 칸이
+    #: 있는지 묻는다. 사건이 아니다.
+    assert len(with_condition) == 11, [r["card_id"] for r in with_condition]
 
     #: 그 조건은 **판을 읽는다** — 사건이 아니라 상태다.
     sample = next(
@@ -636,7 +660,12 @@ def test_13_sixteen_registered_definitions_are_tabulated(repository):
     # 🔴 16 → 17 (6-K, 어니스트 ①) → 18 (6-V, 기르수 ①) → **19**
     # (6-AC, 『성장』 ②). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라
     # 그때마다 실제로 그 수였다.
-    assert len(rows) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(rows) == 20
 
     #: 모든 줄이 같은 모양으로 채워진다.
     #:
@@ -683,7 +712,9 @@ def test_13_sixteen_registered_definitions_are_tabulated(repository):
     #: 있었던 것이 아니라 그 시점에 실제로 13건이었다.
     #: 🔴 14 → **15** (Phase 6-V, 기르수 ①) → **16** (Phase 6-AC,
     #: 『성장』 ②). 실행하지 않는 셋은 **그대로**다 (ADR-006).
-    assert sum(1 for r in rows if r["executable"]) == 16
+    #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 실행하지 않는 셋은
+    #: **그대로**다 (ADR-006).
+    assert sum(1 for r in rows if r["executable"]) == 17
     assert sum(1 for r in rows if not r["executable"]) == 3
 
 
@@ -750,7 +781,9 @@ def test_16_monster_effects_are_blocked_for_a_different_reason(repository):
     rows = registered_rows(repository)
     monsters = [r for r in rows if r["kind"] == "monster"]
     #: 🔴 2 → **3** (Phase 6-AC, 『성장』 ②). 셋 다 실행된다.
-    assert len(monsters) == 3, monsters
+    #: 🔴 3 → **4** (Phase 6-AF, 기르수 ③). 넷 다 실행된다. 막는 이유가
+    #: 함정과 다르다는 이 테스트의 사실은 그대로다.
+    assert len(monsters) == 4, monsters
     assert all(row["executable"] is True for row in monsters), monsters
     #: 통상 몬스터는 후보를 내지 않는다.
     assert activatable_effects(LUSTER_DRAGON) == ()
@@ -994,7 +1027,14 @@ def test_24_engine_v1_was_not_widened():
     #: 칸이 아니고, 아래 교집합 검사가 그 사실을 센다.
     #: 🔴 Phase 6-AD 후속2 에서 13 → **14** 칸 (``resolution_skip``). 그 칸도
     #: 사건 칸이 아니다 — 담는 것은 해결 시점의 생략 조건 둘과 그 근거다.
-    assert len(dataclasses.fields(EffectDefinition)) == 14
+    #: 🔴 Phase 6-AF 에서 14 → **16** 칸 (``activation_zones`` ·
+    #: ``resolution_condition``). 둘 다 **사건 칸이 아니다** —
+    #: ``activation_zones`` 는 공식 스크립트의 ``SetRange`` 를 옮긴 **자리**
+    #: 집합이고 (``c69811710.lua`` e3 의 ``LOCATION_MZONE``),
+    #: ``resolution_condition`` 은 해결 함수가 **다시 보는 조건**이다
+    #: (``s.tkop`` 이 ``s.tktg`` 와 같은 다섯 가지를 재검사한다). 어느 쪽도
+    #: "무엇이 일어났는가" 를 담지 않으므로 아래 교집합·부재 단언은 그대로다.
+    assert len(dataclasses.fields(EffectDefinition)) == 16
     #: ``TimingPoint`` 도 8개 그대로다.
     assert len(list(TimingPoint)) == 8
 

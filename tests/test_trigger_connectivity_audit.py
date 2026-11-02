@@ -526,12 +526,18 @@ def test_10_every_registered_effect_is_free_chain_not_a_trigger(repository):
         for entry, code in zip(EFFECT_LIBRARY, codes)
         if code is None
     ]
-    assert without_code == [HONEST], without_code
+    #: 🔴 **Phase 6-AF 에서 한 건 → 두 건이 되었다** — 기르수 ③ 도 기동
+    #: 효과이고 ``SetCode`` 가 없다. 이 시험이 재는 사실은 수가 아니라
+    #: **"코드가 없는 쪽은 전부 기동 효과다"** 이므로, 수를 고정하는 대신
+    #: 그 사실을 그대로 센다 (아래 루프가 두 등재를 **각각** 확인한다).
+    from engine.effect.library import GIRSU as _GIRSU
+
+    assert without_code == [HONEST, _GIRSU], without_code
     assert [
         entry.definition.activation_kind
-        for entry in EFFECT_LIBRARY
-        if entry.definition.effect_ref.card_id == HONEST
-    ] == [ActivationKind.IGNITION]
+        for entry, code in zip(EFFECT_LIBRARY, codes)
+        if code is None
+    ] == [ActivationKind.IGNITION, ActivationKind.IGNITION]
 
 
 # ======================================================================

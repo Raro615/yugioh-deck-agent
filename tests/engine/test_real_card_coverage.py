@@ -244,7 +244,11 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
         assert row is not None, entry.card_id
         if "EFFECT_TYPE_ACTIVATE" not in row["types"]:
             not_activate.append(entry.card_id)
-    assert not_activate == [HONEST, GIRSU, WORLD_WAND], not_activate
+    #: 🔴 **Phase 6-AF 에서 기르수가 두 번 나온다** — 같은 카드의 블록
+    #: 둘을 등재했기 때문이다 (①유발 · ③기동). 목록은 **등재 단위**로
+    #: 세므로 카드가 중복되는 것이 정상이고, 그 사실을 억지로 집합으로
+    #: 바꾸지 않고 그대로 적는다.
+    assert not_activate == [HONEST, GIRSU, GIRSU, WORLD_WAND], not_activate
 
     # ② 그 하나가 기동 효과이고, **실행된다** (Phase 6-L).
     assert corpus[HONEST]["types"] >= {
@@ -308,7 +312,11 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
     #: 어니스트 · 기르수와 **같은 이유**로 빼고 센다.
     from engine.effect.library import GIRSU, HONEST, WORLD_WAND
 
-    assert skipped == [HONEST, GIRSU, WORLD_WAND], skipped
+    #: 🔴 **Phase 6-AF 에서 기르수가 두 번 나온다** — 같은 카드의 블록
+    #: 둘을 등재했기 때문이다 (①유발 · ③기동). 목록은 **등재 단위**로
+    #: 세므로 카드가 중복되는 것이 정상이고, 그 사실을 억지로 집합으로
+    #: 바꾸지 않고 그대로 적는다.
+    assert skipped == [HONEST, GIRSU, GIRSU, WORLD_WAND], skipped
     assert corpus[HONEST]["blocks"] == 3
     assert corpus[GIRSU]["blocks"] >= 3
     assert corpus[WORLD_WAND]["blocks"] >= 3

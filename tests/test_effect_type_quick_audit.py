@@ -647,7 +647,14 @@ def test_10_effect_definition_has_no_effect_types_field():
     # 일을 생략하고도 정상 해결되는 조건" 둘과 그 근거이고, 공식 스크립트의
     # 해결 함수에서 읽은 값이다 (``c93920420.lua`` 의 ``s.spop1``). **어떤
     # 사건**인지도 **어떤 효과 종류**인지도 담지 않는다.
-    assert len(definition) == 14
+    #: 🔴 Phase 6-AF 에서 14 → **16** 칸 (``activation_zones`` ·
+    #: ``resolution_condition``). 둘 다 **사건 칸이 아니다** —
+    #: ``activation_zones`` 는 공식 스크립트의 ``SetRange`` 를 옮긴 **자리**
+    #: 집합이고 (``c69811710.lua`` e3 의 ``LOCATION_MZONE``),
+    #: ``resolution_condition`` 은 해결 함수가 **다시 보는 조건**이다
+    #: (``s.tkop`` 이 ``s.tktg`` 와 같은 다섯 가지를 재검사한다). 어느 쪽도
+    #: "무엇이 일어났는가" 를 담지 않으므로 아래 교집합·부재 단언은 그대로다.
+    assert len(definition) == 16
     assert definition == {
         "effect_ref",
         "source_card_id",
@@ -661,6 +668,8 @@ def test_10_effect_definition_has_no_effect_types_field():
         "guards",
         "activation_waits_for_event",  # Phase 6-Q — 사건을 **기다리는가** (bool). 어떤 사건인지는 담지 않는다
         "use_limit",  # Phase 6-AC — 「1턴에 몇 번까지인가」. effect_types 가 아니다
+        "activation_zones",  # Phase 6-AF — SetRange 를 옮긴 자리 집합. effect_types 가 아니다
+        "resolution_condition",  # Phase 6-AF — 해결 시 재검사 조건. effect_types 가 아니다
         "resolution_skip",  # Phase 6-AD 후속2 — 해결 시 생략 조건 + 근거. effect_types 가 아니다
         "provenance",
     }

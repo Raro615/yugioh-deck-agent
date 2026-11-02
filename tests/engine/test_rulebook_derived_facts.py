@@ -806,9 +806,16 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
     #: 🔴 17 → 18 · 14 → 15 (Phase 6-V). 아래가 재는 것은 **욕망의 항아리의
     #: 실행이 그대로인가** 이고, 그 사실은 변하지 않았다.
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
-    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 16
+    #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
+    #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
+    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 17
 
     definition = definition_registry().definition_for(
         EffectRef(POT_OF_GREED, 0)

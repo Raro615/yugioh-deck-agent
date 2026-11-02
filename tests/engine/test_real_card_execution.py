@@ -321,7 +321,12 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
     수도 14 → 15 로 움직인다.
     """
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -370,7 +375,10 @@ def test_a_fifteen_real_effect_refs_are_executable():
         if availability(entry.effect_ref) is ExecutionAvailability.EXECUTABLE
     }
 
-    assert executable == {
+    #: 🔴 **Phase 6-AF 가 기르수 ③ 을 더했다** — ordinal 이 **2** 이므로
+    #: 아래 ``EffectRef(cid, 0)`` 묶음에 들어가지 않는다. 억지로 0 에 맞추지
+    #: 않고 그 효과의 실제 ref 를 따로 더한다.
+    assert executable == {EffectRef(GIRSU, 2)} | {
         EffectRef(cid, 0)
         for cid in OLD_CARDS
         + NEW_CARDS
@@ -390,7 +398,8 @@ def test_a_fifteen_real_effect_refs_are_executable():
         EffectRef(WORLD_WAND, 1),
     }
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
-    assert len(executable) == 16
+    #: 🔴 Phase 6-AF — 기르수 ③(토큰 생성)이 더해졌다 (16 → **17**).
+    assert len(executable) == 17
 
 
 def test_a_every_declined_card_says_what_is_missing():
@@ -479,6 +488,11 @@ def test_a_operation_coverage_by_real_cards():
         #: 몬스터를 특수 소환한다 (``explain_special_summon`` 이 패를
         #: 소생 제한이 묻지 않는 자리로 판정한다).
         OperationKind.SPECIAL_SUMMON,
+        #: 🔴 Phase 6-AF — ``CREATE_TOKEN`` 은 **처음부터 A** 다. 이 종류를
+        #: 더한 까닭이 실제 카드 하나이기 때문이다: 기르수 ③ 이 양쪽에
+        #: 성유물 토큰을 만든다 (``c69811710.lua`` 의 ``s.tkop`` 이
+        #: ``Duel.CreateToken`` 둘과 ``SpecialSummonStep`` 둘을 쓴다).
+        OperationKind.CREATE_TOKEN,
     }
     # B. synthetic 으로만 검증된 종류 (STRUCTURAL-66)
     #

@@ -443,19 +443,31 @@ def test_08_live_never_calls_an_activation_wrong_zone_invalid():
         for node in ast.walk(ast.parse(source_of(path)))
         if isinstance(node, ast.FunctionDef) and "SOURCE_WRONG_ZONE" in codes_in(node)
     }
+    #: 🔴 **Phase 6-AF 가 다섯째를 더했다** — ``_activate_effect`` 다. 그러나
+    #: 구분은 사라지지 않고 **좁아졌다**: live 는 여전히 발동의 자리를
+    #: **추측으로** 적지 않는다. ``EffectDefinition.activation_zones`` 에
+    #: 공식 ``SetRange`` 를 옮겨 둔 효과에만 ``InAnyZone`` 요구가 붙고
+    #: (기르수 ③ 의 ``LOCATION_MZONE``), 적어 두지 않은 효과는 6-AF 전과
+    #: 똑같이 아무 요구도 받지 않는다 — 그래서 dormant 와의 의미 차이는
+    #: **선언하지 않은 효과에 대해** 그대로다.
     assert producers == {
         "_summon_like",
         "_set_spell_trap",
         "_change_position",
         "_attack",
+        "_activate_effect",
     }
 
     activate_codes = codes_in(function_of(path, "_activate_effect"))
-    assert "SOURCE_WRONG_ZONE" not in activate_codes
+    #: 🔴 **Phase 6-AF 가 이 집합에 ``SOURCE_WRONG_ZONE`` 을 더했다** —
+    #: 선언한 효과에만 붙는다 (바로 위 설명). 집합을 지우는 대신 그대로
+    #: 적고, 나머지 다섯은 **하나도** 움직이지 않았음을 센다.
+    assert "SOURCE_WRONG_ZONE" in activate_codes
     assert activate_codes == {
         "NOT_TURN_PLAYER",
         "RULE_NOT_IMPLEMENTED",
         "SOURCE_NOT_CONTROLLED",
+        "SOURCE_WRONG_ZONE",
         "WRONG_PHASE",
         "ZONE_FULL",
     }
@@ -848,7 +860,12 @@ def test_21_no_registered_effect_has_a_cost_so_the_live_filter_removes_nothing()
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     assert costed_entries == []
     assert "if definition.cost.costs:" in source_of("engine/duel.py")
 

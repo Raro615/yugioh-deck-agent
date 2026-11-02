@@ -142,12 +142,21 @@ def _summon(duel, *, seat: int = MINE):
     return entry
 
 
-def _trigger_action(duel, *, seat: int = MINE, card_id: int = GIRSU):
+def _trigger_action(
+    duel, *, seat: int = MINE, card_id: int = GIRSU, ordinal: int = 0
+):
     """
-    후보 목록에서 **그 카드의 효과 발동 하나**를 꺼낸다. 없으면 ``None``.
+    후보 목록에서 **그 카드의 그 효과 발동 하나**를 꺼낸다. 없으면 ``None``.
 
     카드를 지목하는 이유: 패에 다른 발동 가능한 카드가 있으면 후보 목록에
     둘 이상이 오르고, 그때 "첫 번째" 를 집으면 무엇을 쟀는지 알 수 없다.
+
+    🔴 **Phase 6-AF 에서 같은 이유가 ordinal 로도 번졌다.** 기르수 ③(토큰
+    생성)을 등재했으므로 **한 카드가 후보를 둘** 올린다 — ①(유발)과
+    ③(기동)이다. 카드만 지목하면 다시 "첫 번째" 를 집는 셈이 되므로
+    ordinal 까지 지목한다. 기본값 0 은 이 헬퍼를 쓰는 모든 자리가 뜻하던
+    것, 즉 **유발 ①** 이다. 단언을 느슨하게 한 것이 아니라 **무엇을 쟀는지
+    를 좁혔다.**
     """
     return next(
         (
@@ -156,6 +165,7 @@ def _trigger_action(duel, *, seat: int = MINE, card_id: int = GIRSU):
             if a.kind is PlayerActionKind.ACTIVATE_EFFECT
             and a.effect_ref is not None
             and a.effect_ref.card_id == card_id
+            and a.effect_ref.ordinal == ordinal
         ),
         None,
     )
@@ -509,7 +519,17 @@ def test_a07_the_duel_goes_on_after_the_resolution(repository):
     kinds = {a.kind.value for a in legal.allowed}
     assert "end_phase" in kinds, kinds
     #: 🔴 같은 사건으로 다시 발동할 수는 없다.
-    assert "activate_effect" not in kinds, kinds
+    #: 🔴 **Phase 6-AF 가 "기동 효과가 하나도 오르지 않는다" 를 끝냈다** —
+    #: 기르수 ③(토큰 생성, ``c69811710.lua`` e3)을 등재했으므로 필드의
+    #: 기르수가 기동 효과 후보를 **실제로** 올린다. 이 시험이 재는 사실은
+    #: 그것이 아니라 "지나간/해결된 유발 ① 이 다시 오르지 않는다" 이므로,
+    #: 단언을 지우거나 느슨하게 하지 않고 **그 사실만 더 좁게** 적는다.
+    offered_refs = {
+        action.effect_ref
+        for action in legal.allowed
+        if action.kind is PlayerActionKind.ACTIVATE_EFFECT
+    }
+    assert offered_refs == {EffectRef(GIRSU, 2)}, offered_refs
 
 
 @pytest.mark.real_card
@@ -923,7 +943,10 @@ def test_b12_activation_time_targeting_is_untouched(repository):
     #: 판단을 정정해 **미루는 쪽**으로 옮겼다. 열셋은 6-AC 전과 같은
     #: 집합이다 — 그것이 이 수가 말하는 사실이다 (등재된 다른 효과는 한
     #: 글자도 달라지지 않았다).
-    assert len(kept) == 13, kept
+    #: 🔴 13 → **14** (Phase 6-AF, 기르수 ③). 그 효과는 고를 것이
+    #: 없으므로 (토큰을 **만든다** — 후보를 고르지 않는다) 미루는 쪽이
+    #: 아니고, 미루는 셋은 하나도 움직이지 않았다.
+    assert len(kept) == 14, kept
     from engine.effect.library import WORLD_WAND
 
     #: 🔴 **이제 미루는 쪽이다** (Phase 6-AD) — 6-AC 는 이 줄을 ``in kept``

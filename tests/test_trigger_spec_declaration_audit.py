@@ -536,10 +536,14 @@ def test_07_the_condition_field_works_but_cannot_see_the_event(repository):
     #: 🔴 둘 → **셋** (Phase 6-AD, ``SpecialSummonPermitted``). 그것도 판만
     #: 본다 — 양쪽 필드의 앞면 카드를 훑어 특수 소환을 금지하는 것이 있는지
     #: 보고, 사건도 시점도 읽지 않는다 (아래 루프가 그것을 센다).
+    #: 🔴 셋 → **넷** (Phase 6-AF, ``SimultaneousSpecialSummonPermitted``).
+    #: 그것도 "지금 **동시에 둘을** 특수 소환할 수 있는가" 를 묻는 상태
+    #: 술어다 — "소환이 일어났는가" 가 아니다. 사건도 시점도 읽지 않는다.
     assert {name for name in names if "summon" in name.lower()} == {
         "_NormalSummonRightAvailable",
         "_NormalSummonProcedure",
         "SpecialSummonPermitted",
+        "SimultaneousSpecialSummonPermitted",
     }
     #: 🔴 새 술어도 **사건 어휘를 쓰지 않는다** — 다른 모듈에 있으므로 아래
     #: 루프와 따로 센다.
@@ -568,8 +572,19 @@ def test_07_the_condition_field_works_but_cannot_see_the_event(repository):
         "set_spell_trap",
     }
     assert "special_summon" not in {kind.value for kind in RuleActionKind}
-    assert [name for name in dir(view) if "summon" in name.lower()] == [
-        "normal_summons_used"
+    #: 🔴 **Phase 6-AF 가 둘을 더했다** — ``summons_by_name`` 과
+    #: ``summons_of``. 판이 「이 턴에 **어느 카드 이름을** 어떤 소환으로 몇
+    #: 번 썼는가」 를 기억하게 되었고 (갈라테아i 의 「1턴에 1번」), 관측이
+    #: 그것을 읽는다.
+    #:
+    #: **그래도 이 줄이 재는 사실은 그대로다**: ``RuleActionKind`` 에
+    #: ``special_summon`` 이 **여전히 없고** (위 두 단언), 새 칸은 소환권이
+    #: 아니라 **카드 이름 단위의 사용 횟수**다 — 특수 소환이 소환권을
+    #: 쓰지 않는다는 사실은 하나도 움직이지 않았다.
+    assert sorted(name for name in dir(view) if "summon" in name.lower()) == [
+        "normal_summons_used",
+        "summons_by_name",
+        "summons_of",
     ]
 
 
@@ -1007,6 +1022,15 @@ def test_16_the_board_cannot_remember_which_summon_it_was(repository):
         "controller",
     ]
     #: `engine/state/` 전체에서 "summon" 은 **일반 소환권** 하나뿐이다.
+    #:
+    #: 🔴 **Phase 6-AF 가 이 사실을 끝냈다** — ``summon_usage.py`` 가
+    #: 생겼다. 판은 이제 「이 턴에 **어느 카드 이름을 어떤 소환으로** 몇 번
+    #: 썼는가」 를 기억한다 (갈라테아i 의 「1턴에 1번」 제약이 그것을
+    #: 요구한다). 그러나 이 시험이 재는 사실은 **그것이 아니다**: 개체
+    #: (``CardInstance``) 와 그 직전 상태(``PreviousState``) 에는 소환 종류를
+    #: 적는 칸이 **여전히 없고**, 위 두 단언이 그것을 그대로 센다. 즉 "그
+    #: 카드가 어떻게 소환되었는가" 는 아직 판에 없다 — 새로 적은 것은
+    #: **카드 이름 단위의 사용 횟수**이고 개체의 이력이 아니다.
     state_sources = {
         path.name: path.read_text(encoding="utf-8")
         for path in (PROJECT_ROOT / "engine" / "state").glob("*.py")
@@ -1014,7 +1038,12 @@ def test_16_the_board_cannot_remember_which_summon_it_was(repository):
     with_summon = {
         name for name, text in state_sources.items() if "summon" in text.lower()
     }
-    assert with_summon == {"rule_usage.py"}
+    assert with_summon == {
+        "__init__.py",      # 새 모듈을 다시 내보내는 한 줄
+        "game_state.py",    # ``summon_uses`` 칸과 그 사본 · 정규 표현
+        "rule_usage.py",
+        "summon_usage.py",
+    }
 
 
 # ======================================================================

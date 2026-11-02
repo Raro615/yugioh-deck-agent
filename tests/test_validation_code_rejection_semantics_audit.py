@@ -160,7 +160,12 @@ CODE_MEMBER_COUNT = 54
 #: 둘과 **같은 자리**이므로 아래 "차이가 13" 은 그대로다.
 #: 🔴 85 → **86** (Phase 6-AD 후속2). ``REJECTION_PRODUCTIONS`` 가 늘어난
 #: 하나와 **같은 자리**이므로 아래 "차이가 13" 은 그대로다.
-CODE_OCCURRENCES = 86
+#: 🔴 86 → **88** (Phase 6-AF). 늘어난 둘은
+#: ``engine/effect/executor.py`` 의 ``_plan_create_token`` 이 내는
+#: ``RULE_NOT_IMPLEMENTED`` 둘이다 (토큰 규칙이 표에 없을 때 · 표와
+#: 카드 데이터가 어긋날 때). 둘 다 **모름**을 적는 자리이고 확정
+#: 거부가 늘어난 것이 아니다. 아래 "차이가 13" 은 그대로다.
+CODE_OCCURRENCES = 88
 
 #: 그중 **거부를 만드는** 자리.
 #:
@@ -235,7 +240,12 @@ CODE_OCCURRENCES = 86
 #: ``RULE_NOT_IMPLEMENTED`` 로 **모름**을 적는다 — 해결 시점에 후보 자격을
 #: 판정하지 못한 자리이고, 확정 거부가 늘어난 것이 아니다.
 #: ``CODE_OCCURRENCES`` 도 같은 하나만큼 늘어 아래 "차이가 13" 은 그대로다.
-REJECTION_PRODUCTIONS = 73
+#: 🔴 73 → **75** (Phase 6-AF). 늘어난 둘은
+#: ``engine/effect/executor.py`` 의 ``_plan_create_token`` 이 내는
+#: ``RULE_NOT_IMPLEMENTED`` 둘이다 (토큰 규칙이 표에 없을 때 · 표와
+#: 카드 데이터가 어긋날 때). 둘 다 **모름**을 적는 자리이고 확정
+#: 거부가 늘어난 것이 아니다. 아래 "차이가 13" 은 그대로다.
+REJECTION_PRODUCTIONS = 75
 
 #: enum 이 **섹션 주석으로 선언한** 묶음 → 멤버 수.
 DECLARED_SECTIONS = {

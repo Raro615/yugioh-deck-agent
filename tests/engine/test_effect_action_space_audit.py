@@ -843,7 +843,12 @@ def test_15_no_library_effect_has_a_cost_so_the_cost_path_is_untravelled():
     # 🔴 기르수의 Lua 에 ``SetCost`` 가 없다 (``s.tgtg`` 는 target 이고
     # cost 가 아니다). 그래서 비용 경로는 **여전히 아무도 지나지 않는다.**
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
 
 
 # ======================================================================

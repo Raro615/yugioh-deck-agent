@@ -357,7 +357,12 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     #    무엇인지" 로 바꾼다.
     from engine.effect.library import EFFECT_LIBRARY, GIRSU, HONEST, WORLD_WAND
 
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     using_archetype = [
         entry.card_id for entry in EFFECT_LIBRARY
         if entry.definition.targets
@@ -919,8 +924,15 @@ def test_j_the_archetype_condition_is_used_by_exactly_the_two_orcust_effects():
 
     # 🔴 16 → 17 (6-K, 어니스트 ①) → 18 (6-V, 기르수 ①) → **19** (6-AC).
     #    실행 수 13 → 14 (6-L) → 15 (6-V) → **16** (6-AC).
-    assert len(EFFECT_LIBRARY) == 19
-    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 16
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 실행 수 16 → **17** (Phase 6-AF). 기르수 ③ 은 실제로 실행되는
+    #: 효과다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 수행한다.
+    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 17
     #: 🔴 실행되는 효과 중 카드군 조건을 쓰는 것이 **정확히 둘**이다.
     using = [
         entry.card_id

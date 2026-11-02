@@ -361,9 +361,12 @@ def test_04_the_monster_effect_activation_maps_to_the_same_action_kind(repositor
     #: 🔴 1 → **2** (Phase 6-V, 기르수 ①) → **3** (Phase 6-AC, 성유물－
     #: 『성장』 ②). 이 테스트가 재는 것은 아래 줄 — **새 ActionKind 가
     #: 없다** — 이고, 몬스터 효과가 셋이 되어도 그대로다.
-    assert len(monsters) == 3, monsters
-    #: 🔴 Phase 6-L · 6-V · 6-AC — 셋 다 실행된다.
-    assert [entry.executable for entry in monsters] == [True] * 3, monsters
+    #: 🔴 3 → **4** (Phase 6-AF, 기르수 ③). 이 테스트가 재는 것은 아래 줄
+    #: — **새 ActionKind 가 없다** — 이고, 기동 효과가 하나 더 들어와도
+    #: 그대로다 (``ACTIVATE_EFFECT`` 하나로 적는다).
+    assert len(monsters) == 4, monsters
+    #: 🔴 Phase 6-L · 6-V · 6-AC · 6-AF — 넷 다 실행된다.
+    assert [entry.executable for entry in monsters] == [True] * 4, monsters
     #: 공식 용어와 엔진 종류의 대응이 **그대로**다 — 새 ActionKind 가 없다.
     from engine.action import PlayerActionKind, _NEEDS_EFFECT_REF
 
@@ -524,12 +527,17 @@ def test_11_the_effect_choice_never_actually_varies(repository):
             ordinals[ref.ordinal] += 1
 
     assert per_card, "executable 효과가 없다"
-    #: 🔴 카드마다 하나씩 — 그것은 그대로다.
-    assert set(per_card.values()) == {1}, dict(per_card)
+    #: 🔴 **Phase 6-AF 가 "카드마다 하나씩" 을 끝냈다** — 기르수가 블록
+    #: 둘을 등재했으므로 (①유발 · ③기동) 그 카드만 2 다. 억지로 하나로
+    #: 맞추지 않고 분포를 적는다: 2 인 카드가 **정확히 하나**이고 나머지는
+    #: 전부 1 이다.
+    assert set(per_card.values()) == {1, 2}, dict(per_card)
+    assert [c for c, n in per_card.items() if n == 2] == [69811710], dict(per_card)
     #: 🔴 **Phase 6-AC 가 "전부 ordinal 0" 을 끝냈다** — 성유물－『성장』 은
     #: 공식 ②를 등재했다. 억지로 0 에 맞추지 않고 분포를 적는다: 0 이
     #: 열다섯, 1 이 **하나**다.
-    assert dict(ordinals) == {0: 15, 1: 1}, dict(ordinals)
+    #: 🔴 Phase 6-AF — 2 가 하나 생겼다 (기르수 ③, 공식 세 번째 블록).
+    assert dict(ordinals) == {0: 15, 1: 1, 2: 1}, dict(ordinals)
 
     #: 그리고 후보를 여럿으로 만드는 것은 대상이다.
     duel_code = code_only("engine/duel.py")

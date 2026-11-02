@@ -355,7 +355,9 @@ def test_05_every_executable_effect_is_a_spell_or_a_trap(repository):
     #: 성유물－『성장』 ②). 마법 · 함정 세 열은 여기서도 **하나도 움직이지
     #: 않았다** — 늘어난 것은 몬스터 열뿐이고, 그것이 이 측정이 말하는
     #: 사실이다.
-    assert seen == {"SPELL": 6, "QUICKPLAY": 3, "TRAP": 4, "MONSTER": 3}, seen
+    #: 🔴 ``MONSTER`` 3 → **4** (Phase 6-AF, 기르수 ③). 마법 · 함정 세
+    #: 열은 여기서도 **하나도 움직이지 않았다**.
+    assert seen == {"SPELL": 6, "QUICKPLAY": 3, "TRAP": 4, "MONSTER": 4}, seen
 
 
 @requires_official_db

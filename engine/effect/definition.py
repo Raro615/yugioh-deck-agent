@@ -438,7 +438,7 @@ class EffectDefinition:
     **손으로 적는다.** ``EffectSpec`` 에서 자동으로 옮기지 않는다 —
     ``activation_kind`` · ``activation_waits_for_event`` 와 같은 규율이다.
     """
-    activation_zones: "frozenset[Zone] | None" = None
+    activation_zones: frozenset[Zone] | None = None
     """
     이 효과를 **어느 자리에서** 발동하는가 — ``SetRange(LOCATION_*)`` 를 손
     으로 옮긴 값 (Phase 6-AF).
@@ -466,7 +466,7 @@ class EffectDefinition:
     이고, 그것보다 넓은 자리를 적으면 **규칙에 없는 발동을 허가하는** 것이
     된다.
     """
-    resolution_condition: "Condition | None" = None
+    resolution_condition: Condition | None = None
     """
     🔴 **해결 시점에 다시 보는 조건** (Phase 6-AF).
 

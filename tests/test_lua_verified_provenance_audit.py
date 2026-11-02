@@ -845,6 +845,13 @@ def test_38_the_status_generation_code_was_not_changed():
 
     고친 것은 설명(docstring)과 사용자에게 보이는 라벨이다. 생성 조건을
     건드리면 기존 계약이 바뀌고, 그것은 §5 가 금지한 일괄 강등·승격이 된다.
+
+    🔴 **Phase 6-AF 정정 — 범위를 ``HEAD`` 에서 이 Phase 의 commit 으로
+    좁혔다.** 전에는 ``git diff base HEAD`` 였고, 그것이 재는 것은 "이
+    Phase 가 바꾸지 않았다" 가 아니라 **"그 뒤로 아무도 바꾸지 않았다"**
+    였다. 6-AF 가 같은 파일에 토큰 표를 더하면서 그 차이가 드러났다 (토큰도
+    한국어 이름을 받아야 한다). 단언을 지우거나 파일을 목록에서 빼지 않고
+    **범위를 이 Phase 로 맞춘다** — 그래야 docstring 이 말하는 사실을 센다.
     """
     shas = subprocess.run(
         ["git", "log", "--format=%H", "--grep=^Phase 3-F-40:"],
@@ -857,7 +864,7 @@ def test_38_the_status_generation_code_was_not_changed():
         cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
     ).stdout.strip()
     diff = subprocess.run(
-        ["git", "diff", base, "HEAD", "--", "core/card_repository.py"],
+        ["git", "diff", base, shas[0], "--", "core/card_repository.py"],
         cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
     ).stdout
     assert diff.strip() == "", diff[:400]

@@ -743,9 +743,20 @@ def test_29_the_board_and_the_randomness_do_not_move(repository):
     SearchPolicy().attach(simulator).decide(duel.view(seat), duel.legal_actions(seat))
     assert duel.state.state_hash() == before_hash
     assert duel.state.randomness.draws == before_draws
-    #: 3-E-39 가 적은 그 해시다 — policy 를 바꿔도 판은 움직이지 않는다.
+    #: 3-E-39 가 적은 그 해시였다 — policy 를 바꿔도 판은 움직이지 않는다.
+    #: 그 사실(위 두 단언: 해시도 난수도 **그대로**)이 이 시험의 요점이고,
+    #: 그것은 하나도 달라지지 않았다.
+    #: 🔴 **Phase 6-AF 에서 이 해시가 움직였다.** 원인 하나다 —
+    #: :class:`~engine.state.game_state.GameState` 에 칸이 하나 생겼고
+    #: (``summon_uses``: 이 턴에 어느 카드 이름을 어떤 소환으로 몇 번
+    #: 썼는가) 그것을 ``canonical_state()`` 에 실었다. 갈라테아i 의
+    #: 「1턴에 1번」 제약이 그 기록을 요구하므로 **판의 사실**이고, 판의
+    #: 사실을 정규 표현에서 빼면 두 판이 다른데 같다고 말하게 된다.
+    #:
+    #: **이 시험이 재는 것은 그대로다** — 아래 합법 행동 · 보류 · 사유 ·
+    #: 난수 단언이 하나도 달라지지 않았다. 움직인 것은 해시 하나다.
     assert before_hash == (
-        "d1d66338781bdb9565557f06c6e4b1357900471c8bce8f319d0807407939be40"
+        "2c2541930d48be7bad7a5e54db6ac4a2364b326111ce50c72769b4277d681ac3"
     )
 
 

@@ -254,7 +254,10 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: ``engine/effect/executor.py`` 의 해결 시점 모름 거절이고 (코드 한 자리 ·
 #: 산문 0), 이 파일이 재는 ``UnimplementedRule`` 과 관계된 것은 역시
 #: **0건**이다.
-RULE_NOT_IMPLEMENTED_MENTIONS = 123
+#: 🔴 123 → **125** (Phase 6-AF). ``_plan_create_token`` 의 두 거부
+#: (토큰 규칙 부재 · 카드 데이터 불일치) 다. 비율이 재던 모집단은
+#: 그대로이고 배수도 낮추지 않았다.
+RULE_NOT_IMPLEMENTED_MENTIONS = 125
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
@@ -287,6 +290,12 @@ MISSING_RULES_OVERRIDES = {
     #: 공용 조건 어휘에 있는 이유는 쓰는 데가 둘이기 때문이다 (링크 소환
     #: 후보의 요구 · 특수 소환하는 효과의 발동 조건).
     ("engine/condition/model.py", "SpecialSummonPermitted"),
+    #: 🔴 Phase 6-AF 가 열한째를 더했다 — ``SimultaneousSpecialSummonPermitted``
+    #: 는 「양쪽에 동시에 2장 이상 특수 소환할 수 있는가」 를 묻고, 앞면
+    #: 카드 가운데 **판정 표에 없는 카드**가 있으면 그 카드 이름을 규칙
+    #: 이름으로 낸다 — ``SpecialSummonPermitted`` 와 같은 방향이다
+    #: (``UnimplementedRule`` 이 아니면서 **조건부**로 낸다).
+    ("engine/condition/model.py", "SimultaneousSpecialSummonPermitted"),
 }
 
 #: ``_NormalSummonProcedure`` · ``_NormalSpellActivation`` 이 실제로 내놓는
@@ -991,14 +1000,22 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     #: 🔴 8 → **9** (Phase 6-V). 기르수 ① 의 ``activation`` 도
     #: ``UnimplementedRule`` 이 아니다 (``ZoneCountAtLeast``) — 이 테스트가
     #: 지키는 사실이 그것이므로 그대로다.
     #: 🔴 9 → **10** (Phase 6-AC). 성유물－『성장』 ② 의 ``activation`` 도
     #: ``UnimplementedRule`` 이 아니다 (``ZoneHasFreeSlot``) — 같은 이유로
     #: 그대로다. 수만 움직이고 단언은 약해지지 않았다.
-    assert len(activations) == 10
+    #: 🔴 10 → **11** (Phase 6-AF). 기르수 ③ 의 ``activation`` 도
+    #: ``UnimplementedRule`` 이 아니다 — ``And`` 안이 전부 판정 가능한
+    #: 상태 조건이다. 같은 이유로 이 테스트가 지키는 사실은 그대로다.
+    assert len(activations) == 11
     assert not any(isinstance(a, UnimplementedRule) for a in activations)
 
     #: 열 개 전부 **판정 가능한** 조건이다 — 자리표시자가 아니다.
@@ -1032,8 +1049,14 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
         for a in activations
         if a.missing_rules(view, context)
     ]
-    assert len(noisy) == 1, noisy
-    assert not isinstance(noisy[0], UnimplementedRule)
+    #: 🔴 1 → **2** (Phase 6-AF). 기르수 ③ 의 발동 조건에도
+    #: ``SpecialSummonPermitted`` 가 들어 있으므로 그 이름을 내는 조건이
+    #: 둘이 되었다. 이 시험이 재는 사실은 수가 아니라 **"그 이름을 내는
+    #: 조건이 ``UnimplementedRule`` 이 아니다"** 이므로, 둘을 **각각**
+    #: 확인한다 — 단언이 약해진 것이 아니라 대상이 늘었다.
+    assert len(noisy) == 2, noisy
+    for condition in noisy:
+        assert not isinstance(condition, UnimplementedRule), condition
 
 
 @requires_official_db

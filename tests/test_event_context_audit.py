@@ -211,8 +211,13 @@ def test_01_the_engine_condition_vocabulary_only_asks_about_the_board():
         #: (링크 소환 후보의 요구 · 특수 소환하는 효과의 발동 조건) 효과 정의
         #: 계층은 ``engine.action_validation`` 을 읽지 않는다.
         "SpecialSummonPermitted",
+        #: 🔴 17 → **18** (Phase 6-AF, ``SimultaneousSpecialSummonPermitted``).
+        #: 그것도 **판만** 묻는다 — 양쪽 필드의 앞면 카드를 훑어 「동시에 2장
+        #: 이상 특수 소환할 수 없다」 를 적는 카드가 있는지 보고, 문맥에서는
+        #: ``player`` 하나만 읽는다. 사건도 시점도 읽지 않는다.
+        "SimultaneousSpecialSummonPermitted",
     }
-    assert len(board_predicates) == 17
+    assert len(board_predicates) == 18
     assert vocabulary == combinators | board_predicates, sorted(vocabulary)
     gates = by_module["engine.action_validation"]
     #: 🔴 8 → **9** (Phase 6-AC, ``_LinkMaterialsLegal``). 그 조건도 판만

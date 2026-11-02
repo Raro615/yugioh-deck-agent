@@ -194,6 +194,16 @@ def test_01_the_effect_definition_has_no_event_field():
         #: 옮긴 값이고 사건이 아니다. 담는 자리는 :mod:`engine.use_limit`
         #: 이며, **판의 기록**(``UseRegistry``)과 일부러 갈라 두었다.
         "use_limit",
+        #: 🔴 Phase 6-AF — 「어느 자리에 있을 때 발동할 수 있는가」
+        #: (``frozenset[Zone] | None``). 공식 스크립트의 ``SetRange`` 를
+        #: 옮긴 값이고 사건이 아니다 — 자리는 "무엇이 참인가" 쪽이다.
+        "activation_zones",
+        #: 🔴 Phase 6-AF — 「해결 시점에 다시 보는 조건」
+        #: (``Condition | None``). ``s.tkop`` 이 ``s.tktg`` 와 같은 다섯
+        #: 가지를 재검사하는 것을 옮긴 값이고 사건이 아니다. 발동 조건과
+        #: **따로** 두는 까닭은 둘이 실제로 다른 것을 보기 때문이다
+        #: (발동 쪽에만 "자기 필드에 기르수 외 몬스터 없음" 이 있다).
+        "resolution_condition",
         #: 🔴 Phase 6-AD 후속2 — 「해결 시점에 일을 생략하고도 정상 해결되는
         #: 조건」 (``ResolutionSkip``). 공식 스크립트의 **해결 함수**에서 읽은
         #: 값이고 사건이 아니다 — 담는 것은 "조건이 거짓일 때" · "후보가 없을
@@ -323,7 +333,12 @@ def test_04_every_registered_effect_is_free_chain(repository):
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     #: 🔴 Phase 6-K — 열일곱 번째(어니스트 ①)는 ``code`` 가 **없다.** 기동
     #: 효과는 사건이 아니라 선언으로 발동하므로 ``SetCode`` 를 적지 않는다.
     #:
@@ -335,7 +350,12 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: (``EVENT_TO_GRAVE``). 자유 체인 16 과 코드 없음 1 은 **하나도**
     #: 움직이지 않았다: 늘어난 것은 유발 쪽 하나뿐이고, 그것이 이 분포가
     #: 말하는 사실이다.
-    assert len(codes) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(codes) == 20
     assert set(codes) == {
         "EVENT_FREE_CHAIN",
         "EVENT_SUMMON_SUCCESS",
@@ -345,7 +365,11 @@ def test_04_every_registered_effect_is_free_chain(repository):
     assert len([c for c in codes if c == "EVENT_FREE_CHAIN"]) == 16
     assert len([c for c in codes if c == "EVENT_SUMMON_SUCCESS"]) == 1
     assert len([c for c in codes if c == "EVENT_TO_GRAVE"]) == 1
-    assert len([c for c in codes if c is None]) == 1
+    #: 🔴 1 → **2** (Phase 6-AF). 기르수 ③ 은 **기동 효과**이므로
+    #: ``SetCode`` 가 없다 — 사건이 아니라 선언으로 발동한다. 자유 체인
+    #: 16 과 유발 둘은 **하나도** 움직이지 않았고, 그것이 이 분포가
+    #: 말하는 사실이다.
+    assert len([c for c in codes if c is None]) == 2
 
 
 @pytest.mark.real_card
@@ -669,6 +693,9 @@ def test_14_no_registered_effect_can_special_summon():
         "RETURN_TO_HAND",
         "SEND_TO_GRAVE",
         "SHUFFLE",
+        #: 🔴 Phase 6-AF — 기르수 ③ 의 토큰 생성. ``SPECIAL_SUMMON`` 이
+        #: **아니므로** 위 ``users`` 는 하나로 그대로다.
+        "CREATE_TOKEN",
         #: 🔴 Phase 6-AC — 성유물－『성장』 ② 가 실제로 읽힌다.
         "SPECIAL_SUMMON",
     }

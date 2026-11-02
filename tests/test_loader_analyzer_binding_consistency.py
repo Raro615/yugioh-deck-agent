@@ -1039,11 +1039,18 @@ def test_34_engine_v1_definitions_are_untouched():
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     #: 🔴 **Phase 6-AC 가 "등재한 ordinal 은 전부 0" 을 끝냈다** —
     #: 성유물－『성장』 은 공식 **②**를 등재했으므로 1 이다. 억지로 0 에
     #: 맞추지 않고 실제 사실을 적는다: 1 인 것은 **정확히 한 장**이다.
-    assert {ordinal for _c, ordinal in refs} == {0, 1}
+    #: 🔴 **Phase 6-AF 가 2 를 더했다** — 기르수 ③(토큰 생성)은 공식 Lua
+    #: 의 세 번째 블록이다. 1 인 것이 정확히 하나라는 사실은 그대로다.
+    assert {ordinal for _c, ordinal in refs} == {0, 1, 2}
     assert sum(1 for _c, ordinal in refs if ordinal == 1) == 1
     assert {c for c, _o in refs} & set(PHASE32_CARDS) == set()
 

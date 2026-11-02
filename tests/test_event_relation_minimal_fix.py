@@ -726,7 +726,17 @@ def test_18_the_two_different_result_gates_were_left_alone():
         for node in ast.walk(ast.parse(source_of("engine/action_validation.py")))
         if isinstance(node, ast.FunctionDef) and node.name == "_activate_effect"
     )
-    assert "SOURCE_WRONG_ZONE" not in ast.unparse(activate)
+    #: 🔴 **Phase 6-AF 가 이 자리를 연결했다.** live 열거는 이제 발동의
+    #: 자리를 적는다 — 그러나 **추측이 아니라 선언으로만** 적는다:
+    #: ``EffectDefinition.activation_zones`` 에 공식 ``SetRange`` 를 옮겨
+    #: 둔 효과에만 ``InAnyZone`` 요구가 붙고, 적어 두지 않은 효과는
+    #: 6-AF 전과 **한 글자도 다르지 않다** (그 갈래는 ``activation_zones``
+    #: 가 ``None`` 일 때 아무 요구도 더하지 않는다). 그래서 "dormant 를
+    #: 연결하는가" 라는 질문의 답은 **선언한 만큼만 연결한다** 이고,
+    #: 아래 두 단언이 그 사실을 센다.
+    unparsed = ast.unparse(activate)
+    assert unparsed.count("SOURCE_WRONG_ZONE") == 1, unparsed
+    assert "activation_zones" in unparsed
 
 
 def test_19_judging_changes_neither_state_hash_nor_rng(state):

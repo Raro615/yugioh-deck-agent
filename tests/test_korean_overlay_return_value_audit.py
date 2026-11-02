@@ -345,8 +345,12 @@ def test_11_the_sole_discarded_apply_claim_is_scoped_to_production():
     prod_discarded = [r for r in prod if r[2]]
     tests_discarded = [r for r in tests if r[2]]
 
-    assert len(prod_discarded) == 1, prod_discarded
-    assert prod_discarded[0][0] == "core/card_repository.py"
+    #: 🔴 **Phase 6-AF: 1 → 2.** 토큰 표도 한국어 덮어쓰기를 받으므로
+    #: 같은 파일이 ``apply()`` 를 두 번 부르고 둘 다 반환값을 버린다.
+    #: "production 한정" 이라는 **범위**는 그대로이고, 버리는 자리가 든
+    #: **파일**도 여전히 하나다 — 그것이 이 테스트가 재는 사실이다.
+    assert len(prod_discarded) == 2, prod_discarded
+    assert {r[0] for r in prod_discarded} == {"core/card_repository.py"}
     # 테스트에도 버리는 자리가 있다 — 그래서 "유일" 은 production 한정이다
     assert len(tests_discarded) > 1
     assert rows and len(prod) + len(tests) == len(rows)

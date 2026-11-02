@@ -291,7 +291,17 @@ def test_a02_both_decline_and_the_flow_comes_back(repository):
     assert duel.to_act == MINE
     kinds = _kinds(duel, MINE)
     assert "end_phase" in kinds
-    assert "activate_effect" not in kinds
+    #: 🔴 **Phase 6-AF 가 "기동 효과가 하나도 오르지 않는다" 를 끝냈다** —
+    #: 기르수 ③(토큰 생성, ``c69811710.lua`` e3)을 등재했으므로 필드의
+    #: 기르수가 기동 효과 후보를 **실제로** 올린다. 이 시험이 재는 사실은
+    #: 그것이 아니라 "지나간/해결된 유발 ① 이 다시 오르지 않는다" 이므로,
+    #: 단언을 지우거나 느슨하게 하지 않고 **그 사실만 더 좁게** 적는다.
+    offered_refs = {
+        action.effect_ref
+        for action in duel.legal_actions(MINE).allowed
+        if action.kind is PlayerActionKind.ACTIVATE_EFFECT
+    }
+    assert offered_refs == {EffectRef(GIRSU, 2)}, offered_refs
     before = duel.state.turn.phase
     assert duel.apply(PlayerAction.end_phase(actor=MINE)).accepted is True
     assert duel.state.turn.phase is not before

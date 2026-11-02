@@ -299,6 +299,14 @@ Duel.RegisterEffect(e1,tp)
 | `token-card-data` | 공식 데이터를 읽지 않은 토큰 | `UNSUPPORTED_OPERATION` 으로 **거절한다** |
 | `link-material-link-rating` | 소재 장수가 **범위**인 링크 몬스터 | 등록하지 않는다 (§2.5) |
 | `Duel.SpecialSummonComplete` 의 동시 처리 | 두 토큰의 동시성을 사건으로 적기 | 계층이 없다 — 한 조작 안에서 **전부 아니면 무**까지만 옮겼다 |
+| 주인과 컨트롤러가 다른 토큰 | 컨트롤이 옮겨진 뒤의 토큰 | `create_token` 이 `TokenError` 로 **거절한다** (아래) |
+
+🔴 **컨트롤러를 따로 세우는 길을 두지 않았다.** `plan_token` 은 `owner` 와
+`controller` 를 같은 값으로 세우고 (놓이는 쪽이 주인이다), `create_token` 은
+둘이 다르면 거절한다. 「컨트롤이 주인과 다른 토큰」을 조용히 허용하는 대신
+막는 쪽을 골랐고, 그래서 `engine/token.py` 는 **컨트롤을 옮기는 호출을 하지
+않는다** (`tests/test_trigger_actor_consistency.py::test_08` 이 그 사실을
+저장소 전체에서 센다 — 이 Phase 가 그 감사를 깨지 않는다).
 
 🔴 **미지원을 허가로 바꾸지 않았다.** 판정하지 못한 특수 소환 금지는 그대로
 `UNDETERMINED` 이고 (`test_b07`: 「오르페골 디베르」가 그 예다), 그 판에서
@@ -421,6 +429,54 @@ python3 -m pytest tests/engine/test_monster_effect_activation.py \
 "production 이 `include_tokens=True` 를 쓰지 않는다" 이고, 둘 다 여전히
 참이다 (§2.3).
 
+### 4.2-추가 전체 묶음이 드러낸 **97건** — 전부 고쳤다
+
+🔴 **이 Phase 를 커밋한 시점에 §4.3 은 "측정이 끝나지 않았다" 고 적고
+있었다.** 측정이 끝나자 **106건**이 실패했고, 그중 **9건**은 기준선의 기존
+실패였다. 남은 **97건**이 이 Phase 때문에 깨진 것이고, 아래가 그 전부와
+고친 방법이다.
+
+**기존 실패 9건을 가려낸 방법** — 추정이 아니라 측정이다. 기준선
+(`8242ccd`) 을 별도 worktree 로 떼어 내고 (`data/` 는 심볼릭 링크로 공유)
+**실패한 106건만** 그 worktree 에서 돌렸다:
+
+```
+git worktree add <scratch>/base 8242ccd
+python3 -m pytest <실패한 106건> -q -rf -p no:randomly   # → 9 failed, 97 passed
+```
+
+9건은 기준선에서도 같은 자리에서 실패하고 97건은 통과한다. 그래서 97건이
+이 Phase 의 것이다.
+
+| # | 원인 | 무엇이 움직였나 | 고친 방법 |
+| --- | --- | --- | --- |
+| 1 | 등재 수 스냅샷 **(34)** | `len(EFFECT_LIBRARY)` 19 → **20** 과 같은 시험 안의 파생 수치 (실행 16 → 17 · 발동 조건 10 → 11 · 몬스터 3 → 4 · `kind` 분포 · `ordinal` 집합 `{0,1}` → `{0,1,2}`) | 수를 고치고 🔴 주석으로 **무엇이 늘었는지** 적었다. 단언은 하나도 지우지 않았다 |
+| 2 | `EffectDefinition` 칸 수 **(8)** | 14 → **16** (`activation_zones` · `resolution_condition`) | 수를 고치고, 두 칸이 **사건 칸이 아니다**는 근거를 적었다 (`SetRange` 의 자리 집합 · 해결 함수의 재검사). 칸 이름 목록 셋에도 두 이름을 넣었다 |
+| 3 | 거부 생성 수 **(3)** | `REJECTION_PRODUCTIONS` 73 → **75** · `CODE_OCCURRENCES` 86 → **88** · `ENGINE_FILE_COUNT` 73 → **75** | `_plan_create_token` 의 `RULE_NOT_IMPLEMENTED` 둘과 새 모듈 둘이다. **"차이가 13" 은 그대로다** |
+| 4 | 문자열 등장 수 **(2)** | `RULE_NOT_IMPLEMENTED` 123 → **125** | 같은 둘. 코드 수는 움직이지 않았다 |
+| 5 | 모듈 폐쇄 수 **(1)** | 63 → **65** (`engine.token` · `engine.state.summon_usage`) | 늘어난 둘이 휴면 모듈이 아니라는 근거를 적었다. 휴면 넷은 그대로 폐쇄 밖이다 |
+| 6 | 줄 번호 스냅샷 | `CONTRACT_VIOLATIONS` 7자리 · `PROSE_OCCURRENCES` 2자리 | **번호만** 옮겼다. 위반 13 · 산문 37 은 그대로이고, 그것이 "성격도 개수도 바뀌지 않았다" 의 증거다 |
+| 7 | 조작 종류 집합 **(5)** | `create_token` 이 `SUPPORTED` · 실제 카드가 쓰는 종류 · 열거 고정 집합에 더해졌다 | 이름을 더하고 **특수 소환이 아니다**는 것을 적었다 — 그래서 "특수 소환하는 등재는 하나" 가 그대로다 |
+| 8 | 조건 · delta 어휘 **(4)** | 공용 조건 17 → **18** (`SimultaneousSpecialSummonPermitted`) · 구상 delta 12 → **14** (`TokenCreated` · `TokenVanished`) | 이름을 더하고, 둘 다 **판만 묻고 사건을 묻지 않는다**는 것을 함께 쟀다. delta 둘은 `CardMovement` 가 아니므로 시점 이름이 없고 `actor` 가 `None` 이다 |
+| 9 | **기동 효과가 실제로 후보로 오른다 (8)** | 필드의 기르수가 `activate_effect` 를 올린다 — 전에는 하나도 오르지 않았다 | 🔴 **가장 조심한 묶음이다.** `"activate_effect" not in kinds` 를 지우지 않고, 그 시험들이 **실제로 재던 사실**로 좁혔다: 올라온 `effect_ref` 가 `EffectRef(GIRSU, 2)` **하나뿐**이고 유발 ①(`ordinal 0`)은 없다. 공유 헬퍼 `_trigger_action` 에는 `ordinal=0` 기본값을 더했다 — 카드를 지목하던 이유가 그대로 ordinal 에도 적용된다 |
+| 10 | `state_hash` 2건 | `GameState.canonical_state()` 에 `summon_uses` 가 실렸다 | 해시를 **실측값으로** 갱신하고 원인을 적었다. 같은 시험의 합법 행동 · 보류 · 사유 · 난수 단언은 하나도 달라지지 않았다 |
+| 11 | 한국어 덮어쓰기 2건 | `korean_source.apply()` 를 버리는 자리가 1 → **2** (같은 파일) | 토큰 표도 한국어 이름을 받는다. **경계는 그대로다** — 자리가 든 파일은 여전히 하나다 |
+| 12 | 발동 자리 관문 3건 | `_activate_effect` 가 `SOURCE_WRONG_ZONE` 을 낸다 | 🔴 **추측이 아니라 선언으로만** 낸다 — `activation_zones` 를 적어 둔 효과에만 `InAnyZone` 요구가 붙고, 적지 않은 효과는 6-AF 전과 한 글자도 다르지 않다. 그 사실을 단언으로 적었다 (`count == 1` + `"activation_zones" in …`) |
+| 13 | `engine/state` 의 "summon" 2건 | `summon_usage.py` 가 생겼고 관측에 `summons_by_name` · `summons_of` 가 생겼다 | 🔴 **이 Phase 가 사실을 바꿨다**고 적었다. 그러나 그 시험들이 재던 핵심은 그대로다 — `CardInstance` · `PreviousState` 에는 소환 종류 칸이 **여전히 없고** `RuleActionKind` 에 `special_summon` 이 **여전히 없다** |
+| 14 | 공식 Lua 인용 1건 | `PHASE_END` 가 `link_rules.py` · `summon_restriction.py` 의 **문자열**에 들어갔다 | 인용은 근거이고 읽는 코드가 아니다. 감사를 느슨하게 하는 대신 **더 좁게** 쟀다 — 그 두 파일에서 그 이름이 **식별자로 등장하는 자리는 0** 이고 전부 문자열 리터럴 안이다 |
+| 15 | diff 범위 감사 2건 | `git diff <옛 Phase 의 base> HEAD -- core/card_repository.py` 가 비지 않았다 | 🔴 **감사 자신이 틀린 것을 쟀다.** docstring 은 "이 Phase 가 바꾸지 않았다" 고 적는데 범위가 `HEAD` 라서 **그 뒤 누가 바꿨는가**를 쟀다. 파일을 목록에서 빼지 않고 **범위를 그 Phase 의 commit 으로** 좁혔다 (`base` → `shas[0]`) |
+| 16 | 그 밖의 파생 | `card_ids` · `codes` 분포 · `per_card` 분포 · `resolution_skip` 선언 수 · `missing_rules` override 수 · `ACTIVATION_FROM_SET_TARGET` 의 `card_id → ordinal` 사전 | 전부 **한 카드가 블록 둘을 등재한 첫 사례** 때문이다. 사전으로 가를 수 없는 자리는 **등재 항목을 그대로** 들고 다니게 고쳤다 |
+
+괄호 안의 수는 **그 사유가 처음 걸린 시험 수**다 (한 시험이 사유 둘 이상에
+걸린 경우도 있어 합이 97 과 정확히 같지는 않다).
+
+#### 이 뒤에 production 을 두 군데 고쳤다
+
+| 파일 | 고친 것 | 왜 |
+| --- | --- | --- |
+| `engine/effect/definition.py` | 새 두 칸의 주석을 **문자열 표기에서 보통 표기로** (`"Condition \| None"` → `Condition \| None`) | 나머지 다섯 `Condition \| None` 칸과 표기가 달라 전수 주사가 그 칸을 다른 것으로 읽었다. `from __future__ import annotations` 가 있으므로 동작은 같다 |
+| `engine/token.py` | 컨트롤을 옮기는 호출을 **거절로** 바꿨다 | 그 갈래는 지금 경로에서 **한 번도 돌지 않는** 죽은 코드였고(`owner == controller`), 저장소 전체에서 "컨트롤 이동은 표현되지 않는다" 를 세는 감사가 있다. 조용히 허용하는 대신 막고 범위에 적었다 (§2.8) |
+
 ### 4.3 전체 묶음
 
 (아래 수치는 이번 작업에서 실제로 돌린 결과다. 기준선의 **기존 실패
@@ -432,15 +488,23 @@ python3 -m pytest tests/engine/test_monster_effect_activation.py \
 `test_korean_overlay_unapplied_audit::test_01/13/21/25` ·
 `test_trigger_lifetime_audit::test_02`.)
 
-| 묶음 | passed | failed | 종료 코드 |
-| --- | --- | --- | --- |
-| 고친 다섯 파일 + 새 시험 | §4.3 갱신 대기 | — | — |
-| 전체 (`tests`) | §4.3 갱신 대기 | — | — |
+```
+python3 -m pytest tests -q -rf -p no:randomly          # 전체
+python3 -m pytest <그 106건> -q -rf -p no:randomly      # 기준선 worktree 에서
+```
 
-🔴 **아직 적지 않은 수를 적어 두지 않는다.** 위 두 줄은 이 커밋 시점에
-**측정이 끝나지 않은** 묶음이다 — 끝나면 이 표를 실측으로 갱신한다. 지금
-확실한 것은 위 §4 의 두 줄(새 시험 36/0, 그리고 고치기 전의 12건 실패를
-재현했다는 것)과 §4.2 가 적은 **고친 이유**다.
+| 묶음 | passed | failed | 종료 코드 | 소요 |
+| --- | --- | --- | --- | --- |
+| 전체 (`tests`) — **고치기 전** | 6833 | **106** | 1 | 1:47:37 |
+| 그 106건 — **기준선 `8242ccd` worktree** | 97 | **9** | 1 | 1:42 |
+| 그 97건 — **고친 뒤** | **97** | **0** | **0** | 1:18 |
+| `tests/test_girsu_token_line.py` — 고친 뒤 | **36** | **0** | **0** | 0:50 |
+| 전체 (`tests`) — **고친 뒤** | §4.3-재측정 | — | — | — |
+
+🔴 **아직 적지 않은 수를 적어 두지 않는다.** 마지막 줄은 이 커밋 시점에
+**측정이 진행 중**이다 (1시간 47분짜리 묶음이다). 확실한 것은 위 네 줄이고,
+그 가운데 **기준선 worktree 측정이 "97건이 이 Phase 의 것"** 이라는 분류의
+근거다 — 추정이 아니다.
 
 🔴 **고치기 전 12건의 실패를 숨기지 않았다** — 전부 §4.2 의 표에 어느
 시험이 왜 바뀌었는지 적혀 있고, 단언을 지우거나 기대값을 완화한 것이
@@ -467,6 +531,8 @@ python3 -m pytest tests/engine/test_monster_effect_activation.py \
 7. **갈라테아i 의 ① (덱 서치) · ② (묘지 자기 소생) 도 등재되지 않았다.**
    이 경로는 그 카드를 **소재로만** 쓴다.
 8. **토큰에 걸리는 카드명 · 종류 범위 제약**을 읽는 계층이 없다 (§2.8).
+9. **주인과 컨트롤러가 다른 토큰**은 만들지 못한다 — `create_token` 이
+   거절한다 (§2.8). 컨트롤 이동 자체가 이 저장소에 없다.
 
 ---
 

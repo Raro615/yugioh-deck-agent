@@ -58,6 +58,8 @@ from engine.effect.delta import (
     PhaseChanged,
     StateDelta,
     SummonKind,
+    TokenCreated,
+    TokenVanished,
     ZoneMoved,
     ZoneShuffled,
 )
@@ -135,7 +137,8 @@ I = InstanceId
 
 def every_concrete_delta() -> "dict[str, StateDelta]":
     """
-    **실제로 존재하는** 구상 delta 전부. 열두 개다 (``test_03`` 가 수를 센다).
+    **실제로 존재하는** 구상 delta 전부. 🔴 Phase 6-AF 에서 **열네 개**다
+    (``test_03`` 가 수를 센다 — 늘어난 둘은 토큰의 생성과 소멸이다).
 
     ``engine`` 전체를 import 해야 하위 클래스가 다 드러난다 — 일부만
     import 한 상태로 세면 ``BattleDestruction`` 처럼 **빠진다**
@@ -219,6 +222,25 @@ def every_concrete_delta() -> "dict[str, StateDelta]":
             source_zone=Zone.SZONE,
             destination_zone=Zone.SZONE,
             position=Position.FACEDOWN_DEFENSE,
+        ),
+        #: 🔴 **Phase 6-AF — 토큰의 생성과 소멸.** 둘 다 ``CardMovement`` 가
+        #: **아니다**: 토큰은 어느 자리에서도 오지 않고, 필드를 떠날 때
+        #: 아무 자리로도 가지 않는다. 그래서 둘 다 시점 이름이 붙지 않고
+        #: (``UNIMPLEMENTED``) ``actor`` 도 ``None`` 이다 — "묘지로
+        #: 보내짐" 같은 사건을 **허위로 만들지 않는 것**이 요점이다.
+        "TokenCreated": TokenCreated(
+            card=I(10),
+            card_id=46647145,
+            owner=MINE,
+            controller=MINE,
+            summoner=MINE,
+        ),
+        "TokenVanished": TokenVanished(
+            card=I(11),
+            card_id=46647145,
+            owner=MINE,
+            controller=MINE,
+            from_zone=Zone.MZONE,
         ),
     }
 
@@ -340,9 +362,15 @@ def test_03_the_real_delta_vocabulary_is_twelve_classes_not_thirteen_names():
 
     walk(StateDelta)
     #: 추상 둘을 빼면 구상이 열둘이다.
+    #:
+    #: 🔴 **Phase 6-AF 에서 열넷이 되었다** — ``TokenCreated`` ·
+    #: ``TokenVanished``. 둘 다 **새 추상이 아니고** ``CardMovement`` 도
+    #: 아니다 (토큰은 자리를 오가지 않는다). 아래 "없는 이름" 목록은 하나도
+    #: 움직이지 않았고, 그것이 이 시험이 재는 사실이다 — 이름이 delta
+    #: 클래스보다 많다는 것.
     abstract = {"CardMovement", "_SpellMovement"}
     assert abstract <= concrete
-    assert len(concrete - abstract) == 12, sorted(concrete - abstract)
+    assert len(concrete - abstract) == 14, sorted(concrete - abstract)
     assert set(every_concrete_delta()) == concrete - abstract
 
     #: 클래스가 **없는** 이름들.
@@ -571,7 +599,10 @@ def test_11_only_five_of_twelve_deltas_get_a_name():
         "ZoneMoved",
         "PhaseChanged",
     }
-    assert len(nameless) == 7
+    #: 🔴 7 → **9** (Phase 6-AF). 토큰의 생성 · 소멸도 시점 이름이 없고
+    #: actor 가 ``None`` 이다 — ``TimingEvent.from_delta`` 가 이동이
+    #: 아닌 것에 이름을 지어 주지 않는다.
+    assert len(nameless) == 9
     #: 이름 없는 일곱은 **전부** actor 가 `None` 이다.
     assert set(nameless.values()) == {None}
     #: 이름이 붙은 다섯 중 `PhaseChanged` 만 `None` 이다.
@@ -773,9 +804,14 @@ def test_18_self_and_opponent_safety_per_event_family():
         "SpellRevealed",
         "SpellRetired",
         "SpellRestored",
+        #: 🔴 Phase 6-AF — 토큰의 생성 · 소멸. 둘 다 ``actor`` 가 없다.
+        #: ``TokenCreated`` 는 ``summoner`` 를 **따로** 들고 있다 (누가
+        #: 해결했는가) — 그러나 그것을 ``actor`` 로 번역하지 않는다.
+        "TokenCreated",
+        "TokenVanished",
     }
     assert safe | unsafe | absent == set(every_concrete_delta())
-    assert len(safe) == 2 and len(unsafe) == 2 and len(absent) == 8
+    assert len(safe) == 2 and len(unsafe) == 2 and len(absent) == 10
 
     for name in safe:
         delta = every_concrete_delta()[name]

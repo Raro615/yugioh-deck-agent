@@ -61,13 +61,14 @@ import pytest
 
 from agent.simulation import Simulator
 from engine.action import PlayerAction, PlayerActionKind
+from engine.ids import EffectRef
 from engine.priority import ResponseWindow
 from engine.response import ResponseStep
 from engine.validation import ValidationCode
 from engine.vocabulary import Phase
 from tests.conftest import requires_official_db
 from tests.engine.test_bilateral_trigger_order import _bilateral
-from tests.engine.test_trigger_normal_path_integration import MINE, THEIRS
+from tests.engine.test_trigger_normal_path_integration import GIRSU, MINE, THEIRS
 from tests.engine.test_trap_activation_free_chain import (
     GIFT_OF_GREED,
     next_turn,
@@ -484,7 +485,11 @@ def test_d02_and_it_is_still_gone_after_the_board_reopens(repository):
     duel.apply(PlayerAction.passing(actor=THEIRS))
 
     assert not duel.priority.is_open
-    assert _refs(duel, MINE) == []
+    #: 🔴 **Phase 6-AF.** 판이 다시 열리면 기르수 ③(토큰 생성, 기동)이
+    #: 후보로 오른다 — 이 Phase 가 등재한 효과이고, 유발 ① 과 아무 관계가
+    #: 없다. 이 시험이 재는 사실은 "**지나간 유발**이 다시 오르지 않는다"
+    #: 이므로 단언을 지우지 않고 그 사실만 좁게 적는다.
+    assert _refs(duel, MINE) == [EffectRef(GIRSU, 2)]
     assert _refs(duel, THEIRS) == []
 
 

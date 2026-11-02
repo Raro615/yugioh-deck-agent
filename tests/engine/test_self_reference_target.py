@@ -1076,15 +1076,26 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     🔴 **Phase 6-AC 가 다시 하나씩 늘렸다** (19 · 16). 늘어난 하나가
     성유물－『성장』 ② 이고, 그것이 **특수 소환을 실행하는 첫 효과**다.
     """
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     executable = [e for e in EFFECT_LIBRARY if e.executable]
-    assert len(executable) == 16
+    #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
+    #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
+    assert len(executable) == 17
     monsters = [
         e.definition.source_card_id
         for e in executable
         if e.definition.activation_kind is not None
     ]
-    assert monsters == [HONEST, GIRSU, WORLD_WAND], monsters
+    #: 🔴 **Phase 6-AF 에서 기르수가 두 번 나온다** — 같은 카드의 블록
+    #: 둘을 등재했기 때문이다 (①유발 · ③기동). 목록은 **등재 단위**로
+    #: 세므로 카드가 중복되는 것이 정상이고, 그 사실을 억지로 집합으로
+    #: 바꾸지 않고 그대로 적는다.
+    assert monsters == [HONEST, GIRSU, GIRSU, WORLD_WAND], monsters
 
 
 # ======================================================================

@@ -135,6 +135,8 @@ CASE_NOT_FREE_CHAIN = ((2511, 1), (2511, 2))
 
 #: 등재된 유일한 ``SetCondition`` 보유 효과 (의적의 입문서).
 GALLANTRY = 69091732
+#: 🔴 Phase 6-AF — 기르수 ③ 도 ``SetCondition`` 을 가진 등재 효과다.
+GIRSU = 69811710
 #: ``activation`` 이 있는데 Lua 에 ``SetCondition`` 이 **없는** 7개.
 #: 전부 ``s.target`` 의 ``chk==0`` 에서 옮겨 왔다.
 ACTIVATION_FROM_SET_TARGET = (
@@ -548,7 +550,11 @@ def test_08_a_target_requirement_is_not_an_activation_condition():
     assert without.canonical_state()[3] is None
     assert with_condition.canonical_state()[3] is not None
     #: ``targets`` 는 그 다음 자리이고 둘 다 비어 있다 — 섞이지 않았다.
-    assert with_condition.canonical_state()[5] == without.canonical_state()[5] == ()
+    #: 🔴 **Phase 6-AF 에서 자리가 5 → 7 로 밀렸다** —
+    #: ``activation_zones`` 와 ``resolution_condition`` 이 ``activation``
+    #: **바로 뒤**에 실렸기 때문이다. 섞이지 않았다는 사실은 그대로이고,
+    #: 움직인 것은 자리 번호뿐이다 (``activation`` 은 여전히 3 이다).
+    assert with_condition.canonical_state()[7] == without.canonical_state()[7] == ()
 
     #: 3. 조건·대상·비용이 각각 두 칸씩 따로 있다.
     for name in (
@@ -629,12 +635,24 @@ def test_10_both_production_readers_skip_a_none_activation():
     assert activate(new_state(), silent).status is ActivationStatus.ACTIVATED
     assert resolve(new_state(), silent).status is not ResolutionStatus.CONDITION_UNKNOWN
 
-    #: 두 계층이 같은 문장으로 그 태도를 적는다.
+    #: 두 계층이 같은 태도를 적는다 — **없으면 조건이 없는 것처럼** 간다.
+    #:
+    #: 🔴 **Phase 6-AF 가 해결 계층의 문장을 바꿨다.** 해결은 이제
+    #: ``resolution_condition`` 이 있으면 그것을, 없으면 ``activation`` 을
+    #: 골라 본다 (``s.tkop`` 이 ``s.tktg`` 와 **다른** 것을 보는 카드가
+    #: 있기 때문이다). 고른 뒤의 태도는 **한 글자도 달라지지 않았다** —
+    #: ``None`` 이면 조건 없이 간다. 그래서 두 자리를 각각 그 계층의 실제
+    #: 문장으로 센다.
     for path, marker in (
         ("engine/activation.py", 'if definition.activation is None:'),
-        ("engine/effect/executor.py", 'if definition.activation is None:'),
+        ("engine/effect/executor.py", 'if condition is None:'),
     ):
         assert marker in source_of(path)
+    #: 해결 계층이 **무엇을 골랐는지**도 센다 — 고르기가 사라지면 깨진다.
+    assert (
+        "if definition.resolution_condition is None"
+        in source_of("engine/effect/executor.py")
+    )
 
 
 @requires_official_db
@@ -664,7 +682,12 @@ def test_11_no_registered_effect_drops_an_existing_set_condition(analyses):
         for entry in EFFECT_LIBRARY
         if analyses[entry.definition.effect_ref].activation.has_condition_function
     ]
-    assert [ref.card_id for ref in with_lua_condition] == [GALLANTRY]
+    #: 🔴 **Phase 6-AF 에서 둘이 되었다** — 기르수 ③ 의 Lua 에도
+    #: ``SetCondition`` 이 있다 (자기 필드에 기르수 외 몬스터가 없을
+    #: 때). 그 조건도 **버려지지 않고** 옮겨져 있으므로 위의
+    #: ``dropped == []`` 가 그대로 참이고, 그것이 이 시험이 재는
+    #: 사실이다.
+    assert [ref.card_id for ref in with_lua_condition] == [GALLANTRY, GIRSU]
 
 
 @requires_official_db
@@ -692,17 +715,32 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
+    #: (19 → **20**). 이 테스트가 틀린 가정을 갖고 있었던 것이 아니라 그 시점에
+    #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
+    #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
+    #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
+    assert len(EFFECT_LIBRARY) == 20
     #: 🔴 8 → **9** (Phase 6-V, 기르수 ①).
     #: 🔴 9 → **10** (Phase 6-AC, 성유물－『성장』 ②). 그 조건도 상태
     #: 조건이다 (``ZoneHasFreeSlot`` — 자신 몬스터 존에 빈 자리가 있다).
-    assert len(with_activation) == 10
+    #: 🔴 10 → **11** (Phase 6-AF, 기르수 ③). 그 조건도 상태 조건이다 —
+    #: ``Not(ZoneCountAtLeast(…, excluding_source=True))`` 과 양쪽 몬스터
+    #: 존의 빈 칸 · 특수 소환 허가 넷을 ``And`` 로 묶은 것이고, 공식
+    #: ``SetCondition`` 과 ``s.tktg`` 에서 옮겼다.
+    assert len(with_activation) == 11
 
-    from_target = [
-        entry.definition.effect_ref.card_id
+    #: 🔴 **Phase 6-AF — ``card_id → ordinal`` 사전으로는 더 가를 수 없다.**
+    #: 기르수가 블록 둘을 등재했으므로 (① 과 ③) 사전은 하나를 덮어쓴다.
+    #: 그래서 **등재 항목을 그대로** 들고 다니며 그 항목의 ordinal 로 묻는다.
+    #: 묻는 대상은 달라지지 않았다 — 기르수 ③ 은 ``SetCondition`` 을 가지므로
+    #: 애초에 이 아홉에 들지 않는다 (그것이 ``test_11`` 이 센 사실이다).
+    from_target_refs = [
+        entry.definition.effect_ref
         for entry in with_activation
         if not analyses[entry.definition.effect_ref].activation.has_condition_function
     ]
+    from_target = [ref.card_id for ref in from_target_refs]
     assert sorted(from_target) == sorted(ACTIVATION_FROM_SET_TARGET)
     #: 🔴 7 → **8** (Phase 6-V) → **9** (Phase 6-AC).
     assert len(from_target) == 9
@@ -711,15 +749,11 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: 🔴 Phase 6-AC — **등재한 블록의 ordinal 로** 묻는다. 성유물－
     #: 『성장』 은 ②를 등재했으므로 0 번 블록을 물으면 **다른 효과**를
     #: 검사하게 된다 (그쪽은 ``e1`` 이고 조건 함수를 가지고 있다).
-    ordinal_of = {
-        e.definition.effect_ref.card_id: e.definition.effect_ref.ordinal
-        for e in EFFECT_LIBRARY
-    }
-    for card_id in ACTIVATION_FROM_SET_TARGET:
-        has_condition, has_target, _ = slot_flags(card_id, ordinal_of[card_id])
-        assert has_condition is False
-        assert has_target is True
-        assert "chk==0" in lua_of(card_id)
+    for ref in from_target_refs:
+        has_condition, has_target, _ = slot_flags(ref.card_id, ref.ordinal)
+        assert has_condition is False, ref
+        assert has_target is True, ref
+        assert "chk==0" in lua_of(ref.card_id), ref
 
     #: 그리고 **등재 16개 전부** ``SetTarget`` 을 가진다.
     assert all(slot_flags(e.definition.effect_ref.card_id, e.definition.effect_ref.ordinal)[1] for e in EFFECT_LIBRARY)
