@@ -129,6 +129,34 @@ class OfficialDatabaseSource:
     def load(self, include_tokens: bool = False) -> dict[int, Card]:
         return {c.id: c for c in self.iter_cards(include_tokens=include_tokens)}
 
+    def iter_token_cards(self) -> Iterator[Card]:
+        """
+        **토큰만** 하나씩 내보낸다 (Phase 6-AF).
+
+        🔴 :meth:`iter_cards` 의 기본값은 그대로 ``False`` 다 — 검색 · 덱
+        구축이 보는 목록은 **한 장도 늘지 않는다**. 토큰은 덱에 넣을 수
+        없고 (공식 규칙), 검색 결과에 섞이면 "이 카드를 넣을 수 있다" 로
+        읽힌다.
+
+        그런데 **듀얼 중에는 그 정의가 필요하다.** 효과가 토큰을 만들면
+        그 개체의 이름 · 카드군 · 종족 · 속성 · 레벨 · 공수를 어디선가
+        읽어야 하고, 지어내지 않으려면 ``cards.cdb`` 의 그 줄을 읽는 수밖에
+        없다 (실측: 46647145 → setcode 254 · type 16401 · atk 0 · def 0 ·
+        level 1 · race 32 · attribute 32).
+
+        그래서 **문을 따로 둔다** — 같은 함수에 ``True`` 를 넘기는 길을
+        쓰지 않는 이유는 그 길이 "검색 목록에 토큰을 섞는" 길과 같기
+        때문이다. 이 문으로 읽은 것은 :attr:`~core.card_repository.
+        CardRepository.tokens` 라는 **다른 표**에 들어간다.
+        """
+        for card in self.iter_cards(include_tokens=True):
+            if card.type_mask & C.TYPE_TOKEN:
+                yield card
+
+    def load_tokens(self) -> dict[int, Card]:
+        """토큰 정의만 담은 표. :meth:`load` 와 **겹치지 않는다.**"""
+        return {c.id: c for c in self.iter_token_cards()}
+
     # ------------------------------------------------------------------
     @staticmethod
     def _row_to_card(row: sqlite3.Row) -> Card:

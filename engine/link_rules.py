@@ -49,6 +49,7 @@ from engine.ids import InstanceId
 from engine.summon_restriction import (
     SUMMON_PROHIBITION_RULE_MISSING,
     SUMMON_RESTRICTION_BLIND_SPOTS,
+    ProhibitionScope,
     assess_special_summon_permission,
 )
 from engine.vocabulary import Position, Zone
@@ -83,8 +84,22 @@ LINK_MATERIAL_DESTINATION: Zone = Zone.GRAVE
 # ======================================================================
 
 #: 링크 몬스터를 소재로 쓰면 그 링크 수치만큼 센다 (공식 규칙).
+#:
+#: 🔴 **Phase 6-AF 가 이것을 옮겼다.** 6-AD 까지 이 이름은 "아직 못 옮겼다"
+#: 는 뜻이었고 링크 몬스터가 소재로 들어오면 판정이 ``UNDETERMINED`` 였다.
+#: 지금은 :func:`material_contribution` 이 센다. 이름을 **지우지 않는 이유**:
+#: 기여 수치를 세게 되었어도 :data:`LINK_MATERIAL_RULES` 의 머리말이 적는
+#: 한계는 그대로다 — 소재 **장수가 범위**인 링크 몬스터 (``Link.AddProcedure``
+#: 의 ``max`` 가 ``nil`` 이 아닌 카드) 는 여전히 등록할 수 없고, 그 카드를
+#: 소재로 쓰는 조합을 셀 수도 없다. 이 이름이 그 사실을 들고 있다.
 LINK_MATERIAL_AS_LINK_RULE: str = (
     "link-material-link-rating (링크 몬스터를 소재로 쓰면 링크 수치만큼 센다)"
+)
+
+#: 링크 몬스터의 **링크 수치를 읽을 수 없다.**
+LINK_RATING_UNREADABLE_RULE: str = (
+    "link-material-link-rating-unreadable (소재로 쓴 링크 몬스터의 링크 "
+    "수치를 카드 데이터에서 읽을 수 없다)"
 )
 
 #: 엑스트라 몬스터 존이 찼을 때, 링크 몬스터가 **가리키는** 메인 몬스터 존.
@@ -287,7 +302,139 @@ LINK_MATERIAL_RULES: tuple[LinkMaterialRule, ...] = (
             "data/cards.cdb 의 30741503 setcode=0x11b 로 대조했다)."
         ),
     ),
+    #: 오르페골 갈라테아i — 「「오르페골」 몬스터 또는 「성유물」 몬스터 1장」
+    #: (Phase 6-AF).
+    #:
+    #: ``Link.AddProcedure(c, aux.FilterBoolFunctionEx(Card.IsSetCard,
+    #: {SET_ORCUST,SET_WORLD_LEGACY}), 1, 1)`` 에서 **정확히 1장**과 두
+    #: 카드군을 옮겼다 (``min`` 과 ``max`` 가 둘 다 1 이므로 범위가 아니다).
+    #:
+    #: 🔴 **효과 몬스터를 요구하지 않는다.** 필터가 ``Card.IsSetCard`` 하나
+    #: 이고 ``Card.IsType(TYPE_EFFECT)`` 가 없다 — 갈라테아와 **다른 조건**
+    #: 이고, 그 차이가 성유물 토큰(통상 몬스터)을 이 카드의 소재로는 쓸 수
+    #: 있고 갈라테아의 소재로는 쓸 수 없게 만든다.
+    #:
+    #: ``SET_ORCUST`` = ``0x11b`` · ``SET_WORLD_LEGACY`` = ``0xfe`` (상수
+    #: 파일에서 읽었고, 성유물 토큰 46647145 의 setcode 254 = 0xfe 와
+    #: 대조했다).
+    LinkMaterialRule(
+        card_id=48835607,
+        link_rating=1,
+        count=1,
+        each=MaterialRequirement(setcodes=(0x11B, 0xFE)),
+        text_ko="「오르페골」 몬스터 또는 「성유물」 몬스터 1장",
+        lua_file="c48835607.lua",
+        lua_excerpt=(
+            "Link.AddProcedure(c,aux.FilterBoolFunctionEx(Card.IsSetCard,"
+            "{SET_ORCUST,SET_WORLD_LEGACY}),1,1)"
+        ),
+        note=(
+            "공식 텍스트: 「「오르페골」 몬스터 또는 「성유물」 몬스터 "
+            "1장」. 효과 몬스터 조건이 **없다** — 필터에 "
+            "Card.IsType(TYPE_EFFECT) 가 들어 있지 않다. "
+            "data/cards.cdb 의 48835607 은 setcode=0x11b · 링크 수치 1 이다. "
+            "같은 스크립트의 e1 (링크 소환 성공 시 그 턴 이 카드의 링크 "
+            "소환을 막는 EFFECT_CANNOT_SPECIAL_SUMMON 등록) 은 "
+            "LINK_SUMMON_ONCE_PER_TURN 가 따로 들고 있다."
+        ),
+    ),
 )
+
+@dataclass(frozen=True, slots=True)
+class LinkSummonTurnLimit:
+    """
+    「이 카드를 1턴에 1번만 링크 소환할 수 있다」 류의 제약 (Phase 6-AF).
+
+    공식 스크립트가 이것을 **소재 조건이 아니라 지속 효과**로 적는다 —
+    링크 소환에 성공하면 그때 ``EFFECT_CANNOT_SPECIAL_SUMMON`` 을 **플레이어
+    에게** 걸고 엔드 페이즈에 지운다. 그래서 :class:`LinkMaterialRule` 과
+    **다른 표**에 적는다: 저쪽은 "무엇을 소재로 쓸 수 있는가" 이고 이쪽은
+    "몇 번 소환할 수 있는가" 다.
+
+    세는 자리는 :class:`~engine.state.summon_usage.SummonUsageRegistry` 이고
+    (판에 있다), 판정하는 자리는 :func:`assess_link_materials` 다 —
+    **지식 · 상태 · 판정**이 각자 다른 자리에 있다
+    (``EffectDefinition.use_limit`` 과 같은 규율).
+    """
+
+    card_id: int
+    times: int
+    """그 턴에 **몇 번까지** 링크 소환할 수 있는가."""
+    scope: ProhibitionScope
+    """``SetTargetRange`` 를 옮긴 값 — 누구에게 걸리는가."""
+    text_ko: str
+    lua_file: str
+    lua_excerpt: str
+    note: str
+
+    def __post_init__(self) -> None:
+        if self.card_id <= 0:
+            raise ValueError(f"카드 ID 는 양수입니다: {self.card_id}")
+        if self.times < 1:
+            raise ValueError(f"횟수는 1 이상입니다: {self.times}")
+        for required in ("text_ko", "lua_file", "lua_excerpt", "note"):
+            if not getattr(self, required).strip():
+                raise ValueError(
+                    f"{self.card_id}: {required} 를 비워 둘 수 없습니다 — "
+                    "근거 없는 제약은 추측입니다."
+                )
+
+    def canonical_state(self) -> tuple:
+        return (self.card_id, self.times, self.scope.value)
+
+
+#: 턴당 링크 소환 횟수를 **읽은** 링크 몬스터들. 여기 없는 카드는 제약이
+#: 적히지 않았다 (ADR-006 — "제약이 없다" 가 아니라 "읽지 않았다").
+LINK_SUMMON_ONCE_PER_TURN: tuple[LinkSummonTurnLimit, ...] = (
+    LinkSummonTurnLimit(
+        card_id=48835607,
+        times=1,
+        #: ``SetTargetRange(1,0)`` — **그 카드의 컨트롤러에게만** 걸린다.
+        scope=ProhibitionScope.CONTROLLER,
+        text_ko=(
+            "오르페골 갈라테아i: 「"
+            "「오르페골 갈라테아i」는 1턴에 1번밖에 링크 소환할 수 없다」"
+        ),
+        lua_file="c48835607.lua",
+        lua_excerpt=(
+            "function s.regop(e,tp,...) local e1=Effect.CreateEffect("
+            "e:GetHandler()); e1:SetType(EFFECT_TYPE_FIELD); "
+            "e1:SetCode(EFFECT_CANNOT_SPECIAL_SUMMON); "
+            "e1:SetProperty(EFFECT_FLAG_PLAYER_TARGET); "
+            "e1:SetTargetRange(1,0); e1:SetTarget(function(e,c,sump,sumtype) "
+            "return c:IsCode(id) and sumtype&SUMMON_TYPE_LINK=="
+            "SUMMON_TYPE_LINK end); e1:SetReset(RESET_PHASE|PHASE_END); "
+            "Duel.RegisterEffect(e1,tp) end"
+        ),
+        note=(
+            "링크 소환에 성공했을 때 (EVENT_SPSUMMON_SUCCESS + "
+            "IsLinkSummoned) 등록되는 지속 효과이고, 대상이 "
+            "c:IsCode(id) and sumtype&SUMMON_TYPE_LINK 이므로 **그 카드명의 "
+            "링크 소환만** 막는다 (다른 특수 소환은 막지 않는다). "
+            "SetReset(RESET_PHASE|PHASE_END) 이 '그 턴' 이고, "
+            "SetTargetRange(1,0) 이 '자신' 이다 — 상대의 링크 소환은 "
+            "막지 않으므로 scope 가 CONTROLLER 다. "
+            "이 저장소는 그것을 '이 턴에 그 카드명을 링크 소환한 횟수' 로 "
+            "세고 (GameState.summon_uses), 카드가 필드를 떠난 뒤에도 그 "
+            "기록이 남는다 — 공식 효과도 카드가 사라져도 턴 끝까지 "
+            "남는다 (Duel.RegisterEffect 는 플레이어에게 건다)."
+        ),
+    ),
+)
+
+_TURN_LIMIT_BY_CARD: dict[int, LinkSummonTurnLimit] = {
+    rule.card_id: rule for rule in LINK_SUMMON_ONCE_PER_TURN
+}
+if len(_TURN_LIMIT_BY_CARD) != len(LINK_SUMMON_ONCE_PER_TURN):  # pragma: no cover
+    raise ValueError("한 카드의 턴당 링크 소환 제한을 두 줄로 적었습니다.")
+
+
+def turn_limit_for(card_id: "int | None") -> "LinkSummonTurnLimit | None":
+    """그 링크 몬스터의 턴당 소환 제한. **적히지 않았으면 ``None``.**"""
+    if card_id is None:
+        return None
+    return _TURN_LIMIT_BY_CARD.get(card_id)
+
 
 _RULES_BY_CARD: dict[int, LinkMaterialRule] = {
     rule.card_id: rule for rule in LINK_MATERIAL_RULES
@@ -296,6 +443,32 @@ assert len(_RULES_BY_CARD) == len(LINK_MATERIAL_RULES), (
     "같은 카드의 소재 조건이 두 번 적혀 있습니다 — 어느 쪽이 이기는지 말할 "
     "수 없습니다."
 )
+
+
+def material_contribution(definition) -> "int | None":
+    """
+    그 소재가 **소재 장수로 몇 장으로 세어지는가** (Phase 6-AF).
+
+    공식 규칙 — *"If you use a Link Monster as Link Material, it counts as
+    the number of materials equal to its Link Rating."* 그 밖의 몬스터는
+    1장이다.
+
+    🔴 **장수와 기여를 가른다.** 돌려주는 것은 **기여**이고, 고른 카드가 몇
+    장인지는 ``len(materials)`` 가 따로 말한다. 두 수가 다를 수 있는 것이
+    이 규칙의 전부이므로 한 수로 합치지 않는다 (링크 2 한 장을 쓰면 **고른
+    장수 1 · 기여 2** 다).
+
+    읽을 수 없으면 ``None`` 이다 — ``0`` 도 ``1`` 도 아니다. 모르는 수를
+    1 로 접으면 링크 몬스터가 조용히 1장으로 세어진다.
+    """
+    if definition is None:
+        return None
+    if not definition.is_link:
+        return 1
+    rating = definition.link_rating
+    if not isinstance(rating, int) or rating < 1:
+        return None
+    return rating
 
 
 def material_rule_for(card_id: "int | None") -> "LinkMaterialRule | None":
@@ -463,9 +636,50 @@ def assess_link_materials(
             LINK_MATERIAL_RULE_MISSING,
         )
 
-    if len(materials) != rule.count:
+    #: 🔴 **턴당 링크 소환 제한을 소재보다 먼저 본다** (Phase 6-AF).
+    #: 규칙이 답한 것이 소재 조건의 모름보다 먼저다 (확인된 특수 소환 금지와
+    #: 같은 자리이고 같은 이유다).
+    limit = turn_limit_for(definition.card_id)
+    if limit is not None and limit.scope.covers(actor, actor):
+        done = view.summons_of(actor, definition.card_id, LINK_SUMMON_KIND)
+        if done >= limit.times:
+            return _illegal(
+                f"P{actor} 는 이 턴에 {definition.card_id} 를 이미 "
+                f"{done}번 링크 소환했습니다 (1턴 {limit.times}번) — "
+                f"{limit.text_ko}"
+            )
+
+    #: 🔴 **고른 장수와 소재 장수가 다를 수 있다** (Phase 6-AF). 링크 몬스터
+    #: 를 소재로 쓰면 그 링크 수치만큼 세므로 (:func:`material_contribution`),
+    #: 장수 검사는 **기여의 합**으로 한다. 두 수를 함께 적는다 — 거절 문장이
+    #: "2장인데 2장이 아니다" 로 읽히지 않게 한다.
+    contributed = 0
+    for instance in materials:
+        held = view.find(instance)
+        found = None if held is None else held.definition
+        share = material_contribution(found)
+        if share is None:
+            if held is not None and found is not None and found.is_link:
+                return _undetermined(
+                    f"{instance} 의 링크 수치를 읽을 수 없어 소재 장수를 "
+                    "셀 수 없습니다.",
+                    LINK_RATING_UNREADABLE_RULE,
+                    rule,
+                )
+            #: 보이지 않거나 정의를 못 읽는다 — 아래 고리가 그 사실을
+            #: 더 정확한 문장으로 적는다. 여기서는 세지 않고 넘어간다.
+            contributed = -1
+            break
+        contributed += share
+    if contributed >= 0 and contributed != rule.count:
+        extra = (
+            ""
+            if contributed == len(materials)
+            else f" (고른 카드 {len(materials)}장, 링크 수치로 환산한 소재 "
+            f"장수 {contributed}장)"
+        )
         return _illegal(
-            f"소재가 {len(materials)}장입니다 — {rule.card_id} 는 "
+            f"소재가 {contributed}장입니다{extra} — {rule.card_id} 는 "
             f"{rule.describe_ko()} 입니다.",
             rule,
         )
@@ -506,15 +720,10 @@ def assess_link_materials(
                 LINK_MATERIAL_RULE_MISSING,
                 rule,
             )
-        #: 🔴 **링크 몬스터를 소재로 쓰는 것은 아직 옮기지 못했다** — 그때
-        #: 링크 수치만큼 세므로 장수 계산이 달라진다 (모듈 머리말).
-        if material_definition.is_link:
-            return _undetermined(
-                f"{instance} 가 링크 몬스터입니다 — 그때 소재 장수를 링크 "
-                "수치로 세는 규칙을 아직 옮기지 못했습니다.",
-                LINK_MATERIAL_AS_LINK_RULE,
-                rule,
-            )
+        #: 🔴 **링크 몬스터도 소재가 된다** (Phase 6-AF). 6-AD 까지 이
+        #: 자리가 ``UNDETERMINED`` 였고, 그 이유는 "링크 수치만큼 세는
+        #: 규칙을 옮기지 못했다" 였다 — 지금은 위에서
+        #: :func:`material_contribution` 이 센다.
         holds = rule.each.holds(material_definition)
         if holds is None:
             return _undetermined(
@@ -626,8 +835,20 @@ def assess_link_placement(
 
 
 
+#: 링크 소환의 **소환법 이름** — ``SummonUsageRegistry`` 의 열쇠에 쓴다.
+#:
+#: 🔴 :class:`~engine.effect.delta.SummonKind` 의 값을 그대로 쓴다. 이 모듈은
+#: 효과 계층을 import 하지 않으므로 (머리말의 import 고리) 그 열거형을
+#: 가져올 수 없고, 문자열을 **여기 하나에** 적어 두 곳이 갈라지지 않게 한다.
+#: 같은 값인지는 시험이 센다.
+LINK_SUMMON_KIND: str = "link"
+
+
 __all__ = [
     "LINK_BLIND_SPOTS",
+    "LINK_RATING_UNREADABLE_RULE",
+    "LINK_SUMMON_KIND",
+    "LINK_SUMMON_ONCE_PER_TURN",
     "LINK_MATERIAL_AS_LINK_RULE",
     "LINK_MATERIAL_BAN_RULE",
     "LINK_MATERIAL_DESTINATION",
@@ -641,8 +862,11 @@ __all__ = [
     "LinkMaterialAssessment",
     "LinkMaterialEligibility",
     "LinkMaterialRule",
+    "LinkSummonTurnLimit",
     "MaterialRequirement",
     "assess_link_materials",
     "assess_link_placement",
+    "material_contribution",
     "material_rule_for",
+    "turn_limit_for",
 ]

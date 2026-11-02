@@ -42,10 +42,13 @@ from dataclasses import dataclass
 from engine.archetype_compiler import compile_archetype_condition
 from engine.condition import (
     And,
+    Condition,
     ConditionResult,
     IsMonster,
     IsSpellTrap,
+    Not,
     PlayerRef,
+    SimultaneousSpecialSummonPermitted,
     SpecialSummonPermitted,
     ZoneCountAtLeast,
     ZoneHasFreeSlot,
@@ -65,11 +68,13 @@ from engine.effect.executor import EffectExecutor, EffectImplementationRegistry
 from engine.effect.journal import EventJournal
 from engine.effect.operation import (
     CardOperation,
+    CreateTokenOperation,
     DrawOperation,
     LifeChangeOperation,
     OperationKind,
     ShuffleOperation,
     SpecialSummonOperation,
+    TokenSpec,
 )
 from engine.effect.semantics import FIELD_ZONES, DestructionRuling, MovementRuling
 from engine.effect.target import (
@@ -93,7 +98,7 @@ from engine.effect.ruling import (
 from engine.execution import ResultField, ResultRef
 from engine.ids import EffectRef
 from engine.use_limit import LimitScope, UseLimit
-from engine.vocabulary import ActivationKind, Zone
+from engine.vocabulary import ActivationKind, Position, Zone
 
 
 @dataclass(frozen=True, slots=True)
@@ -1208,6 +1213,34 @@ _HONEST_IGNITION_ENTRY = LibraryEntry(
 )
 
 
+#: 「성유물 토큰」 (Phase 6-AF). ``TOKEN_WORLD_LEGACY`` 의 값이다.
+#:
+#: 🔴 **같은 이름의 69811711 이 아니다.** ``cards.cdb`` 에 "World Legacy
+#: Token" 이 두 ID 로 들어 있고 그중 69811711 은 기르수의 ID +1 이어서
+#: 잘못 짚기 쉽다. 상수 파일이 가리키는 것은 이 번호다
+#: (``data/constants/card_counter_constants.lua`` 의
+#: ``TOKEN_WORLD_LEGACY=46647145``).
+WORLD_LEGACY_TOKEN = 46647145
+
+#: 기르수 ③ 의 ``s.tktg`` 가 ``chk==0`` 에서 보고 ``s.tkop`` 이 **다시
+#: 보는** 다섯 가지 (Phase 6-AF).
+#:
+#: 🔴 **한 값에 적어 두 자리에서 함께 쓴다.** 발동 조건은 이 다섯에
+#: ``SetCondition`` 한 항을 더한 것이고, 해결 시점 재검사는 이 다섯
+#: 그대로다 — 두 곳에 베껴 적으면 한쪽만 고쳐지는 날이 온다.
+#:
+#: 네 항인데 다섯인 이유: ``IsPlayerCanSpecialSummonMonster`` 가 두 번
+#: (``tp`` 자신 쪽 · ``1-tp`` 쪽) 불리지만 **둘 다 ``tp`` 가 소환할 수 있는
+#: 가**를 묻고 (첫 인자가 같다), 놓는 쪽의 차이는 빈 칸 검사 둘이 이미
+#: 말한다. 그래서 ``SpecialSummonPermitted`` 는 한 항이다.
+_GIRSU_TOKEN_RESOLUTION_CHECKS: tuple[Condition, ...] = (
+    ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.MZONE),
+    ZoneHasFreeSlot(PlayerRef.OPPONENT, Zone.MZONE),
+    SimultaneousSpecialSummonPermitted(2),
+    SpecialSummonPermitted(),
+)
+
+
 #: 잭나이츠 오르페골 기르수 — "①: 이 카드가 일반 소환·특수 소환했을 때에
 #: 발동할 수 있다. 덱에서 「오르페골」 또는 「성유물」 카드 1장을 묘지로
 #: 보낸다. (1턴에 1번)"
@@ -1300,6 +1333,168 @@ _GIRSU_TRIGGER_ENTRY = LibraryEntry(
         "c:IsAbleToGrave(); "
         "Duel.SelectMatchingCard(tp,s.tgfilter,tp,LOCATION_DECK,0,1,1,nil); "
         "Duel.SendtoGrave(tc,REASON_EFFECT)"
+    ),
+    executable=True,
+)
+
+
+#: 🔴 **잭나이츠 오르페골 기르수 ③ — 토큰 두 장** (Phase 6-AF).
+#:
+#: 공식 한국어 텍스트 (``data/cards.cdb``, 69811710 — ``ko-KR.json`` 오버레이):
+#:
+#:     ●자신 필드에 이 카드 이외의 몬스터가 존재하지 않을 경우에 발동할 수
+#:       있다. 서로의 필드에 "성유물 토큰"(기계족 / 어둠 / 레벨 1 / 공 0 /
+#:       수 0) 1장씩을 앞면 수비 표시로 특수 소환한다.
+#:       (이 효과는 1턴에 1번밖에 사용할 수 없다)
+#:
+#: 이 저장소의 **첫 토큰 효과**이고, 첫 "상대 필드에 놓는" 특수 소환이다.
+#:
+#: 무엇을 옮겼는가 — ``c69811710.lua`` 의 ``e3``
+#: ---------------------------------------------
+#: ==========================================  ==============================
+#: ``e3:SetType(EFFECT_TYPE_IGNITION)``          ``activation_kind=IGNITION``
+#: ``e3:SetRange(LOCATION_MZONE)``               (발동 자리 — 후보 생성이
+#:                                               읽는다)
+#: ``e3:SetCondition(not Duel.``                 ``activation`` 의 첫 항
+#: ``IsExistingMatchingCard(nil,tp,``            ``Not(ZoneCountAtLeast(…,
+#: ``LOCATION_MZONE,0,1,e:GetHandler()))``       excluding_source=True))``
+#: ``s.tktg`` 의 ``GetLocationCount(tp,…)>0``    ``ZoneHasFreeSlot(자신,
+#:                                               MZONE)``
+#: ``s.tktg`` 의 ``GetLocationCount(1-tp,…)>0``  ``ZoneHasFreeSlot(상대,
+#:                                               MZONE)``
+#: ``not IsPlayerAffectedByEffect(tp,``          ``SimultaneousSpecial
+#: ``CARD_BLUEEYES_SPIRIT)``                     SummonPermitted(2)``
+#: ``IsPlayerCanSpecialSummonMonster(tp,…)``     ``SpecialSummonPermitted()``
+#: ``CreateToken(tp,TOKEN_WORLD_LEGACY)`` ×2     ``CreateTokenOperation``
+#: ``SpecialSummonStep(tk1,0,tp,tp,…)``          ``TokenSpec(…, CONTROLLER,
+#:                                               FACEUP_DEFENSE)``
+#: ``SpecialSummonStep(tk2,0,tp,1-tp,…)``        ``TokenSpec(…, OPPONENT,
+#:                                               FACEUP_DEFENSE)``
+#: ``e3:SetCountLimit(1,{id,1})``                ``use_limit=PER_EFFECT``
+#: ==========================================  ==============================
+#:
+#: 🔴 **발동 조건과 해결 시점 재검사가 다르다.** ``s.tkop`` 은 ``s.tktg`` 의
+#: **다섯 가지만** 다시 보고 ``SetCondition`` 은 다시 보지 않는다 (실측 — 그
+#: 함수에 ``IsExistingMatchingCard`` 호출이 없다). 그래서 ``activation`` 은
+#: 여섯 항이고 :attr:`~engine.effect.definition.EffectDefinition.
+#: resolution_condition` 은 **다섯 항**이다. 합치면 발동 뒤에 다른 몬스터가
+#: 생긴 것만으로 해결이 불발로 바뀌는데, 실제 카드는 그때도 토큰을 만든다.
+#:
+#: 🔴 **사용 제한의 열쇠가 ① · ② 와 다르다.** ``e1`` · ``e2`` 는
+#: ``SetCountLimit(1,id)`` 이고 이 효과는 ``SetCountLimit(1,{id,1})`` 이다 —
+#: Project Ignis 의 ``{code, hopt_index}`` 꼴이고 **같은 카드명의 다른
+#: 칸**이다. 그 칸을 :class:`~analysis.effect_model.LimitScope` 로 옮기면
+#: ``PER_EFFECT`` 다 (열쇠가 ``(player, card_id, ordinal)`` 이므로 ① · ② 의
+#: ``(player, card_id)`` 와 **겹치지 않는다**). 덱→묘지 효과를 쓴 턴에도 이
+#: 효과를 쓸 수 있고 그 반대도 같다 — 실제 카드가 그렇다.
+#:
+#: 🔴 **ordinal 2 는 추측이 아니다.** 파싱 결과의 세 번째 항이 이 효과다
+#: (실측: ``repository.get(69811710).script.effects`` →
+#: ``[e1 SINGLE+TRIGGER_O/EVENT_SUMMON_SUCCESS, e2 … EVENT_SPSUMMON_SUCCESS,
+#: e3 IGNITION/categories SPECIAL_SUMMON+TOKEN/ranges MZONE/count_limit
+#: "1,{id,1}", e1 SINGLE/EFFECT_ADD_TYPE]``).
+#:
+#: 무엇을 옮기지 **못했는가**
+#: --------------------------
+#: - ``IsPlayerCanSpecialSummonMonster`` 의 **토큰 자신에 대한** 부분 —
+#:   「그 이름 · 종족 · 속성의 몬스터를 특수 소환할 수 없다」 류의 범위
+#:   제약이다. 그것은 :data:`~engine.summon_restriction.
+#:   SUMMON_RESTRICTION_BLIND_SPOTS` 와 :data:`~engine.token.
+#:   TOKEN_OPERATION_BLIND_SPOTS` 에 **이름으로** 남고 허가로 바뀌지 않는다.
+#: - ``Duel.SpecialSummonComplete`` 의 "동시 처리" 자체 — 이 저장소는 두
+#:   토큰을 **한 조작 안에서 전부 아니면 무**로 놓는 것까지 옮겼고
+#:   (:class:`~engine.effect.operation.CreateTokenOperation`), 동시성을
+#:   사건으로 적는 계층은 없다.
+_GIRSU_TOKEN_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(GIRSU, 2),
+        source_card_id=GIRSU,
+        operations=(
+            CreateTokenOperation(
+                tokens=(
+                    TokenSpec(
+                        card_id=WORLD_LEGACY_TOKEN,
+                        to=PlayerRef.CONTROLLER,
+                        position=Position.FACEUP_DEFENSE,
+                    ),
+                    TokenSpec(
+                        card_id=WORLD_LEGACY_TOKEN,
+                        to=PlayerRef.OPPONENT,
+                        position=Position.FACEUP_DEFENSE,
+                    ),
+                ),
+            ),
+        ),
+        activation=And(
+            (
+                #: ``e3:SetCondition`` — **발동 시점에만** 본다.
+                Not(
+                    ZoneCountAtLeast(
+                        PlayerRef.CONTROLLER,
+                        Zone.MZONE,
+                        1,
+                        excluding_source=True,
+                    )
+                ),
+            )
+            + _GIRSU_TOKEN_RESOLUTION_CHECKS
+        ),
+        #: 🔴 **``s.tkop`` 이 다시 보는 다섯만** (위의 표).
+        resolution_condition=And(_GIRSU_TOKEN_RESOLUTION_CHECKS),
+        resolution_skip=ResolutionSkip(
+            when_condition_false=True,
+            basis=(
+                "c69811710.lua 의 s.tkop 이 s.tktg 의 다섯 검사를 다시 보고 "
+                "거짓이면 if 블록에 들어가지 않는다 — CreateToken 도 "
+                "SpecialSummonStep 도 부르지 않고 그대로 끝난다. 발동이 "
+                "불법이었던 것이 아니라 해결 시점에 할 일이 없어진 것이다."
+            ),
+        ),
+        activation_kind=ActivationKind.IGNITION,
+        #: 🔴 ``e3:SetRange(LOCATION_MZONE)`` 를 그대로 옮긴다 (6-AF) —
+        #: 덱 · 패 · 묘지의 기르수로는 이 효과를 발동할 수 없고, 그것은
+        #: 모름이 아니라 **규칙이 막는 것**이다.
+        activation_zones=frozenset({Zone.MZONE}),
+        use_limit=UseLimit(LimitScope.PER_EFFECT),
+        provenance=EffectProvenance.official_lua(
+            "c69811710.lua 의 e3 (EFFECT_TYPE_IGNITION · "
+            "SetRange(LOCATION_MZONE)) 에서 발동 분류를, SetCondition 의 "
+            "not Duel.IsExistingMatchingCard(nil,tp,LOCATION_MZONE,0,1,"
+            "e:GetHandler()) 에서 발동 전용 조건을, s.tktg 의 chk==0 갈래 "
+            "다섯 가지에서 해결 시점에도 다시 보는 조건을, s.tkop 의 "
+            "CreateToken(tp,TOKEN_WORLD_LEGACY) 두 번과 "
+            "SpecialSummonStep(tk1,0,tp,tp,false,false,POS_FACEUP_DEFENSE) · "
+            "SpecialSummonStep(tk2,0,tp,1-tp,…) 에서 하는 일과 놓는 쪽을 "
+            "옮겼다. SetCountLimit(1,{id,1}) 은 PER_EFFECT 로 옮겼다 — "
+            "e1 · e2 의 SetCountLimit(1,id) 와 **다른 칸**이다. "
+            "TOKEN_WORLD_LEGACY=46647145 는 "
+            "data/constants/card_counter_constants.lua 에서 읽었고 "
+            "(같은 이름의 69811711 이 아니다), 토큰의 종족 · 속성 · 레벨 · "
+            "공수는 engine.token.TOKEN_RULES 가 data/cards.cdb 와 대조한다. "
+            "IsPlayerCanSpecialSummonMonster 의 토큰 이름 · 종류 범위 제약과 "
+            "SpecialSummonComplete 의 동시 처리는 옮기지 못했다."
+        ),
+    ),
+    lua_file="c69811710.lua",
+    lua_excerpt=(
+        "e3:SetType(EFFECT_TYPE_IGNITION); e3:SetRange(LOCATION_MZONE); "
+        "e3:SetCountLimit(1,{id,1}); "
+        "e3:SetCondition(function(e,tp) return not "
+        "Duel.IsExistingMatchingCard(nil,tp,LOCATION_MZONE,0,1,"
+        "e:GetHandler()) end); "
+        "s.tktg: Duel.GetLocationCount(tp,LOCATION_MZONE)>0 and "
+        "Duel.GetLocationCount(1-tp,LOCATION_MZONE)>0 and not "
+        "Duel.IsPlayerAffectedByEffect(tp,CARD_BLUEEYES_SPIRIT) and "
+        "Duel.IsPlayerCanSpecialSummonMonster(tp,TOKEN_WORLD_LEGACY,"
+        "SET_WORLD_LEGACY,TYPES_TOKEN,0,0,1,RACE_MACHINE,ATTRIBUTE_DARK,"
+        "POS_FACEUP_DEFENSE) and Duel.IsPlayerCanSpecialSummonMonster(tp,"
+        "TOKEN_WORLD_LEGACY,SET_WORLD_LEGACY,TYPES_TOKEN,0,0,1,RACE_MACHINE,"
+        "ATTRIBUTE_DARK,POS_FACEUP_DEFENSE,1-tp); "
+        "s.tkop: local tk1=Duel.CreateToken(tp,TOKEN_WORLD_LEGACY); "
+        "local tk2=Duel.CreateToken(tp,TOKEN_WORLD_LEGACY); "
+        "Duel.SpecialSummonStep(tk1,0,tp,tp,false,false,POS_FACEUP_DEFENSE); "
+        "Duel.SpecialSummonStep(tk2,0,tp,1-tp,false,false,"
+        "POS_FACEUP_DEFENSE); Duel.SpecialSummonComplete()"
     ),
     executable=True,
 )
@@ -1522,6 +1717,7 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _HONEST_IGNITION_ENTRY,
     # Phase 6-V — 첫 유발 효과.
     _GIRSU_TRIGGER_ENTRY,
+    _GIRSU_TOKEN_ENTRY,
     # Phase 6-AC — 두 번째 유발, 그리고 **특수 소환을 실행하는 첫 효과**.
     _WORLD_WAND_TRIGGER_ENTRY,
 )
@@ -1891,6 +2087,7 @@ def availability(
 __all__ = [
     "LibraryEntry",
     "EFFECT_LIBRARY",
+    "WORLD_LEGACY_TOKEN",
     "HONEST",
     "POT_OF_GREED",
     "RAIN_OF_MERCY",

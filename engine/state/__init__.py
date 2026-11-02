@@ -7,6 +7,7 @@
 from engine.state.card_instance import AppliedEffect, CardInstance, PreviousState
 from engine.state.game_state import DuelResult, GameState
 from engine.state.player import PlayerState
+from engine.state.summon_usage import SummonNameKey, SummonUsageRegistry
 from engine.state.turn import TurnState
 from engine.state.use_registry import (
     PerCardKey,
@@ -29,6 +30,8 @@ __all__ = [
     "PerCardKey",
     "PerCardNameKey",
     "PerEffectKey",
+    "SummonNameKey",
+    "SummonUsageRegistry",
     "TurnState",
     "GameState",
     "DuelResult",

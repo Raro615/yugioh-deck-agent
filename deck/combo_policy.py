@@ -215,6 +215,28 @@ class ComboLine:
     이 칸은 **보고서와 시험이 읽는 재현 입력**이다. 경로가 요구하는 패를
     사용자 모르게 끼워 넣으면 "이 패로 됐다" 가 거짓이 된다.
     """
+    declines: tuple[tuple[int, int], ...] = ()
+    """
+    이 경로가 **일부러 지나가는** 발동 기회들 — ``(card_id, ordinal)``
+    (Phase 6-AF).
+
+    왜 필요한가 — **적법한 유발 처리 절차를 지나가야 하는 경로가 있다.**
+    기르수를 일반 소환하면 ① (덱→묘지) 의 발동 기회가 열리고, 그것은
+    ``EFFECT_TYPE_TRIGGER_O`` 이므로 **발동하지 않는 것도 적법하다**
+    (공식 텍스트의 「발동할 수 있다」). 토큰 경로는 그 기회를 쓰지 않고
+    지나가야 ③ 으로 넘어간다.
+
+    🔴 **단계로 적을 수 없다.** :class:`VerificationLinePolicy` 는 상태가
+    없고 매번 경로를 처음부터 훑으므로, ``kind="pass"`` 단계를 넣으면 그
+    단계가 **뒤의 모든 자리에서도** 맞아 버린다 (``pass`` 는 거의 모든
+    자리에 있다). 그래서 지나가는 것은 단계가 아니라 **이 경로의 성질**로
+    적는다.
+
+    🔴 **적지 않은 기회는 지나가지 않는다** (ADR-006). 적히지 않은 발동
+    후보가 열려 있으면 정책은 ``None`` 을 돌려주고 실행이 그 자리에서
+    멈춘다 — 조용히 넘기면 "경로가 돌았다" 가 "다른 선택을 몰래 했다" 를
+    숨긴다.
+    """
     recipe_ydk: str = ""
     """
     이 경로를 재현하는 **검증용 레시피** (YDK 모양).
@@ -273,7 +295,11 @@ class ComboLine:
         return "\n".join(lines)
 
     def canonical_state(self) -> tuple:
-        return (self.name, tuple(s.canonical_state() for s in self.steps))
+        return (
+            self.name,
+            tuple(s.canonical_state() for s in self.steps),
+            tuple(sorted(tuple(pair) for pair in self.declines)),
+        )
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
         return self.describe_ko()
@@ -312,9 +338,49 @@ class VerificationLinePolicy:
             for action in legal.allowed:
                 if step.matches(duel, action):
                     return action
+        passing = self._declining_pass(legal)
+        if passing is not None:
+            return passing
         if self.then is None:
             return None
         return self.then(duel, legal)
+
+    def _declining_pass(self, legal):
+        """
+        **이 경로가 일부러 지나가는 발동 기회**인가. 맞으면 그 ``PASS``.
+
+        조건이 좁다 — 흐름이 아닌 후보가 **전부** :attr:`ComboLine.declines`
+        에 적힌 발동이어야 한다. 하나라도 적히지 않은 후보가 섞여 있으면
+        ``None`` 을 돌려주고 실행이 멈춘다 (그 칸의 설명).
+
+        🔴 **진행을 기억하지 않는다.** 지나간 기회는 **엔진이** 다시 열지
+        않으므로 (``Duel.consumed_events``) 이 갈래가 같은 자리에서 두 번
+        쓰이지 않는다 — 정책이 세는 것이 아니라 판이 민다
+        (클래스 설명과 같은 자리).
+        """
+        if not self.line.declines:
+            return None
+        from engine.action import PlayerActionKind
+
+        flow = {PlayerActionKind.PASS, PlayerActionKind.END_PHASE}
+        wanted = {tuple(pair) for pair in self.line.declines}
+        passes = [a for a in legal.allowed if a.kind is PlayerActionKind.PASS]
+        if not passes:
+            return None
+        opened = 0
+        for action in legal.allowed:
+            if action.kind in flow:
+                continue
+            ref = action.effect_ref
+            if ref is None or (ref.card_id, ref.ordinal) not in wanted:
+                #: 적히지 않은 후보가 있다 — 지나가지 않는다.
+                return None
+            opened += 1
+        if not opened:
+            #: 지나갈 **기회가 없다.** 흐름만 남은 자리에서 ``PASS`` 를
+            #: 집으면 전개가 아니라 턴을 흘려보내는 선택이 된다.
+            return None
+        return passes[0]
 
     def describe_ko(self) -> str:
         tail = "" if self.then is None else " (경로 뒤에는 다른 방식으로 계속)"
@@ -700,13 +766,145 @@ ORCUST_GIRSU_LINE = ComboLine(
     ),
 )
 
+#: 🔴 **토큰 경로의 시작 패** (Phase 6-AF) — 사용자가 적어 준 다섯 장이다.
+#:
+#: 🔴 **「성유물－『성장』」(93920420) 이 없다.** 그것이 이 경로의 요점이다 —
+#: 기존 경로는 패의 『성장』 을 특수 소환해 두 번째 소재를 만들지만, 이
+#: 경로는 **기르수 ③ 이 만든 토큰**으로 소재를 만든다.
+#:
+#: 다섯 장이 모두 :data:`ORCUST_VERIFICATION_RECIPE` 의 메인 덱에 있다
+#: (실측: 69811710 x3 · 703897 x3 · 2930675 x3 · 12989604 x3 ·
+#: 55051920 x2).
+ORCUST_GIRSU_TOKEN_HAND: tuple[int, ...] = (
+    69811710,  # 잭나이츠 오르페골 기르수
+    703897,  # 오르페골 클리막스
+    2930675,  # 성유물에 이르는 열쇠
+    12989604,  # 성유물로부터의 자각
+    55051920,  # 오르페골 코어
+)
+
+
+#: 🔴 **기르수 ③ 의 토큰으로 갈라테아까지 가는 경로** (Phase 6-AF).
+#:
+#: ===  ============================================================
+#: 1    「잭나이츠 오르페골 기르수」(69811710) 일반 소환
+#: 2    기르수 ③ 발동 — 서로의 필드에 성유물 토큰 1장씩
+#: 3    **자신의** 토큰을 소재로 「오르페골 갈라테아i」(48835607) 링크 소환
+#: 4    기르수 + 갈라테아i 를 소재로 「오르페골 갈라테아」(30741503) 링크 소환
+#: ===  ============================================================
+#:
+#: 🔴 **기르수 ① 의 발동 기회를 지나간다** (:attr:`ComboLine.declines`).
+#: ① 은 ``EFFECT_TYPE_TRIGGER_O`` 이므로 발동하지 않는 것이 적법하고, 이
+#: 경로는 덱→묘지를 쓰지 않는다. 🔴 **그 기회가 열리지 않았다는 뜻이
+#: 아니다** — 실행 기록에 ``pass`` 걸음으로 남는다.
+#:
+#: 🔴 **상대 토큰은 소재가 되지 않는다.** 링크 소재는 자신이 컨트롤하는
+#: 몬스터이므로 (:func:`~engine.link_rules.assess_link_materials` 의
+#: 컨트롤러 검사), 상대 필드에 놓인 토큰은 끝까지 그 자리에 남는다.
+#:
+#: 🔴 **토큰은 갈라테아의 소재가 될 수 없다.** 갈라테아는 「효과 몬스터 2장」
+#: 을 요구하고 (``Card.IsType(TYPE_EFFECT)``) 토큰은 통상 몬스터다. 그래서 3
+#: 단계가 **필요하다** — 토큰을 갈라테아i 로 바꾸고, 그 링크 몬스터가 2
+#: 단계의 소재가 된다 (링크 몬스터를 소재로 쓰면 링크 수치만큼 세므로
+#: 링크 1 + 기르수 = 소재 2장).
+#:
+#: 🔴 **최선 전개가 아니다.** 이것은 새 엔진 기능(토큰 생성 · 토큰 소멸 ·
+#: 링크 몬스터 소재 · 턴당 링크 소환 제한)을 실제 듀얼로 잇는 **검증용
+#: 경로**다. 실제 오르페골 전개는 이 자리에서 다른 수를 쓴다.
+ORCUST_GIRSU_TOKEN_LINE = ComboLine(
+    name="orcust-girsu-token",
+    title_ko=(
+        "기르수 → 성유물 토큰 2장 → 자기 토큰으로 갈라테아i → "
+        "기르수 + 갈라테아i 로 갈라테아"
+    ),
+    steps=(
+        PlannedAction(
+            kind="normal_summon",
+            card_id=69811710,
+            label="「잭나이츠 오르페골 기르수」 를 일반 소환",
+        ),
+        PlannedAction(
+            kind="activate_effect",
+            card_id=69811710,
+            effect_ref=(69811710, 2),
+            label=(
+                "기르수 ③ 발동 — 서로의 필드에 「성유물 토큰」 1장씩을 "
+                "앞면 수비 표시로 특수 소환"
+            ),
+        ),
+        PlannedAction(
+            kind="link_summon",
+            card_id=48835607,
+            material_card_ids=(46647145,),
+            label=(
+                "자신의 「성유물 토큰」 을 소재로 「오르페골 갈라테아i」 "
+                "링크 소환 (토큰이 소멸한다)"
+            ),
+        ),
+        PlannedAction(
+            kind="link_summon",
+            card_id=30741503,
+            material_card_ids=(69811710, 48835607),
+            label=(
+                "기르수 + 갈라테아i 를 소재로 「오르페골 갈라테아」 "
+                "링크 소환 (갈라테아i 가 떠나 엑스트라 몬스터 존이 빈다)"
+            ),
+        ),
+    ),
+    #: 기르수 ① — 「덱에서 「오르페골」 또는 「성유물」 카드 1장을 묘지로
+    #: 보낸다」. 이 경로는 쓰지 않고 지나간다 (위 설명).
+    declines=((69811710, 0),),
+    basis=(
+        "① 기르수(69811710) ③ 공식 텍스트 「자신 필드에 이 카드 이외의 "
+        "몬스터가 존재하지 않을 경우에 발동할 수 있다. 서로의 필드에 "
+        "「성유물 토큰」(기계족 / 어둠 / 레벨 1 / 공 0 / 수 0) 1장씩을 "
+        "앞면 수비 표시로 특수 소환한다」 와 c69811710.lua 의 e3 "
+        "(EFFECT_TYPE_IGNITION · SetRange(LOCATION_MZONE) · "
+        "SetCountLimit(1,{id,1}) · s.tktg · s.tkop 의 CreateToken 두 번과 "
+        "SpecialSummonStep(tk1,0,tp,tp,…) · SpecialSummonStep(tk2,0,tp,1-tp,…))."
+        " 토큰 ID 46647145 는 data/constants/card_counter_constants.lua 의 "
+        "TOKEN_WORLD_LEGACY 이고, setcode 254(0xfe) · 기계족 · 어둠 · "
+        "레벨 1 · 0/0 을 data/cards.cdb 로 대조했다. "
+        "② 갈라테아i(48835607) 공식 텍스트 「「오르페골」 몬스터 또는 "
+        "「성유물」 몬스터 1장」 과 c48835607.lua 의 "
+        "Link.AddProcedure(c,aux.FilterBoolFunctionEx(Card.IsSetCard,"
+        "{SET_ORCUST,SET_WORLD_LEGACY}),1,1) — 효과 몬스터 조건이 없으므로 "
+        "통상 몬스터인 토큰도 소재가 된다. "
+        "③ 갈라테아(30741503) 공식 텍스트 「효과 몬스터 2장 (「오르페골」 "
+        "몬스터를 포함)」 과 c30741503.lua 의 Link.AddProcedure(..., "
+        "Card.IsType(TYPE_EFFECT), 2, nil, s.matcheck) — 토큰은 TYPE_NORMAL "
+        "이므로 이 카드의 소재가 될 수 없고, 링크 몬스터인 갈라테아i 는 "
+        "효과 몬스터이면서 링크 수치 1 만큼 세어진다 (공식 규칙). "
+        "소재 적격: 기르수는 효과 몬스터이고 setcode 0x11b(오르페골)를 "
+        "가진다 — data/cards.cdb 로 대조했다."
+    ),
+    hand=ORCUST_GIRSU_TOKEN_HAND,
+    recipe_ydk=ORCUST_VERIFICATION_RECIPE,
+    note=(
+        "🔴 이 경로는 **검증용**이다. 최선 전개라고 주장하지 않고, 최종 "
+        "필드가 강하다고도 주장하지 않는다 — 새로 구현한 토큰 생성 · 토큰 "
+        "소멸 · 링크 몬스터 소재 · 턴당 링크 소환 제한을 실제 엔진 실행으로 "
+        "잇는 것이 목적이다. 상대 필드에는 성유물 토큰 1장이 남는다 "
+        "(공식 효과가 그렇게 적는다 — 이 경로가 그것을 이득으로 "
+        "주장하지 않는다)."
+    ),
+)
+
+
 #: ``/combo`` 가 이름으로 고를 수 있는 경로들.
 #:
 #: 🔴 **기본값이 아니다.** 이름을 주지 않으면 ``execute_opening`` 은 여전히
 #: :func:`~deck.opening.first_meaningful` 을 쓴다 — 사용자가 고르지 않은
 #: 정책이 조용히 다른 요청의 행동 선택을 바꾸지 않게 하는 것이 이 Phase 의
 #: 규율이다 (§5).
-COMBO_LINES: dict[str, ComboLine] = {ORCUST_GIRSU_LINE.name: ORCUST_GIRSU_LINE}
+COMBO_LINES: dict[str, ComboLine] = {
+    line.name: line
+    for line in (ORCUST_GIRSU_LINE, ORCUST_GIRSU_TOKEN_LINE)
+}
+assert len(COMBO_LINES) == 2, (
+    "같은 이름의 경로가 두 번 적혀 있습니다 — 어느 쪽이 이기는지 말할 수 "
+    f"없습니다: {sorted(COMBO_LINES)}"
+)
 
 
 def line_named(name: "str | None") -> "ComboLine | None":
@@ -719,6 +917,8 @@ def line_named(name: "str | None") -> "ComboLine | None":
 __all__ = [
     "COMBO_LINES",
     "ORCUST_GIRSU_LINE",
+    "ORCUST_GIRSU_TOKEN_HAND",
+    "ORCUST_GIRSU_TOKEN_LINE",
     "ORCUST_VERIFICATION_HAND",
     "ORCUST_VERIFICATION_RECIPE",
     "ORCUST_VERIFICATION_RECIPE_KO",

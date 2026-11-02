@@ -1239,7 +1239,15 @@ def test_j01_tokens_are_not_in_the_engine_at_all(repository):
 
 
 def test_k01_no_new_operation_kind_and_no_new_destination():
-    """**§3-4 · §9** — 새 이동 시스템을 만들지 않았다."""
+    """
+    **§3-4 · §9** — 새 **이동** 시스템을 만들지 않았다.
+
+    🔴 **Phase 6-AF 가 종류를 하나 더했다** — ``create_token`` 이다. 그것은
+    이동이 아니다: 출발 자리가 없고 (토큰은 어느 존에서도 오지 않는다) 목적
+    지 표(:data:`MOVABLE_DESTINATIONS`)에 **아무것도 더하지 않는다.** 이
+    시험이 지키는 사실("이동 시스템이 늘지 않았다")은 아래 두 번째 단언이
+    그대로 들고 있다.
+    """
     assert [k.value for k in OperationKind] == [
         "destroy",
         "send_to_grave",
@@ -1253,6 +1261,7 @@ def test_k01_no_new_operation_kind_and_no_new_destination():
         "change_life",
         "shuffle",
         "move",
+        "create_token",
         "unknown",
     ]
     assert MOVABLE_DESTINATIONS == frozenset(
@@ -1270,9 +1279,11 @@ def test_k02_the_library_grew_no_executable_entry():
     않았다는 사실은 그대로이고, 넓힌 것은 6-V 다 — 기르수 ① 하나.
     """
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
-    assert len(EFFECT_LIBRARY) == 19
+    #: Phase 6-AF 가 기르수 ③ (토큰) 을 더했다 (19 → 20).
+    assert len(EFFECT_LIBRARY) == 20
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 16
+    #: Phase 6-AF — 기르수 ③ 이 실행 가능으로 더해졌다 (16 → 17).
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 17
 
 
 def test_k03_only_one_registered_operation_declares_its_origin():

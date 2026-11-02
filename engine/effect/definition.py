@@ -67,7 +67,7 @@ from engine.execution import (
 )
 from engine.ids import EffectRef
 from engine.use_limit import UseLimit
-from engine.vocabulary import ActivationKind
+from engine.vocabulary import ActivationKind, Zone
 
 
 class EffectSource(str, Enum):
@@ -438,6 +438,66 @@ class EffectDefinition:
     **손으로 적는다.** ``EffectSpec`` 에서 자동으로 옮기지 않는다 —
     ``activation_kind`` · ``activation_waits_for_event`` 와 같은 규율이다.
     """
+    activation_zones: "frozenset[Zone] | None" = None
+    """
+    이 효과를 **어느 자리에서** 발동하는가 — ``SetRange(LOCATION_*)`` 를 손
+    으로 옮긴 값 (Phase 6-AF).
+
+    🔴 ``None`` 은 **"적지 않았다"** 이고 "어디서든" 이 아니다. 그때
+    :func:`~engine.action_validation._monster_activation_out_of_scope` 는
+    예전 그대로 :data:`~engine.action_validation.IGNITION_ACTIVATION_ZONES`
+    로 좁히고, 그 자리가 아니면 **``UNKNOWN``** 을 돌려준다 (ADR-006).
+
+    왜 필요했는가 — **실측한 거짓 모름**
+    ------------------------------------
+    6-AF 가 이 저장소의 **첫 기동 효과를 메인 덱 몬스터에** 등재했다
+    (기르수 ③). 그러자 같은 카드가 **묘지 · 덱**에 있는 판마다 그 효과의
+    발동이 ``ignition-effect-location`` 으로 보류되었다 — 즉 "묘지에서
+    발동하는 기동 효과일지도 모른다" 는 모름이 전개마다 쌓였다 (실측:
+    기존 ``orcust-girsu`` 경로의 미지원 사유가 2건 → 3건).
+
+    그 모름은 **이 카드에 대해서는 거짓이다.** 공식 스크립트가
+    ``e3:SetRange(LOCATION_MZONE)`` 라고 적어 두었으므로 묘지에서의 발동은
+    규칙이 막는 것이고, 모르는 것이 아니다. 그래서 그 사실을 적을 자리를
+    둔다 — 적은 효과는 자리를 **확정 판정**으로 받는다
+    (``SOURCE_WRONG_ZONE``).
+
+    🔴 **넓히는 값이 아니다.** 여기에 적는 것은 스크립트의 ``SetRange`` 뿐
+    이고, 그것보다 넓은 자리를 적으면 **규칙에 없는 발동을 허가하는** 것이
+    된다.
+    """
+    resolution_condition: "Condition | None" = None
+    """
+    🔴 **해결 시점에 다시 보는 조건** (Phase 6-AF).
+
+    ``None`` 이면 :attr:`activation` 을 그대로 다시 본다 — 6-AD 후속2 까지의
+    동작이고, 그 효과들에는 맞다 (``c93920420.lua`` 의 ``s.spop1`` 이
+    ``s.sptg1`` 과 **같은** 조건을 다시 본다).
+
+    🔴 **같지 않은 카드가 있다.** ``c69811710.lua`` 의 ``e3`` 이 그 예다.
+
+    ======================================  =====================================
+    ``e3:SetCondition(…)``                   "자신 필드에 이 카드 외의 몬스터가
+                                             없다" — **발동 시점에만** 본다
+    ``s.tktg`` 의 ``chk==0`` 갈래 다섯       빈 칸 둘 · 동시 다수 금지 ·
+                                             특수 소환 가능 — ``s.tkop`` 이
+                                             **다시 본다**
+    ======================================  =====================================
+
+    ``s.tkop`` 은 그 다섯만 다시 보고 ``SetCondition`` 은 보지 않는다 (실측 —
+    스크립트에 그 호출이 없다). 그래서 발동 조건 전체를 재검사하면 **발동
+    이후에 다른 몬스터가 생긴 것만으로** 해결이 불발로 바뀐다 — 실제 카드는
+    그때도 토큰을 만든다.
+
+    두 칸을 가르는 이유가 그것이다. 발동 관문
+    (:meth:`~engine.activation.EffectActivator._check_condition`)은 언제나
+    :attr:`activation` 을 보고, 해결기
+    (:meth:`~engine.effect.executor.EffectExecutor._check_condition`)는 이
+    칸이 있으면 **이것을** 본다.
+
+    🔴 **완화 수단이 아니다.** 여기에 적는 것은 공식 스크립트의 해결 함수가
+    실제로 다시 보는 것뿐이고, 그 근거는 :attr:`provenance` 에 적는다.
+    """
     resolution_skip: "ResolutionSkip | None" = None
     """
     🔴 **해결 시점에 일을 생략하고도 정상 해결되는 조건** (6-AD 후속2).
@@ -762,6 +822,17 @@ class EffectDefinition:
             self.source_card_id,
             tuple(op.canonical_state() for op in self.operations),
             self.activation.canonical_state() if self.activation is not None else None,
+            #: 🔴 **정규 표현에 싣는다.** 이 칸은 발동 자리의 판정을 모름에서
+            #: 확정으로 옮기므로, 두 정의가 이 칸만 달라도 같지 않다.
+            tuple(sorted(z.value for z in self.activation_zones))
+            if self.activation_zones is not None
+            else None,
+            #: 🔴 **정규 표현에 싣는다.** 이 칸은 해결 시점의 재검사를
+            #: 바꾸므로 (같은 상황에서 불발인지 아닌지), 두 정의가 이 칸만
+            #: 달라도 "같다" 고 말할 수 없다.
+            self.resolution_condition.canonical_state()
+            if self.resolution_condition is not None
+            else None,
             self.cost.canonical_state(),
             tuple(b.canonical_state() for b in self.targets),
             tuple(b.canonical_state() for b in self.declarations),
@@ -797,6 +868,12 @@ class EffectDefinition:
             data["activation"] = self.activation.to_dict()
         if self.activation_kind is not None:
             data["activation_kind"] = self.activation_kind.value
+        if self.activation_zones is not None:
+            data["activation_zones"] = sorted(
+                z.value for z in self.activation_zones
+            )
+        if self.resolution_condition is not None:
+            data["resolution_condition"] = self.resolution_condition.to_dict()
         if self.resolution_skip is not None:
             data["resolution_skip"] = self.resolution_skip.to_dict()
         if self.use_limit is not None:
@@ -812,6 +889,10 @@ class EffectDefinition:
             parts.append(f"비용: {self.cost.describe_ko()}")
         if self.activation is not None:
             parts.append(f"조건: {self.activation.describe_ko()}")
+        if self.resolution_condition is not None:
+            parts.append(
+                f"해결 시 재검사: {self.resolution_condition.describe_ko()}"
+            )
         if self.resolution_skip is not None:
             parts.append(self.resolution_skip.describe_ko())
         if self.requires_target:

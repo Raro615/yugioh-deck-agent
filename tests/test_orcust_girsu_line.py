@@ -70,6 +70,9 @@ GIRSU = 69811710
 WAND = 93920420
 GALATEA = 30741503
 GALATEA_I = 48835607
+#: 🔴 **소재 조건을 읽지 않은** 링크 몬스터 (Phase 6-AF 가 갈라테아i 를
+#: 등록했으므로 그 자리를 이 카드가 맡는다). 오르페골 롱기르수 — LINK-3.
+UNREAD_LINK = 76145142
 FEATHERMAN = 21844576
 CRESCENDO = 703897
 P0, P1 = 0, 1
@@ -534,18 +537,25 @@ def test_b04_an_unread_link_monster_is_unknown_not_invalid(repository):
     """
     🔴 **소재 조건을 읽지 않은 링크 몬스터는 ``UNKNOWN``** 이다 (ADR-006).
 
-    「오르페골 갈라테아i」(48835607) 는 LINK-1 이고 소재 조건이
-    :data:`~engine.link_rules.LINK_MATERIAL_RULES` 에 없다 — 필드에 적격한
-    몬스터가 있어도 후보가 되지 않는다.
+    🔴 **예시 카드가 바뀌었다** (Phase 6-AF). 이 시험은 6-AC 부터
+    「오르페골 갈라테아i」(48835607) 를 미등록 예시로 썼는데, 6-AF 가 그
+    카드의 소재 조건을 등록했다 (토큰 경로가 그것을 소환한다). 그래서
+    **여전히 등록되지 않은** 「오르페골 롱기르수」(76145142, LINK-3) 로
+    같은 사실을 잰다 — 재는 것은 "미등록은 UNKNOWN 이다" 이고 특정 카드가
+    아니다.
     """
-    duel, _field, _extra = _link_board(repository, [GIRSU, WAND], [GALATEA_I])
+    duel, _field, _extra = _link_board(
+        repository, [GIRSU, WAND], [UNREAD_LINK]
+    )
     allowed, held = _links(duel)
     assert allowed == []
     assert [w.code for w in held] == [ValidationCode.RULE_NOT_IMPLEMENTED]
     assert held[0].missing == LINK_MATERIAL_RULE_MISSING
     assert held[0].validity is ActionValidity.UNKNOWN
     assert held[0].is_rule_refusal is False
-    assert material_rule_for(GALATEA_I) is None
+    assert material_rule_for(UNREAD_LINK) is None
+    #: 🔴 갈라테아i 는 **등록되었다** — 그 사실을 여기서 함께 적어 둔다.
+    assert material_rule_for(GALATEA_I) is not None
 
 
 @pytest.mark.real_card
@@ -554,7 +564,7 @@ def test_b05_a_legal_combination_is_not_hidden_by_an_unread_neighbour(
 ):
     """읽은 카드와 읽지 않은 카드가 함께 있어도 **읽은 쪽은 후보가 된다.**"""
     duel, _field, _extra = _link_board(
-        repository, [GIRSU, WAND], [GALATEA, GALATEA_I]
+        repository, [GIRSU, WAND], [GALATEA, UNREAD_LINK]
     )
     allowed, held = _links(duel)
     assert len(allowed) == 1
@@ -607,11 +617,18 @@ def test_b06_a_full_extra_monster_zone_splits_into_two_answers(repository):
 
 
 @pytest.mark.real_card
-def test_b07_a_link_monster_as_material_is_unknown(repository):
+def test_b07_a_link_monster_as_material_counts_as_its_link_rating(repository):
     """
-    링크 몬스터를 소재로 쓰면 **링크 수치만큼 센다** — 그 규칙이 없으므로
-    장수 계산을 할 수 없고, ``UNKNOWN`` 으로 거절한다.
+    링크 몬스터를 소재로 쓰면 **링크 수치만큼 센다** (공식 규칙).
+
+    🔴 **이 시험이 6-AF 에서 뒤집혔다.** 6-AD 까지는 그 규칙을 옮기지
+    못해 ``UNDETERMINED`` 였고 (``LINK_MATERIAL_AS_LINK_RULE`` 이 그 이름
+    이었다), 지금은 :func:`~engine.link_rules.material_contribution` 이
+    센다. 기르수 + 갈라테아i(LINK-1) = 기여 2장이고, 갈라테아의 소재 조건이
+    그 수다.
     """
+    from engine.link_rules import material_contribution
+
     duel, _field, extra = _link_board(
         repository, [GIRSU], [GALATEA], emzone=(GALATEA_I,)
     )
@@ -623,8 +640,13 @@ def test_b07_a_link_monster_as_material_is_unknown(repository):
     )
     assert len(materials) == 2
     verdict = assess_link_materials(duel.view(P0), P0, extra[0], materials)
-    assert verdict.eligibility is LinkMaterialEligibility.UNDETERMINED
-    assert verdict.missing_rule == LINK_MATERIAL_AS_LINK_RULE
+    assert verdict.eligibility is LinkMaterialEligibility.LEGAL
+
+    #: 🔴 **장수와 기여를 가른다** — 이름은 남아 있고 뜻이 바뀌었다
+    #: (그 상수의 설명).
+    assert material_contribution(repository.get(GALATEA_I)) == 1
+    assert material_contribution(repository.get(UNREAD_LINK)) == 3
+    assert LINK_MATERIAL_AS_LINK_RULE
 
 
 @pytest.mark.real_card
@@ -675,7 +697,13 @@ def test_b10_only_read_link_monsters_are_registered():
     🔴 **등록은 하나이고 근거를 들고 있다.** 늘어나면 이 단언이 깨지고,
     그때 그 카드의 소재 조건을 **읽었는지** 사람이 확인해야 한다.
     """
-    assert [rule.card_id for rule in LINK_MATERIAL_RULES] == [GALATEA]
+    #: 🔴 **Phase 6-AF 가 한 장을 더했다** (갈라테아i — 토큰 경로가 그것을
+    #: 소환한다). 늘어난 것은 **읽은 카드**이고, 읽지 않은 카드는 여전히
+    #: 등록되지 않는다 (``test_b04`` 의 롱기르수).
+    assert [rule.card_id for rule in LINK_MATERIAL_RULES] == [
+        GALATEA,
+        GALATEA_I,
+    ]
     rule = LINK_MATERIAL_RULES[0]
     assert rule.count == 2
     assert rule.link_rating == 2
@@ -890,7 +918,14 @@ def test_d03_an_effect_without_a_recorded_limit_is_untouched():
         for entry in EFFECT_LIBRARY
         if entry.definition.use_limit is not None
     }
-    assert limited == {f"{GIRSU}:e[0]", f"{WAND}:e[1]"}, limited
+    #: 🔴 **Phase 6-AF 가 하나를 더했다** — 기르수 ③ 의
+    #: ``SetCountLimit(1,{id,1})`` 이고, ① 의 ``SetCountLimit(1,id)`` 와
+    #: **다른 칸**이다 (범위가 PER_EFFECT 대 PER_CARD_NAME).
+    assert limited == {
+        f"{GIRSU}:e[0]",
+        f"{GIRSU}:e[2]",
+        f"{WAND}:e[1]",
+    }, limited
 
 
 # ======================================================================
@@ -909,7 +944,9 @@ def test_e01_a_rule_refusal_is_not_counted_as_unsupported(repository):
     illegal, _f1, _e1 = _link_board(
         repository, [GIRSU, FEATHERMAN], [GALATEA]
     )
-    unread, _f2, _e2 = _link_board(repository, [GIRSU, WAND], [GALATEA_I])
+    unread, _f2, _e2 = _link_board(
+        repository, [GIRSU, WAND], [UNREAD_LINK]
+    )
 
     #: ① 소재 조건 위반은 **미지원 목록에 오르지 않는다.**
     illegal_lines = unsupported_reasons(illegal.legal_actions(P0))
@@ -1218,4 +1255,6 @@ def test_g04_no_format_legality_is_claimed():
             assert "않는다" in line or "않았다" in line, line
     assert "검증용" in ORCUST_GIRSU_LINE.note
     assert ORCUST_GIRSU_LINE.reproduction_ready is True
-    assert set(COMBO_LINES) == {"orcust-girsu"}
+    #: 🔴 **Phase 6-AF 가 경로를 하나 더 등록했다** (토큰 경로). 기존
+    #: 이름은 그대로다 — 새 경로는 **따로** 등록되었다.
+    assert set(COMBO_LINES) == {"orcust-girsu", "orcust-girsu-token"}

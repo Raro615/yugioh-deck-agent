@@ -86,6 +86,7 @@ from engine.effect.definition import (
     execution_availability,
 )
 from engine.effect.operation import (
+    CreateTokenOperation,
     Partial,
     ShuffleOperation,
     CardOperation,
@@ -190,6 +191,41 @@ def special_summon_procedure():
     from engine.special_summon import SPECIAL_SUMMON_PROCEDURE
 
     return SPECIAL_SUMMON_PROCEDURE
+
+
+def _token_module():
+    """
+    :mod:`engine.token` — **함수 안에서** 읽는다 (Phase 6-AF).
+
+    :func:`special_summon_procedure` 와 같은 자리이고 같은 이유다. 그
+    모듈이 :mod:`engine.effect.delta` 를 모듈 위에서 읽으므로
+    (``TokenCreated`` · ``MonsterSummoned``), 여기서 모듈 위에 적으면
+    ``engine.effect.__init__`` → 이 파일 → ``engine.token`` →
+    ``engine.effect.delta`` → ``engine.effect.__init__`` 으로 고리가 닫힌다.
+    """
+    import engine.token as module
+
+    return module
+
+
+#: 그 토큰의 공식 데이터를 읽지 않았다 (ADR-006).
+TOKEN_DATA_RULE_MISSING: str = (
+    "token-card-data (이 토큰의 공식 데이터를 아직 읽지 않았다 — "
+    "engine.token.TOKEN_RULES)"
+)
+
+
+def _definition_of(state: GameState, card_id: int):
+    """
+    그 카드 ID 의 **정의**. 저장소가 없거나 없는 카드면 ``None``.
+
+    🔴 토큰은 검색 목록에 없고 ``CardRepository.get`` 으로만 읽힌다
+    (:attr:`core.card_repository.CardRepository._tokens`).
+    """
+    repository = state.repository
+    if repository is None:
+        return None
+    return repository.get(card_id)
 
 
 #: 카드를 다루는 일이 카드를 **어디로** 보내는가.
@@ -335,6 +371,15 @@ class _Step:
     player: int | None = None
     placements: "tuple[SummonPlacement, ...]" = ()
     """소환이 확정한 배치들. 소환이 아닌 일에는 비어 있다 (Phase 2-U)."""
+    tokens: tuple = ()
+    """
+    토큰 생성이 확정한 계획들 (:class:`~engine.token.TokenPlan`, Phase 6-AF).
+
+    🔴 :attr:`placements` 와 **다른 칸이다.** 저쪽은 "판에 있는 그 카드를
+    어디로" 이고 ``card`` 칸에 ``InstanceId`` 가 들어 있다. 토큰의 개체는
+    **계획 단계에 존재하지 않으므로** 그 칸을 채울 수 없다 — 같은 칸에
+    담으려면 없는 번호를 지어내야 한다.
+    """
     attempted: "int | None" = None
     """
     **하려고 한 장수** (Phase 2-AF). 실제로 한 장수(``instances``)와 다를
@@ -386,6 +431,9 @@ class _Step:
         """
         if self.instances:
             affected = len(self.instances)
+        elif self.tokens:
+            #: 토큰은 **만든 장수**가 다룬 장수다 (Phase 6-AF).
+            affected = len(self.tokens)
         elif self.operation.kind is OperationKind.DRAW:
             affected = self.amount
         elif isinstance(self.operation, CardOperation):
@@ -1338,13 +1386,21 @@ class EffectExecutor:
         ``UNKNOWN`` 을 ``TRUE`` 로 접지 않는다 — 모르는 것을 실행으로 바꾸면
         프로젝트 전체의 원칙이 깨진다.
         """
-        if definition.activation is None:
+        #: 🔴 **해결 시점에 다시 보는 조건은 따로 적힐 수 있다** (6-AF).
+        #: 공식 스크립트의 해결 함수가 발동 조건 **전체**를 다시 보지 않는
+        #: 카드가 있다 (``c69811710.lua`` 의 ``s.tkop`` — 그쪽
+        #: ``EffectDefinition.resolution_condition`` 의 표). 적지 않은
+        #: 효과는 예전 그대로 ``activation`` 을 다시 본다.
+        condition = (
+            definition.activation
+            if definition.resolution_condition is None
+            else definition.resolution_condition
+        )
+        if condition is None:
             return None
         view = GameStateView.from_state(state, viewer=context.controller)
         condition_context = context.condition_context()
-        verdict = ConditionEvaluator(view).evaluate(
-            definition.activation, condition_context
-        )
+        verdict = ConditionEvaluator(view).evaluate(condition, condition_context)
         if verdict.result is ConditionResult.TRUE:
             return None
         if verdict.result is ConditionResult.FALSE:
@@ -1363,9 +1419,7 @@ class EffectExecutor:
                 #: 🔴 **확인된 사유를 그대로 적는다.** 트리 전체의 설명만
                 #: 적으면 "빈 칸이 없다" 와 "특수 소환이 금지되었다" 가 같은
                 #: 문장이 된다 (``And.refusal_reasons`` 의 실측).
-                said = definition.activation.refusal_reasons(
-                    view, condition_context
-                )
+                said = condition.refusal_reasons(view, condition_context)
                 return EffectResult(
                     ResolutionStatus.RESOLVED_WITHOUT_EFFECT,
                     ValidationCode.OK,
@@ -1389,7 +1443,7 @@ class EffectExecutor:
         # 발동기(:meth:`EffectActivator._check_condition`)와 **같은 태도**를
         # 유지한다 — "정보가 없어서" 와 "규칙이 없어서" 를 나눈다. 여기만
         # 다르게 적으면 같은 정의가 두 계층에서 다른 뜻이 된다 (Phase 3-E-26).
-        unimplemented = definition.activation.missing_rules(view, condition_context)
+        unimplemented = condition.missing_rules(view, condition_context)
         return _fail(
             ResolutionStatus.CONDITION_UNKNOWN,
             ValidationCode.RULE_NOT_IMPLEMENTED
@@ -2402,6 +2456,117 @@ class EffectExecutor:
             changes.append(placement.to_delta(procedure.summon))
         return step.record(), tuple(changes)
 
+    def _plan_create_token(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        operation: "CreateTokenOperation",
+        values: ExecutionValues,
+    ) -> "_Step | EffectResult":
+        """
+        토큰들을 어디에 놓을지 정한다. **판에 손대기 전에 전부 끝낸다.**
+
+        순서가 규칙이다. ① 그 토큰의 공식 데이터를 읽었는가 → ② 카드
+        데이터가 그 표와 같은가 → ③ 놓을 칸이 있는가. 하나라도 아니면
+        **한 장도 만들지 않는다** (``CreateTokenOperation`` 의 "전부 아니면
+        무").
+
+        🔴 **특수 소환 금지를 여기서 다시 보지 않는다.** 그것은 이 효과의
+        조건이 들고 있고 (``SpecialSummonPermitted`` 와
+        ``SimultaneousSpecialSummonPermitted``), 발동 관문과 해결 시점
+        재검사가 **같은 판정**을 쓴다. 여기서 또 보면 같은 사실이 두 곳에
+        적히고, 한쪽만 고쳐지는 날이 온다.
+        """
+        token = _token_module()
+        plans = []
+        taken: dict[int, set[int]] = {}
+        for spec in operation.tokens:
+            rule = token.token_rule_for(spec.card_id)
+            if rule is None:
+                #: 🔴 **모름이다** (ADR-006). 공식 데이터를 읽지 않은 토큰을
+                #: 지어내지 않는다.
+                return _fail(
+                    ResolutionStatus.UNSUPPORTED_OPERATION,
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    f"토큰 {spec.card_id} 의 공식 데이터를 이 저장소가 아직 "
+                    "읽지 않았습니다.",
+                    #: 🔴 ``unchecked`` 를 함께 적지 않는다 — 아무 일도 하지
+                    #: 않은 결과에 "보지 않은 규칙" 을 실으면 ``EffectResult``
+                    #: 가 거절한다 (그쪽 ``__post_init__`` 의 규율).
+                    missing=TOKEN_DATA_RULE_MISSING,
+                )
+            mismatch = token.verify_token_definition(
+                rule, _definition_of(state, spec.card_id)
+            )
+            if mismatch is not None:
+                return _fail(
+                    ResolutionStatus.UNSUPPORTED_OPERATION,
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    f"토큰 데이터를 대조하지 못했습니다: {mismatch}",
+                    missing=TOKEN_DATA_RULE_MISSING,
+                )
+            controller = spec.to.resolve(context.condition_context())
+            try:
+                plan = token.plan_token(
+                    state,
+                    rule,
+                    controller=controller,
+                    summoner=context.controller,
+                    position=spec.position,
+                    creator=context.source,
+                    creator_card_id=definition.source_card_id,
+                    taken=taken,
+                )
+            except token.TokenError as error:
+                #: 지시를 수행할 수 없다. **적법성 위반이 아니다** — 놓을
+                #: 칸이 없다는 뜻이고 판은 그대로다
+                #: (``_plan_summon_operation`` 과 같은 자리).
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                    f"토큰 {spec.card_id} 를 놓을 수 없습니다: {error}",
+                )
+            taken.setdefault(controller, set()).add(plan.slot)
+            plans.append(plan)
+        return _Step(
+            operation,
+            tokens=tuple(plans),
+            player=context.controller,
+            blind=token.TOKEN_OPERATION_BLIND_SPOTS,
+        )
+
+    def _apply_create_token(
+        self, state: GameState, step: _Step
+    ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
+        """
+        계획대로 개체를 만들어 놓는다. **만드는 일은 :mod:`engine.token` 이
+        한다** — 여기서 ``create_instance`` 를 직접 부르면 "덱 · 패의 장수가
+        변하지 않았다" 를 확인하는 자리가 둘로 갈린다.
+        """
+        token = _token_module()
+        changes: list[StateDelta] = []
+        made: list[InstanceId] = []
+        for plan in step.tokens:
+            try:
+                instance, created, summoned = token.create_token(state, plan)
+            except token.TokenError as error:  # pragma: no cover - 방어선
+                raise EffectExecutionError(
+                    f"토큰을 만들지 못했습니다: {error}"
+                ) from error
+            made.append(instance.instance_id)
+            changes.extend((created, summoned))
+        #: 🔴 **만든 개체를 기록에 싣는다.** ``_Step.instances`` 는 계획
+        #: 단계의 칸이므로 비어 있었고, 적용이 끝난 뒤에야 번호가 생긴다.
+        applied = AppliedOperation(
+            kind=step.operation.kind,
+            reason_names=step.operation.reason_names,
+            instances=tuple(made),
+            amount=None,
+            player=step.player,
+        )
+        return applied, tuple(changes)
+
     def _apply_shuffle(
         self, state: GameState, step: _Step
     ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
@@ -2522,6 +2687,11 @@ OPERATION_HANDLERS: dict[OperationKind, OperationHandler] = {
         EffectExecutor._plan_summon_operation,
         EffectExecutor._apply_special_summon,
         "SummonProcedure (Phase 2-T)",
+    ),
+    OperationKind.CREATE_TOKEN: OperationHandler(
+        EffectExecutor._plan_create_token,
+        EffectExecutor._apply_create_token,
+        "engine.token (Phase 6-AF)",
     ),
     OperationKind.SHUFFLE: OperationHandler(
         EffectExecutor._plan_shuffle,

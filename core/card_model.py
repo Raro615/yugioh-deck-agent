@@ -467,6 +467,16 @@ class Card:
         return self.alias != 0
 
     @property
+    def is_token(self) -> bool:
+        """
+        **토큰인가** (Phase 6-AF). ``cards.cdb`` 의 ``type`` 비트가 답한다.
+
+        실측: 46647145 (World Legacy Token) 의 ``type`` 은 16401 =
+        ``TYPE_MONSTER|TYPE_NORMAL|TYPE_TOKEN`` 이다.
+        """
+        return bool(self.type_mask & C.TYPE_TOKEN)
+
+    @property
     def has_printed_effect(self) -> bool:
         """
         공식 카드 종류상 **효과를 가진 카드**인가.
@@ -613,7 +623,18 @@ class Card:
         소환할 수 없다」 라고 말하지만 이 저장소에 스크립트가 없다).
         """
         if self.script is None:
-            return None
+            #: 🔴 **토큰은 "읽지 못한 카드" 가 아니다** (Phase 6-AF).
+            #: 토큰에는 카드 텍스트가 **없고** 스크립트도 존재하지 않는다
+            #: (실측: ProjectIgnis/CardScripts 의 ``official/c46647145.lua``
+            #: 는 **HTTP 404**, 그리고 ``type`` 비트가 ``TYPE_NORMAL`` 이다).
+            #: 즉 "제약 상수를 한 건도 찾지 못했다" 가 **확인된 사실**이고,
+            #: 그것의 표현은 ``()`` 다.
+            #:
+            #: 이 갈래가 없으면 토큰이 필드에 놓인 것만으로 그 뒤의 모든
+            #: 특수 소환 판정이 ``UNDETERMINED`` 가 된다 (``summon_restriction``
+            #: 의 ``_look`` 이 ``None`` 을 모름으로 읽는다) — 규칙이 막지
+            #: 않는 판이 **엔진 미지원**으로 집계되는 자리다.
+            return () if self.is_token else None
         codes = set(self.script.effect_codes or ())
         return tuple(c for c in NORMAL_SUMMON_RESTRICTION_CODES if c in codes)
 
@@ -641,7 +662,9 @@ class Card:
         파슬 다이너 파키세팔로가 필드에 있는데 링크 소환이 수락되었다).
         """
         if self.script is None:
-            return None
+            #: 🔴 **토큰은 ``()`` 다** — 같은 근거이고 같은 이유다
+            #: (:attr:`normal_summon_restriction_signals` 의 설명).
+            return () if self.is_token else None
         codes = set(self.script.effect_codes or ())
         return tuple(c for c in SPECIAL_SUMMON_RESTRICTION_CODES if c in codes)
 

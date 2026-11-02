@@ -242,7 +242,110 @@ SPECIAL_SUMMON_PROHIBITIONS: tuple[SummonProhibitionRule, ...] = (
             "이 판에서는 걸리지 않는다. ③ 을 등재하면 이 줄이 거짓이 된다."
         ),
     ),
+    SummonProhibitionRule(
+        card_id=48835607,
+        prohibits=False,
+        text_ko=(
+            "오르페골 갈라테아i: 링크 소환에 성공하면 「그 턴 「오르페골 "
+            "갈라테아i」를 링크 소환할 수 없다」 가 걸린다. 그것은 "
+            "**카드명과 소환법으로 좁혀진** 제약이고, 특수 소환 전체를 "
+            "막지 않는다."
+        ),
+        lua_file="c48835607.lua",
+        lua_excerpt=(
+            "function s.regop(e,tp,...) local e1=Effect.CreateEffect("
+            "e:GetHandler()); e1:SetType(EFFECT_TYPE_FIELD); "
+            "e1:SetCode(EFFECT_CANNOT_SPECIAL_SUMMON); "
+            "e1:SetProperty(EFFECT_FLAG_PLAYER_TARGET); "
+            "e1:SetTargetRange(1,0); e1:SetTarget(function(e,c,sump,sumtype) "
+            "return c:IsCode(id) and sumtype&SUMMON_TYPE_LINK=="
+            "SUMMON_TYPE_LINK end); e1:SetReset(RESET_PHASE|PHASE_END); "
+            "Duel.RegisterEffect(e1,tp) end"
+        ),
+        note=(
+            "신호(EFFECT_CANNOT_SPECIAL_SUMMON)는 실제로 있지만 **범위 "
+            "조건이 붙어 있다** — SetTarget 이 c:IsCode(id) and "
+            "sumtype&SUMMON_TYPE_LINK 이므로 그 카드명의 링크 소환만 막는다. "
+            "그러므로 이 카드가 필드에 있다는 사실이 다른 특수 소환을 막지 "
+            "않는다 (실측: 6-AF 전까지 이 카드가 엑스트라 몬스터 존에 있는 "
+            "판에서 갈라테아의 링크 소환이 summon-prohibition-scope 로 "
+            "보류되었다 — 규칙이 막지 않는 것이 엔진 미지원으로 집계됐다). "
+            "🔴 좁혀진 그 제약을 **버린 것이 아니다** — "
+            "engine.link_rules.LINK_SUMMON_ONCE_PER_TURN 가 같은 근거로 "
+            "들고 있고 assess_link_materials 가 판정한다. 이 표에서 "
+            "prohibits=False 인 것은 '특수 소환 전체를 막지 않는다' 는 "
+            "뜻이고 '아무 제약도 없다' 는 뜻이 아니다. "
+            "같은 스크립트의 EFFECT_CANNOT_BE_XYZ_MATERIAL 은 특수 소환 "
+            "금지가 아니라 엑시즈 소재 제약이므로 이 판정과 무관하다."
+        ),
+    ),
 )
+
+#: 🔴 **"한 번에 2장 이상" 을 막는 금지** (Phase 6-AF) — 위의 표와 **다른
+#: 질문**이다.
+#:
+#: 위의 표는 "특수 소환을 할 수 있는가" 이고 이 표는 "**동시에 여러 장**을
+#: 특수 소환할 수 있는가" 다. 둘을 합치면 청안의 정령룡이 필드에 있는 판에서
+#: 한 장짜리 특수 소환까지 막히고, 그것은 규칙이 아니다.
+#:
+#: 🔴 **왜 신호로 찾을 수 없는가.** 이 금지는
+#: :data:`~core.card_model.SPECIAL_SUMMON_RESTRICTION_CODES` 의
+#: ``EFFECT_CANNOT_SPECIAL_SUMMON`` 으로 적히지 않는다 — 카드가 **자기 ID 를
+#: 코드로** 등록하고 (``e1:SetCode(id)``) 다른 스크립트가
+#: ``Duel.IsPlayerAffectedByEffect(tp,CARD_BLUEEYES_SPIRIT)`` 로 묻는다.
+#: 파싱 캐시는 그 숫자 코드를 **``null`` 로** 적으므로 (실측:
+#: ``data/cache/lua_scripts.json`` 의 59822133 e1 → ``"code": null``) 이
+#: 금지를 등록하는 카드를 전수 조회할 길이 **없다.** 그래서 손으로 읽은
+#: 한 장만 확정 판정을 받고, 전수를 확인하지 못한 사실은 아래
+#: :data:`SIMULTANEOUS_SUMMON_BLIND_SPOTS` 에 이름으로 남는다.
+SIMULTANEOUS_SUMMON_PROHIBITIONS: tuple[SummonProhibitionRule, ...] = (
+    SummonProhibitionRule(
+        card_id=59822133,
+        prohibits=True,
+        scope=ProhibitionScope.BOTH,
+        zones=frozenset({Zone.MZONE}),
+        text_ko=(
+            "청안의 정령룡: 「서로 2장 이상의 몬스터를 동시에 특수 소환할 "
+            "수 없다」 (공식 영문 Neither player can Special Summon 2 or "
+            "more monsters at the same time. — data/cards.cdb 59822133)"
+        ),
+        lua_file="c59822133.lua",
+        lua_excerpt=(
+            "local e1=Effect.CreateEffect(c); "
+            "e1:SetType(EFFECT_TYPE_FIELD); e1:SetCode(id); "
+            "e1:SetRange(LOCATION_MZONE); "
+            "e1:SetProperty(EFFECT_FLAG_PLAYER_TARGET); "
+            "e1:SetTargetRange(1,1); c:RegisterEffect(e1)"
+        ),
+        note=(
+            "카드가 필드에 **앞면으로 있는 동안** 걸리는 지속 효과이고 "
+            "(EFFECT_TYPE_FIELD · SetRange(LOCATION_MZONE)), 조건도 범위 "
+            "조건도 없다. SetTargetRange(1,1) 이 '서로' 다. 코드가 "
+            "EFFECT_CANNOT_SPECIAL_SUMMON 이 아니라 **카드 자신의 ID** 이고 "
+            "(SetCode(id)), 다른 카드들은 그것을 "
+            "Duel.IsPlayerAffectedByEffect(tp,CARD_BLUEEYES_SPIRIT) 로 "
+            "묻는다 — 상수 CARD_BLUEEYES_SPIRIT=59822133 은 "
+            "data/constants/card_counter_constants.lua 에 있다."
+        ),
+    ),
+)
+
+#: 🔴 **이 판정이 보지 못하는 범위.** 허가로 바꾸지 않는다 — 적어만 둔다.
+SIMULTANEOUS_SUMMON_BLIND_SPOTS: tuple[str, ...] = (
+    "같은 금지를 등록하는 다른 카드가 있는지 전수로 확인하지 못했습니다 — "
+    "파싱 캐시가 SetCode(id) 의 숫자 코드를 null 로 적으므로 "
+    "(실측: 59822133 의 e1) 그 카드들을 조회할 수 없습니다.",
+) + SUMMON_RESTRICTION_BLIND_SPOTS
+
+#: 전수를 확인하지 못했다는 사실의 **이름**.
+SIMULTANEOUS_SUMMON_RULE_MISSING: str = (
+    "simultaneous-summon-prohibition-scan (동시 다수 특수 소환 금지를 "
+    "등록하는 카드를 전수로 찾을 수 없다)"
+)
+
+_BY_CARD_SIMULTANEOUS: dict[int, SummonProhibitionRule] = {
+    rule.card_id: rule for rule in SIMULTANEOUS_SUMMON_PROHIBITIONS
+}
 
 _BY_CARD: dict[int, SummonProhibitionRule] = {
     rule.card_id: rule for rule in SPECIAL_SUMMON_PROHIBITIONS
@@ -336,6 +439,80 @@ def assess_special_summon_permission(
     )
 
 
+def assess_simultaneous_special_summon_permission(
+    view, actor: int, count: int
+) -> SummonPermissionAssessment:
+    """
+    P{actor} 가 **한 번에 ``count`` 장**을 특수 소환할 수 있는가 (Phase 6-AF).
+
+    공식 스크립트의 ``not Duel.IsPlayerAffectedByEffect(tp,
+    CARD_BLUEEYES_SPIRIT)`` 를 옮긴 자리다.
+
+    🔴 **``count`` 가 1 이면 묻지 않는다.** 이 금지는 "2장 이상 동시" 에만
+    걸리므로, 한 장짜리 특수 소환에 적용하면 규칙에 없는 금지를 만든다.
+
+    🔴 **:func:`assess_special_summon_permission` 과 합치지 않는다** — 다른
+    질문이고 (그쪽 표의 설명), 합치면 한 장짜리까지 막힌다.
+
+    세 갈래가 그대로 보존된다. 확인된 금지 → ``FORBIDDEN``, 필드의 앞면
+    카드를 전부 읽었고 그 카드가 없다 → ``ALLOWED``, 정체를 알 수 없는
+    앞면 카드가 있다 → ``UNDETERMINED``.
+    """
+    if count < 2:
+        return SummonPermissionAssessment(
+            SpecialSummonPermission.ALLOWED,
+            f"{count}장은 '동시에 2장 이상' 이 아니므로 이 금지가 걸리지 "
+            "않습니다.",
+            unchecked=(),
+        )
+    undetermined: "SummonPermissionAssessment | None" = None
+    for player in view.players:
+        for zone in player.zones:
+            if zone.zone not in SUMMON_RESTRICTION_SCAN_ZONES:
+                continue
+            for card in zone.cards:
+                if card is None:
+                    continue
+                if (
+                    zone.zone in SUMMON_RESTRICTION_FACE_ZONES
+                    and not card.face_up
+                ):
+                    continue
+                if card.card_id is None:
+                    if undetermined is None:
+                        undetermined = SummonPermissionAssessment(
+                            SpecialSummonPermission.UNDETERMINED,
+                            f"{zone.zone.value} 에 정체를 알 수 없는 앞면 "
+                            "카드가 있어 동시 다수 특수 소환을 막는 것이 "
+                            "있는지 볼 수 없습니다.",
+                            SIMULTANEOUS_SUMMON_RULE_MISSING,
+                            blocker=card.instance_id,
+                            unchecked=SIMULTANEOUS_SUMMON_BLIND_SPOTS,
+                        )
+                    continue
+                rule = _BY_CARD_SIMULTANEOUS.get(card.card_id)
+                if rule is not None and rule.applies_to(
+                    actor, card.controller, zone.zone
+                ):
+                    return SummonPermissionAssessment(
+                        SpecialSummonPermission.FORBIDDEN,
+                        f"{zone.zone.value} 의 {card.card_id} 가 동시에 "
+                        f"{count}장을 특수 소환하는 것을 막습니다 — "
+                        f"{rule.text_ko}",
+                        blocker=card.instance_id,
+                        blocker_card_id=card.card_id,
+                        unchecked=SIMULTANEOUS_SUMMON_BLIND_SPOTS,
+                    )
+    if undetermined is not None:
+        return undetermined
+    return SummonPermissionAssessment(
+        SpecialSummonPermission.ALLOWED,
+        "필드의 앞면 카드를 전부 읽었고 동시 다수 특수 소환을 막는 카드가 "
+        "없습니다.",
+        unchecked=SIMULTANEOUS_SUMMON_BLIND_SPOTS,
+    )
+
+
 def _look(view, actor: int, card, zone: Zone) -> "SummonPermissionAssessment | None":
     """카드 한 장이 막는가. **막지 않는 것이 확인되면 ``None``** 이다."""
     if card.card_id is None:
@@ -391,11 +568,15 @@ __all__ = [
     "SUMMON_RESTRICTION_BLIND_SPOTS",
     "SUMMON_RESTRICTION_FACE_ZONES",
     "SUMMON_RESTRICTION_SCAN_ZONES",
+    "SIMULTANEOUS_SUMMON_BLIND_SPOTS",
+    "SIMULTANEOUS_SUMMON_PROHIBITIONS",
+    "SIMULTANEOUS_SUMMON_RULE_MISSING",
     "SPECIAL_SUMMON_PROHIBITIONS",
     "ProhibitionScope",
     "SpecialSummonPermission",
     "SummonPermissionAssessment",
     "SummonProhibitionRule",
+    "assess_simultaneous_special_summon_permission",
     "assess_special_summon_permission",
     "prohibition_for",
 ]

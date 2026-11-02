@@ -578,6 +578,79 @@ class SpecialSummonPermitted(Condition):
 
 
 @dataclass(frozen=True, slots=True)
+class SimultaneousSpecialSummonPermitted(Condition):
+    """
+    **한 번에 이 장수**를 특수 소환할 수 있는가 (Phase 6-AF).
+
+    :class:`SpecialSummonPermitted` 와 **다른 질문**이다 — 저쪽은 "특수
+    소환을 할 수 있는가" 이고 이쪽은 "**동시에 여러 장**을 놓을 수
+    있는가" 다. 둘을 하나로 적으면 청안의 정령룡이 필드에 있는 판에서 한
+    장짜리 특수 소환까지 막힌다 (그 카드의 공식 텍스트는 "2장 이상 동시" 에만
+    걸린다).
+
+    공식 스크립트의 ``not Duel.IsPlayerAffectedByEffect(tp,
+    CARD_BLUEEYES_SPIRIT)`` 를 옮긴 조건이고, 판정은
+    :func:`~engine.summon_restriction.
+    assess_simultaneous_special_summon_permission` 하나가 한다.
+
+    세 갈래가 보존된다 — ``ALLOWED`` → ``TRUE``, ``FORBIDDEN`` → ``FALSE``,
+    ``UNDETERMINED`` → ``UNKNOWN`` (+ 없는 규칙 이름).
+    """
+
+    count: int = 2
+
+    def __post_init__(self) -> None:
+        if self.count < 1:
+            raise ValueError(f"장수는 1 이상입니다: {self.count}")
+
+    def evaluate(self, view, context) -> ConditionResult:
+        assessment = self._assess(view, context)
+        if assessment.allowed:
+            return ConditionResult.TRUE
+        if assessment.forbidden:
+            return ConditionResult.FALSE
+        return ConditionResult.UNKNOWN
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        if assessment.allowed or assessment.forbidden:
+            return ()
+        return (assessment.reason,)
+
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        rule = assessment.missing_rule
+        return (rule,) if rule and not assessment.forbidden else ()
+
+    def refusal_reasons(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        return (assessment.reason,) if assessment.forbidden else ()
+
+    def _assess(self, view, context):
+        #: 🔴 **지연 import** — :class:`SpecialSummonPermitted` 와 같은 자리
+        #: 이고 같은 이유다 (그쪽 ``_assess`` 의 설명).
+        from engine.summon_restriction import (
+            assess_simultaneous_special_summon_permission,
+        )
+
+        return assess_simultaneous_special_summon_permission(
+            view, context.player, self.count
+        )
+
+    def canonical_state(self) -> tuple:
+        return ("simultaneous_special_summon_permitted", self.count)
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "simultaneous_special_summon_permitted",
+            "count": self.count,
+        }
+
+    def describe_ko(self) -> str:
+        return f"동시에 {self.count}장을 특수 소환하는 것이 금지되지 않았다"
+
+
+@dataclass(frozen=True, slots=True)
 class ZoneHasFreeSlot(Condition):
     """칸 방식 존에 빈 칸이 있는가. 필드는 공개이므로 확정된다."""
 

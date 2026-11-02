@@ -127,10 +127,29 @@ class ExactNameMatch:
 class CardRepository:
     """카드 적재/보관/조회 계층."""
 
-    def __init__(self, cards: dict[int, Card], constants=None, script_dir=None):
+    def __init__(
+        self,
+        cards: dict[int, Card],
+        constants=None,
+        script_dir=None,
+        tokens: "dict[int, Card] | None" = None,
+    ):
         from sources.script_constants import ScriptConstants
 
         self._cards: dict[int, Card] = cards
+        #: 🔴 **토큰 정의는 다른 표에 있다** (Phase 6-AF).
+        #:
+        #: :meth:`all_cards` 도 :meth:`search` 도 색인도 이 표를 보지 않는다 —
+        #: 토큰은 덱에 넣을 수 없으므로 (공식 규칙) 검색 결과에 섞이면
+        #: "이 카드를 넣을 수 있다" 로 읽힌다. 색인은 ``_cards`` 하나로만
+        #: 만들어진다 (:meth:`_build_indexes`).
+        #:
+        #: 그런데 **듀얼 중에는 그 정의가 필요하다** — 효과가 만든 토큰
+        #: 개체의 이름 · 카드군 · 종족 · 속성 · 레벨 · 공수를 지어내지 않고
+        #: 읽으려면 ``cards.cdb`` 의 그 줄이 있어야 한다. 그래서
+        #: :meth:`get` 이 **이 표까지 본다** (ID 로 직접 묻는 길이고,
+        #: 목록을 훑는 길이 아니다).
+        self._tokens: dict[int, Card] = dict(tokens or {})
         self.constants = constants if constants is not None else ScriptConstants()
         #: 🔴 **이 리포지토리가 ``c*.lua`` 를 실제로 읽은 디렉터리** (Phase 3-F-35).
         #:
@@ -203,6 +222,8 @@ class CardRepository:
 
         official = OfficialDatabaseSource(db_path)
         cards = official.load()
+        #: 🔴 **다른 표로 읽는다** (Phase 6-AF — ``_tokens`` 의 설명).
+        tokens = official.load_tokens()
 
         lua = LuaScriptSource(script_dir or DEFAULT_SCRIPT_DIR)
         if use_cache:
@@ -220,11 +241,20 @@ class CardRepository:
             korean_source = KoreanTextSource.autoload()
         if korean_source:
             korean_source.apply(cards)
+            #: 토큰에도 같은 오버레이를 적용한다 — 한국어 이름이 있으면
+            #: 보고서가 "World Legacy Token" 대신 그것을 적는다. 없으면
+            #: 아무 일도 일어나지 않는다 (지어내지 않는다).
+            korean_source.apply(tokens)
 
         cls._record_provenance(cards)
         #: 🔴 analyzer 가 **같은 디렉터리**를 다시 읽도록 실제로 읽은 자리를
         #: 함께 넘긴다 (Phase 3-F-35 — 위 ``script_dir`` 주석 참고).
-        return cls(cards, constants=constants, script_dir=lua.script_dir)
+        return cls(
+            cards,
+            constants=constants,
+            script_dir=lua.script_dir,
+            tokens=tokens,
+        )
 
     @staticmethod
     def _record_provenance(cards: dict[int, Card]) -> None:
@@ -380,7 +410,27 @@ class CardRepository:
         return iter(self._cards.values())
 
     def get(self, card_id: int) -> Card | None:
-        return self._cards.get(card_id)
+        """
+        그 ID 의 카드 정의. **토큰도 돌려준다** (Phase 6-AF).
+
+        🔴 **목록은 늘지 않는다** — :meth:`all_cards` · 검색 · 색인은
+        ``_cards`` 만 본다 (:attr:`_tokens` 의 설명). 여기서만 토큰을 함께
+        보는 이유는 듀얼 중의 토큰 개체가 자기 정의를 ID 로 묻기 때문이다
+        (``CardInstance.definition``).
+        """
+        found = self._cards.get(card_id)
+        if found is not None:
+            return found
+        return self._tokens.get(card_id)
+
+    @property
+    def tokens(self) -> dict[int, Card]:
+        """토큰 정의 표의 **사본**. 원본을 내주지 않는다."""
+        return dict(self._tokens)
+
+    def token(self, card_id: int) -> Card | None:
+        """그 ID 의 **토큰** 정의. 토큰이 아니면 ``None`` 이다."""
+        return self._tokens.get(card_id)
 
     def all_cards(self, include_alternates: bool = False) -> list[Card]:
         """

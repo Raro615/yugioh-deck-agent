@@ -1024,8 +1024,15 @@ def _activate_effect(
     activation_kind = _declared_activation_kind(validator, action)
     waits_for_event = _declared_activation_event(validator, action)
     event_backed = _activation_has_event(validator, action)
+    #: 🔴 **효과가 적어 둔 발동 자리** (Phase 6-AF). ``activation_kind`` 와
+    #: 같은 자리에서 같은 방식으로 읽는다 — 관측에 없는 효과 단위 사실이다.
+    activation_zones = _declared_activation_zones(validator, action)
     scope = _NormalSpellActivation(
-        action.source, activation_kind, waits_for_event, event_backed
+        action.source,
+        activation_kind,
+        waits_for_event,
+        event_backed,
+        activation_zones,
     )
     always = (
         Requirement(
@@ -1050,6 +1057,7 @@ def _activate_effect(
         activation_kind,
         waits_for_event,
         event_backed,
+        activation_zones,
     ):
         return always
 
@@ -1133,7 +1141,7 @@ def _activate_effect(
     if activation_is_monster_ignition(
         validator.view, context, action.source, activation_kind
     ):
-        return always + (
+        narrow = [
             Requirement(
                 IsTurnPlayer(PlayerRef.CONTROLLER),
                 ValidationCode.NOT_TURN_PLAYER,
@@ -1146,7 +1154,24 @@ def _activate_effect(
                 "메인 페이즈가 아닙니다 (기동 효과는 자신 메인 페이즈에 "
                 "발동합니다 — RULE-EFFECT-002).",
             ),
-        )
+        ]
+        #: 🔴 **정의가 발동 자리를 적은 효과만** 자리를 확정으로 묻는다
+        #: (Phase 6-AF). 적지 않은 효과의 자리는 위의 범위 조건이 모름으로
+        #: 돌려주므로 이 갈래에 들어오지 않는다 — 두 곳이 각자 좁히는 것이
+        #: 아니라 **한 곳이 답하고 다른 곳은 비켜 준다.**
+        zones = activation_zones
+        if zones is not None:
+            narrow.append(
+                Requirement(
+                    InAnyZone(zones, action.source),
+                    ValidationCode.SOURCE_WRONG_ZONE,
+                    "이 효과를 그 자리에서 발동할 수 없습니다 (공식 "
+                    "스크립트의 SetRange 가 적은 자리: "
+                    + " · ".join(sorted(z.value for z in zones))
+                    + ").",
+                )
+            )
+        return always + tuple(narrow)
 
     quick_play = activation_is_quick_play(validator.view, context, action.source)
 
@@ -1667,6 +1692,25 @@ def _declared_activation_kind(validator, action) -> "ActivationKind | None":
     return getattr(definition, "activation_kind", None)
 
 
+def _declared_activation_zones(validator, action):
+    """
+    이 발동이 가리키는 효과가 적어 둔 **발동 자리들** (Phase 6-AF).
+    적지 않았으면 ``None``.
+
+    :func:`_declared_activation_kind` 와 **같은 모양이고 같은 태도**다 —
+    ``None`` 이 되는 길이 셋이고 (등록소가 없다 · 정의가 없다 · 정의가 적지
+    않았다) 전부 "모른다" 이며, 접은 결과가 **더 넓어지지 않는다**: ``None``
+    이면 자리를 확정으로 묻지 않고 예전 그대로 모름으로 남는다.
+    """
+    source = getattr(validator, "definitions", None)
+    if source is None or action.effect_ref is None:
+        return None
+    definition = source.definition_for(action.effect_ref)
+    if definition is None:
+        return None
+    return getattr(definition, "activation_zones", None)
+
+
 def _declared_activation_event(validator, action) -> "bool | None":
     """
     이 발동이 가리킨 효과가 **사건을 기다리는가** (Phase 6-Q). 모르면 ``None``.
@@ -1851,7 +1895,13 @@ def _trap_activation_out_of_scope(
 
 
 def _monster_activation_out_of_scope(
-    view, context, instance, definition, activation_kind, event_backed=False
+    view,
+    context,
+    instance,
+    definition,
+    activation_kind,
+    event_backed=False,
+    activation_zones=None,
 ) -> tuple[tuple[str, str], ...]:
     """
     **몬스터 효과**의 발동을 범위 밖으로 만드는 것들 (Phase 6-K).
@@ -1902,9 +1952,28 @@ def _monster_activation_out_of_scope(
         )
     target = instance if instance is not None else context.source
     card = view.find(target) if target is not None else None
-    if card is None or card.zone not in IGNITION_ACTIVATION_ZONES:
-        where = card.zone.value if card is not None else "?"
-        return ((f"{where} 에서의 기동 효과 발동이다", IGNITION_LOCATION_MISSING),)
+    if card is None:
+        return (("어디에 있는지 보이지 않는다", IGNITION_LOCATION_MISSING),)
+    #: 🔴 **정의가 발동 자리를 적어 두면 그것이 답한다** (Phase 6-AF).
+    #:
+    #: 그때 "그 자리가 아니다" 는 **모름이 아니라 확정 거부**이므로 범위
+    #: 조건에서 빼고 (여기서 ``()`` 를 돌려준다) 좁은 요구가
+    #: ``SOURCE_WRONG_ZONE`` 으로 답한다 (:func:`_activate_effect` 의 기동
+    #: 갈래). 적지 않은 정의는 **아래 줄이 그대로** 모름을 돌려준다.
+    zones = activation_zones
+    if zones is not None:
+        if card.zone not in zones:
+            return ()
+        if not card.face_up:
+            return (("뒷면 몬스터의 효과 발동이다", FACEDOWN_EFFECT_MISSING),)
+        return ()
+    if card.zone not in IGNITION_ACTIVATION_ZONES:
+        return (
+            (
+                f"{card.zone.value} 에서의 기동 효과 발동이다",
+                IGNITION_LOCATION_MISSING,
+            ),
+        )
     if not card.face_up:
         return (("뒷면 몬스터의 효과 발동이다", FACEDOWN_EFFECT_MISSING),)
     return ()
@@ -1917,6 +1986,7 @@ def _activation_out_of_scope(
     activation_kind=None,
     waits_for_event=None,
     event_backed=False,
+    activation_zones=None,
 ) -> tuple[tuple[str, str], ...]:
     """
     이 발동을 **이번 Phase 의 범위 밖으로** 만드는 (사실, 없는 규칙) 들.
@@ -1962,7 +2032,13 @@ def _activation_out_of_scope(
             # 더 이상 답하지 않는다 — 한 카드가 기동 효과와 유발 즉시
             # 효과를 함께 가지는 것이 실측 856장(10.4%)이다.
             return _monster_activation_out_of_scope(
-                view, context, instance, definition, activation_kind, event_backed
+                view,
+                context,
+                instance,
+                definition,
+                activation_kind,
+                event_backed,
+                activation_zones,
             )
         # 마법도 함정도 몬스터도 아니다 (토큰 등). 종류 축 자체가 비어 있다.
         return (("통상 마법이 아니다", MONSTER_ACTIVATION_MISSING),)
@@ -2095,6 +2171,15 @@ class _NormalSpellActivation(Condition):
     activation_kind: ActivationKind | None = None
     waits_for_event: "bool | None" = None
     event_backed: bool = False
+    activation_zones: "frozenset[Zone] | None" = None
+    """
+    가리킨 효과가 적어 둔 **발동 자리들** (Phase 6-AF). ``None`` 은 "적지
+    않았다" 다.
+
+    ``activation_kind`` 와 **같은 자리이고 같은 이유**다 — 이 사실은 효과
+    단위이므로 관측에 없고, 요구를 만드는 쪽이 등록소에서 읽어 값으로
+    넘긴다. 🔴 판정을 바꾸므로 :meth:`canonical_state` 에 들어간다.
+    """
     """
     가리킨 효과의 **발동 분류** (Phase 6-K). ``None`` 은 "모른다" 다.
 
@@ -2125,6 +2210,7 @@ class _NormalSpellActivation(Condition):
             self.activation_kind,
             self.waits_for_event,
             self.event_backed,
+            self.activation_zones,
         )
 
     def canonical_state(self) -> tuple:
@@ -2140,6 +2226,12 @@ class _NormalSpellActivation(Condition):
             #: 있을 때와 없을 때 **다른 답**을 내므로, 빠뜨리면 사건 없이 물은
             #: 결과가 사건이 있을 때의 캐시로 쓰인다 (그 반대도 마찬가지다).
             self.event_backed,
+            #: 🔴 ``activation_zones`` 도 들어간다 (Phase 6-AF). 적은 효과와
+            #: 적지 않은 효과가 **같은 자리에서 다른 답**을 내므로 (모름 vs
+            #: 확정), 빠뜨리면 한쪽의 답이 다른 쪽의 캐시로 쓰인다.
+            None
+            if self.activation_zones is None
+            else tuple(sorted(z.value for z in self.activation_zones)),
         )
 
     def to_dict(self) -> dict:
@@ -2152,6 +2244,10 @@ class _NormalSpellActivation(Condition):
             data["waits_for_event"] = self.waits_for_event
         if self.event_backed:
             data["event_backed"] = True
+        if self.activation_zones is not None:
+            data["activation_zones"] = sorted(
+                z.value for z in self.activation_zones
+            )
         return data
 
     def describe_ko(self) -> str:

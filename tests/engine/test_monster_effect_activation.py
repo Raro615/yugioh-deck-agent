@@ -380,6 +380,9 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
 
     🔴 **Phase 6-AC 에서 둘이 셋이 됐다** (성유물－『성장』 ② 유발). 같은
     성질의 고침이고, 지키는 사실도 그대로다 — 셋 다 손으로 적었다.
+
+    🔴 **Phase 6-AF 에서 셋이 넷이 됐다** (기르수 ③ 기동). 같은 성질의
+    고침이다 — 넷 다 손으로 적었고, 자동 변환은 여전히 **없다.**
     """
     declared = {
         entry.definition.effect_ref: entry.definition.activation_kind
@@ -391,6 +394,10 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
         EffectRef(GIRSU, 0): ActivationKind.TRIGGER,
         #: 🔴 Phase 6-AC — ``ordinal`` 이 **1** 인 첫 등재이기도 하다.
         EffectRef(WORLD_WAND, 1): ActivationKind.TRIGGER,
+        #: 🔴 Phase 6-AF — 같은 카드의 **다른 ordinal** 을 적은 첫 자리다
+        #: (기르수 ① 과 ③). 한 효과를 등재했다고 나머지가 열리지 않는다는
+        #: 사실은 ``test_m02`` 가 센다.
+        EffectRef(GIRSU, GIRSU_IGNITION_ORDINAL): ActivationKind.IGNITION,
     }
     entry = next(e for e in EFFECT_LIBRARY if e.definition.effect_ref == HONEST_REF)
     #: 🔴 **Phase 6-L 에서 실행된다.** 6-K 시점에는 ``executable=False`` ·
@@ -1082,33 +1089,48 @@ def test_m01_girsu_really_has_an_ignition_effect_in_the_monster_zone(repository)
 
 @requires_official_db
 @pytest.mark.real_card
-def test_m02_girsu_is_not_forced_to_work(repository):
+def test_m02_registering_one_ordinal_does_not_open_the_others(repository):
     """
-    🔴 **기르수를 억지로 실행시키지 않았다** (§11 금지).
+    🔴 **한 효과를 등재했다고 나머지가 열리지 않는다** (§11 금지의 핵심).
 
-    🔴 **Phase 6-V 가 기르수 ①(``e[0]``, 유발)을 등재했다.** 그런데 이
-    시험이 묻는 것은 ③(``e[2]``, **기동**)이고 6-V 는 그것을 등재하지
-    않았다. 그래서 기동 쪽 답은 그대로 "분류를 적지 않았다" 다.
+    🔴 **이 시험이 Phase 6-AF 에서 뒤집혔다.** 6-AC 까지 기르수는 ①
+    (``e[0]``, 유발) 하나만 등재되어 있었고, 그래서 ③ (``e[2]``, **기동**)
+    을 물으면 "분류를 적지 않았다" 였다. 6-AF 가 ③ 을 등재했으므로 그
+    답은 이제 ``VALID`` 다 — 억지로 실행시킨 것이 아니라 **근거와 함께
+    등재**했고, 그 근거는 ``engine/effect/library.py`` 의 그 항목이 적는다.
 
-    두 ordinal 을 **구분해서** 잰다 — 하나를 등재했다고 나머지가 열리지
-    않는다는 것이 이 시험이 지키는 사실이다.
+    🔴 지키는 사실은 그대로다: **등재한 ordinal 만 열린다.** 같은 카드의
+    ② (``e[1]``, ``EVENT_SPSUMMON_SUCCESS`` 사본) 와 ④ (``e[3]``,
+    ``EFFECT_ADD_TYPE``) 는 등재하지 않았고, 그 둘을 물으면 여전히 모른다.
     """
     duel, instance = board(repository, GIRSU)
-    verdict = judged(
+    opened = judged(
         duel,
         ignition_action(instance, card_id=GIRSU, ordinal=GIRSU_IGNITION_ORDINAL),
         definitions=definition_registry(),
     )
-    assert verdict.validity is ActionValidity.UNKNOWN
-    assert verdict.missing_rule == MONSTER_ACTIVATION_MISSING
+    assert opened.validity is ActionValidity.VALID, opened.reason
 
-    #: 🔴 목록에는 들어왔지만 **그 ordinal 이 아니다.**
+    #: 🔴 **등재하지 않은 ordinal 은 그대로 모른다.**
+    for ordinal in (1, 3):
+        verdict = judged(
+            duel,
+            ignition_action(instance, card_id=GIRSU, ordinal=ordinal),
+            definitions=definition_registry(),
+        )
+        assert verdict.validity is ActionValidity.UNKNOWN, ordinal
+        assert verdict.missing_rule == MONSTER_ACTIVATION_MISSING
+
     refs = {
         entry.effect_ref for entry in EFFECT_LIBRARY
         if entry.effect_ref.card_id == GIRSU
     }
-    assert refs == {EffectRef(GIRSU, 0)}, refs
-    assert EffectRef(GIRSU, GIRSU_IGNITION_ORDINAL) not in refs
+    assert refs == {
+        EffectRef(GIRSU, 0),
+        EffectRef(GIRSU, GIRSU_IGNITION_ORDINAL),
+    }, refs
+    assert EffectRef(GIRSU, 1) not in refs
+    assert EffectRef(GIRSU, 3) not in refs
 
 
 # ======================================================================

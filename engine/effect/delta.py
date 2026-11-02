@@ -561,7 +561,19 @@ class MonsterSummoned(StateDelta):
     """소환한 사람. 소환된 몬스터의 컨트롤러다."""
     owner: int
     """카드의 주인. 컨트롤러와 **다를 수 있다** (ADR: Owner ≠ Controller)."""
-    from_zone: Zone
+    from_zone: "Zone | None"
+    """
+    어느 자리에서 나왔는가. **``None`` 은 "어느 자리에서도 오지 않았다"** 다
+    (Phase 6-AF).
+
+    🔴 **"적지 않았다" 가 아니다.** 토큰은 덱에도 패에도 엑스트라 덱에도
+    없다 — 효과가 **그 자리에서 만들어** 필드에 놓는다 (``Duel.CreateToken``
+    뒤의 ``Duel.SpecialSummonStep``). 출발 자리를 아무 값으로 채우면 그
+    존에서 카드가 한 장 줄어든 것처럼 읽히고, 「덱에서 특수 소환되었을
+    경우」 류의 유발이 거짓으로 발화할 자리가 된다.
+
+    그래서 **없음을 그대로 적는다.** 읽는 쪽은 ``is None`` 으로 묻는다.
+    """
     to_zone: Zone
     to_index: int
     """놓인 칸 번호. 몬스터 존은 칸이 밀리지 않으므로 자리가 곧 사실이다."""
@@ -573,7 +585,7 @@ class MonsterSummoned(StateDelta):
                 raise ValueError(f"{name} 는 0 또는 1 입니다: {getattr(self, name)}")
         if self.to_index < 0:
             raise ValueError(f"칸 번호는 음수일 수 없습니다: {self.to_index}")
-        if self.from_zone is self.to_zone:
+        if self.from_zone is not None and self.from_zone is self.to_zone:
             raise ValueError(
                 "소환은 다른 존으로 나오는 것입니다: "
                 f"{self.from_zone.value} → {self.to_zone.value}"
@@ -599,7 +611,7 @@ class MonsterSummoned(StateDelta):
             self.card.value,
             self.player,
             self.owner,
-            self.from_zone.value,
+            None if self.from_zone is None else self.from_zone.value,
             self.to_zone.value,
             self.to_index,
             self.position.value,
@@ -612,7 +624,9 @@ class MonsterSummoned(StateDelta):
             "instance": self.card.value,
             "player": self.player,
             "owner": self.owner,
-            "from": {"zone": self.from_zone.value},
+            "from": {
+                "zone": None if self.from_zone is None else self.from_zone.value
+            },
             "to": {
                 "zone": self.to_zone.value,
                 "index": self.to_index,
@@ -621,10 +635,179 @@ class MonsterSummoned(StateDelta):
         }
 
     def describe_ko(self) -> str:
+        whence = (
+            "어느 자리에서도 오지 않고"
+            if self.from_zone is None
+            else f"{self.from_zone.value} 에서"
+        )
         return (
-            f"P{self.player} 가 {self.card} 를 {self.from_zone.value} 에서 "
+            f"P{self.player} 가 {self.card} 를 {whence} "
             f"{self.to_zone.value}[{self.to_index}] 로 "
             f"{self.summon.value} 소환 ({self.position.value})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TokenCreated(StateDelta):
+    """
+    토큰 하나가 **만들어졌다** (Phase 6-AF).
+
+    🔴 **소환 사실과 다른 축이다.** 같은 처리에서
+    :class:`MonsterSummoned` 도 함께 남는다 — 토큰은 규칙상 **특수
+    소환되는** 것이고, 그 사실을 이 변화 하나로 대신하면 「특수 소환되었을
+    경우」 유발이 토큰을 보지 못한다. 반대로 이 변화를 생략하면 **누가
+    만들었는가**(생성 관계)가 어디에도 남지 않는다.
+
+    ==================  ==================================================
+    :class:`TokenCreated`    개체가 생겼다 · **누가 만들었는가**
+    :class:`MonsterSummoned` 그 개체가 **특수 소환되었다**
+    ==================  ==================================================
+
+    네 사람을 가른다 (ADR: Owner ≠ Controller 의 연장)
+    --------------------------------------------------
+    ====================  ==============================================
+    :attr:`owner`          카드의 주인 — 토큰은 **놓이는 쪽**이 주인이다
+    :attr:`controller`     지금 컨트롤하는 쪽
+    :attr:`creator`        만든 **카드** (효과의 핸들러)
+    :attr:`summoner`       그 효과를 해결한 **플레이어**
+    ====================  ==============================================
+
+    기르수가 그 네 칸이 모두 필요한 실제 예다 — ``s.tkop`` 이
+    ``SpecialSummonStep(tk2,0,tp,1-tp,…)`` 로 **상대 필드에** 토큰을 놓으므로
+    :attr:`summoner` 는 ``tp`` 이고 :attr:`owner` · :attr:`controller` 는
+    ``1-tp`` 다. 한 칸으로 적으면 상대 토큰이 자신의 것으로 읽힌다.
+    """
+
+    card: InstanceId
+    card_id: int
+    owner: int
+    controller: int
+    summoner: int
+    """그 효과를 해결한 플레이어. :attr:`owner` 와 **다를 수 있다.**"""
+    creator: "InstanceId | None" = None
+    """토큰을 만든 카드. 읽을 수 없으면 ``None`` 이다."""
+    creator_card_id: "int | None" = None
+
+    def __post_init__(self) -> None:
+        for name in ("owner", "controller", "summoner"):
+            if getattr(self, name) not in (0, 1):
+                raise ValueError(
+                    f"{name} 는 0 또는 1 입니다: {getattr(self, name)}"
+                )
+        if self.card_id <= 0:
+            raise ValueError(f"카드 ID 는 양수입니다: {self.card_id}")
+
+    @property
+    def kind(self) -> str:
+        return "token_created"
+
+    @property
+    def instance(self) -> InstanceId:
+        return self.card
+
+    def canonical_state(self) -> tuple:
+        return (
+            "token_created",
+            self.card.value,
+            self.card_id,
+            self.owner,
+            self.controller,
+            self.summoner,
+            None if self.creator is None else self.creator.value,
+            self.creator_card_id,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "token_created",
+            "instance": self.card.value,
+            "card_id": self.card_id,
+            "owner": self.owner,
+            "controller": self.controller,
+            "summoner": self.summoner,
+            "creator": None if self.creator is None else self.creator.value,
+            "creator_card_id": self.creator_card_id,
+        }
+
+    def describe_ko(self) -> str:
+        by = "" if self.creator_card_id is None else f" ({self.creator_card_id} 가)"
+        return (
+            f"P{self.summoner} 가{by} 토큰 {self.card_id} 를 만들어 "
+            f"P{self.controller} 의 필드에 놓음 (#{self.card.value})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TokenVanished(StateDelta):
+    """
+    토큰이 필드를 떠나 **소멸했다** (Phase 6-AF).
+
+    🔴 **:class:`ZoneMoved` 가 아니다.** 공식 규칙이 토큰을 묘지에 남기지
+    않는다 — 필드를 떠나는 순간 게임에서 제외되고 어느 존에도 들어가지
+    않는다. 그래서 이 변화는 목적지를 적지 않고 :class:`CardMovement` 를
+    상속하지도 않는다.
+
+    그 가름이 **거짓 유발을 막는다.** ``ZoneMoved(send_to_grave)`` 로 적으면
+    :meth:`~engine.trigger.TimingEvent.from_delta` 가 그것을 ``CARD_MOVED``
+    로 읽고, 「이 카드가 묘지로 보내졌을 경우」 류의 유발이 **묘지에 가지도
+    않은 토큰**에 발화할 자리가 된다. 토큰이 소멸했다는 사실에서 묘지행
+    사건을 만들어 내지 않는다.
+
+    🔴 **옮길 시점 이름이 아직 없다.** :func:`~engine.trigger.timing_for` 가
+    이것을 ``UNIMPLEMENTED`` 사건으로 남긴다 — 지어낸 시점을 주지 않고,
+    그 사실이 보고에 보이는 쪽을 고른다 (STRUCTURAL-74 와 같은 태도).
+    """
+
+    card: InstanceId
+    card_id: int
+    owner: int
+    controller: int
+    from_zone: Zone
+    reason: str = ""
+    """왜 필드를 떠났는가 — 사람이 읽는 한 줄 ("링크 소재" 등)."""
+
+    def __post_init__(self) -> None:
+        for name in ("owner", "controller"):
+            if getattr(self, name) not in (0, 1):
+                raise ValueError(
+                    f"{name} 는 0 또는 1 입니다: {getattr(self, name)}"
+                )
+
+    @property
+    def kind(self) -> str:
+        return "token_vanished"
+
+    @property
+    def instance(self) -> InstanceId:
+        return self.card
+
+    def canonical_state(self) -> tuple:
+        return (
+            "token_vanished",
+            self.card.value,
+            self.card_id,
+            self.owner,
+            self.controller,
+            self.from_zone.value,
+            self.reason,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "token_vanished",
+            "instance": self.card.value,
+            "card_id": self.card_id,
+            "owner": self.owner,
+            "controller": self.controller,
+            "from": {"zone": self.from_zone.value},
+            "reason": self.reason,
+        }
+
+    def describe_ko(self) -> str:
+        why = f" — {self.reason}" if self.reason else ""
+        return (
+            f"P{self.controller} 의 {self.from_zone.value} 에 있던 토큰 "
+            f"{self.card_id} 가 소멸 (어느 존에도 가지 않음){why}"
         )
 
 
@@ -644,5 +827,7 @@ __all__ = [
     "SummonKind",
     "SPECIAL_SUMMON_KINDS",
     "MonsterSummoned",
+    "TokenCreated",
+    "TokenVanished",
     "canonical_deltas",
 ]

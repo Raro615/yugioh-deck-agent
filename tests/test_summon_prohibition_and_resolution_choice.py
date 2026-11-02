@@ -382,7 +382,16 @@ def test_h10_the_prohibition_table_carries_its_evidence():
     걸릴 수 없는 카드가 있고 (『성장』 의 ③), 그 사실을 적지 않으면 그 카드가
     필드에 있는 모든 판이 모름이 된다.
     """
-    assert {rule.card_id for rule in SPECIAL_SUMMON_PROHIBITIONS} == {PACHY, WAND}
+    #: 🔴 **Phase 6-AF 가 한 줄을 더했다** — 「오르페골 갈라테아i」
+    #: (48835607) 다. 그 카드는 신호를 적었지만 금지가 **카드명과 소환법으로
+    #: 좁혀져 있어** 특수 소환 전체를 막지 않는다 (``prohibits=False``), 그리고
+    #: 좁혀진 그 제약은 ``engine.link_rules.LINK_SUMMON_ONCE_PER_TURN`` 가
+    #: 따로 들고 판정한다 — 버린 것이 아니다.
+    assert {rule.card_id for rule in SPECIAL_SUMMON_PROHIBITIONS} == {
+        PACHY,
+        WAND,
+        48835607,
+    }
     for rule in SPECIAL_SUMMON_PROHIBITIONS:
         assert rule.lua_file.startswith("c") and rule.lua_file.endswith(".lua")
         assert rule.lua_excerpt.strip()

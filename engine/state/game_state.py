@@ -32,6 +32,7 @@ from engine.state.card_instance import CardInstance
 from engine.state.player import DEFAULT_LIFE_POINTS, PlayerState
 from engine.state.turn import TurnState
 from engine.state.rule_usage import RuleUsageRegistry
+from engine.state.summon_usage import SummonUsageRegistry
 from engine.state.use_registry import UseRegistry
 from engine.state.zones import ZoneContainer, move_card
 from engine.vocabulary import PLAYER_ZONES, Position, Zone
@@ -61,6 +62,7 @@ class GameState:
         "turn",
         "uses",
         "rule_uses",
+        "summon_uses",
         "chain",
         "pending",
         "journal",
@@ -80,6 +82,7 @@ class GameState:
         result: DuelResult | None = None,
         uses: UseRegistry | None = None,
         rule_uses: RuleUsageRegistry | None = None,
+        summon_uses: SummonUsageRegistry | None = None,
         seed: int | None = None,
         rng: "random.Random | RandomSource | None" = None,
     ):
@@ -107,6 +110,14 @@ class GameState:
         # (:mod:`engine.state.rule_usage`).
         self.rule_uses: RuleUsageRegistry = (
             rule_uses if rule_uses is not None else RuleUsageRegistry()
+        )
+
+        # 🔴 **카드명 단위 소환 기록은 또 다른 표다** (Phase 6-AF). 왜 위의
+        # 둘에 섞을 수 없는지는 :mod:`engine.state.summon_usage` 머리말에
+        # 실측과 함께 적혀 있다 — 요점은 ``UseRegistry`` 의
+        # ``(player, card_id)`` 칸을 갈라테아i 의 ① 이 **이미 쓴다**는 것이다.
+        self.summon_uses: SummonUsageRegistry = (
+            summon_uses if summon_uses is not None else SummonUsageRegistry()
         )
 
         # 무작위는 주입된 seed 에서만 나온다. seed 가 없으면 난수원도 없고,
@@ -399,6 +410,7 @@ class GameState:
             result=self.result,  # frozen
             uses=self.uses.clone(),
             rule_uses=self.rule_uses.clone(),
+            summon_uses=self.summon_uses.clone(),
             seed=self._seed,
             rng=rng,
         )
@@ -441,6 +453,7 @@ class GameState:
             result=self.result,  # frozen
             uses=self.uses.clone(),
             rule_uses=self.rule_uses.clone(),
+            summon_uses=self.summon_uses.clone(),
             seed=self._seed,
             # **복제하지 않는다.** 같은 난수원을 함께 쓴다.
             rng=self._random,
@@ -509,6 +522,10 @@ class GameState:
             self.turn.canonical_state(),
             self.uses.canonical_state(key),
             self.rule_uses.canonical_state(),
+            #: 🔴 **판의 모양이다** (Phase 6-AF). "이 턴에 이 카드명을 링크
+            #: 소환했는가" 는 뒤의 소환이 적법한지를 바꾸므로 (갈라테아i),
+            #: 해시에 들어가야 같은 해시가 같은 판을 뜻한다.
+            self.summon_uses.canonical_state(),
             self.result.as_tuple() if self.result else None,
         )
 

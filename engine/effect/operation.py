@@ -65,7 +65,7 @@ from enum import Enum
 
 from engine.condition import PlayerRef
 from engine.effect.target import SelectionCount, TargetRef
-from engine.vocabulary import Zone
+from engine.vocabulary import Position, Zone
 
 
 class OperationKind(str, Enum):
@@ -127,6 +127,25 @@ class OperationKind(str, Enum):
     아직 없는 일을 정직하게 옮기기 위한 원시 조작이고, 앞으로 생길
     파괴 · 보내기 계층이 **공유할 바닥**이다.
     """
+    CREATE_TOKEN = "create_token"
+    """
+    **토큰을 만들어 특수 소환한다** (Phase 6-AF).
+
+    ``SPECIAL_SUMMON`` 과 가르는 이유가 둘이다.
+
+    1. **대상이 없다.** 저쪽은 ``TargetRef`` 로 "이미 판에 있는 그 카드" 를
+       가리키고, 이쪽이 놓는 개체는 **아직 존재하지 않는다.** 없는 대상을
+       ``None`` 으로 적으면 "대상을 빠뜨렸다" 와 구분되지 않는다
+       (모듈 머리말의 가름).
+    2. **출발 자리가 없다.** 저쪽은 패 · 묘지의 카드를 옮기고, 이쪽은
+       어느 존에서도 꺼내지 않는다 — 그래서
+       :class:`~engine.summon.SummonProcedure` 를 쓸 수 없다
+       (:mod:`engine.token` 머리말).
+
+    🔴 **그래도 특수 소환이다.** 남기는 변화에
+    :class:`~engine.effect.delta.MonsterSummoned` 가 함께 들어가므로
+    「특수 소환되었을 경우」 유발이 토큰을 본다.
+    """
     UNKNOWN = "unknown"
     """무엇을 하는지 구조화하지 못했다."""
 
@@ -150,6 +169,9 @@ REASON_NAMES: dict[OperationKind, tuple[str, ...]] = {
     OperationKind.CHANGE_LIFE: ("EFFECT",),
     # 섞기는 카드에 **아무 일도 하지 않는다.** 이유를 주장하지 않는 것이
     # 사실이다 — ``MOVE`` 가 비어 있는 것과 같은 자리.
+    # 효과로 특수 소환된 것은 맞으므로 ``SPECIAL_SUMMON`` 과 **같은 이유**를
+    # 적는다 (Phase 6-AF). 토큰을 만든 것 자체에 별도 ``REASON_*`` 은 없다.
+    OperationKind.CREATE_TOKEN: ("SPSUMMON", "EFFECT"),
     OperationKind.SHUFFLE: (),
     # **비어 있는 것이 사실이다.** 이유를 말할 수 없는 이동이므로
     # ``REASON_EFFECT`` 조차 주장하지 않는다. 여기에 이유를 적는 순간
@@ -824,6 +846,96 @@ class SpecialSummonOperation(Operation):
 
 
 @dataclass(frozen=True, slots=True)
+class TokenSpec:
+    """
+    토큰 **한 장**을 어느 쪽에 어떤 표시 형식으로 놓을 것인가 (Phase 6-AF).
+
+    ``card_id`` 는 토큰의 ID 이고, 그 토큰의 공식 데이터(카드군 · 종족 ·
+    속성 · 레벨 · 공수)는 **여기 적지 않는다** —
+    :data:`engine.token.TOKEN_RULES` 가 근거와 함께 들고 있고, 실행기가
+    ``cards.cdb`` 의 값과 대조한다. 두 곳에 적으면 둘이 갈라진다.
+    """
+
+    card_id: int
+    to: PlayerRef
+    """**누구의 필드**에 놓는가. ``OPPONENT`` 가 실제로 쓰인다 (기르수)."""
+    position: Position
+    """
+    놓이는 표시 형식. 여기서는 **고정이 아니라 카드가 정한 값**이다 —
+    공식 스크립트가 ``POS_FACEUP_DEFENSE`` 를 직접 적는다 (STRUCTURAL-61 의
+    "고를 계층이 없어서 고정" 과 다른 자리다).
+    """
+
+    def __post_init__(self) -> None:
+        if self.card_id <= 0:
+            raise ValueError(f"토큰 ID 는 양수입니다: {self.card_id}")
+        if not isinstance(self.to, PlayerRef):
+            raise TypeError(f"PlayerRef 가 필요합니다: {self.to!r}")
+        if not isinstance(self.position, Position):
+            raise TypeError(f"Position 이 필요합니다: {self.position!r}")
+
+    def canonical_state(self) -> tuple:
+        return (self.card_id, self.to.value, self.position.value)
+
+    def to_dict(self) -> dict:
+        return {
+            "card_id": self.card_id,
+            "to": self.to.value,
+            "position": self.position.value,
+        }
+
+    def describe_ko(self) -> str:
+        return f"{self.to} 필드에 토큰 {self.card_id} ({self.position.value})"
+
+
+@dataclass(frozen=True, slots=True)
+class CreateTokenOperation(Operation):
+    """
+    토큰들을 **한 번에** 만들어 특수 소환한다 (Phase 6-AF).
+
+    🔴 **장수가 목록의 길이다.** 기르수는 두 장을 **동시에** 놓으므로
+    (``SpecialSummonStep`` 두 번 뒤 ``SpecialSummonComplete`` 한 번) 두
+    일로 쪼갤 수 없다 — 쪼개면 한 장만 놓이고 멈춘 판이 생길 수 있고,
+    공식 스크립트에는 그 상태가 없다. 그래서 계획도 적용도 **전부 아니면
+    무**다.
+    """
+
+    tokens: tuple[TokenSpec, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.tokens, tuple) or not self.tokens:
+            raise TypeError(
+                "만들 토큰을 적지 않았습니다 — 아무것도 만들지 않는 일은 "
+                f"일이 아닙니다: {self.tokens!r}"
+            )
+        for spec in self.tokens:
+            if not isinstance(spec, TokenSpec):
+                raise TypeError(f"TokenSpec 이 필요합니다: {spec!r}")
+
+    @property
+    def kind(self) -> OperationKind:
+        return OperationKind.CREATE_TOKEN
+
+    @property
+    def target_refs(self) -> tuple[TargetRef, ...]:
+        """**없다.** 놓는 개체는 아직 존재하지 않는다 (클래스 설명)."""
+        return ()
+
+    def canonical_state(self) -> tuple:
+        return ("create_token", tuple(s.canonical_state() for s in self.tokens))
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "create_token",
+            "tokens": [s.to_dict() for s in self.tokens],
+            "reasons": list(self.reason_names),
+        }
+
+    def describe_ko(self) -> str:
+        return "토큰 생성 — " + " · ".join(s.describe_ko() for s in self.tokens)
+
+
+@dataclass(frozen=True, slots=True)
 class UnimplementedOperation(Operation):
     """
     **아직 표현할 수 없는 일.**
@@ -849,6 +961,8 @@ class UnimplementedOperation(Operation):
 
 
 __all__ = [
+    "CreateTokenOperation",
+    "TokenSpec",
     "OperationKind",
     "REASON_NAMES",
     "CARD_OPERATION_KINDS",

@@ -51,7 +51,12 @@
 from dataclasses import dataclass, field
 
 from engine.action import PlayerAction, PlayerActionKind
-from engine.effect.delta import StateDelta, SummonKind, ZoneMoved
+from engine.effect.delta import (
+    StateDelta,
+    SummonKind,
+    TokenVanished,
+    ZoneMoved,
+)
 from engine.effect.operation import OperationKind
 from engine.ids import InstanceId
 from engine.link_rules import (
@@ -62,6 +67,7 @@ from engine.link_rules import (
     LINK_SUMMON_TO_ZONE,
 )
 from engine.summon import SummonError, SummonPlacement, SummonProcedure
+from engine.token import TokenError, is_token, vanish_token
 from engine.vocabulary import Zone
 
 
@@ -245,6 +251,32 @@ class LinkSummonExecutor:
         plan = self.plan(state, action)
         deltas: list[StateDelta] = []
         for instance, from_player, from_zone, owner in plan.materials:
+            #: 🔴 **토큰은 묘지로 가지 않는다** (Phase 6-AF). 공식 규칙이
+            #: 토큰을 필드 밖에 두지 않으므로, 소재로 떠나는 순간 소멸한다 —
+            #: ``ZoneMoved(send_to_grave)`` 를 적으면 묘지에 가지도 않은
+            #: 카드의 「묘지로 보내졌을 경우」 사건이 만들어진다
+            #: (:class:`~engine.effect.delta.TokenVanished` 의 설명).
+            #:
+            #: 🔴 **"토큰인지 모른다" 를 "토큰이 아니다" 로 읽지 않는다** —
+            #: ``is_token`` 이 ``None`` 을 돌려주면 판에 손대기 전에 멈춘다.
+            card = state.find_instance(instance)
+            token = is_token(card)
+            if token is None:
+                raise LinkSummonError(
+                    f"소재 {instance} 의 카드 정의를 읽을 수 없어 토큰인지 "
+                    "알 수 없습니다 — 묘지로 보낼지 소멸시킬지 정할 수 "
+                    "없습니다."
+                )
+            if token:
+                try:
+                    deltas.append(
+                        vanish_token(state, instance, reason="링크 소재")
+                    )
+                except TokenError as error:  # pragma: no cover - 방어선
+                    raise LinkSummonError(
+                        f"소재 {instance} 를 소멸시키지 못했습니다: {error}"
+                    ) from error
+                continue
             #: 🔴 **주인의 묘지로 보낸다** — 필드는 컨트롤러의 자리이지만
             #: 묘지는 주인의 자리다 (``LinkSummonPlan.materials`` 의 설명).
             state.move(instance, LINK_MATERIAL_DESTINATION, to_player=owner)
@@ -265,6 +297,18 @@ class LinkSummonExecutor:
                 )
             )
         self._procedure.place(state, plan.placement)
+        #: 🔴 **이 턴에 그 카드명을 링크 소환했다고 적는다** (Phase 6-AF).
+        #: 「1턴에 1번만 링크 소환할 수 있다」 를 판정하는 자리가 이 기록을
+        #: 읽는다 (:data:`~engine.link_rules.LINK_SUMMON_ONCE_PER_TURN`).
+        #: 🔴 **판정하지 않는다** — 여기서는 세기만 한다.
+        summoned = state.find_instance(plan.placement.card)
+        if summoned is not None and self._procedure.summon is not None:
+            state.summon_uses.record(
+                state.turn.turn_number,
+                plan.placement.player,
+                summoned.card_id,
+                self._procedure.summon.value,
+            )
         deltas.append(plan.placement.to_delta(self._procedure.summon))
         return tuple(deltas)
 

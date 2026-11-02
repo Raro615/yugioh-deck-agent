@@ -693,6 +693,22 @@ class GameStateView:
     **검증기가 이것을 읽는다.** 검증기는 관측만 보므로 (ADR-007), 여기에
     실리지 않으면 "이미 공격했는가" 를 판정할 길이 없다.
     """
+    summons_by_name: tuple[tuple[int, int, str, int], ...] = ()
+    """
+    **이번 턴에** 소환된 카드명들 — ``(player, card_id, 소환법, 횟수)``
+    (Phase 6-AF).
+
+    :attr:`attacks_used` 와 **다른 단위**다. 저쪽은 카드 하나의 권리라
+    ``instance_id`` 로 세지만, 「이 카드를 1턴에 1번만 링크 소환할 수
+    있다」 류의 제약은 **카드명**에 걸린다 — 엑스트라 덱에 같은 이름이 두
+    장 있어도 하나뿐인 제약이다.
+
+    가릴 것이 없다. 소환은 공개된 자리에서 일어나므로 양쪽 다 본다.
+
+    **판정기가 이것을 읽는다** (:func:`~engine.link_rules.
+    assess_link_materials`). 판정은 관측만 보므로 (ADR-007), 여기에 실리지
+    않으면 "이미 이 턴에 링크 소환했는가" 를 판정할 길이 없다.
+    """
 
     # ------------------------------------------------------------------
     # 만들기
@@ -779,6 +795,7 @@ class GameStateView:
             attacks_used=state.rule_uses.cards_used(
                 state.turn.turn_number, RuleActionKind.ATTACK
             ),
+            summons_by_name=state.summon_uses.entries(state.turn.turn_number),
         )
 
     # ------------------------------------------------------------------
@@ -807,6 +824,20 @@ class GameStateView:
         value = getattr(instance_id, "value", instance_id)
         for instance, count in self.attacks_used:
             if instance == value:
+                return count
+        return 0
+
+    def summons_of(self, player: int, card_id: int, summon: str) -> int:
+        """
+        P{player} 가 **이번 턴에** 그 카드명을 그 소환법으로 소환한 횟수.
+
+        기록이 없으면 0 이고, 거기서 0 은 "하지 않았다" 는 **사실**이다 —
+        소환은 공개된 자리에서 일어나므로 기록이 없는 것이 곧 하지 않은
+        것이다 (:meth:`attacks_by` 와 같은 규약).
+        """
+        name = getattr(summon, "value", summon)
+        for seat, found, kind, count in self.summons_by_name:
+            if seat == player and found == card_id and kind == name:
                 return count
         return 0
 
@@ -855,6 +886,7 @@ class GameStateView:
             self.result_reason,
             self.normal_summons_used,
             self.attacks_used,
+            self.summons_by_name,
         )
 
     def to_dict(self) -> dict:
@@ -869,6 +901,7 @@ class GameStateView:
             "result_reason": self.result_reason,
             "normal_summons_used": list(self.normal_summons_used),
             "attacks_used": [list(pair) for pair in self.attacks_used],
+            "summons_by_name": [list(row) for row in self.summons_by_name],
         }
 
     def __str__(self) -> str:
