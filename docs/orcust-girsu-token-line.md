@@ -501,12 +501,27 @@ python3 -m pytest <그 106건> -q -rf -p no:randomly      # 기준선 worktree �
 | 그 106건 — **기준선 `8242ccd` worktree** | 97 | **9** | 1 | 1:42 |
 | 그 97건 — **고친 뒤** | **97** | **0** | **0** | 1:18 |
 | `tests/test_girsu_token_line.py` — 고친 뒤 | **36** | **0** | **0** | 0:50 |
-| 전체 (`tests`) — **고친 뒤** | §4.3-재측정 | — | — | — |
+| 전체 (`tests`) — **고친 뒤** | **6930** | **9** (기존 실패 그 9건) | 1 | 1:46:12 |
 
-🔴 **아직 적지 않은 수를 적어 두지 않는다.** 마지막 줄은 이 커밋 시점에
-**측정이 진행 중**이다 (1시간 47분짜리 묶음이다). 확실한 것은 위 네 줄이고,
-그 가운데 **기준선 worktree 측정이 "97건이 이 Phase 의 것"** 이라는 분류의
-근거다 — 추정이 아니다.
+🔴 **마지막 줄은 이 보고서를 쓴 뒤에 끝난 실측이다** (1시간 46분짜리
+묶음이다). 10건은 `skipped` 다. **종료 코드가 1 인 이유는 남은 실패
+9건**이고, 그 9건은 위에 이름을 적어 둔 **기준선의 기존 실패와 정확히 같은
+9건**이다 — 더도 덜도 아니다:
+
+```
+FAILED tests/agent/test_opponent_resource_weighting_audit.py::test_07_…
+FAILED tests/rulings/test_data_audit.py::test_every_repository_card_can_reach_a_cid
+FAILED tests/test_effect_type_quick_audit.py::test_29_…
+FAILED tests/test_event_free_chain_semantic_audit.py::test_27_…
+FAILED tests/test_korean_overlay_unapplied_audit.py::test_01_… / test_13_… / test_21_… / test_25_…
+FAILED tests/test_trigger_lifetime_audit.py::test_02_…
+```
+
+🔴 **`6833 + 97 = 6930` 이 맞는다.** 고치기 전 통과 6833건에 이 Phase 가
+깨뜨렸던 97건이 되돌아온 수다. 즉 **97건을 고치면서 그 전에 통과하던
+시험을 하나도 떨어뜨리지 않았다**. 그리고 이 수는 기준선 worktree 측정이
+"97건이 이 Phase 의 것"이라는 분류를 뒤에서 한 번 더 확인한다 — 추정이
+아니다.
 
 🔴 **고치기 전 12건의 실패를 숨기지 않았다** — 전부 §4.2 의 표에 어느
 시험이 왜 바뀌었는지 적혀 있고, 단언을 지우거나 기대값을 완화한 것이
