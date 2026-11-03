@@ -420,7 +420,37 @@ python3 -m pytest tests -q -rf -p no:randomly
 | `test_discord_bot::test_44` | `/combo` 의 인자 목록을 고정한다 | `search` 를 **맨 뒤에** 더한 사실을 적었다 — 6-T 가 `recipe` 를, 6-AC 가 `line` 을 더했을 때와 **같은 방식**이고, 그 역사가 이 시험의 설명문에 쌓여 있다. 🔴 단언을 지우거나 느슨하게 하지 않았다: 이름 · 순서 · 필수 여부를 여전히 **정확히** 고정한다 |
 | `test_discord_bot::test_58` | 가짜 서비스의 `combo_response` 서명이 핸들러가 넘기는 인자 수와 맞아야 한다 | 가짜 구현에 `search_text=""` 를 더하고, **빈 문자열이 그대로 전달된다**는 단언을 더했다 — 그것이 "주지 않으면 탐색을 돌리지 않는다" 의 증거다 |
 
-<!--MEASURE-FULL-AFTER-->
+#### 전체 회귀 — **고친 뒤**
+
+| 묶음 | passed | failed | skipped | 종료 코드 | 소요 |
+| --- | --- | --- | --- | --- | --- |
+| 전체 (`tests`) — 고치기 전 | 6972 | 13 | 10 | 1 | 1:42:46 |
+| 전체 (`tests`) — **고친 뒤** | **6976** | **9** (기존 실패 그 9건) | 10 | 1 | 1:45:22 |
+
+🔴 **이름으로 대조했다.** 남은 9건은 기준선 `79ce531` 의 기존 실패와
+**정확히 같은 9건**이고 더도 덜도 아니다:
+
+```
+FAILED tests/agent/test_opponent_resource_weighting_audit.py::test_07_…
+FAILED tests/rulings/test_data_audit.py::test_every_repository_card_can_reach_a_cid
+FAILED tests/test_effect_type_quick_audit.py::test_29_…
+FAILED tests/test_event_free_chain_semantic_audit.py::test_27_…
+FAILED tests/test_korean_overlay_unapplied_audit.py::test_01_… / test_13_… / test_21_… / test_25_…
+FAILED tests/test_trigger_lifetime_audit.py::test_02_…
+```
+
+🔴 **`6948 + 28 = 6976` 이 맞는다.** 6-AG 의 통과 6948건에 이번에 더한 새
+시험 28건을 더한 수다 — 즉 **이 Phase 가 그 전에 통과하던 시험을 하나도
+떨어뜨리지 않았다.** 종료 코드가 1 인 이유는 남은 그 9건이다.
+
+🔴 **고치기 전 줄도 지우지 않는다.** 한 번은 신규 회귀 4건을 만들었고, 그
+사실과 수치를 위 표의 첫 줄이 들고 있다 — 고친 뒤의 수만 적으면 "처음부터
+깨끗했다" 로 읽힌다.
+
+| 묶음 | passed | failed | 소요 |
+| --- | --- | --- | --- |
+| `tests/test_bounded_search_first_pass.py` — 네 수정 **뒤** | **28** | **0** | 4:27 |
+| `tests/test_discord_bot.py` — 두 수정 뒤 | **61** | **0** | 0:08 |
 
 ---
 
