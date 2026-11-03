@@ -389,17 +389,38 @@ python3 -m pytest tests/test_bounded_search_first_pass.py -q -rf -p no:randomly
 불가능" 으로 읽힌다.**
 | E | `e01`~`e08` | 재생 성공 · 기록을 어긋나게 한 재생 실패 3건 · 요약의 다섯 가지 · 탐색 모드 opt-in · 기존 정책 회귀 · 짧은 진입점 |
 
-#### 직접 영향 묶음과 전체 회귀
+#### 직접 영향 묶음 — 🔴 **요약을 남기지 못했다**
 
-🔴 **아직 적지 않은 수를 적어 두지 않는다.** 이 커밋 시점에 두 묶음의
-측정이 **진행 중**이다 — 바꾼 계층이 넓어서 (`agent/simulation.py` ·
-`integration/autonomy.py` · `deck/report.py` · `app/*`) 직접 영향 묶음이
-**98개 파일**이고, 그 뒤에 전체 묶음을 한 번 돌린다 (6-AG 실측으로 약
-1시간 45분이다). 확실한 것은 위의 한 줄이다.
+바꾼 계층이 넓어서 (`agent/simulation.py` · `integration/autonomy.py` ·
+`deck/report.py` · `app/*`) 직접 영향 묶음을 **98개 파일**로 잡고 돌렸다.
+🔴 **그 묶음은 자기 90분 제한에 97% 지점에서 끊겼고, `-rf` 요약이 나오지
+않았다.** 진행 표시에 `F` 가 4개 보였지만 **이름을 읽을 수 없으므로 그것을
+결과로 적지 않는다.** 전체 묶음이 같은 파일을 모두 포함하므로 그쪽의
+요약으로 판단했다 (아래).
 
-측정이 끝나면 이 절에 **passed · failed · skipped · 종료 코드 · 소요**를
-적고, 실패가 있으면 **기준선 `79ce531` 의 기존 실패 9건과 대조**한다
-(그 9건의 이름은 `docs/orcust-girsu-token-line.md` §4.3 에 있다).
+#### 전체 회귀 — **고치기 전**
+
+```
+python3 -m pytest tests -q -rf -p no:randomly
+```
+
+| 묶음 | passed | failed | skipped | 종료 코드 | 소요 |
+| --- | --- | --- | --- | --- | --- |
+| 전체 (`tests`) — **고치기 전** | 6972 | **13** | 10 | 1 | 1:42:46 |
+
+실패 13건 중 **9건은 기준선 `79ce531` 의 기존 실패**이고
+(`docs/orcust-girsu-token-line.md` §4.3 에 이름이 있다 — 이름으로 하나하나
+대조했고, 통과 수로 판단하지 않았다), **4건은 이 Phase 가 만든 신규
+회귀**다. 🔴 그 4건을 전부 고쳤다.
+
+| 신규 회귀 | 무엇이 깨졌는가 | 어떻게 고쳤는가 |
+| --- | --- | --- |
+| `test_duel_advance_rule_step_contract::test_22` | 인자 없는 `advance()` 를 부르는 production 자리가 **하나여야** 한다 (`agent/runner.py`) — 그래야 `rule_steps` 가 생기는 길이 하나다. `_settle` 이 둘째 자리를 만들었다 | **그 호출을 없앴다.** 이 범위에서는 부를 일이 없다 — `advance()` 가 하는 일은 드로우 페이즈의 드로우 하나이고, 탐색은 `end_phase` 를 고르지 않아 `DRAW_PENDING` 에 닿지 않는다. 🔴 조용히 넘기지 않는다: 그 자리가 생기면 후보가 비어 멈추고 `blocked` 에 남는다 |
+| `test_chain_resolution_replay_boundary_audit::test_07` | production 코드에 `replay` 라는 **이름이 0회**여야 한다 (3-F-19 가 "`ChainResolution` 직렬화 replay 구현이 없다" 를 그 부재로 증명한다) | **production 식별자를 `rerun` 으로 바꿨다.** 이 저장소의 어휘가 이미 그렇게 가른다 — 3-F-19 §4 가 *"replay 라는 **기능**은 없지만 **재실행**은 이미 엔진의 일상이다"* 라고 적었고, 이 기능은 **기록된 `PlayerAction` 순서를 다시 실행**하는 것이다 (그 문서가 재현 기록이라고 적은 바로 그것). 감사의 보증을 **그대로 남겼다** |
+| `test_discord_bot::test_44` | `/combo` 의 인자 목록을 고정한다 | `search` 를 **맨 뒤에** 더한 사실을 적었다 — 6-T 가 `recipe` 를, 6-AC 가 `line` 을 더했을 때와 **같은 방식**이고, 그 역사가 이 시험의 설명문에 쌓여 있다. 🔴 단언을 지우거나 느슨하게 하지 않았다: 이름 · 순서 · 필수 여부를 여전히 **정확히** 고정한다 |
+| `test_discord_bot::test_58` | 가짜 서비스의 `combo_response` 서명이 핸들러가 넘기는 인자 수와 맞아야 한다 | 가짜 구현에 `search_text=""` 를 더하고, **빈 문자열이 그대로 전달된다**는 단언을 더했다 — 그것이 "주지 않으면 탐색을 돌리지 않는다" 의 증거다 |
+
+<!--MEASURE-FULL-AFTER-->
 
 ---
 
