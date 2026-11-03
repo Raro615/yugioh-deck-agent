@@ -239,19 +239,32 @@ Duel.RegisterEffect(e1,tp)
 
 ### 2.5 링크 소재 — 장수와 **기여**를 가른다
 
-공식 규칙 — *링크 몬스터를 소재로 쓰면 그 링크 수치만큼 센다.*
-`material_contribution` 이 그것을 센다.
+🔴 **이 절은 Phase 6-AG 가 정정했다.** 6-AF 가 여기에 적었던 문장은
+공식 규칙의 **절반**이었고, 그 절반이 판정 코드에 그대로 들어가 두 가지를
+동시에 틀리게 만들었다. 정정된 내용과 실측은 **§7 후속 보완**에 있다.
+아래는 정정된 사실이다.
 
-| 소재 | 고른 카드 | **기여** |
+공식 규칙 (`rules` 계층의 `sd-rulebook-en-v10`, RULE-SUMMON-002) —
+*"Normally, 1 monster equals 1 Link Material. But when you use a Link
+Monster as material for another Link Summon, you can count it as either
+1 monster, or as a number of monsters equal to its Link Rating."*
+
+`material_contribution_options` 가 그 **고를 수 있는 값들**을 돌려준다.
+
+| 소재 | 고른 카드 | **기여로 고를 수 있는 값** |
 | --- | --- | --- |
-| 기르수 (비링크) | 1장 | 1 |
-| 성유물 토큰 (비링크) | 1장 | 1 |
-| 갈라테아i (LINK-1) | 1장 | 1 |
-| 롱기르수 (LINK-3) | 1장 | **3** |
+| 기르수 (비링크) | 1장 | `{1}` |
+| 성유물 토큰 (비링크) | 1장 | `{1}` |
+| 갈라테아i (LINK-1) | 1장 | `{1}` (두 값이 같다) |
+| 갈라테아 (LINK-2) | 1장 | **`{1, 2}`** |
+| 롱기르수 (LINK-3) | 1장 | **`{1, 3}`** — 사이의 `2` 는 **없다** |
 
-소재 장수 검사는 **기여의 합**으로 하고, 두 수가 다르면 거절 문장이 둘을
-함께 적는다. 읽을 수 없으면 `None` 이고 **1 로 접지 않는다** (접으면 링크
-몬스터가 조용히 1장으로 세어진다).
+그리고 공식 규칙은 **두 조건을 따로** 센다 (RULE-MONSTER-005 의 "3 goals"):
+고른 **카드 장수**는 `LinkMaterialRule.count` 가 받고, **기여의 합**은
+`LinkMaterialRule.link_rating` 이 받는다. 두 수를 한 수로 비교하면 안 된다 —
+6-AF 가 그렇게 했고 §7 이 그 결과를 적는다. 읽을 수 없으면 `None` 이고
+**`{1}` 로도 빈 집합으로도 접지 않는다** (앞은 링크 몬스터를 조용히 1 로만
+세고, 뒤는 모름을 확정 거절로 바꾼다).
 
 🔴 **6-AD 까지 이 자리는 `UNDETERMINED` 였다** (`LINK_MATERIAL_AS_LINK_RULE`
 이 그 이름이었다). 그 이름은 **남겨 두었다** — 기여 수치를 세도 소재 장수가
@@ -621,3 +634,236 @@ Phase 가 보이려는 것이다). 사람이 읽는 모양은
 🔴 **금제를 확인하지 않았다** — 확인한 금지 · 제한 목록도 그 날짜도 이
 저장소에 없으므로 "대회 합법 덱" 이라고 부르지 않는다. 이것은 **검증
 자료**이고 추천 덱이 아니다.
+
+---
+
+## 7. 후속 보완 (Phase 6-AG) — 링크 소재 판정 정정과 실제 체인 검증
+
+외부 검토가 두 가지를 짚었다. 둘 다 **재현했고**, 고쳤고, 실측을 아래에
+적는다.
+
+### 7.1 재현한 문제와 원인
+
+원인은 **한 줄**이다. `engine/link_rules.py` 의 `assess_link_materials` 가
+기여의 합을 `LinkMaterialRule.count` 와 **직접 비교**했다.
+
+```python
+    contributed = 0
+    for instance in materials:
+        ...
+        contributed += material_contribution(found)   # 링크 수치로만 센다
+    if contributed >= 0 and contributed != rule.count:   # 🔴 장수와 비교한다
+        return _illegal(f"소재가 {contributed}장입니다 ...")
+```
+
+여기에 **두 개의 서로 다른 혼용**이 겹쳐 있었다.
+
+1. **`material_contribution` 이 링크 수치로만 셌다.** 공식 규칙은
+   *"you can count it as **either 1 monster, or** as a number of monsters
+   equal to its Link Rating"* 이고 (RULE-SUMMON-002), 고르는 쪽이 1 을
+   택할 수 있다. 그 선택지를 잃었다.
+2. **`count`(장수)와 기여의 합을 한 수로 비교했다.** 공식 규칙은 두 조건을
+   **따로** 적는다 (RULE-MONSTER-005 의 "3 goals" — §2.5).
+
+재현 실측 (수정 **전**, `8242ccd` 이후의 `5c099a2`):
+
+| # | 판 · 소재 | `assess_link_materials` | 후보 생성 | `Duel.apply` |
+| --- | --- | --- | --- | --- |
+| 1 | 기르수 + 갈라테아(LINK-2) → 다른 갈라테아 | **`illegal`** "소재가 3장입니다 (고른 카드 2장, 링크 수치로 환산한 소재 장수 3장)" | **0건** | 거절 |
+| 2 | 갈라테아 한 장 → 다른 갈라테아 | **`legal`** 🔴 | 그 조합을 만들지 않음 | 거절 — **다른 사유**로 ("필드의 몬스터가 1장이라 소재 2장을 고를 수 없습니다") |
+| 2b | 같은 판에 기르수가 **있는데** 갈라테아만 고름 | **`legal`** 🔴 | — | — |
+| 3 | 롱기르수(LINK-3) 한 장 → 갈라테아 | `illegal` 이지만 사유가 **"소재가 3장입니다"** — 기여를 장수로 읽은 문장 | — | — |
+| dup | 기르수를 **두 번** 고름 → 갈라테아 | **`legal`** 🔴 | — | `PlayerAction` 이 `MalformedAction` 으로 막음 |
+
+🔴 **한 장 소환이 실제로 적용된 적은 없다.** 사례 2 는 `Duel.apply` 가
+거절했다. 그러나 그 거절은 **소재 판정의 답이 아니었다** — 후보 생성이 그
+조합을 만들지 않았기 때문의 "허가된 행위가 아니다" 였다. 즉 **판정 계층과
+실행 계층의 답이 달랐고**, 판정을 직접 부르는 길(검증기 · 보고 계층)에는
+그 방어막이 없었다. 그것이 이번에 고친 것의 절반이다.
+
+### 7.2 실제 소재 장수와 링크 수치 계산의 분리
+
+`LinkMaterialRule` 의 두 칸에 **각자의 일**을 주었다 (둘 다 이미 있던
+칸이고, `link_rating` 은 판정에 **쓰이지 않고 있었다**).
+
+| 칸 | 공식 조건 | 무엇을 세는가 |
+| --- | --- | --- |
+| `count` | 둘째 — *"The number of materials you use meets the number specified in the materials line or 'recipe'"* | **고른 카드 장수** (`len(materials)`) |
+| `link_rating` | 첫째 — *"The amount of materials you use matches the Link Rating (Link Monsters count as 1 OR their own Link Rating)"* | **기여의 합** |
+
+새 함수 둘이 첫째 조건을 센다.
+
+- `material_contribution_options(definition) -> frozenset[int] | None`
+  — 비링크는 `{1}`, 링크는 `{1, 링크 수치}`, 읽을 수 없으면 `None`.
+  **사이의 값은 없다** (LINK-3 은 1 또는 3이고 2가 아니다).
+- `reachable_material_counts(choices) -> frozenset[int]` — 선택들의 곱.
+  "도달 가능한가"(참/거짓)가 아니라 **"무엇에 도달하는가"** 를 돌려준다 —
+  거절 문장이 어디까지 갈 수 있었는지 적어야 하기 때문이다.
+
+`material_contribution` 은 **지우지 않고** 뜻을 좁혔다 — `options` 의
+**최댓값**이고, **판정은 그것을 쓰지 않는다.** 6-AF 가 이 값을 그대로
+판정에 쓴 것이 결함이었으므로, 그 사실을 함수 docstring 이 적는다.
+
+판정 순서도 세 조건으로 갈랐다 (`assess_link_materials`):
+
+1. **중복** — 같은 개체를 두 번 고를 수 없다 (`PlayerAction` 과 **같은
+   답**을 판정 자신이 낸다).
+2. **고른 카드 장수** — 관측을 읽지 않으므로 (`len` 하나) 판을 못 읽는
+   모름이 이 사실을 가릴 수 없다. 그래서 가장 먼저 둔다.
+3. **카드별 조건** (`each` · `includes`) — 보이지 않는 소재와 못 읽는
+   정의를 정확한 문장으로 거른다.
+4. **기여의 합** — 3 을 지난 뒤이므로 정의가 전부 읽히고, 남은 `None` 은
+   **링크 수치를 못 읽는 경우 하나**로 좁혀진다 → `UNDETERMINED` +
+   `LINK_RATING_UNREADABLE_RULE`. 모름을 거절이나 허가로 바꾸지 않는다.
+
+그리고 **달성할 수 없는 등록을 자료형이 막는다** — `link_rating < count`
+는 `ValueError` 다. 소재 한 장의 최소 기여가 1 이므로 그런 줄은 어떤
+조합도 소환하지 못하는 줄이고, 조용히 등록되면 "그 카드는 소환할 수 없다"
+가 규칙이 아니라 오타로 들어온다.
+
+🔴 **카드 ID 분기를 쓰지 않았다.** 고친 것은 두 수의 의미와 기여의 집합
+뿐이고, 특정 조합을 위한 예외는 한 줄도 없다. 등록표
+(`LINK_MATERIAL_RULES`)의 **값은 한 글자도 바뀌지 않았다** — 갈라테아
+`count=2 · link_rating=2`, 갈라테아i `count=1 · link_rating=1` 그대로다.
+바뀐 것은 그 두 수를 **어떻게 쓰는가**다.
+
+### 7.3 후보 생성 · 검증 · 실행이 같은 기준을 쓰는가
+
+| 계층 | 무엇을 쓰는가 | 6-AF | 6-AG |
+| --- | --- | --- | --- |
+| 후보 생성 (`Duel._link_summon_actions`) | `combinations(field, rule.count)` — **장수** | 이미 장수였다 | 그대로 |
+| 검증 (`_LinkMaterialsLegal` → `assess_link_materials`) | 판정 함수 하나 | 기여 합을 **장수와** 비교 🔴 | 두 조건을 **각각** |
+| 실행 (`Duel.apply` → 같은 검증기) | 같은 함수 | 같음 | 같음 |
+| 직접 호출 (보고 계층 · 시험) | 같은 함수 | **중복을 막지 않았다** 🔴 | 판정이 막는다 |
+
+즉 **후보 생성은 처음부터 장수로 세고 있었고**, 판정 함수만 두 의미를
+섞었다. 그래서 사례 1 은 후보가 **0건**이었고 (조합은 2장으로 만들어졌는데
+판정이 "3장" 이라며 전부 거절했다), 사례 2 는 판정만 `legal` 이었다.
+`test_a01` 이 네 계층(판정 · 후보 · 검증기 · 실행)을 한 시험에서 함께
+확인한다.
+
+🔴 **소재의 순서는 규칙이 아니다.** `assess_link_materials` 는 순서를
+묻지 않지만 `Duel.apply` 는 **자신이 낸 후보**만 실행하므로 손으로 만든
+순서가 다르면 "허가된 행위가 아닙니다" 로 거절한다. 이것은 기존 설계이고
+이번에 바꾸지 않았다 — 시험은 후보에서 찾아 넘긴다 (`_pick_link`).
+
+### 7.4 실제 체인 통합 시험과 단위 시험의 구분
+
+`tests/test_girsu_token_line.py` 의 `test_f01` · `test_f02` 는 **단위
+검증**이다 — 해결 직전 판을 `state.move` 로 만들고 `executor.execute` 를
+직접 부른다. 지우지 않았고 (해결 함수의 계약을 재는 자리로 쓸모가 있다),
+**그렇게 적도록 머리말을 정정했다** (§7.6).
+
+통합 검증은 새 파일 `tests/test_girsu_token_chain_integration.py` 가
+들고 있다. 한 실행 안에서 **발동 수락 → 체인 등록 → 역순 해결 → 우선권
+복귀**를 지난다.
+
+| 시험 | 체인 링크 1 | 체인 링크 2 | 기르수 ③ 의 해결 |
+| --- | --- | --- | --- |
+| `test_o01` | 기르수 ③ (자신 필드에 **다른 몬스터 없음**) | 함정 — 자신 필드에 몬스터 하나를 특수 소환 | **양쪽에 토큰** (발동 전용 절을 재검사하지 않는다) |
+| `test_p01` | 기르수 ③ (상대 넷 + **빈 칸 하나**) | 상대의 함정 — 상대 필드의 마지막 칸을 채움 | **양쪽 모두 토큰 없음** — 정상 불발 |
+| `test_p02` | 기르수 ③ (같은 시작 판) | 없음 | 양쪽에 토큰 — `test_p01` 의 **대조군** |
+
+🔴 **왜 링크 2 가 함정인가.** 기동 효과 위에 무엇을 쌓으려면 스펠 스피드
+2 가 필요하고, 이 저장소가 실제로 허가하는 자리는 **함정**이다 (6-Q).
+유발즉시(`ActivationKind.QUICK`)로는 만들 수 없다 — 분류를 그렇게 적어도
+공용 관문이 `UNKNOWN` 을 돌려준다 (룰북이 유발즉시의 발동 시점을 적지
+않았다 — `ACTIVATION_KINDS_IN_SCOPE` · ADR-006). **미지원을 허가로 바꾸지
+않았다.** 스펠 스피드 1 유발도 안 된다 — 지나간 사건에 걸린 것은 체인
+응답 단계에서 `stage_forbids_action` 으로 막히고 (실측), 기르수 ③ 은
+사건이 아니라 기동이므로 "같은 사건의 동시 유발" 길에도 들어가지 않는다.
+
+🔴 **무엇이 합성인가.** 함정이 **하는 일**(특수 소환 한 장)만 합성이고,
+카드 종류 · 스펠 스피드 · 발동 경로 · 체인 · 역순 해결 · 우선권은 전부
+실제다. 합성 정의는 「욕망의 선물」 의 그 주소를 **갈아 끼운 격리
+등록부**에 있고 (`duel_components(definitions=…)`), production
+`EFFECT_LIBRARY` 는 한 줄도 바뀌지 않는다 — `test_n02` 가 그것을 센다
+(production 의 그 효과는 여전히 `draw` 다).
+
+🔴 **첫 행동 뒤에 판을 손으로 바꾸지 않는다.** 함정은 **뒷면으로 세워 둔
+채** 시작 상태에 적고 턴 번호를 5 로 둔다 — 실제 `SET_SPELL_TRAP` 으로
+세우면 「세트한 턴」 제약이 걸리고, 그것을 풀려고 턴을 손으로 넘기면 첫
+행동 뒤에 판을 손으로 바꾸는 것이 된다.
+
+### 7.5 실행한 명령과 실제 결과
+
+**먼저 결함을 재현했다** — 고치기 전 `5c099a2` 에서 §7.1 의 표를 실측으로
+얻었고, 새 시험은 그 상태에서 전부 실패한다 (사례 1·2·2b·3·dup 다섯
+갈래).
+
+```
+python3 -m pytest tests/test_link_material_count_and_rating.py -q -rf -p no:randomly
+python3 -m pytest tests/test_girsu_token_chain_integration.py -q -rf -p no:randomly
+python3 -m pytest tests/test_girsu_token_line.py tests/test_orcust_girsu_line.py \
+                 tests/test_combo_brief_and_detail.py -q -rf -p no:randomly
+python3 -m pytest <engine/link_rules.py 를 참조하는 21개 파일>            \
+                 tests/test_girsu_token_chain_integration.py              \
+                 tests/test_chain_state_change_between_links.py           \
+                 tests/engine/test_trap_activation_free_chain.py          \
+                 -q -rf -p no:randomly
+python3 -m pytest tests -q -rf -p no:randomly
+```
+
+| 묶음 | passed | failed | 종료 코드 | 소요 |
+| --- | --- | --- | --- | --- |
+| 새 시험 `…_link_material_count_and_rating` | **13** | **0** | **0** | 0:03 |
+| 새 시험 `…_girsu_token_chain_integration` | **5** | **0** | **0** | 0:03 |
+| 검토가 지목한 3개 파일 — **고치기 전** | 113 | **1** | 1 | 4:54 |
+| 직접 영향 24개 파일 — **고친 뒤** | **580** | **0** | **0** | 7:47 |
+| 전체 (`tests`) — **고친 뒤** | §7.5-전체 | — | — | — |
+
+🔴 **아직 적지 않은 수를 적어 두지 않는다.** 마지막 줄은 이 커밋 시점에
+**측정이 진행 중**이다 (1시간 46분짜리 묶음이다 — §4.3 의 실측). 확실한
+것은 위 네 줄이다.
+
+🔴 **"고치기 전 1건" 이 무엇인지 적는다.** `test_girsu_token_line.py::
+test_d02` 가 `assert "3장" in over.reason` 으로 **기여를 장수로 읽은 거절
+문장**을 고정하고 있었다. 그 문장이 바뀐 것은 정당하다 — 롱기르수 한 장이
+갈라테아의 소재가 되지 못하는 이유는 기여가 3이라 넘치는 것이 아니라 **고른
+카드가 1장**이라는 것이다 (§7.1 사례 3). 단언을 지우지 않고 **더 좁게**
+바꿨다: `"1장" in` · `"3장" not in` 에 더해 **두 장이면 합법**인 대조를
+같은 시험에 넣었다 (6-AF 에서는 그 조합이 "4장" 으로 거절되었다).
+
+🔴 **직접 영향 묶음에 기존 실패가 없다.** 24개 파일 580건이 전부 통과하므로
+이 범위에서는 "기존 실패와 신규 회귀" 를 가를 일이 없었다. 전체 묶음의
+기준선은 `5c099a2` 에서 측정한 **기존 실패 9건**이고 (§4.3 에 이름이 적혀
+있다), 전체 묶음의 결과는 그 9건과 대조한다.
+
+### 7.6 정정한 설명
+
+| 자리 | 6-AF 가 적은 것 | 정정 |
+| --- | --- | --- |
+| `engine/link_rules.py` 머리말 | (없었다) | 공식 3 조건과 두 수의 분리를 적었다 |
+| `LINK_MATERIAL_AS_LINK_RULE` | "링크 몬스터를 소재로 쓰면 링크 수치**만큼** 센다" | "**1 또는** 링크 수치로 센다" + 룰북 인용 |
+| `LinkMaterialRule.count` | "**정확히** 이 장수다" (무엇의 장수인지 적지 않았다) | "**고른 카드가** 정확히 몇 장이어야 하는가" + "기여의 합이 아니다" |
+| `LinkMaterialRule.link_rating` | "카드 데이터의 링크 수치" (판정에 쓰이지 않았다) | "**기여의 합이** 정확히 맞춰야 하는 수" |
+| `material_contribution` | "그 소재가 소재 장수로 몇 장으로 세어지는가" | "**최대로** 몇 으로 세어질 수 있는가 — **판정은 쓰지 않는다**" |
+| `assess_link_materials` 의 장수 주석 | "장수 검사는 **기여의 합**으로 한다" | 두 조건을 각각 보는 순서를 적었다 |
+| `…::test_d02` (이름) | `a_link_monster_counts_as_its_link_rating` | `…_counts_as_one_or_its_link_rating` |
+| `…::test_d02` (단언) | `"3장" in over.reason` — 기여를 장수로 읽은 문장을 고정 | `"1장" in` · `"3장" not in` + **두 장이면 합법**인 대조 |
+| `tests/test_orcust_girsu_line.py::test_b07` | 같은 "링크 수치만큼" | 이름과 설명을 정정하고 `options` 단언을 더했다 |
+| `…::_board` docstring | "이 뒤의 변화는 **전부** 엔진이 만든다" | `F` 절은 그렇지 않다고 적고, 통합 시험의 자리를 가리킨다 |
+| `…::test_f01` · `test_f02` | "판을 직접 바꿔 …" (단위인지 통합인지 불분명) | "**이것은 단위 검증이다 — 실제 체인 검증이 아니다**" + 대응 통합 시험 |
+| 이 보고서 §2.5 | "링크 몬스터를 소재로 쓰면 그 링크 수치만큼 센다" | 룰북 인용과 **고를 수 있는 값 집합** 표 |
+
+### 7.7 남은 미지원 범위
+
+이번에 **열지 않은** 것들이다.
+
+1. **소재 장수가 범위인 링크 몬스터** (`Link.AddProcedure` 의 `max` 가
+   `nil`) 는 여전히 등록할 수 없다. `count` 는 정확한 한 수이고, 범위를
+   지원하려면 "어느 장수로 소환할 것인가" 를 고르는 계층이 필요하다.
+   🔴 **그래서 등록된 두 카드는 `count == link_rating` 이고**, 실제
+   카드로는 **첫째 조건만 깨지는 판을 만들 수 없다** — `count` 장을
+   고르면 합이 최소 `count` 이고 그 값이 곧 `link_rating` 이라 언제나
+   도달한다. 그 갈래는 `link_rating > count` 인 **합성 규칙**으로만
+   잴 수 있고, 새 시험 파일의 `B` 절이 그것이다 (`test_b03` · `test_b04`).
+2. **유발즉시의 발동**은 여전히 `UNKNOWN` 이다 (§7.4). 체인 링크 2 를
+   함정으로 만든 이유이고, 이번에 그 관문을 열지 않았다.
+3. **「링크 소재로 할 수 없다」** 류의 지속 효과 제약은 여전히 못 본다
+   (`LINK_MATERIAL_BAN_RULE` — §2.8 그대로).
+4. **소재 순서**는 `Duel.apply` 가 자신이 낸 후보와 맞춰야 한다 (§7.3).
+   순서를 규칙으로 보지 않는 판정과 그 설계의 간격은 그대로 남았다.
+5. **탐색 · 평가 · 자동 레시피 · 외부 시뮬레이터**는 이번에도 시작하지
+   않았다. 이 경로는 **등록된 한 전개를 엔진이 끝까지 실행한다**는 것이고
+   자율 탐색이나 최선 전개가 아니다.
