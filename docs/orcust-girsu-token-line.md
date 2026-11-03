@@ -846,11 +846,27 @@ python3 -m pytest tests -q -rf -p no:randomly
 | 새 시험 `…_girsu_token_chain_integration` | **5** | **0** | **0** | 0:03 |
 | 검토가 지목한 3개 파일 — **고치기 전** | 113 | **1** | 1 | 4:54 |
 | 직접 영향 24개 파일 — **고친 뒤** | **580** | **0** | **0** | 7:47 |
-| 전체 (`tests`) — **고친 뒤** | §7.5-전체 | — | — | — |
+| 전체 (`tests`) — **고친 뒤** | **6948** | **9** (기존 실패 그 9건) | 1 | 1:43:36 |
 
-🔴 **아직 적지 않은 수를 적어 두지 않는다.** 마지막 줄은 이 커밋 시점에
-**측정이 진행 중**이다 (1시간 46분짜리 묶음이다 — §4.3 의 실측). 확실한
-것은 위 네 줄이다.
+🔴 **마지막 줄은 이 보고서를 쓴 뒤에 끝난 실측이다** (1시간 43분짜리
+묶음이다). 10건은 `skipped` 다. **종료 코드가 1 인 이유는 남은 실패
+9건**이고, 그 9건은 §4.3 에 이름을 적어 둔 **기준선 `5c099a2` 의 기존 실패와
+정확히 같은 9건**이다 — 더도 덜도 아니다:
+
+```
+FAILED tests/agent/test_opponent_resource_weighting_audit.py::test_07_…
+FAILED tests/rulings/test_data_audit.py::test_every_repository_card_can_reach_a_cid
+FAILED tests/test_effect_type_quick_audit.py::test_29_…
+FAILED tests/test_event_free_chain_semantic_audit.py::test_27_…
+FAILED tests/test_korean_overlay_unapplied_audit.py::test_01_… / test_13_… / test_21_… / test_25_…
+FAILED tests/test_trigger_lifetime_audit.py::test_02_…
+```
+
+🔴 **`6930 + 18 = 6948` 이 맞는다.** 6-AF 의 통과 6930건에 이번에 더한
+새 시험 18건(`…_link_material_count_and_rating` 13 + `…_girsu_token_chain_
+integration` 5)을 더한 수다. 즉 **링크 판정을 고치면서 그 전에 통과하던
+시험을 하나도 떨어뜨리지 않았다**. `test_d02` 는 고치기 전에도 1건이었고
+지금도 1건이므로(단언만 좁혔다) 이 합에 들어가지 않는다.
 
 🔴 **"고치기 전 1건" 이 무엇인지 적는다.** `test_girsu_token_line.py::
 test_d02` 가 `assert "3장" in over.reason` 으로 **기여를 장수로 읽은 거절
@@ -899,6 +915,10 @@ test_d02` 가 `assert "3장" in over.reason` 으로 **기여를 장수로 읽은
    고르면 합이 최소 `count` 이고 그 값이 곧 `link_rating` 이라 언제나
    도달한다. 그 갈래는 `link_rating > count` 인 **합성 규칙**으로만
    잴 수 있고, 새 시험 파일의 `B` 절이 그것이다 (`test_b03` · `test_b04`).
+   🔴 **그 합성 규칙도 격리해 둔다** — `monkeypatch.setitem(
+   link_rules._RULES_BY_CARD, …)` 로 시험 안에서만 끼우고 시험이 끝나면
+   되돌린다. production 의 `LINK_MATERIAL_RULES` 는 한 글자도 바뀌지
+   않고, 그 사실을 `test_a07` 이 카드 데이터와 맞춰 센다.
 2. **유발즉시의 발동**은 여전히 `UNKNOWN` 이다 (§7.4). 체인 링크 2 를
    함정으로 만든 이유이고, 이번에 그 관문을 열지 않았다.
 3. **「링크 소재로 할 수 없다」** 류의 지속 효과 제약은 여전히 못 본다
