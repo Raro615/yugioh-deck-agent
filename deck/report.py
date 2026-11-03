@@ -746,3 +746,224 @@ def render_opening_brief(setup, run, repository=None, *,
                      " — **문제 없음이 아닙니다**: "
                      + " · ".join(f.rule for f in setup.unverifiable))
     return "\n".join(lines)
+
+
+# ======================================================================
+# 제한 탐색 (Phase 6-AH)
+# ======================================================================
+#: 요약에 적는 걸음·메모의 상한. 넘으면 **버리지 않고** 몇 줄을 뺐는지
+#: 적고 전부는 상세 기록에 있다고 가리킨다 (6-AE 와 같은 규율).
+_SEARCH_BRIEF_STEPS = 8
+_SEARCH_BRIEF_NOTES = 3
+
+#: 🔴 **이 설명은 요약에도 상세에도 들어간다.** 빼면 "엔진이 규칙을 다
+#: 안다" 로 읽힌다.
+_SEARCH_DISCLAIMER = (
+    "🔴 **제한 탐색입니다** — 사람이 적어 둔 경로를 호출하지 않고 엔진이"
+    " 허가한 후보와 해결 중 선택만 펼쳤습니다. **전체 규칙 지원을 뜻하지"
+    " 않습니다**: 지원하지 않아 후보가 되지 못한 수는 아래 `지원 범위` 에"
+    " 적혀 있고, **최선 전개도 승률 평가도 아닙니다** (평가 함수가"
+    " 없습니다)."
+)
+
+#: 종료 사유를 **뜻으로** 적는다. 🔴 미발견을 "불가능" 으로 바꾸지 않는다.
+_TERMINATION_KO = {
+    "goal_reached": "목표 도달",
+    "exhausted": "지정된 탐색 범위를 모두 펼쳤고 그 안에 목표가 없었습니다"
+                 " (**이 패로 불가능하다는 뜻이 아닙니다**)",
+    "budget_exceeded": "예산 초과로 멈췄습니다 (**못 찾았다는 뜻이"
+                       " 아닙니다**)",
+    "error": "🔴 실행 중 오류가 났습니다",
+}
+
+
+def _search_notes(label: str, notes, limit: int) -> "list[str]":
+    """메모 묶음 한 구역. 상한에 걸리면 **몇 줄을 뺐는지** 적는다."""
+    if not notes:
+        return []
+    lines = [f"  {label} {len(notes)}건"]
+    for note in notes[:limit]:
+        lines.append(f"    - {note}")
+    hidden = len(notes) - limit
+    if hidden > 0:
+        lines.append(f"    - … {hidden}건은 요약에서 뺐습니다"
+                     " (상세 기록에 전부 있습니다)")
+    return lines
+
+
+def render_bounded_search_brief(outcome, replay=None) -> str:
+    """
+    **제한 탐색의 기본 응답용 요약** (Phase 6-AH).
+
+    🔴 **판정하지 않는다.** 이미 끝난 탐색 결과만 읽고, 엔진을 다시 돌리지
+    않는다 — ``outcome`` 과 ``replay`` 는 부르는 쪽이 만든 값이다.
+
+    🔴 **다섯 가지를 반드시 적는다** (§6): 실행 방식이 제한 탐색이라는 것 ·
+    목표 도달 여부 · 행동 수와 탐색 노드 수 · 예산 종료 여부 · 전체 규칙
+    지원을 뜻하지 않는다는 설명.
+
+    ``agent`` 를 import 하지 않는다 — 결과의 **모양만** 읽는다
+    (``deck`` → ``agent`` 방향의 import 는 이 저장소에 0곳이다).
+    """
+    lines = ["", "제한 전개 탐색 요약", _RULE]
+    lines.append(f"  목표: {outcome.goal.describe_ko()}")
+    mark = "✔ 도달" if outcome.reached else "✗ 미도달"
+    lines.append(
+        f"  {mark} — {_TERMINATION_KO.get(outcome.termination.value, outcome.termination.value)}"
+    )
+    lines.append(f"  행동 {outcome.action_count}걸음 · 해결 중 선택"
+                 f" {outcome.choice_count}회 · 펼친 노드"
+                 f" {outcome.nodes_expanded}개 · 최대 깊이"
+                 f" {outcome.deepest} · {outcome.elapsed_seconds:.2f}초")
+    lines.append(f"  예산: {outcome.budget.describe_ko()}")
+    if outcome.budget_hit and outcome.reached:
+        #: 🔴 **목표는 찾았지만 일부 가지가 예산에 걸렸다** — 두 사실을
+        #: 한 문장으로 적으면 "예산 때문에 실패했다" 로 읽힌다.
+        lines.append("  ⚠️ 목표는 찾았지만 **일부 분기가 예산에"
+                     " 걸렸습니다**: " + " · ".join(outcome.budget_hit)
+                     + " (더 넓게 보면 다른 경로도 있을 수 있습니다)")
+    elif outcome.budget_hit:
+        lines.append("  🔴 **예산에 걸렸습니다**: "
+                     + " · ".join(outcome.budget_hit)
+                     + " — **못 찾았다는 뜻이 아닙니다.**")
+    else:
+        lines.append("  예산에 걸리지 않았습니다.")
+    lines.append(f"  {_SEARCH_DISCLAIMER}")
+
+    lines.append("")
+    lines.append("  찾은 경로")
+    if not outcome.path:
+        lines.append("  경로가 없습니다.")
+    for step in outcome.path[:_SEARCH_BRIEF_STEPS]:
+        picked = " · ".join(
+            f"[{card_id}]"
+            for ask in step.choices
+            for card_id in ask.chosen_card_ids
+        )
+        tail = f" (해결 중 선택 {picked})" if picked else ""
+        lines.append(f"    {step.order}. {_kind_ko(step.kind)}{tail}")
+    hidden = len(outcome.path) - _SEARCH_BRIEF_STEPS
+    if hidden > 0:
+        lines.append(f"    … {hidden}걸음은 요약에서 뺐습니다"
+                     " (상세 기록에 전부 있습니다)")
+
+    lines.append("")
+    lines.append("  최종 자신 필드 (실제 GameState)")
+    if not outcome.final_field:
+        lines.append("    비어 있습니다.")
+    for zone, card_id, face_up in outcome.final_field:
+        face = "앞면" if face_up else "뒷면"
+        lines.append(f"    {zone} [{card_id}] {face}")
+
+    if replay is not None:
+        lines.append("")
+        state = "✔ 성공" if replay.ok else "🔴 실패"
+        lines.append(f"  경로 재생 (새 초기 상태에서 다시 실행): {state}")
+        lines.append(f"    {replay.reason}")
+        if not replay.ok:
+            lines.append("    🔴 **재생이 실패했으므로 성공 결과로 읽지"
+                         " 마십시오.**")
+
+    lines.append("")
+    lines.append("  지원 범위")
+    body = (
+        _search_notes("범위 밖으로 둔 분기", outcome.out_of_scope,
+                      _SEARCH_BRIEF_NOTES)
+        + _search_notes("지원하지 않아 후보가 되지 못한 수",
+                        outcome.unsupported, _SEARCH_BRIEF_NOTES)
+        + _search_notes("상대 자리에서 무방해 정책이 넘긴 수",
+                        outcome.opponent_declined, _SEARCH_BRIEF_NOTES)
+        + _search_notes("상대 자리에 고를 것이 남아 멈춘 노드",
+                        outcome.opponent_blocked, _SEARCH_BRIEF_NOTES)
+        + _search_notes("🔴 오류", outcome.errors, _SEARCH_BRIEF_NOTES)
+    )
+    lines.extend(body or ["  적을 것이 없습니다 — 🔴 **그래도 전체 규칙"
+                          " 지원을 뜻하지 않습니다.**"])
+    return "\n".join(lines)
+
+
+def render_bounded_search(outcome, replay=None, setup=None) -> str:
+    """
+    **제한 탐색의 전체 기록** — 첨부와 CLI 가 보는 것 (Phase 6-AH).
+
+    🔴 **한 줄도 줄이지 않는다.** 걸음마다 행동 열쇠와 그 걸음에서 한 해결
+    중 선택 전부, 지나간 필수 걸음을 그대로 적는다 — 그것이 "같은 초기
+    상태에서 재생할 수 있다" 의 근거다.
+
+    ``setup`` 을 주면 **입력 조건**을 함께 적는다 (§5 가 요구하는 항목이다).
+    🔴 **알 수 없는 것을 지우지 않는다** — 남은 덱의 순서를 모른다는 사실이
+    그 목록에 그대로 있다.
+    """
+    lines = ["", "제한 전개 탐색 — 전체 기록", _RULE]
+    lines.append(f"  목표: {outcome.goal.describe_ko()}")
+    if setup is not None:
+        lines.append("  입력 조건")
+        lines.append("    시작 패: "
+                     + " · ".join(f"[{card_id}]" for card_id in setup.hand))
+        lines.append(f"    남은 메인 덱 {len(setup.deck_rest)}장 ·"
+                     f" 엑스트라 {len(setup.extra)}장")
+        for note in setup.unknowns:
+            lines.append(f"    ⚠️ 알 수 없음: {note}")
+    lines.append(f"  종료: {outcome.termination.value} — "
+                 + _TERMINATION_KO.get(outcome.termination.value,
+                                       outcome.termination.value))
+    lines.append(f"  목표 판정: {outcome.goal_reason}")
+    lines.append(f"  예산: {outcome.budget.describe_ko()}")
+    lines.append("  예산에 걸린 칸: "
+                 + (" · ".join(outcome.budget_hit) or "없음"))
+    lines.append(f"  펼친 노드 {outcome.nodes_expanded} · 최대 깊이"
+                 f" {outcome.deepest} · 선택 분기"
+                 f" {outcome.choice_branches} · 중복 제거"
+                 f" {outcome.deduped} · {outcome.elapsed_seconds:.3f}초")
+    lines.append(f"  최종 판 해시: {outcome.final_state_hash}")
+    lines.append(f"  {_SEARCH_DISCLAIMER}")
+
+    lines.append("")
+    lines.append("  경로 (행동과 해결 중 선택)")
+    if not outcome.path:
+        lines.append("    경로가 없습니다.")
+    for step in outcome.path:
+        lines.append(f"    {step.order}. {step.kind} {step.action_key}")
+        if step.reason:
+            lines.append(f"       → {step.reason}")
+        for ask in step.choices:
+            lines.append(f"       선택 {ask.describe_ko()}")
+            offered = " · ".join(
+                f"#{instance}[{card_id}]" for instance, card_id in ask.offered
+            )
+            lines.append(f"         그 자리의 허용 후보: {offered or '없음'}")
+        for note in step.forced:
+            lines.append(f"       필수 {note}")
+
+    lines.append("")
+    lines.append("  최종 자신 필드 (실제 GameState)")
+    if not outcome.final_field:
+        lines.append("    비어 있습니다.")
+    for zone, card_id, face_up in outcome.final_field:
+        lines.append(f"    {zone} [{card_id}] "
+                     + ("앞면" if face_up else "뒷면"))
+
+    if replay is not None:
+        lines.append("")
+        lines.append("  경로 재생 (새 초기 상태에서 다시 실행)")
+        lines.append(f"    결과: {'성공' if replay.ok else '🔴 실패'}")
+        lines.append(f"    걸음 {replay.steps} · 목표 도달"
+                     f" {replay.goal_reached} · 탐색 결과와 일치"
+                     f" {replay.matches_search}")
+        lines.append(f"    {replay.reason}")
+        lines.append(f"    재생 최종 해시: {replay.final_state_hash}")
+
+    for label, notes in (
+        ("범위 밖으로 둔 분기", outcome.out_of_scope),
+        ("지원하지 않아 후보가 되지 못한 수", outcome.unsupported),
+        ("상대 자리에서 무방해 정책이 넘긴 수", outcome.opponent_declined),
+        ("상대 자리에 고를 것이 남아 멈춘 노드", outcome.opponent_blocked),
+        ("🔴 오류", outcome.errors),
+    ):
+        lines.append("")
+        lines.append(f"  {label} ({len(notes)}건)")
+        if not notes:
+            lines.append("    없음")
+        for note in notes:
+            lines.append(f"    - {note}")
+    return "\n".join(lines)

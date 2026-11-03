@@ -757,6 +757,83 @@ def _run_opening(agent, recipe_text: str,
                          refused=not setup.can_run, ran=True)
 
 
+def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
+                        search_text: str) -> "OpeningReport | None":
+    """
+    ``/combo search:…`` — **제한 전개 탐색** (Phase 6-AH).
+
+    ``search_text`` 가 비어 있으면 ``None`` 이다 — 사용자가 고르지 않은
+    탐색을 조용히 돌리지 않는다. 그래서 ``search:`` 를 주지 않은 요청의
+    동작은 6-AG 와 **한 글자도 다르지 않다**.
+
+    🔴 **핵심 탐색은 이 파일에 없다.** 목표 이름을 카드 ID 로 바꾸는 표와
+    세 계층을 잇는 자리는 ``app.main`` 하나이고 (``bounded_search_opening``),
+    탐색 자체는 ``agent.bounded_search`` 다 — 이 어댑터는 ``agent`` ·
+    ``integration`` 을 직접 import 하지 않는다
+    (``tests/test_discord_bot.py::test_15``).
+
+    🔴 **요약도 상세도 공용 보고 함수가 만든다** (``deck.report``) — CLI 와
+    같은 문장이어야 어느 쪽이 맞는지 묻지 않게 된다.
+    """
+    from app.main import bounded_search_opening, search_goal_card_id
+    from deck.recipe import parse_recipe
+    from deck.report import render_bounded_search, render_bounded_search_brief
+
+    if not search_text or not search_text.strip():
+        return None
+
+    head = ["**[제한 전개 탐색]**"]
+    card_id = search_goal_card_id(search_text)
+    if card_id is None:
+        from app.main import SEARCH_GOALS
+
+        names = " · ".join(f"`{name}`" for name in sorted(SEARCH_GOALS))
+        said = tuple(head + [
+            f"🔴 **하지 않았습니다** — `search:{search_text}` 라는 목표가"
+            f" 없습니다. 있는 목표: {names}",
+            "🔴 비슷한 목표를 골라 주지 않습니다 — 사용자가 고르지 않은"
+            " 목표로 찾은 경로를 보여 주면 그것이 자기 목표인 줄로"
+            " 읽힙니다.",
+        ])
+        return OpeningReport(brief=said, detail=said, refused=False, ran=False)
+
+    if not recipe_text or not recipe_text.strip():
+        said = tuple(head + [
+            "🔴 **하지 않았습니다** — 실제 덱 레시피가 없습니다.",
+            "탐색은 실제 `GameState` 에서 목표를 판정하므로 남은 덱의"
+            " 장수와 카드가 필요합니다 (`recipe:` 로 넘겨 주세요).",
+        ])
+        return OpeningReport(brief=said, detail=said, refused=False, ran=False)
+
+    parsed = parse_recipe(recipe_text, agent.repository)
+    if parsed.draft is None:
+        said = tuple(head + [
+            "🔴 레시피에서 카드를 하나도 읽지 못해 **탐색하지"
+            " 않았습니다.**",
+        ])
+        return OpeningReport(brief=said, detail=said, refused=False, ran=False)
+
+    setup, outcome, replayed = bounded_search_opening(
+        agent.repository, parsed.draft, hand_ids, card_id=card_id
+    )
+    if outcome is None:
+        said = tuple(head + [
+            "🔴 **탐색하지 않았습니다** — 입력 검증을 통과하지 못했습니다"
+            " (위 `[실제 엔진 실행]` 절에 이유가 있습니다).",
+        ])
+        return OpeningReport(brief=said, detail=said,
+                             refused=not setup.can_run, ran=False)
+
+    brief = list(head)
+    brief.extend(render_bounded_search_brief(outcome, replayed).splitlines())
+    detail = list(head)
+    detail.extend(
+        render_bounded_search(outcome, replayed, setup).splitlines()
+    )
+    return OpeningReport(brief=tuple(brief), detail=tuple(detail),
+                         refused=False, ran=True)
+
+
 @dataclass(frozen=True, slots=True)
 class ComboAttachment:
     """
@@ -1112,7 +1189,7 @@ def _overflow_notice(detail: ComboDetail) -> str:
 
 def combo_response(agent, hand_text: str, board_text: str = "",
                    deck_text: str = "", recipe_text: str = "",
-                   line_text: str = "") -> ComboResponse:
+                   line_text: str = "", search_text: str = "") -> ComboResponse:
     """
     ``/combo`` 의 응답. **discord 를 모른다.** 메시지들과 첨부들을 돌려준다.
 
@@ -1205,6 +1282,9 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     #: ``deck:`` 초안과 **가르는 것이 요점**이다 — 초안은 이 저장소가 추천한
     #: 구성이고 사용자가 확정한 덱이 아니다 (§5).
     executed = _run_opening(agent, recipe_text, hand_ids, line_text)
+    #: 🔴 **주지 않으면 돌리지 않는다** (Phase 6-AH). ``search:`` 가 없는
+    #: 요청의 동작은 6-AG 와 한 글자도 다르지 않다.
+    searched = _run_bounded_search(agent, recipe_text, hand_ids, search_text)
 
     #: 🔴 **입력이 거절되면 정적 전개 추천을 내지 않는다** (Phase 6-AA —
     #: 사용자 실험 ③). 실측으로, 「기르수: 패 4장 > 덱 3장」으로 거절한
@@ -1214,6 +1294,9 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     if executed.refused:
         lines.append("")
         lines.extend(executed.brief)
+        if searched is not None:
+            lines.append("")
+            lines.extend(searched.brief)
         lines.append("")
         lines.append("🔴 **정적 전개 추천은 내지 않았습니다** — 이번 요청의"
                      " 입력이 규칙 검증을 통과하지 못했습니다.")
@@ -1221,7 +1304,8 @@ def combo_response(agent, hand_text: str, board_text: str = "",
                      " 것으로 읽힙니다. 위에 적힌 위반을 고쳐서 다시"
                      " 보내 주세요.")
         detail = combo_attachments(
-            _combo_detail_text(agent, executed, plan=None, verdict=None)
+            _combo_detail_text(agent, executed, plan=None, verdict=None,
+                               searched=searched)
         )
         lines.append("")
         #: 🔴 **이 첨부에는 정적 계획이 없다** — 거절한 입력에 전개를
@@ -1266,6 +1350,9 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     #: 보여 준다 (§13 "사용자에게 혼동시키지 않는다").
     lines.append("")
     lines.extend(executed.brief)
+    if searched is not None:
+        lines.append("")
+        lines.extend(searched.brief)
 
     lines.append("")
     if executed.ran:
@@ -1323,7 +1410,8 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     detail = combo_attachments(
         _combo_detail_text(agent, executed, plan=plan, verdict=verdict,
                            manual_checks=tuple(shown_checks),
-                           hidden_checks=hidden_checks)
+                           hidden_checks=hidden_checks,
+                           searched=searched)
     )
     lines.append("")
     lines.extend(_detail_pointer_lines(detail))
@@ -1342,7 +1430,8 @@ def combo_response(agent, hand_text: str, board_text: str = "",
 def _combo_detail_text(agent, executed: OpeningReport,
                        plan=None, verdict=None,
                        manual_checks: "tuple[str, ...] | None" = None,
-                       hidden_checks: int = 0) -> str:
+                       hidden_checks: int = 0,
+                       searched: "OpeningReport | None" = None) -> str:
     """
     첨부에 담을 **전체 상세 기록** (Phase 6-AE).
 
@@ -1371,6 +1460,16 @@ def _combo_detail_text(agent, executed: OpeningReport,
                      " 전개 추천은 내지 않았습니다.")
     lines.append("")
     lines.extend(executed.detail)
+    #: 🔴 **탐색 기록은 고정 경로 실행과 다른 절이다** (Phase 6-AH). 같은
+    #: 목록에 섞으면 "적어 둔 경로를 따라간 것" 과 "엔진이 허가한 분기를
+    #: 펼친 것" 을 구별할 수 없다.
+    if searched is not None:
+        lines.append("")
+        lines.append("=" * 68)
+        lines.append("[아래는 제한 전개 탐색입니다 — 적어 둔 경로를 따라간"
+                     " 것이 아닙니다]")
+        lines.append("=" * 68)
+        lines.extend(searched.detail)
     if plan is not None:
         lines.append("")
         lines.append("=" * 68)
@@ -1514,7 +1613,8 @@ class SearchService:
 
     def combo_response(self, hand_text: str, board_text: str = "",
                        deck_text: str = "", recipe_text: str = "",
-                       line_text: str = "") -> ComboResponse:
+                       line_text: str = "",
+                       search_text: str = "") -> ComboResponse:
         """
         전개 계획을 세워 **메시지들과 첨부들**을 돌려준다 (Phase 6-AE).
 
@@ -1530,11 +1630,13 @@ class SearchService:
             return ComboResponse(messages=(COMBO_UNAVAILABLE_MESSAGE,))
         try:
             return combo_response(self._agent, hand_text, board_text,
-                                  deck_text, recipe_text, line_text)
+                                  deck_text, recipe_text, line_text,
+                                  search_text)
         except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
             logger.exception("전개 계획 생성에 실패했습니다. 패=%r 필드=%r"
-                             " 덱=%r 레시피=%r 경로=%r", hand_text, board_text,
-                             deck_text, recipe_text, line_text)
+                             " 덱=%r 레시피=%r 경로=%r 탐색=%r",
+                             hand_text, board_text,
+                             deck_text, recipe_text, line_text, search_text)
             return ComboResponse(messages=(COMBO_ERROR_MESSAGE,))
 
     def deck_texts(self, request_text: str) -> "list[str]":
@@ -1702,15 +1804,22 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         recipe="(선택) 실제 덱 레시피 — 주면 엔진으로 실행 검증합니다."
                " 예: 욕망의 항아리 x3, 11091375 x37 / 또는 YDK",
         line="(선택) 검증용 전개 경로 이름 — 적어 둔 경로를 따라 실행합니다."
-             " 예: orcust-girsu")
+             " 예: orcust-girsu",
+        search="(선택) 제한 전개 탐색의 목표 — 적어 둔 경로를 쓰지 않고"
+               " 엔진이 허가한 분기를 펼칩니다. 예: galatea")
     async def combo_command(interaction: "discord.Interaction",
                             hand: str, board: str = "",
                             deck: str = "", recipe: str = "",
-                            line: str = "") -> None:
+                            line: str = "", search: str = "") -> None:
         #: 🔴 ``/search`` · ``/deck`` 과 같은 순서다.
+        #: 🔴 **탐색은 오래 걸릴 수 있다** (실측 20~150초 — 보고서 §5).
+        #: 그래서 ``defer()`` 로 먼저 응답을 열고 (3초 제한), 실제 탐색은
+        #: ``asyncio.to_thread`` 로 보내 이벤트 루프를 막지 않는다 —
+        #: 기존 ``/combo`` 와 **같은 구조**이고 새로 만든 것이 없다.
         await interaction.response.defer()
         response = await asyncio.to_thread(
-            combo_service.combo_response, hand, board, deck, recipe, line)
+            combo_service.combo_response, hand, board, deck, recipe, line,
+            search)
         await send_combo_response(interaction.followup, response)
 
     @client.event

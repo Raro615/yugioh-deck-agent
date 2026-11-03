@@ -753,6 +753,10 @@ def cmd_combo(agent: DeckAgent, args) -> int:
             recipe_text = candidate.read_text(encoding="utf-8")
     _print_opening(agent, recipe_text, hand_ids,
                    getattr(args, "line", "") or "")
+    #: 🔴 **주지 않으면 돌리지 않는다** (Phase 6-AH) — ``--search`` 없는
+    #: 호출의 출력은 6-AG 와 한 글자도 다르지 않다.
+    _print_bounded_search(agent, recipe_text, hand_ids,
+                          getattr(args, "search", "") or "")
 
     plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
                                                board=board_ids)
@@ -763,6 +767,121 @@ def cmd_combo(agent: DeckAgent, args) -> int:
     print(render_plan(plan))
     print(render_simulator_steps(plan))
     return 0
+
+
+def _print_bounded_search(agent: DeckAgent, recipe_text: str,
+                          hand_ids: "list[int]", search_text: str) -> None:
+    """
+    🔴 **제한 전개 탐색 절** (Phase 6-AH). 목표를 주지 않으면 아무것도 적지
+    않는다 — 고르지 않은 탐색을 조용히 돌리지 않는다.
+
+    Discord 의 ``search:`` 와 **같은 것**이고, 두 어댑터가 같은 두 함수를
+    쓴다 (:func:`bounded_search_opening` · ``deck.report`` 의 두 렌더러).
+    """
+    from deck.recipe import parse_recipe
+    from deck.report import render_bounded_search, render_bounded_search_brief
+
+    if not search_text or not search_text.strip():
+        return
+    print()
+    print("=" * 68)
+    print("[제한 전개 탐색] 🔴 적어 둔 경로를 호출하지 않았습니다.")
+    print("=" * 68)
+    card_id = search_goal_card_id(search_text)
+    if card_id is None:
+        names = " · ".join(sorted(SEARCH_GOALS))
+        print(f"  🔴 `{search_text}` 라는 목표가 없습니다. 있는 목표: {names}")
+        print("  🔴 비슷한 목표를 골라 주지 않습니다.")
+        return
+    if not recipe_text or not recipe_text.strip():
+        print("  🔴 하지 않았습니다 — 실제 덱 레시피(--recipe)가 없습니다.")
+        return
+    parsed = parse_recipe(recipe_text, agent.repository)
+    if parsed.draft is None:
+        print("  🔴 레시피에서 카드를 하나도 읽지 못해 탐색하지 않았습니다.")
+        return
+    setup, outcome, replayed = bounded_search_opening(
+        agent.repository, parsed.draft, hand_ids, card_id=card_id
+    )
+    if outcome is None:
+        print("  🔴 탐색하지 않았습니다 — 입력 검증을 통과하지 못했습니다.")
+        for blocker in setup.blockers:
+            print(f"    - {blocker}")
+        return
+    print(render_bounded_search_brief(outcome, replayed))
+    print(render_bounded_search(outcome, replayed, setup))
+
+
+#: ``/combo search:…`` 가 받는 **목표 이름** → 카드 ID (Phase 6-AH).
+#:
+#: 🔴 **이름을 추측해 비슷한 것을 골라 주지 않는다.** 없는 이름이면 그
+#: 사실을 적고 탐색을 돌리지 않는다 — 사용자가 고르지 않은 목표로 찾은
+#: 경로를 보여 주면 그것이 자기 목표인 줄로 읽는다 (``line:`` 과 같은 규율).
+#:
+#: 🔴 **카드 ID 는 목표 지정에만 쓰인다.** 탐색기 안에는 "이 카드 다음에는
+#: 이 효과" 같은 분기가 없다 (``agent.bounded_search`` 의 설명).
+SEARCH_GOALS: dict = {
+    "galatea": 30741503,
+}
+
+
+def search_goal_card_id(name: str) -> "int | None":
+    """``search:`` 로 받은 이름의 목표 카드 ID. 모르는 이름이면 ``None``."""
+    if not name or not name.strip():
+        return None
+    return SEARCH_GOALS.get(name.strip().lower())
+
+
+def bounded_search_opening(
+    repository, draft, hand, *, card_id: int, budget=None, replay: bool = True
+) -> tuple:
+    """
+    선공 전개를 **제한 탐색**으로 돌리고, 찾은 경로를 재생한다 (Phase 6-AH).
+
+    돌려주는 것은 ``(setup, outcome, replay_result)`` 다.
+
+    🔴 **왜 이 자리인가.** 탐색의 핵심은 ``agent.bounded_search`` 에 있고,
+    초기 상태는 ``deck.opening.build_opening`` 이 만들고, 유발과 해결 시점
+    선택은 :func:`opening_wiring` 이 꽂는다. 세 계층을 잇는 자리가 하나여야
+    CLI 와 Discord 가 같은 답을 낸다 — :func:`opening_wiring` 과 같은
+    규율이고, 어댑터는 ``agent`` 를 직접 import 하지 않는다
+    (``tests/test_discord_bot.py::test_15``).
+
+    🔴 **재생은 새 초기 상태에서 한다.** 같은 입력으로 ``build_opening`` 을
+    **다시** 불러 만든 듀얼에 기록된 걸음을 다시 밟는다 — 탐색이 만든 최종
+    상태를 그대로 내보내는 것이 아니다 (§5).
+
+    🔴 **재생이 실패하면 그대로 돌려준다.** 이 자리에서 성공으로 바꾸지
+    않는다.
+    """
+    from agent.bounded_search import BoundedSearch, FieldGoal, replay_path
+    from deck.opening import build_opening
+
+    chooser, triggers = opening_wiring(repository, None)
+    setup = build_opening(
+        repository, draft, list(hand), chooser=chooser, triggers=triggers
+    )
+    if not setup.can_run:
+        return setup, None, None
+
+    search = BoundedSearch(
+        goal=FieldGoal(card_id=card_id, seat=0),
+        **({"budget": budget} if budget is not None else {}),
+    )
+    outcome = search.run(setup.duel)
+
+    replayed = None
+    if replay and outcome.reached:
+        #: 🔴 **새 초기 상태다.** 같은 입력으로 다시 만든 듀얼이고, 탐색이
+        #: 쓴 ``setup.duel`` 이 아니다.
+        fresh_chooser, fresh_triggers = opening_wiring(repository, None)
+        fresh = build_opening(
+            repository, draft, list(hand),
+            chooser=fresh_chooser, triggers=fresh_triggers,
+        )
+        if fresh.can_run:
+            replayed = replay_path(fresh.duel, outcome)
+    return setup, outcome, replayed
 
 
 def opening_wiring(repository, line=None) -> tuple:
@@ -960,6 +1079,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--line", default="",
                    help="검증용 전개 경로 이름 — 적어 둔 경로를 따라"
                         " 실행합니다. 예: orcust-girsu")
+    p.add_argument("--search", default="",
+                   help="제한 전개 탐색의 목표 — 적어 둔 경로를 쓰지 않고"
+                        " 엔진이 허가한 분기를 펼칩니다. 예: galatea")
     p.set_defaults(func=cmd_combo)
 
     return parser
