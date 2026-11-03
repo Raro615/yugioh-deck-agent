@@ -158,7 +158,17 @@ def _board(
     turn_number=3,
 ):
     """
-    **시작 상태**를 만든다. 이 뒤의 변화는 전부 엔진이 만든다.
+    **시작 상태**를 만든다.
+
+    🔴 **Phase 6-AG 가 이 설명을 정정했다.** 6-AF 는 여기에 "이 뒤의 변화는
+    전부 엔진이 만든다" 고 적었는데, 이 파일의 ``F`` 절(``test_f01`` ·
+    ``test_f02``)은 그렇지 않다 — 해결 직전 판을 ``state.create_instance`` ·
+    ``state.move`` 로 **직접** 만들고 ``executor.execute`` 를 부른다. 그
+    둘은 **단위 검증**이고 각자의 docstring 이 그렇게 적는다.
+
+    나머지 절(``B`` · ``C`` · ``D`` · ``E`` · ``H``)은 첫 행동 뒤의 변화를
+    ``Duel.apply`` 에만 맡긴다. **실제 체인을 지나는 통합 검증**은
+    ``tests/test_girsu_token_chain_integration.py`` 가 따로 들고 있다.
 
     ``their_mzone_fill`` 은 상대 몬스터 존을 통상 몬스터로 채운다 — 기르수
     ③ 의 ``Duel.GetLocationCount(1-tp,LOCATION_MZONE)>0`` 를 거짓으로
@@ -853,12 +863,25 @@ def test_d01_the_token_satisfies_galatea_i_but_not_galatea(repository):
 
 
 @pytest.mark.real_card
-def test_d02_a_link_monster_counts_as_its_link_rating(repository):
+def test_d02_a_link_monster_counts_as_one_or_its_link_rating(repository):
     """
-    🔴 **소재 장수와 링크 수치 기여를 가른다** (공식 규칙).
+    🔴 **소재 장수와 기여를 가른다** (공식 규칙).
 
-    갈라테아i(LINK-1) + 기르수 = **고른 카드 2장 · 기여 2장** 이고,
-    롱기르수(LINK-3) 한 장은 **고른 카드 1장 · 기여 3장** 이다.
+    🔴 **Phase 6-AG 가 이 시험의 설명과 단언을 정정했다.** 6-AF 는 여기에
+    "링크 몬스터를 소재로 쓰면 그 링크 수치**만큼** 센다" 고 적었고, 그것은
+    공식 규칙의 절반이다 — 룰북(RULE-SUMMON-002)은 *"you can count it as
+    either 1 monster, or as a number of monsters equal to its Link Rating"*
+    이다. **고르는 쪽이 1 을 택할 수 있다.**
+
+    그래서 이 시험이 재는 것도 바뀌었다.
+
+    - :func:`material_contribution` 은 **최대 기여**다 (판정이 쓰지 않는다).
+      고를 수 있는 값 전부는 ``material_contribution_options`` 가 돌려주고,
+      그 분리는 ``tests/test_link_material_count_and_rating.py`` 가 잰다.
+    - 롱기르수(LINK-3) **한 장**이 갈라테아의 소재가 되지 못하는 이유는
+      "기여가 3이라 넘친다" 가 아니라 **고른 카드가 1장**이라는 것이다
+      (공식 3 조건의 둘째). 6-AF 의 거절 문장은 기여를 장수로 읽은
+      문장이었다.
     """
     assert material_contribution(repository.get(GIRSU)) == 1
     assert material_contribution(repository.get(TOKEN)) == 1
@@ -873,7 +896,8 @@ def test_d02_a_link_monster_counts_as_its_link_rating(repository):
     verdict = assess_link_materials(duel.view(P0), P0, extra[0], materials)
     assert verdict.eligibility is LinkMaterialEligibility.LEGAL
 
-    #: 🔴 기여가 **넘치면** 규칙이 막는다 (장수만 맞춰 통과시키지 않는다).
+    #: 🔴 **고른 카드가 한 장이면 규칙이 막는다** — 기여를 3 으로 세든
+    #: 1 로 세든 「효과 몬스터 2장」 은 두 장을 요구한다.
     duel2, field2, extra2 = _board(
         repository, mine=(), emzone=(LONGIRSU,), extra=[GALATEA]
     )
@@ -881,7 +905,20 @@ def test_d02_a_link_monster_counts_as_its_link_rating(repository):
         duel2.view(P0), P0, extra2[0], (field2[0],)
     )
     assert over.eligibility is LinkMaterialEligibility.ILLEGAL
-    assert "3장" in over.reason
+    assert "1장" in over.reason, over.reason
+    assert "3장" not in over.reason, (
+        "기여 3 을 장수로 적으면 6-AF 의 혼용이 문장에 남는다: " + over.reason
+    )
+
+    #: 🔴 **그리고 두 장이면 합법이다** — LINK-3 을 **1 로 세는 길**이
+    #: 열려 있다는 것을 같은 판에서 못 박는다 (6-AF 는 4장이라며 막았다).
+    duel3, field3, extra3 = _board(
+        repository, mine=(GIRSU,), emzone=(LONGIRSU,), extra=[GALATEA]
+    )
+    pair = assess_link_materials(
+        duel3.view(P0), P0, extra3[0], (field3[0], field3[1])
+    )
+    assert pair.eligibility is LinkMaterialEligibility.LEGAL, pair.reason
 
 
 @pytest.mark.real_card
@@ -1115,8 +1152,15 @@ def test_f01_only_the_rechecked_conditions_are_rechecked(repository):
     ``s.tkop`` 은 ``SetCondition`` 을 다시 보지 않으므로, 발동 뒤에 자신
     필드에 몬스터가 늘어도 토큰은 만들어진다.
 
-    🔴 이 시험은 **판을 직접 바꿔 해결 직전 상태를 만든다** — 판정 결과를
-    주입하지 않고, 바뀐 판에서 엔진이 내는 답을 읽는다.
+    🔴 **이것은 단위 검증이다 — 실제 체인 검증이 아니다.** 판을
+    ``state.create_instance`` · ``state.move`` 로 직접 바꿔 해결 직전
+    상태를 만들고 ``executor.execute`` 를 **직접** 부른다. 판정 결과를
+    주입하지는 않지만 (바뀐 판에서 엔진이 내는 답을 읽는다), **발동 수락 ·
+    체인 등록 · 역순 해결 · 우선권 복귀는 지나지 않는다.**
+
+    그 통합 검증은 ``tests/test_girsu_token_chain_integration.py`` 의
+    ``test_o01`` 이 한다 — 거기서는 **체인 링크 2 가 실제로 특수 소환해서**
+    같은 판을 만든다 (Phase 6-AG).
     """
     from engine.effect.resolution import ResolutionContext
 
@@ -1182,6 +1226,12 @@ def test_f02_a_resolution_condition_that_turns_false_is_a_normal_no_op(
     🔴 **해결 시점의 조건이 거짓이면 정상 불발이다** (``s.tkop`` 의 ``if``).
 
     미지원도 오류도 아니고, 토큰도 만들어지지 않는다.
+
+    🔴 **이것도 단위 검증이다** (``test_f01`` 과 같은 구분 — Phase 6-AG).
+    상대 몬스터 존을 ``state.move`` 로 채우고 ``executor.execute`` 를 직접
+    부른다. 같은 사실을 **실제 체인**으로 재는 것은
+    ``tests/test_girsu_token_chain_integration.py`` 의 ``test_p01`` 이고,
+    거기서는 체인 링크 2(함정)가 그 칸을 채운다.
     """
     from engine.effect.resolution import ResolutionContext
 

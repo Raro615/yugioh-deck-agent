@@ -31,6 +31,36 @@
 ``engine.archetype`` · ``engine.ids`` · ``engine.vocabulary`` 뿐이고,
 ``SummonProcedure`` 도 ``StateDelta`` 도 여기 없다.
 
+공식 규칙이 **세 조건을 따로** 적는다
+--------------------------------------
+``rules`` 계층의 ``sd-rulebook-en-v10`` 가 그대로 적는다 (RULE-MONSTER-005,
+printed page 15) — *"Remember that when you Link Summon, you need to meet
+3 goals"*:
+
+1. *"The amount of materials you use matches the Link Rating (Link Monsters
+   count as 1 OR their own Link Rating)."*  → :attr:`LinkMaterialRule.link_rating`
+2. *"The number of materials you use meets the number specified in the
+   materials line or 'recipe'."*  → :attr:`LinkMaterialRule.count`
+3. *"The materials match any other requirements in the materials line (such
+   as only Effect Monsters, or only a specific Type of monster)."*
+   → :attr:`LinkMaterialRule.each` · :attr:`LinkMaterialRule.includes`
+
+🔴 **1 과 2 는 다른 수를 센다.** 1 은 **기여의 합**이고 2 는 **고른 카드
+장수**다. 같은 룰북이 예까지 적는다 (RULE-SUMMON-002, printed page 14) —
+*"if you want to Summon a Link 3 monster that requires 2 or more materials
+in its 'recipe', you can either use 3 monsters (each counts as 1 material)
+or else a Link 2 Link Monster (counts as 1 or 2 materials) and a second
+monster (counts as 1 material)."* 거기서 고른 카드는 **2장**이고 기여의
+합은 **3**이다.
+
+🔴 **Phase 6-AG 가 이 혼용을 고쳤다.** 6-AF 는 기여의 합을
+:attr:`LinkMaterialRule.count` 와 **직접 비교**했고, 그래서 두 가지가
+동시에 틀렸다 — 기르수(기여 1) + 갈라테아(LINK-2) 로 다른 갈라테아를
+소환하려 하면 "소재가 3장" 이라며 거절했고 (각 1로 셀 수 있으므로 합법
+이다), 갈라테아 **한 장**이 다른 갈라테아의 「효과 몬스터 2장」 을
+만족한다고 판정했다 (고른 카드가 1장이므로 2 를 어긴다). 실측은 보고서
+``docs/orcust-girsu-token-line.md`` 의 후속 보완 절에 있다.
+
 무엇을 지원하는가 · 무엇을 지원하지 않는가
 ------------------------------------------
 :func:`assess_link_materials` 의 설명과 아래 "지원하지 않는 것들의 이름"
@@ -83,17 +113,25 @@ LINK_MATERIAL_DESTINATION: Zone = Zone.GRAVE
 # 지원하지 않는 것들의 **이름**
 # ======================================================================
 
-#: 링크 몬스터를 소재로 쓰면 그 링크 수치만큼 센다 (공식 규칙).
+#: 링크 몬스터를 소재로 쓰면 **1 또는** 그 링크 수치로 센다 (공식 규칙 —
+#: RULE-SUMMON-002: *"you can count it as either 1 monster, or as a number
+#: of monsters equal to its Link Rating"*).
 #:
-#: 🔴 **Phase 6-AF 가 이것을 옮겼다.** 6-AD 까지 이 이름은 "아직 못 옮겼다"
-#: 는 뜻이었고 링크 몬스터가 소재로 들어오면 판정이 ``UNDETERMINED`` 였다.
-#: 지금은 :func:`material_contribution` 이 센다. 이름을 **지우지 않는 이유**:
-#: 기여 수치를 세게 되었어도 :data:`LINK_MATERIAL_RULES` 의 머리말이 적는
-#: 한계는 그대로다 — 소재 **장수가 범위**인 링크 몬스터 (``Link.AddProcedure``
-#: 의 ``max`` 가 ``nil`` 이 아닌 카드) 는 여전히 등록할 수 없고, 그 카드를
-#: 소재로 쓰는 조합을 셀 수도 없다. 이 이름이 그 사실을 들고 있다.
+#: 🔴 **Phase 6-AF 가 이것을 옮겼고 6-AG 가 "또는" 을 고쳤다.** 6-AD 까지
+#: 이 이름은 "아직 못 옮겼다" 는 뜻이었고 링크 몬스터가 소재로 들어오면
+#: 판정이 ``UNDETERMINED`` 였다. 6-AF 는 **링크 수치로만** 셌고 (고르는
+#: 쪽이 1 을 택할 수 있다는 것을 빠뜨렸다), 지금은
+#: :func:`material_contribution_options` 가 **고를 수 있는 값들**을 돌려주고
+#: :func:`reachable_material_counts` 가 그 조합을 센다.
+#:
+#: 이름을 **지우지 않는 이유**: 기여를 세게 되었어도
+#: :data:`LINK_MATERIAL_RULES` 의 머리말이 적는 한계는 그대로다 — 소재
+#: **장수가 범위**인 링크 몬스터 (``Link.AddProcedure`` 의 ``max`` 가
+#: ``nil`` 이 아닌 카드) 는 여전히 등록할 수 없다. 이 이름이 그 사실을
+#: 들고 있다.
 LINK_MATERIAL_AS_LINK_RULE: str = (
-    "link-material-link-rating (링크 몬스터를 소재로 쓰면 링크 수치만큼 센다)"
+    "link-material-link-rating (링크 몬스터를 소재로 쓰면 1 또는 링크 "
+    "수치로 센다)"
 )
 
 #: 링크 몬스터의 **링크 수치를 읽을 수 없다.**
@@ -201,9 +239,29 @@ class LinkMaterialRule:
 
     card_id: int
     link_rating: int
-    """카드 데이터의 링크 수치. 등록과 데이터가 어긋나면 실측으로 잡힌다."""
+    """
+    **기여의 합이 정확히 맞춰야 하는 수** — 공식 3 조건의 첫째 (모듈
+    머리말 · RULE-MONSTER-005). 카드 데이터의 링크 수치와 같아야 하고,
+    등록과 데이터가 어긋나면 실측으로 잡힌다.
+
+    🔴 **:attr:`count` 와 다른 수를 센다.** 이쪽은 ``1`` 또는 소재로 쓴
+    링크 몬스터의 링크 수치를 **더한 값**이고, 저쪽은 **고른 카드 장수**다.
+    두 수가 같은 카드가 많아서 (갈라테아는 둘 다 2) 한 칸으로 합치고 싶어
+    지지만, 합치면 「Link 3 이고 소재 2장」 류가 표현 불가능해지고 무엇보다
+    **링크 몬스터를 소재로 쓴 순간 두 수가 갈라진다** (Phase 6-AG 가 고친
+    결함이 정확히 그것이다).
+    """
     count: int
-    """**정확히** 이 장수다. ``2+`` 류는 아직 적을 수 없다 (아래 설명)."""
+    """
+    **고른 카드가 정확히 몇 장이어야 하는가** — 공식 3 조건의 둘째
+    (*"The number of materials you use meets the number specified in the
+    materials line or 'recipe'"*). ``Link.AddProcedure`` 의 ``min`` ·
+    ``max`` 가 둘 다 이 수인 카드만 등록한다.
+
+    ``2+`` 류는 아직 적을 수 없다 (아래 :data:`LINK_MATERIAL_RULES` 설명).
+
+    🔴 **기여의 합이 아니다.** :attr:`link_rating` 를 보라.
+    """
     each: MaterialRequirement
     includes: "MaterialRequirement | None" = None
     """소재 중 **적어도 하나**가 만족해야 하는 것 (``matcheck``)."""
@@ -228,6 +286,17 @@ class LinkMaterialRule:
             raise ValueError(f"소재는 최소 한 장입니다: {self.count}")
         if self.link_rating < 1:
             raise ValueError(f"링크 수치는 1 이상입니다: {self.link_rating}")
+        #: 🔴 **달성할 수 없는 등록을 막는다** (Phase 6-AG). 소재 한 장의
+        #: 최소 기여가 1 이므로 (:func:`material_contribution_options`),
+        #: ``count`` 장으로 만들 수 있는 기여의 합은 **최소 ``count``** 다.
+        #: ``link_rating`` 이 그보다 작으면 어떤 조합도 첫째 조건을 만족할
+        #: 수 없고, 그 등록은 **조용히 아무것도 소환하지 못하는** 줄이 된다.
+        if self.link_rating < self.count:
+            raise ValueError(
+                f"{self.card_id}: 링크 수치 {self.link_rating} 가 소재 "
+                f"장수 {self.count} 보다 작습니다 — 소재 한 장은 최소 1 로 "
+                "세므로 어떤 조합도 기여의 합을 맞출 수 없습니다."
+            )
         if not self.lua_file or not self.lua_excerpt:
             raise ValueError(
                 f"{self.card_id}: 소재 조건을 어느 스크립트에서 읽었는지 "
@@ -445,30 +514,79 @@ assert len(_RULES_BY_CARD) == len(LINK_MATERIAL_RULES), (
 )
 
 
-def material_contribution(definition) -> "int | None":
+def material_contribution_options(definition) -> "frozenset[int] | None":
     """
-    그 소재가 **소재 장수로 몇 장으로 세어지는가** (Phase 6-AF).
+    그 소재가 **몇 으로 세어질 수 있는가** — 고를 수 있는 값들 (Phase 6-AG).
 
-    공식 규칙 — *"If you use a Link Monster as Link Material, it counts as
-    the number of materials equal to its Link Rating."* 그 밖의 몬스터는
-    1장이다.
+    공식 규칙 (RULE-SUMMON-002) — *"Normally, 1 monster equals 1 Link
+    Material. But when you use a Link Monster as material for another Link
+    Summon, you can count it as either 1 monster, or as a number of
+    monsters equal to its Link Rating."*
 
-    🔴 **장수와 기여를 가른다.** 돌려주는 것은 **기여**이고, 고른 카드가 몇
-    장인지는 ``len(materials)`` 가 따로 말한다. 두 수가 다를 수 있는 것이
-    이 규칙의 전부이므로 한 수로 합치지 않는다 (링크 2 한 장을 쓰면 **고른
-    장수 1 · 기여 2** 다).
+    - 링크 몬스터가 아니면 ``{1}`` — 고를 것이 없다.
+    - 링크 몬스터면 ``{1, 링크 수치}`` — **고르는 쪽이 정한다.**
+      링크 1 이면 두 값이 같으므로 ``{1}`` 하나다.
 
-    읽을 수 없으면 ``None`` 이다 — ``0`` 도 ``1`` 도 아니다. 모르는 수를
-    1 로 접으면 링크 몬스터가 조용히 1장으로 세어진다.
+    🔴 **사이의 값은 없다.** 링크 3 을 소재로 쓰면 1 또는 3 이고 **2 가
+    아니다** — 룰북이 "either 1 monster, or ... equal to its Link Rating"
+    이라고 적는다. 그래서 돌려주는 것이 범위가 아니라 **집합**이다.
+
+    읽을 수 없으면 ``None`` 이다 — ``{1}`` 도 ``frozenset()`` 도 아니다.
+    모르는 수를 ``{1}`` 로 접으면 링크 몬스터가 조용히 1 로만 세어지고,
+    빈 집합으로 접으면 "어떤 조합도 없다" 는 **확정 거절**이 된다. 둘 다
+    모름을 답으로 바꾼다 (ADR-006).
     """
     if definition is None:
         return None
     if not definition.is_link:
-        return 1
+        return frozenset({1})
     rating = definition.link_rating
     if not isinstance(rating, int) or rating < 1:
         return None
-    return rating
+    return frozenset({1, rating})
+
+
+def material_contribution(definition) -> "int | None":
+    """
+    그 소재가 **최대로** 몇 으로 세어질 수 있는가.
+
+    :func:`material_contribution_options` 의 가장 큰 값이다 — 링크 몬스터면
+    자신의 링크 수치, 그 밖이면 1.
+
+    🔴 **판정은 이 함수를 쓰지 않는다** (Phase 6-AG). 판정은 고를 수 있는
+    값 **전부**가 필요하고 (``1`` 을 택하는 길이 합법일 수 있다), 그것은
+    :func:`material_contribution_options` 가 돌려준다. 이 함수는 **한 장이
+    얼마까지 셀 수 있는가**를 묻는 자리에만 쓴다 — 6-AF 가 이 값을 그대로
+    판정에 썼고 그래서 "1 로 세는 길" 을 잃었다.
+
+    읽을 수 없으면 ``None`` 이다.
+    """
+    options = material_contribution_options(definition)
+    if options is None:
+        return None
+    return max(options)
+
+
+def reachable_material_counts(
+    choices: "tuple[frozenset[int], ...]"
+) -> frozenset[int]:
+    """
+    고른 소재들로 만들 수 있는 **기여 합 전부** (Phase 6-AG).
+
+    각 소재가 자기 집합에서 하나를 고르므로, 합의 집합은 선택들의 곱이다.
+    소재는 자신 필드의 몬스터이고 (``LINK_MATERIAL_ZONES`` — 최대 6장),
+    집합의 크기는 최대 2 이므로 결과는 최대 64가지다.
+
+    🔴 **"도달 가능한가" 를 세는 것이 아니라 "무엇에 도달하는가" 를
+    센다.** 거절 문장이 **어디까지 갈 수 있었는지**를 적어야 하고, 참 /
+    거짓 하나로는 그것을 적을 수 없다.
+
+    빈 입력은 ``{0}`` 이다 — 아무것도 고르지 않으면 합이 0 이다.
+    """
+    sums = {0}
+    for options in choices:
+        sums = {total + share for total in sums for share in options}
+    return frozenset(sums)
 
 
 def material_rule_for(card_id: "int | None") -> "LinkMaterialRule | None":
@@ -575,6 +693,19 @@ def assess_link_materials(
     하나하나 본다. 반대로 하면 "소재가 틀렸다" 가 "애초에 링크 몬스터가
     아니다" 를 가린다.
 
+    **공식 3 조건을 셋으로 나눠 본다** (Phase 6-AG · 모듈 머리말):
+
+    1. **고른 카드 장수** (``len(materials) == rule.count``) — 관측을 읽지
+       않으므로 가장 먼저 본다.
+    2. **카드별 조건** (``rule.each`` · ``rule.includes``) — 그 고리가
+       보이지 않는 소재와 못 읽는 정의를 정확한 문장으로 거른다.
+    3. **기여의 합** (``rule.link_rating`` 에 닿는 조합이 있는가) — 2 를
+       지난 뒤이므로 정의가 전부 읽히고, 남은 모름은 **링크 수치를 못
+       읽는 경우 하나**다.
+
+    🔴 **1 과 3 을 한 수로 합치지 않는다.** 6-AF 가 합쳤고 그래서 둘 다
+    틀렸다 (모듈 머리말의 실측).
+
     🔴 **특수 소환 금지를 함께 본다** (Phase 6-AD). 링크 소환은 규칙상
     특수 소환이므로 (공식 룰북) 판에 걸린 특수 소환 금지가 이 행동도
     막는다. 6-AC 까지 이 함수는 그것을 보지 않았고, 그래서 파슬 다이너
@@ -649,38 +780,33 @@ def assess_link_materials(
                 f"{limit.text_ko}"
             )
 
-    #: 🔴 **고른 장수와 소재 장수가 다를 수 있다** (Phase 6-AF). 링크 몬스터
-    #: 를 소재로 쓰면 그 링크 수치만큼 세므로 (:func:`material_contribution`),
-    #: 장수 검사는 **기여의 합**으로 한다. 두 수를 함께 적는다 — 거절 문장이
-    #: "2장인데 2장이 아니다" 로 읽히지 않게 한다.
-    contributed = 0
-    for instance in materials:
-        held = view.find(instance)
-        found = None if held is None else held.definition
-        share = material_contribution(found)
-        if share is None:
-            if held is not None and found is not None and found.is_link:
-                return _undetermined(
-                    f"{instance} 의 링크 수치를 읽을 수 없어 소재 장수를 "
-                    "셀 수 없습니다.",
-                    LINK_RATING_UNREADABLE_RULE,
-                    rule,
-                )
-            #: 보이지 않거나 정의를 못 읽는다 — 아래 고리가 그 사실을
-            #: 더 정확한 문장으로 적는다. 여기서는 세지 않고 넘어간다.
-            contributed = -1
-            break
-        contributed += share
-    if contributed >= 0 and contributed != rule.count:
-        extra = (
-            ""
-            if contributed == len(materials)
-            else f" (고른 카드 {len(materials)}장, 링크 수치로 환산한 소재 "
-            f"장수 {contributed}장)"
-        )
+    #: 🔴 **같은 카드를 두 번 셀 수 없다** (Phase 6-AG). 소재는 필드를
+    #: 떠나므로 한 장이 두 자리를 채울 수 없다.
+    #: :class:`~engine.action.PlayerAction` 이 이미 막지만
+    #: (``MalformedAction``), 이 함수를 **직접** 부르는 길에는 그 관문이
+    #: 없었다 — 그래서 판정 자신이 막는다. 세 계층이 같은 기준을 쓰게
+    #: 하는 것이 이 Phase 가 고친 것의 절반이다.
+    if len(set(materials)) != len(materials):
         return _illegal(
-            f"소재가 {contributed}장입니다{extra} — {rule.card_id} 는 "
-            f"{rule.describe_ko()} 입니다.",
+            "같은 몬스터를 소재로 두 번 고를 수 없습니다 — 소재는 필드를 "
+            f"떠납니다: {materials}",
+            rule,
+        )
+
+    #: 🔴 **공식 3 조건의 둘째 — 고른 카드 장수** (모듈 머리말).
+    #: *"The number of materials you use meets the number specified in the
+    #: materials line or 'recipe'."* 이 검사는 **관측을 읽지 않는다** —
+    #: ``len(materials)`` 하나로 답이 나오므로, 판을 못 읽는 모름이 이
+    #: 사실을 가릴 수 없다. 그래서 가장 먼저 둔다.
+    #:
+    #: 🔴 6-AF 는 이 자리에 **기여의 합**을 놓았다. 그래서 링크 몬스터 한
+    #: 장이 「효과 몬스터 2장」 을 만족한다고 판정했다 — 고른 카드가
+    #: 1장인데 둘째 조건을 세지 않았기 때문이다.
+    if len(materials) != rule.count:
+        return _illegal(
+            f"소재로 고른 몬스터가 {len(materials)}장입니다 — "
+            f"{rule.card_id} 는 {rule.describe_ko()} 입니다 "
+            f"(정확히 {rule.count}장).",
             rule,
         )
 
@@ -721,9 +847,11 @@ def assess_link_materials(
                 rule,
             )
         #: 🔴 **링크 몬스터도 소재가 된다** (Phase 6-AF). 6-AD 까지 이
-        #: 자리가 ``UNDETERMINED`` 였고, 그 이유는 "링크 수치만큼 세는
-        #: 규칙을 옮기지 못했다" 였다 — 지금은 위에서
-        #: :func:`material_contribution` 이 센다.
+        #: 자리가 ``UNDETERMINED`` 였고, 그 이유는 "링크 수치로 세는
+        #: 규칙을 옮기지 못했다" 였다 — 지금은 **아래에서**
+        #: :func:`material_contribution_options` 와
+        #: :func:`reachable_material_counts` 가 센다 (이 고리는 카드별
+        #: 조건만 본다 — 공식 3 조건의 셋째다).
         holds = rule.each.holds(material_definition)
         if holds is None:
             return _undetermined(
@@ -758,6 +886,49 @@ def assess_link_materials(
                 f"{rule.card_id} 는 {rule.describe_ko()} 입니다.",
                 rule,
             )
+
+    #: 🔴 **공식 3 조건의 첫째 — 기여의 합** (모듈 머리말).
+    #: *"The amount of materials you use matches the Link Rating (Link
+    #: Monsters count as 1 OR their own Link Rating)."*
+    #:
+    #: 소재마다 **고를 수 있는 값들**을 모아 (``1`` 또는 그 링크 수치),
+    #: 그 조합으로 :attr:`LinkMaterialRule.link_rating` 에 **정확히**
+    #: 닿는 길이 있는지 본다. 하나라도 있으면 그 길을 고른 것이 합법이다 —
+    #: 고르는 계층이 없어도 **존재**는 판정할 수 있고, 어느 길을 고를지는
+    #: 판정이 정할 일이 아니다.
+    #:
+    #: 🔴 **이 자리가 둘째 조건 뒤에 온다.** 여기서는 정의를 전부 읽은
+    #: 뒤이므로 (위 고리가 못 읽는 소재를 이미 걸렀다) ``None`` 은 **링크
+    #: 수치를 못 읽는 경우 하나**로 좁혀진다 — 그래서 모름의 이름이
+    #: 정확해진다 (:data:`LINK_RATING_UNREADABLE_RULE`).
+    choices: list[frozenset[int]] = []
+    for instance in materials:
+        held = view.find(instance)
+        options = material_contribution_options(
+            None if held is None else held.definition
+        )
+        if options is None:
+            return _undetermined(
+                f"{instance} 의 링크 수치를 읽을 수 없어 기여를 셀 수 "
+                "없습니다.",
+                LINK_RATING_UNREADABLE_RULE,
+                rule,
+            )
+        choices.append(options)
+    reachable = reachable_material_counts(tuple(choices))
+    if rule.link_rating not in reachable:
+        #: 🔴 **어디까지 갈 수 있었는지 적는다.** "합이 안 맞는다" 만
+        #: 적으면 읽는 쪽이 한 장을 바꿔야 하는지 장수를 바꿔야 하는지
+        #: 알 수 없다. 장수 조건은 **이미 통과**했으므로 (둘째 조건) 남은
+        #: 길은 소재를 바꾸는 것뿐이다.
+        able = " · ".join(str(value) for value in sorted(reachable))
+        return _illegal(
+            f"고른 소재 {len(materials)}장으로 만들 수 있는 기여의 합은 "
+            f"{able} 이고 {rule.card_id} 의 링크 수치 {rule.link_rating} "
+            "에 닿지 않습니다 — 링크 몬스터는 1 또는 자신의 링크 수치로 "
+            "세고 그 사이의 값은 없습니다.",
+            rule,
+        )
 
     placement = assess_link_placement(view, actor, materials)
     if placement is not None:
@@ -867,6 +1038,8 @@ __all__ = [
     "assess_link_materials",
     "assess_link_placement",
     "material_contribution",
+    "material_contribution_options",
     "material_rule_for",
+    "reachable_material_counts",
     "turn_limit_for",
 ]

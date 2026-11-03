@@ -617,17 +617,30 @@ def test_b06_a_full_extra_monster_zone_splits_into_two_answers(repository):
 
 
 @pytest.mark.real_card
-def test_b07_a_link_monster_as_material_counts_as_its_link_rating(repository):
+def test_b07_a_link_monster_as_material_counts_as_one_or_its_link_rating(
+    repository,
+):
     """
-    링크 몬스터를 소재로 쓰면 **링크 수치만큼 센다** (공식 규칙).
+    링크 몬스터를 소재로 쓰면 **1 또는 자신의 링크 수치로** 센다 (공식 규칙).
 
-    🔴 **이 시험이 6-AF 에서 뒤집혔다.** 6-AD 까지는 그 규칙을 옮기지
-    못해 ``UNDETERMINED`` 였고 (``LINK_MATERIAL_AS_LINK_RULE`` 이 그 이름
-    이었다), 지금은 :func:`~engine.link_rules.material_contribution` 이
-    센다. 기르수 + 갈라테아i(LINK-1) = 기여 2장이고, 갈라테아의 소재 조건이
-    그 수다.
+    🔴 **이 시험이 6-AF 에서 뒤집히고 6-AG 에서 정정되었다.** 6-AD 까지는
+    그 규칙을 옮기지 못해 ``UNDETERMINED`` 였고
+    (``LINK_MATERIAL_AS_LINK_RULE`` 이 그 이름이었다), 6-AF 는 **링크
+    수치로만** 셌다. 룰북(RULE-SUMMON-002)은 *"you can count it as either
+    1 monster, or as a number of monsters equal to its Link Rating"* 이고,
+    **고르는 쪽이 1 을 택할 수 있다** — 지금은
+    :func:`~engine.link_rules.material_contribution_options` 가 그 값들을
+    돌려주고 :func:`~engine.link_rules.reachable_material_counts` 가 합을
+    센다.
+
+    기르수 + 갈라테아i(LINK-1) 은 고른 카드 2장 · 기여 합 2 이고, 갈라테아의
+    두 수(``count`` 2 · ``link_rating`` 2)가 **각각** 그것을 받는다. 분리된
+    두 조건은 ``tests/test_link_material_count_and_rating.py`` 가 잰다.
     """
-    from engine.link_rules import material_contribution
+    from engine.link_rules import (
+        material_contribution,
+        material_contribution_options,
+    )
 
     duel, _field, extra = _link_board(
         repository, [GIRSU], [GALATEA], emzone=(GALATEA_I,)
@@ -647,6 +660,14 @@ def test_b07_a_link_monster_as_material_counts_as_its_link_rating(repository):
     assert material_contribution(repository.get(GALATEA_I)) == 1
     assert material_contribution(repository.get(UNREAD_LINK)) == 3
     assert LINK_MATERIAL_AS_LINK_RULE
+    #: 🔴 **그리고 "또는" 이 실제로 집합으로 적혀 있다** (Phase 6-AG) —
+    #: LINK-3 은 1 **또는** 3 이고 사이의 2 는 없다.
+    assert material_contribution_options(
+        repository.get(UNREAD_LINK)
+    ) == frozenset({1, 3})
+    assert material_contribution_options(
+        repository.get(GALATEA_I)
+    ) == frozenset({1})
 
 
 @pytest.mark.real_card
