@@ -47,6 +47,7 @@ ChoicePolicy — **해결 중에 무엇을 고를 것인가** (Phase 6-Y).
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from engine.ids import InstanceId
@@ -348,12 +349,196 @@ class RandomChoice:
         return f"<{self.name} draws={self._draws}>"
 
 
+@dataclass(frozen=True, slots=True)
+class ChoiceAsk:
+    """
+    **해결 중에 한 번 물어진 것과 그 자리에서 답한 것** (Phase 6-AH).
+
+    제한 탐색이 분기하는 자리가 이것이다 — 같은 행동을 같은 판에서 해도
+    이 자리의 답이 달라지면 다른 미래가 된다. 그래서 적는 것은 **엔진이
+    그 자리에서 낸 후보**와 **고른 것**이고, 둘 다 값이다.
+
+    🔴 **후보를 지어내지 않는다.** :attr:`offered` 는 그 자리의
+    ``offer.permitted`` 를 그대로 옮긴 것이고, 이 기록을 쓰는 쪽은 그
+    목록 밖을 고를 수 없다 (:class:`ScriptedChoice` 가 거절한다).
+
+    🔴 **장수 조건을 들고 있는다.** :attr:`minimum` · :attr:`maximum` 은
+    엔진이 그 자리에서 말한 수다 — 분기를 만드는 쪽이 그 범위를 지켜야
+    하고, 범위를 다시 추측하지 않도록 함께 적는다.
+    """
+
+    index: int
+    """이 걸음에서 **몇 번째** 물음인가 (0 부터)."""
+    label: str
+    """어느 효과의 어느 선택인가 — 사람이 읽는 이름이다. 판정에 쓰지 않는다."""
+    minimum: int
+    maximum: int
+    offered: "tuple[tuple[int, int], ...]"
+    """허용 후보 ``(instance, card_id)`` 들. 🔴 **그 자리의 목록 그대로다.**"""
+    chosen: "tuple[int, ...]"
+    """고른 인스턴스 번호들."""
+    chosen_card_ids: "tuple[int, ...]" = ()
+    planned: bool = False
+    """적어 둔 선택을 그대로 썼는가. 거짓이면 뒤의 정책이 답했다."""
+    plan_missing: bool = False
+    """
+    🔴 적어 둔 선택이 **그 자리의 후보에 없었다.**
+
+    그때 이 정책은 적어 둔 것을 쓰지 않고 뒤의 정책에게 넘긴다. 재생
+    (``bounded_search.replay_path``)은 이 칸이 참이면 **실패**로 적는다 —
+    같은 선택을 다시 하지 못했는데 결과가 같다고 말할 수 없다.
+    """
+
+    @property
+    def options(self) -> int:
+        """그 자리에 후보가 몇 장 있었는가."""
+        return len(self.offered)
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        picked = " · ".join(str(c) for c in self.chosen_card_ids) or "없음"
+        mark = "적어 둔 대로" if self.planned else "기준점이 집었다"
+        gap = " 🔴 적어 둔 것이 후보에 없었다" if self.plan_missing else ""
+        return (
+            f"[{self.index}] {self.label} 후보 {self.options}장 중 "
+            f"{self.minimum}~{self.maximum}장 → {picked} ({mark}){gap}"
+        )
+
+
+class ScriptedChoice:
+    """
+    **적어 둔 선택을 순서대로 답하고, 물은 것을 전부 적는다** (Phase 6-AH).
+
+    제한 탐색이 해결 중 선택을 분기하는 수단이다. 분기는 이렇게 생긴다:
+
+    1. 빈 각본으로 한 번 돌린다 → :attr:`log` 에 그 걸음의 **물음 전부**가
+       남는다 (몇 번 물었고, 그 자리의 후보가 무엇이었는지).
+    2. 그중 한 자리를 다른 답으로 바꾼 각본을 만들어 **새 사본**에서 다시
+       돌린다. 같은 효과를 두 번 적용하는 것이 아니다 — 부모의 판에서
+       **처음부터** 다시 하는 것이고, 원본은 건드리지 않는다.
+
+    🔴 **후보 밖을 고르지 않는다.** 각본에 적힌 인스턴스가 그 자리의
+    ``offer.permitted`` 에 없으면 쓰지 않고 ``then`` 에게 넘기며, 그
+    사실을 :attr:`ChoiceAsk.plan_missing` 에 적는다. 조용히 비슷한 것을
+    집어 주면 "적어 둔 경로를 재생했다" 가 거짓이 된다.
+
+    🔴 **장수를 고치지 않는다.** 각본의 장수가 ``minimum``~``maximum`` 밖
+    이면 그것도 적어 둔 것이 쓰일 수 없는 경우이므로 ``then`` 에게 넘긴다.
+
+    🔴 **발동 여부는 답하지 않는다.** :meth:`accept_offer` 는 ``then`` 에게
+    그대로 넘긴다 — 이 정책이 아는 것은 *무엇을 집을까* 하나다. 지금
+    경로에서 발동은 ``legal_actions`` 를 지나는 **행동**이므로 (6-Z), 발동
+    여부의 분기는 탐색이 행동 쪽에서 만든다.
+
+    🔴 **기록은 사본의 것이다.** :meth:`forked` 는 같은 각본에 **빈 기록**
+    을 준다 — 사본의 물음이 이쪽 목록에 섞이면 "이 분기에서 무엇을
+    물었는가" 가 더 이상 사실이 아니다.
+    """
+
+    __slots__ = ("name", "plan", "then", "_log")
+
+    def __init__(self, plan=(), then=None, name: str = "scripted"):
+        script: list[tuple] = []
+        for selection in plan:
+            picked = tuple(selection)
+            for instance in picked:
+                if isinstance(instance, bool) or not isinstance(instance, int):
+                    raise ChoiceError(
+                        f"인스턴스 번호는 정수입니다: {instance!r}"
+                    )
+            script.append(picked)
+        fallback = FirstPermittedChoice() if then is None else then
+        for needed in ("accept_offer", "choose_cards"):
+            if not hasattr(fallback, needed):
+                raise ChoiceError(
+                    "뒤에 둘 정책이 필요합니다 — 각본이 끝난 자리를 "
+                    f"기본값으로 메꾸지 않습니다: {type(fallback).__name__}"
+                )
+        if not callable(getattr(fallback, "forked", None)):
+            raise ChoiceError(
+                "뒤에 둘 정책은 forked() 를 가져야 합니다 — 사본이 쓸 수 "
+                f"없는 정책을 감싸면 그 사실이 가려집니다: "
+                f"{type(fallback).__name__}"
+            )
+        self.name = name
+        self.plan = tuple(script)
+        self.then = fallback
+        self._log: list[ChoiceAsk] = []
+
+    @property
+    def log(self) -> "tuple[ChoiceAsk, ...]":
+        """물은 것과 고른 것, **순서대로.** 분기를 만드는 쪽이 읽는 목록이다."""
+        return tuple(self._log)
+
+    @property
+    def plan_was_missed(self) -> bool:
+        """적어 둔 선택을 **쓸 수 없었던 자리가 있는가.**"""
+        return any(ask.plan_missing for ask in self._log)
+
+    def accept_offer(self, offer) -> bool:
+        return self.then.accept_offer(offer)
+
+    def choose_cards(self, offer) -> "tuple[InstanceId, ...]":
+        index = len(self._log)
+        #: 🔴 ``InstanceId`` 는 ``int`` 가 아니다 (frozen dataclass) — 번호는
+        #: ``.value`` 다. 실측: ``int(instance)`` 는 그 자리에서 터져
+        #: **선택이 조용히 실패**했고, 그래서 그 효과가 해결되지 않았다.
+        permitted = tuple(
+            (candidate.instance.value, candidate.card_id)
+            for candidate in offer.permitted
+        )
+        allowed = {instance for instance, _card in permitted}
+        wanted = self.plan[index] if index < len(self.plan) else None
+        planned = False
+        missing = False
+        if wanted is None:
+            chosen = tuple(self.then.choose_cards(offer))
+        elif not set(wanted) <= allowed:
+            missing = True
+            chosen = tuple(self.then.choose_cards(offer))
+        elif not offer.minimum <= len(wanted) <= offer.maximum:
+            missing = True
+            chosen = tuple(self.then.choose_cards(offer))
+        else:
+            planned = True
+            chosen = tuple(InstanceId(instance) for instance in wanted)
+        by_instance = dict(permitted)
+        self._log.append(
+            ChoiceAsk(
+                index=index,
+                label=str(getattr(offer, "effect_ref", "")),
+                minimum=offer.minimum,
+                maximum=offer.maximum,
+                offered=permitted,
+                chosen=tuple(instance.value for instance in chosen),
+                chosen_card_ids=tuple(
+                    by_instance.get(instance.value, -1) for instance in chosen
+                ),
+                planned=planned,
+                plan_missing=missing,
+            )
+        )
+        return chosen
+
+    def forked(self) -> "ScriptedChoice":
+        """**같은 각본 · 빈 기록 · 사본용 뒤 정책.**"""
+        return ScriptedChoice(
+            self.plan, self.then.forked(), name=f"{self.name}-fork"
+        )
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return (
+            f"<{self.name} 각본 {len(self.plan)}자리 물음 {len(self._log)}회>"
+        )
+
+
 __all__ = [
     "ChoiceError",
     "ChoicePolicy",
     "ForkablePolicy",
+    "ChoiceAsk",
     "FirstPermittedChoice",
     "DeclineChoice",
     "PreferredCardChoice",
     "RandomChoice",
+    "ScriptedChoice",
 ]

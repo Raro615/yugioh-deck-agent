@@ -216,7 +216,28 @@ class Simulator:
     # ------------------------------------------------------------------
     # 포크
     # ------------------------------------------------------------------
-    def _fork(self) -> Duel:
+    def fork(self, *, selector=None) -> Duel:
+        """
+        탐색이 쓸 **사본 하나.** 원본은 건드리지 않는다 (Phase 6-AH).
+
+        ``selector`` 를 주면 그 사본의 **해결 시점 선택**에 그 정책이
+        답한다. 제한 탐색(:mod:`agent.bounded_search`)이 같은 자리에서
+        다른 선택을 해 보는 자리가 여기다 — 분기마다 사본이 하나이고,
+        그 사본의 선택 기록은 그 사본의 것이다.
+
+        🔴 **``simulate`` 와 다른 쓸모다.** :meth:`simulate` 는 관측만
+        돌려주므로 (가려진 정보를 흘리지 않기 위해 — 모듈 설명 §18) 그
+        미래의 **판**을 더 밟아 볼 수 없다. 탐색은 밟아야 하므로 사본
+        자체를 받는다. 그래서 이 메서드는 ``GameStateView`` 가 아니라
+        :class:`Duel` 을 돌려준다 — 쓰는 쪽이 자기 자리의 전개를
+        분석하는 자리임을 **이름과 반환형으로** 드러낸다.
+
+        🔴 **진짜 판은 여전히 안전하다.** 돌려주는 것은 복제이고
+        (:meth:`_fork`), 원본의 판 · 기록 · 난수원은 그대로다.
+        """
+        return self._fork(selector=selector)
+
+    def _fork(self, *, selector=None) -> Duel:
         """
         **판만 복제하고 나머지는 그대로 쓴다. 단 기록은 떼어 낸다.**
 
@@ -263,7 +284,7 @@ class Simulator:
             **duel_components(
                 **self._forked_journal(),
                 **self._forked_definitions(),
-                chooser=self._forked_chooser(),
+                chooser=self._forked_chooser(selector),
             ),
         )
 
@@ -324,9 +345,20 @@ class Simulator:
             return {"journal": False}
         return {"seed_events": tuple(parent)}
 
-    def _forked_chooser(self):
+    def _forked_chooser(self, selector=None):
         """
         부모와 **같은 정책**으로 해결 시점 선택을 하는 것 (Phase 6-AB).
+
+        🔴 **``selector`` 를 주면 그것을 쓴다** (Phase 6-AH). 부모의
+        고르는 사람에게 "이 정책으로 사본을 만들어 달라" 고 하고, 받은
+        것은 **사본의** 기록을 갖는다 (``PolicyChooser.forked(selector)``).
+        부모의 정책도 기록도 건드리지 않는다.
+
+        🔴 **고르는 사람이 그 말을 못 받으면 사본에도 주지 않는다.**
+        조용히 부모의 정책으로 되돌리면, 탐색은 적어 둔 선택이 쓰인 줄
+        알고 **다른 선택의 결과**를 자기 분기의 결과로 읽는다. 그래서
+        ``None`` 을 돌려주고, 아직 정해지지 않은 선택은 사본 안에서
+        **거절된다** — 보이는 거절이 조용한 오염보다 낫다.
 
         사본은 실행기 한 벌을 새로 만들므로 (``duel_components``) 이 자리를
         채우지 않으면 **사본 안에서만** 해결 시점 선택이 거절된다. 실측한
@@ -365,7 +397,14 @@ class Simulator:
         forked = getattr(chooser, "forked", None)
         if not callable(forked):
             return None
-        return forked()
+        if selector is None:
+            return forked()
+        try:
+            return forked(selector)
+        except TypeError:
+            #: 🔴 받을 수 없는 고르는 사람이다. 부모의 정책으로 되돌리지
+            #: 않는다 (이 메서드의 설명).
+            return None
 
     @staticmethod
     def _encountered_line(held, *, seat: int, viewer: int) -> str:

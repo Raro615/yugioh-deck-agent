@@ -512,9 +512,23 @@ class PolicyChooser:
         )
         return chosen
 
-    def forked(self) -> "PolicyChooser | None":
+    def forked(self, selector: "ChoiceSelector | None" = None) -> "PolicyChooser | None":
         """
         사본용 — **같은 정책 · 빈 기록.** 못 만들면 ``None`` (6-AB 보완).
+
+        ``selector`` (Phase 6-AH)
+        -------------------------
+        주면 **그 정책이** 사본의 해결 시점 선택에 답한다. 제한 탐색이
+        해결 중 선택을 분기하는 자리가 여기다 — 사본마다 다른 선택을
+        적어 두어야 하고, 부모의 정책은 **그대로 둬야** 한다.
+
+        🔴 **부모를 건드리지 않는다.** 주어진 정책은 **사본의**
+        :class:`PolicyChooser` 에만 들어가고, 기록도 사본의 것이다.
+        그래서 사본의 선택이 실제 듀얼의 :attr:`records` 에 섞이지 않는다.
+
+        🔴 **정책이 ``forked()`` 를 갖는지 묻지 않는다.** 부르는 쪽이
+        **그 사본용으로 만든** 정책을 주는 자리이므로, 다시 갈라 달라고
+        할 것이 없다. 주지 않으면 아래 규율 그대로다.
 
         탐색 사본은 해결 시점 선택을 **해야** 한다 — 그러지 않으면 사본이
         원본보다 못 해결하고, 미래의 값이 규칙이 아니라 배선 때문에 달라진다
@@ -537,6 +551,8 @@ class PolicyChooser:
           아직 정해지지 않은 선택은 사본 안에서 **거절된다.** 조용히
           공유하는 것보다 이것이 낫다 — 거절은 보이고, 오염은 보이지 않는다.
         """
+        if selector is not None:
+            return PolicyChooser(selector, self.definitions)
         split = getattr(self.selector, "forked", None)
         if not callable(split):
             return None
