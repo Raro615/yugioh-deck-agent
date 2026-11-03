@@ -813,7 +813,7 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
         ])
         return OpeningReport(brief=said, detail=said, refused=False, ran=False)
 
-    setup, outcome, replayed = bounded_search_opening(
+    setup, outcome, rerun = bounded_search_opening(
         agent.repository, parsed.draft, hand_ids, card_id=card_id
     )
     if outcome is None:
@@ -825,10 +825,10 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
                              refused=not setup.can_run, ran=False)
 
     brief = list(head)
-    brief.extend(render_bounded_search_brief(outcome, replayed).splitlines())
+    brief.extend(render_bounded_search_brief(outcome, rerun).splitlines())
     detail = list(head)
     detail.extend(
-        render_bounded_search(outcome, replayed, setup).splitlines()
+        render_bounded_search(outcome, rerun, setup).splitlines()
     )
     return OpeningReport(brief=tuple(brief), detail=tuple(detail),
                          refused=False, ran=True)

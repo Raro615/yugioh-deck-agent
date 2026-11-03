@@ -57,7 +57,7 @@ from agent.bounded_search import (
     Termination,
     node_key,
     own_field,
-    replay_path,
+    rerun_path,
     search_for_card,
     selection_options,
 )
@@ -457,7 +457,7 @@ def test_b02_only_the_choice_branch_reaches_the_goal(repository, two_permitted):
     assert decisive[0].offered[0][1] == CLIMAX
 
     #: 그리고 재생된다.
-    again = replay_path(_choice_board(repository), found)
+    again = rerun_path(_choice_board(repository), found)
     assert again.ok, again.describe_ko()
     assert again.matches_search
 
@@ -880,7 +880,7 @@ def test_e02_a_tampered_choice_fails_the_replay(repository, growth_run):
         repository, parsed.draft, list(ORCUST_GIRSU_LINE.hand),
         chooser=chooser, triggers=triggers,
     )
-    result = replay_path(fresh.duel, tampered)
+    result = rerun_path(fresh.duel, tampered)
     assert result.ok is False
     assert result.goal_reached is False
     assert "허용 후보에 없었습니다" in result.reason
@@ -910,7 +910,7 @@ def test_e03_a_tampered_action_fails_the_replay(repository, growth_run):
         repository, parsed.draft, list(ORCUST_GIRSU_LINE.hand),
         chooser=chooser, triggers=triggers,
     )
-    result = replay_path(fresh.duel, tampered)
+    result = rerun_path(fresh.duel, tampered)
     assert result.ok is False
     assert "허용 후보에" in result.reason
     assert result.steps == 0
@@ -922,7 +922,7 @@ def test_e04_an_empty_path_is_not_a_replay(growth_run):
 
     _setup, outcome, _replay = growth_run
     empty = dataclasses.replace(outcome, path=())
-    result = replay_path(_setup.duel, empty)
+    result = rerun_path(_setup.duel, empty)
     assert result.ok is False
     assert "재생할 경로가 없습니다" in result.reason
 

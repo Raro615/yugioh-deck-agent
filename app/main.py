@@ -800,7 +800,7 @@ def _print_bounded_search(agent: DeckAgent, recipe_text: str,
     if parsed.draft is None:
         print("  🔴 레시피에서 카드를 하나도 읽지 못해 탐색하지 않았습니다.")
         return
-    setup, outcome, replayed = bounded_search_opening(
+    setup, outcome, rerun = bounded_search_opening(
         agent.repository, parsed.draft, hand_ids, card_id=card_id
     )
     if outcome is None:
@@ -808,8 +808,8 @@ def _print_bounded_search(agent: DeckAgent, recipe_text: str,
         for blocker in setup.blockers:
             print(f"    - {blocker}")
         return
-    print(render_bounded_search_brief(outcome, replayed))
-    print(render_bounded_search(outcome, replayed, setup))
+    print(render_bounded_search_brief(outcome, rerun))
+    print(render_bounded_search(outcome, rerun, setup))
 
 
 #: ``/combo search:…`` 가 받는 **목표 이름** → 카드 ID (Phase 6-AH).
@@ -833,12 +833,12 @@ def search_goal_card_id(name: str) -> "int | None":
 
 
 def bounded_search_opening(
-    repository, draft, hand, *, card_id: int, budget=None, replay: bool = True
+    repository, draft, hand, *, card_id: int, budget=None, rerun: bool = True
 ) -> tuple:
     """
     선공 전개를 **제한 탐색**으로 돌리고, 찾은 경로를 재생한다 (Phase 6-AH).
 
-    돌려주는 것은 ``(setup, outcome, replay_result)`` 다.
+    돌려주는 것은 ``(setup, outcome, rerun_result)`` 다.
 
     🔴 **왜 이 자리인가.** 탐색의 핵심은 ``agent.bounded_search`` 에 있고,
     초기 상태는 ``deck.opening.build_opening`` 이 만들고, 유발과 해결 시점
@@ -854,7 +854,7 @@ def bounded_search_opening(
     🔴 **재생이 실패하면 그대로 돌려준다.** 이 자리에서 성공으로 바꾸지
     않는다.
     """
-    from agent.bounded_search import BoundedSearch, FieldGoal, replay_path
+    from agent.bounded_search import BoundedSearch, FieldGoal, rerun_path
     from deck.opening import build_opening
 
     chooser, triggers = opening_wiring(repository, None)
@@ -870,8 +870,8 @@ def bounded_search_opening(
     )
     outcome = search.run(setup.duel)
 
-    replayed = None
-    if replay and outcome.reached:
+    done = None
+    if rerun and outcome.reached:
         #: 🔴 **새 초기 상태다.** 같은 입력으로 다시 만든 듀얼이고, 탐색이
         #: 쓴 ``setup.duel`` 이 아니다.
         fresh_chooser, fresh_triggers = opening_wiring(repository, None)
@@ -880,8 +880,8 @@ def bounded_search_opening(
             chooser=fresh_chooser, triggers=fresh_triggers,
         )
         if fresh.can_run:
-            replayed = replay_path(fresh.duel, outcome)
-    return setup, outcome, replayed
+            done = rerun_path(fresh.duel, outcome)
+    return setup, outcome, done
 
 
 def opening_wiring(repository, line=None) -> tuple:

@@ -1357,11 +1357,20 @@ def test_44_the_combo_command_is_registered_with_its_four_arguments():
     #: 🔴 Phase 6-AC 가 ``line`` 을 **맨 뒤에** 더했다 (검증용 전개 정책의
     #: 이름). 자리가 마지막이고 선택이므로 기존 호출은 그대로 돈다 —
     #: ``test_45`` 가 그 경로를 그대로 센다.
+    #:
+    #: 🔴 **Phase 6-AH 가 ``search`` 를 그 뒤에 더했다** — 제한 전개 탐색의
+    #: **목표**다. ``line`` 과 가르는 것이 요점이다: ``line`` 은 사람이 적어
+    #: 둔 경로를 따라가고, ``search`` 는 그 목록을 **쓰지 않고** 엔진이
+    #: 허가한 분기를 펼친다 (``docs/orcust-first-bounded-search.md`` §1).
+    #: 자리가 마지막이고 선택이므로 **주지 않으면 6-AG 와 한 글자도 다르지
+    #: 않다** (``test_bounded_search_first_pass.py::test_e06`` 가 그 사실을
+    #: 센다). 이 시험이 틀린 가정을 갖고 있었던 것이 아니다 — 그때는
+    #: 다섯이었다.
     assert [p.name for p in combo.parameters] == ["hand", "board", "deck",
-                                                  "recipe", "line"]
+                                                  "recipe", "line", "search"]
     #: 패는 필수, 나머지는 선택 — 무작위 패 생성이 없으므로 패는 받아야 한다
     assert [p.required for p in combo.parameters] == [True, False, False,
-                                                      False, False]
+                                                      False, False, False]
 
 
 def test_45_a_valid_hand_reaches_the_existing_combo_planner(monkeypatch):
@@ -1838,12 +1847,14 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
         #: 🔴 Phase 6-AE — 핸들러가 부르는 것은 ``combo_response`` 다
         #: (메시지와 **첨부**를 함께 받아야 하므로). 가짜 구현도 같은
         #: 서명과 같은 반환형을 내놓아야 한다.
+        #: 🔴 Phase 6-AH — ``search_text`` 가 맨 뒤에 붙었다 (제한 전개
+        #: 탐색의 목표). 같은 이유로 가짜 구현도 받아야 한다.
         def combo_response(self, hand_text, board_text="", deck_text="",
-                           recipe_text="", line_text=""):
+                           recipe_text="", line_text="", search_text=""):
             order.append("combo")
             worker.append(threading.get_ident())
             received.append((hand_text, board_text, deck_text, recipe_text,
-                             line_text))
+                             line_text, search_text))
             return bot.ComboResponse(
                 messages=("첫 번째", "두 번째", "세 번째"),
                 attachments=(bot.ComboAttachment("combo-detail.txt",
@@ -1891,8 +1902,10 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
     #: 🔴 넷째 칸은 ``recipe`` 이고, 이 호출은 주지 않았으므로 **빈 문자열**
     #: 이다 — "주지 않았다" 가 그대로 전달된다 (Phase 6-T).
     #: 🔴 Phase 6-AC — ``line_text`` 도 빈 문자열로 전달된다 (주지 않았다).
+    #: 🔴 Phase 6-AH — ``search_text`` 도 같다. 그 빈 문자열이 **탐색을
+    #: 돌리지 않는다**는 뜻이고, 핸들러가 그것을 꾸며 넣지 않는다는 증거다.
     assert received == [
-        ("오르페골 디베르", "오르페골 코어", "오르페골 덱", "", "")
+        ("오르페골 디베르", "오르페골 코어", "오르페골 덱", "", "", "")
     ]
     #: 🔴 동기 작업이 이벤트 루프 밖에서 돌았다
     assert worker and worker[0] != loop_thread

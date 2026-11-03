@@ -791,12 +791,12 @@ def _search_notes(label: str, notes, limit: int) -> "list[str]":
     return lines
 
 
-def render_bounded_search_brief(outcome, replay=None) -> str:
+def render_bounded_search_brief(outcome, rerun=None) -> str:
     """
     **제한 탐색의 기본 응답용 요약** (Phase 6-AH).
 
     🔴 **판정하지 않는다.** 이미 끝난 탐색 결과만 읽고, 엔진을 다시 돌리지
-    않는다 — ``outcome`` 과 ``replay`` 는 부르는 쪽이 만든 값이다.
+    않는다 — ``outcome`` 과 ``rerun`` 은 부르는 쪽이 만든 값이다.
 
     🔴 **다섯 가지를 반드시 적는다** (§6): 실행 방식이 제한 탐색이라는 것 ·
     목표 도달 여부 · 행동 수와 탐색 노드 수 · 예산 종료 여부 · 전체 규칙
@@ -855,12 +855,12 @@ def render_bounded_search_brief(outcome, replay=None) -> str:
         face = "앞면" if face_up else "뒷면"
         lines.append(f"    {zone} [{card_id}] {face}")
 
-    if replay is not None:
+    if rerun is not None:
         lines.append("")
-        state = "✔ 성공" if replay.ok else "🔴 실패"
+        state = "✔ 성공" if rerun.ok else "🔴 실패"
         lines.append(f"  경로 재생 (새 초기 상태에서 다시 실행): {state}")
-        lines.append(f"    {replay.reason}")
-        if not replay.ok:
+        lines.append(f"    {rerun.reason}")
+        if not rerun.ok:
             lines.append("    🔴 **재생이 실패했으므로 성공 결과로 읽지"
                          " 마십시오.**")
 
@@ -882,7 +882,7 @@ def render_bounded_search_brief(outcome, replay=None) -> str:
     return "\n".join(lines)
 
 
-def render_bounded_search(outcome, replay=None, setup=None) -> str:
+def render_bounded_search(outcome, rerun=None, setup=None) -> str:
     """
     **제한 탐색의 전체 기록** — 첨부와 CLI 가 보는 것 (Phase 6-AH).
 
@@ -943,15 +943,15 @@ def render_bounded_search(outcome, replay=None, setup=None) -> str:
         lines.append(f"    {zone} [{card_id}] "
                      + ("앞면" if face_up else "뒷면"))
 
-    if replay is not None:
+    if rerun is not None:
         lines.append("")
         lines.append("  경로 재생 (새 초기 상태에서 다시 실행)")
-        lines.append(f"    결과: {'성공' if replay.ok else '🔴 실패'}")
-        lines.append(f"    걸음 {replay.steps} · 목표 도달"
-                     f" {replay.goal_reached} · 탐색 결과와 일치"
-                     f" {replay.matches_search}")
-        lines.append(f"    {replay.reason}")
-        lines.append(f"    재생 최종 해시: {replay.final_state_hash}")
+        lines.append(f"    결과: {'성공' if rerun.ok else '🔴 실패'}")
+        lines.append(f"    걸음 {rerun.steps} · 목표 도달"
+                     f" {rerun.goal_reached} · 탐색 결과와 일치"
+                     f" {rerun.matches_search}")
+        lines.append(f"    {rerun.reason}")
+        lines.append(f"    재생 최종 해시: {rerun.final_state_hash}")
 
     for label, notes in (
         ("범위 밖으로 둔 분기", outcome.out_of_scope),

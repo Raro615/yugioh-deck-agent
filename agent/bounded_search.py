@@ -431,7 +431,7 @@ class SearchOutcome:
 
 
 @dataclass(frozen=True, slots=True)
-class ReplayResult:
+class RerunResult:
     """
     찾은 경로를 **새 초기 상태에서 다시 실행한** 결과.
 
@@ -520,26 +520,35 @@ def _settle(duel: Duel, seat: int) -> _Settled:
     """
     **고르는 일이 아닌 걸음들을 지나간다.** 전부 엔진을 지나서.
 
-    세 가지를 지난다 —
+    두 가지를 지난다 —
 
-    1. ``advance()`` 가 하는 일 (고르지 않아도 일어나는 것).
-    2. **상대 자리** — :data:`NO_INTERFERENCE` 가 패스를 고른다. 다른 수가
+    1. **상대 자리** — :data:`NO_INTERFERENCE` 가 패스를 고른다. 다른 수가
        있었으면 적는다. 🔴 패스도 ``legal_actions`` 를 지나 ``apply`` 로
        들어간다 — 손으로 우선권을 돌리지 않는다.
-    3. **자기 자리에 패스밖에 없는 걸음** — 고를 것이 하나뿐이면 고르는
+    2. **자기 자리에 패스밖에 없는 걸음** — 고를 것이 하나뿐이면 고르는
        일이 아니다 (``Simulator._settle_forced_passes`` 와 같은 근거).
 
     🔴 **고를 것이 있으면 즉시 멈춘다.** 그 자리가 진짜 결정 지점이고,
     거기까지가 한 걸음이다.
+
+    🔴 **``Duel.advance()`` 를 부르지 않는다.** 그것을 부르는 production
+    자리는 **하나여야 한다** — ``agent/runner.py`` 의 고리뿐이고, 그래야
+    ``rule_steps`` 가 생기는 길이 하나로 남는다 (``tests/
+    test_duel_advance_rule_step_contract.py::test_22`` 가 그 계약을 센다).
+
+    그리고 이 범위에서는 **부를 일이 없다**: ``advance()`` 가 하는 일은
+    드로우 페이즈의 드로우 하나이고, 이 탐색은 ``end_phase`` 를 고르지
+    않으므로 (:data:`OUT_OF_TURN_SCOPE`) 턴이 넘어가지 않아
+    ``TurnStep.DRAW_PENDING`` 에 닿지 않는다. 🔴 **그래도 조용히 넘기지
+    않는다**: 그 자리가 생기면 후보가 비어 멈추고, 그 사실이
+    :attr:`_Settled.blocked` 에 남는다. ``Simulator._settle_forced_passes``
+    도 같은 이유로 부르지 않는다.
     """
     forced: list[str] = []
     declined: list[str] = []
     blocked: list[str] = []
     met: list[tuple[int, object]] = []
     for _ in range(SETTLE_GUARD):
-        if duel.is_over:
-            break
-        duel.advance()
         if duel.is_over:
             break
         actor = duel.to_act
@@ -1005,9 +1014,9 @@ def _order_key(action: PlayerAction) -> tuple:
 # ======================================================================
 # 재생
 # ======================================================================
-def replay_path(
+def rerun_path(
     duel: Duel, outcome: SearchOutcome, *, goal: "FieldGoal | None" = None
-) -> ReplayResult:
+) -> RerunResult:
     """
     찾은 경로를 **새 초기 상태에서 다시 실행**한다 (§5).
 
@@ -1030,7 +1039,7 @@ def replay_path(
         )
     target = outcome.goal if goal is None else goal
     if not outcome.path:
-        return ReplayResult(
+        return RerunResult(
             ok=False,
             reason="재생할 경로가 없습니다 — 탐색이 목표에 닿지 않았습니다.",
         )
@@ -1040,7 +1049,7 @@ def replay_path(
     for recorded in outcome.path:
         current = sim.duel
         if current.to_act != target.seat:
-            return ReplayResult(
+            return RerunResult(
                 ok=False,
                 reason=f"{recorded.order}번째 걸음 앞에서 고를 사람이 "
                        f"P{current.to_act} 입니다 — 기록과 다릅니다.",
@@ -1052,26 +1061,26 @@ def replay_path(
             if action.canonical_state() == recorded.action_key
         ]
         if not matches:
-            return ReplayResult(
+            return RerunResult(
                 ok=False,
                 reason=f"{recorded.order}번째 행동이 지금 허용 후보에 "
                        f"없습니다: {recorded.kind} {recorded.action_key}",
                 steps=done,
             )
         plan = tuple(ask.chosen for ask in recorded.choices)
-        scripted = ScriptedChoice(plan, FirstPermittedChoice(), name="replay")
+        scripted = ScriptedChoice(plan, FirstPermittedChoice(), name="rerun")
         fork = sim.fork(selector=scripted)
         try:
             step = fork.apply(matches[0])
         except Exception as error:  # noqa: BLE001
-            return ReplayResult(
+            return RerunResult(
                 ok=False,
                 reason=f"{recorded.order}번째 행동에서 예외가 났습니다: "
                        f"{type(error).__name__}: {error}",
                 steps=done,
             )
         if not step.accepted:
-            return ReplayResult(
+            return RerunResult(
                 ok=False,
                 reason=f"{recorded.order}번째 행동이 거절되었습니다: "
                        f"{step.reason}",
@@ -1080,25 +1089,25 @@ def replay_path(
         _settle(fork, target.seat)
         if scripted.plan_was_missed:
             missed = [ask.describe_ko() for ask in scripted.log if ask.plan_missing]
-            return ReplayResult(
+            return RerunResult(
                 ok=False,
                 reason=f"{recorded.order}번째 걸음에서 기록된 선택이 그 자리의 "
                        f"허용 후보에 없었습니다: {' / '.join(missed)}",
                 steps=done,
             )
-        replayed = tuple(ask.chosen for ask in scripted.log)
-        if replayed[: len(plan)] != plan:
-            return ReplayResult(
+        done_asks = tuple(ask.chosen for ask in scripted.log)
+        if done_asks[: len(plan)] != plan:
+            return RerunResult(
                 ok=False,
                 reason=f"{recorded.order}번째 걸음의 선택이 기록과 다릅니다: "
-                       f"{plan} → {replayed[: len(plan)]}",
+                       f"{plan} → {done_asks[: len(plan)]}",
                 steps=done,
             )
-        if len(replayed) != len(plan):
-            return ReplayResult(
+        if len(done_asks) != len(plan):
+            return RerunResult(
                 ok=False,
                 reason=f"{recorded.order}번째 걸음의 물음 수가 기록과 "
-                       f"다릅니다: {len(plan)} → {len(replayed)}",
+                       f"다릅니다: {len(plan)} → {len(done_asks)}",
                 steps=done,
             )
         sim = Simulator(fork)
@@ -1123,7 +1132,7 @@ def replay_path(
             f"걸음 {done}개를 새 초기 상태에서 다시 밟아 같은 최종 판에 "
             "닿았습니다."
         )
-    return ReplayResult(
+    return RerunResult(
         ok=verdict.reached and same,
         reason=reason,
         steps=done,
@@ -1162,14 +1171,14 @@ __all__ = [
     "NO_INTERFERENCE",
     "OUT_OF_TURN_SCOPE",
     "PathStep",
-    "ReplayResult",
+    "RerunResult",
     "SETTLE_GUARD",
     "SearchBudget",
     "SearchOutcome",
     "Termination",
     "node_key",
     "own_field",
-    "replay_path",
+    "rerun_path",
     "search_for_card",
     "selection_options",
 ]
