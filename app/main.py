@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -756,7 +757,8 @@ def cmd_combo(agent: DeckAgent, args) -> int:
     #: 🔴 **주지 않으면 돌리지 않는다** (Phase 6-AH) — ``--search`` 없는
     #: 호출의 출력은 6-AG 와 한 글자도 다르지 않다.
     _print_bounded_search(agent, recipe_text, hand_ids,
-                          getattr(args, "search", "") or "")
+                          getattr(args, "search", "") or "",
+                          getattr(args, "results", "") or "")
 
     plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
                                                board=board_ids)
@@ -770,7 +772,8 @@ def cmd_combo(agent: DeckAgent, args) -> int:
 
 
 def _print_bounded_search(agent: DeckAgent, recipe_text: str,
-                          hand_ids: "list[int]", search_text: str) -> None:
+                          hand_ids: "list[int]", search_text: str,
+                          results_text: str = "") -> None:
     """
     🔴 **제한 전개 탐색 절** (Phase 6-AH). 목표를 주지 않으면 아무것도 적지
     않는다 — 고르지 않은 탐색을 조용히 돌리지 않는다.
@@ -779,7 +782,10 @@ def _print_bounded_search(agent: DeckAgent, recipe_text: str,
     쓴다 (:func:`bounded_search_opening` · ``deck.report`` 의 두 렌더러).
     """
     from deck.recipe import parse_recipe
-    from deck.report import render_bounded_search, render_bounded_search_brief
+    from deck.report import (
+        render_bounded_search, render_bounded_search_brief,
+        render_multi_search, render_multi_search_brief,
+    )
 
     if not search_text or not search_text.strip():
         return
@@ -796,9 +802,28 @@ def _print_bounded_search(agent: DeckAgent, recipe_text: str,
     if not recipe_text or not recipe_text.strip():
         print("  🔴 하지 않았습니다 — 실제 덱 레시피(--recipe)가 없습니다.")
         return
+    wanted, why = search_result_count(results_text)
+    if wanted is None:
+        print(f"  🔴 하지 않았습니다 — --results 를 읽지 못했습니다. {why}")
+        return
     parsed = parse_recipe(recipe_text, agent.repository)
     if parsed.draft is None:
         print("  🔴 레시피에서 카드를 하나도 읽지 못해 탐색하지 않았습니다.")
+        return
+    if wanted > 1:
+        #: 🔴 **복수 결과 모드** (6-AI). 같은 탐색기이고 예산만 다르다.
+        setup, many = bounded_search_many_opening(
+            agent.repository, parsed.draft, hand_ids,
+            card_id=card_id, max_results=wanted,
+        )
+        if many is None:
+            print("  🔴 탐색하지 않았습니다 — 입력 검증을 통과하지"
+                  " 못했습니다.")
+            for blocker in setup.blockers:
+                print(f"    - {blocker}")
+            return
+        print(render_multi_search_brief(many, agent.repository))
+        print(render_multi_search(many, agent.repository, setup))
         return
     setup, outcome, rerun = bounded_search_opening(
         agent.repository, parsed.draft, hand_ids, card_id=card_id
@@ -830,6 +855,40 @@ def search_goal_card_id(name: str) -> "int | None":
     if not name or not name.strip():
         return None
     return SEARCH_GOALS.get(name.strip().lower())
+
+
+def search_result_count(text) -> tuple:
+    """
+    ``results:`` 로 받은 **모을 결과 수** — ``(개수, 설명)`` (Phase 6-AI).
+
+    주지 않으면 ``(1, "")`` 다 — 🔴 **단일 결과 모드가 기본이고**, 고르지
+    않은 모드로 조용히 바꾸지 않는다. 읽지 못하거나 상한을 벗어나면
+    ``(None, 이유)`` 이고, 그때 부르는 쪽은 **탐색을 돌리지 않는다**.
+
+    🔴 **작고 분명한 상한을 둔다** (``RESULTS_CAP``). 조용히 깎아 주지
+    않는 이유는 하나 — 5개를 달라고 한 요청에 3개를 돌려주면 그것이 "가능한
+    전부" 로 읽힌다.
+    """
+    from agent.bounded_search import RESULTS_CAP
+
+    if text is None:
+        return 1, ""
+    if isinstance(text, bool):
+        return None, "참·거짓이 아니라 개수를 적어 주세요."
+    if isinstance(text, int):
+        number = text
+    else:
+        stripped = str(text).strip()
+        if not stripped:
+            return 1, ""
+        try:
+            number = int(stripped)
+        except ValueError:
+            return None, f"정수가 아닙니다: {stripped!r}"
+    if not 1 <= number <= RESULTS_CAP:
+        return None, (f"1 이상 {RESULTS_CAP} 이하로 적어 주세요"
+                      f" (받은 값 {number}). 1 이면 단일 결과 모드입니다.")
+    return number, ""
 
 
 def bounded_search_opening(
@@ -882,6 +941,60 @@ def bounded_search_opening(
         if fresh.can_run:
             done = rerun_path(fresh.duel, outcome)
     return setup, outcome, done
+
+
+def bounded_search_many_opening(
+    repository, draft, hand, *, card_id: int, max_results: int,
+    budget=None, rerun: bool = True
+) -> tuple:
+    """
+    선공 전개의 **서로 다른 결과 여럿**을 모으고 각각을 재생한다 (6-AI §6).
+
+    돌려주는 것은 ``(setup, outcome)`` 이고, ``outcome`` 은
+    ``MultiSearchOutcome`` 이다 — 재생 결과가 그 안의 결과마다 들어 있다.
+
+    🔴 **단일 결과 모드와 같은 자리다.** :func:`bounded_search_opening` 과
+    같은 :func:`opening_wiring` · ``build_opening`` 을 쓰고, 탐색기도 같은
+    ``BoundedSearch`` 다 — 예산의 ``max_results`` 만 다르다.
+
+    🔴 **재생은 같은 입력으로 다시 만든 새 초기 상태에서 한다** (§5).
+    탐색이 쓴 ``setup.duel`` 이 아니다. 그 판을 만들지 못하면 탐색이 쓴
+    입력에서 사본을 떠 돌리고, 어느 쪽이든 재생 실패를 성공으로 바꾸지
+    않는다.
+
+    🔴 **결과 수를 채우려고 중복 경로나 정적 계획을 끼워 넣지 않는다** —
+    모은 결과가 하나면 하나로 돌려준다.
+    """
+    from agent.bounded_search import (
+        BoundedSearch, FieldGoal, RESULTS_CAP, SearchBudget,
+    )
+    from deck.opening import build_opening
+
+    wanted = max(2, min(int(max_results), RESULTS_CAP))
+    chooser, triggers = opening_wiring(repository, None)
+    setup = build_opening(
+        repository, draft, list(hand), chooser=chooser, triggers=triggers
+    )
+    if not setup.can_run:
+        return setup, None
+
+    budget = (
+        SearchBudget(max_results=wanted) if budget is None
+        else dataclasses.replace(budget, max_results=wanted)
+    )
+    search = BoundedSearch(goal=FieldGoal(card_id=card_id, seat=0), budget=budget)
+
+    fresh_duel = None
+    if rerun:
+        fresh_chooser, fresh_triggers = opening_wiring(repository, None)
+        fresh = build_opening(
+            repository, draft, list(hand),
+            chooser=fresh_chooser, triggers=fresh_triggers,
+        )
+        if fresh.can_run:
+            fresh_duel = fresh.duel
+    outcome = search.run_many(setup.duel, rerun_from=fresh_duel, rerun=rerun)
+    return setup, outcome
 
 
 def opening_wiring(repository, line=None) -> tuple:
@@ -1082,6 +1195,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--search", default="",
                    help="제한 전개 탐색의 목표 — 적어 둔 경로를 쓰지 않고"
                         " 엔진이 허가한 분기를 펼칩니다. 예: galatea")
+    p.add_argument("--results", default="",
+                   help="모을 서로 다른 결과 수 (2~5, 기본은 1개) — 주면"
+                        " 결과들의 남은 자원을 비교합니다. 🔴 강약 평가가"
+                        " 아닙니다")
     p.set_defaults(func=cmd_combo)
 
     return parser

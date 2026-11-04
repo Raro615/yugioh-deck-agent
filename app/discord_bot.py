@@ -758,7 +758,8 @@ def _run_opening(agent, recipe_text: str,
 
 
 def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
-                        search_text: str) -> "OpeningReport | None":
+                        search_text: str,
+                        results_text: str = "") -> "OpeningReport | None":
     """
     ``/combo search:…`` — **제한 전개 탐색** (Phase 6-AH).
 
@@ -774,10 +775,20 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
 
     🔴 **요약도 상세도 공용 보고 함수가 만든다** (``deck.report``) — CLI 와
     같은 문장이어야 어느 쪽이 맞는지 묻지 않게 된다.
+
+    ``results_text`` (Phase 6-AI) 를 주면 **복수 결과 모드**로 돈다 —
+    🔴 **주지 않으면 6-AH 의 단일 결과 모드 그대로다.** 사용자가 고르지
+    않은 모드로 조용히 바꾸지 않는다.
     """
-    from app.main import bounded_search_opening, search_goal_card_id
+    from app.main import (
+        bounded_search_many_opening, bounded_search_opening,
+        search_goal_card_id, search_result_count,
+    )
     from deck.recipe import parse_recipe
-    from deck.report import render_bounded_search, render_bounded_search_brief
+    from deck.report import (
+        render_bounded_search, render_bounded_search_brief,
+        render_multi_search, render_multi_search_brief,
+    )
 
     if not search_text or not search_text.strip():
         return None
@@ -805,6 +816,14 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
         ])
         return OpeningReport(brief=said, detail=said, refused=False, ran=False)
 
+    wanted, why = search_result_count(results_text)
+    if wanted is None:
+        said = tuple(head + [
+            f"🔴 **탐색하지 않았습니다** — `results:{results_text}` 를 결과"
+            f" 수로 읽지 못했습니다. {why}",
+        ])
+        return OpeningReport(brief=said, detail=said, refused=False, ran=False)
+
     parsed = parse_recipe(recipe_text, agent.repository)
     if parsed.draft is None:
         said = tuple(head + [
@@ -812,6 +831,32 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
             " 않았습니다.**",
         ])
         return OpeningReport(brief=said, detail=said, refused=False, ran=False)
+
+    if wanted > 1:
+        #: 🔴 **복수 결과 모드.** 같은 ``app.main`` 자리를 지나고, 같은
+        #: 탐색기를 쓴다 — 예산의 ``max_results`` 만 다르다.
+        setup, many = bounded_search_many_opening(
+            agent.repository, parsed.draft, hand_ids,
+            card_id=card_id, max_results=wanted,
+        )
+        if many is None:
+            said = tuple(head + [
+                "🔴 **탐색하지 않았습니다** — 입력 검증을 통과하지"
+                " 못했습니다 (위 `[실제 엔진 실행]` 절에 이유가"
+                " 있습니다).",
+            ])
+            return OpeningReport(brief=said, detail=said,
+                                 refused=not setup.can_run, ran=False)
+        brief = list(head)
+        brief.extend(
+            render_multi_search_brief(many, agent.repository).splitlines()
+        )
+        detail = list(head)
+        detail.extend(
+            render_multi_search(many, agent.repository, setup).splitlines()
+        )
+        return OpeningReport(brief=tuple(brief), detail=tuple(detail),
+                             refused=False, ran=True)
 
     setup, outcome, rerun = bounded_search_opening(
         agent.repository, parsed.draft, hand_ids, card_id=card_id
@@ -1189,7 +1234,8 @@ def _overflow_notice(detail: ComboDetail) -> str:
 
 def combo_response(agent, hand_text: str, board_text: str = "",
                    deck_text: str = "", recipe_text: str = "",
-                   line_text: str = "", search_text: str = "") -> ComboResponse:
+                   line_text: str = "", search_text: str = "",
+                   results_text: str = "") -> ComboResponse:
     """
     ``/combo`` 의 응답. **discord 를 모른다.** 메시지들과 첨부들을 돌려준다.
 
@@ -1284,7 +1330,8 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     executed = _run_opening(agent, recipe_text, hand_ids, line_text)
     #: 🔴 **주지 않으면 돌리지 않는다** (Phase 6-AH). ``search:`` 가 없는
     #: 요청의 동작은 6-AG 와 한 글자도 다르지 않다.
-    searched = _run_bounded_search(agent, recipe_text, hand_ids, search_text)
+    searched = _run_bounded_search(agent, recipe_text, hand_ids, search_text,
+                                   results_text)
 
     #: 🔴 **입력이 거절되면 정적 전개 추천을 내지 않는다** (Phase 6-AA —
     #: 사용자 실험 ③). 실측으로, 「기르수: 패 4장 > 덱 3장」으로 거절한
@@ -1613,8 +1660,8 @@ class SearchService:
 
     def combo_response(self, hand_text: str, board_text: str = "",
                        deck_text: str = "", recipe_text: str = "",
-                       line_text: str = "",
-                       search_text: str = "") -> ComboResponse:
+                       line_text: str = "", search_text: str = "",
+                       results_text: str = "") -> ComboResponse:
         """
         전개 계획을 세워 **메시지들과 첨부들**을 돌려준다 (Phase 6-AE).
 
@@ -1631,12 +1678,13 @@ class SearchService:
         try:
             return combo_response(self._agent, hand_text, board_text,
                                   deck_text, recipe_text, line_text,
-                                  search_text)
+                                  search_text, results_text)
         except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
             logger.exception("전개 계획 생성에 실패했습니다. 패=%r 필드=%r"
-                             " 덱=%r 레시피=%r 경로=%r 탐색=%r",
+                             " 덱=%r 레시피=%r 경로=%r 탐색=%r 결과수=%r",
                              hand_text, board_text,
-                             deck_text, recipe_text, line_text, search_text)
+                             deck_text, recipe_text, line_text, search_text,
+                             results_text)
             return ComboResponse(messages=(COMBO_ERROR_MESSAGE,))
 
     def deck_texts(self, request_text: str) -> "list[str]":
@@ -1806,11 +1854,14 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         line="(선택) 검증용 전개 경로 이름 — 적어 둔 경로를 따라 실행합니다."
              " 예: orcust-girsu",
         search="(선택) 제한 전개 탐색의 목표 — 적어 둔 경로를 쓰지 않고"
-               " 엔진이 허가한 분기를 펼칩니다. 예: galatea")
+               " 엔진이 허가한 분기를 펼칩니다. 예: galatea",
+        results="(선택) 모을 서로 다른 결과 수 (2~5, 기본은 1개) — 주면"
+                " 결과들의 남은 자원을 비교합니다. 강약 평가는 아닙니다")
     async def combo_command(interaction: "discord.Interaction",
                             hand: str, board: str = "",
                             deck: str = "", recipe: str = "",
-                            line: str = "", search: str = "") -> None:
+                            line: str = "", search: str = "",
+                            results: str = "") -> None:
         #: 🔴 ``/search`` · ``/deck`` 과 같은 순서다.
         #: 🔴 **탐색은 오래 걸릴 수 있다** (실측 20~150초 — 보고서 §5).
         #: 그래서 ``defer()`` 로 먼저 응답을 열고 (3초 제한), 실제 탐색은
@@ -1819,7 +1870,7 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         await interaction.response.defer()
         response = await asyncio.to_thread(
             combo_service.combo_response, hand, board, deck, recipe, line,
-            search)
+            search, results)
         await send_combo_response(interaction.followup, response)
 
     @client.event
