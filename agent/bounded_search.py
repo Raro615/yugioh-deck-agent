@@ -72,6 +72,7 @@ BoundedSearch — **적어 둔 경로를 따라가지 않고** 목표에 닿는 
 
 from __future__ import annotations
 
+import dataclasses
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -100,6 +101,17 @@ DEFAULT_MAX_NODES: int = 300
 DEFAULT_MAX_SECONDS: float = 300.0
 #: 한 행동에서 만들 **해결 중 선택 분기**의 상한.
 DEFAULT_MAX_CHOICE_BRANCHES: int = 8
+
+#: 기본은 **결과 하나**다 — 기존 단일 결과 모드와 한 글자도 다르지 않다
+#: (Phase 6-AI). 복수 결과는 명시적으로 골라야 켜진다.
+DEFAULT_MAX_RESULTS: int = 1
+#: 복수 모드를 고를 때의 권장 기본값.
+MULTI_DEFAULT_MAX_RESULTS: int = 3
+#: 🔴 **옵션으로 노출할 수 있는 작고 명확한 상한.** 결과 하나마다 재생을
+#: 한 번 더 돌리므로 (§5) 비용이 결과 수에 비례한다.
+RESULTS_CAP: int = 5
+#: 재생 전부에 쓸 수 있는 시간의 상한 — **탐색 예산과 따로** 둔다.
+DEFAULT_MAX_RERUN_SECONDS: float = 180.0
 
 #: 필수 걸음(패스 · 드로우)을 지나가는 반복의 안전장치. 무한 반복을 막는
 #: 것뿐이고, 여기 걸리면 그 사실을 노드에 적는다.
@@ -166,6 +178,24 @@ class SearchBudget:
     🔴 **끄면 같은 판을 여러 번 펼친다.** 기준이 안전한지 재는 자리가
     있어야 하므로 칸으로 둔다 — 기본은 켜짐이다.
     """
+    max_results: int = DEFAULT_MAX_RESULTS
+    """
+    모을 **서로 다른 성공 결과**의 상한 (Phase 6-AI).
+
+    🔴 **1 이면 기존 단일 결과 모드다** — 첫 성공에서 멈추고 돌려주는 값도
+    :class:`SearchOutcome` 그대로다. 2 이상이면 복수 결과 모드이고
+    :meth:`BoundedSearch.run_many` 로 들어간다.
+
+    🔴 **중복 결과는 이 수를 늘리지 않는다.** 같은 최종 결과에 다른 행동
+    순서로 닿으면 대표 하나로 합치고 (:func:`outcome_key`), 그 사실을
+    :attr:`PathResult.duplicates` 로 센다.
+    """
+    max_rerun_seconds: float = DEFAULT_MAX_RERUN_SECONDS
+    """
+    재생 **전부**에 쓸 수 있는 시간. 🔴 탐색 예산과 **따로** 둔다 — 그래야
+    보고가 탐색 소요와 재생 소요를 가를 수 있고, 결과 수를 늘렸을 때
+    전체 요청 시간이 무제한으로 늘지 않는다.
+    """
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -182,15 +212,33 @@ class SearchBudget:
                 f"(0 이면 해결 중 선택을 분기하지 않는다): "
                 f"{self.max_choice_branches!r}"
             )
-        if not isinstance(self.max_seconds, (int, float)) or self.max_seconds <= 0:
+        for name, value in (
+            ("max_seconds", self.max_seconds),
+            ("max_rerun_seconds", self.max_rerun_seconds),
+        ):
+            if not isinstance(value, (int, float)) or value <= 0:
+                raise BoundedSearchError(f"{name} 는 0 보다 큰 수입니다: {value!r}")
+        if (
+            isinstance(self.max_results, bool)
+            or not isinstance(self.max_results, int)
+            or not 1 <= self.max_results <= RESULTS_CAP
+        ):
             raise BoundedSearchError(
-                f"max_seconds 는 0 보다 큰 수입니다: {self.max_seconds!r}"
+                f"max_results 는 1 이상 {RESULTS_CAP} 이하의 정수입니다 "
+                f"(1 이면 단일 결과 모드): {self.max_results!r}"
             )
+
+    @property
+    def many(self) -> bool:
+        """복수 결과 모드인가."""
+        return self.max_results > 1
 
     def describe_ko(self) -> str:
         return (
             f"깊이 {self.max_depth} · 노드 {self.max_nodes} · "
             f"{self.max_seconds:g}초 · 선택 분기 {self.max_choice_branches}"
+            + (f" · 결과 {self.max_results}개" if self.many else "")
+            + (f" · 재생 {self.max_rerun_seconds:g}초" if self.many else "")
             + (" · 중복 제거 켜짐" if self.dedup else " · 중복 제거 꺼짐")
         )
 
@@ -469,6 +517,12 @@ class RerunResult:
     final_state_hash: str = ""
     matches_search: bool = False
     """탐색이 남긴 최종 판(해시와 자신 필드)과 **같은가.**"""
+    resources: "ResourceSummary | None" = None
+    """
+    재생이 닿은 판의 **자원 요약** (Phase 6-AI). 재생이 걸음을 하나라도
+    밟았으면 채워진다 — 복수 결과 모드가 "탐색이 적어 둔 요약과 재생된
+    상태가 같은가" 를 재는 자리다.
+    """
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         mark = "성공" if self.ok else "🔴 실패"
@@ -476,6 +530,463 @@ class RerunResult:
             f"재생 {mark} — 걸음 {self.steps} · 목표 {self.goal_reached}"
             f" · 탐색 결과와 일치 {self.matches_search}\n  {self.reason}"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class PathResult:
+    """
+    서로 다른 성공 결과 **하나** (Phase 6-AI).
+
+    🔴 **살아 있는 판을 들고 있지 않다.** :attr:`resources` 가 그 자리에서
+    뜬 값이고, 그 뒤의 탐색이 무엇을 하든 변하지 않는다.
+    """
+
+    index: int
+    path: "tuple[PathStep, ...]"
+    resources: ResourceSummary
+    goal_reason: str
+    duplicates: int = 0
+    """같은 결과에 닿은 **다른 경로**의 수. 🔴 결과 수를 늘리지 않는다."""
+    rerun: "RerunResult | None" = None
+    resources_match: bool = False
+    """재생된 상태의 자원 요약이 탐색이 적어 둔 것과 **같은가.**"""
+
+    @property
+    def action_count(self) -> int:
+        return len(self.path)
+
+    @property
+    def choice_count(self) -> int:
+        return sum(len(step.choices) for step in self.path)
+
+    @property
+    def verified(self) -> bool:
+        """
+        **검증된 결과인가** — 재생이 성공하고 자원 요약까지 같은가.
+
+        🔴 재생하지 않았거나 실패한 결과는 **검증된 비교에 섞지 않는다.**
+        """
+        return (
+            self.rerun is not None
+            and self.rerun.ok
+            and self.resources_match
+        )
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        lines = [
+            f"[결과 {self.index}] 행동 {self.action_count}걸음 · 해결 중 선택 "
+            f"{self.choice_count}회 · 같은 결과에 닿은 다른 경로 "
+            f"{self.duplicates}개 · 검증 "
+            f"{'✔' if self.verified else '🔴 아님'}"
+        ]
+        for step in self.path:
+            lines.append("  " + step.describe_ko().replace("\n", "\n  "))
+        lines.append("  " + self.resources.describe_ko().replace("\n", "\n  "))
+        if self.rerun is not None:
+            lines.append("  " + self.rerun.describe_ko().replace("\n", "\n  "))
+        return "\n".join(lines)
+
+
+@dataclass(frozen=True, slots=True)
+class MultiSearchOutcome:
+    """
+    복수 결과 모드의 결과 **전부** (Phase 6-AI).
+
+    🔴 **"찾은 결과가 있다" 와 "탐색을 끝까지 했다" 를 가른다.**
+    :attr:`reached` 가 앞의 것을 말하고 :attr:`search_exhausted` 가 뒤의 것을
+    말한다. 둘을 한 칸에 담으면 "셋을 찾았으니 다 봤다" 로 읽힌다.
+    :attr:`termination` 은 **고리가 왜 멈췄는가**이고, 복수 결과 모드에서는
+    결과를 찾았더라도 ``exhausted`` 나 ``budget_exceeded`` 로 남는다 —
+    목표에 닿은 분기를 더 펼치지 않고 고리를 계속 돌리기 때문이다.
+
+    🔴 **돌려준 결과가 가능한 모든 전개가 아니다.** 예산 · 지원 범위 ·
+    선택 생략이 모두 남은 길을 가린다.
+    """
+
+    goal: FieldGoal
+    budget: SearchBudget
+    termination: Termination
+    results: "tuple[PathResult, ...]" = ()
+    search_exhausted: bool = False
+    """지정된 범위를 **끝까지** 펼쳤는가 (예산에 걸리지 않고 스택이 비었는가)."""
+    budget_hit: tuple[str, ...] = ()
+    duplicate_results: int = 0
+    """같은 결과에 닿아 **대표로 합친** 경로의 총수."""
+    nodes_expanded: int = 0
+    deepest: int = 0
+    choice_branches: int = 0
+    choice_plans: int = 0
+    choice_offers_truncated: int = 0
+    deduped: int = 0
+    revisited: int = 0
+    stale: int = 0
+    search_seconds: float = 0.0
+    rerun_seconds: float = 0.0
+    """🔴 **탐색 소요와 따로** 적는다 — 둘을 합치면 어디에 시간이 갔는지 모른다."""
+    unsupported: tuple[str, ...] = ()
+    out_of_scope: tuple[str, ...] = ()
+    opponent_declined: tuple[str, ...] = ()
+    opponent_blocked: tuple[str, ...] = ()
+    errors: tuple[str, ...] = ()
+    rerun_notes: tuple[str, ...] = ()
+    """재생을 **돌리지 못한** 결과와 그 이유 (재생 시간 상한 등)."""
+
+    @property
+    def found(self) -> int:
+        return len(self.results)
+
+    @property
+    def verified_results(self) -> "tuple[PathResult, ...]":
+        """🔴 **검증된 것만.** 비교표는 이것으로 만든다."""
+        return tuple(result for result in self.results if result.verified)
+
+    @property
+    def failed_results(self) -> "tuple[PathResult, ...]":
+        """재생을 돌렸는데 실패한 것 — 숨기지 않는다."""
+        return tuple(
+            result for result in self.results
+            if result.rerun is not None and not result.verified
+        )
+
+    @property
+    def unverified_results(self) -> "tuple[PathResult, ...]":
+        """재생을 **돌리지 못한** 것 (시간 상한 등)."""
+        return tuple(result for result in self.results if result.rerun is None)
+
+    @property
+    def reached(self) -> bool:
+        return bool(self.results)
+
+    @property
+    def hit_result_cap(self) -> bool:
+        """결과 수 상한에 닿아 멈췄는가."""
+        return any("max_results=" in line for line in self.budget_hit)
+
+    @property
+    def skipped_choices(self) -> bool:
+        return self.choice_offers_truncated > 0
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        lines = [
+            f"제한 탐색 (복수 결과) — 목표: {self.goal.describe_ko()}",
+            f"  종료: {self.termination.value}"
+            + (f" ({' · '.join(self.budget_hit)})" if self.budget_hit else ""),
+            f"  범위를 끝까지 펼쳤는가: {self.search_exhausted}",
+            f"  찾은 결과 {self.found}개 (검증 {len(self.verified_results)} ·"
+            f" 재생 실패 {len(self.failed_results)} ·"
+            f" 재생 못 함 {len(self.unverified_results)}) ·"
+            f" 대표로 합친 경로 {self.duplicate_results}개",
+            f"  예산: {self.budget.describe_ko()}",
+            f"  펼친 노드 {self.nodes_expanded} · 최대 깊이 {self.deepest}"
+            f" · 탐색 {self.search_seconds:.2f}초 · 재생"
+            f" {self.rerun_seconds:.2f}초",
+        ]
+        for result in self.results:
+            lines.append(result.describe_ko())
+        for label, notes in (
+            ("범위 밖", self.out_of_scope),
+            ("미지원", self.unsupported),
+            ("상대 정책", self.opponent_declined),
+            ("상대 자리에서 멈춤", self.opponent_blocked),
+            ("재생 메모", self.rerun_notes),
+            ("🔴 오류", self.errors),
+        ):
+            for note in notes:
+                lines.append(f"  {label}: {note}")
+        return "\n".join(lines)
+
+
+# ======================================================================
+# 자원 요약 — **값으로** 떠 둔다 (Phase 6-AI)
+# ======================================================================
+#: 자기 자리에서 **내용까지** 적는 존.
+OWN_DETAIL_ZONES: tuple[Zone, ...] = (
+    Zone.HAND, Zone.MZONE, Zone.EMZONE, Zone.SZONE,
+    Zone.FZONE, Zone.PZONE, Zone.GRAVE, Zone.REMOVED,
+)
+#: 자기 자리에서 **장수만** 적는 존. 🔴 덱의 순서는 입력에 없고
+#: (``build_opening`` 의 설명) 엑스트라 덱의 내용은 레시피가 말한다 —
+#: 둘 다 "이 전개가 남긴 것" 이 아니라 입력이므로 장수만 적는다.
+OWN_COUNT_ZONES: tuple[Zone, ...] = (Zone.DECK, Zone.EXTRA)
+#: 상대 자리에서 **내용까지** 적는 존 — 공개된 자리뿐이다.
+THEIR_DETAIL_ZONES: tuple[Zone, ...] = (
+    Zone.MZONE, Zone.EMZONE, Zone.SZONE,
+    Zone.FZONE, Zone.PZONE, Zone.GRAVE, Zone.REMOVED,
+)
+#: 상대 자리에서 **장수만** 적는 존. 🔴 **가려진 정보를 지어내지 않는다.**
+THEIR_COUNT_ZONES: tuple[Zone, ...] = (Zone.HAND, Zone.DECK, Zone.EXTRA)
+
+#: 상대 필드의 **뒷면** 카드를 적을 때 쓰는 자리 표시.
+CONCEALED_CARD: None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CardSlot:
+    """
+    한 칸에 있는 카드 하나. **값뿐이다.**
+
+    🔴 :attr:`card_id` 가 ``None`` 이면 **그 자리가 가려져 있다** — 상대
+    필드의 뒷면 카드다. 없는 것이 아니라 **모르는 것**이고, 그 구분을
+    없애면 보고가 상대의 정체를 아는 척하게 된다.
+
+    🔴 **개체를 합치지 않는다.** 같은 이름의 두 장, 토큰, 앞뒷면, 표시
+    형식이 모두 따로 남는다 — 그 차이가 전개의 차이다.
+    """
+
+    instance: int
+    card_id: "int | None"
+    face_up: bool
+    position: str
+    sequence: int = 0
+
+    @property
+    def concealed(self) -> bool:
+        return self.card_id is CONCEALED_CARD
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        what = "가려짐" if self.concealed else f"[{self.card_id}]"
+        return f"#{self.instance} {what} {self.position}"
+
+
+@dataclass(frozen=True, slots=True)
+class ZoneSummary:
+    """존 하나의 요약. :attr:`counted_only` 면 :attr:`cards` 가 비어 있다."""
+
+    seat: int
+    zone: str
+    size: int
+    cards: "tuple[CardSlot, ...]" = ()
+    counted_only: bool = False
+
+    @property
+    def card_ids(self) -> "tuple[int | None, ...]":
+        return tuple(card.card_id for card in self.cards)
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        if self.counted_only:
+            return f"P{self.seat} {self.zone} {self.size}장 (장수만)"
+        inside = " · ".join(card.describe_ko() for card in self.cards) or "없음"
+        return f"P{self.seat} {self.zone} {self.size}장: {inside}"
+
+
+@dataclass(frozen=True, slots=True)
+class UseRecord:
+    """
+    엔진에 **기록된** 사용 제한 하나.
+
+    🔴 **"쓰지 않았다" 를 "쓸 수 있다" 로 읽지 않는다.** 이 기록은 무엇이
+    이미 쓰였는지만 말한다 — 지금 발동할 수 있는지도, 다음 턴에 쓸 수
+    있는지도 말하지 않는다 (그 판정은 ``legal_actions`` 의 일이다).
+    """
+
+    kind: str
+    """``effect`` · ``card`` · ``card_name`` · ``summon`` · ``rule``."""
+    label: str
+    count: int
+    seat: "int | None" = None
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        return f"{self.kind} {self.label} ×{self.count}"
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceSummary:
+    """
+    한 성공 결과의 **실제 남은 자원** — 값으로만 이루어져 있다.
+
+    🔴 **살아 있는 ``Duel`` 을 들고 있지 않다.** 들고 있으면 그 뒤의 탐색이
+    그 판을 더 밟았을 때 요약이 조용히 달라진다. :func:`summarize_resources`
+    가 **그 자리에서** 값을 뜨고, 이 객체는 그 뒤로 변하지 않는다 (frozen).
+
+    🔴 **평가하지 않는다.** 점수도 총점도 없고, 어느 쪽이 나은지도 적지
+    않는다 — 어떤 자원이 어디에 남았는지만 적는다.
+    """
+
+    seat: int
+    turn_number: int
+    phase: str
+    state_hash: str
+    zones: "tuple[ZoneSummary, ...]"
+    uses: "tuple[UseRecord, ...]"
+    normal_summon_used: bool
+    """그 자리의 **일반 소환권**을 이 턴에 썼는가 (세트와 함께 쓰는 권리다)."""
+
+    def zone(self, seat: int, zone) -> "ZoneSummary | None":
+        wanted = zone.value if hasattr(zone, "value") else str(zone)
+        for summary in self.zones:
+            if summary.seat == seat and summary.zone == wanted:
+                return summary
+        return None
+
+    def size(self, seat: int, zone) -> int:
+        found = self.zone(seat, zone)
+        return 0 if found is None else found.size
+
+    def card_ids(self, seat: int, zone) -> "tuple[int | None, ...]":
+        found = self.zone(seat, zone)
+        return () if found is None else found.card_ids
+
+    @property
+    def own_field(self) -> "tuple[CardSlot, ...]":
+        """자신의 몬스터 존 + 엑스트라 몬스터 존."""
+        out: list[CardSlot] = []
+        for zone in FIELD_ZONES:
+            found = self.zone(self.seat, zone)
+            if found is not None:
+                out.extend(found.cards)
+        return tuple(out)
+
+    @property
+    def own_field_rows(self) -> "tuple[tuple[str, int, bool], ...]":
+        """
+        :func:`own_field` 와 **같은 모양** — ``(존, 카드 ID, 앞면인가)``.
+
+        재생이 돌려주는 ``RerunResult.final_field`` 와 바로 견주려고 둔다.
+        """
+        rows: list[tuple[str, int, bool]] = []
+        for zone in FIELD_ZONES:
+            found = self.zone(self.seat, zone)
+            if found is None:
+                continue
+            for card in found.cards:
+                rows.append((found.zone, card.card_id, card.face_up))
+        return tuple(rows)
+
+    @property
+    def their_field(self) -> "tuple[CardSlot, ...]":
+        out: list[CardSlot] = []
+        for zone in (Zone.MZONE, Zone.EMZONE, Zone.SZONE):
+            found = self.zone(1 - self.seat, zone)
+            if found is not None:
+                out.extend(found.cards)
+        return tuple(out)
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        lines = [
+            f"P{self.seat} T{self.turn_number} {self.phase} "
+            f"해시 {self.state_hash[:12]}… "
+            f"일반 소환권 {'씀' if self.normal_summon_used else '안 씀'}"
+        ]
+        lines.extend(f"  {summary.describe_ko()}" for summary in self.zones)
+        if self.uses:
+            lines.append("  사용 제한: " + " · ".join(
+                record.describe_ko() for record in self.uses
+            ))
+        return "\n".join(lines)
+
+
+def _slots_of(container, *, concealed: bool) -> "tuple[CardSlot, ...]":
+    """그 존의 카드들을 값으로. ``concealed`` 면 뒷면의 정체를 적지 않는다."""
+    out: list[CardSlot] = []
+    for card in container.cards():
+        face_up = bool(card.is_faceup)
+        out.append(
+            CardSlot(
+                instance=card.instance_id.value,
+                card_id=(
+                    card.card_id if face_up or not concealed else CONCEALED_CARD
+                ),
+                face_up=face_up,
+                position=card.position.value,
+                sequence=card.sequence,
+            )
+        )
+    return tuple(out)
+
+
+def _use_records(state, turn_number: int) -> "tuple[UseRecord, ...]":
+    """
+    엔진이 **기록한** 사용 제한 전부 — 효과 · 카드 · 카드명 · 소환 · 규칙.
+
+    🔴 **세는 것을 지어내지 않는다.** 등록부가 들고 있는 항목만 옮긴다.
+    """
+    from engine.state.rule_usage import RuleActionKind
+
+    records: list[UseRecord] = []
+    uses = state.uses
+    for (player, card_id, ordinal), count in sorted(uses.per_effect.items()):
+        records.append(UseRecord(
+            kind="effect", label=f"{card_id}:e[{ordinal}]", count=count,
+            seat=player,
+        ))
+    for (player, instance), count in sorted(uses.per_card.items()):
+        records.append(UseRecord(
+            kind="card", label=f"#{instance}", count=count, seat=player,
+        ))
+    for (player, card_id), count in sorted(uses.per_card_name.items()):
+        records.append(UseRecord(
+            kind="card_name", label=f"[{card_id}]", count=count, seat=player,
+        ))
+    for player, card_id, summon, count in state.summon_uses.entries(turn_number):
+        records.append(UseRecord(
+            kind="summon", label=f"[{card_id}] {summon}", count=count,
+            seat=player,
+        ))
+    for player in (0, 1):
+        for action in RuleActionKind:
+            if action is RuleActionKind.NORMAL_SUMMON:
+                count = state.rule_uses.count(turn_number, player, action)
+                if count:
+                    records.append(UseRecord(
+                        kind="rule", label=action.value, count=count,
+                        seat=player,
+                    ))
+    return tuple(records)
+
+
+def summarize_resources(duel: Duel, seat: int) -> ResourceSummary:
+    """
+    그 판의 자원을 **값으로** 뜬다 (Phase 6-AI §3).
+
+    🔴 **가려진 정보를 지어내지 않는다.** 상대의 패 · 덱 · 엑스트라 덱은
+    **장수만** 적고, 상대 필드의 뒷면 카드는 정체를 적지 않는다
+    (:data:`CONCEALED_CARD`). 입력에 없는 것을 평가하지 않는다는 규율이
+    요약에도 그대로 적용된다.
+
+    🔴 **그 자리에서 뜬다.** 돌려주는 것은 불변 값이므로, 이 뒤에 그 판을
+    더 밟아도 요약은 변하지 않는다.
+    """
+    from engine.state.rule_usage import RuleActionKind
+
+    state = duel.state
+    turn_number = state.turn.turn_number
+    zones: list[ZoneSummary] = []
+    for player in state.players:
+        mine = player.player_id == seat
+        detail = OWN_DETAIL_ZONES if mine else THEIR_DETAIL_ZONES
+        counted = OWN_COUNT_ZONES if mine else THEIR_COUNT_ZONES
+        for zone, container in sorted(
+            player.zones.items(), key=lambda item: item[0].value
+        ):
+            if zone in detail:
+                zones.append(ZoneSummary(
+                    seat=player.player_id,
+                    zone=zone.value,
+                    size=len(container),
+                    cards=_slots_of(container, concealed=not mine),
+                ))
+            else:
+                #: 🔴 **분류하지 않은 존도 빠뜨리지 않는다** — 장수만 적는다.
+                #: ``counted`` 에 적어 둔 존이 그 길로 오고, 거기에 없는
+                #: 존(앞으로 생기는 존)도 **조용히 사라지지 않는다**.
+                assert zone in counted or zone not in detail
+                zones.append(ZoneSummary(
+                    seat=player.player_id,
+                    zone=zone.value,
+                    size=len(container),
+                    counted_only=True,
+                ))
+    return ResourceSummary(
+        seat=seat,
+        turn_number=turn_number,
+        phase=state.turn.phase.value,
+        state_hash=state.state_hash(),
+        zones=tuple(zones),
+        uses=_use_records(state, turn_number),
+        normal_summon_used=state.rule_uses.used(
+            turn_number, seat, RuleActionKind.NORMAL_SUMMON
+        ),
+    )
 
 
 # ======================================================================
@@ -522,6 +1033,78 @@ def node_key(duel: Duel, legal) -> "tuple | None":
         duel.step.value,
         duel.priority.window.value,
         frozenset(repr(action.canonical_state()) for action in legal.allowed),
+    )
+
+
+def outcome_key(duel: Duel, legal, seat: int) -> tuple:
+    """
+    두 **성공 결과**를 같은 것으로 볼 수 있는가 (Phase 6-AI §2).
+
+    🔴 **:func:`node_key` 와 목적이 다르다.** 그쪽은 *탐색 도중에* 같은
+    자리를 두 번 펼치지 않으려는 것이고 (그래서 체인 중에는 ``None`` 을
+    돌려주어 **합치지 않는다**), 이쪽은 *사용자에게 보여 줄* 서로 다른
+    결과를 세는 것이다. 그래서 계약이 다르다 —
+
+    =====================  ===============================================
+    ``node_key``           체인 중이면 ``None`` (병합 불가). 깊이는 값으로
+                           따로 들고 있는다 (:func:`admit`)
+    ``outcome_key``        **언제나 열쇠를 돌려준다.** 목표는 *정리된*
+                           자리에서만 성립하므로 (``_is_settled``) 체인
+                           중인 성공 결과가 없다
+    =====================  ===============================================
+
+    무엇이 들어가는가 — ``GameState.canonical_state`` 가 §2 가 요구한 것을
+    이미 함께 센다: **양쪽 플레이어의 카드 위치와 상태** (패 · 덱 ·
+    엑스트라 · 묘지 · 제외 · 필드 배치 · 표시 형식 · 토큰) · **사용한
+    효과·소환 제한** (``uses`` · ``rule_uses`` · ``summon_uses``) · **턴**.
+    그 위에 흐름 위의 자리와 **허용 후보 집합**을 더한다 — 후자가 "후속
+    행동을 바꿀 수 있는 엔진 상태" 를 그 자리에서 보이는 만큼 담는다
+    (지나간 사건 중 아직 쓸 수 있는 유발이 그 목록에 오른다).
+
+    🔴 **카드 장수나 카드명 목록만 같다는 이유로 합치지 않는다.** 열쇠의
+    바탕이 ``state_hash`` 이므로 개체 위치 · 표시 형식 · 사용 제한이 모두
+    들어간다 — **필드가 같아도 사용 제한이 다르면 다른 결과**다.
+
+    🔴 **안전하게 같다고 말할 수 없으면 별개로 둔다.** 이 열쇠는 보수적인
+    쪽으로 기운다 (합치기보다 가른다). 그래서 **중복이 일부 남을 수 있고**,
+    개체 ID 를 지우는 공격적인 정규화는 이번에 넣지 않았다 — 그 한계는
+    보고서 §2 에 적었다.
+    """
+    settled, why = _is_settled(duel, seat, legal)
+    if not settled:
+        raise BoundedSearchError(
+            f"정리되지 않은 자리를 성공 결과로 셀 수 없습니다: {why}"
+        )
+    return (
+        duel.state.state_hash(),
+        duel.to_act,
+        duel.step.value,
+        duel.priority.window.value,
+        frozenset(repr(action.canonical_state()) for action in legal.allowed),
+    )
+
+
+def representative_order(path: "tuple[PathStep, ...]") -> tuple:
+    """
+    같은 결과에 닿은 경로들 중 **대표를 고르는 결정론적 기준** (§2).
+
+    1. **행동 수가 적은 것** 먼저.
+    2. 동률이면 **행동 열쇠의 글자 순서**.
+    3. 그래도 동률이면 **해결 중 선택의 글자 순서**.
+
+    🔴 **"발견한 경로 중 대표" 다.** 전체 최단 경로를 보장하지 않는다 —
+    탐색이 그 결과에 닿는 모든 경로를 보았다는 주장이 아니다.
+
+    🔴 **점수가 아니다.** 행동 수가 적다고 더 강한 전개가 아니고, 이 순서를
+    전개의 강약으로 읽어서는 안 된다. 같은 결과 안에서 **어느 기록을
+    보여 줄지** 고르는 데만 쓴다.
+    """
+    return (
+        len(path),
+        tuple(repr(step.action_key) for step in path),
+        tuple(
+            repr(ask.chosen) for step in path for ask in step.choices
+        ),
     )
 
 
@@ -837,6 +1420,38 @@ class _Ledger:
     declined: list = field(default_factory=list)
     blocked: list = field(default_factory=list)
     errors: list = field(default_factory=list)
+    results: list = field(default_factory=list)
+    """
+    모은 **서로 다른 성공 결과**들 — ``(경로, 자원 요약, 판정 이유)`` (6-AI).
+
+    🔴 **판을 들고 있지 않다.** 요약을 그 자리에서 값으로 뜨므로, 뒤의
+    탐색이 무엇을 하든 이 목록은 변하지 않는다.
+    """
+    result_keys: dict = field(default_factory=dict)
+    """:func:`outcome_key` → :attr:`results` 의 자리. 중복을 합치는 열쇠다."""
+    duplicate_results: int = 0
+    """같은 결과에 닿아 **대표로 합친** 경로 수. 🔴 결과 수를 늘리지 않는다."""
+    result_dups: dict = field(default_factory=dict)
+    """:attr:`results` 의 자리 → 그 결과에 닿은 **다른 경로**의 수."""
+    rerun_notes: list = field(default_factory=list)
+    """재생을 **돌리지 못한** 결과와 그 이유. 🔴 실패를 숨기지 않는다."""
+    rerun_budget_hit: list = field(default_factory=list)
+    """
+    **재생** 쪽에서 걸린 예산 칸 (6-AI).
+
+    🔴 **탐색 예산과 한 통에 담지 않는다.** 담으면 재생 시간 상한에 걸린
+    것이 "탐색을 끝까지 펼치지 못했다" 로 읽힌다 — 그 둘은 다른 사실이다.
+    보고에는 두 묶음을 합쳐 적고, "범위를 끝까지 펼쳤는가" 는 탐색 쪽만
+    본다 (:meth:`BoundedSearch._many_outcome`).
+    """
+    stack_emptied: bool = False
+    """
+    고리가 **스택이 비어서** 끝났는가 (6-AI).
+
+    🔴 **"찾은 결과가 있다" 와 다른 사실이다.** 이것이 거짓이면 예산이나
+    결과 상한이 고리를 끊은 것이고, 그때 돌려준 결과는 **가능한 모든
+    전개가 아니다.**
+    """
     seen: dict = field(default_factory=dict)
     """
     이 탐색이 본 노드 열쇠 → **그 상태에 가장 얕게 닿은 깊이** (보완 A).
@@ -903,9 +1518,234 @@ class BoundedSearch:
                 Termination.GOAL_REACHED, ledger, (), duel, verdict, started
             )
 
-        #: 🔴 **사본이 선택 정책을 받는지 먼저 확인한다.** 받지 못하면 해결
-        #: 중 선택이 사본 안에서 거절되고, 그 결과는 "목표에 닿지 못했다" 로
-        #: 보인다 — 그 둘을 섞지 않으려고 **사실을 적는다** (§4.4).
+        #: 🔴 **사본이 선택 정책을 받는지 먼저 확인한다** (:meth:`_probe_chooser`).
+        self._probe_chooser(duel, ledger)
+
+        root = _Node(Simulator(duel), (), 0)
+        termination, found = self._drive(root, ledger, started)
+
+        #: 🔴 **종료 사유는 고리가 확정한다** (:meth:`_classify`).
+
+        #: 🔴 **진짜 판이 그대로인지 확인한다** (:meth:`_assert_untouched`).
+        self._assert_untouched(duel, root_hash, root_draws)
+
+        if found is not None:
+            path, final, verdict = found
+            return self._outcome(
+                termination, ledger, path, final, verdict, started
+            )
+        return self._outcome(
+            termination, ledger, (), duel, self.goal.judge(duel), started
+        )
+
+    # ------------------------------------------------------------------
+    def run_many(
+        self,
+        duel: Duel,
+        *,
+        rerun_from: "Duel | None" = None,
+        rerun: bool = True,
+    ) -> MultiSearchOutcome:
+        """
+        목표에 닿는 **서로 다른 결과 여럿**을 예산 안에서 모은다 (6-AI §1).
+
+        🔴 **복수 결과 수집을 위한 별도 탐색기를 복사해 만들지 않았다.**
+        펼치는 고리는 :meth:`_drive` **하나**이고, 단일 결과 모드와 같은
+        :meth:`_open` · :func:`admit` · :func:`superseded` ·
+        :meth:`_attempts` · :meth:`_apply_once` 를 지난다. 이 메서드가
+        더하는 것은 셋뿐이다 — (1) 목표에 닿은 자리를 값으로 모아 두고
+        (:meth:`_collect`) **그 분기를 더 펼치지 않는 것**, (2) 결과 수
+        상한, (3) 탐색이 **끝난 뒤** 모은 결과를 재생하는 것
+        (:meth:`rerun_results`).
+
+        🔴 **목표를 달성한 분기는 더 펼치지 않는다.** 그래서 "같은 경로에서
+        목표 달성 뒤 세트만 더 한 결과" 가 별개의 전개로 늘지 않는다.
+
+        🔴 **"찾은 결과가 있음" 과 "탐색을 끝까지 수행함" 을 가른다.**
+        앞의 것은 :attr:`MultiSearchOutcome.reached`, 뒤의 것은
+        :attr:`MultiSearchOutcome.search_exhausted` 다. 결과 수 상한에
+        걸렸으면 종료 사유에 ``max_results=`` 가 남는다.
+
+        🔴 **돌려준 결과가 가능한 모든 전개라는 말이 아니다.** 깊이 · 노드 ·
+        시간 · 선택 분기 · 결과 수 상한이 모두 남은 길을 가리고, 미지원
+        후보와 확인하지 못한 선택 대안도 그렇다.
+
+        🔴 **예산이 끝나도 찾은 결과는 보존한다** — 상한에 걸려 멈춘
+        탐색도 그때까지 모은 결과를 그대로 돌려준다.
+
+        ``rerun_from`` 은 재생을 돌릴 **새 초기 상태**다 (§5). 같은 입력으로
+        다시 만든 듀얼을 넘기는 자리이고, 주지 않으면 받은 ``duel`` 에서
+        사본을 떠서 돈다 — 탐색은 원본을 밟지 않으므로 (:meth:`_assert_untouched`)
+        그것도 초기 상태이지만, **입력에서 다시 조립한 판**이 더 센 검증이다.
+
+        ``rerun=False`` 면 재생을 돌리지 않고 그 사실을 적는다 — 🔴 그때
+        결과는 하나도 :attr:`PathResult.verified` 가 아니다.
+        """
+        if not isinstance(duel, Duel):
+            raise BoundedSearchError(f"Duel 이 필요합니다: {type(duel).__name__}")
+        if rerun_from is not None and not isinstance(rerun_from, Duel):
+            raise BoundedSearchError(
+                f"재생할 Duel 이 필요합니다: {type(rerun_from).__name__}"
+            )
+        if not self.budget.many:
+            raise BoundedSearchError(
+                "복수 결과 모드는 max_results 가 2 이상일 때만 돕니다 "
+                f"(지금 {self.budget.max_results}) — 단일 결과는 run() 입니다."
+            )
+        started = time.monotonic()
+        ledger = _Ledger()
+        root_hash = duel.state.state_hash()
+        root_draws = duel.state.randomness.draws
+
+        verdict = self.goal.judge(duel)
+        if verdict.reached:
+            #: 🔴 **뿌리가 이미 목표다** — 밟을 걸음이 없으므로 재생할 경로도
+            #: 없다. 그 사실을 적고 **결과 없이** 돌려준다. 걸음 0개를
+            #: "서로 다른 전개 한 가지" 로 세지 않는다.
+            ledger.note(
+                ledger.out_of_scope,
+                f"받은 판이 이미 목표를 만족합니다 ({verdict.reason}) — "
+                "전개 경로가 없습니다.",
+            )
+            return self._many_outcome(
+                Termination.GOAL_REACHED, ledger, 0.0, 0.0
+            )
+
+        #: 🔴 **사본이 선택 정책을 받는지 먼저 확인한다** (:meth:`_probe_chooser`).
+        self._probe_chooser(duel, ledger)
+
+        root = _Node(Simulator(duel), (), 0)
+        termination, _found = self._drive(root, ledger, started)
+        search_seconds = time.monotonic() - started
+
+        #: 🔴 **진짜 판이 그대로인지 확인한다** (:meth:`_assert_untouched`).
+        self._assert_untouched(duel, root_hash, root_draws)
+
+        rerun_started = time.monotonic()
+        if not rerun:
+            ledger.note(
+                ledger.rerun_notes,
+                "재생을 돌리지 않았습니다 (rerun=False) — 🔴 어떤 결과도 "
+                "검증되지 않았습니다.",
+            )
+            results = tuple(
+                PathResult(
+                    index=slot + 1,
+                    path=path,
+                    resources=summary,
+                    goal_reason=reason,
+                    duplicates=ledger.result_dups.get(slot, 0),
+                )
+                for slot, (path, summary, reason) in enumerate(ledger.results)
+            )
+        else:
+            results = self.rerun_results(
+                duel if rerun_from is None else rerun_from, ledger
+            )
+        rerun_seconds = time.monotonic() - rerun_started
+        #: 🔴 **탐색 소요와 재생 소요를 따로 적는다** — 합치면 어디에 시간이
+        #: 갔는지 알 수 없다 (§5).
+        return self._many_outcome(
+            termination, ledger, search_seconds, rerun_seconds, results
+        )
+
+    # ------------------------------------------------------------------
+    def rerun_results(
+        self, duel: Duel, ledger: _Ledger
+    ) -> "tuple[PathResult, ...]":
+        """
+        모은 결과를 **새 초기 상태에서 하나씩 다시 밟는다** (6-AI §5).
+
+        🔴 **탐색이 끝난 뒤에 돈다.** :meth:`_collect` 가 더 짧은 경로를
+        보면 대표를 교체하므로, 중간에 재생하면 교체된 대표가 검증되지 않은
+        채 보고된다. 이 자리에서 돌면 **사용자에게 제시하는 최종 대표**가
+        검증된 것이 된다.
+
+        🔴 **받은 ``duel`` 은 탐색에 쓴 것과 같은 입력이다.**
+        :func:`rerun_steps` 가 거기서 :class:`Simulator` 사본을 새로 떠서
+        걸음을 밟으므로, 원본은 그대로 남는다 (:meth:`_assert_untouched` 가
+        탐색 직후 이미 확인했다).
+
+        🔴 **재생 실행량에 상한을 둔다** (:attr:`SearchBudget.max_rerun_seconds`).
+        상한에 걸린 결과는 **버리지 않고** 재생 없이(``rerun=None``) 남기고
+        그 사실을 :attr:`_Ledger.rerun_notes` 에 적는다 — 검증된 비교에는
+        섞이지 않는다 (:attr:`PathResult.verified`).
+
+        🔴 **하나가 실패해도 다른 결과를 버리지 않는다.** 실패는 그 결과에만
+        적히고, 실패 수와 이유는 :attr:`MultiSearchOutcome.failed_results` ·
+        :attr:`PathResult.rerun` 에 남는다.
+        """
+        out: list[PathResult] = []
+        started = time.monotonic()
+        for slot, (path, summary, reason) in enumerate(ledger.results):
+            index = slot + 1
+            dups = ledger.result_dups.get(slot, 0)
+            spent = time.monotonic() - started
+            if spent >= self.budget.max_rerun_seconds:
+                ledger.note(
+                    ledger.rerun_budget_hit,
+                    f"max_rerun_seconds={self.budget.max_rerun_seconds:g}",
+                )
+                ledger.note(
+                    ledger.rerun_notes,
+                    f"[결과 {index}] 재생을 돌리지 못했습니다 — 재생 시간 "
+                    f"상한 {self.budget.max_rerun_seconds:g}초에 걸렸습니다. "
+                    "🔴 이 결과는 검증된 비교에 쓰지 않습니다.",
+                )
+                out.append(PathResult(
+                    index=index,
+                    path=path,
+                    resources=summary,
+                    goal_reason=reason,
+                    duplicates=dups,
+                ))
+                continue
+            try:
+                rerun = rerun_steps(
+                    duel,
+                    path,
+                    self.goal,
+                    expect_field=summary.own_field_rows,
+                    expect_hash=summary.state_hash,
+                )
+            except BoundedSearchError as error:
+                #: 🔴 **재생 오류를 "탐색이 아무것도 못 찾았다" 로 바꾸지
+                #: 않는다.** 그 결과에만 실패로 적는다.
+                rerun = RerunResult(
+                    ok=False,
+                    reason=f"재생이 예외로 멈췄습니다: "
+                           f"{type(error).__name__}: {error}",
+                )
+            #: 🔴 **자원 요약까지 견준다.** 목표와 해시가 같아도 요약이 다르면
+            #: 그 비교는 재생으로 뒷받침되지 않는다.
+            matched = rerun.ok and rerun.resources == summary
+            if rerun.ok and not matched:
+                ledger.note(
+                    ledger.rerun_notes,
+                    f"[결과 {index}] 재생이 같은 판에 닿았지만 자원 요약이 "
+                    "탐색이 적어 둔 것과 다릅니다 — 검증된 비교에 쓰지 "
+                    "않습니다.",
+                )
+            out.append(PathResult(
+                index=index,
+                path=path,
+                resources=summary,
+                goal_reason=reason,
+                duplicates=dups,
+                rerun=rerun,
+                resources_match=matched,
+            ))
+        return tuple(out)
+
+    # ------------------------------------------------------------------
+    def _probe_chooser(self, duel: Duel, ledger: _Ledger) -> None:
+        """
+        사본이 **선택 정책을 받는지** 먼저 확인한다.
+
+        받지 못하면 해결 중 선택이 사본 안에서 거절되고, 그 결과는 "목표에
+        닿지 못했다" 로 보인다 — 그 둘을 섞지 않으려고 **사실을 적는다**
+        (:data:`CHOICE_BRANCHING_UNAVAILABLE`, §4.4).
+        """
         if self.budget.max_choice_branches and _chooser_of(duel) is not None:
             probe = Simulator(duel).fork(
                 selector=ScriptedChoice((), FirstPermittedChoice(), name="probe")
@@ -913,13 +1753,15 @@ class BoundedSearch:
             if _chooser_of(probe) is None:
                 ledger.note(ledger.out_of_scope, CHOICE_BRANCHING_UNAVAILABLE)
 
-        root = _Node(Simulator(duel), (), 0)
-        termination, found = self._drive(root, ledger, started)
+    @staticmethod
+    def _assert_untouched(duel: Duel, root_hash: str, root_draws: int) -> None:
+        """
+        **진짜 판이 그대로인지** 확인한다.
 
-        #: 🔴 **종료 사유는 고리가 확정한다** (:meth:`_classify`).
-
-        #: 🔴 **진짜 판이 그대로인지 확인한다.** 탐색이 원본을 밀면 그
-        #: 결과는 분석이 아니라 사고다.
+        🔴 탐색이 원본을 밀면 그 결과는 분석이 아니라 사고다. 해시와 난수원
+        소비량을 둘 다 본다 — 해시만 보면 ``project()`` 처럼 난수원을
+        공유하는 사본이 조용히 지나간다.
+        """
         if duel.state.state_hash() != root_hash:
             raise BoundedSearchError(
                 "탐색이 원본 판을 바꿨습니다 — 사본에만 적용해야 합니다."
@@ -929,13 +1771,58 @@ class BoundedSearch:
                 "탐색이 원본의 난수원을 밀었습니다 — 사본에만 적용해야 합니다."
             )
 
-        if found is not None:
-            path, final, verdict = found
-            return self._outcome(
-                termination, ledger, path, final, verdict, started
-            )
-        return self._outcome(
-            termination, ledger, (), duel, self.goal.judge(duel), started
+    # ------------------------------------------------------------------
+    def _many_outcome(
+        self,
+        termination: Termination,
+        ledger: _Ledger,
+        search_seconds: float,
+        rerun_seconds: float,
+        results: "tuple[PathResult, ...]" = (),
+    ) -> MultiSearchOutcome:
+        """
+        복수 결과 모드의 결과를 **값으로** 묶는다.
+
+        🔴 **"범위를 끝까지 펼쳤다" 는 네 가지가 모두 참일 때만이다** —
+        스택이 비어서 끝났고, **탐색** 예산에 걸린 칸이 없고, 오류가 없고,
+        **확인하지 못한 선택 대안도 없다.** 넷 중 하나라도 어긋나면 그
+        탐색은 소진된 것이 아니다.
+
+        🔴 **재생 쪽 예산은 이 판정에 넣지 않는다.** 재생 시간 상한에 걸린
+        것은 "탐색을 끝까지 펼치지 못했다" 와 다른 사실이다 — 보고에는 두
+        묶음을 합쳐 적고(:attr:`MultiSearchOutcome.budget_hit`), 소진
+        판정은 탐색 쪽만 본다.
+        """
+        exhausted = (
+            ledger.stack_emptied
+            and not ledger.budget_hit
+            and not ledger.errors
+            and ledger.choice_offers_truncated == 0
+        )
+        return MultiSearchOutcome(
+            goal=self.goal,
+            budget=self.budget,
+            termination=termination,
+            results=tuple(results),
+            search_exhausted=exhausted,
+            budget_hit=tuple(ledger.budget_hit) + tuple(ledger.rerun_budget_hit),
+            duplicate_results=ledger.duplicate_results,
+            nodes_expanded=ledger.nodes,
+            deepest=ledger.deepest,
+            choice_branches=ledger.choice_branches,
+            choice_plans=ledger.choice_plans,
+            choice_offers_truncated=ledger.choice_offers_truncated,
+            deduped=ledger.deduped,
+            revisited=ledger.revisited,
+            stale=ledger.stale,
+            search_seconds=search_seconds,
+            rerun_seconds=rerun_seconds,
+            unsupported=tuple(ledger.unsupported),
+            out_of_scope=tuple(ledger.out_of_scope),
+            opponent_declined=tuple(ledger.declined),
+            opponent_blocked=tuple(ledger.blocked),
+            errors=tuple(ledger.errors),
+            rerun_notes=tuple(ledger.rerun_notes),
         )
 
     # ------------------------------------------------------------------
@@ -963,6 +1850,10 @@ class BoundedSearch:
         found = None
 
         while stack:
+            if len(ledger.results) >= self.budget.max_results and self.budget.many:
+                #: 🔴 **결과 상한에 닿았다.** 그 사실을 종료 사유에 남긴다
+                #: (:meth:`_open` 이 이미 적었다) — "다 찾았다" 가 아니다.
+                break
             spent = time.monotonic() - started
             if ledger.nodes >= self.budget.max_nodes:
                 ledger.note(ledger.budget_hit, f"max_nodes={self.budget.max_nodes}")
@@ -988,6 +1879,9 @@ class BoundedSearch:
             if found is not None:
                 termination = Termination.GOAL_REACHED
                 break
+        else:
+            #: 🔴 스택이 **비어서** 끝났다 — 지정된 범위를 끝까지 펼쳤다.
+            ledger.stack_emptied = True
         return self._classify(termination, found, ledger), found
 
     @staticmethod
@@ -1082,7 +1976,21 @@ class BoundedSearch:
                 child_legal = child_duel.legal_actions(child_duel.to_act)
                 verdict = self.goal.judge(child_duel, child_legal)
                 if verdict.reached:
-                    return path, child_duel, verdict
+                    if not self.budget.many:
+                        #: 🔴 **단일 결과 모드는 한 글자도 달라지지 않는다.**
+                        return path, child_duel, verdict
+                    #: 🔴 **이 분기는 더 펼치지 않는다** (6-AI §1). 비교하는
+                    #: 것은 "목표에 **처음** 도달하고 처리가 정리된 상태"
+                    #: 이므로, 그 뒤에 세트만 더 한 결과를 별개의 전개로
+                    #: 늘리지 않는다.
+                    self._collect(ledger, path, child_duel, child_legal, verdict)
+                    if len(ledger.results) >= self.budget.max_results:
+                        ledger.note(
+                            ledger.budget_hit,
+                            f"max_results={self.budget.max_results}",
+                        )
+                        return None
+                    continue
                 child_depth = node.depth + 1
                 if self.budget.dedup:
                     verdict_on_key = admit(
@@ -1103,6 +2011,33 @@ class BoundedSearch:
         #: 깊이 우선 — 앞쪽 후보를 **먼저** 펼치려면 뒤에서부터 쌓는다.
         stack.extend(reversed(children))
         return None
+
+    def _collect(self, ledger: _Ledger, path, duel, legal, verdict) -> None:
+        """
+        성공 결과 하나를 **값으로** 모은다 (6-AI §1 · §2).
+
+        🔴 **같은 결과면 대표 하나로 합친다** (:func:`outcome_key`), 그리고
+        합친 사실을 :attr:`_Ledger.duplicate_results` 로 센다 — 중복을
+        발견했다는 이유로 "서로 다른 결과" 수가 늘지 않는다.
+
+        🔴 **요약을 그 자리에서 뜬다** (:func:`summarize_resources`). 판을
+        들고 있으면 뒤의 탐색이 그 판을 더 밟았을 때 요약이 조용히 달라진다.
+        """
+        key = outcome_key(duel, legal, self.goal.seat)
+        summary = summarize_resources(duel, self.goal.seat)
+        where = ledger.result_keys.get(key)
+        if where is None:
+            ledger.result_keys[key] = len(ledger.results)
+            ledger.results.append((tuple(path), summary, verdict.reason))
+            return
+        ledger.duplicate_results += 1
+        ledger.result_dups[where] = ledger.result_dups.get(where, 0) + 1
+        kept_path, _kept_summary, _kept_reason = ledger.results[where]
+        if representative_order(path) < representative_order(kept_path):
+            #: 🔴 **대표가 바뀐다.** 그래서 재생은 탐색이 **끝난 뒤**에
+            #: 돌린다 — 중간에 돌리면 교체된 대표가 검증되지 않는다
+            #: (:meth:`rerun_results`).
+            ledger.results[where] = (tuple(path), summary, verdict.reason)
 
     # ------------------------------------------------------------------
     def _attempts(
@@ -1314,8 +2249,38 @@ def rerun_path(
         raise BoundedSearchError(
             f"SearchOutcome 이 필요합니다: {type(outcome).__name__}"
         )
-    target = outcome.goal if goal is None else goal
-    if not outcome.path:
+    return rerun_steps(
+        duel,
+        outcome.path,
+        outcome.goal if goal is None else goal,
+        expect_field=outcome.final_field,
+        expect_hash=outcome.final_state_hash,
+    )
+
+
+def rerun_steps(
+    duel: Duel,
+    path: "tuple[PathStep, ...]",
+    target: FieldGoal,
+    *,
+    expect_field: "tuple[tuple[str, int, bool], ...]" = (),
+    expect_hash: str = "",
+) -> RerunResult:
+    """
+    기록된 걸음들을 **새 초기 상태에서** 다시 밟는다 (§5).
+
+    🔴 :func:`rerun_path` 와 **같은 코드**다 — 그쪽이 ``SearchOutcome`` 을
+    받는 얇은 겉면이고, 복수 결과 모드는 :class:`PathResult` 의 경로를
+    들고 이쪽으로 들어온다 (6-AI). 재생 로직을 두 벌로 갈라 두지 않는다.
+
+    ``expect_field`` · ``expect_hash`` 를 주면 그 둘과 **같은가**까지 본다.
+    주지 않으면 목표 도달 여부만 본다.
+    """
+    if not isinstance(duel, Duel):
+        raise BoundedSearchError(f"Duel 이 필요합니다: {type(duel).__name__}")
+    if not isinstance(target, FieldGoal):
+        raise BoundedSearchError(f"FieldGoal 이 필요합니다: {type(target).__name__}")
+    if not path:
         return RerunResult(
             ok=False,
             reason="재생할 경로가 없습니다 — 탐색이 목표에 닿지 않았습니다.",
@@ -1323,7 +2288,7 @@ def rerun_path(
 
     sim = Simulator(duel)
     done = 0
-    for recorded in outcome.path:
+    for recorded in path:
         current = sim.duel
         if current.to_act != target.seat:
             return RerunResult(
@@ -1393,16 +2358,23 @@ def rerun_path(
     verdict = target.judge(sim.duel)
     field_now = own_field(sim.duel, target.seat)
     hash_now = sim.duel.state.state_hash()
+    #: 🔴 **비교할 것을 주지 않았으면 "같다" 고 말하지 않는다.**
+    compared = bool(expect_hash) or bool(expect_field)
     same = (
-        field_now == outcome.final_field
-        and hash_now == outcome.final_state_hash
+        field_now == expect_field and hash_now == expect_hash
+        if compared else False
     )
     if not verdict.reached:
         reason = f"재생이 목표에 닿지 않았습니다: {verdict.reason}"
-    elif not same:
+    elif compared and not same:
         reason = (
             "재생이 목표에는 닿았지만 최종 판이 탐색 결과와 다릅니다 — "
-            f"해시 {outcome.final_state_hash[:12]}… → {hash_now[:12]}…"
+            f"해시 {expect_hash[:12]}… → {hash_now[:12]}…"
+        )
+    elif not compared:
+        reason = (
+            f"걸음 {done}개를 새 초기 상태에서 다시 밟아 목표에 닿았습니다 "
+            "(비교할 최종 판을 주지 않았습니다)."
         )
     else:
         reason = (
@@ -1410,13 +2382,14 @@ def rerun_path(
             "닿았습니다."
         )
     return RerunResult(
-        ok=verdict.reached and same,
+        ok=verdict.reached and (same or not compared),
         reason=reason,
         steps=done,
         goal_reached=verdict.reached,
         final_field=field_now,
         final_state_hash=hash_now,
         matches_search=same,
+        resources=summarize_resources(sim.duel, target.seat),
     )
 
 
@@ -1434,20 +2407,51 @@ def search_for_card(
     ).run(duel)
 
 
+def search_many_for_card(
+    duel: Duel,
+    card_id: int,
+    *,
+    seat: int = 0,
+    budget: "SearchBudget | None" = None,
+) -> MultiSearchOutcome:
+    """
+    그 카드를 자신 필드에 올리는 **서로 다른 결과 여럿**을 모은다 (6-AI).
+
+    🔴 :func:`search_for_card` 와 **같은 탐색기**다 — 예산의
+    ``max_results`` 만 다르다.
+    """
+    return BoundedSearch(
+        goal=FieldGoal(card_id=card_id, seat=seat),
+        budget=(
+            SearchBudget(max_results=MULTI_DEFAULT_MAX_RESULTS)
+            if budget is None else budget
+        ),
+    ).run_many(duel)
+
+
 __all__ = [
     "BoundedSearch",
     "BoundedSearchError",
+    "CONCEALED_CARD",
+    "CardSlot",
     "CHOICE_BRANCHING_UNAVAILABLE",
     "DEFAULT_MAX_CHOICE_BRANCHES",
     "DEFAULT_MAX_DEPTH",
     "DEFAULT_MAX_NODES",
+    "DEFAULT_MAX_RERUN_SECONDS",
+    "DEFAULT_MAX_RESULTS",
     "DEFAULT_MAX_SECONDS",
     "FIELD_ZONES",
     "FieldGoal",
     "GoalVerdict",
     "NO_INTERFERENCE",
     "OUT_OF_TURN_SCOPE",
+    "MULTI_DEFAULT_MAX_RESULTS",
+    "MultiSearchOutcome",
+    "PathResult",
     "PathStep",
+    "RESULTS_CAP",
+    "ResourceSummary",
     "RerunResult",
     "SETTLE_GUARD",
     "SearchBudget",
@@ -1455,8 +2459,15 @@ __all__ = [
     "Termination",
     "node_key",
     "own_field",
+    "UseRecord",
+    "ZoneSummary",
+    "outcome_key",
+    "representative_order",
     "rerun_path",
+    "rerun_steps",
     "search_for_card",
+    "search_many_for_card",
+    "summarize_resources",
     "Admission",
     "admit",
     "alternative_options",
