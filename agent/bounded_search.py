@@ -377,7 +377,16 @@ class SearchOutcome:
     nodes_expanded: int = 0
     deepest: int = 0
     choice_branches: int = 0
+    """해결 중 선택의 **대기에 넣은 대안 각본** 수 (상한이 세는 것과 같다)."""
+    choice_plans: int = 0
+    """그중 **실제로 돌린** 대안 각본 수. 🔴 위 수와 섞지 않는다."""
+    choice_offers_truncated: int = 0
+    """**확인하지 않은 대안이 남은 물음**의 수. 0 이 아니면 선택을 생략했다."""
     deduped: int = 0
+    revisited: int = 0
+    """같은 상태에 **더 얕게** 다시 닿아 다시 펼친 횟수 (보완 A)."""
+    stale: int = 0
+    """대기 중에 **더 얕은 길이 생겨** 펼치지 않은 노드 수 (보완 A)."""
     elapsed_seconds: float = 0.0
     unsupported: tuple[str, ...] = ()
     """그 자리에서 **지원하지 않아 후보가 되지 못한** 것들. 종료 사유와 별개다."""
@@ -404,6 +413,16 @@ class SearchOutcome:
     def choice_count(self) -> int:
         return sum(len(step.choices) for step in self.path)
 
+    @property
+    def skipped_choices(self) -> bool:
+        """
+        **확인하지 않은 선택 대안이 남았는가** (보완 B).
+
+        🔴 목표에 닿았어도 참일 수 있다 — 그러면 "이 경로를 찾았다" 는
+        맞지만 "선택을 다 봤다" 는 틀리다. 두 사실을 함께 적는다.
+        """
+        return self.choice_offers_truncated > 0
+
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         lines = [
             f"제한 탐색 — 목표: {self.goal.describe_ko()}",
@@ -411,7 +430,10 @@ class SearchOutcome:
             + (f" ({' · '.join(self.budget_hit)})" if self.budget_hit else ""),
             f"  예산: {self.budget.describe_ko()}",
             f"  펼친 노드 {self.nodes_expanded} · 최대 깊이 {self.deepest}"
-            f" · 선택 분기 {self.choice_branches} · 중복 제거 {self.deduped}"
+            f" · 선택 분기 대기 {self.choice_branches}/실행 {self.choice_plans}"
+            f" · 중복 제거 {self.deduped} · 얕게 재방문 {self.revisited}"
+            f" · 밀려난 노드 {self.stale}"
+            f" · 확인 못 한 선택 물음 {self.choice_offers_truncated}"
             f" · {self.elapsed_seconds:.2f}초",
             f"  목표 판정: {self.goal_reason}",
         ]
@@ -501,6 +523,75 @@ def node_key(duel: Duel, legal) -> "tuple | None":
         duel.priority.window.value,
         frozenset(repr(action.canonical_state()) for action in legal.allowed),
     )
+
+
+class Admission(str, Enum):
+    """
+    같은 상태에 다시 닿았을 때 **펼칠 것인가** (Phase 6-AH 보완 A).
+
+    🔴 **깊이 상한이 있으면 "같은 상태" 가 "같은 미래" 가 아니다.** 얕게
+    닿은 쪽에는 남은 깊이 예산이 더 많으므로, 그 쪽에서만 닿는 경로가
+    있을 수 있다.
+
+    🔴 **최단 경로 탐색이 아니다.** 이 판정이 보장하는 것은 하나뿐이다 —
+    **깊이 상한 안의 경로를 "이미 봤다" 는 이유로 잘못 버리지 않는다.**
+    더 짧은 경로를 **찾아 준다**는 주장이 아니고, 탐색의 완전성이나
+    최적성을 주장하지도 않는다.
+    """
+
+    FRESH = "fresh"
+    """처음 보는 상태다."""
+    SHALLOWER = "shallower"
+    """본 상태인데 **더 얕게** 닿았다 — 남은 깊이 예산이 더 많으므로 다시 펼친다."""
+    DUPLICATE = "duplicate"
+    """
+    본 상태이고 **같거나 더 깊게** 닿았다 — 버린다.
+
+    🔴 **왜 안전한가.** 먼저 기록된 깊이 ``d`` 가 이번 깊이 ``d'`` 보다
+    작거나 같으면, 남은 예산은 ``max_depth - d >= max_depth - d'`` 다. 즉
+    이번 노드에서 예산 안에 닿을 수 있는 것은 그 노드에서도 닿을 수 있다.
+    """
+
+    @property
+    def opens(self) -> bool:
+        """이 판정이 노드를 **펼치게** 하는가."""
+        return self is not Admission.DUPLICATE
+
+
+def admit(seen: dict, key, depth: int) -> Admission:
+    """
+    그 열쇠를 ``depth`` 에서 받아들일지 정하고, **받으면 기록을 갱신한다.**
+
+    ``key`` 가 ``None`` 이면 (:func:`node_key` 가 안전한 기준을 못 만든
+    자리) 언제나 :attr:`Admission.FRESH` 다 — **병합하지 않는다.**
+    """
+    if key is None:
+        return Admission.FRESH
+    before = seen.get(key)
+    if before is None:
+        seen[key] = depth
+        return Admission.FRESH
+    if depth < before:
+        seen[key] = depth
+        return Admission.SHALLOWER
+    return Admission.DUPLICATE
+
+
+def superseded(seen: dict, key, depth: int) -> bool:
+    """
+    대기 중인 노드가 **더 얕은 길에 밀려났는가** (보완 A).
+
+    같은 상태에 더 얕게 닿은 노드가 나중에 생기면, 깊은 쪽을 펼치는 일은
+    **그 얕은 쪽이 하는 일의 부분집합**이다 (:attr:`Admission.DUPLICATE`
+    의 근거와 같다). 그래서 꺼낼 때 한 번 더 보고 넘긴다 — 같은 기준을
+    **넣을 때와 꺼낼 때 모두** 적용해 일관되게 둔다.
+
+    🔴 열쇠가 없으면 밀려날 수 없다 (병합하지 않는 상태다).
+    """
+    if key is None:
+        return False
+    before = seen.get(key)
+    return before is not None and before < depth
 
 
 # ======================================================================
@@ -605,28 +696,99 @@ def _settle(duel: Duel, seat: int) -> _Settled:
 # ======================================================================
 # 선택 분기
 # ======================================================================
-def selection_options(ask: ChoiceAsk, limit: int) -> "tuple[tuple[tuple[int, ...], ...], bool]":
+def iter_selections(ask: ChoiceAsk):
     """
-    그 물음에서 **엔진이 허용한 장수 범위 안의 조합 전부** (그리고 잘렸는가).
+    그 물음의 **허용 조합을 차례로 낸다.** 🔴 **지연 생성이다** (generator).
 
     🔴 **후보 밖을 만들지 않는다.** 재료는 :attr:`ChoiceAsk.offered` 의
     인스턴스뿐이고, 장수는 ``minimum``~``maximum`` 안이다.
 
     🔴 **순서가 결정론적이다.** 번호로 정렬한 뒤 ``combinations`` 를 쓰므로
-    같은 물음이면 같은 목록이 나온다 — 집합의 반복 순서에 기대지 않는다.
+    같은 물음이면 같은 순서가 나온다 — 집합의 반복 순서에 기대지 않는다.
+
+    🔴 **두 비용을 가른다** (Phase 6-AH 보완 B). 후보를 **읽는** 비용은
+    ``offered`` 의 길이에 비례하고 (정렬 한 번), 조합을 **만드는** 비용은
+    꺼내 쓰는 만큼만 든다. 앞의 것은 피할 수 없고 뒤의 것은 피할 수 있다 —
+    그 구분이 이 함수가 생성기인 이유다.
+
+    🔴 **빈 선택과 조합 없음을 가른다.** ``minimum == 0`` 이면 빈 짝 ``()``
+    을 **허용 조합의 하나로** 낸다 (아무것도 고르지 않는 선택이 적법하다는
+    뜻이다). 낼 것이 없으면 아무것도 내지 않는다.
     """
     pool = tuple(sorted(instance for instance, _card in ask.offered))
-    options: list[tuple[int, ...]] = []
     lowest = max(0, ask.minimum)
     for size in range(lowest, ask.maximum + 1):
         if size == 0:
-            options.append(())
+            yield ()
             continue
         if size > len(pool):
+            return
+        yield from combinations(pool, size)
+
+
+def selection_options(
+    ask: ChoiceAsk, limit: int
+) -> "tuple[tuple[tuple[int, ...], ...], bool]":
+    """
+    앞에서 **최대 ``limit`` 개**의 조합과, **더 있는가**.
+
+    🔴 **전부 만든 뒤 자르지 않는다** (Phase 6-AH 보완 B 가 고친 자리).
+    보완 전에는 ``combinations`` 의 결과를 모두 목록에 넣고
+    ``options[:limit]`` 로 잘랐다. 실측 — 후보 20개에서 정확히 10개를
+    고르는 물음에 상한 4를 주면 **반환은 4개인데 내부 생성은 184,756개**
+    였다. 반환 개수만 제한하고 **생성 비용은 제한하지 않았다**, 그리고 그
+    생성 도중에는 바깥의 시간 예산 검사가 끼어들지도 못했다.
+
+    지금은 생성기에서 **많아도 ``limit + 1`` 개만 꺼낸다** — ``limit`` 개를
+    담고, "하나 더 있는가" 를 알려고 한 개를 더 본다. 그 한 개가
+    :attr:`truncated` 의 근거다.
+
+    🔴 **대안이 없는 자리를 잘렸다고 적지 않는다.** 생성기가 ``limit`` 개를
+    채우기 전에 끝나면 ``truncated`` 는 거짓이다 — ``limit == 0`` 이고 낼
+    조합이 하나도 없는 자리도 그렇다.
+    """
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
+        raise BoundedSearchError(f"상한은 0 이상의 정수입니다: {limit!r}")
+    taken: list[tuple[int, ...]] = []
+    truncated = False
+    for option in iter_selections(ask):
+        if len(taken) >= limit:
+            truncated = True
             break
-        options.extend(combinations(pool, size))
-    truncated = len(options) > limit
-    return tuple(options[:limit]), truncated
+        taken.append(option)
+    return tuple(taken), truncated
+
+
+def alternative_options(
+    ask: ChoiceAsk, realized: "tuple[int, ...]", limit: int
+) -> "tuple[tuple[tuple[int, ...], ...], bool]":
+    """
+    **이미 한 선택을 뺀 대안**을 앞에서 최대 ``limit`` 개, 그리고 더 있는가.
+
+    🔴 **이미 실행한 기본 선택과 새로 해 볼 대안을 가른다** (보완 B).
+    ``realized`` 는 그 걸음에서 **실제로 고른 것**이므로 다시 해 볼 필요가
+    없다. 그것을 뺀 나머지가 대안이다.
+
+    🔴 **상한이 0 이어도 "대안이 있는가" 는 답한다.** ``limit == 0`` 이면
+    담는 것은 없지만, 대안이 하나라도 있으면 ``more`` 가 참이다. 그래야
+    "상한 0 이라 아무것도 확인하지 않았다" 를 **기록할 수** 있다 — 보완
+    전에는 그 자리에서 분기 처리를 즉시 건너뛰어 생략 사실이 남지 않았다.
+
+    꺼내는 양은 많아도 ``limit + 2`` 개다 (``realized`` 를 만나 건너뛰는
+    한 개를 더 본다).
+    """
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
+        raise BoundedSearchError(f"상한은 0 이상의 정수입니다: {limit!r}")
+    picked: list[tuple[int, ...]] = []
+    more = False
+    for option in iter_selections(ask):
+        if option == realized:
+            continue
+        if len(picked) >= limit:
+            more = True
+            break
+        picked.append(option)
+    return tuple(picked), more
 
 
 # ======================================================================
@@ -659,19 +821,42 @@ class _Ledger:
     nodes: int = 0
     deepest: int = 0
     choice_branches: int = 0
+    """**대기에 넣은 대안 각본**의 수 (:class:`SearchBudget.max_choice_branches`)."""
+    choice_plans: int = 0
+    """**실제로 돌린 대안 각본**의 수. 예산이 끊으면 대기한 것보다 적다."""
+    choice_offers_truncated: int = 0
+    """**확인하지 못한 대안이 남은 물음**의 수 (Phase 6-AH 보완 B)."""
     deduped: int = 0
+    revisited: int = 0
+    """같은 상태에 **더 얕게** 다시 닿아 다시 펼친 횟수 (보완 A)."""
+    stale: int = 0
+    """대기 중에 **더 얕은 길이 생겨** 펼치지 않은 노드 수 (보완 A)."""
     budget_hit: list = field(default_factory=list)
     unsupported: list = field(default_factory=list)
     out_of_scope: list = field(default_factory=list)
     declined: list = field(default_factory=list)
     blocked: list = field(default_factory=list)
     errors: list = field(default_factory=list)
-    seen: set = field(default_factory=set)
-    """이 탐색이 본 노드 열쇠들 (:func:`node_key`). 🔴 탐색마다 새 집합이다."""
+    seen: dict = field(default_factory=dict)
+    """
+    이 탐색이 본 노드 열쇠 → **그 상태에 가장 얕게 닿은 깊이** (보완 A).
 
-    def note(self, bucket: list, line: str) -> None:
-        if line not in bucket:
-            bucket.append(line)
+    🔴 **방문 여부만으로는 모자란다.** 깊이 우선 탐색이 같은 상태를 **깊은
+    경로로 먼저** 보면, 나중에 더 얕은 경로로 닿아도 "이미 봤다" 로 버린다.
+    그런데 깊이 상한이 있으면 얕은 쪽에 **남은 깊이 예산이 더 많다** —
+    버리면 상한 안의 경로를 놓친다 (격리 그래프 실측: 보고서 §9.1).
+
+    🔴 **깊이를 열쇠에 넣지 않는다.** 넣으면 같은 상태가 깊이마다 다른
+    노드가 되어 중복 제거가 사실상 꺼진다. 열쇠는 그대로 두고 **값**으로
+    깊이를 들고 있는다.
+    """
+
+    def note(self, bucket: list, line: str) -> bool:
+        """그 줄을 **새로** 적었는가. 같은 줄은 한 번만 남는다."""
+        if line in bucket:
+            return False
+        bucket.append(line)
+        return True
 
 
 @dataclass
@@ -728,43 +913,10 @@ class BoundedSearch:
             if _chooser_of(probe) is None:
                 ledger.note(ledger.out_of_scope, CHOICE_BRANCHING_UNAVAILABLE)
 
-        stack: list[_Node] = [_Node(Simulator(duel), (), 0)]
-        termination = Termination.EXHAUSTED
-        found: "tuple[tuple, Duel, GoalVerdict] | None" = None
+        root = _Node(Simulator(duel), (), 0)
+        termination, found = self._drive(root, ledger, started)
 
-        while stack:
-            spent = time.monotonic() - started
-            if ledger.nodes >= self.budget.max_nodes:
-                ledger.note(ledger.budget_hit, f"max_nodes={self.budget.max_nodes}")
-                termination = Termination.BUDGET_EXCEEDED
-                break
-            if spent >= self.budget.max_seconds:
-                ledger.note(
-                    ledger.budget_hit, f"max_seconds={self.budget.max_seconds:g}"
-                )
-                termination = Termination.BUDGET_EXCEEDED
-                break
-            node = stack.pop()
-            ledger.deepest = max(ledger.deepest, node.depth)
-            found = self._open(node, ledger, stack, started)
-            if found is not None:
-                termination = Termination.GOAL_REACHED
-                break
-
-        #: 🔴 **예산에 걸린 채로 "범위를 다 펼쳤다" 고 적지 않는다.**
-        #: 깊이 상한에 걸려 더 내려가지 못한 가지가 하나라도 있으면 그
-        #: 탐색은 소진된 것이 아니다 — 못 찾았다는 말과 범위를 다 봤다는
-        #: 말은 다른 사실이다 (:class:`Termination` 의 설명).
-        #: 🔴 **오류가 가장 센 사실이다.** 예외가 났는데 "범위를 다 펼쳤다"
-        #: 거나 "예산에 걸렸다" 로 적으면 그 예외가 보고에서 사라진다.
-        if found is None and ledger.errors:
-            termination = Termination.ERROR
-        elif (
-            found is None
-            and termination is Termination.EXHAUSTED
-            and ledger.budget_hit
-        ):
-            termination = Termination.BUDGET_EXCEEDED
+        #: 🔴 **종료 사유는 고리가 확정한다** (:meth:`_classify`).
 
         #: 🔴 **진짜 판이 그대로인지 확인한다.** 탐색이 원본을 밀면 그
         #: 결과는 분석이 아니라 사고다.
@@ -785,6 +937,93 @@ class BoundedSearch:
         return self._outcome(
             termination, ledger, (), duel, self.goal.judge(duel), started
         )
+
+    # ------------------------------------------------------------------
+    def _drive(self, root: _Node, ledger: _Ledger, started: float):
+        """
+        깊이 우선 고리 하나. 돌려주는 것은 ``(종료 사유, 찾은 것)``.
+
+        🔴 **:meth:`run` 과 가른 이유가 시험이다** (Phase 6-AH 보완 A).
+        중복 제거가 깊이를 어떻게 보는지는 **고리 · :meth:`_open` ·
+        :func:`admit` · :func:`superseded` 가 함께** 만드는 동작이므로,
+        그것을 재려면 그 넷을 **그대로** 돌려야 한다. 격리된 그래프로
+        재는 시험이 이 자리에 들어온다 (``tests/
+        test_bounded_search_depth_and_choices.py``) — 시험이 제 알고리즘을
+        따로 적어 그것만 통과시키는 일을 막는다.
+
+        :meth:`run` 은 그대로 입력을 검사하고 (``Duel`` 인가) 원본이
+        그대로인지 확인한다 — 그 둘은 이 고리의 일이 아니다.
+
+        🔴 **뿌리도 같은 원칙을 받는다.** 뿌리의 열쇠를 깊이 0 으로 적어
+        두므로, 순환 경로가 뿌리로 돌아오면 그것도 중복이다.
+        """
+        stack: list[_Node] = [root]
+        admit(ledger.seen, self._key_of(root), 0)
+        termination = Termination.EXHAUSTED
+        found = None
+
+        while stack:
+            spent = time.monotonic() - started
+            if ledger.nodes >= self.budget.max_nodes:
+                ledger.note(ledger.budget_hit, f"max_nodes={self.budget.max_nodes}")
+                termination = Termination.BUDGET_EXCEEDED
+                break
+            if spent >= self.budget.max_seconds:
+                ledger.note(
+                    ledger.budget_hit, f"max_seconds={self.budget.max_seconds:g}"
+                )
+                termination = Termination.BUDGET_EXCEEDED
+                break
+            node = stack.pop()
+            #: 🔴 **꺼낼 때 한 번 더 본다** — 이 노드가 대기하는 동안 같은
+            #: 상태에 더 얕게 닿았으면 이 노드는 할 일이 없다
+            #: (:func:`superseded`).
+            if self.budget.dedup and superseded(
+                ledger.seen, self._key_of(node), node.depth
+            ):
+                ledger.stale += 1
+                continue
+            ledger.deepest = max(ledger.deepest, node.depth)
+            found = self._open(node, ledger, stack, started)
+            if found is not None:
+                termination = Termination.GOAL_REACHED
+                break
+        return self._classify(termination, found, ledger), found
+
+    @staticmethod
+    def _classify(termination, found, ledger: _Ledger) -> Termination:
+        """
+        고리가 끝난 뒤 **종료 사유를 확정한다.**
+
+        🔴 **오류가 가장 센 사실이다.** 예외가 났는데 "범위를 다 펼쳤다"
+        거나 "예산에 걸렸다" 로 적으면 그 예외가 보고에서 사라진다.
+
+        🔴 **예산에 걸린 채로 "범위를 다 펼쳤다" 고 적지 않는다.** 깊이
+        상한에 걸려 더 내려가지 못한 가지나, **확인하지 못한 선택 대안**이
+        하나라도 있으면 그 탐색은 소진된 것이 아니다 — 못 찾았다는 말과
+        범위를 다 봤다는 말은 다른 사실이다 (:class:`Termination`).
+
+        🔴 **이 판정이 고리 안에 있는 이유.** :meth:`run` 에만 두면 고리를
+        직접 돌리는 쪽(격리 그래프 시험)이 다른 답을 보게 되고, 그러면 두
+        계층의 종료 사유가 어긋난다.
+        """
+        if found is not None:
+            return Termination.GOAL_REACHED
+        if ledger.errors:
+            return Termination.ERROR
+        if termination is Termination.EXHAUSTED and ledger.budget_hit:
+            return Termination.BUDGET_EXCEEDED
+        return termination
+
+    def _key_of(self, node: _Node):
+        """그 노드의 상태 열쇠. 후보 목록을 **다시 세지 않는다.**"""
+        duel = node.sim.duel
+        legal = (
+            node.legal if node.legal is not None
+            else duel.legal_actions(duel.to_act)
+        )
+        node.legal = legal
+        return node_key(duel, legal)
 
     # ------------------------------------------------------------------
     def _open(self, node: _Node, ledger: _Ledger, stack: list, started: float):
@@ -844,15 +1083,22 @@ class BoundedSearch:
                 verdict = self.goal.judge(child_duel, child_legal)
                 if verdict.reached:
                     return path, child_duel, verdict
+                child_depth = node.depth + 1
                 if self.budget.dedup:
-                    key = node_key(child_duel, child_legal)
-                    if key is not None:
-                        if key in ledger.seen:
-                            ledger.deduped += 1
-                            continue
-                        ledger.seen.add(key)
+                    verdict_on_key = admit(
+                        ledger.seen,
+                        node_key(child_duel, child_legal),
+                        child_depth,
+                    )
+                    if verdict_on_key is Admission.DUPLICATE:
+                        ledger.deduped += 1
+                        continue
+                    if verdict_on_key is Admission.SHALLOWER:
+                        #: 🔴 **다시 펼친다.** 남은 깊이 예산이 더 많으므로
+                        #: 이 쪽에서만 닿는 경로가 있을 수 있다.
+                        ledger.revisited += 1
                 children.append(
-                    _Node(Simulator(child_duel), path, node.depth + 1, child_legal)
+                    _Node(Simulator(child_duel), path, child_depth, child_legal)
                 )
         #: 깊이 우선 — 앞쪽 후보를 **먼저** 펼치려면 뒤에서부터 쌓는다.
         stack.extend(reversed(children))
@@ -890,6 +1136,11 @@ class BoundedSearch:
             plan = queue.pop(0)
             attempt = self._apply_once(parent, action, plan)
             ledger.nodes += 1
+            if plan:
+                #: 🔴 **실행한 대안 각본의 수**다 — 대기에 넣은 수
+                #: (:attr:`_Ledger.choice_branches`) 와 섞지 않는다. 예산이
+                #: 고리를 끊으면 대기한 것보다 적다.
+                ledger.choice_plans += 1
             if attempt.error:
                 ledger.note(ledger.errors, attempt.error)
             for line in attempt.settled.declined:
@@ -907,29 +1158,21 @@ class BoundedSearch:
             if not attempt.accepted:
                 continue
             realized = tuple(ask.chosen for ask in attempt.asks)
+            cap = self.budget.max_choice_branches
+            #: 🔴 **상한에 걸렸어도 물음마다 한 번은 본다** (보완 B).
+            #: 보완 전에는 ``branches >= cap`` 이면 이 고리를 **즉시
+            #: 끊었고**, 그래서 상한 0 이거나 앞선 물음이 상한을 다 쓴
+            #: 경우에 **대안이 있어도 생략 사실이 남지 않았다.** 지금은
+            #: 물음마다 :func:`alternative_options` 를 부르는데, 그 호출은
+            #: 상한이 0 이어도 조합을 많아도 두 개만 꺼내므로 (설명 참조)
+            #: 비용이 상한과 함께 묶여 있다.
             for index in range(len(plan), len(attempt.asks)):
-                if branches >= self.budget.max_choice_branches:
-                    break
-                options, truncated = selection_options(
-                    attempt.asks[index], self.budget.max_choice_branches
+                ask = attempt.asks[index]
+                room = max(0, cap - branches)
+                alternatives, more = alternative_options(
+                    ask, realized[index], room
                 )
-                if truncated:
-                    ledger.note(
-                        ledger.out_of_scope,
-                        f"{attempt.asks[index].label} 의 선택 조합이 "
-                        f"{self.budget.max_choice_branches}개를 넘어 잘랐습니다.",
-                    )
-                for option in options:
-                    if option == realized[index]:
-                        continue
-                    if branches >= self.budget.max_choice_branches:
-                        ledger.note(
-                            ledger.out_of_scope,
-                            "한 행동의 선택 분기 상한"
-                            f"({self.budget.max_choice_branches})에 걸려 남은 "
-                            "선택을 해 보지 않았습니다.",
-                        )
-                        break
+                for option in alternatives:
                     plan_next = realized[:index] + (option,)
                     if plan_next in seen_plans:
                         continue
@@ -937,6 +1180,20 @@ class BoundedSearch:
                     queue.append(plan_next)
                     branches += 1
                     ledger.choice_branches += 1
+                if more:
+                    #: 🔴 **확인하지 않은 대안이 남았다.** 그 사실을 범위 밖
+                    #: 목록과 **예산에 걸린 칸**에 함께 적는다 — 그러면 아무
+                    #: 것도 못 찾았을 때 종료 사유가 "범위를 다 펼쳤다" 가
+                    #: 되지 않는다 (:class:`Termination` 의 구분).
+                    #: 🔴 **물음 하나를 한 번만 센다.** 같은 물음이 여러
+                    #: 각본에서 다시 나오므로, 집계를 **새로 적은 줄**에
+                    #: 묶어 둔다 — 그러지 않으면 목록은 2줄인데 수치는 3이
+                    #: 되어 두 보고가 어긋난다 (실측).
+                    if ledger.note(
+                        ledger.out_of_scope, _skipped_choices_line(ask, cap)
+                    ):
+                        ledger.choice_offers_truncated += 1
+                    ledger.note(ledger.budget_hit, f"max_choice_branches={cap}")
         return results
 
     def _apply_once(
@@ -986,7 +1243,11 @@ class BoundedSearch:
             nodes_expanded=ledger.nodes,
             deepest=ledger.deepest,
             choice_branches=ledger.choice_branches,
+            choice_plans=ledger.choice_plans,
+            choice_offers_truncated=ledger.choice_offers_truncated,
             deduped=ledger.deduped,
+            revisited=ledger.revisited,
+            stale=ledger.stale,
             elapsed_seconds=time.monotonic() - started,
             unsupported=tuple(ledger.unsupported),
             out_of_scope=tuple(ledger.out_of_scope),
@@ -997,6 +1258,22 @@ class BoundedSearch:
             final_state_hash=duel.state.state_hash(),
             goal_reason=verdict.reason,
         )
+
+
+def _skipped_choices_line(ask: ChoiceAsk, cap: int) -> str:
+    """
+    **확인하지 않은 선택 대안이 남았다**는 한 줄 (Phase 6-AH 보완 B).
+
+    🔴 **상한의 뜻을 문장에 적는다.** 세 수치가 혼용되지 않아야 한다 —
+    *만든* 조합 수 · *대기에 넣은* 대안 각본 수 · *실행한* 대안 각본 수.
+    상한이 세는 것은 가운데 하나다.
+    """
+    return (
+        f"{ask.label} 의 해결 중 선택: 그 자리의 후보 {ask.options}장에서 "
+        "**확인하지 않은 대안이 남았습니다** — 한 행동의 선택 분기 상한 "
+        f"{cap}개에 걸렸습니다. 그 상한이 세는 것은 **대기에 넣은 대안 "
+        "각본의 수**이고, 만든 조합의 수도 실행한 각본의 수도 아닙니다."
+    )
 
 
 def _order_key(action: PlayerAction) -> tuple:
@@ -1180,5 +1457,10 @@ __all__ = [
     "own_field",
     "rerun_path",
     "search_for_card",
+    "Admission",
+    "admit",
+    "alternative_options",
+    "iter_selections",
     "selection_options",
+    "superseded",
 ]
