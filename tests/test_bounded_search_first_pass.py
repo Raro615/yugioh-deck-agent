@@ -1007,9 +1007,14 @@ def test_e06_the_search_mode_is_opt_in(repository):
         "agent", "hand_text", "board_text", "deck_text", "recipe_text",
         "line_text",
     ]
-    assert list(inspect.signature(SearchService.combo_response).parameters)[-1] == (
-        "search_text"
-    )
+    #: 🔴 **Phase 6-AI 가 ``results_text`` 를 그 뒤에 더했다** (모을 서로
+    #: 다른 결과 수). 이 시험이 틀린 가정을 갖고 있었던 것이 아니다 —
+    #: 그때는 ``search_text`` 가 마지막이었다. 6-AI 도 **맨 뒤의 선택
+    #: 인자**로 더했으므로 기존 호출은 그대로 돈다
+    #: (``test_bounded_search_multi_results.py::test_e11`` · ``test_e12``).
+    assert list(inspect.signature(SearchService.combo_response).parameters)[-2:] == [
+        "search_text", "results_text",
+    ]
 
     agent = DeckAgent(repository)
     assert _run_bounded_search(agent, "", [], "") is None
