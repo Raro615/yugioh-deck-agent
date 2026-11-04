@@ -345,6 +345,31 @@ timeout 3000 python3 -m pytest tests/test_bounded_search_multi_results.py \
 빈 문자열이 **탐색을 돌리지 않는다**는 것을 센다. 단언을 지우거나 기대값을
 느슨하게 바꾼 칸은 없다.
 
+전체 회귀(이번 실행):
+
+`timeout 7000 python3 -m pytest tests -q -rf -p no:randomly`
+
+```
+9 failed, 7051 passed, 10 skipped in 5704.35s (1:35:04)
+```
+
+🔴 **실패 9건은 이번 작업이 만든 것이 아니다** — 6-AI 를 시작하기 전
+기준 `f890510` 에서도 같은 9건이 실패했고, 이번 실행의 실패 목록이 그
+목록과 **한 줄도 다르지 않다**:
+
+| 실패한 시험 | 성질 |
+|-------------|------|
+| `rulings/test_data_audit::test_every_repository_card_can_reach_a_cid` | 카드 자료 감사 |
+| `agent/test_opponent_resource_weighting_audit::test_07` | 기존 감사 |
+| `test_effect_type_quick_audit::test_29` | 기존 감사 |
+| `test_event_free_chain_semantic_audit::test_27` | 기존 감사 |
+| `test_korean_overlay_unapplied_audit::test_01` · `test_13` · `test_21` · `test_25` | 기존 감사 (한국어 겹침) |
+| `test_trigger_lifetime_audit::test_02` | 기존 감사 |
+
+🔴 이 9건을 **고치거나 지우지 않았다.** 이번 단계의 범위가 아니고,
+남의 실패를 숨기지 않기 위해 그대로 둔 채 수를 적는다. 위 수치는 모두
+**이번 실행**에서 읽은 것이다(지난 실행의 수를 옮겨 적지 않았다).
+
 ---
 
 ## 6. 미지원과 한계
