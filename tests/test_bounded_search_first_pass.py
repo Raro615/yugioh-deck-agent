@@ -434,9 +434,26 @@ def test_b02_only_the_choice_branch_reaches_the_goal(repository, two_permitted):
         goal=FieldGoal(card_id=GALATEA, seat=P0),
         budget=SearchBudget(max_depth=6, max_nodes=120, max_choice_branches=0),
     ).run(_choice_board(repository))
-    assert blind.termination is Termination.EXHAUSTED, blind.describe_ko()
     assert blind.reached is False
     assert blind.choice_branches == 0
+    assert blind.choice_plans == 0
+    #: 🔴 **"범위를 다 펼쳤다" 가 아니다** (6-AH 보완 B 가 정정한 자리).
+    #: 보완 전에는 이 줄이 ``EXHAUSTED`` 였는데, 그것은 **틀린 말**이었다 —
+    #: 선택 분기 상한이 0 이라 기르수 ① 의 대안을 **하나도 확인하지 않은**
+    #: 채 끝났기 때문이다. 지금은 그 생략이 기록되고, 종료 사유도 예산
+    #: 초과로 나온다.
+    assert blind.termination is Termination.BUDGET_EXCEEDED, blind.describe_ko()
+    assert "max_choice_branches=0" in blind.budget_hit
+    assert blind.skipped_choices
+    assert blind.choice_offers_truncated == 1
+    assert any(
+        "확인하지 않은 대안이 남았습니다" in line for line in blind.out_of_scope
+    )
+    #: 🔴 어느 자리인지 적혀 있고, 그 자리의 후보 수도 적혀 있다.
+    assert any(
+        "69811710:e[0]" in line and "후보 2장" in line
+        for line in blind.out_of_scope
+    )
 
     found = BoundedSearch(
         goal=FieldGoal(card_id=GALATEA, seat=P0),
@@ -455,6 +472,14 @@ def test_b02_only_the_choice_branch_reaches_the_goal(repository, two_permitted):
     assert decisive[0].chosen_card_ids == (GROWTH,)
     assert decisive[0].planned is True
     assert decisive[0].offered[0][1] == CLIMAX
+
+    #: 🔴 **상한 4 로는 대안을 다 확인했다** — 생략이 없다.
+    assert found.choice_offers_truncated == 0
+    assert found.skipped_choices is False
+    assert not any(
+        "확인하지 않은 대안이 남았습니다" in line for line in found.out_of_scope
+    )
+    assert found.choice_plans >= 1
 
     #: 그리고 재생된다.
     again = rerun_path(_choice_board(repository), found)

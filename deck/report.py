@@ -815,6 +815,13 @@ def render_bounded_search_brief(outcome, rerun=None) -> str:
                  f" {outcome.choice_count}회 · 펼친 노드"
                  f" {outcome.nodes_expanded}개 · 최대 깊이"
                  f" {outcome.deepest} · {outcome.elapsed_seconds:.2f}초")
+    #: 🔴 **선택을 생략했으면 목표 도달과 함께 적는다** (6-AH 보완 B).
+    #: "경로를 찾았다" 는 맞고 "선택을 다 봤다" 는 틀린 경우가 있다.
+    if outcome.skipped_choices:
+        lines.append(f"  ⚠️ **해결 중 선택을 다 보지 않았습니다** —"
+                     f" 확인하지 않은 대안이 남은 물음"
+                     f" {outcome.choice_offers_truncated}곳 (아래 `지원 범위`"
+                     f" 에 어느 자리인지 적혀 있습니다)")
     lines.append(f"  예산: {outcome.budget.describe_ko()}")
     if outcome.budget_hit and outcome.reached:
         #: 🔴 **목표는 찾았지만 일부 가지가 예산에 걸렸다** — 두 사실을
@@ -912,9 +919,18 @@ def render_bounded_search(outcome, rerun=None, setup=None) -> str:
     lines.append("  예산에 걸린 칸: "
                  + (" · ".join(outcome.budget_hit) or "없음"))
     lines.append(f"  펼친 노드 {outcome.nodes_expanded} · 최대 깊이"
-                 f" {outcome.deepest} · 선택 분기"
-                 f" {outcome.choice_branches} · 중복 제거"
-                 f" {outcome.deduped} · {outcome.elapsed_seconds:.3f}초")
+                 f" {outcome.deepest} · {outcome.elapsed_seconds:.3f}초")
+    #: 🔴 **세 수치를 가른다** (6-AH 보완 B): 대기에 넣은 대안 각본 ·
+    #: 실제로 돌린 대안 각본 · 확인하지 못한 대안이 남은 물음.
+    lines.append(f"  해결 중 선택 — 대기에 넣은 대안 각본"
+                 f" {outcome.choice_branches}개 · 실제로 돌린 각본"
+                 f" {outcome.choice_plans}개 · 확인하지 못한 대안이 남은 물음"
+                 f" {outcome.choice_offers_truncated}곳")
+    #: 🔴 **중복 제거의 세 수치도 가른다** (6-AH 보완 A): 버린 노드 ·
+    #: 더 얕게 닿아 다시 펼친 노드 · 대기 중에 밀려난 노드.
+    lines.append(f"  중복 제거 — 버린 노드 {outcome.deduped}개 · 더 얕게"
+                 f" 닿아 다시 펼친 노드 {outcome.revisited}개 · 대기 중에"
+                 f" 밀려난 노드 {outcome.stale}개")
     lines.append(f"  최종 판 해시: {outcome.final_state_hash}")
     lines.append(f"  {_SEARCH_DISCLAIMER}")
 
