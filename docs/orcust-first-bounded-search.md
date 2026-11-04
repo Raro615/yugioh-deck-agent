@@ -848,13 +848,28 @@ python3 -m pytest <agent/ 를 전수로 훑는 감사 7개 파일> -q -rf -p no:
 | `test_bounded_search_depth_and_choices.py` (신규 **25건**) | **25** | **0** | 0:01 |
 | `test_bounded_search_first_pass.py` (28건 — `test_b02` 정정 뒤) | **28** | **0** | 4:00 |
 | `test_discord_bot.py` + `test_combo_brief_and_detail.py` + `test_opening_duel_integration.py` | **148** | **0** | 1:34 |
+| `agent/` 를 전수로 훑는 감사 7개 파일 | **169** | **0** | 8:29 |
 
-🔴 **`agent/` 를 전수로 훑는 감사 묶음의 수는 아직 적지 않았다** — 이 커밋
-시점에 측정이 **진행 중**이다. 바꾼 production 파일이 둘
-(`agent/bounded_search.py` · `deck/report.py`)뿐이고 공용 엔진 · 선택 ·
-복제 계약을 건드리지 않았으므로 **전체 회귀는 돌리지 않는다** (6-AH 가 그
-묶음을 이미 돌렸고, 같은 묶음을 근거 없이 반복하지 않는다). 측정이 끝나면
-이 자리에 수를 적는다.
+감사 7개 파일은 `agent/bounded_search.py` 에 생긴 새 이름들(`Admission` ·
+`admit` · `superseded` · `iter_selections` · `alternative_options`)이 그
+계층의 금지선을 넘지 않는지 보는 것들이다 —
+`test_chain_resolution_replay_boundary_audit` ·
+`test_duel_advance_rule_step_contract` ·
+`test_activation_precondition_audit` ·
+`test_event_context_actor_provenance` ·
+`test_unimplemented_rule_semantics_audit` ·
+`test_official_activation_player_action_contract` ·
+`test_engine_condition_none_contract_audit`.
+
+🔴 **새 import 를 들이지 않았다.** 처음에는 `typing.Iterator` 를 들였는데,
+생성기의 주석이 따옴표 안에 있으므로 **필요하지 않았다** — 지웠다
+(`test_a03` 이 이 모듈의 import 뿌리를 전수로 센다).
+
+🔴 **전체 회귀는 돌리지 않았다.** 바꾼 production 파일이 둘
+(`agent/bounded_search.py` · `deck/report.py`)뿐이고 공용 엔진 · 선택 정책 ·
+상태 복제 계약을 **한 줄도 바꾸지 않았으므로**, 위 네 묶음으로 범위를
+덮었다. 6-AH 가 이미 돌린 전체 묶음을 근거 없이 반복하지 않고, **그 수치를
+이번 결과로 재사용하지도 않는다.**
 
 🔴 **검증을 넓힌 범위와 넓히지 않은 범위.**
 
@@ -862,7 +877,7 @@ python3 -m pytest <agent/ 를 전수로 훑는 감사 7개 파일> -q -rf -p no:
 | --- | --- | --- |
 | 탐색 두 파일 | ✔ | 고친 자리다 |
 | 보고 렌더러를 쓰는 묶음 (`combo_brief_and_detail` · `discord_bot` · `opening_duel_integration`) | ✔ | `deck/report.py` 가 바뀌었다 |
-| `agent/` 전수 감사 | ✔ (진행 중) | `agent/bounded_search.py` 에 새 이름이 생겼다 (`Admission` · `admit` · `superseded` · `iter_selections` · `alternative_options`) |
+| `agent/` 전수 감사 | ✔ 169 passed | `agent/bounded_search.py` 에 새 이름이 생겼다 (`Admission` · `admit` · `superseded` · `iter_selections` · `alternative_options`) |
 | 공용 엔진 · 선택 정책 · 상태 복제 묶음 | ✗ | `agent/choice.py` · `agent/simulation.py` · `integration/autonomy.py` · `engine/` 를 **한 줄도 바꾸지 않았다** |
 | 전체 회귀 | ✗ | 위와 같은 이유. 🔴 6-AH 의 전체 실측(6976 passed · 기존 실패 9건)을 **이번 결과로 재사용하지 않는다** — 이번에는 돌리지 않았다고 적는다 |
 
