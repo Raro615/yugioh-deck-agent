@@ -983,3 +983,412 @@ def render_bounded_search(outcome, rerun=None, setup=None) -> str:
         for note in notes:
             lines.append(f"    - {note}")
     return "\n".join(lines)
+
+
+# ======================================================================
+# 복수 전개 결과의 자원 비교 (Phase 6-AI)
+# ======================================================================
+#: 🔴 **이 줄을 빼면 비교표가 강약표로 읽힌다.**
+_MULTI_DISCLAIMER = (
+    "🔴 **아직 강약 평가가 아닙니다** — 아래는 같은 초기 상태에서 나온"
+    " 서로 다른 결과의 **남은 자원을 그대로 늘어놓은 것**이고, 어느 쪽이"
+    " 더 좋은지 고르지 않았습니다. 점수도 총점도 순위도 없습니다"
+    " (평가 함수가 없습니다). 방해 수와 다음 턴의 전개는 **세지"
+    " 않았습니다**."
+)
+
+#: 비교표에 적는 존의 한국어 이름.
+_ZONE_KO = {
+    "HAND": "패", "MZONE": "몬스터 존", "EMZONE": "엑스트라 몬스터 존",
+    "SZONE": "마법·함정 존", "FZONE": "필드 존", "PZONE": "펜듈럼 존",
+    "GRAVE": "묘지", "REMOVED": "제외", "DECK": "남은 메인 덱",
+    "EXTRA": "남은 엑스트라 덱", "OVERLAY": "엑시즈 소재",
+}
+
+
+def _zone_ko(zone: str) -> str:
+    return _ZONE_KO.get(zone, zone)
+
+
+def _card_ko(card_id, repository=None) -> str:
+    """
+    카드 한 장을 **이름 + ID** 로. 🔴 없는 이름을 만들지 않는다.
+
+    ``card_id`` 가 ``None`` 이면 그 자리는 **가려져 있다** — 상대 필드의
+    뒷면 카드다. "없다" 로 적지 않는다.
+
+    🔴 **한국어 이름은 이 층에서 붙인다.** ``agent`` 의 요약은 ID 만 들고
+    있고 (표시 경계 감사: ``agent/`` 는 이름을 만들지 않는다), 저장소가
+    없으면 ID 만 적는다.
+    """
+    if card_id is None:
+        return "가려진 카드(정체 모름)"
+    found = repository.get(card_id) if repository else None
+    name = found.display_name() if found else None
+    return f"{name} [{card_id}]" if name else f"[{card_id}]"
+
+
+def _slot_ko(slot, repository=None) -> str:
+    """필드 한 칸. 앞뒷면과 표시 형식을 **지우지 않는다**."""
+    face = "앞면" if slot.face_up else "뒷면"
+    return f"{_card_ko(slot.card_id, repository)} {face}/{slot.position}"
+
+
+def _counts_ko(card_ids, repository=None) -> str:
+    """
+    카드 목록을 **같은 이름끼리 묶어** 적는다 (``×2`` 처럼).
+
+    🔴 **같은 이름 여러 장을 한 장으로 줄이지 않는다** — 장수를 함께 적는다.
+    """
+    order: list = []
+    counted: dict = {}
+    for card_id in card_ids:
+        if card_id not in counted:
+            order.append(card_id)
+            counted[card_id] = 0
+        counted[card_id] += 1
+    if not order:
+        return "없음"
+    bits = []
+    for card_id in order:
+        count = counted[card_id]
+        label = _card_ko(card_id, repository)
+        bits.append(label if count == 1 else f"{label} ×{count}")
+    return " · ".join(bits)
+
+
+def _use_lines(result) -> "list[str]":
+    """그 결과에 **기록된** 사용 제한들."""
+    out = []
+    for record in result.resources.uses:
+        seat = "" if record.seat is None else f"P{record.seat} "
+        out.append(f"{seat}{record.kind} {record.label} ×{record.count}")
+    return out
+
+
+def _their_tokens(result) -> "tuple":
+    """
+    상대 자리에 **남긴 토큰** 칸들.
+
+    🔴 **토큰을 "상대에게 준 손해" 로 읽지 않는다** — 그 칸이 무엇을 막고
+    무엇을 돕는지는 이 단계에서 세지 않는다. 몇 칸이 어디에 있는지만 적는다.
+    """
+    return tuple(
+        slot for slot in result.resources.their_field
+        if slot.card_id is not None and slot.position
+    )
+
+
+def _result_rows(result, repository=None) -> "list[tuple[str, str]]":
+    """비교표 한 칸(결과 하나)의 항목들 — ``(항목, 값)``."""
+    res = result.resources
+    their = res.zone(1 - res.seat, "MZONE")
+    their_cards = their.cards if their is not None else ()
+    return [
+        ("행동 수", f"{result.action_count}걸음"
+                  f" (해결 중 선택 {result.choice_count}회)"),
+        ("남은 패", f"{res.size(res.seat, 'HAND')}장 — "
+                  + _counts_ko(res.card_ids(res.seat, "HAND"), repository)),
+        ("자신 필드", " · ".join(
+            _slot_ko(slot, repository) for slot in res.own_field) or "없음"),
+        ("자신 마법·함정 존", " · ".join(
+            _slot_ko(slot, repository)
+            for slot in (res.zone(res.seat, "SZONE").cards
+                         if res.zone(res.seat, "SZONE") is not None
+                         else ())) or "없음"),
+        ("상대 필드에 남긴 칸", " · ".join(
+            _slot_ko(slot, repository) for slot in their_cards) or "없음"),
+        ("자신 묘지", f"{res.size(res.seat, 'GRAVE')}장 — "
+                   + _counts_ko(res.card_ids(res.seat, "GRAVE"), repository)),
+        ("자신 제외", f"{res.size(res.seat, 'REMOVED')}장 — "
+                   + _counts_ko(res.card_ids(res.seat, "REMOVED"), repository)),
+        ("남은 덱", f"메인 {res.size(res.seat, 'DECK')}장 ·"
+                 f" 엑스트라 {res.size(res.seat, 'EXTRA')}장"),
+        ("일반 소환권", "이 턴에 썼습니다" if res.normal_summon_used
+                    else "이 턴에 쓰지 않았습니다 (🔴 **지금 쓸 수 있다는"
+                         " 뜻이 아닙니다**)"),
+        ("기록된 사용 제한", " · ".join(_use_lines(result)) or "없음"),
+        ("재생 검증", "✔ 새 초기 상태에서 같은 판에 닿았습니다"
+                   if result.verified else
+                   ("🔴 재생 실패 — 검증된 비교에 쓰지 않습니다"
+                    if result.rerun is not None else
+                    "⚠️ 재생을 돌리지 못했습니다 — 검증되지 않았습니다")),
+    ]
+
+
+def _compare_lines(results, repository=None) -> "list[str]":
+    """
+    결과들의 **차이만** 짚는 문장들 (§4).
+
+    🔴 **총점을 만들지 않는다.** 패와 필드의 장수를 더해 "자원 N" 으로
+    적지 않고, 묘지·제외에 간 카드를 손실로 세지 않으며, 행동 수가 적은
+    쪽을 센 전개로 적지 않는다.
+
+    🔴 **차이가 없으면 없다고 적는다** — 억지로 차이를 만들지 않는다.
+    """
+    if len(results) < 2:
+        return ["  비교할 다른 결과가 없습니다 (결과 1개)."]
+    lines: list[str] = []
+    base = results[0]
+    for other in results[1:]:
+        head = f"  결과 {base.index} 대비 결과 {other.index}"
+        bits: list[str] = []
+        if other.action_count != base.action_count:
+            bits.append(f"행동이 {base.action_count}걸음 →"
+                        f" {other.action_count}걸음 (🔴 적은 쪽이 센"
+                        " 전개라는 뜻이 아닙니다)")
+        mine, theirs = base.resources, other.resources
+        for zone in ("HAND", "GRAVE", "REMOVED"):
+            a = _counts_ko(mine.card_ids(mine.seat, zone), repository)
+            b = _counts_ko(theirs.card_ids(theirs.seat, zone), repository)
+            if a != b:
+                bits.append(f"{_zone_ko(zone)}가 다릅니다 — {a} → {b}")
+        a_field = tuple(_slot_ko(s, repository) for s in mine.own_field)
+        b_field = tuple(_slot_ko(s, repository) for s in theirs.own_field)
+        if a_field != b_field:
+            bits.append("자신 필드가 다릅니다 — "
+                        + (" · ".join(a_field) or "없음") + " → "
+                        + (" · ".join(b_field) or "없음"))
+        def _szone(summary):
+            found = summary.zone(summary.seat, "SZONE")
+            return tuple(
+                _slot_ko(slot, repository)
+                for slot in (found.cards if found is not None else ())
+            )
+        a_szone, b_szone = _szone(mine), _szone(theirs)
+        if a_szone != b_szone:
+            bits.append("자신 마법·함정 존이 다릅니다 — "
+                        + (" · ".join(a_szone) or "없음") + " → "
+                        + (" · ".join(b_szone) or "없음"))
+        a_token = len(_their_tokens(base))
+        b_token = len(_their_tokens(other))
+        if a_token != b_token:
+            bits.append(f"상대 필드에 남긴 칸이 {a_token}칸 → {b_token}칸"
+                        " (🔴 그 칸이 상대에게 이득인지 손해인지는 이"
+                        " 단계에서 세지 않습니다)")
+        a_uses = set(_use_lines(base))
+        b_uses = set(_use_lines(other))
+        if a_uses != b_uses:
+            only_a = " · ".join(sorted(a_uses - b_uses)) or "없음"
+            only_b = " · ".join(sorted(b_uses - a_uses)) or "없음"
+            bits.append(f"기록된 사용 제한이 다릅니다 — 결과"
+                        f" {base.index} 에만 있는 것: {only_a} / 결과"
+                        f" {other.index} 에만 있는 것: {only_b}")
+        if mine.normal_summon_used != theirs.normal_summon_used:
+            bits.append("일반 소환권 사용이 다릅니다")
+        if not bits:
+            #: 🔴 **요약에 담기지 않는 차이가 있을 수 있다.** 두 결과는
+            #: 서로 다른 상태(:func:`agent.bounded_search.outcome_key`)이므로
+            #: "같다" 고 적지 않는다.
+            lines.append(f"{head}: 위 항목에서는 차이를 찾지 못했습니다 —"
+                         " 🔴 **두 결과는 엔진 상태가 다릅니다**(그래서"
+                         " 따로 셌습니다). 차이가 이 요약 항목에 담기지"
+                         " 않았다는 뜻이므로, 아래 전체 기록의 상태 해시와"
+                         " 존 목록을 보십시오.")
+            continue
+        lines.append(head + ":")
+        lines.extend(f"    - {bit}" for bit in bits)
+    return lines
+
+
+def _multi_head(outcome) -> "list[str]":
+    """결과 수 · 목표 · 조건 · 종료 사유 — 요약과 상세가 함께 쓴다."""
+    lines = [f"  목표: {outcome.goal.describe_ko()}"]
+    lines.append("  조건: **선공 · 상대 방해 없음**(명시적 정책) ·"
+                 " **이번 턴만** — 🔴 상대가 움직이는 판이 아닙니다.")
+    verified = len(outcome.verified_results)
+    lines.append(f"  검증된 서로 다른 결과 {verified}개"
+                 f" (모은 결과 {outcome.found}개 · 재생 실패"
+                 f" {len(outcome.failed_results)}개 · 재생 못 함"
+                 f" {len(outcome.unverified_results)}개)")
+    if outcome.duplicate_results:
+        lines.append(f"  같은 결과에 닿아 **대표로 합친** 경로"
+                     f" {outcome.duplicate_results}개 — 🔴 이 수는 서로"
+                     " 다른 결과 수를 늘리지 않습니다.")
+    lines.append("  종료: "
+                 + _TERMINATION_KO.get(outcome.termination.value,
+                                       outcome.termination.value))
+    if outcome.hit_result_cap:
+        lines.append(f"  ⚠️ **결과 수 상한에 닿아 멈췄습니다**"
+                     f" (max_results={outcome.budget.max_results}) — 더"
+                     " 있을 수 있습니다.")
+    if outcome.budget_hit:
+        lines.append("  예산에 걸린 칸: " + " · ".join(outcome.budget_hit))
+    else:
+        lines.append("  예산에 걸리지 않았습니다.")
+    #: 🔴 **"찾았다" 와 "끝까지 봤다" 를 가른다.**
+    lines.append("  지정된 범위를 끝까지 펼쳤는가: "
+                 + ("예" if outcome.search_exhausted else
+                    "아니오 — 🔴 **돌려준 결과가 가능한 모든 전개가"
+                    " 아닙니다**"))
+    if outcome.skipped_choices:
+        lines.append(f"  ⚠️ **해결 중 선택을 다 보지 않았습니다** —"
+                     f" 확인하지 않은 대안이 남은 물음"
+                     f" {outcome.choice_offers_truncated}곳")
+    lines.append(f"  탐색 {outcome.search_seconds:.2f}초 · 재생"
+                 f" {outcome.rerun_seconds:.2f}초"
+                 f" (🔴 따로 적습니다) · 펼친 노드"
+                 f" {outcome.nodes_expanded}개 · 최대 깊이 {outcome.deepest}")
+    return lines
+
+
+def render_multi_search_brief(outcome, repository=None) -> str:
+    """
+    **복수 결과 탐색의 기본 응답용 요약** (Phase 6-AI §6).
+
+    🔴 **판정하지 않는다.** 이미 끝난 탐색 결과만 읽고 엔진을 다시 돌리지
+    않는다. ``agent`` 를 import 하지 않고 결과의 **모양만** 읽는다.
+
+    🔴 **다섯 가지를 반드시 적는다**: 검증된 결과 수 · 목표와 무방해 조건 ·
+    자원 비교 요약 · 탐색 종료 사유와 생략 여부 · 아직 강약 평가가 아니라는
+    설명.
+    """
+    lines = ["", "제한 전개 탐색 — 서로 다른 결과 비교", _RULE]
+    lines.extend(_multi_head(outcome))
+    lines.append(f"  {_SEARCH_DISCLAIMER}")
+    lines.append(f"  {_MULTI_DISCLAIMER}")
+
+    shown = outcome.verified_results or outcome.results
+    lines.append("")
+    if not outcome.results:
+        lines.append("  찾은 결과가 없습니다 — 🔴 **이 패로 불가능하다는"
+                     " 뜻이 아닙니다.**")
+        return "\n".join(lines)
+    if not outcome.verified_results:
+        lines.append("  🔴 **검증된 결과가 없습니다** — 아래는 재생으로"
+                     " 뒷받침되지 않은 결과입니다.")
+    elif len(shown) == 1:
+        lines.append("  검증된 결과가 **하나**입니다 — 🔴 결과 수를 채우려고"
+                     " 중복 경로를 끼워 넣지 않았습니다.")
+
+    for result in shown:
+        lines.append("")
+        lines.append(f"  [결과 {result.index}]"
+                     + (f" (같은 결과에 닿은 다른 경로"
+                        f" {result.duplicates}개)" if result.duplicates
+                        else ""))
+        for step in result.path:
+            picked = " · ".join(
+                _card_ko(card_id, repository)
+                for ask in step.choices
+                for card_id in ask.chosen_card_ids
+            )
+            tail = f" (해결 중 선택 {picked})" if picked else ""
+            lines.append(f"    {step.order}. {_kind_ko(step.kind)}{tail}")
+        for label, value in _result_rows(result, repository):
+            lines.append(f"    {label}: {value}")
+
+    lines.append("")
+    lines.append("  결과들의 차이")
+    lines.extend(_compare_lines(shown, repository))
+    if len(shown) >= 2:
+        lines.append("    🔴 **어느 쪽이 더 좋은지 고르지 않았습니다** —"
+                     " 서로 주고받는 차이(한쪽은 패가 남고 다른 쪽은 묘지가"
+                     " 쌓이는 식)는 양쪽을 그대로 적었습니다.")
+    return "\n".join(lines)
+
+
+def render_multi_search(outcome, repository=None, setup=None) -> str:
+    """
+    **복수 결과 탐색의 전체 기록** — 첨부와 CLI 가 보는 것 (6-AI §6).
+
+    🔴 **한 줄도 줄이지 않는다.** 결과마다 걸음의 행동 열쇠와 해결 중 선택
+    전부 · 모든 존의 자원 · 기록된 사용 제한 · 재생 결과를 적고, 미지원 ·
+    예산 · 생략의 상세를 그대로 적는다.
+    """
+    lines = ["", "제한 전개 탐색 (복수 결과) — 전체 기록", _RULE]
+    lines.extend(_multi_head(outcome))
+    if setup is not None:
+        lines.append("  입력 조건")
+        lines.append("    시작 패: " + " · ".join(
+            _card_ko(card_id, repository) for card_id in setup.hand))
+        lines.append(f"    남은 메인 덱 {len(setup.deck_rest)}장 ·"
+                     f" 엑스트라 {len(setup.extra)}장")
+        for note in setup.unknowns:
+            lines.append(f"    ⚠️ 알 수 없음: {note}")
+    lines.append(f"  예산: {outcome.budget.describe_ko()}")
+    lines.append(f"  해결 중 선택 — 대기에 넣은 대안 각본"
+                 f" {outcome.choice_branches}개 · 실제로 돌린 각본"
+                 f" {outcome.choice_plans}개 · 확인하지 못한 대안이 남은 물음"
+                 f" {outcome.choice_offers_truncated}곳")
+    lines.append(f"  중복 제거 — 버린 노드 {outcome.deduped}개 · 더 얕게"
+                 f" 닿아 다시 펼친 노드 {outcome.revisited}개 · 대기 중에"
+                 f" 밀려난 노드 {outcome.stale}개")
+    lines.append(f"  {_SEARCH_DISCLAIMER}")
+    lines.append(f"  {_MULTI_DISCLAIMER}")
+
+    for result in outcome.results:
+        lines.append("")
+        lines.append(f"  [결과 {result.index}] 목표 판정:"
+                     f" {result.goal_reason}")
+        lines.append(f"    같은 결과에 닿은 다른 경로 {result.duplicates}개"
+                     " (🔴 결과 수를 늘리지 않습니다)")
+        lines.append("    경로 (행동과 해결 중 선택)")
+        for step in result.path:
+            lines.append(f"      {step.order}. {step.kind} {step.action_key}")
+            if step.reason:
+                lines.append(f"         → {step.reason}")
+            for ask in step.choices:
+                lines.append(f"         선택 {ask.describe_ko()}")
+                offered = " · ".join(
+                    f"#{instance}[{card_id}]"
+                    for instance, card_id in ask.offered
+                )
+                lines.append(f"           그 자리의 허용 후보:"
+                             f" {offered or '없음'}")
+            for note in step.forced:
+                lines.append(f"         필수 {note}")
+        lines.append("    최종 자원 (실제 GameState)")
+        res = result.resources
+        lines.append(f"      T{res.turn_number} {res.phase} · 상태 해시"
+                     f" {res.state_hash}")
+        for zone in res.zones:
+            who = "자신" if zone.seat == res.seat else "상대"
+            if zone.counted_only:
+                lines.append(f"      {who} {_zone_ko(zone.zone)}"
+                             f" {zone.size}장 (장수만)")
+                continue
+            inside = " · ".join(
+                _slot_ko(slot, repository) for slot in zone.cards) or "없음"
+            lines.append(f"      {who} {_zone_ko(zone.zone)}"
+                         f" {zone.size}장: {inside}")
+        lines.append("      기록된 사용 제한: "
+                     + (" · ".join(_use_lines(result)) or "없음")
+                     + " — 🔴 **쓰지 않았다는 기록을 지금 쓸 수 있다는"
+                       " 뜻으로 읽지 마십시오.**")
+        lines.append("      일반 소환권: "
+                     + ("이 턴에 썼습니다" if res.normal_summon_used
+                        else "이 턴에 쓰지 않았습니다"))
+        lines.append("    재생 (새 초기 상태에서 다시 실행)")
+        if result.rerun is None:
+            lines.append("      ⚠️ 돌리지 못했습니다 — 아래 `재생 메모` 를"
+                         " 보십시오. 🔴 검증되지 않았습니다.")
+        else:
+            state = "✔ 성공" if result.rerun.ok else "🔴 실패"
+            lines.append(f"      {state} — 걸음 {result.rerun.steps}개 ·"
+                         f" 목표 {result.rerun.goal_reached} · 최종 판 일치"
+                         f" {result.rerun.matches_search} · 자원 요약 일치"
+                         f" {result.resources_match}")
+            lines.append(f"      {result.rerun.reason}")
+            if not result.verified:
+                lines.append("      🔴 **검증된 비교에 쓰지 않습니다.**")
+
+    lines.append("")
+    lines.append("  결과들의 차이 (검증된 것만)")
+    lines.extend(_compare_lines(outcome.verified_results, repository))
+
+    for label, notes in (
+        ("범위 밖으로 둔 분기", outcome.out_of_scope),
+        ("지원하지 않아 후보가 되지 못한 수", outcome.unsupported),
+        ("상대 자리에서 무방해 정책이 넘긴 수", outcome.opponent_declined),
+        ("상대 자리에 고를 것이 남아 멈춘 노드", outcome.opponent_blocked),
+        ("재생 메모", outcome.rerun_notes),
+        ("🔴 오류", outcome.errors),
+    ):
+        lines.append("")
+        lines.append(f"  {label} ({len(notes)}건)")
+        if not notes:
+            lines.append("    없음")
+        for note in notes:
+            lines.append(f"    - {note}")
+    return "\n".join(lines)
