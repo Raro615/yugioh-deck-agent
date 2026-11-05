@@ -23,7 +23,8 @@
 §1–§4 가 1–4 를 차례로 적고, §5 가 실측, §6 이 한계, §7 이 시험, §8 이
 실행 예시다. **§9 는 후속 보완(Phase 6-AJ)** — 복수 경로 재생의 **공유 시간
 제한**과 **결과별 예외 격리**이고, 그 절이 §1.3 · §6 · §8.3 의 설명도
-정정한다.
+정정한다. **§10 은 그 뒤의 작은 보완** — 행동 실행(`apply`) 예외가
+`ERRORED` 가 아니라 `MISMATCHED` 로 집계되던 것을 고친다.
 
 ---
 
@@ -429,6 +430,7 @@ timeout 3000 python3 -m pytest tests/test_bounded_search_multi_results.py \
 | D | `test_d01`–`test_d11` | **실제 카드**에서 서로 다른 결과 3개 · 전부 재생 성공 · 요약이 재생 상태와 일치 · 비공개 정보 미생성 · 요약이 불변 값 · 행동/선택 조작 시 재생 실패 |
 | E | `test_e01`–`test_e15` | 기본 응답의 다섯 항목 · 금칙어 부재 · 한국어 이름은 표시 층 · 상세가 줄지 않음 · 결과 1개는 1개로 · 못 찾음 ≠ 불가능 · **단일 결과 모드 불변** · 보완 A 동작 유지 · CLI/Discord 기본값 불변 |
 | 6-AJ | `tests/test_bounded_search_rerun_limits.py` (`test_a01`–`test_d03`) | 공유 재생 마감과 **다섯 종류의 검사 자리** · 협력적 제한의 한계 · 결과별 일반 예외 격리 · 종료 신호 미삼킴 · `BaseException` 미포획 · 여섯 재생 상태와 집계 일치 · 탐색/재생 사유 분리 · 실제 카드 정상 경로 (§9) |
+| 6-AJ 후속 | `tests/test_bounded_search_rerun_apply_errors.py` (`test_a01`–`test_d01`) | 행동 실행(`apply`) 예외가 `ERRORED` 로 분류됨 · `error_type`/`stage` 기록 · `reason`과 완료 걸음 수 유지 · 다른 경로 보존과 다음 결과의 새 초기 상태 · 예외 집계와 상세 보고 · 종료 신호 전파 (§10) |
 
 🔴 **시험은 production 탐색 로직을 호출한다.** 격리 그래프에서 바꿔 끼우는
 것은 `_attempts` 하나이고(C 절 일부는 `rerun_steps` 하나), 고리 · `_open` ·
@@ -642,6 +644,11 @@ rerun.timed_out = (칸 없음)          rerun.timed_out = True
 | `VERIFIED` | 같은 판에 닿고 자원 요약까지 같다 | 있음 |
 | `MISMATCHED` | 행동·선택·최종 판·자원 요약 중 하나가 어긋났다 | 있음 |
 | `ERRORED` | 일반 실행 예외로 멈췄다 (`error_type`) | 있음 |
+
+> 🔴 **정정 (§10).** 6-AJ 시점의 구현은 이 분류를 **행동 실행**
+> (`fork.apply`) 예외에는 적용하지 못했다 — 그 분기가 `error_type` ·
+> `stage` 를 비워 두어 `MISMATCHED` 로 집계됐다. §10 이 그 한 곳을
+> 고치고 회귀 테스트를 더한다. 아래 표 자체는 그대로 맞다.
 | `TIMED_OUT` | **시작했는데** 공유 마감을 넘겼다 | 있음 |
 | `NOT_STARTED` | 시간이 남지 않아 **시작조차 못 했다** | 없음 |
 | `DISABLED` | `rerun=False` 로 **끄고** 돌렸다 | 없음 |
@@ -730,3 +737,143 @@ production 서명에 새로 붙은 `deadline` 을 받지 못해 `TypeError` 가 
 함께 돌렸다 — 재생을 쓰는 곳(복수 결과 · 단일 경로 첫 구현), 탐색 수치를
 읽는 곳(깊이·선택), 출력과 어댑터(`/combo` 요약·첨부 · Discord · 선공 실행
 통합).
+
+---
+
+## 10. 후속 보완 2 — 행동 실행(`apply`) 예외의 상태 분류 누락
+
+🔴 **§9 의 테스트가 모두 통과한 뒤에도 남아 있던 결함이다.** 독립 검토에서
+관련 테스트 167개가 통과했고 공유 재생 마감과 결과별 예외 격리도 구현돼
+있었지만, 그 분류가 **실제 행동 실행 예외를 놓치고** 있었다.
+
+### 10.1 무엇이 어긋나 있었나
+
+`rerun_steps()` 안의 **행동 실행** 분기는 6-AH 부터 있던 그대로였다 —
+`fork.apply()` 가 터지면 `ok=False` 인 `RerunResult` 를 만들면서
+`reason` 과 `steps` 만 적고, 6-AJ 가 더한 `error_type` · `stage` 는
+**비워 두었다.** 그래서:
+
+1. `apply()` 에서 `RuntimeError` 가 난다.
+2. `rerun_steps()` 가 `ok=False` 인 결과를 **반환**한다 (예외가 밖으로
+   나가지 않는다).
+3. 결과별 경계 `_rerun_one()` 에는 **예외가 전파되지 않는다.**
+4. `error_type` 이 비어 있으므로 `PathResult.rerun_state` 가
+   `ERRORED` 가 아니라 **`MISMATCHED`** 를 돌려준다.
+5. 상태별 집계와 보고가 **실행 예외를 재생 불일치로** 표시한다.
+
+🔴 **성공으로 잘못 인정하는 문제는 아니었다** — `verified` 는 두 경우 모두
+거짓이다. 어긋난 것은 **왜 검증되지 않았는가**이고, 그것이 §9.4 가 가르려고
+만든 바로 그 구분이다.
+
+수정 전 격리 재현(`tests/test_bounded_search_rerun_apply_errors.py` 를
+수정 전 코드에서 돌린 것):
+
+```
+assert rerun.error_type == "RuntimeError"
+  AssertionError: assert '' == 'RuntimeError'
+
+assert only.rerun_state is RerunState.ERRORED
+  AssertionError: assert <RerunState.MISMATCHED: 'mismatched'>
+                      is <RerunState.ERRORED: 'errored'>
+  … RerunResult(ok=False, …, error_type='', stage='')
+```
+
+### 10.2 최소 수정
+
+`agent/bounded_search.py` 의 그 분기 **하나**에 두 칸을 채웠다.
+
+| 칸 | 값 |
+|----|-----|
+| `error_type` | `type(error).__name__` — 실제 예외 클래스 이름 |
+| `stage` | `f"행동 {recorded.order} 실행"` — **몇 번째 행동의 실행 중**인지 |
+
+🔴 **그 밖에는 아무것도 바꾸지 않았다.**
+
+- `reason` 의 문구(`"N번째 행동에서 예외가 났습니다: …"`)와 `steps`(그때까지
+  **완료한 걸음 수**)의 뜻은 그대로다.
+- 공유 마감 · 시간 초과 처리 · 단일 경로 재생 API(`rerun_path` ·
+  `rerun_steps` 의 서명과 기본값)는 **건드리지 않았다.**
+- 예외를 성공 · 정상 무효과 · UNKNOWN · 재생 불일치로 바꾸지 않는다.
+- `except Exception` 이므로 `apply()` 에서 난 `KeyboardInterrupt` ·
+  `SystemExit` 같은 `BaseException` 직계는 **그대로 올라간다**(이 분기도,
+  바깥 `_rerun_one` 도 마찬가지다).
+
+### 10.3 수정 전/후 상태 분류
+
+| | 수정 전 | 수정 후 |
+|---|---|---|
+| `rerun.error_type` | `""` | `"RuntimeError"` |
+| `rerun.stage` | `""` | `"행동 1 실행"` |
+| `rerun.reason` | `"1번째 행동에서 예외가 났습니다: RuntimeError: …"` | **같다** |
+| `rerun.steps` | 완료한 걸음 수 | **같다** |
+| `PathResult.rerun_state` | `MISMATCHED` | **`ERRORED`** |
+| `verified` | `False` | `False` (같다) |
+| `tally` | 불일치 1 · 예외 0 | **불일치 0 · 예외 1** |
+| 상세 보고 | "재생이 어긋났습니다" | "재생이 **일반 실행 예외**로 멈췄습니다 … 🔴 예외 RuntimeError · 단계 행동 1 실행" |
+
+### 10.4 회귀 테스트 — 실제 행동 실행 지점을 지난다
+
+새 파일 `tests/test_bounded_search_rerun_apply_errors.py` (7건).
+
+🔴 **`rerun_steps()` 를 가짜로 바꾸지 않는다.** 바꿔 끼우는 것은
+`Duel.apply` 하나이고, 그것도 **기록된 그 행동의 열쇠일 때만** 터지게 한다 —
+필수 걸음이 적용하는 패스에는 손대지 않으므로 예외가 **행동 실행 지점**에만
+들어간다. 재생 반복문 · 허용 후보 재조회 · 필수 걸음 처리 · 결과별 경계
+(`_rerun_one`) · 집계(`_many_outcome`) · 두 렌더러는 **production 그대로**
+돈다.
+
+🔴 **실제 카드를 쓰지만 탐색을 돌리지 않는다.** 선공 판에서 엔진이 내놓은
+허용 후보로 짧은 경로 둘을 만든다 — `일반 소환 → 패스`(목표 `[69811710]` 에
+**닿는다**)와 `마·함 세트 → 일반 소환`(두 번째 걸음에서 터뜨려 **완료 걸음
+수 1**을 만든다). 열쇠가 틀렸다면 픅스처가 production `rerun_steps` 로
+실제로 밟아 보는 자리에서 깨진다. 30초짜리 탐색을 반복할 이유가 없다.
+
+| 시험 | 고정하는 사실 |
+|------|---------------|
+| `test_a01` | `ok=False` · `error_type="RuntimeError"` · `stage` 에 `행동 1` · `steps=0` · `reason` 문구 유지 · 시간 초과도 목표 도달도 아님 |
+| `test_a02` | 두 번째 행동에서 터지면 `stage` 가 `행동 2`, `steps=1` (완료 걸음 수의 뜻 유지) |
+| `test_a03` | 결과별 경계를 지나도 `ERRORED` 이고 `MISMATCHED` 가 아니다 · `verified=False` · 경로 보존 · 진단이 `rerun_notes` 에 남음 |
+| `test_b01` | 첫 결과의 `apply` 만 터지면 두 번째는 **검증 성공** · 모은 결과 수와 경로 보존 · 두 재생이 **같은 초기 해시**에서 시작 · 원본 판 불변 |
+| `test_c01` | 예외 수 1 · 불일치 수 0 · 검증 수 1 · `tally.total == found` · 상세에 예외 종류와 발생 단계 · 요약은 간결(단계는 상세에만) |
+| `test_d01` (×2) | `apply` 에서 난 `KeyboardInterrupt` · `SystemExit` 이 `rerun_steps` 와 `rerun_results` 양쪽에서 **상위로 전파** |
+
+### 10.5 실행한 명령과 결과
+
+🔴 아래는 **이번 보완에서 실제로 돌려 얻은 것**이다.
+
+**수정 전 (결함 재현):**
+
+`timeout 600 python3 -m pytest tests/test_bounded_search_rerun_apply_errors.py -q -rf -p no:randomly`
+
+```
+7 failed in 31.38s
+```
+
+(일곱 건 모두 실패했고, 실패 이유가 §10.1 의 블록이다.)
+
+**수정 후:**
+
+```
+7 passed in 24.91s
+```
+
+**직접 관련된 묶음** — 재생 상태·집계·보고서와, `rerun_steps` 를 함께 쓰는
+단일 경로 재생:
+
+```
+timeout 2400 python3 -m pytest tests/test_bounded_search_rerun_apply_errors.py \
+  tests/test_bounded_search_rerun_limits.py \
+  tests/test_bounded_search_multi_results.py \
+  tests/test_bounded_search_first_pass.py \
+  tests/test_combo_brief_and_detail.py -q -rf -p no:randomly
+```
+
+```
+157 passed in 940.61s (0:15:40)
+```
+
+🔴 **전체 모음을 다시 돌리지 않았다.** 바꾼 것은 `rerun_steps` 의 예외 분기
+한 곳(두 칸을 채운 것)이고 공용 계층(`engine` · `core`)과 출력 층
+(`deck/report.py`) 은 손대지 않았다. 공유 마감과 단일 경로 재생의 서명·기본
+동작도 바꾸지 않았으므로, 그 둘을 재는 묶음(`rerun_limits` ·
+`first_pass`)까지만 함께 돌렸다.
