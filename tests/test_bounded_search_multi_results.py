@@ -614,7 +614,9 @@ def test_c01_one_failed_rerun_does_not_discard_the_others(monkeypatch):
     assert len(ledger.results) == 2
     calls = []
 
-    def fake(duel, path, target, *, expect_field=(), expect_hash=""):
+    def fake(duel, path, target, *, expect_field=(), expect_hash="",
+             deadline=None):
+        assert isinstance(deadline, bs.RerunDeadline), deadline
         calls.append(expect_hash)
         if len(calls) == 1:
             return RerunResult(ok=False, reason="[스텁] 첫 결과만 실패")
@@ -641,7 +643,9 @@ def test_c02_a_rerun_error_is_not_turned_into_nothing_found(monkeypatch):
     """🔴 **재생 오류를 "탐색이 아무것도 못 찾았다" 로 바꾸지 않는다.**"""
     search, ledger = _stub_ledger(TWO_GOALS, max_results=3)
 
-    def boom(duel, path, target, *, expect_field=(), expect_hash=""):
+    def boom(duel, path, target, *, expect_field=(), expect_hash="",
+             deadline=None):
+        assert isinstance(deadline, bs.RerunDeadline), deadline
         raise BoundedSearchError("[스텁] 재생이 예외로 멈췄다")
 
     monkeypatch.setattr(bs, "rerun_steps", boom)
@@ -664,7 +668,9 @@ def test_c03_matching_resources_are_required_for_verification(monkeypatch):
     search, ledger = _stub_ledger(TWO_GOALS, max_results=3)
     other = summarize_resources(_MDuel(TWO_GOALS, "G2"), P0)
 
-    def fake(duel, path, target, *, expect_field=(), expect_hash=""):
+    def fake(duel, path, target, *, expect_field=(), expect_hash="",
+             deadline=None):
+        assert isinstance(deadline, bs.RerunDeadline), deadline
         return RerunResult(
             ok=True, reason="[스텁] 성공", steps=len(path), goal_reached=True,
             matches_search=True, resources=other,
@@ -701,8 +707,18 @@ def test_c04_rerun_time_cap_keeps_results_unverified(monkeypatch):
     assert outcome.found == 2
     assert len(outcome.unverified_results) == 2
     assert all(result.rerun is None for result in outcome.results)
-    assert any("max_rerun_seconds" in line for line in outcome.budget_hit)
+    #: 🔴 **Phase 6-AJ 가 두 사유를 가른다** — 재생 쪽에서 걸린 칸은
+    #: ``rerun_budget_hit`` 이고, 탐색 쪽 ``budget_hit`` 에는 **섞이지
+    #: 않는다.** 이 시험이 틀린 가정을 갖고 있었던 것이 아니다 — 6-AI 에서는
+    #: 한 칸에 담았고, 그러면 "재생 시간이 끝났다" 가 "탐색 범위를 끝까지
+    #: 펼치지 못했다" 로 읽혔다. 기대를 **좁혀서** 더 세게 센다.
+    assert any("max_rerun_seconds" in line
+               for line in outcome.rerun_budget_hit)
+    assert not any("max_rerun_seconds" in line for line in outcome.budget_hit)
     assert len(outcome.rerun_notes) == 2
+    #: 🔴 시작조차 하지 못한 것이다 — 재생 도중 넘긴 것과 가른다 (§C).
+    assert len(outcome.not_started_results) == 2
+    assert not outcome.timed_out_results
     assert not outcome.verified_results
 
 
@@ -714,7 +730,9 @@ def test_c05_the_final_representative_is_the_one_rerun(monkeypatch):
     search, ledger = _stub_ledger(SAME_GOAL_TWICE, max_results=5)
     seen = []
 
-    def fake(duel, path, target, *, expect_field=(), expect_hash=""):
+    def fake(duel, path, target, *, expect_field=(), expect_hash="",
+             deadline=None):
+        assert isinstance(deadline, bs.RerunDeadline), deadline
         seen.append(tuple(step.action_key for step in path))
         return RerunResult(
             ok=True, reason="[스텁] 성공", steps=len(path), goal_reached=True,
