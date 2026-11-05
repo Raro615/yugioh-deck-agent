@@ -1079,6 +1079,34 @@ def _their_tokens(result) -> "tuple":
     )
 
 
+#: 재생 상태 → 사람이 읽는 말 (Phase 6-AJ §C). 🔴 **여섯 가지를 한 칸으로
+#: 뭉치지 않는다** — "검증되지 않았다" 하나로 적으면 왜 그런지가 사라진다.
+#: ``agent`` 를 import 하지 않으므로 ``RerunState`` 의 **값 문자열**로 받는다
+#: (ADR-007).
+_RERUN_STATE_KO: dict = {
+    "verified": "✔ 새 초기 상태에서 같은 판에 닿았습니다",
+    "mismatched": "🔴 재생이 어긋났습니다 (행동·선택·최종 판·자원 요약 중"
+                  " 하나) — 검증된 비교에 쓰지 않습니다",
+    "errored": "🔴 재생이 **일반 실행 예외**로 멈췄습니다 — 이 결과만"
+               " 실패이고, 다른 결과는 그대로 남습니다",
+    "timed_out": "⏱️ 재생을 **시작했지만** 공유 재생 마감을 넘겨 멈췄습니다"
+                 " — 🔴 검증 성공으로 세지 않습니다",
+    "not_started": "⏱️ 재생을 **시작하지 못했습니다** (공유 재생 마감을 이미"
+                   " 넘겼습니다) — 경로는 그대로 남습니다",
+    "disabled": "⚪ 재생을 **끄고** 돌렸습니다 (rerun=False) — 검증되지"
+                " 않았습니다",
+}
+
+
+def _rerun_state_ko(result) -> str:
+    """그 결과의 재생 상태를 사람이 읽는 말로."""
+    state = getattr(result, "rerun_state", None)
+    key = getattr(state, "value", state)
+    return _RERUN_STATE_KO.get(
+        key, "⚠️ 재생 상태를 알 수 없습니다 — 🔴 검증된 것으로 세지 않습니다"
+    )
+
+
 def _result_rows(result, repository=None) -> "list[tuple[str, str]]":
     """비교표 한 칸(결과 하나)의 항목들 — ``(항목, 값)``."""
     res = result.resources
@@ -1108,11 +1136,7 @@ def _result_rows(result, repository=None) -> "list[tuple[str, str]]":
                     else "이 턴에 쓰지 않았습니다 (🔴 **지금 쓸 수 있다는"
                          " 뜻이 아닙니다**)"),
         ("기록된 사용 제한", " · ".join(_use_lines(result)) or "없음"),
-        ("재생 검증", "✔ 새 초기 상태에서 같은 판에 닿았습니다"
-                   if result.verified else
-                   ("🔴 재생 실패 — 검증된 비교에 쓰지 않습니다"
-                    if result.rerun is not None else
-                    "⚠️ 재생을 돌리지 못했습니다 — 검증되지 않았습니다")),
+        ("재생 검증", _rerun_state_ko(result)),
     ]
 
 
@@ -1196,11 +1220,23 @@ def _multi_head(outcome) -> "list[str]":
     lines = [f"  목표: {outcome.goal.describe_ko()}"]
     lines.append("  조건: **선공 · 상대 방해 없음**(명시적 정책) ·"
                  " **이번 턴만** — 🔴 상대가 움직이는 판이 아닙니다.")
-    verified = len(outcome.verified_results)
-    lines.append(f"  검증된 서로 다른 결과 {verified}개"
-                 f" (모은 결과 {outcome.found}개 · 재생 실패"
-                 f" {len(outcome.failed_results)}개 · 재생 못 함"
-                 f" {len(outcome.unverified_results)}개)")
+    tally = outcome.tally
+    lines.append(f"  검증된 서로 다른 결과 {tally.verified}개"
+                 f" (모은 결과 {outcome.found}개 — {tally.describe_ko()})")
+    #: 🔴 **경로를 찾은 사실과 검증을 마친 사실을 가른다** (§C).
+    if tally.verified != outcome.found:
+        lines.append(f"  🔴 **찾은 경로 {outcome.found}개는 그대로 남아"
+                     f" 있습니다** — 재생 검증을 마친 것이"
+                     f" {tally.verified}개라는 뜻입니다 (경로가 사라진 것이"
+                     " 아닙니다).")
+    if tally.timed_out or tally.not_started:
+        lines.append(f"  ⏱️ 재생 시간이 끊은 결과 — 도중에 멈춘 것"
+                     f" {tally.timed_out}개 · 시작조차 못 한 것"
+                     f" {tally.not_started}개 (🔴 서로 다른 사실입니다)")
+    if tally.errored:
+        lines.append(f"  🔴 일반 실행 예외로 멈춘 결과 {tally.errored}개 —"
+                     " 시간 초과와 **다른 이유**입니다. 상세 기록의 결과별"
+                     " 사유를 보십시오.")
     if outcome.duplicate_results:
         lines.append(f"  같은 결과에 닿아 **대표로 합친** 경로"
                      f" {outcome.duplicate_results}개 — 🔴 이 수는 서로"
@@ -1212,10 +1248,12 @@ def _multi_head(outcome) -> "list[str]":
         lines.append(f"  ⚠️ **결과 수 상한에 닿아 멈췄습니다**"
                      f" (max_results={outcome.budget.max_results}) — 더"
                      " 있을 수 있습니다.")
-    if outcome.budget_hit:
-        lines.append("  예산에 걸린 칸: " + " · ".join(outcome.budget_hit))
-    else:
-        lines.append("  예산에 걸리지 않았습니다.")
+    #: 🔴 **탐색 예산과 재생 예산의 사유를 섞지 않는다** (§A-9).
+    lines.append("  탐색 예산에 걸린 칸: "
+                 + (" · ".join(outcome.budget_hit) or "없음"))
+    lines.append("  재생 예산에 걸린 칸: "
+                 + (" · ".join(getattr(outcome, "rerun_budget_hit", ()))
+                    or "없음"))
     #: 🔴 **"찾았다" 와 "끝까지 봤다" 를 가른다.**
     lines.append("  지정된 범위를 끝까지 펼쳤는가: "
                  + ("예" if outcome.search_exhausted else
@@ -1279,7 +1317,10 @@ def render_multi_search_brief(outcome, repository=None) -> str:
             lines.append(f"    {label}: {value}")
 
     lines.append("")
-    lines.append("  결과들의 차이")
+    #: 🔴 **검증된 비교에는 검증 성공 결과만 넣는다** — 검증된 것이 없어
+    #: 아래에 적을 수밖에 없을 때는 제목에서 그 사실을 밝힌다 (§C).
+    lines.append("  결과들의 차이" if outcome.verified_results
+                 else "  결과들의 차이 (🔴 검증되지 않은 결과입니다)")
     lines.extend(_compare_lines(shown, repository))
     if len(shown) >= 2:
         lines.append("    🔴 **어느 쪽이 더 좋은지 고르지 않았습니다** —"
@@ -1360,15 +1401,28 @@ def render_multi_search(outcome, repository=None, setup=None) -> str:
                      + ("이 턴에 썼습니다" if res.normal_summon_used
                         else "이 턴에 쓰지 않았습니다"))
         lines.append("    재생 (새 초기 상태에서 다시 실행)")
+        #: 🔴 **결과별 사유를 상세 기록에 적는다** (§C) — 기본 응답은 짧게
+        #: 두고, 왜 검증되지 않았는지는 여기서 되돌릴 수 있게 둔다.
+        lines.append(f"      상태: {_rerun_state_ko(result)}")
         if result.rerun is None:
-            lines.append("      ⚠️ 돌리지 못했습니다 — 아래 `재생 메모` 를"
-                         " 보십시오. 🔴 검증되지 않았습니다.")
+            lines.append("      아래 `재생 메모` 를 보십시오. 🔴 이 결과는"
+                         " 검증되지 않았지만 **경로는 그대로 남아 있습니다.**")
         else:
             state = "✔ 성공" if result.rerun.ok else "🔴 실패"
             lines.append(f"      {state} — 걸음 {result.rerun.steps}개 ·"
                          f" 목표 {result.rerun.goal_reached} · 최종 판 일치"
                          f" {result.rerun.matches_search} · 자원 요약 일치"
                          f" {result.resources_match}")
+            stage = getattr(result.rerun, "stage", "")
+            error_type = getattr(result.rerun, "error_type", "")
+            if error_type:
+                lines.append(f"      🔴 예외 {error_type} · 단계"
+                             f" {stage or '알 수 없음'} — 조용히 삼키지 않고"
+                             " 이 결과의 실패로 적었습니다.")
+            elif getattr(result.rerun, "timed_out", False):
+                lines.append(f"      ⏱️ 공유 재생 마감을 넘긴 자리: "
+                             f"{stage or '알 수 없음'} — 🔴 협력적 제한이므로"
+                             " 돌고 있던 엔진 호출 하나는 끊지 않았습니다.")
             lines.append(f"      {result.rerun.reason}")
             if not result.verified:
                 lines.append("      🔴 **검증된 비교에 쓰지 않습니다.**")
