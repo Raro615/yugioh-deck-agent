@@ -2746,12 +2746,25 @@ def rerun_steps(
         fork = sim.fork(selector=scripted)
         try:
             step = fork.apply(matches[0])
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:  # noqa: BLE001 - 걸음 하나의 경계
+            #: 🔴 **실행 예외를 예외로 적는다** (Phase 6-AJ 후속). 6-AH 가
+            #: 둔 이 분기는 ``reason`` 만 적었고, 6-AJ 가 더한
+            #: :attr:`RerunResult.error_type` · :attr:`RerunResult.stage` 를
+            #: 채우지 않았다 — 그래서 바깥
+            #: :meth:`BoundedSearch._rerun_one` 이 이 결과를
+            #: :attr:`RerunState.ERRORED` 가 아니라
+            #: :attr:`RerunState.MISMATCHED` 로 읽었고, 집계와 보고가 **실행
+            #: 예외를 재생 불일치로** 표시했다.
+            #:
+            #: 🔴 ``reason`` 과 ``steps`` 의 뜻은 그대로다 — 몇 번째 행동에서
+            #: 무엇이 터졌는지, 그때까지 몇 걸음을 밟았는지.
             return RerunResult(
                 ok=False,
                 reason=f"{recorded.order}번째 행동에서 예외가 났습니다: "
                        f"{type(error).__name__}: {error}",
                 steps=done,
+                error_type=type(error).__name__,
+                stage=f"행동 {recorded.order} 실행",
             )
         if not step.accepted:
             return RerunResult(
