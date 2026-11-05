@@ -500,6 +500,116 @@ class SearchOutcome:
         return "\n".join(lines)
 
 
+class RerunState(str, Enum):
+    """
+    결과 하나의 **재생 상태** (Phase 6-AJ).
+
+    🔴 **여섯 가지를 한 칸으로 뭉치지 않는다.** 섞으면 "검증되지 않았다"
+    하나로 읽혀서, 왜 검증되지 않았는지(시간이 없었나 · 예외가 났나 ·
+    판이 달랐나 · 아예 끄고 돌렸나)를 되돌릴 수 없다.
+    """
+
+    VERIFIED = "verified"
+    """재생이 같은 판에 닿고 자원 요약까지 같았다."""
+    MISMATCHED = "mismatched"
+    """재생이 돌았지만 행동 · 선택 · 최종 상태 · 자원 요약이 어긋났다."""
+    ERRORED = "errored"
+    """재생 도중 **일반 실행 예외**가 났다 (:attr:`RerunResult.error_type`)."""
+    TIMED_OUT = "timed_out"
+    """재생을 **시작했는데** 공유 마감 시각을 넘겼다."""
+    NOT_STARTED = "not_started"
+    """시간이 남지 않아 **시작조차 하지 않았다.** 🔴 위와 다른 사실이다."""
+    DISABLED = "disabled"
+    """``rerun=False`` 로 재생을 **명시적으로 끄고** 돌렸다."""
+
+    @property
+    def ran(self) -> bool:
+        """재생을 **시작했는가.**"""
+        return self in (
+            RerunState.VERIFIED, RerunState.MISMATCHED,
+            RerunState.ERRORED, RerunState.TIMED_OUT,
+        )
+
+
+@dataclass(slots=True)
+class RerunDeadline:
+    """
+    복수 결과 재생이 **함께 쓰는 마감 시각** (Phase 6-AJ §A).
+
+    🔴 **결과마다 예산을 새로 시작하지 않는다.** 하나를 만들어 모든 결과가
+    돌려 쓰므로, 앞의 결과가 쓴 시간이 뒤의 결과에서 되살아나지 않는다.
+
+    🔴 **단조 시계를 쓴다** (:func:`time.monotonic`). 벽시계는 뒤로 갈 수
+    있어서 마감 판정이 뒤집힐 수 있다. ``clock`` 은 시험이 **제어 가능한
+    단조 시계**를 꽂는 자리다 — 실제 ``sleep`` 이나 기계 성능에 기대지
+    않고 경계를 재기 위한 것이고, 기본값은 그대로 :func:`time.monotonic` 이다.
+
+    🔴 **협력적 시간 제한이다.** 안전한 경계에서만 멈춘다 — 돌고 있는 엔진
+    호출 하나를 **강제로 끊지 않는다** (그러려면 프로세스나 스레드 구조가
+    필요하고, 이번 범위가 아니다). 그래서 단일 호출이 오래 걸리면 마감
+    시각을 **넘겨서** 돌아올 수 있다. 그때 "지정한 초 안에 끝났다" 고
+    말하지 않고, 돌아온 즉시 초과를 보고 성공 처리를 막는다.
+
+    🔴 **마감과 정확히 같은 순간은 만료로 본다** (``spent >= limit``).
+    경계를 한쪽으로 고정해 두어야 "같을 때는 어느 쪽" 이 구현마다
+    달라지지 않는다 (``test_bounded_search_rerun_limits.py::test_a08``).
+    """
+
+    limit: float
+    clock: "object" = time.monotonic
+    started: float = 0.0
+
+    def __post_init__(self) -> None:
+        if isinstance(self.limit, bool) or not isinstance(
+            self.limit, (int, float)
+        ):
+            raise BoundedSearchError(
+                f"재생 마감은 수여야 합니다: {self.limit!r}"
+            )
+        if self.limit <= 0:
+            raise BoundedSearchError(
+                f"재생 마감은 0 보다 커야 합니다: {self.limit}"
+            )
+        if not callable(self.clock):
+            raise BoundedSearchError(
+                f"시계는 부를 수 있어야 합니다: {type(self.clock).__name__}"
+            )
+        self.started = float(self.clock())
+
+    @property
+    def spent(self) -> float:
+        """시작한 뒤 흐른 시간."""
+        return float(self.clock()) - self.started
+
+    @property
+    def remaining(self) -> float:
+        return self.limit - self.spent
+
+    def expired(self) -> bool:
+        """🔴 마감과 **같을 때도** 만료다."""
+        return self.spent >= self.limit
+
+    def describe_ko(self) -> str:
+        return f"재생 마감 {self.limit:g}초 (쓴 시간 {self.spent:.2f}초)"
+
+
+def _timed_out(stage: str, deadline: "RerunDeadline", steps: int = 0,
+               ) -> "RerunResult":
+    """마감을 넘긴 재생을 **실패로** 적는다 (성공으로 바꾸지 않는다)."""
+    return RerunResult(
+        ok=False,
+        reason=(
+            f"재생이 공유 마감을 넘겼습니다 ({stage}) — "
+            f"{deadline.describe_ko()}. 🔴 이 결과는 검증된 비교에 쓰지 "
+            "않습니다. (협력적 제한이므로 돌고 있던 엔진 호출 하나는 끊지 "
+            "않았습니다 — 그 호출이 돌아온 자리에서 초과를 보았습니다.)"
+        ),
+        steps=steps,
+        timed_out=True,
+        stage=stage,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class RerunResult:
     """
@@ -523,6 +633,21 @@ class RerunResult:
     밟았으면 채워진다 — 복수 결과 모드가 "탐색이 적어 둔 요약과 재생된
     상태가 같은가" 를 재는 자리다.
     """
+    timed_out: bool = False
+    """
+    **공유 재생 마감을 넘겨** 멈췄는가 (Phase 6-AJ §A).
+
+    🔴 **검증 불일치와 다른 사실이다.** 불일치는 "다시 밟았더니 달랐다"
+    이고, 이것은 "끝까지 보지 못했다" 다. 둘을 한 칸에 담으면 시간이 없어
+    못 본 것이 "재현되지 않는 경로" 로 읽힌다.
+    """
+    error_type: str = ""
+    """
+    재생을 멈춘 **일반 실행 예외**의 형 이름 (Phase 6-AJ §B). 비어 있으면
+    예외가 아니라 판정으로 멈춘 것이다.
+    """
+    stage: str = ""
+    """실패가 난 **단계** — 진단용 (``행동 3`` · ``최종 검증`` 등)."""
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         mark = "성공" if self.ok else "🔴 실패"
@@ -550,6 +675,13 @@ class PathResult:
     rerun: "RerunResult | None" = None
     resources_match: bool = False
     """재생된 상태의 자원 요약이 탐색이 적어 둔 것과 **같은가.**"""
+    rerun_disabled: bool = False
+    """
+    재생을 **명시적으로 끄고** 돌렸는가 (``rerun=False``, Phase 6-AJ §C).
+
+    🔴 **시간이 없어 시작하지 못한 것과 다르다.** 둘 다 재생이 없지만,
+    앞은 사용자가 끈 것이고 뒤는 예산이 끊은 것이다.
+    """
 
     @property
     def action_count(self) -> int:
@@ -560,17 +692,35 @@ class PathResult:
         return sum(len(step.choices) for step in self.path)
 
     @property
+    def rerun_state(self) -> RerunState:
+        """
+        이 결과의 **재생 상태** (Phase 6-AJ §C).
+
+        🔴 **담아 둔 값에서 끌어낸다** — 상태를 따로 적어 두면 두 곳이
+        어긋날 수 있다.
+        """
+        if self.rerun is None:
+            return (
+                RerunState.DISABLED if self.rerun_disabled
+                else RerunState.NOT_STARTED
+            )
+        if self.rerun.timed_out:
+            return RerunState.TIMED_OUT
+        if self.rerun.error_type:
+            return RerunState.ERRORED
+        if self.rerun.ok and self.resources_match:
+            return RerunState.VERIFIED
+        return RerunState.MISMATCHED
+
+    @property
     def verified(self) -> bool:
         """
         **검증된 결과인가** — 재생이 성공하고 자원 요약까지 같은가.
 
         🔴 재생하지 않았거나 실패한 결과는 **검증된 비교에 섞지 않는다.**
+        시간 초과와 예외도 마찬가지다 (:class:`RerunState`).
         """
-        return (
-            self.rerun is not None
-            and self.rerun.ok
-            and self.resources_match
-        )
+        return self.rerun_state is RerunState.VERIFIED
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         lines = [
@@ -585,6 +735,46 @@ class PathResult:
         if self.rerun is not None:
             lines.append("  " + self.rerun.describe_ko().replace("\n", "\n  "))
         return "\n".join(lines)
+
+
+@dataclass(frozen=True, slots=True)
+class ResultTally:
+    """
+    모은 결과의 **상태별 집계** (Phase 6-AJ §C).
+
+    🔴 **수가 맞아떨어져야 한다** — :attr:`total` 이 모은 결과 수와 같다
+    (``test_c01``). 하나라도 어느 칸에도 들어가지 않으면 "검증되지 않은
+    결과가 조용히 사라진" 것이다.
+    """
+
+    verified: int = 0
+    mismatched: int = 0
+    errored: int = 0
+    timed_out: int = 0
+    not_started: int = 0
+    disabled: int = 0
+
+    @property
+    def total(self) -> int:
+        return (self.verified + self.mismatched + self.errored
+                + self.timed_out + self.not_started + self.disabled)
+
+    @property
+    def ran(self) -> int:
+        """재생을 **시작한** 결과 수."""
+        return self.verified + self.mismatched + self.errored + self.timed_out
+
+    @property
+    def incomplete(self) -> int:
+        """재생을 **마치지 못한** 결과 수 (시간 초과 · 미시작 · 끔)."""
+        return self.timed_out + self.not_started + self.disabled
+
+    def describe_ko(self) -> str:
+        return (
+            f"검증 {self.verified} · 불일치 {self.mismatched} · 예외"
+            f" {self.errored} · 시간 초과 {self.timed_out} · 미시작"
+            f" {self.not_started} · 재생 끔 {self.disabled}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -610,6 +800,15 @@ class MultiSearchOutcome:
     search_exhausted: bool = False
     """지정된 범위를 **끝까지** 펼쳤는가 (예산에 걸리지 않고 스택이 비었는가)."""
     budget_hit: tuple[str, ...] = ()
+    """
+    **탐색** 쪽에서 걸린 예산 칸만 (Phase 6-AJ §A-9).
+
+    🔴 **재생 쪽 칸을 여기 담지 않는다** — 담으면 "재생 시간이 끝났다" 가
+    "탐색 범위를 끝까지 펼치지 못했다" 로 읽힌다. 재생 쪽은
+    :attr:`rerun_budget_hit` 이고, 두 사유는 섞지 않는다.
+    """
+    rerun_budget_hit: tuple[str, ...] = ()
+    """**재생** 쪽에서 걸린 예산 칸만 (:class:`RerunDeadline`)."""
     duplicate_results: int = 0
     """같은 결과에 닿아 **대표로 합친** 경로의 총수."""
     nodes_expanded: int = 0
@@ -650,8 +849,60 @@ class MultiSearchOutcome:
 
     @property
     def unverified_results(self) -> "tuple[PathResult, ...]":
-        """재생을 **돌리지 못한** 것 (시간 상한 등)."""
+        """재생을 **시작하지 못한** 것 (시간 부족 · 재생 끔)."""
         return tuple(result for result in self.results if result.rerun is None)
+
+    def results_in(self, *states: RerunState) -> "tuple[PathResult, ...]":
+        """그 상태인 결과들만 (Phase 6-AJ §C)."""
+        return tuple(
+            result for result in self.results if result.rerun_state in states
+        )
+
+    @property
+    def mismatched_results(self) -> "tuple[PathResult, ...]":
+        """재생이 돌았지만 **어긋난** 것."""
+        return self.results_in(RerunState.MISMATCHED)
+
+    @property
+    def errored_results(self) -> "tuple[PathResult, ...]":
+        """**일반 실행 예외**로 멈춘 것 — 🔴 시간 초과와 다른 이유다."""
+        return self.results_in(RerunState.ERRORED)
+
+    @property
+    def timed_out_results(self) -> "tuple[PathResult, ...]":
+        """재생을 **시작했는데** 공유 마감을 넘긴 것."""
+        return self.results_in(RerunState.TIMED_OUT)
+
+    @property
+    def not_started_results(self) -> "tuple[PathResult, ...]":
+        """시간이 남지 않아 **시작조차 못 한** 것."""
+        return self.results_in(RerunState.NOT_STARTED)
+
+    @property
+    def disabled_results(self) -> "tuple[PathResult, ...]":
+        """``rerun=False`` 로 **끄고** 돌린 것."""
+        return self.results_in(RerunState.DISABLED)
+
+    @property
+    def tally(self) -> ResultTally:
+        """
+        상태별 집계 (Phase 6-AJ §C).
+
+        🔴 **경로를 찾았다는 사실과 재생 검증을 마쳤다는 사실을 가른다** —
+        :attr:`found` 는 앞의 것이고 이 집계가 뒤의 것이다. 재생이 실패해도
+        :attr:`found` 는 줄지 않는다.
+        """
+        counts = {state: 0 for state in RerunState}
+        for result in self.results:
+            counts[result.rerun_state] += 1
+        return ResultTally(
+            verified=counts[RerunState.VERIFIED],
+            mismatched=counts[RerunState.MISMATCHED],
+            errored=counts[RerunState.ERRORED],
+            timed_out=counts[RerunState.TIMED_OUT],
+            not_started=counts[RerunState.NOT_STARTED],
+            disabled=counts[RerunState.DISABLED],
+        )
 
     @property
     def reached(self) -> bool:
@@ -669,12 +920,12 @@ class MultiSearchOutcome:
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         lines = [
             f"제한 탐색 (복수 결과) — 목표: {self.goal.describe_ko()}",
-            f"  종료: {self.termination.value}"
+            f"  종료(탐색): {self.termination.value}"
             + (f" ({' · '.join(self.budget_hit)})" if self.budget_hit else ""),
+            "  종료(재생): "
+            + (" · ".join(self.rerun_budget_hit) or "예산에 걸리지 않음"),
             f"  범위를 끝까지 펼쳤는가: {self.search_exhausted}",
-            f"  찾은 결과 {self.found}개 (검증 {len(self.verified_results)} ·"
-            f" 재생 실패 {len(self.failed_results)} ·"
-            f" 재생 못 함 {len(self.unverified_results)}) ·"
+            f"  찾은 결과 {self.found}개 ({self.tally.describe_ko()}) ·"
             f" 대표로 합친 경로 {self.duplicate_results}개",
             f"  예산: {self.budget.describe_ko()}",
             f"  펼친 노드 {self.nodes_expanded} · 최대 깊이 {self.deepest}"
@@ -1188,9 +1439,17 @@ class _Settled:
     declined: tuple[str, ...] = ()
     blocked: tuple[str, ...] = ()
     met: tuple[tuple[int, object], ...] = ()
+    timed_out: bool = False
+    """
+    **공유 재생 마감을 넘겨** 필수 걸음 도중에 멈췄는가 (Phase 6-AJ §A).
+
+    🔴 :attr:`blocked` 와 다른 사실이다 — 막힌 것이 아니라 **시간이 끝난**
+    것이다. 섞으면 "후보가 없어 멈췄다" 로 읽힌다.
+    """
 
 
-def _settle(duel: Duel, seat: int) -> _Settled:
+def _settle(duel: Duel, seat: int, *,
+            deadline: "RerunDeadline | None" = None) -> _Settled:
     """
     **고르는 일이 아닌 걸음들을 지나간다.** 전부 엔진을 지나서.
 
@@ -1217,12 +1476,23 @@ def _settle(duel: Duel, seat: int) -> _Settled:
     않는다**: 그 자리가 생기면 후보가 비어 멈추고, 그 사실이
     :attr:`_Settled.blocked` 에 남는다. ``Simulator._settle_forced_passes``
     도 같은 이유로 부르지 않는다.
+
+    ``deadline`` 을 주면 **고리의 첫머리**에서 마감을 본다 (Phase 6-AJ §A).
+    🔴 **안전한 경계다** — 엔진에 들어간 ``apply`` 하나를 중간에서 끊지
+    않고, 다음 필수 걸음을 **시작하지 않는 것**으로 멈춘다. 주지 않으면
+    기본 동작은 6-AI 와 한 글자도 다르지 않다.
     """
     forced: list[str] = []
     declined: list[str] = []
     blocked: list[str] = []
     met: list[tuple[int, object]] = []
+    ran_out = False
     for _ in range(SETTLE_GUARD):
+        #: 🔴 **필수 처리 반복의 안전한 경계** — 다음 필수 걸음을 시작하기
+        #: 전에 마감을 본다. 돌고 있는 ``apply`` 를 끊지는 않는다.
+        if deadline is not None and deadline.expired():
+            ran_out = True
+            break
         if duel.is_over:
             break
         actor = duel.to_act
@@ -1273,6 +1543,7 @@ def _settle(duel: Duel, seat: int) -> _Settled:
         declined=tuple(declined),
         blocked=tuple(blocked),
         met=tuple(met),
+        timed_out=ran_out,
     )
 
 
@@ -1545,6 +1816,7 @@ class BoundedSearch:
         *,
         rerun_from: "Duel | None" = None,
         rerun: bool = True,
+        deadline: "RerunDeadline | None" = None,
     ) -> MultiSearchOutcome:
         """
         목표에 닿는 **서로 다른 결과 여럿**을 예산 안에서 모은다 (6-AI §1).
@@ -1579,7 +1851,11 @@ class BoundedSearch:
         그것도 초기 상태이지만, **입력에서 다시 조립한 판**이 더 센 검증이다.
 
         ``rerun=False`` 면 재생을 돌리지 않고 그 사실을 적는다 — 🔴 그때
-        결과는 하나도 :attr:`PathResult.verified` 가 아니다.
+        결과는 하나도 :attr:`PathResult.verified` 가 아니고, 상태는
+        :attr:`RerunState.DISABLED` 다 (시간이 없어 못 한 것과 가른다).
+
+        ``deadline`` 은 Phase 6-AJ 가 더한 자리다 — 주지 않으면 예산에서
+        **공유 마감** 하나를 만들어 모든 결과가 돌려 쓴다.
         """
         if not isinstance(duel, Duel):
             raise BoundedSearchError(f"Duel 이 필요합니다: {type(duel).__name__}")
@@ -1635,12 +1911,15 @@ class BoundedSearch:
                     resources=summary,
                     goal_reason=reason,
                     duplicates=ledger.result_dups.get(slot, 0),
+                    #: 🔴 **끈 것과 시간이 없어 못 한 것을 가른다** (§C).
+                    rerun_disabled=True,
                 )
                 for slot, (path, summary, reason) in enumerate(ledger.results)
             )
         else:
             results = self.rerun_results(
-                duel if rerun_from is None else rerun_from, ledger
+                duel if rerun_from is None else rerun_from, ledger,
+                deadline=deadline,
             )
         rerun_seconds = time.monotonic() - rerun_started
         #: 🔴 **탐색 소요와 재생 소요를 따로 적는다** — 합치면 어디에 시간이
@@ -1651,7 +1930,8 @@ class BoundedSearch:
 
     # ------------------------------------------------------------------
     def rerun_results(
-        self, duel: Duel, ledger: _Ledger
+        self, duel: Duel, ledger: _Ledger, *,
+        deadline: "RerunDeadline | None" = None,
     ) -> "tuple[PathResult, ...]":
         """
         모은 결과를 **새 초기 상태에서 하나씩 다시 밟는다** (6-AI §5).
@@ -1666,32 +1946,40 @@ class BoundedSearch:
         걸음을 밟으므로, 원본은 그대로 남는다 (:meth:`_assert_untouched` 가
         탐색 직후 이미 확인했다).
 
-        🔴 **재생 실행량에 상한을 둔다** (:attr:`SearchBudget.max_rerun_seconds`).
-        상한에 걸린 결과는 **버리지 않고** 재생 없이(``rerun=None``) 남기고
-        그 사실을 :attr:`_Ledger.rerun_notes` 에 적는다 — 검증된 비교에는
-        섞이지 않는다 (:attr:`PathResult.verified`).
+        🔴 **모든 결과가 마감 하나를 돌려 쓴다** (Phase 6-AJ §A,
+        :class:`RerunDeadline`). :attr:`SearchBudget.max_rerun_seconds` 는
+        **재생 전체**의 상한이고, 결과마다 새로 시작하지 않는다. 마감은
+        결과를 시작하기 전뿐 아니라 :func:`rerun_steps` 안의 행동 전후 ·
+        필수 걸음 경계 · 최종 검증 뒤에서도 본다.
 
-        🔴 **하나가 실패해도 다른 결과를 버리지 않는다.** 실패는 그 결과에만
-        적히고, 실패 수와 이유는 :attr:`MultiSearchOutcome.failed_results` ·
-        :attr:`PathResult.rerun` 에 남는다.
+        🔴 **시작하지 못한 결과와 도중에 넘긴 결과를 가른다** —
+        :attr:`RerunState.NOT_STARTED` 와 :attr:`RerunState.TIMED_OUT` 이고,
+        둘 다 검증으로 세지 않는다. 그때까지 **시간 안에 검증된 결과와
+        탐색이 찾은 경로는 그대로 보존한다.**
+
+        🔴 **하나가 실패해도 다른 결과를 버리지 않는다** (§B). 일반 실행
+        예외도 그 결과의 실패로만 적히고 (:meth:`_rerun_one`), 남은 예산이
+        있으면 다음 결과를 **새 초기 상태에서** 계속 검증한다.
+
+        ``deadline`` 은 시험이 **제어 가능한 단조 시계**를 꽂는 자리다 —
+        주지 않으면 예산에서 만들어 쓴다.
         """
+        if deadline is None:
+            #: 🔴 **하나를 만들어 모든 결과가 돌려 쓴다** — 결과마다 예산을
+            #: 새로 시작하면 "전체 N초" 가 "결과마다 N초" 가 된다.
+            deadline = RerunDeadline(self.budget.max_rerun_seconds)
+        elif not isinstance(deadline, RerunDeadline):
+            raise BoundedSearchError(
+                f"RerunDeadline 이 필요합니다: {type(deadline).__name__}"
+            )
         out: list[PathResult] = []
-        started = time.monotonic()
         for slot, (path, summary, reason) in enumerate(ledger.results):
             index = slot + 1
             dups = ledger.result_dups.get(slot, 0)
-            spent = time.monotonic() - started
-            if spent >= self.budget.max_rerun_seconds:
-                ledger.note(
-                    ledger.rerun_budget_hit,
-                    f"max_rerun_seconds={self.budget.max_rerun_seconds:g}",
-                )
-                ledger.note(
-                    ledger.rerun_notes,
-                    f"[결과 {index}] 재생을 돌리지 못했습니다 — 재생 시간 "
-                    f"상한 {self.budget.max_rerun_seconds:g}초에 걸렸습니다. "
-                    "🔴 이 결과는 검증된 비교에 쓰지 않습니다.",
-                )
+            if deadline.expired():
+                #: 🔴 **시작조차 하지 않았다** — 재생 도중 넘긴 것과 다른
+                #: 사실이므로 ``rerun=None`` 으로 남긴다 (§C).
+                self._note_rerun_budget(ledger, index, deadline)
                 out.append(PathResult(
                     index=index,
                     path=path,
@@ -1700,32 +1988,9 @@ class BoundedSearch:
                     duplicates=dups,
                 ))
                 continue
-            try:
-                rerun = rerun_steps(
-                    duel,
-                    path,
-                    self.goal,
-                    expect_field=summary.own_field_rows,
-                    expect_hash=summary.state_hash,
-                )
-            except BoundedSearchError as error:
-                #: 🔴 **재생 오류를 "탐색이 아무것도 못 찾았다" 로 바꾸지
-                #: 않는다.** 그 결과에만 실패로 적는다.
-                rerun = RerunResult(
-                    ok=False,
-                    reason=f"재생이 예외로 멈췄습니다: "
-                           f"{type(error).__name__}: {error}",
-                )
-            #: 🔴 **자원 요약까지 견준다.** 목표와 해시가 같아도 요약이 다르면
-            #: 그 비교는 재생으로 뒷받침되지 않는다.
-            matched = rerun.ok and rerun.resources == summary
-            if rerun.ok and not matched:
-                ledger.note(
-                    ledger.rerun_notes,
-                    f"[결과 {index}] 재생이 같은 판에 닿았지만 자원 요약이 "
-                    "탐색이 적어 둔 것과 다릅니다 — 검증된 비교에 쓰지 "
-                    "않습니다.",
-                )
+            rerun, matched = self._rerun_one(
+                duel, path, summary, index, ledger, deadline
+            )
             out.append(PathResult(
                 index=index,
                 path=path,
@@ -1736,6 +2001,148 @@ class BoundedSearch:
                 resources_match=matched,
             ))
         return tuple(out)
+
+    # ------------------------------------------------------------------
+    def _note_rerun_budget(
+        self, ledger: _Ledger, index: int, deadline: "RerunDeadline"
+    ) -> None:
+        """재생 예산이 끊었다는 사실을 **재생 쪽 칸에** 적는다."""
+        ledger.note(
+            ledger.rerun_budget_hit,
+            f"max_rerun_seconds={self.budget.max_rerun_seconds:g}",
+        )
+        ledger.note(
+            ledger.rerun_notes,
+            f"[결과 {index}] 재생을 **시작하지 못했습니다** — 공유 "
+            f"{deadline.describe_ko()} 를 이미 넘겼습니다. 🔴 이 결과는 "
+            "검증된 비교에 쓰지 않습니다 (경로 자체는 그대로 남습니다).",
+        )
+
+    # ------------------------------------------------------------------
+    def _rerun_one(
+        self,
+        duel: Duel,
+        path: "tuple[PathStep, ...]",
+        summary: "ResourceSummary",
+        index: int,
+        ledger: _Ledger,
+        deadline: "RerunDeadline",
+    ) -> "tuple[RerunResult, bool]":
+        """
+        결과 **하나**를 재생하고 자원 요약까지 견준다 (Phase 6-AJ §B).
+
+        🔴 **예외 경계는 결과 하나다.** 재생 · 최종 검증 · 자원 요약 비교가
+        모두 이 안에서 돌고, 여기서 난 예외는 **그 결과의 실패**로 적힌다 —
+        다음 결과는 **새 초기 상태**에서 계속 검증된다.
+
+        🔴 **``BaseException`` 을 잡지 않는다.** ``except Exception`` 이므로
+        :class:`KeyboardInterrupt` · :class:`SystemExit` ·
+        :class:`GeneratorExit` · :class:`asyncio.CancelledError` 는 (셋
+        모두 ``BaseException`` 의 직계다) **그대로 올라간다**. 종료와 취소
+        신호를 결과 실패로 삼키면 멈추라는 말이 사라진다.
+
+        🔴 **예외를 조용히 삼키지 않는다.** 형 이름과 단계를
+        :attr:`RerunResult.error_type` · :attr:`RerunResult.stage` 에 적고
+        :attr:`_Ledger.rerun_notes` 에도 남긴다. 성공 기본값으로 바꾸지
+        않으며, "탐색이 아무것도 못 찾았다" · UNKNOWN · 정상 무효과 해결로
+        바꾸지도 않는다.
+
+        🔴 **실패한 재생의 중간 상태를 다음 결과에 물려주지 않는다.**
+        :func:`rerun_steps` 가 받은 ``duel`` 에서 :class:`Simulator` 사본을
+        새로 뜨고 원본은 밟지 않으므로, 다음 결과도 같은 초기 상태에서
+        시작한다 (``test_b05`` 가 해시로 센다).
+        """
+        try:
+            rerun = rerun_steps(
+                duel,
+                path,
+                self.goal,
+                expect_field=summary.own_field_rows,
+                expect_hash=summary.state_hash,
+                deadline=deadline,
+            )
+            #: 🔴 **자원 요약까지 견준다.** 목표와 해시가 같아도 요약이
+            #: 다르면 그 비교는 재생으로 뒷받침되지 않는다. 이 비교도 같은
+            #: 경계 안에서 돈다 (§B-1).
+            matched = rerun.ok and rerun.resources == summary
+        except BoundedSearchError as error:
+            #: 🔴 **재생 오류를 "탐색이 아무것도 못 찾았다" 로 바꾸지
+            #: 않는다.** 그 결과에만 실패로 적는다.
+            rerun = RerunResult(
+                ok=False,
+                reason=f"재생이 예외로 멈췄습니다: "
+                       f"{type(error).__name__}: {error}",
+                error_type=type(error).__name__,
+                stage="재생 호출",
+            )
+            matched = False
+        except Exception as error:  # noqa: BLE001 - 결과별 경계 (§B)
+            rerun = RerunResult(
+                ok=False,
+                reason=f"재생이 일반 실행 예외로 멈췄습니다: "
+                       f"{type(error).__name__}: {error}",
+                error_type=type(error).__name__,
+                stage="재생 호출",
+            )
+            matched = False
+        #: 🔴 **재생이 돌아온 자리에서 다시 본다** (§A-5, 협력적 제한의
+        #: 핵심). 재생 안에서 **하나의 긴 호출**이 마감을 넘겨 버리면 안에서는
+        #: 끊을 수 없다 — 그 호출이 반환한 **즉시** 초과를 보고 **성공 처리를
+        #: 막는다.** 이 자리가 없으면 "예산 1초인데 10초를 쓰고 검증 성공" 이
+        #: 된다 (기준 코드의 재현이 그랬다).
+        #:
+        #: 🔴 **성공만 막는다.** 어긋남(불일치)과 예외는 우리가 **실제로 본**
+        #: 사실이므로 시간 초과로 덮어쓰지 않는다 — 덮으면 "재현되지 않는
+        #: 경로" 가 "시간이 없었다" 로 바뀐다.
+        if rerun.ok and not rerun.timed_out and deadline.expired():
+            rerun = dataclasses.replace(
+                rerun,
+                ok=False,
+                timed_out=True,
+                stage=rerun.stage or "재생 호출 뒤",
+                reason=(
+                    "재생은 끝났지만 돌아온 자리에서 공유 마감을 이미 "
+                    f"넘겼습니다 ({deadline.describe_ko()}) — 🔴 검증 성공으로 "
+                    "세지 않습니다. (협력적 제한이므로 돌고 있던 호출 하나는 "
+                    "끊지 않았습니다.) 먼저 적힌 판정: " + rerun.reason
+                ),
+            )
+            matched = False
+        if rerun.error_type:
+            ledger.note(
+                ledger.rerun_notes,
+                f"[결과 {index}] 🔴 재생이 예외로 멈췄습니다 "
+                f"({rerun.error_type}, 단계 {rerun.stage or '알 수 없음'}) — "
+                "이 결과만 실패로 적었고 다음 결과는 새 초기 상태에서 "
+                "계속 검증했습니다.",
+            )
+        elif rerun.timed_out:
+            self._note_rerun_timeout(ledger, index, rerun, deadline)
+        elif rerun.ok and not matched:
+            ledger.note(
+                ledger.rerun_notes,
+                f"[결과 {index}] 재생이 같은 판에 닿았지만 자원 요약이 "
+                "탐색이 적어 둔 것과 다릅니다 — 검증된 비교에 쓰지 "
+                "않습니다.",
+            )
+        return rerun, matched
+
+    # ------------------------------------------------------------------
+    def _note_rerun_timeout(
+        self, ledger: _Ledger, index: int, rerun: "RerunResult",
+        deadline: "RerunDeadline",
+    ) -> None:
+        """재생 **도중** 마감을 넘긴 결과를 적는다 — 미시작과 가른다."""
+        ledger.note(
+            ledger.rerun_budget_hit,
+            f"max_rerun_seconds={self.budget.max_rerun_seconds:g}",
+        )
+        ledger.note(
+            ledger.rerun_notes,
+            f"[결과 {index}] ⚠️ 재생을 **시작했지만** 공유 마감을 넘겨 "
+            f"{rerun.stage or '중간'} 에서 멈췄습니다 (걸음 {rerun.steps}개까지). "
+            "🔴 검증 성공으로 세지 않습니다.",
+        )
 
     # ------------------------------------------------------------------
     def _probe_chooser(self, duel: Duel, ledger: _Ledger) -> None:
@@ -1789,9 +2196,10 @@ class BoundedSearch:
         탐색은 소진된 것이 아니다.
 
         🔴 **재생 쪽 예산은 이 판정에 넣지 않는다.** 재생 시간 상한에 걸린
-        것은 "탐색을 끝까지 펼치지 못했다" 와 다른 사실이다 — 보고에는 두
-        묶음을 합쳐 적고(:attr:`MultiSearchOutcome.budget_hit`), 소진
-        판정은 탐색 쪽만 본다.
+        것은 "탐색을 끝까지 펼치지 못했다" 와 다른 사실이다 — Phase 6-AJ
+        부터는 **칸도 따로 둔다**: 탐색 쪽은
+        :attr:`MultiSearchOutcome.budget_hit`, 재생 쪽은
+        :attr:`MultiSearchOutcome.rerun_budget_hit` 이고 섞지 않는다 (§A-9).
         """
         exhausted = (
             ledger.stack_emptied
@@ -1805,7 +2213,9 @@ class BoundedSearch:
             termination=termination,
             results=tuple(results),
             search_exhausted=exhausted,
-            budget_hit=tuple(ledger.budget_hit) + tuple(ledger.rerun_budget_hit),
+            #: 🔴 **두 사유를 섞지 않는다** (§A-9).
+            budget_hit=tuple(ledger.budget_hit),
+            rerun_budget_hit=tuple(ledger.rerun_budget_hit),
             duplicate_results=ledger.duplicate_results,
             nodes_expanded=ledger.nodes,
             deepest=ledger.deepest,
@@ -2227,7 +2637,8 @@ def _order_key(action: PlayerAction) -> tuple:
 # 재생
 # ======================================================================
 def rerun_path(
-    duel: Duel, outcome: SearchOutcome, *, goal: "FieldGoal | None" = None
+    duel: Duel, outcome: SearchOutcome, *, goal: "FieldGoal | None" = None,
+    deadline: "RerunDeadline | None" = None,
 ) -> RerunResult:
     """
     찾은 경로를 **새 초기 상태에서 다시 실행**한다 (§5).
@@ -2242,6 +2653,10 @@ def rerun_path(
     🔴 **기록된 선택이 그 자리의 허용 후보인지 다시 본다.**
     :class:`~agent.choice.ScriptedChoice` 가 후보 밖이면 쓰지 않고 그 사실을
     적으므로 (``plan_missing``), 하나라도 있으면 **실패**다.
+
+    ``deadline`` 은 Phase 6-AJ 가 더한 **선택 인자**다 — 주지 않으면 기존
+    호출 방식과 기본 동작이 그대로다 (단일 경로 재생에는 시간 제한이
+    없었고, 지금도 기본은 없다).
     """
     if not isinstance(duel, Duel):
         raise BoundedSearchError(f"Duel 이 필요합니다: {type(duel).__name__}")
@@ -2255,6 +2670,7 @@ def rerun_path(
         outcome.goal if goal is None else goal,
         expect_field=outcome.final_field,
         expect_hash=outcome.final_state_hash,
+        deadline=deadline,
     )
 
 
@@ -2265,6 +2681,7 @@ def rerun_steps(
     *,
     expect_field: "tuple[tuple[str, int, bool], ...]" = (),
     expect_hash: str = "",
+    deadline: "RerunDeadline | None" = None,
 ) -> RerunResult:
     """
     기록된 걸음들을 **새 초기 상태에서** 다시 밟는다 (§5).
@@ -2275,6 +2692,13 @@ def rerun_steps(
 
     ``expect_field`` · ``expect_hash`` 를 주면 그 둘과 **같은가**까지 본다.
     주지 않으면 목표 도달 여부만 본다.
+
+    ``deadline`` 을 주면 **네 자리에서 마감을 본다** (Phase 6-AJ §A) —
+    경로를 시작하기 전, 각 행동 **전후**(필수 걸음 처리 포함,
+    :func:`_settle`), 그리고 **최종 검증과 자원 요약을 마친 뒤**. 🔴 마지막
+    행동이나 최종 검증에서 시간을 넘긴 경우도 놓치지 않는다 — 넘겼으면
+    :attr:`RerunResult.timed_out` 이 참이고 :attr:`RerunResult.ok` 는
+    거짓이다. 주지 않으면 기본 동작이 6-AI 와 같다.
     """
     if not isinstance(duel, Duel):
         raise BoundedSearchError(f"Duel 이 필요합니다: {type(duel).__name__}")
@@ -2285,10 +2709,18 @@ def rerun_steps(
             ok=False,
             reason="재생할 경로가 없습니다 — 탐색이 목표에 닿지 않았습니다.",
         )
+    #: 🔴 **경로를 시작하기 전에 본다** — 이미 마감이면 걸음을 하나도 밟지
+    #: 않는다 (``test_a01``).
+    if deadline is not None and deadline.expired():
+        return _timed_out("경로 시작 전", deadline)
 
     sim = Simulator(duel)
     done = 0
     for recorded in path:
+        #: 🔴 **각 행동 앞에서 본다** — 시간이 끝났으면 다음 행동을
+        #: 시작하지 않는다 (``test_a02``).
+        if deadline is not None and deadline.expired():
+            return _timed_out(f"행동 {recorded.order} 앞", deadline, done)
         current = sim.duel
         if current.to_act != target.seat:
             return RerunResult(
@@ -2328,7 +2760,12 @@ def rerun_steps(
                        f"{step.reason}",
                 steps=done,
             )
-        _settle(fork, target.seat)
+        settled = _settle(fork, target.seat, deadline=deadline)
+        if settled.timed_out:
+            #: 🔴 **필수 걸음 도중에 시간이 끝났다** — 안전한 경계에서
+            #: 멈췄고, 이 결과는 검증으로 세지 않는다 (``test_a03``).
+            return _timed_out(f"행동 {recorded.order} 의 필수 걸음",
+                              deadline, done)
         if scripted.plan_was_missed:
             missed = [ask.describe_ko() for ask in scripted.log if ask.plan_missing]
             return RerunResult(
@@ -2354,6 +2791,10 @@ def rerun_steps(
             )
         sim = Simulator(fork)
         done += 1
+        #: 🔴 **각 행동 뒤에서도 본다** — 마지막 행동에서 시간을 넘긴
+        #: 경우를 놓치지 않는다 (``test_a04``).
+        if deadline is not None and deadline.expired():
+            return _timed_out(f"행동 {recorded.order} 뒤", deadline, done)
 
     verdict = target.judge(sim.duel)
     field_now = own_field(sim.duel, target.seat)
@@ -2381,6 +2822,20 @@ def rerun_steps(
             f"걸음 {done}개를 새 초기 상태에서 다시 밟아 같은 최종 판에 "
             "닿았습니다."
         )
+    summary = summarize_resources(sim.duel, target.seat)
+    #: 🔴 **최종 검증과 자원 요약을 마친 뒤에도 본다** (``test_a05``). 여기서
+    #: 넘겼으면 판정이 맞았더라도 성공으로 적지 않는다 — 협력적 제한이므로
+    #: 마지막 호출을 끊지는 못하지만, 돌아온 자리에서 초과를 본다.
+    if deadline is not None and deadline.expired():
+        late = _timed_out("최종 검증 · 자원 요약 뒤", deadline, done)
+        return dataclasses.replace(
+            late,
+            goal_reached=verdict.reached,
+            final_field=field_now,
+            final_state_hash=hash_now,
+            matches_search=same,
+            resources=summary,
+        )
     return RerunResult(
         ok=verdict.reached and (same or not compared),
         reason=reason,
@@ -2389,7 +2844,7 @@ def rerun_steps(
         final_field=field_now,
         final_state_hash=hash_now,
         matches_search=same,
-        resources=summarize_resources(sim.duel, target.seat),
+        resources=summary,
     )
 
 
@@ -2452,7 +2907,10 @@ __all__ = [
     "PathStep",
     "RESULTS_CAP",
     "ResourceSummary",
+    "RerunDeadline",
     "RerunResult",
+    "RerunState",
+    "ResultTally",
     "SETTLE_GUARD",
     "SearchBudget",
     "SearchOutcome",
