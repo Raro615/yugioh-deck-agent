@@ -822,8 +822,11 @@ def _print_bounded_search(agent: DeckAgent, recipe_text: str,
             for blocker in setup.blockers:
                 print(f"    - {blocker}")
             return
-        print(render_multi_search_brief(many, agent.repository))
-        print(render_multi_search(many, agent.repository, setup))
+        #: 🔴 **추천은 탐색·재생이 끝난 뒤에 붙는다** (6-AK). 새 명령도
+        #: 새 옵션도 만들지 않았다 — 복수 결과 모드의 출력에 이어 붙는다.
+        ranking = rank_search_results(many)
+        print(render_multi_search_brief(many, agent.repository, ranking))
+        print(render_multi_search(many, agent.repository, setup, ranking))
         return
     setup, outcome, rerun = bounded_search_opening(
         agent.repository, parsed.draft, hand_ids, card_id=card_id
@@ -855,6 +858,25 @@ def search_goal_card_id(name: str) -> "int | None":
     if not name or not name.strip():
         return None
     return SEARCH_GOALS.get(name.strip().lower())
+
+
+def rank_search_results(outcome):
+    """
+    검증된 복수 결과를 **비교해 추천 후보를 고른다** (Phase 6-AK).
+
+    🔴 **왜 이 자리인가.** 평가는 ``agent`` 의 일이고(``agent.result_ranking``),
+    표시는 ``deck`` 의 일이다 — 그런데 어댑터는 둘을 **이어 주기만** 한다
+    (``deck`` 은 ``agent`` 를 import 하지 않는다, ADR-007). 사용자에게 보이는
+    경로가 둘(CLI · Discord)이므로, 같은 것을 꽂는 자리를 **하나**로 둔다.
+
+    🔴 **탐색과 재생이 끝난 뒤의 독립 단계다.** 받은 결과를 바꾸지 않고 값만
+    읽는다. ``outcome`` 이 없으면 평가도 없다.
+    """
+    if outcome is None:
+        return None
+    from agent.result_ranking import rank_results
+
+    return rank_results(outcome)
 
 
 def search_result_count(text) -> tuple:

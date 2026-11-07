@@ -33,6 +33,21 @@ _STATUS_MARK = {
 }
 
 _RULE = "-" * 68
+#: 추천 절의 얇은 구분선 (Phase 6-AK).
+_RULE_THIN = "  " + "·" * 60
+#: 🔴 **이번 평가의 범위** — 요약과 상세에 **둘 다** 적는다. 길이 제한
+#: 때문에 이 줄이 잘리면 "최강 전개를 골랐다" 로 읽힌다.
+_RANKING_SCOPE = (
+    "🔴 **탐색에서 발견하고 재생 검증한 후보 사이의 비교**입니다 —"
+    " 자원 보존 중심의 제한적 휴리스틱이고, **실전 최강·승률 평가가"
+    " 아닙니다**. 상대의 방해 대응력도 계산하지 않았습니다."
+)
+#: 🔴 **언제의 자원인가** — 처음 도달한 시점이다.
+_RANKING_WHEN = (
+    "🔴 **목표 카드에 처음 도달한 시점**의 후보 비교입니다 — 탐색이"
+    " 목표에 닿은 분기를 더 펼치지 않으므로, 전개를 끝까지 수행한"
+    " 최종 집의 평가가 아닙니다."
+)
 
 
 def render_request(request: DeckRequest) -> str:
@@ -1270,7 +1285,120 @@ def _multi_head(outcome) -> "list[str]":
     return lines
 
 
-def render_multi_search_brief(outcome, repository=None) -> str:
+def _ranking_brief(ranking) -> "list[str]":
+    """
+    **추천 요약** — 기본 응답에 들어가는 몇 줄 (Phase 6-AK §4).
+
+    🔴 ``agent`` 를 import 하지 않는다 — 넘어온 평가 결과의 **모양만** 읽는다
+    (ADR-007).
+
+    🔴 **판정하지 않는다.** 여기서 수치를 다시 세거나 순위를 만들지 않고,
+    평가 단계가 적어 둔 것을 그대로 옮긴다.
+    """
+    if ranking is None:
+        return []
+    verified = len(getattr(ranking, "verified_candidates", ()))
+    lines = ["", "  추천 — 어느 후보를 먼저 볼까", _RULE_THIN]
+    lines.append(f"    평가 정책: {getattr(ranking, 'policy_label', '?')}"
+                 " (자원 보존 중심의 제한적 휴리스틱)")
+    lines.append(f"    검증된 후보 {verified}개")
+    note = getattr(ranking, "note", "")
+    if note:
+        lines.append(f"    {note}")
+    picked = getattr(ranking, "recommended", ())
+    if not picked:
+        lines.append("    🔴 **추천 후보가 없습니다** — 아래 `추천 대상에서"
+                     " 제외` 를 보십시오. 🔴 이 패로 불가능하다는 뜻이"
+                     " 아닙니다.")
+    else:
+        ids = " · ".join(f"결과 {one.index}" for one in picked)
+        head = ("공동 후보" if getattr(ranking, "tied", False)
+                else "추천 후보")
+        lines.append(f"    {head}: {ids}"
+                     + ("  — 🔴 **둘 이상입니다**: 장단점이 갈리거나 동률이고,"
+                        " 억지로 하나로 줄이지 않았습니다."
+                        if getattr(ranking, "tied", False) else ""))
+        for one in picked:
+            lines.append(f"    [결과 {one.index}]"
+                         f" {ranking.reason_ko(one.index)}")
+    #: 🔴 **범위와 한계를 요약에서 잘라 내지 않는다.**
+    lines.append(f"    {_RANKING_SCOPE}")
+    lines.append(f"    {_RANKING_WHEN}")
+    return lines
+
+
+def _ranking_detail(ranking) -> "list[str]":
+    """**추천 상세** — 후보별 값 · 선정 이유 · 제외 사유 · 평가 못 한 것."""
+    if ranking is None:
+        return []
+    lines = ["", "  추천 (평가 정책과 후보별 값)", _RULE_THIN]
+    lines.append(f"    정책 이름: {getattr(ranking, 'policy', '?')}")
+    lines.append(f"    정책 판: {getattr(ranking, 'version', '?')}")
+    lines.append(f"    {_RANKING_SCOPE}")
+    lines.append(f"    {_RANKING_WHEN}")
+    lines.append("")
+    lines.append("    쓴 기준")
+    for criterion in getattr(ranking, "criteria", ()):
+        lines.append(f"      - {criterion.label_ko} (`{criterion.key}`)"
+                     f" — {criterion.reads_ko}")
+        lines.append(f"        쓰임: {criterion.role_ko}")
+        lines.append(f"        {criterion.limit_ko}")
+    lines.append("    🔴 **임의의 가중치 합계나 전개 점수를 만들지 않았습니다**"
+                 " — 위 세 수치와 그 제한만 적습니다.")
+
+    lines.append("")
+    lines.append("    후보별 평가 항목과 값")
+    for one in getattr(ranking, "candidates", ()):
+        measures = getattr(one, "measures", None)
+        if measures is None:
+            lines.append(f"      [결과 {one.index}] 평가하지 못했습니다 —"
+                         f" {ranking.reason_ko(one.index)}")
+            continue
+        mark = "✔ 추천" if one.recommended else "— 비추천"
+        lines.append(f"      [결과 {one.index}] {mark}"
+                     f" · 표시 순서 {one.order or '-'}"
+                     f" · 남은 패 {measures.hand_left}장"
+                     f" · 일반 소환권 "
+                     + ("사용" if measures.normal_summon_used else "미사용")
+                     + f" · 비흐름 행동 {measures.spend_actions}회"
+                     f" (흐름 {measures.flow_actions}회는 비용에서 제외)")
+        lines.append(f"        {ranking.reason_ko(one.index)}")
+
+    lines.append("")
+    lines.append("    비지배 후보 선정")
+    lines.append("      두 보존 축(남은 패 · 일반 소환권)에서 **두 축 모두"
+                 " 나쁘지 않고 최소 한 축이 더 나은** 후보가 있으면 밀린다.")
+    lines.append("      서로 장단점이 있으면 **둘 다 남긴다**. 비지배 후보"
+                 " 안에서는 비흐름 행동이 적은 쪽을 먼저 적고, 같으면 공동"
+                 " 후보로 둔다.")
+    lines.append("      🔴 **게임 전체에서의 우월성이나 안전한 가지치기 근거가"
+                 " 아니다** — 밀린 후보가 필드 구성이나 세트한 카드 때문에"
+                 " 실제로 더 좋을 수 있고, 이번 기준은 그것을 보지 못한다.")
+    lines.append("      🔴 결과 ID 는 **표시 순서를 가르는 데만** 썼고 우열"
+                 " 근거로 쓰지 않았다.")
+
+    excluded = getattr(ranking, "excluded", ())
+    lines.append("")
+    lines.append(f"    추천 대상에서 제외 ({len(excluded)}건)")
+    if not excluded:
+        lines.append("      없음")
+    for one in excluded:
+        lines.append(f"      - [결과 {one.index}] 재생 상태"
+                     f" {one.rerun_state} · {ranking.reason_ko(one.index)}")
+    lines.append("      🔴 제외된 결과의 **경로와 자원은 위에 그대로**"
+                 " 있습니다 — 평가 때문에 사라지지 않습니다.")
+
+    lines.append("")
+    lines.append("    🔴 이번 기준이 유불리를 판단하지 **못한** 차이")
+    for note in getattr(ranking, "unjudged", ()):
+        lines.append(f"      - {note}")
+    lines.append("      이 차이들은 위 `결과들의 차이` 와 각 결과의 자원"
+                 " 칸에 **그대로 남아 있습니다** — 보여 주기만 하고 점수로"
+                 " 바꾸지 않았습니다.")
+    return lines
+
+
+def render_multi_search_brief(outcome, repository=None, ranking=None) -> str:
     """
     **복수 결과 탐색의 기본 응답용 요약** (Phase 6-AI §6).
 
@@ -1285,6 +1413,10 @@ def render_multi_search_brief(outcome, repository=None) -> str:
     lines.extend(_multi_head(outcome))
     lines.append(f"  {_SEARCH_DISCLAIMER}")
     lines.append(f"  {_MULTI_DISCLAIMER}")
+
+    #: 🔴 **추천은 탐색·재생이 끝난 뒤의 독립 단계다** (6-AK). 주지 않으면
+    #: 6-AJ 와 한 글자도 다르지 않다.
+    lines.extend(_ranking_brief(ranking))
 
     shown = outcome.verified_results or outcome.results
     lines.append("")
@@ -1329,7 +1461,8 @@ def render_multi_search_brief(outcome, repository=None) -> str:
     return "\n".join(lines)
 
 
-def render_multi_search(outcome, repository=None, setup=None) -> str:
+def render_multi_search(outcome, repository=None, setup=None,
+                        ranking=None) -> str:
     """
     **복수 결과 탐색의 전체 기록** — 첨부와 CLI 가 보는 것 (6-AI §6).
 
@@ -1430,6 +1563,7 @@ def render_multi_search(outcome, repository=None, setup=None) -> str:
     lines.append("")
     lines.append("  결과들의 차이 (검증된 것만)")
     lines.extend(_compare_lines(outcome.verified_results, repository))
+    lines.extend(_ranking_detail(ranking))
 
     for label, notes in (
         ("범위 밖으로 둔 분기", outcome.out_of_scope),

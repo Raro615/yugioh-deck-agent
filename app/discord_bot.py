@@ -782,7 +782,7 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
     """
     from app.main import (
         bounded_search_many_opening, bounded_search_opening,
-        search_goal_card_id, search_result_count,
+        rank_search_results, search_goal_card_id, search_result_count,
     )
     from deck.recipe import parse_recipe
     from deck.report import (
@@ -847,13 +847,21 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
             ])
             return OpeningReport(brief=said, detail=said,
                                  refused=not setup.can_run, ran=False)
+        #: 🔴 **CLI 와 같은 자리를 쓴다** (``rank_search_results``) — 두
+        #: 어댑터가 각자 평가하면 같은 입력에 다른 추천이 나온다. 어댑터는
+        #: ``agent`` 를 직접 import 하지 않는다 (``test_15`` 의 경계).
+        ranking = rank_search_results(many)
         brief = list(head)
         brief.extend(
-            render_multi_search_brief(many, agent.repository).splitlines()
+            render_multi_search_brief(
+                many, agent.repository, ranking
+            ).splitlines()
         )
         detail = list(head)
         detail.extend(
-            render_multi_search(many, agent.repository, setup).splitlines()
+            render_multi_search(
+                many, agent.repository, setup, ranking
+            ).splitlines()
         )
         return OpeningReport(brief=tuple(brief), detail=tuple(detail),
                              refused=False, ran=True)
