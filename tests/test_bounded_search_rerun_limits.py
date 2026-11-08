@@ -440,7 +440,15 @@ def test_a06_a_slow_single_call_cannot_pass_as_verified(
     deadline = RerunDeadline(limit=1.0, clock=clock)
 
     def slow(duel, path, target, *, expect_field=(), expect_hash="",
-             deadline=None):
+             reached_at=0, deadline=None):
+        #: 🔴 Phase 6-AL — production ``rerun_steps`` 가 ``reached_at``
+        #: (최초 목표 도달 걸음)을 받는다. 가짜 구현도 **같은 서명**을
+        #: 받아야 한다 — 안 맞추면 이 시험은 재생 판정이 아니라
+        #: ``TypeError`` 를 보고, 결과별 예외 격리(6-AJ §B)가 그것을
+        #: "그 결과의 실패" 로 적어 **조용히 통과하는 쪽**이 될 수도
+        #: 있다. 첫 도달 모드에서는 0 이어야 한다 (기준점은 기존
+        #: 검증과 같은 길을 지난다).
+        assert reached_at == 0, reached_at
         clock.advance(10.0)  # 🔴 가상 시계다.
         return RerunResult(
             ok=True, reason="[주입] 정상 결과를 반환했다", steps=len(path),
@@ -480,7 +488,10 @@ def test_a07_an_observed_mismatch_is_not_relabelled_as_a_timeout(
     deadline = RerunDeadline(limit=1.0, clock=clock)
 
     def mismatch(duel, path, target, *, expect_field=(), expect_hash="",
-                 deadline=None):
+                 reached_at=0, deadline=None):
+        #: 🔴 Phase 6-AL — production ``rerun_steps`` 가 ``reached_at`` 을
+        #: 받는다. 첫 도달 모드에서는 0 이어야 한다.
+        assert reached_at == 0, reached_at
         clock.advance(10.0)
         return RerunResult(
             ok=False, reason="[주입] 최종 판이 달랐다", steps=len(path),

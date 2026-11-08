@@ -1012,9 +1012,17 @@ def test_e06_the_search_mode_is_opt_in(repository):
     #: 그때는 ``search_text`` 가 마지막이었다. 6-AI 도 **맨 뒤의 선택
     #: 인자**로 더했으므로 기존 호출은 그대로 돈다
     #: (``test_bounded_search_multi_results.py::test_e11`` · ``test_e12``).
-    assert list(inspect.signature(SearchService.combo_response).parameters)[-2:] == [
-        "search_text", "results_text",
+    #: 🔴 **Phase 6-AL 이 ``followups_text`` 를 그 뒤에 더했다** — 목표 도달
+    #: **뒤**에 더 탐색할 비흐름 행동 수다. 셋 다 **맨 뒤의 선택 인자**이고
+    #: 기본값이 빈 문자열이므로, 주지 않으면 앞 단계와 한 글자도 다르지
+    #: 않다. 이 시험이 틀린 가정을 갖고 있었던 것이 아니다 — 6-AH 에서는
+    #: ``search_text`` 가 마지막이었고 6-AI 에서는 ``results_text`` 였다.
+    assert list(inspect.signature(SearchService.combo_response).parameters)[-3:] == [
+        "search_text", "results_text", "followups_text",
     ]
+    for name in ("search_text", "results_text", "followups_text"):
+        assert inspect.signature(
+            SearchService.combo_response).parameters[name].default == ""
 
     agent = DeckAgent(repository)
     assert _run_bounded_search(agent, "", [], "") is None

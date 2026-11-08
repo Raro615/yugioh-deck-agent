@@ -563,15 +563,20 @@ def test_c05_the_adapters_share_one_evaluation_seat():
     assert "result_ranking" not in source, \
         "🔴 어댑터는 agent 를 직접 import 하지 않는다"
 
-    #: 🔴 ``/combo`` 의 인자가 늘지 않았다 (6-AI 가 더한 일곱 그대로).
+    #: 🔴 **추천 때문에 ``/combo`` 의 인자가 늘지 않았다** — 이 시험이 재는
+    #: 사실은 그것이다. (Phase 6-AL 이 **다른 기능**으로 ``followups`` 를
+    #: 더했으므로, 추천용 인자가 없다는 쪽을 직접 센다.)
     import app.discord_bot as bot
 
     pytest.importorskip("discord", reason="봇 전용 의존성")
     _client, tree = bot.build_client(dev_guild_id=None, service=object())
     combo = {one.name: one for one in tree.get_commands()}["combo"]
-    assert [one.name for one in combo.parameters] == [
+    names = [one.name for one in combo.parameters]
+    assert names[:7] == [
         "hand", "board", "deck", "recipe", "line", "search", "results",
     ]
+    assert not [one for one in names
+                if "rank" in one or "recommend" in one or "추천" in one]
     #: 🔴 CLI 도 그대로다.
     parser = build_parser()
     combo_cli = parser._subparsers._group_actions[0].choices["combo"]

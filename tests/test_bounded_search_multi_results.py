@@ -615,7 +615,15 @@ def test_c01_one_failed_rerun_does_not_discard_the_others(monkeypatch):
     calls = []
 
     def fake(duel, path, target, *, expect_field=(), expect_hash="",
-             deadline=None):
+             reached_at=0, deadline=None):
+        #: 🔴 Phase 6-AL — production ``rerun_steps`` 가 ``reached_at``
+        #: (최초 목표 도달 걸음)을 받는다. 가짜 구현도 **같은 서명**을
+        #: 받아야 한다 — 안 맞추면 이 시험은 재생 판정이 아니라
+        #: ``TypeError`` 를 보고, 결과별 예외 격리(6-AJ §B)가 그것을
+        #: "그 결과의 실패" 로 적어 **조용히 통과하는 쪽**이 될 수도
+        #: 있다. 첫 도달 모드에서는 0 이어야 한다 (기준점은 기존
+        #: 검증과 같은 길을 지난다).
+        assert reached_at == 0, reached_at
         assert isinstance(deadline, bs.RerunDeadline), deadline
         calls.append(expect_hash)
         if len(calls) == 1:
@@ -644,7 +652,15 @@ def test_c02_a_rerun_error_is_not_turned_into_nothing_found(monkeypatch):
     search, ledger = _stub_ledger(TWO_GOALS, max_results=3)
 
     def boom(duel, path, target, *, expect_field=(), expect_hash="",
-             deadline=None):
+             reached_at=0, deadline=None):
+        #: 🔴 Phase 6-AL — production ``rerun_steps`` 가 ``reached_at``
+        #: (최초 목표 도달 걸음)을 받는다. 가짜 구현도 **같은 서명**을
+        #: 받아야 한다 — 안 맞추면 이 시험은 재생 판정이 아니라
+        #: ``TypeError`` 를 보고, 결과별 예외 격리(6-AJ §B)가 그것을
+        #: "그 결과의 실패" 로 적어 **조용히 통과하는 쪽**이 될 수도
+        #: 있다. 첫 도달 모드에서는 0 이어야 한다 (기준점은 기존
+        #: 검증과 같은 길을 지난다).
+        assert reached_at == 0, reached_at
         assert isinstance(deadline, bs.RerunDeadline), deadline
         raise BoundedSearchError("[스텁] 재생이 예외로 멈췄다")
 
@@ -669,7 +685,15 @@ def test_c03_matching_resources_are_required_for_verification(monkeypatch):
     other = summarize_resources(_MDuel(TWO_GOALS, "G2"), P0)
 
     def fake(duel, path, target, *, expect_field=(), expect_hash="",
-             deadline=None):
+             reached_at=0, deadline=None):
+        #: 🔴 Phase 6-AL — production ``rerun_steps`` 가 ``reached_at``
+        #: (최초 목표 도달 걸음)을 받는다. 가짜 구현도 **같은 서명**을
+        #: 받아야 한다 — 안 맞추면 이 시험은 재생 판정이 아니라
+        #: ``TypeError`` 를 보고, 결과별 예외 격리(6-AJ §B)가 그것을
+        #: "그 결과의 실패" 로 적어 **조용히 통과하는 쪽**이 될 수도
+        #: 있다. 첫 도달 모드에서는 0 이어야 한다 (기준점은 기존
+        #: 검증과 같은 길을 지난다).
+        assert reached_at == 0, reached_at
         assert isinstance(deadline, bs.RerunDeadline), deadline
         return RerunResult(
             ok=True, reason="[스텁] 성공", steps=len(path), goal_reached=True,
@@ -731,7 +755,15 @@ def test_c05_the_final_representative_is_the_one_rerun(monkeypatch):
     seen = []
 
     def fake(duel, path, target, *, expect_field=(), expect_hash="",
-             deadline=None):
+             reached_at=0, deadline=None):
+        #: 🔴 Phase 6-AL — production ``rerun_steps`` 가 ``reached_at``
+        #: (최초 목표 도달 걸음)을 받는다. 가짜 구현도 **같은 서명**을
+        #: 받아야 한다 — 안 맞추면 이 시험은 재생 판정이 아니라
+        #: ``TypeError`` 를 보고, 결과별 예외 격리(6-AJ §B)가 그것을
+        #: "그 결과의 실패" 로 적어 **조용히 통과하는 쪽**이 될 수도
+        #: 있다. 첫 도달 모드에서는 0 이어야 한다 (기준점은 기존
+        #: 검증과 같은 길을 지난다).
+        assert reached_at == 0, reached_at
         assert isinstance(deadline, bs.RerunDeadline), deadline
         seen.append(tuple(step.action_key for step in path))
         return RerunResult(
@@ -1191,11 +1223,16 @@ def test_e11_discord_option_is_trailing_and_optional():
 
     from app.discord_bot import SearchService, combo_response
 
+    #: 🔴 **Phase 6-AL 이 ``followups_text`` 를 그 뒤에 더했다** — 그래서
+    #: ``results_text`` 는 이제 **마지막에서 두 번째**다. 이 시험이 재는
+    #: 사실은 바뀌지 않았다: **선택 인자이고 기본값이 빈 문자열이며 뒤쪽에
+    #: 붙어 있어 기존 호출이 그대로 돈다.**
     for func in (combo_response, SearchService.combo_response):
         params = list(inspect.signature(func).parameters)
-        assert params[-1] == "results_text"
-        assert (inspect.signature(func).parameters["results_text"].default
-                == "")
+        assert params[-2] == "results_text"
+        assert params[-1] == "followups_text"
+        for name in ("results_text", "followups_text"):
+            assert inspect.signature(func).parameters[name].default == ""
 
 
 def test_e12_search_without_results_does_not_change_behaviour():
