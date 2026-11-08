@@ -758,7 +758,8 @@ def cmd_combo(agent: DeckAgent, args) -> int:
     #: 호출의 출력은 6-AG 와 한 글자도 다르지 않다.
     _print_bounded_search(agent, recipe_text, hand_ids,
                           getattr(args, "search", "") or "",
-                          getattr(args, "results", "") or "")
+                          getattr(args, "results", "") or "",
+                          getattr(args, "followups", "") or "")
 
     plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
                                                board=board_ids)
@@ -773,7 +774,8 @@ def cmd_combo(agent: DeckAgent, args) -> int:
 
 def _print_bounded_search(agent: DeckAgent, recipe_text: str,
                           hand_ids: "list[int]", search_text: str,
-                          results_text: str = "") -> None:
+                          results_text: str = "",
+                          followups_text: str = "") -> None:
     """
     🔴 **제한 전개 탐색 절** (Phase 6-AH). 목표를 주지 않으면 아무것도 적지
     않는다 — 고르지 않은 탐색을 조용히 돌리지 않는다.
@@ -806,6 +808,17 @@ def _print_bounded_search(agent: DeckAgent, recipe_text: str,
     if wanted is None:
         print(f"  🔴 하지 않았습니다 — --results 를 읽지 못했습니다. {why}")
         return
+    extra, why_extra = search_followup_count(followups_text)
+    if extra is None:
+        print(f"  🔴 하지 않았습니다 — --followups 를 읽지 못했습니다."
+              f" {why_extra}")
+        return
+    if extra and wanted <= 1:
+        #: 🔴 **후속 모드는 복수 결과 모드 위에서 돈다** — 조용히 켜 주지
+        #: 않고, 무엇을 주어야 하는지 적는다.
+        print("  🔴 하지 않았습니다 — --followups 는 --results 2 이상과"
+              " 함께 주십시오 (후속 모드는 복수 결과 탐색의 모드입니다).")
+        return
     parsed = parse_recipe(recipe_text, agent.repository)
     if parsed.draft is None:
         print("  🔴 레시피에서 카드를 하나도 읽지 못해 탐색하지 않았습니다.")
@@ -814,7 +827,7 @@ def _print_bounded_search(agent: DeckAgent, recipe_text: str,
         #: 🔴 **복수 결과 모드** (6-AI). 같은 탐색기이고 예산만 다르다.
         setup, many = bounded_search_many_opening(
             agent.repository, parsed.draft, hand_ids,
-            card_id=card_id, max_results=wanted,
+            card_id=card_id, max_results=wanted, followups=extra,
         )
         if many is None:
             print("  🔴 탐색하지 않았습니다 — 입력 검증을 통과하지"
@@ -860,6 +873,32 @@ def search_goal_card_id(name: str) -> "int | None":
     return SEARCH_GOALS.get(name.strip().lower())
 
 
+def search_followup_count(text) -> tuple:
+    """
+    ``followups:`` 로 받은 **후속 비흐름 행동 상한** — ``(개수, 설명)``
+    (Phase 6-AL).
+
+    🔴 **주지 않으면 0 이다** — 그때는 목표에 처음 도달하면 멈추는 기존
+    모드이고 한 글자도 다르지 않다. 🔴 **읽지 못하거나 상한을 벗어나면
+    탐색하지 않는다** — 조용히 깎아 주면 그 결과가 "이게 전부" 로 읽힌다.
+    """
+    from agent.bounded_search import FOLLOWUP_CAP
+
+    if text is None or not str(text).strip():
+        return 0, ""
+    raw = str(text).strip()
+    if isinstance(text, bool):
+        return None, f"참/거짓이 아니라 수를 적어 주세요: {text!r}"
+    try:
+        value = int(raw)
+    except ValueError:
+        return None, f"정수가 아닙니다: {raw!r}"
+    if not 0 <= value <= FOLLOWUP_CAP:
+        return None, (f"0 이상 {FOLLOWUP_CAP} 이하로 적어 주세요 "
+                      f"(0 이면 첫 도달에서 멈춥니다): {value}")
+    return value, ""
+
+
 def rank_search_results(outcome):
     """
     검증된 복수 결과를 **비교해 추천 후보를 고른다** (Phase 6-AK).
@@ -873,6 +912,12 @@ def rank_search_results(outcome):
     읽는다. ``outcome`` 이 없으면 평가도 없다.
     """
     if outcome is None:
+        return None
+    if getattr(outcome, "continues", False):
+        #: 🔴 **후속 모드에는 추천을 연결하지 않는다** (6-AL §5). 자원 보존
+        #: 기준은 패를 쓰는 행동을 불리하게 보므로, 후속 전개의 가지치기나
+        #: 확장 우선순위로 쓰면 후속 전개를 찾지 못한다. 그 사실은 출력이
+        #: 한 줄로 밝힌다 (``deck.report`` 의 후속 절).
         return None
     from agent.result_ranking import rank_results
 
@@ -967,7 +1012,7 @@ def bounded_search_opening(
 
 def bounded_search_many_opening(
     repository, draft, hand, *, card_id: int, max_results: int,
-    budget=None, rerun: bool = True
+    budget=None, rerun: bool = True, followups: int = 0
 ) -> tuple:
     """
     선공 전개의 **서로 다른 결과 여럿**을 모으고 각각을 재생한다 (6-AI §6).
@@ -988,11 +1033,12 @@ def bounded_search_many_opening(
     모은 결과가 하나면 하나로 돌려준다.
     """
     from agent.bounded_search import (
-        BoundedSearch, FieldGoal, RESULTS_CAP, SearchBudget,
+        BoundedSearch, FOLLOWUP_CAP, FieldGoal, RESULTS_CAP, SearchBudget,
     )
     from deck.opening import build_opening
 
     wanted = max(2, min(int(max_results), RESULTS_CAP))
+    extra = max(0, min(int(followups), FOLLOWUP_CAP))
     chooser, triggers = opening_wiring(repository, None)
     setup = build_opening(
         repository, draft, list(hand), chooser=chooser, triggers=triggers
@@ -1004,6 +1050,22 @@ def bounded_search_many_opening(
         SearchBudget(max_results=wanted) if budget is None
         else dataclasses.replace(budget, max_results=wanted)
     )
+    if extra:
+        #: 🔴 **후속 모드** (Phase 6-AL). 같은 탐색기이고 예산만 다르다.
+        #:
+        #: 🔴 **깊이 상한을 후속 상한만큼 올려 잡는다** — 상한을 무시하는
+        #: 것이 아니라, 두 상한이 서로를 잡아먹지 않게 두는 것이다. 기준점이
+        #: 깊이 상한에 가까우면 후속 행동을 한 번도 못 하고, 그러면 "후속이
+        #: 없다" 가 실제로는 "깊이가 없었다" 가 된다. 올린 값은
+        #: ``budget.describe_ko()`` 에 그대로 보인다.
+        budget = dataclasses.replace(
+            budget,
+            max_depth=budget.max_depth + extra,
+            max_followup_actions=extra,
+            #: 🔴 **기준점 상한과 후속 후보 상한은 역할이 다르다** —
+            #: 기준점을 모으는 것이 후속 후보의 자리를 먹지 않는다.
+            max_baselines=wanted,
+        )
     search = BoundedSearch(goal=FieldGoal(card_id=card_id, seat=0), budget=budget)
 
     fresh_duel = None
@@ -1221,6 +1283,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="모을 서로 다른 결과 수 (2~5, 기본은 1개) — 주면"
                         " 결과들의 남은 자원을 비교합니다. 🔴 강약 평가가"
                         " 아닙니다")
+    p.add_argument("--followups", default="",
+                   help="목표 도달 뒤 더 탐색할 비흐름 행동 수 (0~3, 기본은"
+                        " 0 = 첫 도달에서 멈춤) — --results 2 이상과 함께"
+                        " 주십시오. 🔴 최선 전개도 최종 집 완성도 아닙니다")
     p.set_defaults(func=cmd_combo)
 
     return parser

@@ -1375,13 +1375,21 @@ def test_44_the_combo_command_is_registered_with_its_four_arguments():
     #: 않다** (``test_bounded_search_multi_results.py::test_e12`` 가 그
     #: 사실을 센다). 이 시험이 틀린 가정을 갖고 있었던 것이 아니다 —
     #: 그때는 여섯이었다.
+    #: 🔴 **Phase 6-AL 이 ``followups`` 를 그 뒤에 더했다** — 목표 도달
+    #: **뒤**에 더 탐색할 비흐름 행동 수다. ``results`` 와 가르는 것이
+    #: 요점이다: ``results`` 는 **몇 가지 결과를 모을지**이고,
+    #: ``followups`` 는 **목표에 닿은 뒤 더 갈지**다. 자리가 마지막이고
+    #: 선택이므로 주지 않으면 6-AK 와 한 글자도 다르지 않다. 이 시험이 틀린
+    #: 가정을 갖고 있었던 것이 아니다 — 그때는 일곱이었다.
     assert [p.name for p in combo.parameters] == ["hand", "board", "deck",
                                                   "recipe", "line", "search",
-                                                  "results"]
+                                                  "results", "followups"]
     #: 패는 필수, 나머지는 선택 — 무작위 패 생성이 없으므로 패는 받아야 한다
-    assert [p.required for p in combo.parameters] == [True, False, False,
-                                                      False, False, False,
-                                                      False]
+    #: 🔴 **패만 필수다** — 뒤에 붙은 선택 인자가 몇 개가 되어도 그 사실은
+    #: 변하지 않고, 그래서 기존 호출이 그대로 돈다.
+    assert [p.required for p in combo.parameters] == \
+        [True] + [False] * (len(combo.parameters) - 1)
+    assert len(combo.parameters) == 8
 
 
 def test_45_a_valid_hand_reaches_the_existing_combo_planner(monkeypatch):
@@ -1862,13 +1870,18 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
         #: 탐색의 목표). 같은 이유로 가짜 구현도 받아야 한다.
         #: 🔴 Phase 6-AI — ``results_text`` 가 그 뒤에 붙었다 (모을 서로
         #: 다른 결과 수). 같은 이유다.
+        #: 🔴 Phase 6-AL — ``followups_text`` 가 맨 뒤에 붙었다 (목표 도달
+        #: 뒤 더 탐색할 비흐름 행동 수). 같은 이유로 가짜 구현도 받아야
+        #: 한다 — 안 맞추면 이 시험은 "defer 가 먼저" 가 아니라
+        #: ``TypeError`` 를 본다.
         def combo_response(self, hand_text, board_text="", deck_text="",
                            recipe_text="", line_text="", search_text="",
-                           results_text=""):
+                           results_text="", followups_text=""):
             order.append("combo")
             worker.append(threading.get_ident())
             received.append((hand_text, board_text, deck_text, recipe_text,
-                             line_text, search_text, results_text))
+                             line_text, search_text, results_text,
+                             followups_text))
             return bot.ComboResponse(
                 messages=("첫 번째", "두 번째", "세 번째"),
                 attachments=(bot.ComboAttachment("combo-detail.txt",
@@ -1920,8 +1933,11 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
     #: 돌리지 않는다**는 뜻이고, 핸들러가 그것을 꾸며 넣지 않는다는 증거다.
     #: 🔴 Phase 6-AI — ``results_text`` 도 같다. 빈 문자열은 **단일 결과
     #: 모드**이고, 핸들러가 개수를 꾸며 넣지 않는다는 증거다.
+    #: 🔴 **주지 않은 선택 인자는 빈 문자열로 그대로 전달된다** — 6-AI 의
+    #: ``results`` 와 6-AL 의 ``followups`` 가 그 뒤에 붙었고, 둘 다 빈
+    #: 문자열이면 탐색을 돌리지 않는다.
     assert received == [
-        ("오르페골 디베르", "오르페골 코어", "오르페골 덱", "", "", "", "")
+        ("오르페골 디베르", "오르페골 코어", "오르페골 덱", "", "", "", "", "")
     ]
     #: 🔴 동기 작업이 이벤트 루프 밖에서 돌았다
     assert worker and worker[0] != loop_thread

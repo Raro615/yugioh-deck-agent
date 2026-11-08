@@ -34,6 +34,8 @@ from enum import Enum
 
 from engine.vocabulary import Zone
 
+from agent.bounded_search import FLOW_ACTION_KINDS as _FLOW_ACTION_KINDS
+
 __all__ = [
     "CRITERIA_V1",
     "Candidate",
@@ -68,12 +70,10 @@ FIRST_ARRIVAL_NOTE: str = (
     " 아닙니다."
 )
 
-#: **흐름 행동** — 전개 비용으로 세지 않는다. 🔴 패스는 무엇을 쓰는 수가
-#: 아니라 우선권을 넘기는 수이고, 페이즈를 넘기는 수도 그렇다. 이것을 비용으로
-#: 세면 "패스를 한 번 더 한 경로" 가 더 비싼 전개로 읽힌다.
-FLOW_ACTION_KINDS: frozenset = frozenset({
-    "pass", "end_phase", "change_phase",
-})
+#: **흐름 행동** — 전개 비용으로 세지 않는다. 🔴 **정의는 한 곳에만 둔다**
+#: (:data:`agent.bounded_search.FLOW_ACTION_KINDS`) — 평가(6-AK)와 후속 전개
+#: 상한(6-AL)이 같은 집합을 보아야 하고, 두 벌로 두면 조용히 갈라진다.
+FLOW_ACTION_KINDS: frozenset = _FLOW_ACTION_KINDS
 
 #: 평가할 수 없다는 표시. 🔴 **0 점이나 유리한 기본값으로 바꾸지 않는다.**
 UNMEASURABLE: None = None

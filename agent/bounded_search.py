@@ -113,9 +113,33 @@ RESULTS_CAP: int = 5
 #: 재생 전부에 쓸 수 있는 시간의 상한 — **탐색 예산과 따로** 둔다.
 DEFAULT_MAX_RERUN_SECONDS: float = 180.0
 
+#: 기본은 **목표에 처음 도달하면 그 분기를 더 펼치지 않는다** (Phase 6-AI
+#: 그대로). 0 이면 그 모드이고, 후속 전개 탐색은 **명시적으로 골라야**
+#: 켜진다 (Phase 6-AL).
+DEFAULT_MAX_FOLLOWUP_ACTIONS: int = 0
+#: 후속 모드를 고를 때의 권장 기본값 — **작고 명시적인 상한**이다.
+FOLLOWUP_DEFAULT_ACTIONS: int = 2
+#: 🔴 **옵션으로 노출할 수 있는 상한.** 기준점마다 분기가 늘어나므로 비용이
+#: 빠르게 커진다 — 크게 열어 두면 예산이 한 기준점에서 소진된다.
+FOLLOWUP_CAP: int = 3
+#: 후속 모드에서 **기준점(최초 도달)** 을 몇 개까지 보관할지의 기본값.
+#: 🔴 후속 후보의 상한(:attr:`SearchBudget.max_results`)과 **역할이 다르다**.
+DEFAULT_MAX_BASELINES: int = 1
+
 #: 필수 걸음(패스 · 드로우)을 지나가는 반복의 안전장치. 무한 반복을 막는
 #: 것뿐이고, 여기 걸리면 그 사실을 노드에 적는다.
 SETTLE_GUARD: int = 24
+
+#: **흐름 행동** — 전개 비용으로 세지 않는다 (Phase 6-AK 가 평가에서, 6-AL
+#: 이 후속 상한에서 같은 집합을 쓴다). 🔴 패스는 무엇을 쓰는 수가 아니라
+#: 우선권을 넘기는 수이고, 페이즈를 넘기는 수도 그렇다. 비용으로 세면
+#: "패스를 한 번 더 한 경로" 가 더 비싼 전개로 읽힌다.
+#:
+#: 🔴 **반복 방지와는 별개다** — 흐름 행동도 노드를 만들고 중복 제거
+#: (:func:`node_key`)와 필수 처리 상한(:data:`SETTLE_GUARD`)을 그대로 지난다.
+FLOW_ACTION_KINDS: frozenset = frozenset({
+    "pass", "end_phase", "change_phase",
+})
 
 #: ``end_phase`` 를 전개하지 않는 이유.
 OUT_OF_TURN_SCOPE: str = (
@@ -191,6 +215,34 @@ class SearchBudget:
     :attr:`PathResult.duplicates` 로 센다.
     """
     max_rerun_seconds: float = DEFAULT_MAX_RERUN_SECONDS
+    max_followup_actions: int = DEFAULT_MAX_FOLLOWUP_ACTIONS
+    """
+    목표에 처음 도달한 뒤 **추가로 탐색할 비흐름 행동 수**의 상한
+    (Phase 6-AL).
+
+    🔴 **0 이 기본이고, 그때는 6-AI 와 한 글자도 다르지 않다** — 목표에 닿은
+    분기를 더 펼치지 않는다. 1 이상이면 후속 모드다.
+
+    🔴 **흐름 행동(패스 · 페이즈 전환)은 이 수에 넣지 않는다** — 패스는
+    무엇을 쓰는 수가 아니라 우선권을 넘기는 수다. 그래도 반복 방지
+    (:func:`node_key` 중복 제거)와 필수 처리 상한(:data:`SETTLE_GUARD`)은
+    그대로 돈다.
+
+    🔴 **깊이 상한을 대신하지 않는다** — :attr:`max_depth` 는 그대로
+    적용되므로, 기준점이 깊으면 남은 깊이만큼만 더 간다.
+    """
+    max_baselines: int = DEFAULT_MAX_BASELINES
+    """
+    후속 모드에서 보관할 **기준점(최초 목표 도달)** 의 수 (Phase 6-AL).
+
+    🔴 **후속 후보의 상한과 역할이 다르다.** :attr:`max_results` 는 **제시할
+    후속 후보**의 상한이고, 이 칸은 **어디에서 출발할지**의 상한이다. 둘을
+    한 칸에 담으면 "기준점을 모으는 순간 결과 상한에 걸려 후속 행동을 전혀
+    탐색하지 않는" 구조가 된다.
+
+    🔴 첫 도달 모드(``max_followup_actions == 0``)에서는 쓰지 않는다 — 그때
+    기준점이 곧 결과다.
+    """
     """
     재생 **전부**에 쓸 수 있는 시간. 🔴 탐색 예산과 **따로** 둔다 — 그래야
     보고가 탐색 소요와 재생 소요를 가를 수 있고, 결과 수를 늘렸을 때
@@ -227,11 +279,40 @@ class SearchBudget:
                 f"max_results 는 1 이상 {RESULTS_CAP} 이하의 정수입니다 "
                 f"(1 이면 단일 결과 모드): {self.max_results!r}"
             )
+        if (
+            isinstance(self.max_followup_actions, bool)
+            or not isinstance(self.max_followup_actions, int)
+            or not 0 <= self.max_followup_actions <= FOLLOWUP_CAP
+        ):
+            raise BoundedSearchError(
+                f"max_followup_actions 는 0 이상 {FOLLOWUP_CAP} 이하의 "
+                f"정수입니다 (0 이면 첫 도달 모드): "
+                f"{self.max_followup_actions!r}"
+            )
+        if (
+            isinstance(self.max_baselines, bool)
+            or not isinstance(self.max_baselines, int)
+            or not 1 <= self.max_baselines <= RESULTS_CAP
+        ):
+            raise BoundedSearchError(
+                f"max_baselines 는 1 이상 {RESULTS_CAP} 이하의 정수입니다: "
+                f"{self.max_baselines!r}"
+            )
 
     @property
     def many(self) -> bool:
         """복수 결과 모드인가."""
         return self.max_results > 1
+
+    @property
+    def continues(self) -> bool:
+        """
+        **후속 전개 탐색 모드인가** (Phase 6-AL).
+
+        🔴 거짓이면 목표에 처음 도달한 분기를 더 펼치지 않는다 — 기존 동작
+        그대로다.
+        """
+        return self.max_followup_actions > 0
 
     def describe_ko(self) -> str:
         return (
@@ -239,6 +320,8 @@ class SearchBudget:
             f"{self.max_seconds:g}초 · 선택 분기 {self.max_choice_branches}"
             + (f" · 결과 {self.max_results}개" if self.many else "")
             + (f" · 재생 {self.max_rerun_seconds:g}초" if self.many else "")
+            + (f" · 후속 행동 {self.max_followup_actions}회"
+               f" · 기준점 {self.max_baselines}개" if self.continues else "")
             + (" · 중복 제거 켜짐" if self.dedup else " · 중복 제거 꺼짐")
         )
 
@@ -500,6 +583,82 @@ class SearchOutcome:
         return "\n".join(lines)
 
 
+class ResultRole(str, Enum):
+    """
+    결과 하나가 **무엇인가** (Phase 6-AL).
+
+    🔴 **기준점과 후속 후보를 가른다.** 섞으면 "목표에 처음 도달한 자리" 와
+    "거기서 더 간 자리" 가 한 줄로 보여서, 비교의 기준이 사라진다.
+    """
+
+    FIRST_ARRIVAL = "first_arrival"
+    """**최초 목표 도달 기준점** — 체인과 필수 처리가 정리된 결정 지점."""
+    CONTINUED = "continued"
+    """기준점에서 **후속 행동을 실제로 수행한** 후보."""
+
+
+class ContinuationStop(str, Enum):
+    """
+    후속 후보가 **왜 거기서 멈췄는가** (Phase 6-AL §4).
+
+    🔴 **"더 할 수 있는 것이 없다" 로 뭉개지 않는다.** 상한에 걸린 것과,
+    합법 후보가 없는 것과, 지원하지 않아 후보가 되지 못한 수가 남은 것은
+    서로 다른 사실이다.
+    """
+
+    OPEN = "open"
+    """더 갈 수 있는 자리다 — 🔴 이 후보는 **전개 완료가 아니다.**"""
+    ACTION_CAP = "action_cap"
+    """``max_followup_actions`` 에 닿았다."""
+    DEPTH_CAP = "depth_cap"
+    """``max_depth`` 에 닿았다 — 🔴 후속 상한과 다른 상한이다."""
+    NO_LEGAL = "no_legal"
+    """이 턴 범위에서 엔진이 허가한 수가 없다(``end_phase`` 는 범위 밖)."""
+    UNSUPPORTED_LEFT = "unsupported_left"
+    """
+    허가된 수가 없지만 **지원하지 않아 후보가 되지 못한 수가 남아 있다.**
+    🔴 그래서 "규칙상 더 할 수 없다" 고 단정하지 않는다.
+    """
+    BUDGET = "budget"
+    """전체 예산(시간 · 노드 · 결과 수)이 끊어서 끝까지 보지 못했다."""
+
+
+@dataclass(frozen=True, slots=True)
+class FoundMeta:
+    """
+    모은 결과 하나의 **후속 전개 이력** (Phase 6-AL).
+
+    🔴 **최초 도달 기록은 사라지지 않는다.** 후속 전개 중 목표 카드를
+    소재나 비용으로 써도 :attr:`reached_at` 은 남고, 최종 상태에 목표가
+    남아 있는지는 :attr:`goal_kept` 이 따로 말한다 — 둘을 한 칸에 담으면
+    "목표를 거친 경로" 가 "목표가 있는 집" 으로 읽힌다.
+    """
+
+    role: ResultRole = ResultRole.FIRST_ARRIVAL
+    reached_at: int = 0
+    """목표에 **처음** 도달한 걸음의 순서(1부터). 0 이면 알 수 없다."""
+    followup_actions: int = 0
+    """기준점 뒤에 실제로 수행한 **비흐름 행동**의 수."""
+    followup_flow: int = 0
+    """기준점 뒤의 **흐름 행동** 수 — 🔴 후속 상한에 세지 않은 것."""
+    goal_kept: bool = True
+    """**최종 상태에도** 목표 카드가 앞면으로 남아 있는가."""
+    stop: ContinuationStop = ContinuationStop.OPEN
+    stop_note: str = ""
+    merged_arrivals: "tuple[int, ...]" = ()
+    """
+    같은 최종 상태로 합쳐진 다른 경로들의 **최초 도달 걸음**들 (§4).
+
+    🔴 **대표를 고르면서 다른 도달 이력을 지우지 않는다.** 대표는
+    :func:`representative_order` 가 고르고(기존 기준 그대로), 합쳐진 쪽의
+    도달 위치는 여기 남는다.
+    """
+
+    @property
+    def continued(self) -> bool:
+        return self.role is ResultRole.CONTINUED
+
+
 class RerunState(str, Enum):
     """
     결과 하나의 **재생 상태** (Phase 6-AJ).
@@ -648,6 +807,21 @@ class RerunResult:
     """
     stage: str = ""
     """실패가 난 **단계** — 진단용 (``행동 3`` · ``최종 검증`` 등)."""
+    first_arrival_at: int = 0
+    """
+    재생 중 **최초 목표 도달을 확인한** 걸음 (Phase 6-AL). 0 이면 확인할
+    지점을 받지 않았다(첫 도달 모드).
+    """
+    first_arrival_confirmed: bool = False
+    """
+    기록된 그 걸음에서 **목표에 실제로 닿았는가.**
+
+    🔴 **후속 경로의 성공 조건은 이것이다.** 최종 상태에 목표가 없다는
+    이유만으로 실패시키지 않고, 그렇다고 이 확인을 생략하고 성공시키지도
+    않는다.
+    """
+    goal_kept: bool = False
+    """**최종 상태에도** 목표가 앞면으로 남아 있는가 (재생이 실제로 센 값)."""
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         mark = "성공" if self.ok else "🔴 실패"
@@ -682,6 +856,29 @@ class PathResult:
     🔴 **시간이 없어 시작하지 못한 것과 다르다.** 둘 다 재생이 없지만,
     앞은 사용자가 끈 것이고 뒤는 예산이 끊은 것이다.
     """
+    meta: FoundMeta = field(default_factory=FoundMeta)
+    """후속 전개 이력 (Phase 6-AL). 첫 도달 모드에서는 기본값 그대로다."""
+
+    @property
+    def role(self) -> ResultRole:
+        return self.meta.role
+
+    @property
+    def is_baseline(self) -> bool:
+        """**최초 목표 도달 기준점**인가."""
+        return self.meta.role is ResultRole.FIRST_ARRIVAL
+
+    @property
+    def goal_kept(self) -> bool:
+        """
+        **최종 상태에도** 목표 카드가 남아 있는가.
+
+        🔴 재생을 돌렸으면 **재생이 센 값**을 쓴다 — 탐색이 적어 둔 것과
+        다르면 그쪽이 검증된 사실이다.
+        """
+        if self.rerun is not None and self.rerun.steps:
+            return self.rerun.goal_kept
+        return self.meta.goal_kept
 
     @property
     def action_count(self) -> int:
@@ -829,6 +1026,11 @@ class MultiSearchOutcome:
     errors: tuple[str, ...] = ()
     rerun_notes: tuple[str, ...] = ()
     """재생을 **돌리지 못한** 결과와 그 이유 (재생 시간 상한 등)."""
+    followup_notes: tuple[str, ...] = ()
+    """
+    후속 전개에서 **멈춘 자리와 이유** (Phase 6-AL). 🔴 "더 할 수 있는 것이
+    없다" 로 뭉개지 않는다.
+    """
 
     @property
     def found(self) -> int:
@@ -882,6 +1084,35 @@ class MultiSearchOutcome:
     def disabled_results(self) -> "tuple[PathResult, ...]":
         """``rerun=False`` 로 **끄고** 돌린 것."""
         return self.results_in(RerunState.DISABLED)
+
+    @property
+    def continues(self) -> bool:
+        """**후속 전개 탐색 모드**로 돌았는가 (Phase 6-AL)."""
+        return self.budget.continues
+
+    @property
+    def baselines(self) -> "tuple[PathResult, ...]":
+        """**최초 목표 도달 기준점**들."""
+        return tuple(one for one in self.results if one.is_baseline)
+
+    @property
+    def continued_results(self) -> "tuple[PathResult, ...]":
+        """기준점에서 **후속 행동을 실제로 수행한** 후보들."""
+        return tuple(one for one in self.results if not one.is_baseline)
+
+    @property
+    def verified_continued(self) -> "tuple[PathResult, ...]":
+        """🔴 **재생 검증된 후속 후보만.**"""
+        return tuple(one for one in self.continued_results if one.verified)
+
+    @property
+    def reached_first_goal(self) -> bool:
+        """
+        **최초 목표 도달이 있었는가.**
+
+        🔴 후속 후보를 하나도 찾지 못해도 이 사실은 사라지지 않는다 (§4).
+        """
+        return bool(self.results)
 
     @property
     def tally(self) -> ResultTally:
@@ -940,6 +1171,7 @@ class MultiSearchOutcome:
             ("상대 정책", self.opponent_declined),
             ("상대 자리에서 멈춤", self.opponent_blocked),
             ("재생 메모", self.rerun_notes),
+            ("후속 전개 메모", self.followup_notes),
             ("🔴 오류", self.errors),
         ):
             for note in notes:
@@ -1666,6 +1898,10 @@ class _Node:
     path: tuple
     depth: int
     legal: object = None
+    reached_at: int = 0
+    """목표에 **처음** 도달한 걸음(1부터). 0 이면 아직 닿지 않았다 (6-AL)."""
+    followups: int = 0
+    """기준점 뒤에 수행한 **비흐름 행동** 수 (6-AL)."""
 
 
 @dataclass(slots=True)
@@ -1704,6 +1940,18 @@ class _Ledger:
     """같은 결과에 닿아 **대표로 합친** 경로 수. 🔴 결과 수를 늘리지 않는다."""
     result_dups: dict = field(default_factory=dict)
     """:attr:`results` 의 자리 → 그 결과에 닿은 **다른 경로**의 수."""
+    result_meta: dict = field(default_factory=dict)
+    """
+    :attr:`results` 의 자리 → :class:`FoundMeta` (Phase 6-AL).
+
+    🔴 **결과 목록의 모양을 바꾸지 않고** 후속 이력을 따로 든다 — 기존
+    재생 고리와 시험이 쓰는 ``(경로, 요약, 이유)`` 모양이 그대로 남는다.
+    """
+    followup_notes: list = field(default_factory=list)
+    """
+    후속 전개에서 **멈춘 자리와 이유** (Phase 6-AL). 🔴 "더 할 수 있는 것이
+    없다" 로 뭉개지 않는다.
+    """
     rerun_notes: list = field(default_factory=list)
     """재생을 **돌리지 못한** 결과와 그 이유. 🔴 실패를 숨기지 않는다."""
     rerun_budget_hit: list = field(default_factory=list)
@@ -1736,6 +1984,12 @@ class _Ledger:
     노드가 되어 중복 제거가 사실상 꺼진다. 열쇠는 그대로 두고 **값**으로
     깊이를 들고 있는다.
     """
+
+    def count_of(self, role) -> int:
+        """그 역할의 결과가 몇 개인가 (Phase 6-AL)."""
+        return sum(
+            1 for meta in self.result_meta.values() if meta.role is role
+        )
 
     def note(self, bucket: list, line: str) -> bool:
         """그 줄을 **새로** 적었는가. 같은 줄은 한 번만 남는다."""
@@ -1913,6 +2167,7 @@ class BoundedSearch:
                     duplicates=ledger.result_dups.get(slot, 0),
                     #: 🔴 **끈 것과 시간이 없어 못 한 것을 가른다** (§C).
                     rerun_disabled=True,
+                    meta=ledger.result_meta.get(slot, FoundMeta()),
                 )
                 for slot, (path, summary, reason) in enumerate(ledger.results)
             )
@@ -1976,6 +2231,7 @@ class BoundedSearch:
         for slot, (path, summary, reason) in enumerate(ledger.results):
             index = slot + 1
             dups = ledger.result_dups.get(slot, 0)
+            meta = ledger.result_meta.get(slot, FoundMeta())
             if deadline.expired():
                 #: 🔴 **시작조차 하지 않았다** — 재생 도중 넘긴 것과 다른
                 #: 사실이므로 ``rerun=None`` 으로 남긴다 (§C).
@@ -1986,10 +2242,11 @@ class BoundedSearch:
                     resources=summary,
                     goal_reason=reason,
                     duplicates=dups,
+                    meta=meta,
                 ))
                 continue
             rerun, matched = self._rerun_one(
-                duel, path, summary, index, ledger, deadline
+                duel, path, summary, index, ledger, deadline, meta
             )
             out.append(PathResult(
                 index=index,
@@ -1999,6 +2256,7 @@ class BoundedSearch:
                 duplicates=dups,
                 rerun=rerun,
                 resources_match=matched,
+                meta=meta,
             ))
         return tuple(out)
 
@@ -2027,6 +2285,7 @@ class BoundedSearch:
         index: int,
         ledger: _Ledger,
         deadline: "RerunDeadline",
+        meta: "FoundMeta | None" = None,
     ) -> "tuple[RerunResult, bool]":
         """
         결과 **하나**를 재생하고 자원 요약까지 견준다 (Phase 6-AJ §B).
@@ -2052,6 +2311,11 @@ class BoundedSearch:
         새로 뜨고 원본은 밟지 않으므로, 다음 결과도 같은 초기 상태에서
         시작한다 (``test_b05`` 가 해시로 센다).
         """
+        meta = FoundMeta() if meta is None else meta
+        #: 🔴 **후속 후보만 최초 도달 지점을 따로 확인한다** (6-AL §2).
+        #: 기준점은 최초 도달이 곧 최종 상태이므로 기존 검증과 같고, 그래서
+        #: 첫 도달 모드의 동작은 한 글자도 달라지지 않는다.
+        arrival = meta.reached_at if meta.continued else 0
         try:
             rerun = rerun_steps(
                 duel,
@@ -2059,6 +2323,7 @@ class BoundedSearch:
                 self.goal,
                 expect_field=summary.own_field_rows,
                 expect_hash=summary.state_hash,
+                reached_at=arrival,
                 deadline=deadline,
             )
             #: 🔴 **자원 요약까지 견준다.** 목표와 해시가 같아도 요약이
@@ -2233,6 +2498,7 @@ class BoundedSearch:
             opponent_blocked=tuple(ledger.blocked),
             errors=tuple(ledger.errors),
             rerun_notes=tuple(ledger.rerun_notes),
+            followup_notes=tuple(ledger.followup_notes),
         )
 
     # ------------------------------------------------------------------
@@ -2260,7 +2526,7 @@ class BoundedSearch:
         found = None
 
         while stack:
-            if len(ledger.results) >= self.budget.max_results and self.budget.many:
+            if self.budget.many and self._results_full(ledger):
                 #: 🔴 **결과 상한에 닿았다.** 그 사실을 종료 사유에 남긴다
                 #: (:meth:`_open` 이 이미 적었다) — "다 찾았다" 가 아니다.
                 break
@@ -2319,6 +2585,50 @@ class BoundedSearch:
             return Termination.BUDGET_EXCEEDED
         return termination
 
+    def _results_full(self, ledger: _Ledger) -> bool:
+        """
+        **제시할 결과**가 상한에 닿았는가 (Phase 6-AL §3).
+
+        🔴 **기준점 보관과 후속 후보 보관의 역할이 다르다.** 후속 모드에서
+        :attr:`SearchBudget.max_results` 는 **후속 후보**의 상한이고,
+        기준점은 :attr:`SearchBudget.max_baselines` 가 따로 센다 — 한 칸에
+        담으면 "기준점을 모으는 순간 결과 상한에 걸려 후속 행동을 전혀
+        탐색하지 않는" 구조가 된다.
+        """
+        if not self.budget.continues:
+            return len(ledger.results) >= self.budget.max_results
+        return (ledger.count_of(ResultRole.CONTINUED)
+                >= self.budget.max_results)
+
+    def _followups_left(self, node: _Node) -> int:
+        """그 노드에서 더 할 수 있는 **비흐름 후속 행동** 수."""
+        return self.budget.max_followup_actions - node.followups
+
+    def _dedup_key(self, duel: Duel, legal, *, reached_at: int,
+                   followups: int):
+        """
+        중복 제거용 열쇠 (Phase 6-AL §3).
+
+        🔴 **후속 모드에서는 목표 도달 이력과 남은 후속 예산을 함께 넣는다.**
+        넣지 않으면 "같은 상태에 도착했다" 는 이유로 **더 많은 탐색 기회를
+        가진 경로를 버린다** — 목표 전에 들른 상태와 목표 뒤에 들른 상태는
+        할 수 있는 일이 다르고, 남은 후속 예산이 더 많은 쪽에서만 닿는
+        결과가 있다.
+
+        🔴 **그 대가로 중복 제거가 약해진다** — 같은 판이 남은 예산마다 다른
+        노드가 된다. 그 한계를 보고서에 적는다.
+
+        🔴 첫 도달 모드에서는 :func:`node_key` 그대로다 (한 글자도 다르지
+        않다).
+        """
+        base = node_key(duel, legal)
+        if base is None or not self.budget.continues:
+            return base
+        return base + (
+            reached_at > 0,
+            max(0, self.budget.max_followup_actions - followups),
+        )
+
     def _key_of(self, node: _Node):
         """그 노드의 상태 열쇠. 후보 목록을 **다시 세지 않는다.**"""
         duel = node.sim.duel
@@ -2327,7 +2637,10 @@ class BoundedSearch:
             else duel.legal_actions(duel.to_act)
         )
         node.legal = legal
-        return node_key(duel, legal)
+        return self._dedup_key(
+            duel, legal,
+            reached_at=node.reached_at, followups=node.followups,
+        )
 
     # ------------------------------------------------------------------
     def _open(self, node: _Node, ledger: _Ledger, stack: list, started: float):
@@ -2337,6 +2650,15 @@ class BoundedSearch:
             return None
         if node.depth >= self.budget.max_depth:
             ledger.note(ledger.budget_hit, f"max_depth={self.budget.max_depth}")
+            if node.reached_at:
+                #: 🔴 **후속 상한이 아니라 깊이 상한이 끊었다** — 두 상한을
+                #: 섞으면 "후속을 다 봤다" 로 읽힌다 (§3).
+                ledger.note(
+                    ledger.followup_notes,
+                    f"기준점(걸음 {node.reached_at}) 뒤에서 깊이 상한"
+                    f" max_depth={self.budget.max_depth} 에 걸려 더 펼치지"
+                    " 않았습니다 — 후속 행동 상한과 다른 상한입니다.",
+                )
             return None
         if duel.to_act != self.goal.seat:
             ledger.note(
@@ -2354,6 +2676,21 @@ class BoundedSearch:
                     held, seat=duel.to_act, viewer=self.goal.seat
                 ),
             )
+        if node.reached_at and self._followups_left(node) <= 0:
+            #: 🔴 **후속 행동 상한에 닿았다** — 더 펼치지 않는다.
+            ledger.note(
+                ledger.budget_hit,
+                f"max_followup_actions={self.budget.max_followup_actions}",
+            )
+            ledger.note(
+                ledger.followup_notes,
+                f"기준점(걸음 {node.reached_at}) 뒤에서 비흐름 행동"
+                f" {node.followups}회로 상한"
+                f" max_followup_actions={self.budget.max_followup_actions}"
+                " 에 닿아 더 펼치지 않았습니다.",
+            )
+            return None
+
         ordered = sorted(legal.allowed, key=_order_key)
         children: list[_Node] = []
         for action in ordered:
@@ -2385,27 +2722,146 @@ class BoundedSearch:
                 path = node.path + (step,)
                 child_legal = child_duel.legal_actions(child_duel.to_act)
                 verdict = self.goal.judge(child_duel, child_legal)
-                if verdict.reached:
+                child_depth = node.depth + 1
+                flow = action.kind.value in FLOW_ACTION_KINDS
+
+                if node.reached_at == 0 and verdict.reached:
+                    #: ---------------- 최초 목표 도달 ----------------
                     if not self.budget.many:
                         #: 🔴 **단일 결과 모드는 한 글자도 달라지지 않는다.**
                         return path, child_duel, verdict
-                    #: 🔴 **이 분기는 더 펼치지 않는다** (6-AI §1). 비교하는
-                    #: 것은 "목표에 **처음** 도달하고 처리가 정리된 상태"
-                    #: 이므로, 그 뒤에 세트만 더 한 결과를 별개의 전개로
-                    #: 늘리지 않는다.
-                    self._collect(ledger, path, child_duel, child_legal, verdict)
-                    if len(ledger.results) >= self.budget.max_results:
+                    if not self.budget.continues:
+                        #: 🔴 **첫 도달 모드 — 이 분기는 더 펼치지 않는다**
+                        #: (6-AI §1). 비교하는 것은 "목표에 **처음** 도달하고
+                        #: 처리가 정리된 상태" 이므로, 그 뒤에 세트만 더 한
+                        #: 결과를 별개의 전개로 늘리지 않는다.
+                        self._collect(ledger, path, child_duel, child_legal,
+                                      verdict,
+                                      FoundMeta(reached_at=child_depth,
+                                                goal_kept=verdict.present))
+                        if self._results_full(ledger):
+                            ledger.note(
+                                ledger.budget_hit,
+                                f"max_results={self.budget.max_results}",
+                            )
+                            return None
+                        continue
+                    #: 🔴 **후속 모드 — 기준점으로 모으고 계속 펼친다** (6-AL).
+                    if ledger.count_of(ResultRole.FIRST_ARRIVAL) >= \
+                            self.budget.max_baselines:
                         ledger.note(
                             ledger.budget_hit,
-                            f"max_results={self.budget.max_results}",
+                            f"max_baselines={self.budget.max_baselines}",
                         )
-                        return None
+                        ledger.note(
+                            ledger.followup_notes,
+                            f"기준점 상한 max_baselines="
+                            f"{self.budget.max_baselines} 에 닿아 걸음"
+                            f" {child_depth} 의 최초 도달을 더 보관하지"
+                            " 않았습니다 — 🔴 다른 기준점이 없다는 뜻이"
+                            " 아닙니다.",
+                        )
+                        continue
+                    self._collect(
+                        ledger, path, child_duel, child_legal, verdict,
+                        FoundMeta(reached_at=child_depth,
+                                  goal_kept=verdict.present,
+                                  stop=self._stop_of(child_legal, 0,
+                                                     child_depth)),
+                    )
+                    if self.budget.dedup:
+                        admitted = admit(
+                            ledger.seen,
+                            self._dedup_key(child_duel, child_legal,
+                                            reached_at=child_depth,
+                                            followups=0),
+                            child_depth,
+                        )
+                        if admitted is Admission.DUPLICATE:
+                            ledger.deduped += 1
+                            continue
+                        if admitted is Admission.SHALLOWER:
+                            ledger.revisited += 1
+                    children.append(_Node(
+                        Simulator(child_duel), path, child_depth, child_legal,
+                        reached_at=child_depth, followups=0,
+                    ))
                     continue
-                child_depth = node.depth + 1
+
+                if node.reached_at:
+                    #: ---------------- 기준점 뒤 ----------------
+                    child_followups = node.followups + (0 if flow else 1)
+                    settled, why = _is_settled(
+                        child_duel, self.goal.seat, child_legal
+                    )
+                    if settled and child_followups >= 1:
+                        #: 🔴 **정리된 결정 지점에서만 수집한다** (§4) — 중간
+                        #: 상태를 결과로 내놓지 않는다. 흐름 행동만 한 자리는
+                        #: 수집하지 않고(판이 그대로다) 계속 펼친다.
+                        self._collect(
+                            ledger, path, child_duel, child_legal, verdict,
+                            FoundMeta(
+                                role=ResultRole.CONTINUED,
+                                reached_at=node.reached_at,
+                                followup_actions=child_followups,
+                                followup_flow=(
+                                    len(path) - node.reached_at
+                                    - child_followups
+                                ),
+                                goal_kept=verdict.present,
+                                stop=self._stop_of(
+                                    child_legal, child_followups, child_depth
+                                ),
+                            ),
+                        )
+                        if self._results_full(ledger):
+                            ledger.note(
+                                ledger.budget_hit,
+                                f"max_results={self.budget.max_results}",
+                            )
+                            return None
+                    elif not settled:
+                        ledger.note(
+                            ledger.followup_notes,
+                            f"걸음 {child_depth} 뒤가 정리되지 않아 후속"
+                            f" 후보로 세지 않았습니다 ({why}) — 계속"
+                            " 펼칩니다.",
+                        )
+                    if child_followups >= self.budget.max_followup_actions:
+                        #: 상한에 닿은 자리는 더 펼치지 않는다 (위 메모는
+                        #: 다음 :meth:`_open` 이 아니라 여기서 끝낸다).
+                        ledger.note(
+                            ledger.budget_hit,
+                            "max_followup_actions="
+                            f"{self.budget.max_followup_actions}",
+                        )
+                        continue
+                    if self.budget.dedup:
+                        admitted = admit(
+                            ledger.seen,
+                            self._dedup_key(child_duel, child_legal,
+                                            reached_at=node.reached_at,
+                                            followups=child_followups),
+                            child_depth,
+                        )
+                        if admitted is Admission.DUPLICATE:
+                            ledger.deduped += 1
+                            continue
+                        if admitted is Admission.SHALLOWER:
+                            ledger.revisited += 1
+                    children.append(_Node(
+                        Simulator(child_duel), path, child_depth, child_legal,
+                        reached_at=node.reached_at,
+                        followups=child_followups,
+                    ))
+                    continue
+
+                #: ---------------- 목표 전 (기존 그대로) ----------------
                 if self.budget.dedup:
                     verdict_on_key = admit(
                         ledger.seen,
-                        node_key(child_duel, child_legal),
+                        self._dedup_key(child_duel, child_legal,
+                                        reached_at=0, followups=0),
                         child_depth,
                     )
                     if verdict_on_key is Admission.DUPLICATE:
@@ -2422,7 +2878,32 @@ class BoundedSearch:
         stack.extend(reversed(children))
         return None
 
-    def _collect(self, ledger: _Ledger, path, duel, legal, verdict) -> None:
+    def _stop_of(self, legal, followups: int, depth: int) -> ContinuationStop:
+        """
+        이 자리에서 **왜 멈추는가** (Phase 6-AL §4).
+
+        🔴 **"더 할 수 있는 것이 없다" 로 단정하지 않는다.** 허가된 수가
+        없어도 지원하지 않아 후보가 되지 못한 수가 남아 있으면
+        :attr:`ContinuationStop.UNSUPPORTED_LEFT` 다.
+        """
+        if not self.budget.continues:
+            return ContinuationStop.OPEN
+        playable = [
+            action for action in legal.allowed
+            if action.kind is not PlayerActionKind.END_PHASE
+        ]
+        if not playable:
+            held = list(legal.unsupported())
+            return (ContinuationStop.UNSUPPORTED_LEFT if held
+                    else ContinuationStop.NO_LEGAL)
+        if followups >= self.budget.max_followup_actions:
+            return ContinuationStop.ACTION_CAP
+        if depth >= self.budget.max_depth:
+            return ContinuationStop.DEPTH_CAP
+        return ContinuationStop.OPEN
+
+    def _collect(self, ledger: _Ledger, path, duel, legal, verdict,
+                 meta: "FoundMeta | None" = None) -> None:
         """
         성공 결과 하나를 **값으로** 모은다 (6-AI §1 · §2).
 
@@ -2433,21 +2914,46 @@ class BoundedSearch:
         🔴 **요약을 그 자리에서 뜬다** (:func:`summarize_resources`). 판을
         들고 있으면 뒤의 탐색이 그 판을 더 밟았을 때 요약이 조용히 달라진다.
         """
-        key = outcome_key(duel, legal, self.goal.seat)
+        meta = FoundMeta() if meta is None else meta
+        #: 🔴 **역할을 열쇠에 넣는다** (Phase 6-AL §4). 넣지 않으면 흐름
+        #: 행동만 한 후속 후보가 기준점과 같은 판에 닿아 **기준점을 덮어쓸**
+        #: 수 있다 — 둘은 다른 사실이다.
+        key = (meta.role.value, outcome_key(duel, legal, self.goal.seat))
         summary = summarize_resources(duel, self.goal.seat)
         where = ledger.result_keys.get(key)
         if where is None:
             ledger.result_keys[key] = len(ledger.results)
+            ledger.result_meta[len(ledger.results)] = meta
             ledger.results.append((tuple(path), summary, verdict.reason))
             return
         ledger.duplicate_results += 1
         ledger.result_dups[where] = ledger.result_dups.get(where, 0) + 1
         kept_path, _kept_summary, _kept_reason = ledger.results[where]
-        if representative_order(path) < representative_order(kept_path):
+        kept_meta = ledger.result_meta.get(where, FoundMeta())
+        #: 🔴 **합쳐진 쪽의 최초 도달 이력을 지우지 않는다** (§4). 대표는
+        #: :func:`representative_order` 가 고르고(기존 기준 그대로), 도달
+        #: 위치가 다르면 그 사실이 ``merged_arrivals`` 에 남는다.
+        takes_over = representative_order(path) < representative_order(
+            kept_path
+        )
+        #: 🔴 **대표의 자기 도달 걸음은 ``merged_arrivals`` 에 넣지 않는다** —
+        #: 거기 들어가는 것은 **합쳐져 사라진 경로**의 도달 걸음이다. 섞으면
+        #: "이 결과는 두 자리에서 도달했다" 로 읽힌다.
+        leader, displaced = (
+            (meta, kept_meta) if takes_over else (kept_meta, meta)
+        )
+        arrivals = set(kept_meta.merged_arrivals)
+        if displaced.reached_at and displaced.reached_at != leader.reached_at:
+            arrivals.add(displaced.reached_at)
+        arrivals.discard(leader.reached_at)
+        if takes_over:
             #: 🔴 **대표가 바뀐다.** 그래서 재생은 탐색이 **끝난 뒤**에
             #: 돌린다 — 중간에 돌리면 교체된 대표가 검증되지 않는다
             #: (:meth:`rerun_results`).
             ledger.results[where] = (tuple(path), summary, verdict.reason)
+        ledger.result_meta[where] = dataclasses.replace(
+            leader, merged_arrivals=tuple(sorted(arrivals)),
+        )
 
     # ------------------------------------------------------------------
     def _attempts(
@@ -2681,6 +3187,7 @@ def rerun_steps(
     *,
     expect_field: "tuple[tuple[str, int, bool], ...]" = (),
     expect_hash: str = "",
+    reached_at: int = 0,
     deadline: "RerunDeadline | None" = None,
 ) -> RerunResult:
     """
@@ -2692,6 +3199,13 @@ def rerun_steps(
 
     ``expect_field`` · ``expect_hash`` 를 주면 그 둘과 **같은가**까지 본다.
     주지 않으면 목표 도달 여부만 본다.
+
+    ``reached_at`` 을 주면 (Phase 6-AL) **그 걸음에서 목표에 닿았는지 다시
+    확인**하고, 최종 상태에 목표가 남아 있는지는 따로 적는다
+    (:attr:`RerunResult.goal_kept`). 🔴 **후속 경로의 성공 조건은 "그 걸음에서
+    목표에 닿았고 최종 판이 기록과 같다" 이다** — 최종 상태에 목표가 없다는
+    이유만으로 실패시키지 않고, 그렇다고 최초 도달 확인을 생략하고
+    성공시키지도 않는다. 0 이면 기존 그대로 **최종 상태의 목표**를 본다.
 
     ``deadline`` 을 주면 **네 자리에서 마감을 본다** (Phase 6-AJ §A) —
     경로를 시작하기 전, 각 행동 **전후**(필수 걸음 처리 포함,
@@ -2709,6 +3223,14 @@ def rerun_steps(
             ok=False,
             reason="재생할 경로가 없습니다 — 탐색이 목표에 닿지 않았습니다.",
         )
+    if isinstance(reached_at, bool) or not isinstance(reached_at, int) \
+            or reached_at < 0 or reached_at > len(path):
+        raise BoundedSearchError(
+            f"최초 도달 걸음은 0 이상 {len(path)} 이하의 정수입니다: "
+            f"{reached_at!r}"
+        )
+    arrival_confirmed = False
+    arrival_reason = ""
     #: 🔴 **경로를 시작하기 전에 본다** — 이미 마감이면 걸음을 하나도 밟지
     #: 않는다 (``test_a01``).
     if deadline is not None and deadline.expired():
@@ -2804,6 +3326,22 @@ def rerun_steps(
             )
         sim = Simulator(fork)
         done += 1
+        if reached_at and done == reached_at:
+            #: 🔴 **최초 도달을 그 자리에서 다시 확인한다** (6-AL §2).
+            #: 생략하고 최종 판만 보면 "목표를 거쳤다" 가 검증되지 않는다.
+            arrival = target.judge(sim.duel)
+            arrival_confirmed = arrival.reached
+            arrival_reason = arrival.reason
+            if not arrival_confirmed:
+                return RerunResult(
+                    ok=False,
+                    reason=f"{reached_at}번째 걸음에서 목표에 닿지 "
+                           f"않았습니다 (기록은 거기서 최초 도달이라고 "
+                           f"적혀 있습니다): {arrival.reason}",
+                    steps=done,
+                    stage=f"최초 도달 확인 (걸음 {reached_at})",
+                    first_arrival_at=reached_at,
+                )
         #: 🔴 **각 행동 뒤에서도 본다** — 마지막 행동에서 시간을 넘긴
         #: 경우를 놓치지 않는다 (``test_a04``).
         if deadline is not None and deadline.expired():
@@ -2818,6 +3356,51 @@ def rerun_steps(
         field_now == expect_field and hash_now == expect_hash
         if compared else False
     )
+    if reached_at:
+        #: 🔴 **후속 경로** — 성공 조건은 "그 걸음에서 목표에 닿았고 최종
+        #: 판이 기록과 같다" 다. 최종 상태의 목표 유지 여부는 **따로** 적는다.
+        if compared and not same:
+            reason = (
+                f"최초 도달(걸음 {reached_at})은 확인했지만 최종 판이 탐색 "
+                f"결과와 다릅니다 — 해시 {expect_hash[:12]}… → "
+                f"{hash_now[:12]}…"
+            )
+        else:
+            kept = "남아 있습니다" if verdict.present else "남아 있지 않습니다"
+            reason = (
+                f"걸음 {done}개를 새 초기 상태에서 다시 밟았습니다. 걸음 "
+                f"{reached_at}에서 목표에 닿은 것을 확인했고({arrival_reason})"
+                f", 최종 상태에 목표 카드는 {kept}"
+                + ("" if compared else " (비교할 최종 판을 주지 않았습니다)")
+                + "."
+            )
+        summary = summarize_resources(sim.duel, target.seat)
+        if deadline is not None and deadline.expired():
+            late = _timed_out("최종 검증 · 자원 요약 뒤", deadline, done)
+            return dataclasses.replace(
+                late,
+                goal_reached=arrival_confirmed,
+                final_field=field_now,
+                final_state_hash=hash_now,
+                matches_search=same,
+                resources=summary,
+                first_arrival_at=reached_at,
+                first_arrival_confirmed=arrival_confirmed,
+                goal_kept=verdict.present,
+            )
+        return RerunResult(
+            ok=arrival_confirmed and (same or not compared),
+            reason=reason,
+            steps=done,
+            goal_reached=arrival_confirmed,
+            final_field=field_now,
+            final_state_hash=hash_now,
+            matches_search=same,
+            resources=summary,
+            first_arrival_at=reached_at,
+            first_arrival_confirmed=arrival_confirmed,
+            goal_kept=verdict.present,
+        )
     if not verdict.reached:
         reason = f"재생이 목표에 닿지 않았습니다: {verdict.reason}"
     elif compared and not same:
@@ -2848,6 +3431,8 @@ def rerun_steps(
             final_state_hash=hash_now,
             matches_search=same,
             resources=summary,
+            first_arrival_confirmed=verdict.reached,
+            goal_kept=verdict.present,
         )
     return RerunResult(
         ok=verdict.reached and (same or not compared),
@@ -2858,6 +3443,9 @@ def rerun_steps(
         final_state_hash=hash_now,
         matches_search=same,
         resources=summary,
+        #: 첫 도달 모드에서는 **최종 상태의 목표**가 곧 도달 확인이다.
+        first_arrival_confirmed=verdict.reached,
+        goal_kept=verdict.present,
     )
 
 
@@ -2898,51 +3486,59 @@ def search_many_for_card(
 
 
 __all__ = [
+    "Admission",
     "BoundedSearch",
     "BoundedSearchError",
+    "CHOICE_BRANCHING_UNAVAILABLE",
     "CONCEALED_CARD",
     "CardSlot",
-    "CHOICE_BRANCHING_UNAVAILABLE",
+    "ContinuationStop",
+    "DEFAULT_MAX_BASELINES",
     "DEFAULT_MAX_CHOICE_BRANCHES",
     "DEFAULT_MAX_DEPTH",
+    "DEFAULT_MAX_FOLLOWUP_ACTIONS",
     "DEFAULT_MAX_NODES",
     "DEFAULT_MAX_RERUN_SECONDS",
     "DEFAULT_MAX_RESULTS",
     "DEFAULT_MAX_SECONDS",
     "FIELD_ZONES",
+    "FLOW_ACTION_KINDS",
+    "FOLLOWUP_CAP",
+    "FOLLOWUP_DEFAULT_ACTIONS",
     "FieldGoal",
+    "FoundMeta",
     "GoalVerdict",
-    "NO_INTERFERENCE",
-    "OUT_OF_TURN_SCOPE",
     "MULTI_DEFAULT_MAX_RESULTS",
     "MultiSearchOutcome",
+    "NO_INTERFERENCE",
+    "OUT_OF_TURN_SCOPE",
     "PathResult",
     "PathStep",
     "RESULTS_CAP",
-    "ResourceSummary",
     "RerunDeadline",
     "RerunResult",
     "RerunState",
+    "ResourceSummary",
+    "ResultRole",
     "ResultTally",
     "SETTLE_GUARD",
     "SearchBudget",
     "SearchOutcome",
     "Termination",
-    "node_key",
-    "own_field",
     "UseRecord",
     "ZoneSummary",
+    "admit",
+    "alternative_options",
+    "iter_selections",
+    "node_key",
     "outcome_key",
+    "own_field",
     "representative_order",
     "rerun_path",
     "rerun_steps",
     "search_for_card",
     "search_many_for_card",
-    "summarize_resources",
-    "Admission",
-    "admit",
-    "alternative_options",
-    "iter_selections",
     "selection_options",
+    "summarize_resources",
     "superseded",
 ]

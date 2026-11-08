@@ -1285,6 +1285,198 @@ def _multi_head(outcome) -> "list[str]":
     return lines
 
 
+#: 후속 전개 모드의 **멈춘 이유**를 사람이 읽는 말로 (Phase 6-AL).
+#: 🔴 ``agent`` 를 import 하지 않으므로 값 문자열로 받는다 (ADR-007).
+_STOP_KO: dict = {
+    "open": "🔴 **더 갈 수 있는 자리입니다** — 전개 완료가 아니고, 예산이"
+            " 끊겨 여기까지만 보았습니다",
+    "action_cap": "후속 행동 상한에 닿았습니다",
+    "depth_cap": "깊이 상한에 닿았습니다 (🔴 후속 상한과 다른 상한입니다)",
+    "no_legal": "이 턴 범위에서 엔진이 허가한 수가 없습니다",
+    "unsupported_left": "🔴 허가된 수가 없지만 **지원하지 않아 후보가 되지"
+                        " 못한 수가 남아 있습니다** — 규칙상 더 할 수 없다는"
+                        " 뜻이 아닙니다",
+    "budget": "전체 예산이 끊어 끝까지 보지 못했습니다",
+}
+
+#: 🔴 **후속 모드의 범위.**
+_FOLLOWUP_SCOPE = (
+    "🔴 **목표에 처음 도달한 뒤 같은 턴 메인 페이즈 안에서** 엔진이 허가한"
+    " 행동을 **제한된 수만큼** 더 펼친 것입니다 — **최선 전개도, 최종 집"
+    " 완성도, 실전 강도 검증도 아닙니다**. 전투 · 턴 종료 · 다음 턴은 범위"
+    " 밖이고, 상대는 언제나 패스합니다(명시적 정책)."
+)
+
+#: 🔴 **후속 모드에 추천을 연결하지 않는다** (6-AL §5).
+_FOLLOWUP_NO_RANKING = (
+    "🔴 **이 모드에는 자원 보존 추천(resource-preservation v1)을 연결하지"
+    " 않았습니다** — 그 기준은 패를 쓰는 행동을 불리하게 보므로, 후속 전개의"
+    " 가지치기나 확장 우선순위로 쓰면 후속 전개를 찾지 못합니다. 아래는"
+    " **기준점 대비 실제 자원 변화**이고 실전 강도 순서가 아닙니다."
+)
+
+
+def _baseline_of(outcome, candidate):
+    """
+    그 후속 후보가 **어느 기준점에서 출발했는가.**
+
+    🔴 **경로의 앞부분으로 맞춘다** — 최초 도달 걸음까지의 경로가 같은
+    기준점이 그것이다. 못 찾으면 ``None`` 이고, 그때는 비교하지 않는다
+    (없는 기준점을 지어내지 않는다).
+    """
+    reached = getattr(candidate.meta, "reached_at", 0)
+    if not reached:
+        return None
+    head = tuple(
+        step.action_key for step in candidate.path[:reached]
+    )
+    for one in outcome.baselines:
+        if tuple(step.action_key for step in one.path) == head:
+            return one
+    return None
+
+
+def _followup_actions_ko(outcome, candidate, repository=None) -> str:
+    """기준점 **뒤에** 실제로 한 행동들."""
+    reached = getattr(candidate.meta, "reached_at", 0)
+    bits = []
+    for step in candidate.path[reached:]:
+        picked = " · ".join(
+            _card_ko(card_id, repository)
+            for ask in step.choices
+            for card_id in ask.chosen_card_ids
+        )
+        bits.append(_kind_ko(step.kind) + (f"({picked})" if picked else ""))
+    return " → ".join(bits) or "없음"
+
+
+def _followup_brief(outcome, repository=None) -> "list[str]":
+    """
+    **후속 전개 요약** — 기본 응답에 들어가는 몇 줄 (Phase 6-AL §6).
+
+    🔴 ``agent`` 를 import 하지 않는다 — 결과의 **모양만** 읽는다.
+    """
+    if not getattr(outcome, "continues", False):
+        return []
+    lines = ["", "  후속 전개 — 목표에 도달한 뒤 더 간 것", _RULE_THIN]
+    lines.append("    최초 목표 도달: "
+                 + ("예 — 기준점 "
+                    f"{len(outcome.baselines)}개" if outcome.baselines
+                    else "🔴 **아니오** — 기준점을 찾지 못했습니다"))
+    verified = outcome.verified_continued
+    lines.append(f"    재생 검증된 후속 후보 {len(verified)}개"
+                 f" (모은 후속 후보 {len(outcome.continued_results)}개)")
+    if not outcome.continued_results:
+        lines.append("    🔴 **후속 후보를 찾지 못했습니다** — 아래 `후속"
+                     " 전개 메모` 와 `지원 범위` 를 보십시오. 최초 도달"
+                     " 결과는 그대로 남아 있습니다.")
+    for one in verified:
+        base = _baseline_of(outcome, one)
+        lines.append("")
+        lines.append(f"    [결과 {one.index}] 기준점 걸음"
+                     f" {one.meta.reached_at} 뒤에 더 한 것:"
+                     f" {_followup_actions_ko(outcome, one, repository)}")
+        lines.append(f"      비흐름 후속 행동 {one.meta.followup_actions}회"
+                     f" (흐름 {one.meta.followup_flow}회는 세지 않았습니다)"
+                     f" · 멈춘 이유: "
+                     + _STOP_KO.get(one.meta.stop.value, one.meta.stop.value))
+        lines.append("      최종 상태에 목표 카드: "
+                     + ("남아 있습니다" if one.goal_kept else
+                        "🔴 **남아 있지 않습니다** (후속 전개에서 소재나"
+                        " 비용으로 썼습니다) — 최초 도달 기록은 그대로입니다"))
+        if base is None:
+            lines.append("      ⚠️ 기준점을 찾지 못해 자원 변화를 비교하지"
+                         " 않았습니다.")
+            continue
+        lines.append(f"      기준점(결과 {base.index}) 대비 자원 변화")
+        for line in _compare_lines((base, one), repository):
+            lines.append("    " + line)
+    lines.append("")
+    lines.append(f"    {_FOLLOWUP_SCOPE}")
+    lines.append(f"    {_FOLLOWUP_NO_RANKING}")
+    if outcome.followup_notes:
+        lines.append(f"    후속 전개에서 멈춘 자리 {len(outcome.followup_notes)}건"
+                     " — 상세 기록에 그대로 있습니다.")
+    return lines
+
+
+def _followup_detail(outcome, repository=None) -> "list[str]":
+    """**후속 전개 상세** — 기준점 · 전체 경로 · 예산 · 검증 한계."""
+    if not getattr(outcome, "continues", False):
+        return []
+    budget = outcome.budget
+    lines = ["", "  후속 전개 (기준점과 전체 경로)", _RULE_THIN]
+    lines.append(f"    {_FOLLOWUP_SCOPE}")
+    lines.append(f"    {_FOLLOWUP_NO_RANKING}")
+    lines.append(f"    쓴 예산 — 후속 비흐름 행동 상한"
+                 f" {budget.max_followup_actions}회 · 기준점 상한"
+                 f" {budget.max_baselines}개 · 후속 후보 상한"
+                 f" {budget.max_results}개 · 깊이 {budget.max_depth} · 노드"
+                 f" {budget.max_nodes} · {budget.max_seconds:g}초 · 재생"
+                 f" {budget.max_rerun_seconds:g}초")
+    lines.append("    🔴 **기준점 보관과 후속 후보 보관은 역할이 다릅니다** —"
+                 " 기준점을 모으는 것이 후속 후보의 상한을 먹지 않습니다.")
+    lines.append("    🔴 **예산은 기준점마다 새로 시작하지 않습니다** — 깊이"
+                 " 우선이므로 한 기준점에서 예산이 소진될 수 있고, 그때"
+                 " 돌려준 후보는 가능한 전부가 아닙니다.")
+
+    for one in outcome.results:
+        lines.append("")
+        role = "기준점 (최초 목표 도달)" if one.is_baseline else "후속 후보"
+        lines.append(f"    [결과 {one.index}] {role}")
+        lines.append(f"      최초 도달 걸음: {one.meta.reached_at or '알 수 없음'}")
+        if one.meta.merged_arrivals:
+            lines.append("      🔴 같은 최종 상태로 합쳐진 다른 경로의 최초"
+                         " 도달 걸음: "
+                         + " · ".join(str(i)
+                                      for i in one.meta.merged_arrivals)
+                         + " (대표는 걸음 수 → 행동 열쇠 → 선택 순서로"
+                           " 골랐고, 합쳐진 도달 이력은 지우지 않았습니다)")
+        lines.append(f"      비흐름 후속 행동 {one.meta.followup_actions}회 ·"
+                     f" 흐름 {one.meta.followup_flow}회 (세지 않음)")
+        lines.append("      멈춘 이유: "
+                     + _STOP_KO.get(one.meta.stop.value, one.meta.stop.value))
+        lines.append("      최종 상태에 목표 카드: "
+                     + ("남아 있습니다" if one.goal_kept
+                        else "🔴 남아 있지 않습니다"))
+        lines.append("      전체 경로 (기준점 앞 | 기준점 뒤)")
+        reached = one.meta.reached_at
+        for step in one.path:
+            where = "기준점 앞" if step.order <= reached else "기준점 뒤"
+            lines.append(f"        {step.order}. [{where}] {step.kind}"
+                         f" {step.action_key}")
+            for ask in step.choices:
+                lines.append(f"           선택 {ask.describe_ko()}")
+        if one.rerun is None:
+            lines.append("      재생: ⚠️ 돌리지 못했습니다 — 🔴 검증되지"
+                         " 않았습니다.")
+        else:
+            lines.append(
+                f"      재생: {_rerun_state_ko(one)}"
+                f"\n        최초 도달 확인"
+                f" {one.rerun.first_arrival_confirmed}"
+                f" (걸음 {one.rerun.first_arrival_at or reached}) · 최종 판"
+                f" 일치 {one.rerun.matches_search} · 자원 요약 일치"
+                f" {one.resources_match} · 최종 목표 유지"
+                f" {one.rerun.goal_kept}"
+            )
+    lines.append("")
+    lines.append("    🔴 검증 한계")
+    lines.append("      - 돌려준 후속 후보가 **가능한 전부가 아닙니다** —"
+                 " 후속 행동 상한 · 기준점 상한 · 후속 후보 상한 · 깊이 ·"
+                 " 노드 · 시간 · 선택 조합이 모두 남은 길을 가립니다.")
+    lines.append("      - **지원하지 않아 후보가 되지 못한 수**가 있으면"
+                 " `지원 범위` 에 적혀 있습니다 — 그 수가 가능했다면 다른"
+                 " 후속이 있었을 수 있습니다.")
+    lines.append("      - 후속 모드의 중복 제거는 **목표 도달 이력과 남은"
+                 " 후속 예산**을 열쇠에 넣습니다 (같은 상태라도 더 갈 수"
+                 " 있는 쪽을 버리지 않기 위해서). 그 대가로 중복 제거가"
+                 " 약해져 같은 판이 여러 노드로 남습니다.")
+    lines.append("      - 재생 실패 · 예외 · 시간 초과 후보는 **검증 성공으로"
+                 " 세지 않습니다** (위 상태 칸을 보십시오).")
+    return lines
+
+
 def _ranking_brief(ranking) -> "list[str]":
     """
     **추천 요약** — 기본 응답에 들어가는 몇 줄 (Phase 6-AK §4).
@@ -1417,6 +1609,8 @@ def render_multi_search_brief(outcome, repository=None, ranking=None) -> str:
     #: 🔴 **추천은 탐색·재생이 끝난 뒤의 독립 단계다** (6-AK). 주지 않으면
     #: 6-AJ 와 한 글자도 다르지 않다.
     lines.extend(_ranking_brief(ranking))
+    #: 🔴 **후속 모드의 절** (6-AL). 후속 모드가 아니면 한 줄도 붙지 않는다.
+    lines.extend(_followup_brief(outcome, repository))
 
     shown = outcome.verified_results or outcome.results
     lines.append("")
@@ -1564,6 +1758,7 @@ def render_multi_search(outcome, repository=None, setup=None,
     lines.append("  결과들의 차이 (검증된 것만)")
     lines.extend(_compare_lines(outcome.verified_results, repository))
     lines.extend(_ranking_detail(ranking))
+    lines.extend(_followup_detail(outcome, repository))
 
     for label, notes in (
         ("범위 밖으로 둔 분기", outcome.out_of_scope),
