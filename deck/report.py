@@ -1316,22 +1316,65 @@ _FOLLOWUP_NO_RANKING = (
 )
 
 
+def _choice_key(ask) -> tuple:
+    """
+    해결 중 선택 **하나**의 식별값 (Phase 6-AM §2).
+
+    🔴 **경로 재현에 필요한 것만, 값으로** 센다 — 몇 번째 물음인가
+    (``index``), 어느 **인스턴스**를 골랐나 (``chosen``), 그것이 어느
+    카드였나 (``chosen_card_ids``). 재생이 각본으로 쓰는 것이 바로
+    ``chosen`` 이므로, 이 셋이 같으면 같은 선택을 다시 한 것이다.
+
+    🔴 **표시 문구나 ``repr`` 에 기대지 않는다** — ``label`` 과
+    ``describe_ko()`` 는 사람이 읽는 말이고 판정에 쓰지 않는다.
+    """
+    return (
+        getattr(ask, "index", -1),
+        tuple(getattr(ask, "chosen", ()) or ()),
+        tuple(getattr(ask, "chosen_card_ids", ()) or ()),
+    )
+
+
+def _path_key(path) -> tuple:
+    """
+    경로 하나의 식별값 — **행동과 해결 중 선택을 함께** (Phase 6-AM §2).
+
+    🔴 **행동 열쇠만으로는 모자란다.** 같은 효과 발동이라도 해결 중 고른
+    카드가 다르면 **다른 자리에 도달**하므로, 선택을 빼고 맞추면 후속
+    후보가 **엉뚱한 기준점**에 이어지고 자원 변화가 다른 경로를 기준으로
+    계산된다 (6-AL 의 결함).
+    """
+    return tuple(
+        (
+            getattr(step, "order", index + 1),
+            getattr(step, "kind", ""),
+            tuple(getattr(step, "action_key", ()) or ()),
+            tuple(_choice_key(ask) for ask in getattr(step, "choices", ())),
+        )
+        for index, step in enumerate(path)
+    )
+
+
 def _baseline_of(outcome, candidate):
     """
     그 후속 후보가 **어느 기준점에서 출발했는가.**
 
-    🔴 **경로의 앞부분으로 맞춘다** — 최초 도달 걸음까지의 경로가 같은
-    기준점이 그것이다. 못 찾으면 ``None`` 이고, 그때는 비교하지 않는다
-    (없는 기준점을 지어내지 않는다).
+    🔴 **경로의 앞부분으로 맞춘다** — 최초 도달 걸음까지의 **행동과 해결 중
+    선택**이 같은 기준점이 그것이다 (:func:`_path_key`).
+
+    🔴 **못 찾으면 ``None``** 이고, 그때는 비교하지 않는다 — 임의의 첫
+    기준점으로 대체하지 않는다(그러면 틀린 자원 변화가 표시된다). 후속
+    경로 자체는 그대로 남는다.
+
+    🔴 **결과 순서에 기대지 않는다** — 값으로 맞추므로 정렬 · 대표 교체 ·
+    중복 병합 뒤에도 연결이 바뀌지 않는다.
     """
     reached = getattr(candidate.meta, "reached_at", 0)
     if not reached:
         return None
-    head = tuple(
-        step.action_key for step in candidate.path[:reached]
-    )
+    head = _path_key(candidate.path[:reached])
     for one in outcome.baselines:
-        if tuple(step.action_key for step in one.path) == head:
+        if _path_key(one.path) == head:
             return one
     return None
 

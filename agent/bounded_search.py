@@ -2676,26 +2676,62 @@ class BoundedSearch:
                     held, seat=duel.to_act, viewer=self.goal.seat
                 ),
             )
-        if node.reached_at and self._followups_left(node) <= 0:
-            #: 🔴 **후속 행동 상한에 닿았다** — 더 펼치지 않는다.
+        #: 🔴 **상한은 새 비흐름 행동만 막는다** (Phase 6-AM §1).
+        #:
+        #: 6-AL 은 상한에 닿으면 이 자리에서 ``return None`` 했다. 그러면
+        #: 마지막 허용 비흐름 행동 뒤에 **아직 처리할 유발 기회**가 남아
+        #: 있을 때, 비용으로 세지 않는 **패스까지 막혀** 정리된 후속 후보가
+        #: 누락됐다 — 실제로 필요한 비흐름 행동은 1회인데 상한 2를 줘야
+        #: 결과가 나왔다.
+        #:
+        #: 🔴 **흐름 처리는 계속한다.** 그래도 ``end_phase`` 는 아래 고리가
+        #: 그대로 건너뛰므로 **같은 턴 메인 페이즈 범위는 그대로**이고,
+        #: 깊이 · 노드 · 시간 · 중복 제거 · 필수 처리 상한도 그대로 돈다.
+        flow_only = bool(node.reached_at) and self._followups_left(node) <= 0
+        if flow_only:
             ledger.note(
                 ledger.budget_hit,
                 f"max_followup_actions={self.budget.max_followup_actions}",
             )
+            in_scope_flow = [
+                action for action in legal.allowed
+                if action.kind is not PlayerActionKind.END_PHASE
+                and action.kind.value in FLOW_ACTION_KINDS
+            ]
+            settled_here, why_here = _is_settled(duel, self.goal.seat, legal)
+            if not in_scope_flow:
+                #: 🔴 **왜 멈추는지 적는다** (§1-H) — 정리되지 않은 채
+                #: 멈췄는지, 이미 정리된 자리였는지를 가른다.
+                ledger.note(
+                    ledger.followup_notes,
+                    f"기준점(걸음 {node.reached_at}) 뒤에서 비흐름 행동"
+                    f" {node.followups}회로 상한"
+                    f" max_followup_actions={self.budget.max_followup_actions}"
+                    " 에 닿았고, 이번 범위에서 할 수 있는 흐름 처리(패스)가"
+                    " 없어 여기서 멈췄습니다"
+                    + ("." if settled_here
+                       else f" — 🔴 아직 정리되지 않았습니다 ({why_here})."),
+                )
+                return None
             ledger.note(
                 ledger.followup_notes,
                 f"기준점(걸음 {node.reached_at}) 뒤에서 비흐름 행동"
                 f" {node.followups}회로 상한"
                 f" max_followup_actions={self.budget.max_followup_actions}"
-                " 에 닿아 더 펼치지 않았습니다.",
+                " 에 닿아 **새 비흐름 행동은 더하지 않고**, 엔진이 허가한"
+                " 흐름 처리(패스)만 이어 갑니다 — 흐름 행동은 후속 행동"
+                " 수에 세지 않습니다.",
             )
-            return None
 
         ordered = sorted(legal.allowed, key=_order_key)
         children: list[_Node] = []
         for action in ordered:
             if action.kind is PlayerActionKind.END_PHASE:
                 ledger.note(ledger.out_of_scope, OUT_OF_TURN_SCOPE)
+                continue
+            if flow_only and action.kind.value not in FLOW_ACTION_KINDS:
+                #: 🔴 **새 비흐름 행동을 차단한다** (§1-A). 상한을 넘는
+                #: 행동은 **적용하지도 않는다** — 노드를 만들지 않는다.
                 continue
             if ledger.nodes >= self.budget.max_nodes:
                 ledger.note(ledger.budget_hit, f"max_nodes={self.budget.max_nodes}")
@@ -2828,14 +2864,20 @@ class BoundedSearch:
                             " 펼칩니다.",
                         )
                     if child_followups >= self.budget.max_followup_actions:
-                        #: 상한에 닿은 자리는 더 펼치지 않는다 (위 메모는
-                        #: 다음 :meth:`_open` 이 아니라 여기서 끝낸다).
+                        #: 🔴 **상한에 닿았다는 사실만 적는다** (Phase 6-AM
+                        #: §1). 6-AL 은 여기서 ``continue`` 해서 자식을 아예
+                        #: 쌓지 않았고, 그래서 그 자리에 남은 **흐름 처리
+                        #: (패스)** 가 영원히 실행되지 않았다. 지금은 쌓고,
+                        #: 그 노드를 열 때 :meth:`_open` 의 ``flow_only``
+                        #: 가 **새 비흐름 행동만** 막는다.
+                        #:
+                        #: 🔴 두 검사 자리를 **함께** 고쳤다 — 한쪽만 고치면
+                        #: 다른 쪽이 같은 누락을 만든다.
                         ledger.note(
                             ledger.budget_hit,
                             "max_followup_actions="
                             f"{self.budget.max_followup_actions}",
                         )
-                        continue
                     if self.budget.dedup:
                         admitted = admit(
                             ledger.seen,
