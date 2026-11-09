@@ -86,6 +86,7 @@ from engine.effect.definition import (
     EffectImplementationLookup,
     EmptyImplementationLookup,
     ExecutionAvailability,
+    NoCandidateScope,
     execution_availability,
 )
 from engine.effect.operation import (
@@ -361,6 +362,25 @@ class EffectExecutionError(RuntimeError):
     :attr:`ResolutionStatus.EXECUTION_ERROR` 로 올라간다. 일어나서는 안
     되는 경우이고, 일어났다면 결함이다.
     """
+
+
+@dataclass(frozen=True, slots=True)
+class _VacantTarget:
+    """
+    **고를 후보가 하나도 없었던 대상** (Phase 6-AO 후속).
+
+    :class:`~engine.effect.definition.NoCandidateScope.TARGET_OPERATIONS` 를
+    선언한 효과에서만 만들어진다. 계획 단계가 이것을 보고 **그 대상을 쓰는
+    조작만** 건너뛰고 나머지는 그대로 계획한다.
+
+    🔴 **가짜 선택이 아니다.** 빈 :class:`~engine.cost.Selection` 을 문맥에
+    넣어 "0장을 골랐다" 로 꾸미면 뒤의 조작이 0장을 소환하려 들고, 기록에는
+    고르지 않은 선택이 남는다. 그래서 선택을 만들지 않고 **그 대상이
+    비었다는 사실**을 따로 들고 다닌다.
+    """
+
+    ref: "TargetRef"
+    note: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -689,9 +709,11 @@ class EffectExecutor:
                 "읽기 전용이라 적용할 수 없습니다."
             )
 
-        plan = self._plan(state, definition, context)
-        if isinstance(plan, EffectResult):
-            return plan  # 계획 실패 — 판은 그대로다
+        planned = self._plan(state, definition, context)
+        if isinstance(planned, EffectResult):
+            return planned  # 계획 실패 — 판은 그대로다
+        #: 🔴 **하지 않은 일의 설명을 함께 받는다** (Phase 6-AO 후속).
+        plan, skipped = planned
 
         applied: list[AppliedOperation] = []
         deltas: list[StateDelta] = []
@@ -720,10 +742,25 @@ class EffectExecutor:
                 if note not in unchecked:
                     unchecked.append(note)
 
+        said = f"{definition.effect_ref} 를 적용했습니다 ({len(applied)}건)."
+        if skipped:
+            #: 🔴 **한 일과 하지 않은 일을 한 문장에 같이 적는다.** 읽는
+            #: 쪽이 "소환이 있었다" 로 읽으면 안 된다.
+            said = said + " " + " ".join(skipped)
+        if skipped and not applied:
+            #: 🔴 **아무 일도 남지 않았으면 "일을 하지 않았다" 다.** 조작
+            #: 묶음 전체가 그 대상을 쓰는 효과가 이 자리다 — 범위를
+            #: 선언했어도 결과는 전체 생략과 같아야 한다.
+            return EffectResult(
+                ResolutionStatus.RESOLVED_WITHOUT_EFFECT,
+                ValidationCode.OK,
+                f"{definition.effect_ref} 는 해결되었지만 일을 하지 "
+                f"않았습니다 — " + " ".join(skipped),
+            )
         result = EffectResult(
             ResolutionStatus.RESOLVED,
             ValidationCode.OK,
-            f"{definition.effect_ref} 를 적용했습니다 ({len(applied)}건).",
+            said,
             applied=tuple(applied),
             deltas=tuple(deltas),
             # 의미를 주장한 일들이 **보지 않은 규칙**을 그대로 들고 나간다.
@@ -754,10 +791,14 @@ class EffectExecutor:
         state: GameState,
         definition: EffectDefinition,
         context: ResolutionContext,
-    ) -> "list[_Step] | EffectResult":
+    ) -> "tuple[list[_Step], tuple[str, ...]] | EffectResult":
         """
         할 일을 카드 단위까지 확정한다. 하나라도 걸리면 :class:`EffectResult`
         를 돌려주고, 그때 판은 아직 손대지 않은 상태다.
+
+        🔴 **돌려주는 것이 둘이다** (Phase 6-AO 후속) — 계획한 일들과,
+        **후보가 없어 건너뛴 대상에 대한 설명들**. 뒤쪽은 결과 문장에
+        그대로 실린다: 한 일과 하지 않은 일이 기록에서 갈려야 한다.
         """
         if context.effect_ref != definition.effect_ref:
             return _fail(
@@ -779,6 +820,10 @@ class EffectExecutor:
         if condition is not None:
             return condition
 
+        #: 🔴 **후보가 없어 비어 있는 대상들** (Phase 6-AO 후속). 선택을
+        #: 묻지 않는 효과는 언제나 비어 있고, 아래 조작 고리가 한 글자도
+        #: 달라지지 않는다.
+        vacant: tuple[_VacantTarget, ...] = ()
         pending = context.pending_targets(definition)
         if pending:
             # 🔴 **여기가 "해결 중 선택" 의 자리다** (Phase 6-Z).
@@ -792,7 +837,7 @@ class EffectExecutor:
             asked = self._ask_for_choice(state, definition, context, pending)
             if isinstance(asked, EffectResult):
                 return asked
-            context = asked
+            context, vacant = asked
 
         declared = self._check_declarations(
             definition, context, self._read_quantity(state, context)
@@ -812,8 +857,25 @@ class EffectExecutor:
         # 않는다 — 선언한 수도 앞선 결과도 판의 모양이 아니다.
         values = ExecutionValues(declarations=declared)
 
+        vacant_refs = {empty.ref for empty in vacant}
         steps: list[_Step] = []
         for index, operation in enumerate(definition.operations):
+            if vacant_refs and set(operation.target_refs) & vacant_refs:
+                #: 🔴 **그 대상을 쓰는 일만 건너뛴다** (Phase 6-AO 후속).
+                #: 어느 일이 그 대상을 쓰는지는 짐작하지 않고
+                #: :attr:`~engine.effect.operation.Operation.target_refs` 가
+                #: 답한다 — 실행기에 카드 ID 가 들어가지 않는다.
+                #:
+                #: 번호는 밀리지 않고 "하지 않았다" 가 그 자리에 들어간다 —
+                #: 아래 ``_check_guards`` 의 거짓 갈래와 **같은 처리**다.
+                values = values.with_result(
+                    OperationResult(
+                        operation_index=index,
+                        outcome=OperationOutcome.NOT_APPLIED,
+                    )
+                )
+                continue
+
             waiting = self._check_requirements(definition, index, values)
             if waiting is not None:
                 return waiting
@@ -877,7 +939,7 @@ class EffectExecutor:
             steps[-1] = replace(
                 steps[-1], blind=steps[-1].blind + tuple(unshuffled)
             )
-        return steps
+        return steps, tuple(empty.note for empty in vacant)
 
     def _shuffle_searched_decks(
         self,
@@ -1076,7 +1138,7 @@ class EffectExecutor:
         definition: EffectDefinition,
         context: ResolutionContext,
         pending: "tuple[TargetRef, ...]",
-    ) -> "ResolutionContext | EffectResult":
+    ) -> "tuple[ResolutionContext, tuple[_VacantTarget, ...]] | EffectResult":
         """
         아직 정해지지 않은 선택을 **지금** 묻는다 (Phase 6-Z).
 
@@ -1096,6 +1158,11 @@ class EffectExecutor:
 
         🔴 **판을 바꾸지 않는다.** 이 함수가 돌려주는 것은 선택이 더해진
         **새 문맥**이고, 판은 계획이 전부 끝난 뒤에야 바뀐다 (2-AH).
+
+        🔴 **돌려주는 것이 둘이다** (Phase 6-AO 후속) — 새 문맥과,
+        **고를 후보가 하나도 없었던 대상들**(:class:`_VacantTarget`). 뒤쪽은
+        범위를 선언한 효과에서만 생기고 (:class:`NoCandidateScope`), 계획이
+        그것을 보고 그 대상을 쓰는 조작만 건너뛴다.
         """
         if self._chooser is None:
             return _fail(
@@ -1107,6 +1174,7 @@ class EffectExecutor:
 
         by_ref = {binding.ref: binding for binding in definition.targets}
         added: list[TargetSelection] = []
+        vacant: list[_VacantTarget] = []
         for ref in pending:
             binding = by_ref.get(ref)
             if binding is None or binding.spec.choice is None:  # pragma: no cover
@@ -1157,6 +1225,12 @@ class EffectExecutor:
                 short = self._short_selection(
                     definition, binding, resolver, context, found, picked
                 )
+                if isinstance(short, _VacantTarget):
+                    #: 🔴 **선택을 만들지 않는다.** 이 대상은 비었고, 그
+                    #: 사실만 들고 간다 — 빈 선택을 문맥에 넣으면 뒤의
+                    #: 조작이 "0장을 골랐다" 를 수행하려 든다.
+                    vacant.append(short)
+                    continue
                 if short is not None:
                     return short
             selection = Selection(picked)
@@ -1174,7 +1248,10 @@ class EffectExecutor:
                 )
             added.append(TargetSelection(ref, selection))
 
-        return replace(context, selections=context.selections + tuple(added))
+        return (
+            replace(context, selections=context.selections + tuple(added)),
+            tuple(vacant),
+        )
 
     def _short_selection(
         self,
@@ -1184,7 +1261,7 @@ class EffectExecutor:
         context: ResolutionContext,
         found,
         picked: tuple,
-    ) -> "EffectResult | None":
+    ) -> "EffectResult | _VacantTarget | None":
         """
         **최소 장수를 못 채운 선택의 원인을 가른다** (Phase 6-AD 후속2).
 
@@ -1195,6 +1272,12 @@ class EffectExecutor:
         후보 자격을 **판정하지 못했다**            모름 → ``UNCHECKED_RULES``
         고를 후보가 **없었다** (전부 확정 불가)    선언했으면 **정상 해결**
         =====================================  ===============================
+
+        🔴 **마지막 줄의 "정상 해결" 이 두 갈래다** (Phase 6-AO 후속). 선언한
+        범위(:class:`~engine.effect.definition.NoCandidateScope`)가 말한다 —
+        조작 묶음 **전체**를 생략하면 :class:`EffectResult` 를 그대로
+        돌려주고, **그 대상을 쓰는 일만** 생략하면 :class:`_VacantTarget` 을
+        돌려주어 계획이 계속된다.
 
         🔴 **모름을 정상 불발로 바꾸지 않는다.** 가운데 줄이 그 금지선이고,
         선언(``ResolutionSkip``)이 있어도 이 줄은 생략으로 가지 않는다.
@@ -1261,15 +1344,26 @@ class EffectExecutor:
         if skip is None or not skip.when_no_candidate:
             #: 선언하지 않은 효과는 예전 그대로 거절된다 (ADR-006).
             return None
+        counted = (
+            f"{ref} 에 고를 수 있는 후보가 없습니다 (후보 "
+            f"{found.possible_count}장을 전부 확인했습니다, 필요 {minimum}장)"
+        )
+        if skip.no_candidate_scope is NoCandidateScope.TARGET_OPERATIONS:
+            #: 🔴 **그 대상을 쓰는 일만 생략한다** (Phase 6-AO 후속). 공식
+            #: 해결 함수가 ``if #g>0`` **밖에서** 계속 일하는 효과이고, 그
+            #: 사실을 정의가 선언해 두었다 (:class:`NoCandidateScope`).
+            return _VacantTarget(
+                ref,
+                f"{counted} — 그 대상을 쓰는 일은 하지 않고 나머지 일은 "
+                f"그대로 수행했습니다. 공식 처리: {skip.basis}",
+            )
         #: 🔴 **고를 후보가 하나도 없고 전부 확인했다** — 공식 스크립트가
         #: 그때 조작 없이 끝내는 것을 읽어 선언해 둔 효과다.
         return EffectResult(
             ResolutionStatus.RESOLVED_WITHOUT_EFFECT,
             ValidationCode.OK,
             f"{definition.effect_ref} 는 해결되었지만 일을 하지 않았습니다 — "
-            f"{ref} 에 고를 수 있는 후보가 없습니다 (후보 "
-            f"{found.possible_count}장을 전부 확인했습니다, 필요 {minimum}장). "
-            f"공식 처리: {skip.basis}",
+            f"{counted}. 공식 처리: {skip.basis}",
         )
 
     def _check_declarations(

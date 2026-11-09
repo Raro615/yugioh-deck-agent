@@ -161,6 +161,58 @@ class EffectDefinitionError(ValueError):
     """정의의 **모양**이 틀렸다. 규칙 위반이 아니다."""
 
 
+class NoCandidateScope(str, Enum):
+    """
+    🔴 **고를 후보가 없을 때 "무엇을" 생략하는가** (Phase 6-AO 후속).
+
+    :attr:`ResolutionSkip.when_no_candidate` 는 "생략하고도 정상 해결된다"
+    까지만 말했고, **생략의 범위**를 말하지 않았다. 그 범위가 공식
+    스크립트마다 다르다 — 그래서 선언으로 가른다.
+
+    ``c93920420.lua`` 의 ``s.spop1`` (성유물－『성장』 ②)::
+
+        local g=Duel.SelectMatchingCard(...)
+        if #g>0 then
+            Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP)
+        end
+        -- 끝. 그 뒤에 하는 일이 없다.
+
+    ``c57835716.lua`` 의 ``s.spop`` (오르페골 디베르 ①)::
+
+        local g=Duel.SelectMatchingCard(...)
+        if #g>0 then
+            Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP)
+        end
+        local e1=Effect.CreateEffect(e:GetHandler())   -- ← if 밖이다
+        ...
+        Duel.RegisterEffect(e1,tp)
+
+    둘의 ``if #g>0`` 은 **같은 모양**인데 그 뒤가 다르다. 앞쪽은 소환이
+    마지막 일이라 "소환을 생략" 과 "효과 전체를 생략" 이 같은 결과가 되고,
+    뒤쪽은 **다르다** — 소환하지 못해도 제한은 걸린다.
+
+    🔴 **일괄 완화가 아니다.** 기본값은 :attr:`WHOLE_EFFECT` 이고, 그것이
+    6-AO 까지의 유일한 동작이다. 선언하지 않은 효과는 한 글자도 달라지지
+    않는다 (ADR-006 과 같은 태도 — 적지 않은 것은 열리지 않는다).
+    """
+
+    WHOLE_EFFECT = "whole_effect"
+    """
+    **조작 묶음 전체**를 생략하고 정상 해결한다 (기본값).
+
+    공식 해결 함수가 ``if #g>0`` 밖에서 하는 일이 **없을 때** 참이다.
+    """
+    TARGET_OPERATIONS = "target_operations"
+    """
+    **그 대상을 쓰는 조작만** 생략하고 나머지는 그대로 수행한다.
+
+    공식 해결 함수가 ``if #g>0`` **밖에서** 계속 일할 때 참이다. 어느
+    조작이 "그 대상을 쓰는" 것인지는 짐작하지 않고
+    :attr:`~engine.effect.operation.Operation.target_refs` 가 답한다 —
+    실행기에 카드 ID 를 적지 않는다.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class ResolutionSkip:
     """
@@ -201,6 +253,15 @@ class ResolutionSkip:
     🔴 **"정책이 고르지 않았다" 와 다르다.** 합법 후보가 있는데 빈 선택이
     돌아온 것은 정책 · 호출의 잘못이고 그대로 거절된다. 후보 자격을
     **판정하지 못한** 경우도 생략이 아니다 — 모름이다.
+
+    🔴 **무엇을 생략하는가는 :attr:`no_candidate_scope` 가 말한다.**
+    """
+    no_candidate_scope: NoCandidateScope = NoCandidateScope.WHOLE_EFFECT
+    """
+    :attr:`when_no_candidate` 가 참일 때 **생략의 범위** (Phase 6-AO 후속).
+
+    기본값은 :attr:`~NoCandidateScope.WHOLE_EFFECT` — 6-AO 까지의 유일한
+    동작이고, 선언하지 않은 효과는 한 글자도 달라지지 않는다.
     """
     basis: str = ""
     """어느 스크립트의 어느 줄에서 읽었는가. **비울 수 없다.**"""
@@ -217,14 +278,33 @@ class ResolutionSkip:
                 "줄에서 읽었는지 적어야 합니다 (거절을 정상 해결로 옮기는 "
                 "선언이므로, 근거가 없으면 그냥 완화입니다)."
             )
+        #: 🔴 **범위만 적고 조건을 적지 않을 수 없다.** 그러면 읽는 쪽은
+        #: "후보가 없을 때 일부만 생략한다" 고 읽는데 실제로는 그 분기에
+        #: 들어가지도 않는다 — 적은 것과 동작이 갈리는 자리다.
+        if (
+            self.no_candidate_scope is not NoCandidateScope.WHOLE_EFFECT
+            and not self.when_no_candidate
+        ):
+            raise ValueError(
+                "when_no_candidate 를 적지 않고 생략 범위만 적었습니다 — "
+                f"{self.no_candidate_scope.value} 는 '후보가 없을 때' 의 "
+                "범위이므로 그 조건이 참이어야 뜻이 있습니다."
+            )
 
     def canonical_state(self) -> tuple:
-        return (self.when_condition_false, self.when_no_candidate)
+        #: 🔴 **범위도 정규 표현에 들어간다** (Phase 6-AO 후속). 범위만
+        #: 다른 두 선언은 **다른 선언**이다 — 빼면 같은 것으로 읽힌다.
+        return (
+            self.when_condition_false,
+            self.when_no_candidate,
+            self.no_candidate_scope.value,
+        )
 
     def to_dict(self) -> dict:
         return {
             "when_condition_false": self.when_condition_false,
             "when_no_candidate": self.when_no_candidate,
+            "no_candidate_scope": self.no_candidate_scope.value,
             "basis": self.basis,
         }
 
@@ -233,7 +313,13 @@ class ResolutionSkip:
         if self.when_condition_false:
             bits.append("발동 조건이 거짓")
         if self.when_no_candidate:
-            bits.append("고를 후보가 없음")
+            scope = (
+                "고를 후보가 없음 (그 대상을 쓰는 일만 생략)"
+                if self.no_candidate_scope
+                is NoCandidateScope.TARGET_OPERATIONS
+                else "고를 후보가 없음"
+            )
+            bits.append(scope)
         return "해결 시 생략: " + " · ".join(bits)
 
 
@@ -1144,6 +1230,7 @@ __all__ = [
     "EffectDefinitionError",
     "EffectDefinition",
     "ExecutionAvailability",
+    "NoCandidateScope",
     "ResolutionSkip",
     "EffectDefinitionSource",
     "EffectDefinitionRegistry",

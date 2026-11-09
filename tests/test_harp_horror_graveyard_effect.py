@@ -125,6 +125,16 @@ FEATHERMAN = 21844576
 WORLD_LEGACY_TOKEN = 46647145
 
 P0, P1 = 0, 1
+#: 🔴 **손으로 읽은 금지 표에 ``prohibits=True`` 로 있는 실제 카드** —
+#: 파슬 다이너 파키세팔로. ``test_h03`` 이 "확정적으로 부적격" 을 만드는
+#: 수단으로 쓴다.
+PACHYCEPHALO = 42009836
+#: 🔴 **「오르페골」 몬스터인데 특수 소환 가능 여부를 읽지 않은 실제 카드** —
+#: 오르페골 트로이메어 (LINK-2). ``test_h04`` 가 "모름" 을 만드는 수단으로
+#: 쓴다. 🔴 **이 자리의 카드는 등록소가 늘 때마다 바뀐다** — 재는 것은
+#: "읽지 않은 후보는 생략의 근거가 되지 못한다" 이고 특정 카드가 아니다.
+UNREAD_ORCUST = 4055337
+
 DIBER_EFFECT = EffectRef(DIBER, 0)
 
 
@@ -1275,3 +1285,434 @@ def test_g04_the_gate_and_the_candidate_list_agree(repository):
             before = _snapshot(duel)
             assert duel.apply(action).accepted is False
             assert _snapshot(duel) == before
+
+
+# ======================================================================
+# H. 후보 0장과 빈 칸 없음을 **가른다** (Phase 6-AO 후속)
+# ======================================================================
+#: 🔴 **이 절의 판은 전부 "준비된 판" 이다.** 발동과 해결 사이의 카드 이동 ·
+#: 카드 놓기는 **시험이 손으로 만든 조작**이고, 그 자리를 실제 등재된 상대
+#: 카드로 만들 수단이 이 저장소에 없다 (상대 방해는 범위 밖이다). 각
+#: 시험이 그 사실을 자기 docstring 에 적는다.
+#:
+#: 재는 것은 ``c57835716.lua`` 의 ``s.spop`` 제어 흐름 **한 가지**다::
+#:
+#:     if Duel.GetLocationCount(tp,LOCATION_MZONE)<=0 then return end   -- (A)
+#:     local g=Duel.SelectMatchingCard(...)
+#:     if #g>0 then Duel.SpecialSummon(g,...) end                        -- (B)
+#:     local e1=...; Duel.RegisterEffect(e1,tp)                          -- (B 밖)
+#:
+#: (A) 는 ``RegisterEffect`` **앞**이라 효과 전체가 끝나고, (B) 는 소환만
+#: 건너뛴다. 6-AO 는 둘을 같은 처리로 묶어 (B) 에서도 제한이 빠졌다.
+
+
+@pytest.mark.real_card
+def test_h01_the_only_deck_candidate_vanishing_still_registers_the_limit(
+    repository,
+):
+    """
+    🔴 **이 보완의 본문** (요구 ③). 해결 전에 **유일한 덱 후보가 사라지면**
+    소환만 하지 않고 **어둠 속성 제한은 걸린다.**
+
+    6-AO 의 실측 (결함)::
+
+        MZONE    [69811710]        ← 소환 없음 (맞다)
+        REMOVED  [57835716]        ← 비용 유지 (맞다)
+        limits   ()                ← 🔴 **제한 누락 — 이것이 결함이었다**
+
+    🔴 **발동과 해결 사이의 카드 이동은 시험이 손으로 만든 조작이다** —
+    덱의 스켈레촌을 묘지로 옮긴다. 실제 등재된 상대 카드로 이 상황을
+    만들었다고 주장하지 않는다.
+    """
+    duel, _f, grave, _e, _h = _board(
+        repository, mine=(GIRSU,), grave=(DIBER,), deck=(SKELETON,)
+    )
+    action = _diber_offer(duel, grave[0])
+    assert action is not None
+    assert duel.apply(action).accepted is True
+    #: 비용은 **발동 시점**에 이미 치러졌다.
+    assert _zone_ids(duel, Zone.REMOVED) == [DIBER]
+
+    state = duel.state
+    #: 🔴 **시험용 상태 조작** — 유일한 합법 후보를 덱에서 빼낸다.
+    only = [c for c in state.zone(P0, Zone.DECK) if c.card_id == SKELETON][0]
+    state.move(only, Zone.GRAVE, to_player=P0)
+    assert [
+        c.card_id
+        for c in state.zone(P0, Zone.DECK)
+        if c.card_id in (SKELETON, CANNONE, GIRSU)
+    ] == []
+
+    settle_chain(duel)
+
+    #: ① 소환은 없다 — 몬스터 존은 그대로다.
+    assert _zone_ids(duel, Zone.MZONE) == [GIRSU]
+    #: ② 빈 칸은 여전히 있었다 (요구 ③ — (A) 갈래가 아니다).
+    assert len(state.zone(P0, Zone.MZONE)) == 1
+    #: ③ 🔴 **제한은 걸렸다.**
+    active = _limits(duel)
+    assert len(active) == 1, active
+    assert active[0].attribute == "DARK"
+    assert active[0].player == P0
+    assert active[0].source_card_id == DIBER
+    #: ④ 비용은 되돌아오지 않는다.
+    assert _zone_ids(duel, Zone.REMOVED) == [DIBER]
+    #: ⑤ 사용 기록도 그대로다 — 이 턴에 다시 쓸 수 없다.
+    limit = entry_for(DIBER_EFFECT).definition.use_limit
+    key = limit.key_for(P0, DIBER_EFFECT, grave[0])
+    assert state.uses.count(limit.scope, key) == 1
+    #: ⑥ 🔴 **허위 소환 기록이 없다** — 기록과 실제 변화가 일치한다.
+    #: 조작 기록을 **종류로** 센다 (문장으로 세면 제한 설명의 "특수 소환"
+    #: 이라는 낱말에 걸린다 — 실측).
+    kinds = [
+        record.kind.name
+        for event in duel.journal
+        for record in getattr(event, "applied", ())
+    ]
+    assert "SPECIAL_SUMMON" not in kinds, kinds
+    assert "RESTRICT_SPECIAL_SUMMON" in kinds, kinds
+    #: 그리고 기록이 건드린 카드에 스켈레촌이 없다.
+    touched = {
+        instance for event in duel.journal for instance in event.instances
+    }
+    assert only.instance_id not in touched, touched
+
+
+@pytest.mark.real_card
+def test_h02_a_full_monster_zone_at_resolution_still_registers_nothing(
+    repository,
+):
+    """
+    🔴 **(A) 갈래는 달라지지 않았다** (요구 ②). 해결 시 몬스터 존이 가득
+    차면 **소환도 제한도** 없다 — ``return`` 이 ``RegisterEffect`` 앞이다.
+
+    ``test_c04`` 와 **같은 사실**을 재지만, 이쪽은 ``test_h01`` 과 나란히
+    두어 두 갈래가 **서로 다른 답**임을 한자리에서 보인다.
+
+    🔴 발동 뒤 몬스터 존을 채우는 것은 **시험이 손으로 만든 조작**이다.
+    """
+    duel, _f, grave, _e, _h = _board(
+        repository, mine=(GIRSU,), grave=(DIBER,), deck=(SKELETON,)
+    )
+    action = _diber_offer(duel, grave[0])
+    assert action is not None
+    assert duel.apply(action).accepted is True
+
+    state = duel.state
+    for index in range(1, 5):
+        filler = state.create_instance(FEATHERMAN, owner=P0, zone=Zone.MZONE)
+        state.move(
+            filler,
+            Zone.MZONE,
+            to_player=P0,
+            index=index,
+            position=Position.FACEUP_ATTACK,
+        )
+    settle_chain(duel)
+
+    assert _zone_ids(duel, Zone.MZONE).count(SKELETON) == 0
+    #: 🔴 **제한이 없다** — ``test_h01`` 과 갈리는 자리다.
+    assert _limits(duel) == ()
+    #: 비용과 사용 기록은 유지된다.
+    assert _zone_ids(duel, Zone.REMOVED) == [DIBER]
+    limit = entry_for(DIBER_EFFECT).definition.use_limit
+    key = limit.key_for(P0, DIBER_EFFECT, grave[0])
+    assert state.uses.count(limit.scope, key) == 1
+    #: 덱의 스켈레촌은 그대로 남아 있다 — 고르지도 않았다.
+    assert SKELETON in _zone_ids(duel, Zone.DECK)
+
+
+@pytest.mark.real_card
+def test_h03_a_candidate_that_became_ineligible_also_registers_the_limit(
+    repository,
+):
+    """
+    🔴 **후보가 남아 있는데 확정적으로 부적격이 된 경우** (요구 ④).
+
+    후보를 없애지 않고 **엔진이 확정 거부로 답하는 기존 수단**으로 만든다 —
+    상대 필드의 「파슬 다이너 파키세팔로」(42009836) 다. 그 카드는 손으로
+    읽은 금지 표에 ``prohibits=True`` 로 있고
+    (:data:`~engine.summon_restriction.SPECIAL_SUMMON_PROHIBITIONS`),
+    해결 중 후보 관문(``may_be_special_summoned``)이 **모든 후보에 대해
+    ``FALSE``** 를 답한다. 공식 ``s.filter`` 의
+    ``IsCanBeSpecialSummoned`` 가 하는 일이 바로 그것이다.
+
+    🔴 **발동 뒤에 놓는다** — 디베르 ① 의 발동 조건에
+    ``SpecialSummonPermitted`` 가 있어서 그 카드가 먼저 있으면 발동 자체가
+    거절된다 (``test_b03`` 과 같은 자리). 그래서 이 상태 변화도 **시험이
+    손으로 만든 조작**이다.
+
+    🔴 **모름이 아니다.** 후보는 덱에 그대로 있고, 판정은 ``FALSE`` 이며,
+    그래서 "합법 후보 0장" 이다 — 그때도 제한은 걸린다.
+    """
+    duel, _f, grave, _e, _h = _board(
+        repository, mine=(GIRSU,), grave=(DIBER,), deck=(SKELETON, CANNONE)
+    )
+    action = _diber_offer(duel, grave[0])
+    assert action is not None
+    assert duel.apply(action).accepted is True
+
+    state = duel.state
+    #: 🔴 **시험용 상태 조작** — 상대 필드에 파키세팔로를 놓는다.
+    pachy = state.create_instance(PACHYCEPHALO, owner=P1, zone=Zone.MZONE)
+    state.move(
+        pachy,
+        Zone.MZONE,
+        to_player=P1,
+        index=0,
+        position=Position.FACEUP_ATTACK,
+    )
+    settle_chain(duel)
+
+    #: ① 후보는 **덱에 그대로 있다** — 사라져서가 아니라 부적격이다.
+    assert SKELETON in _zone_ids(duel, Zone.DECK)
+    assert CANNONE in _zone_ids(duel, Zone.DECK)
+    #: ② 소환은 없다.
+    assert _zone_ids(duel, Zone.MZONE) == [GIRSU]
+    #: ③ 🔴 **제한은 걸렸다.**
+    assert len(_limits(duel)) == 1
+    assert _limits(duel)[0].attribute == "DARK"
+    #: ④ 비용과 사용 기록은 유지된다.
+    assert _zone_ids(duel, Zone.REMOVED) == [DIBER]
+    limit = entry_for(DIBER_EFFECT).definition.use_limit
+    key = limit.key_for(P0, DIBER_EFFECT, grave[0])
+    assert state.uses.count(limit.scope, key) == 1
+    #: ⑤ 그 판정이 **확정 거부**였다는 것을 같은 관문에 직접 물어 확인한다.
+    #: 🔴 해결기가 쓰는 것과 **같은 관측**을 만든다 — 덱은 가린 자리이므로
+    #: 효과가 선언한 ``looked_at`` 을 열지 않으면 관문의 답이 "보이지
+    #: 않는다" 가 된다 (실측).
+    spec = entry_for(DIBER_EFFECT).definition.targets[0].spec
+    granted = GameStateView.from_state(
+        state, viewer=P0, looked_at=spec.looked_at_zones()
+    )
+    ruling = BoardRuling(granted, OPERATION_RULINGS)
+    candidate = [
+        c for c in state.zone(P0, Zone.DECK) if c.card_id == SKELETON
+    ][0]
+    told = ruling.explain_special_summon(candidate.instance_id)
+    assert told.answer is ConditionResult.FALSE, told.reason
+    assert str(PACHYCEPHALO) in told.reason
+
+
+@pytest.mark.real_card
+def test_h04_an_undetermined_candidate_is_not_absorbed_as_an_empty_pool(
+    repository,
+):
+    """
+    🔴 **모름을 "후보 0장" 으로 접지 않는다** (요구 ⑤).
+
+    해결 전에 합법 후보를 빼고, 그 자리에 **특수 소환 가능 여부를 읽지
+    않은** 「오르페골」 몬스터만 남긴다 — 「오르페골 트로이메어」(4055337)
+    는 :data:`~engine.effect.library.OPERATION_RULINGS` 에 없다.
+
+    그때 답은 ``UNCHECKED_RULES`` 이고 **제한도 걸리지 않는다** — 생략의
+    근거가 "전부 확인했고 0장이다" 인데 그 전제가 거짓이기 때문이다.
+
+    🔴 발동과 해결 사이의 카드 이동은 **시험이 손으로 만든 조작**이다.
+    """
+    duel, _f, grave, _e, _h = _board(
+        repository, mine=(GIRSU,), grave=(DIBER,), deck=(SKELETON, UNREAD_ORCUST)
+    )
+    action = _diber_offer(duel, grave[0])
+    assert action is not None
+    assert duel.apply(action).accepted is True
+
+    state = duel.state
+    #: 🔴 **시험용 상태 조작** — 읽은 후보만 빼낸다. 읽지 않은 후보는 남는다.
+    only = [c for c in state.zone(P0, Zone.DECK) if c.card_id == SKELETON][0]
+    state.move(only, Zone.GRAVE, to_player=P0)
+    assert UNREAD_ORCUST in _zone_ids(duel, Zone.DECK)
+
+    before = _snapshot(duel)
+    settle_chain(duel)
+
+    #: ① 소환도 제한도 없다 — **모름은 생략이 아니다.**
+    assert _zone_ids(duel, Zone.MZONE) == [GIRSU]
+    assert _limits(duel) == ()
+    #: ② 비용과 사용 기록은 유지된다 (발동은 성립했다).
+    assert _zone_ids(duel, Zone.REMOVED) == [DIBER]
+    limit = entry_for(DIBER_EFFECT).definition.use_limit
+    key = limit.key_for(P0, DIBER_EFFECT, grave[0])
+    assert state.uses.count(limit.scope, key) == 1
+    #: ③ 🔴 **판은 그 밖에서 한 글자도 바뀌지 않았다** (섞기만 뺀다 —
+    #: 덱을 들여다보지도 못했다).
+    assert _snapshot(duel) == before
+    #: ④ 그 카드가 **정말 읽지 않은 카드**임을 등록소에 직접 묻는다.
+    assert UNREAD_ORCUST not in OPERATION_RULINGS.card_ids
+
+
+@pytest.mark.real_card
+def test_h05_a_policy_pick_outside_the_pool_is_still_refused(repository):
+    """
+    🔴 **후보 밖 선택도 이 보완에 흡수되지 않는다** (요구 ⑤).
+
+    합법 후보가 있는데 정책이 후보 밖 카드를 고르면 그대로 거절이고, 제한도
+    걸리지 않는다 — ``test_d03`` 과 같은 사실을 **이 보완 뒤에** 다시 잰다
+    (그 자리가 "후보 0장" 쪽으로 새지 않는지가 요점이다).
+    """
+    probe, _f0, _g0, _e0, _h0 = _board(
+        repository, mine=(GIRSU,), grave=(DIBER,), deck=(SKELETON,)
+    )
+    outsider = [
+        c for c in probe.state.zone(P0, Zone.DECK) if c.card_id == FEATHERMAN
+    ][0]
+    duel, _f, grave, _e, _h = _board(
+        repository,
+        mine=(GIRSU,),
+        grave=(DIBER,),
+        deck=(SKELETON,),
+        chooser=_PickExactly((outsider.instance_id,)),
+    )
+    action = _diber_offer(duel, grave[0])
+    assert action is not None
+    assert duel.apply(action).accepted is True
+    settle_chain(duel)
+
+    assert _zone_ids(duel, Zone.MZONE) == [GIRSU]
+    assert _limits(duel) == ()
+    assert _zone_ids(duel, Zone.REMOVED) == [DIBER]
+    #: 합법 후보는 덱에 그대로 있다 — "0장이어서" 가 아니다.
+    assert SKELETON in _zone_ids(duel, Zone.DECK)
+
+
+@pytest.mark.real_card
+def test_h06_the_limit_from_an_empty_pool_binds_the_later_summons(repository):
+    """
+    🔴 **소환 없이 걸린 제한도 실제 후속 판정에 작용한다** (요구 ⑥).
+
+    ``test_h01`` 의 자리에서 공용 관문에 물으면 어둠 아닌 카드는 ``FALSE``,
+    어둠은 ``TRUE`` 이고, 상대에게는 걸리지 않고 다음 턴에는 만료된다.
+    """
+    duel, _f, grave, _e, _h = _board(
+        repository,
+        mine=(GIRSU,),
+        grave=(DIBER,),
+        deck=(SKELETON,),
+        hand=(FEATHERMAN, GIRSU),
+        turn_number=3,
+    )
+    action = _diber_offer(duel, grave[0])
+    assert action is not None
+    assert duel.apply(action).accepted is True
+    state = duel.state
+    only = [c for c in state.zone(P0, Zone.DECK) if c.card_id == SKELETON][0]
+    state.move(only, Zone.GRAVE, to_player=P0)   # 🔴 시험용 상태 조작
+    settle_chain(duel)
+    assert len(_limits(duel)) == 1
+
+    ruling = BoardRuling(duel.view(P0), OPERATION_RULINGS)
+    hand = {c.card_id: c.instance_id for c in state.zone(P0, Zone.HAND)}
+    wind = ruling.explain_special_summon(hand[FEATHERMAN])
+    assert wind.answer is ConditionResult.FALSE
+    assert "DARK" in wind.reason
+    assert str(DIBER) in wind.reason
+    dark = ruling.explain_special_summon(hand[GIRSU])
+    assert dark.answer is ConditionResult.TRUE, dark.reason
+    #: 자신에게만 · 이 턴만.
+    assert state.summon_limits.active(3, P1) == ()
+    assert state.summon_limits.active(4, P0) == ()
+
+
+@pytest.mark.real_card
+def test_h07_two_forks_do_not_share_the_limit_from_an_empty_pool(repository):
+    """
+    🔴 **분기 격리** (요구 ⑥). ``test_h01`` 의 해결을 사본에서만 수행하면
+    제한은 **그 사본에만** 생긴다.
+    """
+    from agent.simulation import Simulator
+
+    duel, _f, grave, _e, _h = _board(
+        repository, mine=(GIRSU,), grave=(DIBER,), deck=(SKELETON,)
+    )
+    action = _diber_offer(duel, grave[0])
+    assert action is not None
+    assert duel.apply(action).accepted is True
+
+    fork = Simulator(duel=duel)._fork()
+    other = Simulator(duel=duel)._fork()
+    only = [
+        c for c in fork.state.zone(P0, Zone.DECK) if c.card_id == SKELETON
+    ][0]
+    fork.state.move(only, Zone.GRAVE, to_player=P0)   # 🔴 시험용 상태 조작
+    settle_chain(fork)
+
+    assert len(fork.state.summon_limits.active(3, P0)) == 1
+    #: 🔴 **원본과 다른 사본에는 없다.**
+    assert duel.state.summon_limits.active(3, P0) == ()
+    assert other.state.summon_limits.active(3, P0) == ()
+    #: 해시도 갈린다.
+    assert fork.state.state_hash() != other.state.state_hash()
+
+
+def test_h08_the_scope_is_declared_not_assumed():
+    """
+    🔴 **일괄 완화가 아니다.** 생략의 범위는 **선언**이고, 선언하지 않은
+    효과는 예전 뜻 그대로다.
+
+    실측으로 센다 — 등재된 모든 효과의 ``no_candidate_scope`` 를 본다.
+    """
+    from engine.effect.definition import NoCandidateScope, ResolutionSkip
+
+    #: 기본값이 **전체 생략**이다 — 적지 않으면 6-AO 까지와 같다.
+    assert ResolutionSkip(
+        when_no_candidate=True, basis="시험용"
+    ).no_candidate_scope is NoCandidateScope.WHOLE_EFFECT
+
+    #: 범위만 적고 조건을 적지 않으면 **만들어지지 않는다.**
+    with pytest.raises(ValueError):
+        ResolutionSkip(
+            when_condition_false=True,
+            no_candidate_scope=NoCandidateScope.TARGET_OPERATIONS,
+            basis="시험용",
+        )
+
+    #: 🔴 **범위를 선언한 효과가 디베르 ① 하나뿐이다.**
+    narrowed = {
+        str(entry.definition.effect_ref): entry.definition.resolution_skip
+        for entry in EFFECT_LIBRARY
+        if entry.definition.resolution_skip is not None
+        and entry.definition.resolution_skip.no_candidate_scope
+        is NoCandidateScope.TARGET_OPERATIONS
+    }
+    assert list(narrowed) == [str(DIBER_EFFECT)], narrowed
+    #: 그리고 그 선언의 근거가 ``if #g>0`` 밖의 ``RegisterEffect`` 를 가리킨다.
+    basis = narrowed[str(DIBER_EFFECT)].basis
+    assert "RegisterEffect" in basis
+    assert "if #g>0" in basis
+
+    #: 🔴 **다른 선언들은 전부 전체 생략이다** — 성유물－『성장』 ② ·
+    #: 기르수 ③ 의 뜻이 한 글자도 달라지지 않았다.
+    others = {
+        str(entry.definition.effect_ref)
+        for entry in EFFECT_LIBRARY
+        if entry.definition.resolution_skip is not None
+        and str(entry.definition.effect_ref) != str(DIBER_EFFECT)
+    }
+    assert others == {"69811710:e[2]", "93920420:e[1]"}, others
+    for entry in EFFECT_LIBRARY:
+        skip = entry.definition.resolution_skip
+        if skip is None or str(entry.definition.effect_ref) == str(DIBER_EFFECT):
+            continue
+        assert skip.no_candidate_scope is NoCandidateScope.WHOLE_EFFECT
+
+
+def test_h09_the_executor_names_no_card(repository):
+    """
+    🔴 **해결기에 디베르 카드 ID 가 없다.** 범위는 정의가 말하고, 어느 일이
+    그 대상을 쓰는지는 ``Operation.target_refs`` 가 답한다.
+    """
+    import pathlib
+
+    source = pathlib.Path("engine/effect/executor.py").read_text(encoding="utf-8")
+    assert str(DIBER) not in source
+    assert "57835716" not in source
+    #: 그리고 건너뛸 일을 고르는 기준이 **선언된 대상 이름**이다.
+    assert "operation.target_refs" in source
+    assert "NoCandidateScope.TARGET_OPERATIONS" in source
+
+    #: 실측 — 디베르 ① 의 두 조작 중 대상을 쓰는 것은 소환 하나다.
+    operations = entry_for(DIBER_EFFECT).definition.operations
+    using = [op.kind.name for op in operations if op.target_refs]
+    assert using == ["SPECIAL_SUMMON"], using
+    free = [op.kind.name for op in operations if not op.target_refs]
+    assert free == ["RESTRICT_SPECIAL_SUMMON"], free

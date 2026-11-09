@@ -63,6 +63,7 @@ from engine.effect.definition import (
     EffectProvenance,
     EffectSource,
     ExecutionAvailability,
+    NoCandidateScope,
     ResolutionSkip,
     execution_availability,
 )
@@ -1769,13 +1770,26 @@ _WORLD_WAND_TRIGGER_ENTRY = LibraryEntry(
 #:   (:class:`~engine.condition.FaceUpCardPresent` 의 설명). 무효화된 바벨을
 #:   구별하지 못한다 — 무효화 계층이 없다.
 #: - ``EFFECT_FLAG_OATH`` 깃발 자체 (순서로만 지킨다, 위 설명).
-#: - ``#g>0`` 밖의 ``RegisterEffect``. 공식 스크립트는 **고를 후보가 0장이어도
-#:   제한을 건다.** 이 저장소는 ``ResolutionSkip(when_no_candidate=True)`` 로
-#:   조작 묶음을 통째로 생략하므로 그때 제한도 걸리지 않는다 — **다른
-#:   동작이고, 제한을 덜 거는 쪽이다.** 🔴 지금 등재된 효과로는 그 자리에
-#:   닿을 수 없다 (발동 시점에 후보의 존재를 확인했고, 발동과 해결 사이에
-#:   덱을 비우는 등재 효과가 없다). 그 사실과 함께 보고서 §8 에 적는다.
 #: - ``aux.RegisterClientHint`` (표시용 안내).
+#:
+#: ``#g>0`` 밖의 ``RegisterEffect`` — **6-AO 후속에서 옮겼다**
+#: -------------------------------------------------------------
+#: 🔴 **6-AO 는 이것을 옮기지 못했고, 후속 보완이 옮겼다.** 그때의 설명은
+#: 이랬다: "공식 스크립트는 고를 후보가 0장이어도 제한을 거는데 이 저장소는
+#: ``ResolutionSkip(when_no_candidate=True)`` 로 조작 묶음을 통째로 생략하므로
+#: 그때 제한도 걸리지 않는다 — 제한을 덜 거는 쪽이다." **그 설명은 그때
+#: 사실이었다.**
+#:
+#: 지금은 :class:`~engine.effect.definition.NoCandidateScope` 로 생략의
+#: **범위**를 선언한다. ``s.spop`` 의 ``RegisterEffect`` 가 ``if #g>0``
+#: **밖**이므로 이 효과의 범위는 ``TARGET_OPERATIONS`` 다 — 후보가 0장이면
+#: **소환만** 하지 않고 제한은 그대로 건다. 『성장』 ② 는 ``if #g>0`` 밖에
+#: 하는 일이 없어 기본값(``WHOLE_EFFECT``)이고 **한 글자도 달라지지 않았다.**
+#:
+#: 🔴 **빈 칸이 없는 경우와는 여전히 다르다.** ``s.spop`` 첫 줄의
+#: ``GetLocationCount(...)<=0 then return`` 은 ``RegisterEffect`` **앞**이므로
+#: 그때는 제한도 걸리지 않는다 — 그 갈래는 ``when_condition_false`` 가 맡고
+#: 범위는 그대로 조작 묶음 전체다.
 _HARP_HORROR_GRAVE_ENTRY = LibraryEntry(
     definition=EffectDefinition(
         effect_ref=EffectRef(HARP_HORROR, 0),
@@ -1857,15 +1871,21 @@ _HARP_HORROR_GRAVE_ENTRY = LibraryEntry(
         resolution_skip=ResolutionSkip(
             when_condition_false=True,
             when_no_candidate=True,
+            #: 🔴 **후보가 0장이면 소환만 생략한다** (Phase 6-AO 후속).
+            #: ``RegisterEffect`` 가 ``if #g>0`` **밖**이므로 제한은 그대로
+            #: 걸린다 — 위 설명의 "6-AO 후속에서 옮겼다" 절.
+            no_candidate_scope=NoCandidateScope.TARGET_OPERATIONS,
             basis=(
                 "c57835716.lua 의 s.spop — "
                 "if Duel.GetLocationCount(tp,LOCATION_MZONE)<=0 then return end "
                 "과 if #g>0 then Duel.SpecialSummon(...) end. 빈 칸이 없으면 "
-                "조작 없이 끝나고, SelectMatchingCard 가 빈 묶음을 주면 "
-                "소환하지 않는다 (s.filter 가 IsCanBeSpecialSummoned 로 "
-                "거르므로 금지된 판에서는 후보가 0장이 된다). 🔴 후보가 "
-                "0장일 때 공식 스크립트는 제한을 그대로 거는데 이 저장소는 "
-                "묶음을 통째로 생략한다 — 위 설명의 마지막 항목."
+                "조작 없이 끝나고 (그때는 RegisterEffect 도 하지 않는다 — "
+                "그 return 이 RegisterEffect 앞이다), SelectMatchingCard 가 "
+                "빈 묶음을 주면 **소환만** 하지 않는다 (s.filter 가 "
+                "IsCanBeSpecialSummoned 로 거르므로 금지된 판에서는 후보가 "
+                "0장이 된다). 그 뒤의 RegisterEffect 는 if #g>0 **밖**이라 "
+                "후보가 0장이어도 실행되므로 생략 범위가 "
+                "TARGET_OPERATIONS 다."
             ),
         ),
         use_limit=UseLimit(LimitScope.PER_CARD_NAME),
@@ -1891,8 +1911,10 @@ _HARP_HORROR_GRAVE_ENTRY = LibraryEntry(
             "FaceUpCardPresent 로 옮겨 **무효화된 바벨을 구별하지 못한다**. "
             "EFFECT_FLAG_OATH 는 조작 순서로만 지키고 깃발 자체는 옮기지 "
             "못했다. 후보가 0장일 때도 제한을 거는 동작 (RegisterEffect 가 "
-            "if #g>0 밖에 있다) 과 e2(EFFECT_TYPE_QUICK_O, 바벨이 적용될 때) "
-            "와 aux.RegisterClientHint 는 옮기지 못했다."
+            "if #g>0 밖에 있다) 은 **6-AO 후속에서 옮겼다** — "
+            "ResolutionSkip.no_candidate_scope = TARGET_OPERATIONS 다. "
+            "e2(EFFECT_TYPE_QUICK_O, 바벨이 적용될 때) 와 "
+            "aux.RegisterClientHint 는 옮기지 못했다."
         ),
     ),
     lua_file="c57835716.lua",
