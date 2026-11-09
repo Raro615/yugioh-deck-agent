@@ -402,13 +402,17 @@ def real_capped(opening):
     return search, search.run_many(opening(), rerun_from=opening())
 
 
-def test_a09_the_real_engine_takes_the_optional_trigger_pass(real_capped):
+def test_a09_the_real_engine_passes_without_firing_the_optional_trigger(
+    real_capped
+):
     """
     🔴 **실제 엔진에서도 선택적 유발을 발동하지 않고 패스하는 자리를
     지난다** (§3-A-4).
 
-    기준점 자체가 `일반 소환 → 패스` 이고, 그 패스는 **후속 비흐름 행동으로
-    세지 않는다.**
+    기르수를 일반 소환하면 그 자리에 **발동 기회**가 열리고(발동 또는
+    패스), 기준점은 그 패스를 지나서야 정리된다 — 그래서 기준점 경로가
+    `일반 소환 → 패스` 다. 🔴 그 패스는 **후속 비흐름 행동으로 세지
+    않는다** (기준점 앞의 걸음이고, 애초에 흐름 행동이다).
     """
     _search, outcome = real_capped
     baseline = outcome.baselines[0]
@@ -416,10 +420,58 @@ def test_a09_the_real_engine_takes_the_optional_trigger_pass(real_capped):
     assert "pass" in kinds, kinds
     assert baseline.meta.followup_actions == 0
     assert baseline.meta.followup_flow == 0
-    #: 🔴 상한에 닿은 뒤 **흐름 처리를 이어 간다**는 사실이 실제 실행에서도
-    #: 적힌다 (수정 전에는 "더 펼치지 않았습니다" 였다).
+    #: 후속 후보들도 그 패스를 앞부분에 그대로 들고 있다.
+    for one in outcome.continued_results:
+        assert "pass" in [step.kind for step in one.path[:one.meta.reached_at]]
+
+
+@pytest.fixture(scope="module")
+def real_cap_bound(opening):
+    """
+    실제 카드 · **상한에 닿은 노드가 실제로 열리는** 설정.
+
+    🔴 **왜 이 설정인가.** 후속 후보 상한(:attr:`SearchBudget.max_results`)
+    이 그 노드를 펼치는 중에 차면 고리가 거기서 끊겨 상한에 닿은 노드가
+    **열리지 않는다**. 기르수 목표는 기준점에서 후속 후보가 다섯이라
+    ``RESULTS_CAP`` 과 같아 항상 먼저 차므로, 후속 후보가 넷인 갈라테아
+    목표를 쓴다. 노드 상한을 작게 두어 **54초쯤**에 끝나게 했다.
+    """
+    search = BoundedSearch(
+        goal=FieldGoal(card_id=GALATEA, seat=0),
+        budget=SearchBudget(max_depth=6, max_nodes=30, max_seconds=200,
+                            max_results=5, max_followup_actions=1,
+                            max_baselines=1),
+    )
+    return search, search.run_many(opening(), rerun=False)
+
+
+def test_a09b_the_real_engine_opens_the_cap_bound_node(real_cap_bound):
+    """
+    🔴 **실제 엔진에서도 상한에 닿은 노드가 열리고, 왜 멈추는지 적는다**
+    (§3-A-H).
+
+    수정 전에는 그 노드를 **쌓지도 않았으므로** 이 메모가 나올 수 없었다
+    (6-AL 의 결함). 지금은 열리고, 이 입력에서는 그 자리에 이번 범위의
+    흐름 처리(패스)가 **없어서** 멈춘다 — 그 사실을 그대로 적는다.
+
+    🔴 **"패스를 실제로 밟는" 쪽은 이 입력으로 재지 못한다.** 그 절반은
+    격리 그래프가 잰다(``test_a01``) — 실제 엔진에서 상한 뒤에 미정리
+    상태가 남는 자리를 이 덱·이 목표에서는 찾지 못했고, 그 사실을 보고서에
+    적는다.
+    """
+    _search, outcome = real_cap_bound
+    assert outcome.continues is True
+    assert outcome.baselines
+    assert outcome.continued_results
     joined = " ".join(outcome.followup_notes)
-    assert "흐름 처리" in joined, outcome.followup_notes
+    assert "상한 max_followup_actions=1 에 닿았고" in joined, \
+        outcome.followup_notes
+    assert "흐름 처리(패스)가 없어 여기서 멈췄습니다" in joined
+    #: 🔴 상한을 넘는 비흐름 행동은 하나도 하지 않았다.
+    assert all(one.meta.followup_actions <= 1
+               for one in outcome.continued_results)
+    assert all(one.meta.stop is ContinuationStop.ACTION_CAP
+               for one in outcome.continued_results)
 
 
 def test_a10_the_real_follow_up_path_replays_from_the_start(
