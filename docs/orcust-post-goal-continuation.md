@@ -533,8 +533,9 @@ timeout 2400 python3 -m pytest tests/test_bounded_search_first_pass.py \
   tests/test_discord_bot.py -q -rf -p no:randomly
 ```
 
-🔴 **이 묶음의 수치는 다음 커밋에 적는다** — 이 글을 쓰는 시점에 실행이
-끝나지 않았고, **읽지 않은 수를 적지 않는다.**
+```
+89 passed, 1 warning in 254.25s (0:04:14)
+```
 
 🔴 **전체 모음을 다시 돌리지 않았다.** 공용 엔진(`engine` · `core`)을
 건드리지 않았고, 바꾼 것은 `_open` 의 두 상한 검사와 보고서의 기준점 식별
