@@ -154,12 +154,16 @@ end
   없다.
 - `EFFECT_FLAG_OATH` 깃발 자체. 조작 묶음의 **순서**로만 지킨다 (소환 다음에
   제한을 건다 — 공식 스크립트도 그 순서다).
-- `#g>0` **밖**의 `RegisterEffect`. 공식 스크립트는 **고를 후보가 0장이어도
-  제한을 건다.** 이 저장소는 `ResolutionSkip(when_no_candidate=True)` 로 조작
-  묶음을 통째로 생략하므로 그때 제한도 걸리지 않는다 — **다른 동작이고,
-  제한을 덜 거는 쪽이다.** 지금 등재된 효과로는 그 자리에 닿을 수 없다 (발동
-  시점에 후보의 존재를 확인했고, 발동과 해결 사이에 덱을 비우는 등재 효과가
-  없다). §8 에 그대로 남긴다.
+- ~~`#g>0` **밖**의 `RegisterEffect`.~~ → 🔴 **후속 보완에서 옮겼다 (§10).**
+  6-AO 의 기록은 이랬고 **그때 사실이었다**: "공식 스크립트는 **고를 후보가
+  0장이어도 제한을 건다.** 이 저장소는 `ResolutionSkip(when_no_candidate=True)`
+  로 조작 묶음을 통째로 생략하므로 그때 제한도 걸리지 않는다 — **다른
+  동작이고, 제한을 덜 거는 쪽이다.** 지금 등재된 효과로는 그 자리에 닿을 수
+  없다 (발동 시점에 후보의 존재를 확인했고, 발동과 해결 사이에 덱을 비우는
+  등재 효과가 없다)."
+  🔴 **"닿을 수 없다" 는 부분이 틀렸다** — 발동과 해결 사이에 판이 바뀌면
+  닿는다 (§10.1 의 재현). 지금은 `NoCandidateScope.TARGET_OPERATIONS` 로
+  **소환만** 생략하고 제한은 그대로 건다.
 - `aux.RegisterClientHint` (표시용 안내).
 
 ---
@@ -545,9 +549,12 @@ python3 -m app.main combo "69811710,703897,2930675,12989604,61654098" \
   디베르는 발동할 수 없다** — ① 은 조건이 거짓이고 ② 는 미지원이다.
 - **바벨 자신의 효과도 등재하지 않았다.** `IsPlayerAffectedByEffect` 를
   「앞면으로 필드에 있는가」로 옮겼으므로 **무효화된 바벨을 구별하지 못한다.**
-- **`#g>0` 밖의 제한 등록을 옮기지 못했다** (§2.3). 공식 스크립트는 고를 후보가
-  0장이어도 제한을 걸고, 이 저장소는 그때 묶음을 통째로 생략한다. **제한을 덜
-  거는 쪽**이고, 지금 등재된 효과로는 그 자리에 닿을 수 없다.
+- ~~**`#g>0` 밖의 제한 등록을 옮기지 못했다**~~ → 🔴 **후속 보완에서
+  옮겼다 (§10).** 6-AO 의 기록은 "공식 스크립트는 고를 후보가 0장이어도
+  제한을 걸고, 이 저장소는 그때 묶음을 통째로 생략한다. **제한을 덜 거는
+  쪽**이고, 지금 등재된 효과로는 그 자리에 닿을 수 없다" 였다. 앞 문장은
+  그때 사실이었고 **뒤 문장이 틀렸다** — 발동과 해결 사이에 판이 바뀌면
+  닿는다. 지금은 **소환만** 생략하고 제한은 걸린다 (§10).
 - **표시 형식을 고르지 못한다.** `POS_FACEUP` 은 앞면 공격 · 앞면 수비를
   고를 수 있다는 뜻인데 이 저장소는 앞면 공격으로 고정했다 (STRUCTURAL-61).
 
@@ -874,3 +881,258 @@ python3 -m app.main combo "69811710,703897,2930675,12989604,61654098" \
 - `tests/agent/test_opponent_resource_weighting_audit.py::test_07` 은 **고치지
   않았다** — 기준 HEAD 에서도 실패하는 선재 결함이고 이 Phase 의 범위가 아니다
   (§8.5 의 마지막 문단에 측정 근거를 적었다).
+
+---
+
+## 10. 후속 보완 — 후보 0장일 때의 제한 등록 (6-AO 후속)
+
+🔴 **§1~§9 는 6-AO 의 기록이고 그대로 둔다.** 이 절은 그 뒤에 고친 것이고,
+과거 측정값과 이번 측정값을 섞지 않는다. 기준 HEAD 는
+`14cdbd196521bba24e18b852be75c94fcefd8a67` 다.
+
+### 10.1 수정 전 재현과 원인
+
+**재현 순서** (기준 HEAD · 준비된 판):
+
+```
+자신 필드   기르수(69811710)
+자신 묘지   디베르(57835716)
+자신 덱     스켈레촌(21441617) 1장 + 페더맨(21844576) 20장
+① 디베르 ① 을 Duel.apply 로 발동시킨다                → 수락
+② 비용으로 디베르가 제외된 것을 확인한다               → REMOVED [57835716]
+③ 🔴 시험 조작: 덱의 스켈레촌을 묘지로 옮긴다           → 덱의 「오르페골」 0장
+④ 정상 체인 해결 경로로 해결한다 (settle_chain)
+```
+
+🔴 **③ 은 시험 도구가 손으로 만든 상태 변화다.** 발동과 해결 사이에 덱을
+비우는 **등재된 상대 카드가 이 저장소에 없다** — 실제 카드로 이 상황을
+만들었다고 주장하지 않는다.
+
+**기준 HEAD 의 실측** (`scratchpad/ao2/repro.py`):
+
+```
+MZONE    [69811710]        소환 없음          ← 맞다
+REMOVED  [57835716]        비용 유지          ← 맞다
+use      1                 사용 기록 유지      ← 맞다
+limits   ()                🔴 **제한 누락**    ← 결함
+```
+
+**원인.** `c57835716.lua` 의 `s.spop` 는 제어 흐름이 **세 토막**이다.
+
+```lua
+if Duel.GetLocationCount(tp,LOCATION_MZONE)<=0 then return end   -- (A)
+local g=Duel.SelectMatchingCard(tp,s.filter,tp,LOCATION_DECK,0,1,1,nil,e,tp)
+if #g>0 then Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP) end  -- (B)
+local e1=...; Duel.RegisterEffect(e1,tp)                          -- (B 밖)
+```
+
+(A) 의 `return` 은 `RegisterEffect` **앞**이므로 효과 전체가 끝난다. (B) 의
+`if` 는 **소환만** 감싸고, `RegisterEffect` 는 그 밖이다. 6-AO 는 이 둘을
+`ResolutionSkip(when_condition_false=True, when_no_candidate=True)` **하나로**
+적었고, `when_no_candidate` 의 처리가 "조작 묶음 전체 생략" 뿐이었으므로 (B)
+에서도 제한이 빠졌다.
+
+🔴 **6-AO 가 이 차이를 몰랐던 것은 아니다** — §2.3 · §8.1 에 "제한을 덜 거는
+쪽" 이라고 적어 두었다. 틀린 것은 **"지금 등재된 효과로는 그 자리에 닿을 수
+없다"** 는 뒤 문장이다. 발동과 해결 사이에 판이 바뀌면 닿는다.
+
+### 10.2 네 갈래를 가른다
+
+| 해결 시점의 사실 | 소환 | 제한 | 비용·사용 기록 | 결과 상태 |
+|---|---|---|---|---|
+| **빈 칸 없음** (A) | 안 함 | **안 걸림** | 유지 | `RESOLVED_WITHOUT_EFFECT` |
+| **합법 후보 0장** (B) | 안 함 | **걸림** | 유지 | `RESOLVED` (조작 2건) |
+| **후보 밖 선택** | 안 함 | 안 걸림 | 유지 | `INVALID_TARGET` / `CANDIDATE_NOT_ELIGIBLE` |
+| **판정 불명 (UNKNOWN)** | 안 함 | 안 걸림 | 유지 | `UNCHECKED_RULES` / `RULE_NOT_IMPLEMENTED` |
+
+🔴 **아래 둘은 이번 보완에 흡수되지 않는다.** 생략의 근거는 "후보를 **전부
+확인**했고 0장이다" 이고, 후보 밖 선택은 그 전제가 거짓(후보가 있었다)이며
+UNKNOWN 은 "전부 확인했다" 가 거짓이다. 그 두 갈래는 `_short_selection` 에서
+**생략 판정에 닿기 전에** 갈린다 (후보 밖은 `_ask_for_choice` 의 ③ 단계가,
+모름은 그 앞의 `unknown` 검사가).
+
+### 10.3 효과 정의와 해결기 변경
+
+**① 정의 쪽 — 선언을 하나 더 만든다** (`engine/effect/definition.py`)
+
+```python
+class NoCandidateScope(str, Enum):
+    WHOLE_EFFECT = "whole_effect"          # 기본값 — 6-AO 까지의 유일한 동작
+    TARGET_OPERATIONS = "target_operations"  # 그 대상을 쓰는 조작만 생략
+```
+
+`ResolutionSkip.no_candidate_scope` 로 싣는다. 🔴 **기본값이 전체 생략**이므로
+**선언하지 않은 효과는 한 글자도 달라지지 않는다** — 성유물－『성장』 ②
+(`93920420:e[1]`) 와 기르수 ③ (`69811710:e[2]`) 가 그렇고, `test_h08` 이 그
+사실을 등재표에서 센다. 범위만 적고 `when_no_candidate` 를 적지 않으면
+`ValueError` 다. 정규 표현(`canonical_state`)에 범위가 들어간다 — 범위만 다른
+두 선언은 **다른 선언**이다.
+
+**② 해결기 쪽 — 생략을 "전부" 에서 "그 대상을 쓰는 일" 로 좁힌다**
+(`engine/effect/executor.py`)
+
+| 자리 | 바뀐 것 |
+|---|---|
+| `_VacantTarget` (새 값) | "고를 후보가 하나도 없었던 대상" 과 그 설명. 🔴 **가짜 선택을 만들지 않는다** — 빈 `Selection` 을 문맥에 넣으면 뒤의 조작이 0장을 소환하려 들고 기록에 고르지 않은 선택이 남는다 |
+| `_short_selection` | 범위가 `TARGET_OPERATIONS` 면 `EffectResult` 대신 `_VacantTarget` 을 돌려준다. **UNKNOWN · 후보 밖 갈래는 그 앞에서 그대로 갈린다** |
+| `_ask_for_choice` | `(문맥, 비어 있는 대상들)` 을 돌려준다. 비어 있는 대상에는 **선택을 더하지 않는다** |
+| `_plan` | `(할 일들, 하지 않은 일의 설명들)` 을 돌려준다. 조작 고리에서 `set(operation.target_refs) & vacant_refs` 인 일만 건너뛰고, 번호는 밀리지 않으며 그 자리에 `NOT_APPLIED` 가 들어간다 — `_check_guards` 의 거짓 갈래와 **같은 처리**다 |
+| `execute` | 하지 않은 일의 설명을 결과 문장에 **같이** 적는다. 남은 일이 하나도 없으면 `RESOLVED_WITHOUT_EFFECT` 로 돌려준다 (조작 묶음 전부가 그 대상을 쓰는 효과) |
+
+🔴 **해결기에 카드 ID 가 없다.** 어느 일이 그 대상을 쓰는지는 짐작하지 않고
+`Operation.target_refs` 가 답한다 (`test_h09` 가 `engine/effect/executor.py`
+전문에 `57835716` 이 없는 것까지 센다).
+
+**③ 등재 쪽** (`engine/effect/library.py`) — 디베르 ① 에
+`no_candidate_scope=NoCandidateScope.TARGET_OPERATIONS` 를 적고, 근거 문장과
+`provenance` 를 고쳤다 (`RegisterEffect` 가 `if #g>0` **밖**이라는 것이 근거다).
+
+### 10.4 실제 결과 (실측)
+
+**수정 뒤 같은 재현** (`scratchpad/ao2/repro.py`):
+
+```
+MZONE    [69811710]                소환 없음
+REMOVED  [57835716]                비용 유지
+GRAVE    [21441617]                시험이 옮긴 스켈레촌
+use      1                         사용 기록 유지
+limits   (AttributeOnlyLimit(turn_number=3, player=0, attribute='DARK',
+          source_card_id=57835716, ordinal=0, basis='c57835716.lua 의
+          s.spop 끝 — …'),)        🔴 **제한 등록**
+journal  #0 비용 P0: P0 #42 제외
+         #1 57835716:e[0] P0: P0 는 이 턴 DARK 속성 몬스터밖에 특수 소환할
+            수 없다 ([57835716]:e[0]), P0 의 DECK 20장을 섞었다
+```
+
+**해결 결과 객체** (`scratchpad/ao2/probe_exec.py` — `EffectExecutor.execute`
+의 반환값):
+
+```
+status   resolved          code  ok
+applied  ['RESTRICT_SPECIAL_SUMMON', 'SHUFFLE']
+deltas   ['SpecialSummonLimited', 'ZoneShuffled']
+reason   57835716:e[0] 를 적용했습니다 (2건). @primary 에 고를 수 있는 후보가
+         없습니다 (후보 0장을 전부 확인했습니다, 필요 1장) — 그 대상을 쓰는
+         일은 하지 않고 나머지 일은 그대로 수행했습니다. 공식 처리: …
+```
+
+🔴 **기록과 실제 변화가 일치한다** — `SPECIAL_SUMMON` 조작이 기록에 없고,
+스켈레촌의 개체는 기록이 건드린 카드 목록에 없다 (`test_h01` ⑥). 허위 소환
+이벤트를 만들지 않았다.
+
+🔴 **덱 섞기가 일어난다** — 공식 `SelectMatchingCard` 가 덱을 **들여다봤기**
+때문이고, 룰북의 "search 뒤에는 섞는다" 가 그 자리다. (A) 갈래에서는
+`return` 이 `SelectMatchingCard` **앞**이라 섞기도 없다 — 두 갈래의
+비대칭이 **공식 스크립트의 비대칭과 같다.**
+
+### 10.5 기존 정상 전개와 탐색 · 재생 (실측)
+
+🔴 **시작 패 · 레시피 · 탐색 정책을 바꾸지 않았다** (요구 ⑦). §5 의
+`ORCUST_HARP_HORROR_HAND` 와 기존 `ORCUST_VERIFICATION_RECIPE` 그대로다.
+
+```
+python3 -m app.main combo "69811710,703897,2930675,12989604,61654098" \
+  --recipe <검증용 레시피>.ydk --line orcust-harp-horror
+→ 종료 코드 0 · real 0m10.111s
+→ ✅ 경로를 끝까지 실행했습니다 (4/4단계) · 상태 변경 4걸음
+→ 효과의 조작이 수행된 걸음 2 · 엑스트라 몬스터 존 1장 「오르페골 갈라테아」
+→ 제외 1장 「오르페골 디베르」 · 보고에 DARK 제한이 그대로 적힌다
+
+python3 -m app.main combo "…" --recipe <…>.ydk --search galatea
+→ 종료 코드 0 · real 1m9.236s
+→ ✔ 도달 · 행동 4걸음 · 해결 중 선택 2회 · 펼친 노드 28개 · 최대 깊이 3
+   · 46.01초
+→ 경로 재생 (새 초기 상태에서 다시 실행): ✔ 성공
+→ 최종 판 해시 · 재생 최종 해시 둘 다
+   e66020d1c942d059bea4d578bfd68c5d6479b6b571ff4b958ad88815da3998d0
+```
+
+🔴 **해시가 6-AO (§7) 와 같다.** 정상 경로에는 합법 후보가 있어 이 보완이
+닿는 갈래를 지나지 않기 때문이다 — 그것이 "기존 동작을 바꾸지 않았다" 의
+실측이다. (노드 수 28 · 깊이 3 도 같고, 초 수만 측정마다 다르다.)
+
+### 10.6 테스트 명령과 결과 (실측)
+
+**① 먼저 "수정 전 실패" 를 확보했다.** 기준 HEAD 를 `git worktree` 로 따로
+풀고 (`data/cards.cdb` · `data/constants` 를 붙였다) 새 시험만 돌렸다:
+
+```
+timeout 900 python3 -m pytest tests/test_harp_horror_graveyard_effect.py \
+  -q -rf -p no:randomly -k "h0"          # 기준 HEAD 14cdbd1 에서
+→ 6 failed, 3 passed, 36 deselected in 20.40s
+   실패: h01 · h03 · h06 · h07 · h08 · h09
+   통과: h02 (빈 칸 없음) · h04 (UNKNOWN) · h05 (후보 밖 선택)
+```
+
+🔴 **통과한 셋이 중요하다** — 이미 맞던 경계를 이 보완이 흔들지 않았다는
+뜻이고, 수정 뒤에도 그대로 통과한다.
+
+**② 수정 뒤** (모든 수치는 이번 실행의 실측이다):
+
+```
+timeout 1200 python3 -m pytest tests/test_harp_horror_graveyard_effect.py \
+  -q -rf -p no:randomly
+→ 45 passed in 72.70s        (6-AO 의 36건 + 이번 H 절 9건)
+
+timeout 2900 python3 -m pytest tests/engine -q -rf -p no:randomly
+→ 3882 passed in 666.39s      (🔴 공용 해결 경로를 바꿨으므로 그 경로의
+                               기존 사용자 전체로 범위를 넓혔다)
+
+timeout 600 python3 -m pytest tests/engine/test_cost_payment.py \
+  tests/engine/test_partial_outcome.py tests/engine/test_deferred_resolution.py \
+  tests/engine/test_autonomous_resolution.py \
+  tests/engine/test_multi_target_selection.py -q -rf -p no:randomly
+→ 203 passed in 28.77s        (생략 · 부분 결과 · 선택 검증 쪽)
+
+timeout 2900 python3 -m pytest tests/test_orcust_girsu_line.py \
+  tests/test_girsu_token_line.py tests/test_girsu_token_chain_integration.py \
+  tests/test_combo_output_consistency.py \
+  tests/test_withheld_reason_propagation.py \
+  tests/test_summon_prohibition_and_resolution_choice.py \
+  tests/test_link_material_count_and_rating.py \
+  tests/test_resolution_outcome_four_cases.py -q -rf -p no:randomly
+→ 169 passed in 342.40s       (성유물－『성장』 · 기르수 · 출력 · 제한 쪽)
+
+timeout 1200 python3 -m pytest tests/test_harp_horror_graveyard_effect.py \
+  tests/test_longirsu_link_summon.py tests/engine/test_cost_payment.py \
+  -q -rf -p no:randomly
+→ 118 passed in 77.10s
+```
+
+🔴 **마지막 묶음의 기준 수치는 109 였다** (기준 검토에서 받은 값이고 **이번
+결과가 아니다**). 늘어난 9건이 이번 H 절이다 — 기존 109건은 그대로 통과한다.
+
+**③ 고친 낡은 기대값 하나**
+
+| 자리 | 이전 기대 | 바뀐 뒤 | 왜 이전 기대가 맞았는가 |
+|---|---|---|---|
+| `test_resolution_outcome_four_cases::test_n06` | `ResolutionSkip.canonical_state() == (False, True)` | `== (False, True, "whole_effect")` · 범위를 좁힌 선언의 정규 표현과 `ValueError` 갈래를 **새로 센다** | 그때 선언의 칸이 둘이었다. 범위를 정규 표현에 넣는 이유는 범위만 다른 두 선언이 **다른 선언**이기 때문이고, 기본값이 `whole_effect` 이므로 **적지 않은 선언의 뜻은 달라지지 않았다** |
+
+🔴 **그 밖에 완화한 기대값이 없다.** `tests/engine` 3,882건과 통합 묶음
+169건은 **한 줄도 고치지 않고** 통과했다.
+
+### 10.7 남은 한계
+
+- **(B) 갈래는 아직 준비된 판에서만 닿는다.** 발동과 해결 사이에 덱의
+  「오르페골」 몬스터를 전부 치우거나 특수 소환을 금지하는 **등재된 상대
+  카드가 없다** (상대 방해는 범위 밖이다). `test_h01` · `test_h03` ·
+  `test_h06` · `test_h07` 의 상태 변화는 전부 **시험 조작**이고, 각 시험이
+  자기 docstring 에 그렇게 적는다.
+- **`EFFECT_FLAG_OATH` 깃발 자체**는 여전히 옮기지 못했다 — 조작 **순서**로만
+  지킨다 (§2.3).
+- **무효화된 바벨을 구별하지 못한다** — 무효화 계층이 없다 (§2.3).
+- **`e2` (유발즉시) · `aux.RegisterClientHint`** 는 여전히 미등재 (§8.1).
+- **스켈레촌 · 카노네의 ①** 은 여전히 미등재 (§8.2). 🔴 **그 둘의 `s.spop`
+  을 이번에 읽었다** (실측 — `c21441617.lua` · `c94046012.lua`): 둘 다
+  `RegisterEffect` 가 소환을 감싼 `if` **밖**이다. 카노네는 디베르와 **같은
+  모양**이고 (`GetLocationCount(...)<=0 then return` → `SelectMatchingCard`
+  → `if #g>0 then SpecialSummon` → `RegisterEffect`, 다만 **패**에서
+  고른다), 스켈레촌은 발동 시점에 대상을 잡아 두고
+  (`Duel.GetFirstTarget`) `if tc and tc:IsRelateToEffect(e)` 로 감싼다 —
+  즉 "대상이 사라졌다" 쪽이고 "후보가 0장" 과는 **다른 질문**이다. 등재할
+  때 카노네는 이번 선언을 그대로 쓰고, 스켈레촌은 **그 질문을 적을 자리가
+  따로 필요하다** — 이번 보완은 그 자리를 만들지 않았다.
+- **범위를 선언한 효과는 디베르 ① 하나뿐이다** (`test_h08` 의 실측). 다른
+  효과의 공식 스크립트를 다시 읽지 않았으므로, 그 효과들이 `WHOLE_EFFECT`
+  라는 것은 **6-AD 후속2 · 6-AF 에서 읽은 그대로**이고 이번에 다시 확인한
+  것이 아니다.
