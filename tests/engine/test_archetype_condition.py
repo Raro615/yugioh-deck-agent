@@ -362,7 +362,10 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     using_archetype = [
         entry.card_id for entry in EFFECT_LIBRARY
         if entry.definition.targets
@@ -370,7 +373,10 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
             "카드군" in binding.describe_ko() for binding in entry.definition.targets
         )
     ]
-    assert using_archetype == [GIRSU, WORLD_WAND], using_archetype
+    #: 🔴 **셋이 되었다** (Phase 6-AO). 디베르 ① 의 덱 후보 조건이
+    #: ``IsSetCard(SET_ORCUST)`` 이므로 같은 컴파일러를 쓴다 — 늘어난 것은
+    #: **읽은 카드**이고 컴파일러는 한 글자도 바뀌지 않았다.
+    assert using_archetype == [GIRSU, WORLD_WAND, 57835716], using_archetype
     #: 🔴 조건을 만드는 자리는 **여전히 한 곳**이다 — 기르수의 정의도
     #: ``IsSetCard`` 를 직접 부르지 않고 ``compile_archetype_condition`` 을
     #: 통한다 (위 ② 의 단언이 그것을 지킨다).
@@ -929,10 +935,14 @@ def test_j_the_archetype_condition_is_used_by_exactly_the_two_orcust_effects():
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     #: 🔴 실행 수 16 → **17** (Phase 6-AF). 기르수 ③ 은 실제로 실행되는
     #: 효과다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 수행한다.
-    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 17
+    #: 🔴 17 → **18** (Phase 6-AO).
+    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 18
     #: 🔴 실행되는 효과 중 카드군 조건을 쓰는 것이 **정확히 둘**이다.
     using = [
         entry.card_id
@@ -940,4 +950,6 @@ def test_j_the_archetype_condition_is_used_by_exactly_the_two_orcust_effects():
         if entry.executable
         and any("카드군" in b.describe_ko() for b in entry.definition.targets)
     ]
-    assert using == [GIRSU, WORLD_WAND], using
+    #: 🔴 **셋이 되었다** (Phase 6-AO) — 디베르 ① 의 덱 후보 조건이
+    #: ``IsSetCard(SET_ORCUST)`` 다.
+    assert using == [GIRSU, WORLD_WAND, 57835716], using

@@ -359,10 +359,21 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: ``variable`` 0건)은 **그대로다.**
     #: 🔴 Phase 6-AF 가 기르수 ③(토큰 생성 · ``executable=True``) 을 더했다
     #: (19 → **20**). 아래 단언들은 하나도 약해지지 않았다 — 수만 움직였다.
-    assert len(EFFECT_LIBRARY) == 20, "정의 수가 바뀌면 이 Phase 를 다시 읽는다"
-    assert bindings == 11
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21, "정의 수가 바뀌면 이 Phase 를 다시 읽는다"
+    #: 🔴 11 → **12** (Phase 6-AO) — 디베르 ① 이 대상 묶음 하나를 더했다
+    #: (덱에서 1장을 해결 중에 고른다). **여러 장 선택도 가변 장수도
+    #: 아니다** — 이 시험이 지키는 사실은 그 둘이 하나뿐이라는 것이고,
+    #: 아래 단언들이 그대로 들고 있다.
+    assert bindings == 12
     assert multi == [FINE], multi
-    assert len(exact_one) == 7, exact_one
+    #: 🔴 7 → **8** (Phase 6-AO) — 디베르 ① 도 **정확히 1장**을 고른다
+    #: (``SelectMatchingCard(...,1,1,...)``). 이 시험이 지키는 사실은
+    #: "여러 장 선택은 하나뿐이고 가변 장수는 없다" 이고, 그 둘은 아래
+    #: 단언들이 그대로 들고 있다.
+    assert len(exact_one) == 8, exact_one
     assert variable == [], "가변 장수 효과가 생겼다 — §6 을 다시 읽어야 한다"
     assert optional == [], optional
     assert duplicates == [], duplicates

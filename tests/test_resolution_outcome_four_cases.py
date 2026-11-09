@@ -322,11 +322,21 @@ def test_n05_only_the_declared_effect_can_resolve_without_an_operation():
     #: 거짓이면 아무 일도 하지 않고 끝낸다). 일괄 완화가 아니라 **카드마다
     #: 그 카드의 해결 함수에서 읽은 선언**이라는 것이 이 시험의 사실이고,
     #: 그래서 둘을 각각 근거까지 센다.
-    from engine.effect.library import GIRSU
+    #: 🔴 **Phase 6-AO 에서 셋이 되었다** — 「오르페골 디베르」 ① 도 해결
+    #: 시점의 생략을 선언한다. ``c57835716.lua`` 의 ``s.spop1`` 이
+    #: ``Duel.GetLocationCount(tp,LOCATION_MZONE)<=0`` 이면 그대로 끝내고,
+    #: ``Duel.SelectMatchingCard`` 가 0장이면 ``Duel.SpecialSummon`` 을
+    #: 부르지 않는다 — 조건 거짓과 후보 없음 **둘 다**다.
+    #:
+    #: 🔴 **이전 수가 틀렸던 것이 아니다** — 그때 그 효과는 등재되지 않았다
+    #: (ADR-006). 재는 것은 "**일괄 완화가 아니라 카드마다 그 카드의 해결
+    #: 함수에서 읽은 선언**" 이고, 그래서 셋을 각각 근거까지 센다.
+    from engine.effect.library import GIRSU, HARP_HORROR
 
     girsu_ref = EffectRef(GIRSU, 2)
+    harp_ref = EffectRef(HARP_HORROR, 0)
     assert sorted(str(d.effect_ref) for d in declared) == sorted(
-        [str(girsu_ref), str(WAND_REF)]
+        [str(girsu_ref), str(WAND_REF), str(harp_ref)]
     ), [str(d.effect_ref) for d in declared]
     by_ref = {d.effect_ref: d for d in declared}
     girsu_skip = by_ref[girsu_ref].resolution_skip
@@ -341,6 +351,13 @@ def test_n05_only_the_declared_effect_can_resolve_without_an_operation():
     #: 🔴 **근거가 스크립트를 가리킨다** — 문구만 바꾼 것이 아니다.
     assert "c93920420.lua" in skip.basis
     assert "s.spop1" in skip.basis
+    #: 디베르 ① — 조건 거짓과 후보 없음 **둘 다** 생략이고, 근거가 그
+    #: 카드의 스크립트를 가리킨다.
+    harp_skip = by_ref[harp_ref].resolution_skip
+    assert harp_skip.when_condition_false is True
+    assert harp_skip.when_no_candidate is True
+    assert "c57835716.lua" in harp_skip.basis
+    assert "s.spop" in harp_skip.basis
 
 
 def test_n06_a_declaration_without_a_basis_is_rejected():

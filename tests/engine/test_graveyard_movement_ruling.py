@@ -508,11 +508,13 @@ def test_d01_girsu_resolves_and_the_card_moves(repository):
     """
     from tests.engine.test_deck_to_grave_blocker import (
         _girsu_board,
-        _orcust_pool,
+        _undeclared_grave_pool,
         _summon_girsu,
     )
 
-    others = [cid for cid in _orcust_pool(repository) if cid != GROWTH]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     #: 앞쪽 넷은 패로 뽑힌다 — 증거 카드를 덱에 남기려면 그 뒤에 둔다.
     setup = _girsu_board(
         repository, deck_pool=others[:4] + [GROWTH] + others[4:]
@@ -527,16 +529,38 @@ def test_d01_girsu_resolves_and_the_card_moves(repository):
         duel.state, source, GIRSU, EffectRef(GIRSU, 0), lambda cid: cid == GROWTH
     )
 
-    #: 후보 가운데 증거를 가진 카드는 **정확히 하나**다 — 나머지는 ``UNKNOWN``.
+    #: 🔴 **증거를 가진 카드가 둘이 되었다** (Phase 6-AO). 그때까지 하나였던
+    #: 것은 사실이고, 그 Phase 가 **오르페골 디베르**의
+    #: ``MAY_BE_SENT_TO_GRAVE`` 를 공식 텍스트 전문을 읽어 등재했다 (기르수
+    #: ① 이 덱에서 디베르를 묘지로 보내는 것이 그 Phase 경로의 첫 걸음이다).
+    #: 늘어난 것은 **읽은 카드**이고, 나머지는 여전히 ``UNKNOWN`` 이다.
+    #:
+    #: 🔴 재는 사실은 "**증거 없는 카드를 통과시키지 않는다**" 이므로, 수를
+    #: 박지 않고 **등재된 것과 등재되지 않은 것의 합이 전부**인지 센다.
     board = BoardRuling(granted, OPERATION_RULINGS)
     answers = [
         board.explain(RuleQuestion.MAY_BE_SENT_TO_GRAVE, i).answer
         for i in found.eligible
     ]
-    assert answers.count(ConditionResult.TRUE) == 1, answers.count(
-        ConditionResult.TRUE
+    declared = {
+        instance
+        for instance in found.eligible
+        if (facts := OPERATION_RULINGS.facts_for(
+            granted.find(instance).card_id
+        ))
+        is not None
+        and facts.answer_for(RuleQuestion.MAY_BE_SENT_TO_GRAVE) is not None
+    }
+    assert answers.count(ConditionResult.TRUE) == len(declared), (
+        answers.count(ConditionResult.TRUE),
+        len(declared),
     )
-    assert answers.count(ConditionResult.UNKNOWN) == len(answers) - 1
+    assert answers.count(ConditionResult.UNKNOWN) == len(answers) - len(declared)
+    assert ConditionResult.FALSE not in answers
+    #: 🔴 그리고 이 판에서 그것은 『성장』 **하나**다 — 덱을 증거 없는
+    #: 카드로만 채웠으므로 (:func:`_undeclared_grave_pool`) 일부러 넣은 그
+    #: 한 장만 답을 갖는다.
+    assert {granted.find(i).card_id for i in declared} == {GROWTH}
 
     assert activated.status.value == "activated"
     assert resolved.result.status.name == "RESOLVED", resolved.result.reason
@@ -562,11 +586,13 @@ def test_d02_the_journal_records_the_move_and_the_shuffle(repository):
     """
     from tests.engine.test_deck_to_grave_blocker import (
         _girsu_board,
-        _orcust_pool,
+        _undeclared_grave_pool,
         _summon_girsu,
     )
 
-    others = [cid for cid in _orcust_pool(repository) if cid != GROWTH]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     setup = _girsu_board(
         repository, deck_pool=others[:4] + [GROWTH] + others[4:]
     )
@@ -593,11 +619,13 @@ def test_d03_the_duel_keeps_going_after_the_resolution(repository):
     """§6-9 — 해결 뒤에도 ``legal_actions`` 가 나온다. 판이 멈추지 않는다."""
     from tests.engine.test_deck_to_grave_blocker import (
         _girsu_board,
-        _orcust_pool,
+        _undeclared_grave_pool,
         _summon_girsu,
     )
 
-    others = [cid for cid in _orcust_pool(repository) if cid != GROWTH]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     setup = _girsu_board(
         repository, deck_pool=others[:4] + [GROWTH] + others[4:]
     )
@@ -629,11 +657,13 @@ def test_d04_choosing_a_card_without_evidence_still_stops(repository):
     """
     from tests.engine.test_deck_to_grave_blocker import (
         _girsu_board,
-        _orcust_pool,
+        _undeclared_grave_pool,
         _summon_girsu,
     )
 
-    others = [cid for cid in _orcust_pool(repository) if cid != GROWTH]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     setup = _girsu_board(
         repository, deck_pool=others[:4] + [GROWTH] + others[4:]
     )
@@ -936,9 +966,18 @@ def test_g05_the_verdict_distribution_changed_only_one_way(repository):
 
     assert flipped == [], flipped
     #: 🔴 991 → 990 · 684 → 685 (Phase 6-AC). 한 장이 **파생에서 등재로**
-    #: 옮겨 갔다 — 성유물－『성장』 이다. 합(1,675)은 그대로이고, 뒤집힌
-    #: 카드는 여전히 **0장**이다: 등재가 파생과 **같은 답**을 적었다는 뜻이고
-    #: 그것이 이 시험이 지키는 사실이다.
+    #: 옮겨 갔다 — 성유물－『성장』 이다. 합(1,675)은 그대로였고, 뒤집힌
+    #: 카드는 **0장**이었다: 등재가 파생과 **같은 답**을 적었다는 뜻이다.
+    #:
+    #: 🔴 **685 → 686 · 합 1,675 → 1,676** (Phase 6-AO). 이번에는 **파생이
+    #: 답하지 못했던 카드**가 등재로 들어왔다 — 오르페골 디베르(57835716)
+    #: 이고, 실측으로 ``self_grave_text_fact`` 가 그 카드에 ``None`` 을
+    #: 돌려준다 (「묘지의 이 카드를 제외하고」 는 **자기 묘지행 유발**의
+    #: 문장이 아니다). 그래서 ``newly_true`` 는 **그대로 990** 이고 합만
+    #: 하나 늘었다.
+    #:
+    #: 🔴 **이 시험이 지키는 사실은 그대로다** — 뒤집힌 카드가 0장이다.
+    #: 등재가 늘어도 파생의 답을 덮어쓰지 않는다.
     assert newly_true == 990, newly_true
-    assert already == 685, already
-    assert newly_true + already == 1675
+    assert already == 686, already
+    assert newly_true + already == 1676

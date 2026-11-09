@@ -530,12 +530,17 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     #: 🔴 Phase 6-AF 에서 **등재 수와 카드 수가 갈라졌다** — 카드 수는 19
     #: 로 그대로이고 등재 수만 20 이 되었다. 기르수 ③(토큰 생성)이 이미
     #: 등재된 기르수 ①(유발) 과 **같은 카드**에 붙기 때문이다. 6-AC 까지는
     #: 한 카드에 둘을 등재한 자리가 없어 두 수가 같았다.
-    assert len(card_ids) == 19
+    #: 🔴 19 → **20** (Phase 6-AO) — 디베르는 **새 카드**이므로 카드 수도
+    #: 하나 늘었다 (등재 21 · 카드 20 · 차이는 기르수 한 장에 둘).
+    assert len(card_ids) == 20
 
     kinds = collections.Counter()
     executable_kinds = collections.Counter()
@@ -559,7 +564,10 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 🔴 몬스터가 **셋** 있다 — 어니스트 ①(6-K) · 기르수 ①(6-V) ·
     #: 성유물－『성장』 ②(6-AC). 마법 · 함정 쪽 16 은 **그대로**이고,
     #: 그것이 "늘어난 쪽이 몬스터이고 거기뿐" 을 센다.
-    assert kinds["monster"] == 3, dict(kinds)
+    #: 🔴 3 → **4** (Phase 6-AO, 오르페골 디베르 ①). 마법 · 함정 쪽 16 은
+    #: **그대로**이고, 그것이 "늘어난 쪽이 몬스터이고 거기뿐" 을 센다.
+    #: **이전 수가 틀렸던 것이 아니라** 그때는 셋이었다.
+    assert kinds["monster"] == 4, dict(kinds)
     assert kinds["spell"] + kinds["trap"] == 16, dict(kinds)
     #: 🔴 **실행되는 몬스터가 하나 있다** (Phase 6-L · 어니스트 ①). 6-K
     #: 시점에는 0이었고 그것이 그때의 사실이었다. 단언을 지우지 않는다 —
@@ -568,11 +576,12 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 🔴 1 → **2** (Phase 6-V, 기르수 ①) → **3** (Phase 6-AC, 『성장』 ②).
     #: 마법 · 함정 쪽 13 은 **그대로**이고, 그것이 "늘어난 쪽이 몬스터이고
     #: 거기뿐" 을 센다.
-    assert executable_kinds["monster"] == 3, dict(executable_kinds)
+    #: 🔴 3 → **4** (Phase 6-AO, 디베르 ① · ``executable=True``).
+    assert executable_kinds["monster"] == 4, dict(executable_kinds)
     assert executable_kinds["spell"] + executable_kinds["trap"] == 13, dict(
         executable_kinds
     )
-    assert sum(executable_kinds.values()) == 16, dict(executable_kinds)
+    assert sum(executable_kinds.values()) == 17, dict(executable_kinds)
 
 
 def test_13_the_engine_splits_on_effect_ref_not_on_card_versus_effect(repository):

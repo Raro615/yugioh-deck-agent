@@ -383,6 +383,10 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
 
     🔴 **Phase 6-AF 에서 셋이 넷이 됐다** (기르수 ③ 기동). 같은 성질의
     고침이다 — 넷 다 손으로 적었고, 자동 변환은 여전히 **없다.**
+
+    🔴 **Phase 6-AO 에서 넷이 다섯이 됐다** (오르페골 디베르 ① 기동 —
+    **묘지에서** 발동하는 첫 등재다). 같은 성질의 고침이고, 지키는 사실도
+    그대로다 — 다섯 다 손으로 적었다.
     """
     declared = {
         entry.definition.effect_ref: entry.definition.activation_kind
@@ -398,6 +402,10 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
         #: (기르수 ① 과 ③). 한 효과를 등재했다고 나머지가 열리지 않는다는
         #: 사실은 ``test_m02`` 가 센다.
         EffectRef(GIRSU, GIRSU_IGNITION_ORDINAL): ActivationKind.IGNITION,
+        #: 🔴 Phase 6-AO — **묘지에서** 발동하는 첫 등재다. 발동 자리를
+        #: 정의가 적어 두므로 (``activation_zones={GRAVE}``) 그 자리가
+        #: 아닐 때의 답이 모름이 아니라 확정 거부가 된다.
+        EffectRef(57835716, 0): ActivationKind.IGNITION,
     }
     entry = next(e for e in EFFECT_LIBRARY if e.definition.effect_ref == HONEST_REF)
     #: 🔴 **Phase 6-L 에서 실행된다.** 6-K 시점에는 ``executable=False`` ·

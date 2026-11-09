@@ -946,7 +946,9 @@ def test_f_the_registry_covers_every_registered_real_card():
     #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
     #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
-    assert len(OPERATION_RULINGS) == 22
+    #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네를
+    #: 읽어 등재했다 (디베르는 두 질문, 나머지 둘은 한 질문).
+    assert len(OPERATION_RULINGS) == 25
 
 
 def test_f_no_spell_or_trap_claims_to_be_returnable(repository):

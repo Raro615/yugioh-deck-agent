@@ -777,11 +777,22 @@ def test_d_an_unpayable_cost_leaves_no_link_and_no_change(state):
 
 
 @requires_official_db
-def test_d_can_activate_does_not_promise_the_cost_can_be_paid(state):
+def test_d_can_activate_now_checks_whether_the_cost_can_be_paid(state):
     """
-    🟠 STRUCTURAL-56 — ``can_activate`` 는 ``VALID`` 인데 ``activate`` 는
-    비용에서 멈춘다. ``CostPayer`` 의 preflight 가 비공개라 밖에서 물어볼
-    수 없고, 흉내 내면 두 벌이 갈리기 때문이다. 지금은 그 한계를 적어 둔다.
+    🔴 **STRUCTURAL-56 이 Phase 6-AO 에서 닫혔다.**
+
+    그때까지 ``can_activate`` 는 ``VALID`` 인데 ``activate`` 가 비용에서
+    멈췄다 — ``CostPayer`` 의 preflight 가 비공개라 밖에서 물어볼 수 없고,
+    흉내 내면 두 벌이 갈리기 때문이었다. **그 한계는 실제였다.**
+
+    6-AO 가 비용 있는 효과를 처음 등재하면서 그 갈림이 동작으로 드러나게
+    되었고 (치를 수 없는 비용의 발동이 후보 목록에 오른다), 그래서 관문이
+    **흉내 내지 않고 같은 검증기를 부른다** —
+    :class:`~engine.cost.CostValidator` 는 관측만 읽으므로 판을 바꾸지
+    않는다 (``EffectActivator._check_cost``).
+
+    🔴 **두 답이 이제 같다.** 그것이 이 시험이 지키는 새 사실이고, 아래가
+    둘을 나란히 센다.
     """
     definition = synthetic_destroy(cost=CostGroup((LifeCost(amount=999_999),)))
     activator = synthetic_activator(definition)
@@ -796,7 +807,11 @@ def test_d_can_activate_does_not_promise_the_cost_can_be_paid(state):
         state, Chain(), action, picked(their_monster(state)), authorization=GRANTED
     )
 
-    assert asked.validity is ActionValidity.VALID  # 비용은 보지 않았다
+    #: 🔴 **관문이 비용을 본다** — 그리고 거절의 이유도 비용이다.
+    assert asked.validity is ActionValidity.INVALID
+    assert asked.code is ValidationCode.INSUFFICIENT_LIFE
+    assert "비용을 치를 수 없습니다" in asked.reason
+    #: 실제 발동도 같은 자리에서 멈춘다 — 두 답이 **같은 판에서 같다.**
     assert tried.status is ActivationStatus.COST_UNPAYABLE
     assert tried.link is None  # 그래도 링크는 생기지 않는다
 

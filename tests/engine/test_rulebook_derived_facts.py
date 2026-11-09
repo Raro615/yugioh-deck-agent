@@ -175,8 +175,11 @@ def test_a01_the_registry_holds_twenty_one_hand_written_cards():
     #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
     #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
-    assert len(OPERATION_RULINGS) == 22
-    assert len(OPERATION_RULINGS.card_ids) == 22
+    #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네를
+    #: 읽어 등재했다 (디베르는 두 질문, 나머지 둘은 한 질문).
+    assert len(OPERATION_RULINGS) == 25
+    #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네.
+    assert len(OPERATION_RULINGS.card_ids) == 25
     assert PACHYCEPHALO in OPERATION_RULINGS.card_ids
     assert FEATHERMAN in OPERATION_RULINGS.card_ids
     assert HONEST in OPERATION_RULINGS.card_ids
@@ -811,11 +814,15 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
     #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
-    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 17
+    #: 🔴 17 → **18** (Phase 6-AO) — 디베르 ① 이 실행 가능으로 더해졌다.
+    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 18
 
     definition = definition_registry().definition_for(
         EffectRef(POT_OF_GREED, 0)
@@ -883,7 +890,9 @@ def test_g02_the_registry_data_was_not_expanded():
     #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
     #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
-    assert len(OPERATION_RULINGS) == 22
+    #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네를
+    #: 읽어 등재했다 (디베르는 두 질문, 나머지 둘은 한 질문).
+    assert len(OPERATION_RULINGS) == 25
     #: 라이브러리 쪽은 6-O 가 건드리지 않았다 — 유도는 ruling.py 에 있다.
     assert "rulebook_facts" not in library
 

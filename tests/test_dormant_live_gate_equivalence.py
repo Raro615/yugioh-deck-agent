@@ -40,8 +40,28 @@ Base: Phase 3-E-43 (결과 ``35e156e`` · 보고서 ``40a7766`` · STRUCTURAL_RI
 수 없는 자리) 은 ``UNKNOWN`` 으로 갈랐다. 이 파일의 ``test_22`` · ``test_23``
 · ``test_30`` 이 그 뒤의 계약을 지킨다.
 
-**``ACTIVATION_ZONE`` 과 ``COST_FEASIBILITY`` 의 ``DIFFERENT_RESULT`` 는 그대로
-남아 있다** — 3-E-45 는 ``EVENT_RELATION`` 하나만 다뤘다.
+**``ACTIVATION_ZONE`` 의 ``DIFFERENT_RESULT`` 는 그대로 남아 있다** —
+3-E-45 는 ``EVENT_RELATION`` 하나만 다뤘다.
+
+``COST_FEASIBILITY`` → **Phase 6-AO 가 닫았다**
+-----------------------------------------------
+🔴 **3-E-44 의 측정은 그때 맞았다.** live ``EffectActivator.can_activate`` 는
+비용을 **묻지 않았고**, 그래서 치를 수 없는 비용에 dormant 는 ``INVALID`` ·
+live 는 ``VALID`` 를 냈다 (``test_19``). 그 차이가 production 결과를 바꾸지
+않은 이유도 함께 적혀 있었다 — **등재 효과 전부가 비용이 없었다**
+(``test_21``).
+
+Phase 6-AO 가 「오르페골 디베르」 ① 을 등재하면서 그 전제가 끝났다. 그 효과는
+**비용 있는 첫 등재 효과**(``SelfCardCost.banish({GRAVE})``)이고, 비용을 보지
+않는 ``can_activate`` 는 치를 수 없는 비용의 발동을 후보로 올리게 된다. 그래서
+6-AO 가 ``can_activate`` 에 ``_check_cost`` 를 더해 **같은 판정기**
+(:class:`~engine.cost.CostValidator`) 를 쓰게 했고, 두 계층의 답이 같아졌다.
+
+🔴 **이 파일의 단언을 약하게 고친 것이 하나도 없다.** 바뀐 사실을 그대로
+적는다 — ``test_19`` 는 이제 **둘이 같다**를 재고, ``test_20`` 은 부르는
+자리가 **둘**임을 재고 (그 둘이 무엇인지까지 적는다), ``test_21`` 은 비용 있는
+효과가 **하나**임을 잰다. 어느 것도 "DIFFERENT_RESULT 였다" 는 과거 측정을
+지우지 않는다.
 """
 
 import ast
@@ -795,12 +815,18 @@ def test_19_cost_diverges_hardest_when_the_cost_is_unpayable(repository):
     """
     **K3 — 치를 수 없는 비용.** 라이프 8000 에 비용 9000.
 
-    * dormant → ``INVALID`` / ``INSUFFICIENT_LIFE`` — **확실한 거부**
-    * live    → ``VALID`` / ``OK`` (``can_activate`` 는 비용을 판정하지 않는다
-      고 docstring 이 직접 적는다)
+    3-E-44 의 실측 (그때의 사실)::
 
-    같은 판에서 한쪽은 불가능이라 하고 한쪽은 가능이라 한다. 이것이 이 관문의
-    ``DIFFERENT_RESULT`` 근거다.
+        dormant → INVALID / INSUFFICIENT_LIFE    — 확실한 거부
+        live    → VALID   / OK                   — 비용을 묻지 않았다
+
+    같은 판에서 한쪽은 불가능이라 하고 한쪽은 가능이라 했고, 그것이 이 관문의
+    ``DIFFERENT_RESULT`` 근거였다.
+
+    🔴 **Phase 6-AO 가 그 차이를 닫았다** — 이제 **둘이 같다.** 왜 그때
+    달라도 되었고 지금은 안 되는지는 이 파일 머리말에 적었다 (요지: 비용 있는
+    등재 효과가 없다가 생겼다). 그래서 이 시험은 **"둘이 같다"** 를 잰다 —
+    약해진 것이 아니라 **더 센 단언**이다.
     """
     state, instance = board(repository)
     definition = costed(9000)
@@ -813,19 +839,33 @@ def test_19_cost_diverges_hardest_when_the_cost_is_unpayable(repository):
         ActionValidity.INVALID,
         ValidationCode.INSUFFICIENT_LIFE,
     )
-    assert live["can_activate"] == (ActionValidity.VALID, ValidationCode.OK)
-    assert "비용은 **치르지 않는다.**" in ast.get_docstring(
+    #: 🔴 **같은 답이다** — 판정도 코드도.
+    assert live["can_activate"] == gates[EligibilityGate.COST_FEASIBILITY]
+    #: 🔴 그리고 **왜 같아졌는지**가 코드에 적혀 있다.
+    live_doc = ast.get_docstring(
         function_of("engine/activation.py", "can_activate")
     )
+    assert "STRUCTURAL-56 은 6-AO 가 닫았다" in live_doc
+    #: 🔴 **지불은 아직 하지 않는다** — 그 구분은 그대로다.
+    assert "비용은 **치르지 않는다.**" in live_doc
 
 
 def test_20_validate_group_has_exactly_one_caller_and_it_is_dormant():
     """
     비용 **가능성**을 묻는 함수(``CostValidator.validate_group``) 를 부르는
-    자리는 repo 전체에서 **하나**이고, 그것이 dormant 관문이다.
+    자리를 센다.
+
+    3-E-44 의 실측: **하나**이고 그것이 dormant 관문이었다 — live 는 비용
+    가능성을 **묻지 않았다**.
+
+    🔴 **Phase 6-AO 에서 둘이 되었다.** live ``can_activate`` 가
+    ``_check_cost`` 로 **같은 함수**를 부른다 (``engine/activation.py``).
+    흉내가 아니라 같은 판정기를 쓰는 것이 두 벌로 갈리지 않는 방법이고,
+    이 시험은 그 **두 자리가 정확히 무엇인지**를 못박는다 — 세 번째 자리가
+    생기면 그것이 신호다.
 
     live 지불 경로(``CostPayer._preflight``) 는 ``validate`` 를 비용마다 부른다 —
-    다른 단계의 다른 질문이다.
+    다른 단계의 다른 질문이고, 그래서 여기 세지 않는다.
     """
     callers = []
     for path in sorted(PROJECT_ROOT.glob("engine/**/*.py")) + sorted(
@@ -838,14 +878,22 @@ def test_20_validate_group_has_exactly_one_caller_and_it_is_dormant():
                 and node.func.attr == "validate_group"
             ):
                 callers.append(path.relative_to(PROJECT_ROOT).as_posix())
-    assert callers == ["engine/trigger.py"]
+    assert callers == ["engine/activation.py", "engine/trigger.py"], callers
 
 
-def test_21_no_registered_effect_has_a_cost_so_the_live_filter_removes_nothing():
+def test_21_exactly_one_registered_effect_has_a_cost():
     """
-    등재 효과 **16개 전부 비용이 없다.** 그래서 live 의 ``cost.costs`` 거름은
-    지금 아무것도 빼지 않고, 두 계층의 차이도 **현재 production 결과를 바꾸지
-    않는다**. 숫자가 변하면 그것이 신호다.
+    등재 효과 중 비용을 든 것을 센다.
+
+    3-E-44 의 실측: **16개 전부 비용이 없다.** 그래서 live 의 ``cost.costs``
+    거름은 아무것도 빼지 않았고, 두 계층의 차이도 production 결과를 바꾸지
+    않았다 — "숫자가 변하면 그것이 신호다" 라고 적어 두었다.
+
+    🔴 **Phase 6-AO 에서 그 숫자가 변했다** — 「오르페골 디베르」 ① 이
+    ``SelfCardCost.banish({GRAVE})`` 를 들고 들어왔다. 그래서 이 시험은
+    **비용 있는 효과가 정확히 그 하나**임을 잰다 (수를 지우지 않는다), 그리고
+    ``Duel._activation_actions`` 의 거름이 **고르는 비용만** 빼는 것으로
+    좁혀진 것을 함께 못박는다.
     """
     costed_entries = [
         entry.definition.effect_ref
@@ -865,9 +913,22 @@ def test_21_no_registered_effect_has_a_cost_so_the_live_filter_removes_nothing()
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
-    assert costed_entries == []
-    assert "if definition.cost.costs:" in source_of("engine/duel.py")
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
+    #: 🔴 **정확히 하나**다 — 디베르 ①. 이전 측정이 틀렸던 것이 아니라
+    #: 그때는 하나도 없었다.
+    assert [str(ref) for ref in costed_entries] == ["57835716:e[0]"], (
+        costed_entries
+    )
+    #: 🔴 **거름이 좁혀졌다** — 6-AN 까지는 ``if definition.cost.costs:`` 로
+    #: 비용 있는 효과를 **전부** 뺐고, 6-AO 는 **내놓을 카드를 고르는 비용**
+    #: 만 뺀다 (그 자리를 고르는 계층이 아직 없다). 비용이 있어도 고르지
+    #: 않는 비용은 후보가 되고, 치를 수 있는지는 ``can_activate`` 가 본다.
+    source = source_of("engine/duel.py")
+    assert "if definition.cost.choice_specs():" in source
+    assert "if definition.cost.costs:" not in source
 
 
 # ======================================================================
@@ -1368,7 +1429,13 @@ def test_33_this_phase_changed_no_production_file():
     """
     for path, needle in (
         ("engine/trigger.py", "EligibilityGate.EVENT_RELATION"),
-        ("engine/duel.py", "if definition.cost.costs:"),
+        #: 🔴 **Phase 6-AO 가 이 거름을 좁혔다** —
+        #: ``if definition.cost.costs:`` → ``if definition.cost.choice_specs():``
+        #: (비용 있는 효과를 전부 빼는 대신 **고르는 비용**만 뺀다). 이
+        #: 지문이 지키는 것은 "그 자리에 비용 거름이 있다" 이므로 좁혀진
+        #: 뒤의 모양을 집는다 — 3-E-44 의 측정이 틀렸던 것이 아니라 그때는
+        #: 그 줄이 그 모양이었다.
+        ("engine/duel.py", "if definition.cost.choice_specs():"),
         ("engine/activation.py", "_AVAILABILITY_REFUSAL[availability]"),
         # 🔴 Phase 6-K 가 이 호출에 두 번째 인자를 더했다 (발동 분류). 이
         # 지문이 지키는 것은 "관문이 그대로 있다" 이므로 호출 이름까지만

@@ -687,7 +687,18 @@ def test_11_no_registered_effect_drops_an_existing_set_condition(analyses):
     #: 때). 그 조건도 **버려지지 않고** 옮겨져 있으므로 위의
     #: ``dropped == []`` 가 그대로 참이고, 그것이 이 시험이 재는
     #: 사실이다.
-    assert [ref.card_id for ref in with_lua_condition] == [GALLANTRY, GIRSU]
+    #: 🔴 **Phase 6-AO 에서 셋이 되었다** — 「오르페골 디베르」 ① 의 Lua
+    #: 에도 ``SetCondition`` 이 있다 (``s.spcon1`` —
+    #: ``not Duel.IsPlayerAffectedByEffect(tp,CARD_ORCUSTRATED_BABEL)``).
+    #: 그 조건도 **버려지지 않고** 옮겨져 있으므로 (``FaceUpCardPresent``
+    #: 로 — 그 옮김의 손실은 보고서 §2.3 에 적었다) 위의
+    #: ``dropped == []`` 가 그대로 참이고, 그것이 이 시험이 재는 사실이다.
+    #: **이전 목록이 틀렸던 것이 아니라** 그때는 둘이었다.
+    assert [ref.card_id for ref in with_lua_condition] == [
+        GALLANTRY,
+        GIRSU,
+        57835716,
+    ]
 
 
 @requires_official_db
@@ -720,7 +731,10 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     #: 🔴 8 → **9** (Phase 6-V, 기르수 ①).
     #: 🔴 9 → **10** (Phase 6-AC, 성유물－『성장』 ②). 그 조건도 상태
     #: 조건이다 (``ZoneHasFreeSlot`` — 자신 몬스터 존에 빈 자리가 있다).
@@ -728,7 +742,11 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: ``Not(ZoneCountAtLeast(…, excluding_source=True))`` 과 양쪽 몬스터
     #: 존의 빈 칸 · 특수 소환 허가 넷을 ``And`` 로 묶은 것이고, 공식
     #: ``SetCondition`` 과 ``s.tktg`` 에서 옮겼다.
-    assert len(with_activation) == 11
+    #: 🔴 11 → **12** (Phase 6-AO, 디베르 ①). 그 조건도 상태 조건이다 —
+    #: ``ZoneHasFreeSlot`` · ``SpecialSummonPermitted`` ·
+    #: ``Not(FaceUpCardPresent(…, 바벨))`` 를 ``And`` 로 묶은 것이고,
+    #: 공식 ``s.spcon1`` 과 ``s.sptg`` 에서 옮겼다.
+    assert len(with_activation) == 12
 
     #: 🔴 **Phase 6-AF — ``card_id → ordinal`` 사전으로는 더 가를 수 없다.**
     #: 기르수가 블록 둘을 등재했으므로 (① 과 ③) 사전은 하나를 덮어쓴다.
@@ -755,7 +773,9 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
         assert has_target is True, ref
         assert "chk==0" in lua_of(ref.card_id), ref
 
-    #: 그리고 **등재 16개 전부** ``SetTarget`` 을 가진다.
+    #: 🔴 디베르 ① 은 이 아홉에 **들지 않는다** — ``SetCondition`` 을
+    #: 가지므로 ``test_11`` 이 센 쪽이다. 그래서 ``from_target`` 은 9 그대로다.
+    #: 그리고 **등재 효과 전부** ``SetTarget`` 을 가진다.
     assert all(slot_flags(e.definition.effect_ref.card_id, e.definition.effect_ref.ordinal)[1] for e in EFFECT_LIBRARY)
 
     #: 출처를 적을 **구조적인 칸이 없다**. 생기면 여기서 깨진다.

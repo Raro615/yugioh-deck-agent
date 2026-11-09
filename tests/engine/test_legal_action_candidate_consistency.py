@@ -1933,7 +1933,13 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     #:     ``_note_gate_refusal`` 과 **같은 이유로 뺀 자리**다. 유발의 관문
     #:     거절을 적는 문장이 두 자리에서 필요해졌다 (대상 조합별 관문과
     #:     **대상에 독립적인** 관문), 그래서 한 함수로 뺐다.
+    #: 🔴 **정정 (Phase 6-AO).** ``_activation_actions`` 가 **다시** 보류를
+    #: 만든다 — 자리가 열이다. 그 Phase 가 "비용이 있으면 전부 건너뛴다" 를
+    #: "**고를 것이 있는** 비용만 건너뛴다" 로 좁혔고, 건너뛰는 자리에
+    #: **왜 후보가 되지 못했는지** 적게 했다 (``COST_SELECTION_MISSING``).
+    #: 적지 않으면 "그 효과가 없다" 로 읽힌다.
     assert sorted(by_function) == [
+        "_activation_actions",
         "_enforce_mandatory",
         "_flow_actions",
         "_link_summon_actions",
@@ -1944,6 +1950,12 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
         "_trigger_actions",
         "_withheld_board_actions",
     ], sorted(by_function)
+    #: 그 한 자리는 **언제나 ``missing`` 을 채운다** — 모름이므로 무엇이
+    #: 없어서인지 적어야 한다 (``WithheldAction.__post_init__`` 의 규율).
+    assert all(
+        any(kw.arg == "missing" for kw in node.keywords)
+        for node in by_function["_activation_actions"]
+    )
     assert source.count("WithheldAction(") == sum(
         len(v) for v in by_function.values()
     ), "함수 밖에서 보류를 만드는 자리가 있다"

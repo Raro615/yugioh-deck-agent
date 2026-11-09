@@ -135,8 +135,21 @@ ENLILGIRSU = 74820316
 #: 가 되고 (``special_summon_restriction_signals is None``), 재려는 사실이
 #: 그 모름에 가려진다. ``test_a06`` 이 그 선택의 근거를 센다.
 FILLER = GIRSU
-#: 🔴 **신호를 적었는데 손으로 읽은 표에 없는** 실제 카드 — 오르페골 디베르.
-UNJUDGED = 57835716
+#: 🔴 **신호를 적었는데 손으로 읽은 표에 없는** 실제 카드 — 오르페골
+#: 트로이메어 (LINK-2, ``EFFECT_CANNOT_SPECIAL_SUMMON`` 신호 있음).
+#:
+#: 🔴 **이 자리의 카드는 표가 늘 때마다 바뀐다.** 6-AF 는 「오르페골
+#: 디베르」(57835716)가 이 자리였고, Phase 6-AO 가 디베르의 묘지 효과 ① 을
+#: 등재하면서 **그 신호가 무엇이었는지**를 손으로 읽어 표에 적었다
+#: (``prohibits=False`` — 「① 을 쓴 **그 턴에만** 어둠 속성으로 제한한다」
+#: 는 뜻이고 「필드에 있으면 특수 소환할 수 없다」 가 아니다). 그래서
+#: 디베르는 더 이상 "읽지 않은" 예시가 아니다. **이전 단언이 틀렸던 것이
+#: 아니라, 그때는 그 카드가 정말 표에 없었다** — 재는 것은 "읽지 않은
+#: 신호는 ``UNDETERMINED`` 다" 이고 특정 카드가 아니다.
+#:
+#: 실측 (``scratchpad/ao/probe_unjudged3.py``): 신호를 적었고 표에 없는
+#: 몬스터가 536장이며, 그중 「오르페골」 계열은 이 카드 하나다.
+UNJUDGED = 4055337
 P0, P1 = 0, 1
 
 #: 기르수 ③ 의 ordinal. **추측이 아니다** — ``test_a01`` 이 파싱 결과와
@@ -648,8 +661,10 @@ def test_b07_an_unjudgeable_restriction_stays_unknown(repository):
     """
     🔴 **판정하지 못한 제약을 허가로 바꾸지 않는다** (§1 금지).
 
-    「오르페골 디베르」(57835716)는 특수 소환 금지 신호를 적었고 손으로 읽은
-    표에 없다 — 그때 답은 ``UNDETERMINED`` 이고 ``ALLOWED`` 가 아니다.
+    「오르페골 트로이메어」(4055337)는 특수 소환 금지 신호를 적었고 손으로
+    읽은 표에 없다 — 그때 답은 ``UNDETERMINED`` 이고 ``ALLOWED`` 가 아니다.
+    (6-AF 는 디베르가 이 예시였다 — 왜 옮겼는지는 ``UNJUDGED`` 주석에
+    적었다.)
     """
     definition = repository.get(UNJUDGED)
     assert definition.special_summon_restriction_signals
@@ -1127,7 +1142,13 @@ def test_e04_the_existing_line_still_runs(repository):
 @pytest.mark.real_card
 def test_e05_both_lines_are_registered_separately(repository):
     """🔴 **새 경로를 따로 등록했다.** 기존 이름은 그대로다."""
-    assert sorted(COMBO_LINES) == ["orcust-girsu", "orcust-girsu-token"]
+    #: 🔴 **Phase 6-AO 가 또 하나를 따로 등록했다** (디베르 경로). 기존 두
+    #: 이름은 그대로다.
+    assert sorted(COMBO_LINES) == [
+        "orcust-girsu",
+        "orcust-girsu-token",
+        "orcust-harp-horror",
+    ]
     assert line_named("orcust-girsu") is ORCUST_GIRSU_LINE
     assert line_named("orcust-girsu-token") is ORCUST_GIRSU_TOKEN_LINE
     assert ORCUST_GIRSU_LINE.declines == ()

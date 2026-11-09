@@ -210,7 +210,17 @@ def test_a_the_summon_kind_names_only_implemented_procedures():
 
 
 def test_a_the_procedure_says_what_it_supports():
-    assert SPECIAL_SUMMON_FROM_ZONES == frozenset({Zone.HAND, Zone.GRAVE})
+    #: 🔴 **덱이 Phase 6-AO 에서 들어왔다.** 「덱에서 … 1장을 특수 소환한다」
+    #: 를 실행하는 효과가 등재되었기 때문이고 (오르페골 디베르 ①), 절차는
+    #: 출발 존의 목록만 보므로 옮길 코드가 없었다. 그때까지 덱이 없었던 것은
+    #: 사실이다 — 이 시험이 틀린 가정을 갖고 있었던 것이 아니다.
+    #:
+    #: 🔴 **엑스트라 덱은 여전히 없다** — 그쪽은 융합 · 싱크로 · 엑시즈 ·
+    #: 링크 **절차**의 일이다.
+    assert SPECIAL_SUMMON_FROM_ZONES == frozenset(
+        {Zone.HAND, Zone.GRAVE, Zone.DECK}
+    )
+    assert Zone.EXTRA not in SPECIAL_SUMMON_FROM_ZONES
     assert SPECIAL_SUMMON_TO_ZONE is Zone.MZONE
     assert SPECIAL_SUMMON_PROCEDURE.summon is SummonKind.SPECIAL
     assert SPECIAL_SUMMON_PROCEDURE.kind is PlayerActionKind.SPECIAL_SUMMON
@@ -673,15 +683,39 @@ def test_g_4_the_opponents_hand_cannot_be_probed(state):
 
 @requires_official_db
 def test_g_5_an_unsupported_source_stops_the_execution(state):
-    """덱에서 나오는 특수 소환은 아직 수행할 수 없다."""
-    from_deck = state.player(MINE).deck[0].instance_id
+    """
+    🔴 **옮기지 못한 출발 자리는 절차가 거절한다.**
+
+    🔴 **예시가 덱에서 엑스트라 덱으로 바뀌었다** (Phase 6-AO). 덱은 그
+    Phase 가 옮겼으므로 (``test_a_the_procedure_says_what_it_supports`` 의
+    주석) 더 이상 "지원하지 않는 자리" 가 아니다 — 재는 사실은 **"목록에
+    없는 자리는 거절한다"** 이고 특정 존이 아니다.
+    """
+    outside = state.create_instance(FEATHERMAN, owner=MINE, zone=Zone.EXTRA)
     before = state.state_hash()
 
     with pytest.raises(SpecialSummonError):
-        SpecialSummonExecutor().apply(state, summon(state, from_deck))
+        SpecialSummonExecutor().apply(
+            state, summon(state, outside.instance_id)
+        )
 
-    assert state.locate(from_deck).zone is Zone.DECK
+    assert state.locate(outside.instance_id).zone is Zone.EXTRA
     assert state.state_hash() == before
+
+
+@requires_official_db
+def test_g_5b_the_deck_is_now_a_supported_source(state):
+    """
+    🔴 **덱에서 나오는 특수 소환이 실제로 수행된다** (Phase 6-AO) — 위
+    시험이 덱을 내려놓은 자리를 이 시험이 받는다.
+    """
+    from_deck = state.player(MINE).deck[0].instance_id
+    before = state.state_hash()
+
+    SpecialSummonExecutor().apply(state, summon(state, from_deck))
+
+    assert state.locate(from_deck).zone is Zone.MZONE
+    assert state.state_hash() != before
 
 
 @requires_official_db
@@ -879,9 +913,16 @@ def test_i_only_one_library_effect_special_summons_and_it_was_read_by_hand():
     assert OperationKind.DRAW in kinds
     #: 소환하는 종류는 **특수 소환 하나**다 — 융합 · 싱크로 · 엑시즈 ·
     #: 의식의 종류는 ``OperationKind`` 에 아예 없다.
+    #:
+    #: 🔴 **``RESTRICT_SPECIAL_SUMMON`` 은 소환하는 일이 아니다** (Phase
+    #: 6-AO). 이름에 ``summon`` 이 들어 있을 뿐이고, 하는 일은 「무엇을
+    #: 특수 소환할 수 없는가」 를 적는 것이다 (카드를 움직이지 않는다) —
+    #: 그래서 이 단언에서 빼고 **따로** 센다.
     assert {k for k in kinds if "summon" in k.value} == {
-        OperationKind.SPECIAL_SUMMON
+        OperationKind.SPECIAL_SUMMON,
+        OperationKind.RESTRICT_SPECIAL_SUMMON,
     }
+    assert OperationKind.RESTRICT_SPECIAL_SUMMON in kinds
 
     #: 🔴 **등재가 하나라는 것과, 그 하나의 답이 적혀 있다는 것.**
     #:
@@ -898,7 +939,13 @@ def test_i_only_one_library_effect_special_summons_and_it_was_read_by_hand():
         for operation in entry.definition.operations
         if operation.kind is OperationKind.SPECIAL_SUMMON
     ]
-    assert [str(entry.effect_ref) for entry in summoning] == ["93920420:e[1]"]
+    #: 🔴 **Phase 6-AO 가 두 번째를 등재했다** — 오르페골 디베르 ① 이고,
+    #: 그 카드의 답도 **공식 텍스트 전문을 읽어** 등록소에 적혀 있다
+    #: (아래 고리가 그것을 센다). 늘어난 것은 **읽은 카드**다.
+    assert [str(entry.effect_ref) for entry in summoning] == [
+        "93920420:e[1]",
+        "57835716:e[0]",
+    ]
     for entry in summoning:
         facts = OPERATION_RULINGS.facts_for(entry.card_id)
         assert facts is not None, entry.card_id

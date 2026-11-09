@@ -1081,11 +1081,15 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     executable = [e for e in EFFECT_LIBRARY if e.executable]
     #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
     #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
-    assert len(executable) == 17
+    #: 🔴 17 → **18** (Phase 6-AO) — 디베르 ① 이다.
+    assert len(executable) == 18
     monsters = [
         e.definition.source_card_id
         for e in executable
@@ -1095,7 +1099,9 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     #: 둘을 등재했기 때문이다 (①유발 · ③기동). 목록은 **등재 단위**로
     #: 세므로 카드가 중복되는 것이 정상이고, 그 사실을 억지로 집합으로
     #: 바꾸지 않고 그대로 적는다.
-    assert monsters == [HONEST, GIRSU, GIRSU, WORLD_WAND], monsters
+    #: 🔴 **Phase 6-AO 가 다섯째를 더했다** — 오르페골 디베르 ① 이고
+    #: **묘지에서** 발동하는 첫 등재다.
+    assert monsters == [HONEST, GIRSU, GIRSU, WORLD_WAND, 57835716], monsters
 
 
 # ======================================================================

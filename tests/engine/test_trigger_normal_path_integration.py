@@ -67,6 +67,8 @@ MINE, THEIRS = 0, 1
 GIRSU = 69811710
 #: 성유물－『성장』 — 6-X 가 묘지 이동 근거를 찾은 카드.
 GROWTH = 93920420
+#: 오르페골 디베르 — Phase 6-AO 가 등재한 효과의 주인.
+HARP_HORROR = 57835716
 #: 어리석은 매장 — **같은 해결 시점 선택을 쓰는 다른 효과** (카드 발동이다).
 BURIAL = 81439173
 #: 벌금 — 발동 시점에 패 2장을 받는 효과. **미뤄지지 않는다.**
@@ -77,8 +79,10 @@ PROJECT = pathlib.Path(__file__).resolve().parents[2]
 # ======================================================================
 # 공용 도구 — 시험이 행동을 지정하지 않는다
 # ======================================================================
-def _orcust_pool(repository):
-    from tests.engine.test_deck_to_grave_blocker import _orcust_pool as pool
+def _undeclared_grave_pool(repository):
+    from tests.engine.test_deck_to_grave_blocker import (
+        _undeclared_grave_pool as pool,
+    )
 
     return pool(repository)
 
@@ -101,7 +105,9 @@ def _board(
     ``triggers=False`` 는 **6-Z 이전의 배선**이다 — 사건 원천이 없으면 유발
     후보가 오르지 않는다. 그 사실을 ``test_c10`` 이 센다.
     """
-    others = [cid for cid in _orcust_pool(repository) if cid != GROWTH]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     #: 앞쪽 넷은 패로 뽑힌다 — 증거 카드를 덱에 남기려면 그 뒤에 둔다.
     pool = others[:4] + [GROWTH] * growth_copies + others[4:]
     lines = [f"{GIRSU} x{girsu_copies}"] + [
@@ -937,7 +943,13 @@ def test_b12_activation_time_targeting_is_untouched(repository):
         else:
             kept.append(definition.effect_ref.card_id)
 
-    assert sorted(deferred) == sorted([GIRSU, BURIAL, GROWTH]), deferred
+    #: 🔴 **셋 → 넷** (Phase 6-AO). 더해진 오르페골 디베르 ① 은 **덱**을
+    #: 보고 (가려진 존) 공식 스크립트가 ``s.spop`` 에서 고르므로 (선언)
+    #: **두 이유가 모두** 미루는 쪽을 가리킨다 — 아래 고리가 그 둘을 함께
+    #: 센다. 미루는 다른 셋은 하나도 움직이지 않았다.
+    assert sorted(deferred) == sorted([GIRSU, BURIAL, GROWTH, HARP_HORROR]), (
+        deferred
+    )
     #: 🔴 13 → 14 (Phase 6-AC) → **13** (Phase 6-AD). 6-AC 는 성유물－
     #: 『성장』 ② 를 "패를 보므로 그대로 두는 쪽" 에 넣었고, 6-AD 가 그
     #: 판단을 정정해 **미루는 쪽**으로 옮겼다. 열셋은 6-AC 전과 같은
@@ -973,6 +985,12 @@ def test_b12_activation_time_targeting_is_untouched(repository):
         if card_id == GROWTH:
             #: 패만 본다 — 가려진 존이 아니다. 그래도 미뤄진다.
             assert not (looked & CONCEALED_ZONES), (card_id, looked)
+            assert declared is True
+        elif card_id == HARP_HORROR:
+            #: 🔴 **둘 다다** (Phase 6-AO) — 덱을 보고(짐작), 공식
+            #: 스크립트가 해결 중에 고른다(읽은 것). 선언이 있으므로 짐작에
+            #: 기대지 않는다.
+            assert looked & CONCEALED_ZONES, (card_id, looked)
             assert declared is True
         else:
             assert looked & CONCEALED_ZONES, (card_id, looked)
@@ -1229,7 +1247,13 @@ def test_c07_the_ruling_registry_was_not_widened():
     #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
     #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
-    assert len(OPERATION_RULINGS) == 22
+    #: 🔴 22 → **25** (Phase 6-AO). 세 장이 늘었다 — 오르페골 디베르 ·
+    #: 스켈레촌 · 카노네다. 디베르는 두 질문의 답을 적었고
+    #: (``MAY_BE_SENT_TO_GRAVE`` · ``MAY_BE_SPECIAL_SUMMONED``) 나머지 둘은
+    #: 디베르 ① 이 덱에서 특수 소환할 **후보**이므로 그 질문 하나만 적었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 ``UNKNOWN``
+    #: 이다 (ADR-006).
+    assert len(OPERATION_RULINGS) == 25
 
 
 def test_c08_the_defaults_are_the_old_behaviour():

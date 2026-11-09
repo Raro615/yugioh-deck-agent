@@ -326,7 +326,10 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -343,6 +346,10 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
         #: ``ordinal`` 이 0 이 아닌 **첫** 등재이기도 하다 (공식 ①②③ 중
         #: ②를 실었다 — ``EffectRef(93920420, 1)``).
         WORLD_WAND,
+        #: 🔴 Phase 6-AO — 오르페골 디베르. **묘지에서 발동하는 첫 등재**,
+        #: **비용을 치르는 첫 등재**, **덱에서 특수 소환하는 첫 등재**,
+        #: 그리고 **특수 소환 제한을 거는 첫 등재**다.
+        57835716,
     }
 
 
@@ -378,7 +385,8 @@ def test_a_fifteen_real_effect_refs_are_executable():
     #: 🔴 **Phase 6-AF 가 기르수 ③ 을 더했다** — ordinal 이 **2** 이므로
     #: 아래 ``EffectRef(cid, 0)`` 묶음에 들어가지 않는다. 억지로 0 에 맞추지
     #: 않고 그 효과의 실제 ref 를 따로 더한다.
-    assert executable == {EffectRef(GIRSU, 2)} | {
+    #: 🔴 **Phase 6-AO 가 하나 더했다** — ``EffectRef(57835716, 0)`` 이다.
+    assert executable == {EffectRef(GIRSU, 2), EffectRef(57835716, 0)} | {
         EffectRef(cid, 0)
         for cid in OLD_CARDS
         + NEW_CARDS
@@ -399,7 +407,8 @@ def test_a_fifteen_real_effect_refs_are_executable():
     }
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 Phase 6-AF — 기르수 ③(토큰 생성)이 더해졌다 (16 → **17**).
-    assert len(executable) == 17
+    #: 🔴 Phase 6-AO — 디베르 ① 이 더해졌다 (17 → **18**).
+    assert len(executable) == 18
 
 
 def test_a_every_declined_card_says_what_is_missing():
@@ -493,6 +502,12 @@ def test_a_operation_coverage_by_real_cards():
         #: 성유물 토큰을 만든다 (``c69811710.lua`` 의 ``s.tkop`` 이
         #: ``Duel.CreateToken`` 둘과 ``SpecialSummonStep`` 둘을 쓴다).
         OperationKind.CREATE_TOKEN,
+        #: 🔴 Phase 6-AO — ``RESTRICT_SPECIAL_SUMMON`` 도 **처음부터 A** 다.
+        #: 이 종류를 더한 까닭이 실제 카드 하나이기 때문이다: 디베르 ① 이
+        #: 「턴 종료시까지 어둠 속성 몬스터밖에 특수 소환할 수 없다」 를
+        #: 건다 (``c57835716.lua`` 의 ``s.spop`` 끝에서
+        #: ``EFFECT_CANNOT_SPECIAL_SUMMON`` 을 등록한다).
+        OperationKind.RESTRICT_SPECIAL_SUMMON,
     }
     # B. synthetic 으로만 검증된 종류 (STRUCTURAL-66)
     #
@@ -1024,7 +1039,14 @@ def test_j_exactly_one_real_card_special_summons():
         )
     ]
 
-    assert [entry.effect_ref for entry in summoners] == [EffectRef(WORLD_WAND, 1)]
+    #: 🔴 **둘이 되었다** (Phase 6-AO). 디베르 ① 은 **덱에서** 소환하고,
+    #: 그 자리의 소생 제한은 묘지 · 제외에만 생기므로
+    #: ``REVIVAL_LIMIT_FREE_ZONES`` 에 덱이 들어왔다 — **엑스트라 덱은 그대로
+    #: 밖**이다.
+    assert [entry.effect_ref for entry in summoners] == [
+        EffectRef(WORLD_WAND, 1),
+        EffectRef(57835716, 0),
+    ]
     #: 🔴 여전히 못 하는 쪽 — 빼 버리지 않는다.
     reborn = entry_for(EffectRef(MONSTER_REBORN, 0))
     assert reborn is not None
@@ -1170,17 +1192,32 @@ def test_k_unsupported_operation_is_unreachable_from_real_cards():
         )
 
 
-def test_k_cost_unavailable_is_unreachable_from_real_cards():
+def test_k_exactly_one_real_card_has_a_cost():
     """
-    §10 의 "cost unavailable" 도 **지금 실제 카드로 닿을 수 없다.**
+    🔴 **§10 의 "cost unavailable" 가 Phase 6-AO 에서 닿는 자리가 되었다.**
 
-    목록의 실제 카드 중 비용이 있는 것이 하나도 없다. 비용 있는 후보
-    (압수 c17375316 의 ``Cost.PayLP(1000)``)는 패 공개(``ConfirmCards``)를
-    옮길 수 없어서 목록에 넣지 않았다 (Phase 2-W §1).
+    그때까지 목록의 실제 카드 중 비용이 있는 것이 하나도 없었던 것은
+    **사실**이다 (압수 c17375316 의 ``Cost.PayLP(1000)`` 는 패
+    공개(``ConfirmCards``)를 옮길 수 없어 목록에 넣지 않았다 — Phase 2-W §1).
+    6-AO 가 오르페골 디베르 ① 을 등재했고 그 비용이 ``Cost.SelfBanish`` 다.
+
+    🔴 **그 하나가 어느 것인지 적는다** — 느슨하게 하지 않는다. 그리고
+    **고를 것이 없는 비용**뿐임을 함께 센다: 고르는 비용은 ``Duel`` 이 아직
+    비용 선택을 넘기지 않으므로 등재하지 않았다.
     """
+    from engine.cost import SelfCardCost
+
+    with_cost = [
+        entry.card_id for entry in EFFECT_LIBRARY if entry.definition.has_cost
+    ]
+    assert with_cost == [57835716], with_cost
     for entry in EFFECT_LIBRARY:
-        assert entry.definition.has_cost is False, entry.card_id
-        assert entry.definition.cost.is_free is True, entry.card_id
+        for cost in entry.definition.cost.costs:
+            assert isinstance(cost, SelfCardCost), (entry.card_id, cost)
+            assert cost.choice_spec() is None
+        #: 🔴 **비용이 없는 효과는 그대로 비어 있다** — 하나만 늘었다.
+        if entry.card_id != 57835716:
+            assert entry.definition.cost.is_free is True, entry.card_id
 
 
 def test_k_an_effect_ref_outside_the_library_has_no_implementation():

@@ -61,6 +61,9 @@ from agent.bounded_search import (
 
 #: 잭나이츠 오르페골 기르수 — **두 걸음이면 자신 필드에 선다.**
 GIRSU = 69811710
+#: 🔴 「오르페골 스켈레촌」 — Phase 6-AO 가 등재한 디베르 ① 이 **덱에서**
+#: 특수 소환하는 몬스터다. ``consumed`` 가 이 카드를 목표로 쓴다.
+SKELETON = 21441617
 #: 오르페골 갈라테아 — 기존 입력의 목표 (어댑터 통합에서 쓴다).
 GALATEA = 30741503
 P0 = 0
@@ -127,6 +130,49 @@ def first_only(opening, goal):
 def continued(opening, goal):
     """**후속 모드 (상한 1)** — 기준점 하나에서 한 걸음 더."""
     return _run(opening, goal, max_depth=4, max_nodes=120, max_results=5,
+                max_followup_actions=1, max_baselines=1)
+
+
+@pytest.fixture(scope="module")
+def flow_baseline(opening, goal):
+    """
+    🔴 **패스를 포함한 기준점이 나오는 예산** (Phase 6-AO 에서 더했다).
+
+    ``first_only`` 는 결과 3건만 모으고, 6-AO 가 디베르(57835716)의 묘지행을
+    등재한 뒤로는 기르수 ① 의 해결 중 선택 후보가 **둘에서 다섯으로**
+    늘었다 (디베르 x3 + 『성장』 x2 — 실측). 그래서 앞 세 결과가 전부 그
+    선택의 변형이고, 흐름 행동(패스)으로 갈라지는 기준점은 그 뒤로 밀렸다.
+
+    🔴 **이전 측정이 틀렸던 것이 아니다** — 그때는 후보가 둘이어서 세 번째
+    결과가 패스였다. ``max_results`` 상한이 5 이므로 (``SearchBudget``) 수를
+    늘려 같은 자리를 되찾을 수는 없고, **깊이를 2 로 줄여** 같은 현상을
+    짧게 다시 만든다 (실측: 결과 4건 중 4번이 ``['normal_summon',
+    'pass']``). 재는 요구는 그대로다 — 흐름 행동은 후속 비용으로 세지
+    않는다.
+    """
+    return _run(opening, goal, max_depth=2, max_nodes=120, max_results=5)
+
+
+@pytest.fixture(scope="module")
+def consumed(opening):
+    """
+    🔴 **목표가 소재로 쓰이는 후속이 나오는 탐색** (Phase 6-AO 에서 더했다).
+
+    ``continued`` 의 목표는 기르수이고, 6-AO 전에는 그 뒤의 후속 후보가
+    적어 **기르수를 소재로 쓰는 링크 소환**이 결과 5건 안에 들어왔다. 6-AO
+    가 디베르 ① 을 등재하면서 그 자리의 후속 후보가 늘었고 (디베르 ① 의
+    해결 중 선택 후보가 **8건** — 스켈레촌 x3 · 기르수 x2 · 카노네 x3,
+    실측), ``max_results`` 상한 5 가 그 변형들로 채워진다.
+
+    🔴 **숨기지 않고 자리를 옮긴다.** 재는 요구("목표를 나중에 소재로 써도
+    최초 도달 기록은 남는다")는 **목표가 무엇이든 같은 요구**이므로, 이
+    Phase 가 만든 전개에서 그 현상이 실제로 일어나는 목표를 쓴다 —
+    「오르페골 스켈레촌」이다 (기르수 ① → 디베르 묘지행 → 디베르 ① 로 덱에서
+    스켈레촌 특수 소환 → 기르수 + 스켈레촌 링크 소환으로 **소재가 된다**).
+    실측: 후속 5건 중 2건이 ``goal_kept is False`` 다.
+    """
+    return _run(opening, FieldGoal(card_id=SKELETON, seat=P0),
+                max_depth=4, max_nodes=200, max_results=5,
                 max_followup_actions=1, max_baselines=1)
 
 
@@ -232,7 +278,7 @@ def test_a04_the_action_cap_stops_the_expansion(continued):
     assert outcome.search_exhausted is False
 
 
-def test_a05_flow_actions_are_not_charged_to_the_cap(continued, first_only):
+def test_a05_flow_actions_are_not_charged_to_the_cap(continued, flow_baseline):
     """
     🔴 **흐름 행동을 후속 전개 비용으로 세지 않는다** (§3 · §7).
 
@@ -256,21 +302,29 @@ def test_a05_flow_actions_are_not_charged_to_the_cap(continued, first_only):
 
     #: 🔴 기준점 **앞**의 흐름 행동(패스)도 후속 수에 들어가지 않는다 —
     #: 기본 모드의 기준점이 패스를 포함해도 ``followup_actions`` 는 0 이다.
-    _s, plain = first_only
+    #: 🔴 **Phase 6-AO 에서 ``first_only`` → ``flow_baseline`` 로 바꿨다**
+    #: (그 fixture 의 설명에 이유를 적었다). 재는 것은 같다.
+    _s, plain = flow_baseline
     assert any("pass" in [step.kind for step in one.path]
                for one in plain.results)
     assert all(one.meta.followup_actions == 0 for one in plain.results)
 
 
-def test_a06_a_consumed_goal_keeps_its_arrival_record(continued):
+def test_a06_a_consumed_goal_keeps_its_arrival_record(consumed):
     """
     🔴 **목표 카드를 나중에 소재·비용으로 써도 최초 도달 기록은 남는다**
     (§2 · §7).
 
     그리고 **최종 상태에 목표가 남아 있다고 적지 않는다** — 둘은 다른
     사실이고, 재생이 그 둘을 각각 확인한다.
+
+    🔴 **Phase 6-AO 에서 ``continued`` → ``consumed`` 로 바꿨다** (그
+    fixture 의 설명에 이유를 적었다 — 기르수 목표의 후속 자리가 디베르 ① 의
+    변형으로 채워져 링크 소환이 결과 5건 밖으로 밀렸다). 재는 요구는
+    그대로이고, **목표만 이 Phase 의 전개에서 실제로 소재가 되는 카드**로
+    옮겼다.
     """
-    _search, outcome = continued
+    _search, outcome = consumed
     spent = [one for one in outcome.continued_results if not one.goal_kept]
     assert spent, (
         "목표를 소재로 쓰는 후속이 하나도 없었다 — 실제 전개가 바뀌었는지"

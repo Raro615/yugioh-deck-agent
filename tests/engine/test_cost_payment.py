@@ -748,10 +748,17 @@ def test_a_tribute_is_not_representable_and_pays_nothing(state):
     assert state.state_hash() == before
 
 
+#: 🔴 **제외가 목록에서 빠졌다** (Phase 6-AO). 그때까지 치를 수 없었던 것은
+#: 사실이고 (``COST_OPERATION`` 에 줄이 없었다), 6-AO 가 「묘지의 이 카드를
+#: 제외하고 발동할 수 있다」 를 등재하면서 그 줄을 더했다 — 옮기는 계층은
+#: 이미 있었고 (``DESTINATION[BANISH]`` → ``Zone.REMOVED``) 없던 것은 표의
+#: 한 줄이다. 이 시험이 틀린 가정을 갖고 있었던 것이 아니다.
+#:
+#: 🔴 **제외를 재는 자리를 버리지 않았다** —
+#: ``test_banish_is_now_a_supported_cost_kind`` 가 아래에 있다.
 @pytest.mark.parametrize(
     "cost",
     [
-        CardCost.banish(frozenset({Zone.GRAVE}), 1),
         CardCost.send_to_grave(frozenset({Zone.DECK}), 1),
         CardCost(kind=CostSemantics.DETACH, zones=frozenset({Zone.MZONE})),
     ],
@@ -772,11 +779,41 @@ def test_unsupported_cost_kinds_are_named_not_guessed(state, cost):
 
 
 def test_the_supported_set_is_exactly_what_the_step_promised():
+    #: 🔴 **``BANISH`` 가 Phase 6-AO 에서 들어왔다** (위 주석의 근거).
     assert SUPPORTED_COSTS == {
         CostSemantics.DISCARD,
         CostSemantics.RELEASE,
         CostSemantics.PAY_LIFE,
+        CostSemantics.BANISH,
     }
+    #: 들어오지 **않은** 것도 함께 센다 — 넓어진 범위가 의도한 만큼인지.
+    assert CostSemantics.SEND_TO_GRAVE not in SUPPORTED_COSTS
+    assert CostSemantics.DETACH not in SUPPORTED_COSTS
+    assert CostSemantics.UNKNOWN not in SUPPORTED_COSTS
+
+
+def test_banish_is_now_a_supported_cost_kind(state):
+    """
+    🔴 **제외를 비용으로 치를 수 있다** (Phase 6-AO) — 그리고 치르면 카드가
+    제외 존으로 간다. 위의 매개변수 목록에서 빠진 자리를 이 시험이 받는다.
+    """
+    from engine.ids import InstanceId
+
+    chosen = my_hand(state)
+    before = state.state_hash()
+    result = pay(
+        state,
+        CostGroup((CardCost.banish(frozenset({Zone.HAND}), 1),)),
+        context(CostSelection(0, Selection.of(chosen))),
+    )
+    assert result.paid is True, result.reason
+    assert result.status is PaymentStatus.PAID
+    assert state.state_hash() != before
+    moved = state.find_instance(
+        chosen[0] if isinstance(chosen, tuple) else chosen
+    )
+    assert moved is not None
+    assert moved.zone is Zone.REMOVED
 
 
 # ======================================================================

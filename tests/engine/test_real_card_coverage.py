@@ -248,7 +248,10 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
     #: 둘을 등재했기 때문이다 (①유발 · ③기동). 목록은 **등재 단위**로
     #: 세므로 카드가 중복되는 것이 정상이고, 그 사실을 억지로 집합으로
     #: 바꾸지 않고 그대로 적는다.
-    assert not_activate == [HONEST, GIRSU, GIRSU, WORLD_WAND], not_activate
+    #: 🔴 **다섯째가 들어왔다** (Phase 6-AO) — 오르페골 디베르 ① 이다.
+    assert not_activate == [HONEST, GIRSU, GIRSU, WORLD_WAND, 57835716], (
+        not_activate
+    )
 
     # ② 그 하나가 기동 효과이고, **실행된다** (Phase 6-L).
     assert corpus[HONEST]["types"] >= {
@@ -316,7 +319,8 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
     #: 둘을 등재했기 때문이다 (①유발 · ③기동). 목록은 **등재 단위**로
     #: 세므로 카드가 중복되는 것이 정상이고, 그 사실을 억지로 집합으로
     #: 바꾸지 않고 그대로 적는다.
-    assert skipped == [HONEST, GIRSU, GIRSU, WORLD_WAND], skipped
+    #: 🔴 **다섯째가 들어왔다** (Phase 6-AO) — 오르페골 디베르 ① 이다.
+    assert skipped == [HONEST, GIRSU, GIRSU, WORLD_WAND, 57835716], skipped
     assert corpus[HONEST]["blocks"] == 3
     assert corpus[GIRSU]["blocks"] >= 3
     assert corpus[WORLD_WAND]["blocks"] >= 3
@@ -350,7 +354,8 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     #: 🔴 14 → 15 (Phase 6-V, 기르수 ①).
     executable = {e.card_id for e in EFFECT_LIBRARY if e.executable}
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
-    assert len(executable) == 16
+    #: 🔴 16 → **17** (Phase 6-AO) — 디베르 ① 이다.
+    assert len(executable) == 17
     # 실행되는 카드는 **하나도 빠짐없이** 막는 것이 없어야 한다.
     #
     # 🔴 어니스트는 예외 집합에 있다 (Phase 6-L). ``clean`` 은
@@ -368,8 +373,12 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     assert HONEST not in set(activate_only)
     assert GIRSU not in set(activate_only)
     assert WORLD_WAND not in set(activate_only)
+    #: 🔴 **디베르도 같은 이유로 예외다** (Phase 6-AO). ``EFFECT_TYPE_IGNITION``
+    #: 이고 ``EFFECT_TYPE_ACTIVATE`` 가 아니므로 그 슬라이스에 들어오지
+    #: 않는다 — 네 장 다 "막는 것이 있다" 가 아니라 **세는 범위가 다르다** 다.
+    assert 57835716 not in set(activate_only)
     assert executable <= set(clean) | {
-        53129443, 83764718, HONEST, GIRSU, WORLD_WAND
+        53129443, 83764718, HONEST, GIRSU, WORLD_WAND, 57835716
     }
 
 

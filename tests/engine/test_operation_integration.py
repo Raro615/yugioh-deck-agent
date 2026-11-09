@@ -291,7 +291,13 @@ def test_a_the_taxonomy_is_exactly_what_is_executable():
     지금 실행할 수 있는 일의 **전부**다. 늘어나면 이 테스트가 깨지고,
     그때 무엇이 늘었는지 여기 적는다.
     """
+    #: 🔴 **Phase 6-AO 가 하나 더했다** — ``restrict_special_summon`` 이고
+    #: 카드를 움직이지 않는 일이다 (제한을 적는다).
     assert {kind.value for kind in SUPPORTED} == {
+        #: 🔴 **제한 (Phase 6-AO).** 카드를 움직이지 않는 둘째 일이다
+        #: (``shuffle`` 과 같은 자리) — 「무엇을 특수 소환할 수 없는가」 를
+        #: 상태에 적는다.
+        "restrict_special_summon",
         # 수치
         "draw",
         "change_life",
@@ -915,6 +921,9 @@ def test_h_no_real_card_uses_move_yet():
         OperationKind.RETURN_TO_HAND,  # Phase 2-AK — 강제 탈출 장치
         OperationKind.SPECIAL_SUMMON,  # Phase 6-AC — 성유물－『성장』
         OperationKind.CREATE_TOKEN,  # Phase 6-AF — 기르수 ③
+        #: 🔴 Phase 6-AO — 디베르 ① 이 거는 「어둠 속성밖에 특수 소환할 수
+        #: 없다」. **이동이 아니다** (카드를 움직이지 않는다).
+        OperationKind.RESTRICT_SPECIAL_SUMMON,
     }
     assert OperationKind.MOVE not in kinds
 
@@ -928,7 +937,19 @@ def test_h_no_real_card_uses_move_yet():
         for operation in entry.definition.operations
         if operation.kind is OperationKind.SPECIAL_SUMMON
     ]
-    assert [str(entry.effect_ref) for entry in summoning] == ["93920420:e[1]"]
+    #: 🔴 **둘이 되었다** (Phase 6-AO). 디베르 ① 이고, 그 카드가 **덱에서**
+    #: 소환하므로 관문의 범위도 함께 넓어졌다 —
+    #: ``REVIVAL_LIMIT_FREE_ZONES`` 에 덱이 들어왔고 (소생 제한은 묘지 ·
+    #: 제외에만 생긴다) **엑스트라 덱은 그대로 밖**이다.
+    assert [str(entry.effect_ref) for entry in summoning] == [
+        "93920420:e[1]",
+        "57835716:e[0]",
+    ]
+    from engine.effect.ruling import REVIVAL_LIMIT_FREE_ZONES
+    from engine.vocabulary import Zone as _Zone
+
+    assert _Zone.DECK in REVIVAL_LIMIT_FREE_ZONES
+    assert _Zone.EXTRA not in REVIVAL_LIMIT_FREE_ZONES
 
 
 # ======================================================================

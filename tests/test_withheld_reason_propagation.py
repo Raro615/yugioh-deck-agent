@@ -1661,15 +1661,31 @@ def test_h02_the_hidden_card_alone_does_not_change_the_support_state(
         facedown=False → flow_only   · fully_supported=True  · unsupported=[]
         facedown=True  → unsupported · fully_supported=False · 사유 1건
 
-    🔴 **초기 판 구성과 실제 실행을 가른다.** 앞면 욕망의 항아리를 묘지로
-    옮기는 것은 **초기 판 구성**이다 (그 카드의 별도 발동 미지원 사유가
+    🔴 **초기 판 구성과 실제 실행을 가른다.** 앞면 욕망의 항아리를 판에서
+    치우는 것은 **초기 판 구성**이다 (그 카드의 별도 발동 미지원 사유가
     섞이지 않게 한다). 세트와 기회 통과는 **실제 행위**다.
+
+    🔴 **Phase 6-AO 에서 치우는 자리를 묘지에서 제외 존으로 옮겼다.** 6-AO
+    가 ``ACTIVATION_SOURCE_ZONES`` 에 묘지를 더했으므로 (디베르 ① 이
+    묘지에서 발동한다) **묘지는 더 이상 조용한 자리가 아니다** — 묘지의
+    욕망의 항아리가 발동 후보 자리에 올라오고, 마법의 묘지 발동을 판정할
+    계층이 없으므로 보류 1건이 생긴다
+    (``off-field-activation-timing``). 그 보류는 ``facedown`` 양쪽에
+    똑같이 생기므로 **이 시험이 재는 요구(요구 1-B: 뒷면 카드 유무만으로
+    전체 지원 상태가 달라지지 않는다)는 그대로 참이다.** 그래도 자리를
+    옮긴 이유는 **이 시험의 주제가 아닌 사유를 섞지 않는다** 는 원래 구성
+    의도를 지키기 위해서다 — 기대값을 약하게 고치는 대신 **구성에서 그
+    카드를 치운다** (``fully_supported is True`` · ``unsupported == []``
+    를 그대로 둔다).
+
+    🔴 **묘지가 조용하지 않게 된 것 자체**는 6-AO 의 시험이 따로 잰다
+    (``tests/test_harp_horror_graveyard_effect.py``).
     """
     duel, cyclone, legal_target, _monster = _mixed_target_board(
         repository, facedown_opponent=facedown
     )
-    duel.state.move(legal_target, Zone.GRAVE, to_player=P0)   # 초기 판 구성
-    _set_and_reopen(duel, cyclone)                            # 실제 행위
+    duel.state.move(legal_target, Zone.REMOVED, to_player=P0)  # 초기 판 구성
+    _set_and_reopen(duel, cyclone)                             # 실제 행위
 
     run = _run_opening(duel, repository)
 

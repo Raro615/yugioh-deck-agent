@@ -97,12 +97,25 @@ def _run_line(repository, *, hand=None, choose=None):
 
     🔴 ``opening_wiring`` 을 쓰지 않으면 유발이 ``legal_actions`` 에 오르지
     않아 2 단계부터 막힌다 — 이 파일이 재려는 것이 그 경로다.
+
+    🔴 **경로를 ``opening_wiring`` 에 같이 넘긴다** (Phase 6-AO 에서 고친
+    자리). ``/combo`` 와 Discord 어댑터는 둘 다
+    ``opening_wiring(repository, line)`` 으로 부른다 (``app/main.py`` ·
+    ``app/discord_bot.py``) — 그래야 경로가 **해결 중에 고르려는** 카드가
+    선택 정책에 실린다. 여기서 ``line`` 을 빼고 불렀던 것은 **배선이 실제
+    사용자 경로와 달랐던 것**이고, 그래도 돌았던 이유는 기르수 ① 의 허용
+    후보가 그때 『성장』 **한 장뿐**이어서 기준점(``FirstPermittedChoice``)이
+    우연히 같은 것을 집었기 때문이다. Phase 6-AO 가 디베르(57835716)의
+    묘지행을 등재하자 허용 후보가 둘이 되었고, 패스코드가 더 작은 디베르가
+    먼저 집혀 3 단계가 열리지 않았다. 🔴 **이전 단언이 틀렸던 것이 아니라,
+    배선이 느슨해서 한 장짜리 후보에 기대고 있었다** — 고친 것은 기대값이
+    아니라 배선이다.
     """
     from app.main import opening_wiring
 
     draft = parse_recipe(ORCUST_VERIFICATION_RECIPE, repository).draft
     assert draft is not None
-    chooser, triggers = opening_wiring(repository)
+    chooser, triggers = opening_wiring(repository, ORCUST_GIRSU_LINE)
     setup = build_opening(
         repository,
         draft,
@@ -304,7 +317,9 @@ def test_a04_no_card_is_duplicated_or_lost(repository):
     from app.main import opening_wiring
 
     draft = parse_recipe(ORCUST_VERIFICATION_RECIPE, repository).draft
-    chooser, triggers = opening_wiring(repository)
+    #: 🔴 ``_run_line`` 과 **같은 배선**이다 — 경로를 같이 넘긴다 (Phase
+    #: 6-AO; 이유는 ``_run_line`` 의 주석에 적었다).
+    chooser, triggers = opening_wiring(repository, ORCUST_GIRSU_LINE)
     setup = build_opening(
         repository,
         draft,
@@ -962,10 +977,17 @@ def test_d03_an_effect_without_a_recorded_limit_is_untouched():
     #: 🔴 **Phase 6-AF 가 하나를 더했다** — 기르수 ③ 의
     #: ``SetCountLimit(1,{id,1})`` 이고, ① 의 ``SetCountLimit(1,id)`` 와
     #: **다른 칸**이다 (범위가 PER_EFFECT 대 PER_CARD_NAME).
+    #:
+    #: 🔴 **Phase 6-AO 가 하나를 더했다** — 「오르페골 디베르」 ① 의
+    #: ``c57835716.lua`` ``e1:SetCountLimit(1,57835716)`` 이고 범위는
+    #: ``PER_CARD_NAME`` 이다. **이전 수가 틀렸던 것이 아니라** 그때는 그
+    #: 효과가 등재되지 않았다 (ADR-006 — 등재하지 않은 것은 없는 것처럼
+    #: 동작한다).
     assert limited == {
         f"{GIRSU}:e[0]",
         f"{GIRSU}:e[2]",
         f"{WAND}:e[1]",
+        "57835716:e[0]",
     }, limited
 
 
@@ -1296,6 +1318,11 @@ def test_g04_no_format_legality_is_claimed():
             assert "않는다" in line or "않았다" in line, line
     assert "검증용" in ORCUST_GIRSU_LINE.note
     assert ORCUST_GIRSU_LINE.reproduction_ready is True
-    #: 🔴 **Phase 6-AF 가 경로를 하나 더 등록했다** (토큰 경로). 기존
-    #: 이름은 그대로다 — 새 경로는 **따로** 등록되었다.
-    assert set(COMBO_LINES) == {"orcust-girsu", "orcust-girsu-token"}
+    #: 🔴 **Phase 6-AF 가 경로를 하나 더 등록했고, Phase 6-AO 가 또 하나를
+    #: 더했다** (토큰 경로 · 디베르 경로). 기존 이름은 그대로다 — 새 경로는
+    #: **따로** 등록되었다.
+    assert set(COMBO_LINES) == {
+        "orcust-girsu",
+        "orcust-girsu-token",
+        "orcust-harp-horror",
+    }

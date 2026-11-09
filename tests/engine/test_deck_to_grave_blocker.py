@@ -127,6 +127,38 @@ def _orcust_pool(repository) -> list[int]:
     )
 
 
+def _undeclared_grave_pool(repository) -> list[int]:
+    """
+    「오르페골」 · 「성유물」 풀에서 **묘지행 증거가 등재된 카드를 뺀** 목록
+    (Phase 6-AO).
+
+    왜 이 함수가 생겼는가 — **실측**
+    --------------------------------
+    6-AN 까지 이 풀에서 ``MAY_BE_SENT_TO_GRAVE`` 의 답이 등재된 카드는
+    성유물－『성장』 **하나**였고, 그래서 여러 시험이
+    ``[cid for cid in _orcust_pool(...) if cid != GROWTH]`` 로 "증거 없는
+    덱" 을 만들었다. 그 식은 **"증거를 가진 카드는 『성장』 뿐"** 이라는
+    사실에 기대고 있었다.
+
+    6-AO 가 오르페골 디베르의 그 답을 등재하자 (기르수 ① 이 덱에서 디베르를
+    묘지로 보내는 것이 그 Phase 경로의 첫 걸음이다) 그 기대가 깨졌다 —
+    실측으로 ``first-permitted`` 정책이 **디베르를** 골랐다 (패스코드 순으로
+    57835716 이 93920420 보다 앞이다). 즉 시험이 재려던 것(『성장』 의 묘지행
+    유발) 이 아니라 다른 카드의 이동을 보고 있었다.
+
+    🔴 **그래서 카드 이름을 더 적는 것이 아니라 등록소를 읽는다.** 이 함수는
+    "그 질문의 답이 등재된 카드" 를 전부 빼므로, 다음에 또 한 장이 등재되어도
+    같은 뜻을 유지한다 — 재는 사실은 **"증거 없는 후보는 통과하지 못한다"**
+    이고 특정 카드가 아니다.
+    """
+    return [
+        card_id
+        for card_id in _orcust_pool(repository)
+        if (declared := OPERATION_RULINGS.facts_for(card_id)) is None
+        or declared.answer_for(RuleQuestion.MAY_BE_SENT_TO_GRAVE) is None
+    ]
+
+
 def _girsu_board(repository, *, deck_pool=None, extra_hand=(), girsu_copies=1):
     """기르수가 패에 있는 선공 판. 무작위 셔플에 기대지 않는다."""
     pool = list(deck_pool) if deck_pool is not None else _orcust_pool(repository)
@@ -350,7 +382,9 @@ def test_b04_identical_cards_are_separate_instances(repository):
     묶는 것이 ``InstanceId`` 이므로 같은 이름 3장은 **세 후보**이고, 그
     구분이 없으면 "어느 한 장을 보냈다" 를 말할 수 없다.
     """
-    others = [cid for cid in _orcust_pool(repository) if cid != SELF_GRAVE_TRIGGER]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     #: 🔴 앞쪽 넷은 **패로 뽑힌다** — 세 장을 덱에 남기려면 그 뒤에 둔다.
     pool = others[:4] + [SELF_GRAVE_TRIGGER] * 3 + others[4:]
     setup = _girsu_board(repository, deck_pool=pool)
@@ -676,9 +710,23 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
     이제 후보 하나를 덮는다는 것이다. 그래서 **0장** 을 **그 한 장**으로
     고정한다: 느슨하게 하지 않고 어느 카드인지 적는다.
     """
+    #: 🔴 **덮이는 후보가 넷이 되었다** (Phase 6-AO) — 오르페골 디베르 ·
+    #: 스켈레촌 · 카노네가 등재로 들어왔다. 🔴 그런데 **그 질문의 답**을
+    #: 가진 것은 둘뿐이다 (『성장』 과 디베르): 스켈레촌 · 카노네는
+    #: ``MAY_BE_SPECIAL_SUMMONED`` 만 적혀 있다. 그래서 두 수를 **따로**
+    #: 센다 — "등록소에 있다" 와 "그 질문에 답이 있다" 는 다른 사실이다.
     pool = _orcust_pool(repository)
     covered = [cid for cid in pool if _facts_for(repository, cid) is not None]
-    assert covered == [SELF_GRAVE_TRIGGER], covered
+    assert covered == [21441617, 57835716, SELF_GRAVE_TRIGGER, 94046012], covered
+    answered = [
+        cid
+        for cid in covered
+        if _facts_for(repository, cid).answer_for(
+            RuleQuestion.MAY_BE_SENT_TO_GRAVE
+        )
+        is not None
+    ]
+    assert answered == [57835716, SELF_GRAVE_TRIGGER], answered
 
     #: 등록소는 21장이고 그 안에 든 후보는 **그 한 장**이다.
     #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
@@ -688,8 +736,14 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
     #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
     #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
-    assert len(OPERATION_RULINGS) == 22
-    assert set(OPERATION_RULINGS.card_ids) & set(pool) == {SELF_GRAVE_TRIGGER}
+    #: 🔴 22 → **25** (Phase 6-AO). 세 장이 늘었다 — 오르페골 디베르 ·
+    #: 스켈레촌 · 카노네다. 디베르는 두 질문의 답을 적었고
+    #: (``MAY_BE_SENT_TO_GRAVE`` · ``MAY_BE_SPECIAL_SUMMONED``) 나머지 둘은
+    #: 디베르 ① 이 덱에서 특수 소환할 **후보**이므로 그 질문 하나만 적었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 ``UNKNOWN``
+    #: 이다 (ADR-006).
+    assert len(OPERATION_RULINGS) == 25
+    assert set(OPERATION_RULINGS.card_ids) & set(pool) == set(covered)
 
 
 @pytest.mark.real_card
@@ -699,8 +753,17 @@ def test_f03_every_candidate_answers_unknown_on_the_real_board(repository):
     실제 판에서도 같다 — 적법 후보 **전부**가 ``UNKNOWN`` 이다.
 
     🔴 이것이 §6 의 "그 카드의 묘지 이동 가능성 확인" 이 실패하는 자리다.
+
+    🔴 **덱을 증거 없는 카드로만 채운다** (Phase 6-AO). 그때까지 기본 풀로도
+    같은 답이 나온 것은 증거를 가진 한 장(성유물－『성장』) 이 **패로 뽑혀
+    덱에 남지 않았기** 때문이고, 6-AO 가 오르페골 디베르의 답을 등재하자 그
+    카드가 덱에 남아 ``TRUE`` 를 하나 만들었다. 재는 사실은 **"증거 없는
+    후보는 전부 모름이다"** 이므로, 덱을 그 뜻대로 구성한다
+    (:func:`_undeclared_grave_pool`).
     """
-    setup = _girsu_board(repository)
+    setup = _girsu_board(
+        repository, deck_pool=_undeclared_grave_pool(repository)
+    )
     duel = setup.duel
     source = _summon_girsu(duel)
     _, _, granted, found = _girsu_candidates(duel, source)
@@ -963,7 +1026,9 @@ def test_i01_one_registered_fact_lets_the_same_path_resolve(repository):
        유도된 사실이 **같은 결과**에 이른다는 것을 보이므로, 유도가
        등록소를 흉내 낸 것이 아니라 같은 자리에 들어갔다는 증거다.
     """
-    others = [cid for cid in _orcust_pool(repository) if cid != SELF_GRAVE_TRIGGER]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     #: 앞쪽 넷은 패로 뽑힌다 — 그 뒤에 두어야 덱에 남는다.
     setup = _girsu_board(repository, deck_pool=others[:4] + [SELF_GRAVE_TRIGGER] + others[4:])
     duel = setup.duel
@@ -1059,7 +1124,13 @@ def test_i02_the_production_registry_is_untouched():
     #: ``normal_summon_restriction_signals`` 가 `()` 라는 근거를 함께 적었다.
     #: 🔴 그 카드의 **금지**(② 서로의 특수 소환 금지)는 이 등록소가 아니라
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
-    assert len(OPERATION_RULINGS) == 22
+    #: 🔴 22 → **25** (Phase 6-AO). 세 장이 늘었다 — 오르페골 디베르 ·
+    #: 스켈레촌 · 카노네다. 디베르는 두 질문의 답을 적었고
+    #: (``MAY_BE_SENT_TO_GRAVE`` · ``MAY_BE_SPECIAL_SUMMONED``) 나머지 둘은
+    #: 디베르 ① 이 덱에서 특수 소환할 **후보**이므로 그 질문 하나만 적었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 ``UNKNOWN``
+    #: 이다 (ADR-006).
+    assert len(OPERATION_RULINGS) == 25
     #: 🔴 **이 카드는 이제 원본에 있다** (Phase 6-AC). 그래서 "새지 않았다"
     #: 를 유무로는 더 이상 셀 수 없고, **사유로** 센다: 원본이 들고 있는
     #: 문장은 6-AC 가 적은 등재 사유이고, ``test_i01`` 이 사본에 적은
@@ -1070,8 +1141,10 @@ def test_i02_the_production_registry_is_untouched():
     ).note
     assert "공식 텍스트 전문을 읽었고" in registered_note, registered_note
     assert "EVENT_TO_GRAVE" not in registered_note, registered_note
-    #: 원본에서 묘지 질문에 답하는 것은 **두 장**이다 — 통상 몬스터 하나와
-    #: 6-AC 가 등재한 성유물－『성장』. 느슨하게 하지 않고 둘을 적는다.
+    #: 원본에서 묘지 질문에 답하는 것은 **세 장**이다 — 통상 몬스터 하나와
+    #: 6-AC 가 등재한 성유물－『성장』, 그리고 🔴 **6-AO 가 등재한 오르페골
+    #: 디베르**다 (기르수 ① 이 덱에서 디베르를 묘지로 보내는 것이 그 Phase
+    #: 경로의 첫 걸음이다). 느슨하게 하지 않고 셋을 적는다.
     answering = [
         card_id
         for card_id in OPERATION_RULINGS.card_ids
@@ -1080,4 +1153,6 @@ def test_i02_the_production_registry_is_untouched():
         )
         is not None
     ]
-    assert sorted(answering) == sorted([FEATHERMAN, SELF_GRAVE_TRIGGER]), answering
+    assert sorted(answering) == sorted(
+        [FEATHERMAN, SELF_GRAVE_TRIGGER, 57835716]
+    ), answering

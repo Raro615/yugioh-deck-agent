@@ -1206,7 +1206,10 @@ def test_31_effect_ref_ordinal_and_the_sixteen_definitions_are_unchanged(
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     for entry in EFFECT_LIBRARY:
         ref = entry.definition.effect_ref
         card = repository.get(ref.card_id)
@@ -1245,6 +1248,13 @@ def test_31_effect_ref_ordinal_and_the_sixteen_definitions_are_unchanged(
                 assert len(card.script.effects) == {
                     37742478: 3,  # 어니스트 — ①기동 · ②유발즉시 · 내부 블록
                     69811710: 4,  # 기르수   — ①유발 · ②클론 · ③기동 · 내부
+                    #: 🔴 **Phase 6-AO 에서 기동 효과가 셋이 됐다** —
+                    #: 오르페골 디베르 ①(블록 셋: ①기동 · ②유발즉시 ·
+                    #: 해결이 등록하는 EFFECT_CANNOT_SPECIAL_SUMMON).
+                    #: 억지로 3·4 에 맞추지 않고 **실측한 블록 수**를
+                    #: 적는다. 이전 표가 틀렸던 것이 아니라 그때는 이
+                    #: 카드가 등재되지 않았다.
+                    57835716: 3,  # 디베르   — ①기동 · ②유발즉시 · 내부
                 }[ref.card_id], ref
                 assert ref.resolve(card).code is None, ref
             else:

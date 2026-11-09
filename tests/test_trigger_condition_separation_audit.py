@@ -338,7 +338,10 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     #: 🔴 Phase 6-K — 열일곱 번째(어니스트 ①)는 ``code`` 가 **없다.** 기동
     #: 효과는 사건이 아니라 선언으로 발동하므로 ``SetCode`` 를 적지 않는다.
     #:
@@ -355,7 +358,8 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(codes) == 20
+    #: 🔴 20 → **21** (Phase 6-AO, 디베르 ①).
+    assert len(codes) == 21
     assert set(codes) == {
         "EVENT_FREE_CHAIN",
         "EVENT_SUMMON_SUCCESS",
@@ -365,11 +369,11 @@ def test_04_every_registered_effect_is_free_chain(repository):
     assert len([c for c in codes if c == "EVENT_FREE_CHAIN"]) == 16
     assert len([c for c in codes if c == "EVENT_SUMMON_SUCCESS"]) == 1
     assert len([c for c in codes if c == "EVENT_TO_GRAVE"]) == 1
-    #: 🔴 1 → **2** (Phase 6-AF). 기르수 ③ 은 **기동 효과**이므로
-    #: ``SetCode`` 가 없다 — 사건이 아니라 선언으로 발동한다. 자유 체인
-    #: 16 과 유발 둘은 **하나도** 움직이지 않았고, 그것이 이 분포가
-    #: 말하는 사실이다.
-    assert len([c for c in codes if c is None]) == 2
+    #: 🔴 1 → **2** (Phase 6-AF) → **3** (Phase 6-AO). 기르수 ③ 과
+    #: 디베르 ① 은 **기동 효과**이므로 ``SetCode`` 가 없다 — 사건이 아니라
+    #: 선언으로 발동한다. 자유 체인 16 과 유발 둘은 **하나도** 움직이지
+    #: 않았고, 그것이 이 분포가 말하는 사실이다.
+    assert len([c for c in codes if c is None]) == 3
 
 
 @pytest.mark.real_card
@@ -400,7 +404,13 @@ def test_05_the_eight_activation_conditions_are_state_conditions(repository):
     #: 조건**이다 (자신 몬스터 존에 빈 자리가 있다) — 특수 소환하는 효과가
     #: 들어와도 조건 어휘는 판만 묻는다. 아래 "조건 문구에 사건 어휘가
     #: 없다" 검사가 그것을 그대로 센다.
-    assert len(with_condition) == 10
+    #:
+    #: 🔴 10 → **11** (Phase 6-AO, 오르페골 디베르 ①). 그 조건도 **상태
+    #: 조건**이다 — 자신 몬스터 존의 빈 칸 · 특수 소환 허가 · 자기 필드에
+    #: 앞면 「오르페골 바벨」 이 **없다**. 사건을 묻는 것이 하나도 없고,
+    #: 아래 검사가 그것을 그대로 센다. **이전 수가 틀렸던 것이 아니라**
+    #: 그때는 열이었다.
+    assert len(with_condition) == 11
     #: 사례로 쓰는 넷의 종류를 못박는다.
     assert with_condition[POT_OF_GREED]["types"] == ["SPELL"]
     assert with_condition[RELOAD]["types"] == ["QUICKPLAY", "SPELL"]
@@ -678,8 +688,14 @@ def test_14_no_registered_effect_can_special_summon():
     #: 🔴 **Phase 6-AC 가 이 시험의 사실을 끝냈다.** 그때까지 "등재된 어느
     #: 효과도 특수 소환하지 않는다" 가 참이었고 이 시험이 그것을 세고
     #: 있었다. 6-AC 가 성유물－『성장』 ② 를 등재했으므로 **정확히 하나**가
-    #: 되었다 — 지우는 대신 그 하나를 못박는다. 둘이 되면 깨진다.
-    assert users == ["93920420:e[1]"], users
+    #: 되었다 — 지우는 대신 그 하나를 못박았다.
+    #:
+    #: 🔴 **Phase 6-AO 에서 둘이 되었다** — 「오르페골 디베르」 ① 이
+    #: **덱에서** 특수 소환한다 (6-AC 의 하나는 **패에서**였다). 다시
+    #: 지우는 대신 **그 둘을 못박는다**: 셋이 되면 깨진다. 위 표의 "그것을
+    #: 쓰는 등재 효과 0개" 는 6-AC 가 끝냈고, 이 Phase 가 그 수를 둘로
+    #: 올렸다 — **이전 목록이 틀렸던 것이 아니다.**
+    assert users == ["93920420:e[1]", "57835716:e[0]"], users
 
     #: **빈 목록이 엉뚱한 이유로 비지 않았다는 것까지 본다.** ``kind`` 조회가
     #: 깨지면 위 단정이 **그냥 통과**한다 — 그래서 실제로 읽힌 연산 종류를
@@ -698,8 +714,12 @@ def test_14_no_registered_effect_can_special_summon():
         "CREATE_TOKEN",
         #: 🔴 Phase 6-AC — 성유물－『성장』 ② 가 실제로 읽힌다.
         "SPECIAL_SUMMON",
+        #: 🔴 Phase 6-AO — 디베르 ① 의 해결이 **턴 종료까지의 특수 소환
+        #: 제한**을 건다. 그것은 소환하는 일이 **아니므로** 위 ``users``
+        #: 에 들지 않는다 — 두 질문을 섞지 않는다.
+        "RESTRICT_SPECIAL_SUMMON",
     }
-    #: 🔴 그리고 **그 하나뿐**이다 — 위 ``users`` 가 어느 효과인지 적는다.
+    #: 🔴 그리고 **그 둘뿐**이다 — 위 ``users`` 가 어느 효과인지 적는다.
     assert "SPECIAL_SUMMON" in present
 
 

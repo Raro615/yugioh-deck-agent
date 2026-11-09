@@ -694,7 +694,10 @@ def test_16_the_library_now_has_exactly_two_triggers(repository=None):
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     #: 🔴 Phase 6-AF 가 **셋째 ordinal** 을 열었다 — 기르수 ③(토큰 생성)은
     #: 공식 Lua 의 세 번째 블록이므로 2 다. 억지로 0 이나 1 에 맞추지 않고
     #: **그 효과의 실제 사실**을 적는다 (``c69811710.lua`` e3,
@@ -707,7 +710,8 @@ def test_16_the_library_now_has_exactly_two_triggers(repository=None):
     #: Phase 6-AC — 성유물－『성장』 ② 가 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 실행 수 16 → **17** (Phase 6-AF). 기르수 ③ 은 실제로 실행되는
     #: 효과다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 수행한다.
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 17
+    #: 🔴 17 → **18** (Phase 6-AO) — 디베르 ① 이 실행 가능으로 더해졌다.
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 18
     #: 🔴 등재된 발동 분류 — 유발이 **정확히 둘**이고 유발 즉시 · 플립은 없다.
     kinds = [entry.definition.activation_kind for entry in EFFECT_LIBRARY]
     assert set(kinds) == {None, ActivationKind.IGNITION, ActivationKind.TRIGGER}

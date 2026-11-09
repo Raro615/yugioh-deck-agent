@@ -986,10 +986,12 @@ def test_d04_the_run_separates_flow_only_from_unsupported(repository):
     from app.main import opening_wiring
     from tests.engine.test_trigger_normal_path_integration import (
         GROWTH,
-        _orcust_pool,
+        _undeclared_grave_pool,
     )
 
-    others = [cid for cid in _orcust_pool(repository) if cid != GROWTH]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     pool = others[:4] + [GROWTH] + others[4:]
     lines = [f"{GIRSU} x1"] + [f"{cid} x1" for cid in pool[:39]]
     hand = ([GIRSU] + [cid for cid in pool if cid != GIRSU])[:5]
@@ -1046,8 +1048,27 @@ def test_d05_the_combo_answer_says_the_run_was_not_fully_supported(
     #: 세트를 모두 끝내고 멈추므로 그 자리에 발동 후보가 남지 않는다.
     #: 그래서 "정상 전개 종료가 아닙니다" 대신 **도중에 지나온 미지원**을
     #: 적는 줄을 센다. 재는 요구(④ — 미지원이 응답까지 간다)는 그대로다.
-    assert "전개 도중에 지나온 미지원이 있습니다" in blob
-    assert "정상 전개 종료가 아닙니다" not in blob
+    #:
+    #: 🔴 **다시 정정 (Phase 6-AO) — 멈춘 자리가 바뀌었다.** 그 Phase 가
+    #: 오르페골 디베르의 ``MAY_BE_SENT_TO_GRAVE`` 를 등재하자 기르수 ① 의
+    #: 후보가 늘었고, ``first-permitted`` 기준점이 **패스코드 순으로 앞인
+    #: 디베르**를 골랐다 (57835716 < 93920420). 그래서 『성장』 ② 의 후속
+    #: 유발이 열리지 않고 전개가 다른 여섯 걸음을 밟아, **멈춘 자리에
+    #: 미지원 후보가 남는다** — 6-AC 전과 같은 분기다.
+    #:
+    #: 🔴 **적어 둔 경로는 그대로 돈다** (실측). ``line:orcust-girsu`` 는
+    #: ``resolution_card_ids=(93920420,)`` 를 선언하므로 여전히 『성장』 을
+    #: 고르고 갈라테아까지 간다 — 바뀐 것은 **선언하지 않은 기준점**의
+    #: 선택이고, 그 기준점은 "최선이 아니다" 라고 적혀 있는 것이다.
+    #:
+    #: 🔴 재는 요구는 **그대로다**: 미지원이 응답까지 간다. 그래서 어느
+    #: 분기든 **둘 중 하나는 반드시 적혀야 한다**고 세고, 지금 어느 쪽인지도
+    #: 함께 고정한다.
+    assert (
+        "전개 도중에 지나온 미지원이 있습니다" in blob
+        or "정상 전개 종료가 아닙니다" in blob
+    ), blob
+    assert "정상 전개 종료가 아닙니다" in blob
 
 
 # ======================================================================

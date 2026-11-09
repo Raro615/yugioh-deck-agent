@@ -257,7 +257,15 @@ PRODUCTION_CONSTRUCTION_COUNT = 3
 #: 🔴 123 → **125** (Phase 6-AF). ``_plan_create_token`` 의 두 거부
 #: (토큰 규칙 부재 · 카드 데이터 불일치) 다. 비율이 재던 모집단은
 #: 그대로이고 배수도 낮추지 않았다.
-RULE_NOT_IMPLEMENTED_MENTIONS = 125
+#: 🔴 125 → **127** (Phase 6-AO). 둘 다 ``engine/duel.py`` 의 **보류
+#: 사유**이고 코드 자리다 — ``_activation_actions`` 가 「내놓을 카드를
+#: **고르는** 비용」 을 보류로 적는 자리와, ``_plan_create_token`` 이 특수
+#: 소환 제한을 판정하지 못할 때 적는 자리다. 이 파일이 재는
+#: ``UnimplementedRule`` **생성**과 관계된 것은 역시 **0건**이고 (그 수는
+#: ``PRODUCTION_CONSTRUCTION_COUNT`` 가 따로 센다), 비율이 재던 모집단
+#: (``engine/action_validation.py`` 의 두 곳) 도 그대로이며 배수(30)도
+#: 낮추지 않았다.
+RULE_NOT_IMPLEMENTED_MENTIONS = 127
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
@@ -1005,7 +1013,10 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: 실제로 19건이었다. 아래 단언들은 **하나도 약해지지 않았다** —
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
+    #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
+    #: 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 21
     #: 🔴 8 → **9** (Phase 6-V). 기르수 ① 의 ``activation`` 도
     #: ``UnimplementedRule`` 이 아니다 (``ZoneCountAtLeast``) — 이 테스트가
     #: 지키는 사실이 그것이므로 그대로다.
@@ -1015,7 +1026,12 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: 🔴 10 → **11** (Phase 6-AF). 기르수 ③ 의 ``activation`` 도
     #: ``UnimplementedRule`` 이 아니다 — ``And`` 안이 전부 판정 가능한
     #: 상태 조건이다. 같은 이유로 이 테스트가 지키는 사실은 그대로다.
-    assert len(activations) == 11
+    #: 🔴 11 → **12** (Phase 6-AO). 디베르 ① 의 ``activation`` 도
+    #: ``UnimplementedRule`` 이 아니다 — ``ZoneHasFreeSlot`` ·
+    #: ``SpecialSummonPermitted`` · ``Not(FaceUpCardPresent(…))`` 를
+    #: ``And`` 로 묶은 것이고 전부 판정 가능한 상태 조건이다. 같은 이유로
+    #: 이 테스트가 지키는 사실은 그대로다.
+    assert len(activations) == 12
     assert not any(isinstance(a, UnimplementedRule) for a in activations)
 
     #: 열 개 전부 **판정 가능한** 조건이다 — 자리표시자가 아니다.
@@ -1054,7 +1070,10 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: 둘이 되었다. 이 시험이 재는 사실은 수가 아니라 **"그 이름을 내는
     #: 조건이 ``UnimplementedRule`` 이 아니다"** 이므로, 둘을 **각각**
     #: 확인한다 — 단언이 약해진 것이 아니라 대상이 늘었다.
-    assert len(noisy) == 2, noisy
+    #: 🔴 2 → **3** (Phase 6-AO). 디베르 ① 의 발동 조건에도
+    #: ``SpecialSummonPermitted`` 가 들어 있다 — 같은 이유로 대상이 하나 더
+    #: 늘었고, 아래 루프가 셋을 **각각** 확인한다.
+    assert len(noisy) == 3, noisy
     for condition in noisy:
         assert not isinstance(condition, UnimplementedRule), condition
 

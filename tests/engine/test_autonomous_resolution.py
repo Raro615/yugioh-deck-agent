@@ -72,8 +72,10 @@ NO_EVIDENCE_MONSTER = 10000
 # ======================================================================
 # 공용 도구
 # ======================================================================
-def _orcust_pool(repository):
-    from tests.engine.test_deck_to_grave_blocker import _orcust_pool as pool
+def _undeclared_grave_pool(repository):
+    from tests.engine.test_deck_to_grave_blocker import (
+        _undeclared_grave_pool as pool,
+    )
 
     return pool(repository)
 
@@ -90,7 +92,9 @@ def _opening(repository, *, growth_copies: int = 1):
     🔴 **선택자는 꽂지 않는다** — 이 판은 "고를 사람이 없으면 어떻게 되는가"
     를 보는 데도 쓰인다. 꽂은 판은 :func:`_opening_with_chooser` 다.
     """
-    others = [cid for cid in _orcust_pool(repository) if cid != GROWTH]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     #: 앞쪽 넷은 패로 뽑힌다 — 증거 카드를 덱에 남기려면 그 뒤에 둔다.
     pool = others[:4] + [GROWTH] * growth_copies + others[4:]
     lines = [f"{GIRSU} x1"] + [f"{cid} x1" for cid in pool[:39]]
@@ -114,7 +118,9 @@ def _opening_with_chooser(repository, *, growth_copies: int = 1, selector):
     """
     chooser = PolicyChooser(selector)
     journal = EventJournal()
-    others = [cid for cid in _orcust_pool(repository) if cid != GROWTH]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     pool = others[:4] + [GROWTH] * growth_copies + others[4:]
     lines = [f"{GIRSU} x1"] + [f"{cid} x1" for cid in pool[:39]]
     hand = [GIRSU] + [cid for cid in pool if cid != GIRSU][:4]
@@ -377,7 +383,9 @@ def test_b05_a_duel_without_a_journal_says_so_instead_of_guessing(repository):
     목록이 말한다.** 조용히 넘기지 않는다는 요구는 그대로이고, 말하는 자리가
     바뀐 것이다 — 이 시험이 그 자리를 센다.
     """
-    others = [cid for cid in _orcust_pool(repository) if cid != GROWTH]
+    #: 🔴 **증거가 등재된 카드를 전부 뺀다** (Phase 6-AO) — 그 함수의
+    #: 설명이 왜 이름 하나로는 부족해졌는지 실측과 함께 적는다.
+    others = _undeclared_grave_pool(repository)
     lines = [f"{GIRSU} x1"] + [f"{cid} x1" for cid in others[:39]]
     setup = build_opening(
         repository,
@@ -732,7 +740,10 @@ def test_d04_the_engine_gate_is_not_bypassed(repository):
     #: 파키세팔로(42009836) 이고, 등재한 것은 그 카드 **자신**의
     #: ``MAY_BE_SPECIAL_SUMMONED`` 다 (근거를 함께 적었다). 그 카드의
     #: **금지**는 ``engine.summon_restriction`` 의 표가 들고 있다.
-    assert len(OPERATION_RULINGS) == 22
+    #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네를
+    #: 읽어 등재했다. 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는
+    #: 여전히 ``UNKNOWN`` 이다 (ADR-006).
+    assert len(OPERATION_RULINGS) == 25
     _, _, _, runs = _drive(repository, FirstPermittedChoice())
     choice = runs[0].choice
     #: 제안이 들고 온 판정이 ``BoardRuling`` 의 것과 같은 질문이다.

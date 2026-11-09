@@ -54,7 +54,17 @@ GIRSU = 69811710
 WAND = 93920420
 GALATEA = 30741503
 PACHY = 42009836
-SKELETON = 21441617
+#: 🔴 **신호를 적었는데 손으로 읽은 표에 없는** 실제 카드 — 오르페골
+#: 트로이메어 (LINK-2).
+#:
+#: 🔴 **이 자리의 카드는 표가 늘 때마다 바뀐다.** 6-AD 는 「오르페골
+#: 스켈레촌」(21441617)이 이 자리였고, Phase 6-AO 가 그 카드의 신호를 손으로
+#: 읽어 표에 적었다 (``prohibits=False`` — 「① 을 쓴 **그 턴에만** 어둠
+#: 속성으로 제한한다」 는 뜻이고 「필드에 있으면 특수 소환할 수 없다」 가
+#: 아니다). 그래서 스켈레촌은 더 이상 "읽지 않은" 예시가 아니다. **이전
+#: 단언이 틀렸던 것이 아니라, 그때는 그 카드가 정말 표에 없었다** — 재는
+#: 것은 "읽지 않은 신호는 ``UNDETERMINED`` 다" 이고 특정 카드가 아니다.
+UNJUDGED = 4055337
 FEATHERMAN = 21844576
 P0, P1 = 0, 1
 
@@ -256,14 +266,17 @@ def test_h05_a_signal_without_a_read_scope_is_unknown_not_allowed(repository):
     """
     🔴 **확인된 금지와 판정할 수 없는 금지를 가른다** (ADR-006).
 
-    오르페골 스켈레촌(21441617)의 스크립트에 ``EFFECT_CANNOT_SPECIAL_SUMMON``
-    이 있다 — 「그 턴 어둠 속성 이외를 특수 소환할 수 없다」 쪽이다. 그것이
-    **지금 누구에게 걸리는지**는 이 저장소가 읽지 않았으므로 모름이다.
+    오르페골 트로이메어(4055337)의 스크립트에
+    ``EFFECT_CANNOT_SPECIAL_SUMMON`` 이 있다. 그것이 **지금 누구에게
+    걸리는지**는 이 저장소가 읽지 않았으므로 모름이다.
 
     모름은 허가가 아니다. 그리고 **확정 거부도 아니다** — 코드가 갈린다.
+
+    🔴 6-AD 는 스켈레촌이 이 예시였다 — 왜 옮겼는지는 ``UNJUDGED`` 주석에
+    적었다.
     """
     duel, mine, _theirs, extra, _hand = _board(
-        repository, [GIRSU, WAND, SKELETON]
+        repository, [GIRSU, WAND, UNJUDGED]
     )
     candidates, withheld, applied, unchanged = _link_attempt(duel, extra, mine)
 
@@ -339,12 +352,13 @@ def test_h08_an_unread_prohibition_does_not_hide_an_illegal_material(repository)
     """
     🔴 **반대 방향.** 모름이 확정 위반을 가리지 않는다.
 
-    금지를 판정할 수 없는 판(스켈레촌)에서 **통상 몬스터**를 소재로 고르면,
-    보고는 모름이 아니라 소재 위반을 적어야 한다 — 소재가 확실히 틀린
-    행동은 판을 못 읽는 것과 무관하게 틀렸다.
+    금지를 판정할 수 없는 판(오르페골 트로이메어 — ``UNJUDGED``)에서
+    **통상 몬스터**를 소재로 고르면, 보고는 모름이 아니라 소재 위반을
+    적어야 한다 — 소재가 확실히 틀린 행동은 판을 못 읽는 것과 무관하게
+    틀렸다.
     """
     duel, mine, _theirs, extra, _hand = _board(
-        repository, [FEATHERMAN, SKELETON, GIRSU]
+        repository, [FEATHERMAN, UNJUDGED, GIRSU]
     )
     action = PlayerAction.link_summon(
         actor=P0, source=extra[0], materials=(mine[0], mine[2])
@@ -387,10 +401,21 @@ def test_h10_the_prohibition_table_carries_its_evidence():
     #: 좁혀져 있어** 특수 소환 전체를 막지 않는다 (``prohibits=False``), 그리고
     #: 좁혀진 그 제약은 ``engine.link_rules.LINK_SUMMON_ONCE_PER_TURN`` 가
     #: 따로 들고 판정한다 — 버린 것이 아니다.
+    #: 🔴 **Phase 6-AO 가 세 줄을 더했다** — 「오르페골 디베르」(57835716) ·
+    #: 「오르페골 스켈레촌」(21441617) · 「오르페골 카노네」(94046012) 다.
+    #: 셋 다 신호를 적었지만 그 금지는 **그 카드의 ① 을 쓴 턴에만** 걸리는
+    #: 것이고 (``RegisterEffect`` + ``SetReset(RESET_PHASE|PHASE_END)``),
+    #: 「필드에 있으면 특수 소환할 수 없다」 가 아니다 —
+    #: 그래서 ``prohibits=False`` 이고, 턴에 걸리는 쪽은
+    #: ``engine.state.summon_limit`` 가 따로 들고 판정한다 (**버린 것이
+    #: 아니다**). 이전 목록이 틀렸던 것이 아니라 그때는 셋이 표에 없었다.
     assert {rule.card_id for rule in SPECIAL_SUMMON_PROHIBITIONS} == {
         PACHY,
         WAND,
         48835607,
+        57835716,
+        21441617,
+        94046012,
     }
     for rule in SPECIAL_SUMMON_PROHIBITIONS:
         assert rule.lua_file.startswith("c") and rule.lua_file.endswith(".lua")
@@ -835,8 +860,17 @@ def test_j05_no_candidate_in_hand_refuses_the_activation(repository):
     from engine.ids import EffectRef
     from engine.validation import ValidationResult
 
+    #: 🔴 **``preferred=(WAND,)`` 를 준다** (Phase 6-AO 에서 더한 것).
+    #: 기르수 ① 이 덱에서 꺼내 올 카드를 **기준점**
+    #: (``FirstPermittedChoice``) 이 집으면, 6-AO 가 「오르페골
+    #: 디베르」(57835716)의 묘지행을 등재한 뒤로는 패스코드가 더 작은
+    #: 디베르가 집힌다 — 그러면 묘지에 『성장』 이 없어 이 시험이 재려는
+    #: 질문("『성장』 ② 의 후보가 없으면 거절하는가")에 **닿지도 못한다.**
+    #: 그래서 경로가 적는 것과 같은 자리로 『성장』 을 집게 한다
+    #: (``--line orcust-girsu`` 가 production 에서 하는 것과 같다).
+    #: **기대값을 약하게 고친 것이 아니라 배선을 경로와 맞춘 것이다.**
     setup, run, _chooser, plan = _run_wand(
-        repository, [GIRSU, CLIMAX, KEY, AWAKENING, CORE]
+        repository, [GIRSU, CLIMAX, KEY, AWAKENING, CORE], preferred=(WAND,)
     )
     from deck.combo_policy import line_progress
 

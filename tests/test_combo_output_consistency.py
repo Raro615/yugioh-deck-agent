@@ -249,6 +249,43 @@ def test_06_the_stop_reason_is_scoped_to_what_this_repo_supports(repository):
     세트를 모두 끝낸 뒤라 패에 발동 후보가 남지 않는다. 그래서 **그 자리의**
     보류가 0건이 되었고, 도중에 지나온 미지원은 그대로 1건이다.
 
+    🔴 **Phase 6-AO 가 그 자리를 다시 ``"unsupported"`` 로 옮겼다 — 지원이
+    또 늘어서다.** 이번에도 ``activate_card`` 를 고친 것이 아니고, 바뀐 것은
+    **이 패의 기본(자율) 전개가 지나는 길**이다. 실측으로 적는다.
+
+    ===  ====================================================  ===========
+    6-AC                                                       6-AO
+    ===  ====================================================  ===========
+    2    기르수 ① — 덱의 **『성장』**(93920420) 을 묘지로         덱의 **디베르**(57835716) 를 묘지로
+    3    묘지의 『성장』 ② — 패의 『성장』 을 특수 소환            기르수 ③ — 성유물 토큰 2장
+    4~6  세트 3장                                               세트 3장
+    ===  ====================================================  ===========
+
+    🔴 **왜 2 단계의 대상이 바뀌었나.** 기르수 ① 의 해결 중 선택은
+    ``opening_wiring`` 의 기준점 ``FirstPermittedChoice`` 가 집는다 —
+    **허용된 후보의 앞쪽**이다. 6-AC 때 그 허용 후보는 『성장』 **한
+    장뿐**이었다 (디베르를 묘지로 보낼 수 있는지가 등재되지 않아
+    ``UNKNOWN`` 이었고, ADR-006 으로 후보가 되지 못했다). 6-AO 가 디베르의
+    ``MAY_BE_SENT_TO_GRAVE`` 를 손으로 읽어 등재하자 허용 후보가 둘이 되었고,
+    **패스코드가 더 작은 디베르**(57835716 < 93920420)가 앞이다.
+
+    🔴 **이전 기대값이 틀렸던 것이 아니다** — 그때 이 패의 기본 전개는 정말
+    그 길이었고 그 자리의 보류는 정말 0건이었다. 바뀐 것은 저장소가 아는
+    것이고, ``FirstPermittedChoice`` 는 **전략이 아니라 기준점**이므로
+    (``app/main.py::opening_wiring``) 무엇이 앞인지는 보장한 적이 없다.
+    『성장』 경로를 **보장**받는 자리는 ``--line orcust-girsu`` 이고
+    ``tests/test_orcust_girsu_line.py`` 가 그것을 잰다.
+
+    🔴 **그래서 멈춘 자리의 보류가 0 → 2건이 되었다.** 하나는 6-AB 부터
+    있던 ``activate_card`` 이고, 새로 붙은 하나는 **이번에 등재한 디베르
+    ①**(``57835716:e[0]``)이다 — 묘지에 디베르가 있으므로 발동 자리에
+    오르지만, 그 자리의 판에서는 **해결 중에 고를 후보가 있다고 확인하지
+    못한다** (기르수 ③ 이 만든 성유물 토큰 ``46647145`` 가 특수 소환을
+    막는지 읽은 것이 없어 ``UNKNOWN`` 이고, 덱 후보 「오르페골
+    트로이메어」``4055337`` 도 특수 소환 가능 여부를 읽은 것이 없다).
+    🔴 **그것을 OK 로 바꾸지 않았다** — ``UNKNOWN`` 은 보류로 남고, 그
+    보류가 이 자리의 분류를 ``"unsupported"`` 로 만든다.
+
     재는 요구는 그대로다 — "끝났다고 단정하지 않는다" · "막혔다고 적지
     않는다" · "도중에 지나온 미지원을 적는다". 셋 다 아래에서 센다.
     """
@@ -257,21 +294,27 @@ def test_06_the_stop_reason_is_scoped_to_what_this_repo_supports(repository):
     assert run.stopped_reason
     assert "end_phase" in run.stopped_reason
     #: 🔴 한 낱말로 갈린다 — 네 가지가 같은 문장으로 나오지 않는다.
-    assert run.stopped_kind == "flow_only", (
+    assert run.stopped_kind == "unsupported", (
         run.stopped_kind, run.stopped_reason
     )
-    #: 🔴 **멈춘 자리는 깨끗한데 전개 전체를 검증한 것은 아니다** — 보완8 이
-    #: 가른 두 질문이고, 이 패가 그 자리다.
+    #: 🔴 **멈춘 자리에도 보류가 있고 전개 전체를 검증한 것도 아니다** —
+    #: 보완8 이 가른 두 질문이고, 이 패는 이제 둘 다 참인 자리다.
     assert run.unsupported
     assert run.fully_supported is False
     #: 🔴 **끝났다고 단정하지 않는다** — 그 요구는 그대로다.
-    assert "실제로 이 패의 전개가 끝났다는 뜻이 아니고" in run.stopped_reason
-    #: 🔴 **막혔다고 적지도 않는다** — 그 요구도 그대로다.
-    assert "엔진이 막았다는 뜻도 아닙니다" in run.stopped_reason
-    #: 🔴 그리고 **지원하지 않아 후보가 되지 못한 것**을 적는다 (6-AB 최종 ·
-    #: 보완8 이 시점을 "앞선 자리" 로 분명히 했다).
+    assert "전개가 끝난 것이 아니라" in run.stopped_reason
+    #: 🔴 **막혔다고 적지도 않는다** — "모른다" 라고 적는다.
+    assert "엔진이 그 수단을 모르는 자리" in run.stopped_reason
+    #: 🔴 그리고 **지원하지 않아 후보가 되지 못한 것**을 적는다 — 몇 건인지와
+    #: **무엇인지**를 함께 적는다.
     assert "지원하지 않아 후보가 되지" in run.stopped_reason
-    assert "앞선 자리" in run.stopped_reason
+    assert "2건" in run.stopped_reason
+    #: 🔴 **두 보류가 각각 무엇인지 글자로 남는다.**
+    assert "activate_card" in run.stopped_reason
+    assert "57835716:e[0]" in run.stopped_reason
+    #: 🔴 **새로 등재한 효과의 보류 사유가 "모른다" 다** — 카드 ID 를 보고
+    #: 통과시키지도, 그 카드만 검증을 건너뛰지도 않았다.
+    assert "확인하지 못했습니다" in run.stopped_reason
 
 
 # ======================================================================
@@ -291,6 +334,13 @@ def test_07_resolved_steps_and_resolved_effects_are_different_numbers(repository
     🔴 **Phase 6-AC 에서 수가 둘 다 늘었다** (6 · 2). 성유물－『성장』 ② 이
     등재되어 기르수 ① 뒤에 한 걸음이 더 붙었고, 그 걸음도 효과 해결이다.
     **재는 것은 수가 아니라 두 수가 다르다는 사실**이고 그것은 그대로다.
+
+    🔴 **Phase 6-AO 에서 수는 그대로지만 둘째 효과가 바뀌었다** — 실측:
+    ``executed`` 6 · ``resolved`` 6 · ``effects_resolved`` 2 는 같고, 둘째
+    효과 해결이 ``93920420:e[1]`` 에서 ``69811710:e[2]`` (기르수 ③) 로
+    바뀌었다. 이유는 ``test_06`` 의 표에 적었다 — 기르수 ① 의 기준점 선택이
+    디베르를 집게 되어 『성장』 이 묘지에 가지 않는다. **이전 기대값이
+    틀렸던 것이 아니라** 그때 기본 전개가 지난 길이 그랬다.
     """
     setup = _opened(repository, [69811710, 703897, 2930675, 12989604, 93920420])
     run = execute_opening(setup, repository)
@@ -307,7 +357,7 @@ def test_07_resolved_steps_and_resolved_effects_are_different_numbers(repository
     ]
     assert [s.effect_events for s in effect_steps] == [
         ("69811710:e[0]",),
-        ("93920420:e[1]",),
+        ("69811710:e[2]",),
     ]
 
 

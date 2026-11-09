@@ -1018,36 +1018,59 @@ def test_g02_the_refusal_reads_no_game_state():
 # ======================================================================
 
 
-def test_h01_the_cost_layer_moves_cards_for_two_reasons_only():
+def test_h01_the_cost_layer_moves_cards_for_three_reasons_only():
     """
-    **§8 1 · 3** — 비용이 옮길 수 있는 것은 **버리기와 릴리스**뿐이다.
+    **§8 1 · 3** — 비용이 옮길 수 있는 것은 **버리기 · 릴리스 · 제외**다.
 
-    둘 다 묘지로 가므로 :data:`MAIN_DECK_ONLY_ZONES` 와 겹치지 않는다 —
-    그래서 6-M 의 도착 자리 거절이 비용 경로의 동작을 바꾸지 않는다.
+    🔴 **제외가 Phase 6-AO 에서 들어왔다** (「묘지의 이 카드를 제외하고
+    발동할 수 있다」). 그때까지 둘이었던 것은 사실이다 — 표에 그 줄이
+    없었다.
+
+    🔴 **재는 사실은 그대로다**: 비용이 보내는 자리는 전부
+    :data:`MAIN_DECK_ONLY_ZONES` 와 겹치지 않으므로, 6-M 의 도착 자리
+    거절이 비용 경로의 동작을 바꾸지 않는다. 제외의 목적지도 제외 존이고
+    메인 덱 전용 자리가 아니다 — 아래 고리가 **그것을 센다** (묘지로
+    고정하지 않는다).
     """
     assert set(COST_OPERATION.values()) == {
         OperationKind.DISCARD,
         OperationKind.RELEASE,
+        OperationKind.BANISH,
     }
     for kind in COST_OPERATION.values():
-        assert DESTINATION[kind] is Zone.GRAVE
+        assert DESTINATION[kind] in (Zone.GRAVE, Zone.REMOVED)
         assert DESTINATION[kind] not in MAIN_DECK_ONLY_ZONES
-    assert len(SUPPORTED_COSTS) == 3  # 둘 + 라이프 지불
+    assert len(SUPPORTED_COSTS) == 4  # 셋 + 라이프 지불
 
 
-def test_h02_no_registered_effect_has_a_cost_today():
+def test_h02_exactly_one_registered_effect_has_a_cost():
     """
-    🔴 **§12 — 비용 이동 경로는 등재된 효과에서 도달하지 않는다.**
+    🔴 **§12 의 공백이 Phase 6-AO 에서 채워졌다.**
 
-    그래서 6-M 은 ``engine/payment.py`` 를 고치지 않았다. 남은 공백은
-    보고서 §16 에 적었다 — 숨기지 않고, 지어내지도 않는다.
+    6-M 당시 "비용 이동 경로는 등재된 효과에서 도달하지 않는다" 는 **사실**
+    이었고, 그래서 그 Phase 는 ``engine/payment.py`` 를 고치지 않았다.
+    6-AO 가 오르페골 디베르 ① 을 등재했고 그 효과의 비용이
+    ``Cost.SelfBanish`` 다.
+
+    🔴 **그 비용이 보내는 자리를 함께 센다** — 제외 존이고 메인 덱 전용
+    자리가 아니므로 6-M 의 도착 자리 거절과 겹치지 않는다 (이 파일이 재는
+    것이 그것이다).
     """
+    from engine.cost import SelfCardCost
+
     with_cost = [
         entry.definition.effect_ref
         for entry in EFFECT_LIBRARY
         if entry.definition.cost is not None and entry.definition.cost.costs
     ]
-    assert with_cost == [], with_cost
+    assert [str(ref) for ref in with_cost] == ["57835716:e[0]"], with_cost
+    for entry in EFFECT_LIBRARY:
+        for cost in entry.definition.cost.costs:
+            #: 🔴 **고를 것이 없는 비용뿐이다** — 고르는 비용은 아직 듀얼
+            #: 고리가 선택을 넘기지 않으므로 등재하지 않았다.
+            assert isinstance(cost, SelfCardCost), cost
+            assert cost.choice_spec() is None
+            assert DESTINATION[COST_OPERATION[cost.semantics]] is Zone.REMOVED
 
 
 def test_h03_the_executor_never_pays_a_cost():
@@ -1262,6 +1285,12 @@ def test_k01_no_new_operation_kind_and_no_new_destination():
         "shuffle",
         "move",
         "create_token",
+        #: 🔴 **Phase 6-AO 가 종류를 하나 더했다** — 「무엇을 특수 소환할 수
+        #: 없는가」 를 적는 일이다. 이동이 **아니다**: 카드를 움직이지
+        #: 않으므로 출발 자리도 목적지도 없고, 아래 두 번째 단언이 그 사실을
+        #: 그대로 들고 있다 (``MOVABLE_DESTINATIONS`` 가 한 글자도 늘지
+        #: 않았다).
+        "restrict_special_summon",
         "unknown",
     ]
     assert MOVABLE_DESTINATIONS == frozenset(
@@ -1280,10 +1309,12 @@ def test_k02_the_library_grew_no_executable_entry():
     """
     #: Phase 6-AC 가 성유물－『성장』 ② 을 더했다 (18 → 19).
     #: Phase 6-AF 가 기르수 ③ (토큰) 을 더했다 (19 → 20).
-    assert len(EFFECT_LIBRARY) == 20
+    #: 🔴 Phase 6-AO 가 오르페골 디베르 ① 을 더했다 (20 → 21).
+    assert len(EFFECT_LIBRARY) == 21
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: Phase 6-AF — 기르수 ③ 이 실행 가능으로 더해졌다 (16 → 17).
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 17
+    #: 🔴 Phase 6-AO — 디베르 ① 이 실행 가능으로 더해졌다 (17 → 18).
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 18
 
 
 def test_k03_only_one_registered_operation_declares_its_origin():
