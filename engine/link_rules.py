@@ -253,18 +253,38 @@ class LinkMaterialRule:
     """
     count: int
     """
-    **고른 카드가 정확히 몇 장이어야 하는가** — 공식 3 조건의 둘째
+    **고른 카드가 최소 몇 장이어야 하는가** — 공식 3 조건의 둘째
     (*"The number of materials you use meets the number specified in the
-    materials line or 'recipe'"*). ``Link.AddProcedure`` 의 ``min`` ·
-    ``max`` 가 둘 다 이 수인 카드만 등록한다.
-
-    ``2+`` 류는 아직 적을 수 없다 (아래 :data:`LINK_MATERIAL_RULES` 설명).
+    materials line or 'recipe'"*). ``Link.AddProcedure`` 의 ``min`` 이다.
 
     🔴 **기여의 합이 아니다.** :attr:`link_rating` 를 보라.
+
+    🔴 **Phase 6-AN 까지 이 수는 "정확히" 였다.** ``Link.AddProcedure`` 의
+    ``max`` 가 ``nil`` 이 아닌 카드만 등록했고, 그래서 ``2+`` 류(롱기르수)
+    는 등록할 수 없었다. 지금은 :attr:`count_max` 가 **위쪽 끝**을 들고
+    있고, 주지 않으면 이 수와 같다 — 기존 등록은 **한 글자도 달라지지
+    않는다.**
     """
     each: MaterialRequirement
     includes: "MaterialRequirement | None" = None
     """소재 중 **적어도 하나**가 만족해야 하는 것 (``matcheck``)."""
+    count_max: "int | None" = None
+    """
+    **고른 카드가 최대 몇 장까지인가** (Phase 6-AN). ``None`` 이면
+    :attr:`count` 와 같다 — 즉 **정확히 그 장수**다 (6-AN 이전의 동작).
+
+    🔴 **``Link.AddProcedure`` 의 ``max`` 가 ``nil`` 인 카드의 위쪽 끝은
+    규칙이 정한다.** 소재 한 장의 최소 기여가 1 이므로
+    (:func:`material_contribution_options`), 기여의 합이 정확히
+    :attr:`link_rating` 여야 하는 조건 아래에서 **고를 수 있는 카드는 최대
+    ``link_rating`` 장**이다. 그보다 많이 고르면 합이 넘는다. 그래서 ``nil``
+    을 "무한" 으로 옮기지 않고 **읽을 수 있는 수**로 적는다.
+
+    🔴 **장수를 고르는 계층이 필요하다는 사실은 그대로다** — 범위를 적으면
+    후보가 장수마다 조합으로 불어나고, 그 조합을 만드는 자리는
+    :meth:`~engine.duel.Duel._link_summon_actions` 다. 거기서 장수를
+    ``count``–:attr:`max_count` 로 돌린다.
+    """
     text_ko: str = ""
     """
     공식 **한국어 카드 텍스트**의 소재 조건 한 줄. 거절 문장에 그대로 쓴다.
@@ -279,6 +299,24 @@ class LinkMaterialRule:
     lua_excerpt: str = ""
     note: str = ""
 
+    @property
+    def max_count(self) -> int:
+        """고를 수 있는 **가장 많은** 장수. 적지 않았으면 :attr:`count`."""
+        return self.count if self.count_max is None else self.count_max
+
+    @property
+    def exact_count(self) -> bool:
+        """장수가 **한 수**인가 (범위가 아닌가)."""
+        return self.max_count == self.count
+
+    def accepts_count(self, chosen: int) -> bool:
+        """그 장수가 소재 조건의 범위 안인가 (공식 3 조건의 둘째)."""
+        return self.count <= chosen <= self.max_count
+
+    def counts(self) -> "tuple[int, ...]":
+        """조합을 만들 **장수들** — 후보 생성기가 이것을 돌린다."""
+        return tuple(range(self.count, self.max_count + 1))
+
     def __post_init__(self) -> None:
         if self.card_id <= 0:
             raise ValueError(f"카드 ID 는 양수입니다: {self.card_id}")
@@ -286,6 +324,23 @@ class LinkMaterialRule:
             raise ValueError(f"소재는 최소 한 장입니다: {self.count}")
         if self.link_rating < 1:
             raise ValueError(f"링크 수치는 1 이상입니다: {self.link_rating}")
+        if self.count_max is not None:
+            if self.count_max < self.count:
+                raise ValueError(
+                    f"{self.card_id}: 소재 장수의 위쪽 끝 {self.count_max} 가 "
+                    f"아래쪽 끝 {self.count} 보다 작습니다."
+                )
+            #: 🔴 **위쪽 끝은 링크 수치를 넘을 수 없다** (Phase 6-AN). 소재
+            #: 한 장의 최소 기여가 1 이므로, ``link_rating`` 장보다 많이
+            #: 고르면 기여의 합이 반드시 넘는다 — 그런 장수의 조합은 **하나도
+            #: 합법일 수 없고**, 적어 두면 후보 생성기가 헛조합을 만든다.
+            if self.count_max > self.link_rating:
+                raise ValueError(
+                    f"{self.card_id}: 소재 장수의 위쪽 끝 {self.count_max} 가 "
+                    f"링크 수치 {self.link_rating} 보다 큽니다 — 소재 한 장은 "
+                    "최소 1 로 세므로 그 장수로는 기여의 합을 맞출 수 "
+                    "없습니다."
+                )
         #: 🔴 **달성할 수 없는 등록을 막는다** (Phase 6-AG). 소재 한 장의
         #: 최소 기여가 1 이므로 (:func:`material_contribution_options`),
         #: ``count`` 장으로 만들 수 있는 기여의 합은 **최소 ``count``** 다.
@@ -308,14 +363,22 @@ class LinkMaterialRule:
             self.card_id,
             self.link_rating,
             self.count,
+            self.max_count,
             self.each.canonical_state(),
             self.includes.canonical_state() if self.includes else None,
         )
 
+    def count_ko(self) -> str:
+        """장수 조건을 사람이 읽는 말로 — 한 수인가 범위인가."""
+        if self.exact_count:
+            return f"정확히 {self.count}장"
+        return f"{self.count}장 이상 {self.max_count}장 이하"
+
     def describe_ko(self) -> str:
         if self.text_ko:
             return self.text_ko
-        line = f"{self.each.describe_ko()} {self.count}장"
+        tail = "장" if self.exact_count else f"장 이상 {self.max_count}장 이하"
+        line = f"{self.each.describe_ko()} {self.count}{tail}"
         if self.includes is not None:
             line += f" (그중 하나는 {self.includes.describe_ko()})"
         return line
@@ -405,6 +468,57 @@ LINK_MATERIAL_RULES: tuple[LinkMaterialRule, ...] = (
             "같은 스크립트의 e1 (링크 소환 성공 시 그 턴 이 카드의 링크 "
             "소환을 막는 EFFECT_CANNOT_SPECIAL_SUMMON 등록) 은 "
             "LINK_SUMMON_ONCE_PER_TURN 가 따로 들고 있다."
+        ),
+    ),
+    #: 오르페골 롱기르수 — 「「오르페골」 몬스터를 포함하는 효과 몬스터
+    #: **2장 이상**」 (Phase 6-AN).
+    #:
+    #: 🔴 **이 카드가 ``2+`` 류의 첫 등록이다.** ``Link.AddProcedure(c,
+    #: aux.FilterBoolFunctionEx(Card.IsType,TYPE_EFFECT), 2, nil,
+    #: s.matcheck)`` 에서 ``min=2`` · ``max=nil`` 을 읽었고, 위쪽 끝은
+    #: :attr:`LinkMaterialRule.count_max` 의 설명대로 **링크 수치 3** 이다
+    #: (소재 한 장의 최소 기여가 1 이므로 4장으로는 기여의 합 3 을 만들 수
+    #: 없다).
+    #:
+    #: 🔴 **조건을 셋으로 갈라 적는다** (모듈 머리말의 공식 3 조건).
+    #: 기여의 합 = 3 · 고른 장수 = 2~3 · 소재 각각 = 효과 몬스터 ·
+    #: 소재 집합 = 「오르페골」 1장 이상. 그래서 "효과 몬스터 3장" 과
+    #: "링크 2 + 효과 몬스터 1장" 이 **둘 다** 합법이다.
+    #:
+    #: 🔴 ``matcheck`` 의 ``lc, sumtype, tp`` 인자는 갈라테아와 **같은
+    #: 이유로** 옮기지 못했다 (지속 효과로 카드군이 더해지는 자리 —
+    #: STRUCTURAL-76). 방향이 안전하다: 거짓 음성만 생긴다.
+    #:
+    #: 🔴 **소환 이후의 효과는 이 표가 들고 있지 않다.** ①(링크 상태일 때
+    #: 효과로 파괴되지 않음) · ②(제외된 기계족 2장을 덱으로) 는 효과 계층의
+    #: 일이고 이 Phase 가 옮기지 않았다 — 소환을 지원한 것과 카드의 모든
+    #: 효과를 지원한 것은 다르다.
+    LinkMaterialRule(
+        card_id=76145142,
+        link_rating=3,
+        count=2,
+        count_max=3,
+        each=MaterialRequirement(effect_monster=True),
+        includes=MaterialRequirement(setcodes=(0x11B,)),
+        text_ko="「오르페골」 몬스터를 포함하는 효과 몬스터 2장 이상",
+        lua_file="c76145142.lua",
+        lua_excerpt=(
+            "Link.AddProcedure(c,aux.FilterBoolFunctionEx(Card.IsType,"
+            "TYPE_EFFECT),2,nil,s.matcheck); "
+            "function s.matcheck(g,lc,sumtype,tp) return "
+            "g:IsExists(Card.IsSetCard,1,nil,SET_ORCUST,lc,sumtype,tp) end"
+        ),
+        note=(
+            "공식 한국어 텍스트(data/ko/ko-KR.json 의 76145142 desc 첫 줄): "
+            "「\"오르페골\" 몬스터를 포함하는 효과 몬스터 2장 이상」. "
+            "data/cards.cdb 의 76145142 는 setcode=0x11b · level(링크 수치)=3 "
+            "· type=0x4000021 (LINK+EFFECT+MONSTER) 이다. "
+            "SET_ORCUST = 0x11b 는 data/constants/"
+            "archetype_setcode_constants.lua:395 에서 읽었다. "
+            "이 스크립트에는 링크 소환 성공 시 EFFECT_CANNOT_SPECIAL_SUMMON "
+            "을 거는 자리가 없으므로 LINK_SUMMON_ONCE_PER_TURN 에 등록하지 "
+            "않았다 (갈라테아i 와 다른 점이다). ②의 "
+            "SetCountLimit(1,id) 는 효과의 사용 제한이고 소환 횟수가 아니다."
         ),
     ),
 )
@@ -802,11 +916,15 @@ def assess_link_materials(
     #: 🔴 6-AF 는 이 자리에 **기여의 합**을 놓았다. 그래서 링크 몬스터 한
     #: 장이 「효과 몬스터 2장」 을 만족한다고 판정했다 — 고른 카드가
     #: 1장인데 둘째 조건을 세지 않았기 때문이다.
-    if len(materials) != rule.count:
+    if not rule.accepts_count(len(materials)):
+        #: 🔴 **범위도 한 수도 같은 자리에서 본다** (Phase 6-AN). 한 수인
+        #: 카드의 문장은 그대로 "정확히 N장" 이고, 범위인 카드는 그 범위를
+        #: 적는다 — 읽는 쪽이 장수를 바꿔야 하는지 소재를 바꿔야 하는지 알
+        #: 수 있어야 한다.
         return _illegal(
             f"소재로 고른 몬스터가 {len(materials)}장입니다 — "
             f"{rule.card_id} 는 {rule.describe_ko()} 입니다 "
-            f"(정확히 {rule.count}장).",
+            f"({rule.count_ko()}).",
             rule,
         )
 

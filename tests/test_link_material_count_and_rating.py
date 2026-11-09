@@ -64,6 +64,11 @@ GALATEA_I = 48835607
 #: (``test_b01`` 이 카드 데이터로 확인한다). 소재 조건은 등록하지 않았지만
 #: (``2+`` 류) **소재로 쓰는 쪽**은 등록과 무관하다.
 LONGIRSU = 76145142
+#: 🔴 **소재 조건이 등록되지 않은** 링크 몬스터 (엔릴기르수, LINK-4).
+#: 같은 오르페골 레시피의 엑스트라 덱에 있고, Phase 6-AN 뒤에도
+#: 등록되지 않았다 — "소재로는 쓸 수 있지만 자신을 소환할 수는 없다"
+#: 를 재는 자리다.
+ENLILGIRSU = 74820316
 FEATHERMAN = 21844576
 P0, P1 = 0, 1
 
@@ -397,15 +402,31 @@ def test_a07_the_registered_rules_still_match_the_card_data(repository):
     assert [rule.card_id for rule in LINK_MATERIAL_RULES] == [
         GALATEA,
         GALATEA_I,
+        #: 🔴 **Phase 6-AN 이 더했다** — ``2+`` 류의 첫 등록이다.
+        LONGIRSU,
     ]
     for rule in LINK_MATERIAL_RULES:
         definition = repository.get(rule.card_id)
         assert definition.is_link is True
         assert definition.link_rating == rule.link_rating, rule.card_id
-        #: 🔴 지금은 둘이 같다. **같아야 한다는 규칙은 아니다** — 공식
-        #: 규칙은 두 수를 따로 세고, 이 단언은 "지금 등록된 것이 전부
-        #: 그렇다" 는 **관찰**이다 (B 절이 다른 경우를 합성으로 잰다).
-        assert rule.link_rating == rule.count, rule.card_id
+        #: 🔴 **장수와 기여의 합은 다른 수다** — 공식 규칙이 둘을 따로
+        #: 세고, 이 단언은 등록이 **달성 가능한지**를 센다: 소재 한 장의
+        #: 최소 기여가 1 이므로 장수의 범위는 ``1 ≤ count ≤ max_count ≤
+        #: link_rating`` 안에 있어야 한다.
+        assert 1 <= rule.count <= rule.max_count <= rule.link_rating, \
+            rule.card_id
+        #: 🔴 **``rating == count`` 는 규칙이 아니었다.** 6-AM 까지 이
+        #: 자리가 그렇게 단언했고, 그것은 "지금 등록된 것이 전부
+        #: 그렇다" 는 **관찰**이라고 적혀 있었다 (B 절이 다른 경우를
+        #: 합성으로 쟀다). 롱기르수(링크 3 · 소재 2~3장)가 **실제 카드로
+        #: 그 관찰을 깬 첫 등록**이다.
+        if rule.card_id == LONGIRSU:
+            assert rule.link_rating != rule.count
+            assert rule.exact_count is False
+            assert rule.counts() == (2, 3)
+        else:
+            assert rule.exact_count is True
+            assert rule.link_rating == rule.count, rule.card_id
 
 
 # ======================================================================
@@ -437,9 +458,19 @@ def test_b01_the_contribution_options_come_from_the_card_data(repository):
     ) == frozenset({1, 3})
     assert material_contribution_options(None) is None
 
-    #: 롱기르수를 소재로 쓰는 쪽은 **등록과 무관하다** — 소재 조건이
-    #: 등록되지 않은 카드도 소재로는 쓸 수 있다.
-    assert material_rule_for(LONGIRSU) is None
+    #: 소재로 쓰는 쪽은 **등록과 무관하다** — 소재 조건이 등록되지 않은
+    #: 카드도 소재로는 쓸 수 있다.
+    #:
+    #: 🔴 **이 자리가 롱기르수였다** (6-AM 까지). Phase 6-AN 이 롱기르수의
+    #: 소재 조건을 등록했으므로, 재던 사실("등록되지 않은 카드도 소재가
+    #: 된다")은 **등록되지 않은 다른 링크 몬스터**로 옮긴다 — 그 사실 자체는
+    #: 그대로이고, 이 시험이 틀린 가정을 갖고 있었던 것이 아니다.
+    assert material_rule_for(ENLILGIRSU) is None
+    enlilgirsu = repository.get(ENLILGIRSU)
+    assert enlilgirsu.is_link is True
+    assert material_contribution_options(enlilgirsu) == frozenset({1, 4})
+    #: 롱기르수는 이제 **등록되어 있다** — 그래도 기여를 세는 규칙은 같다.
+    assert material_rule_for(LONGIRSU) is not None
     longirsu = repository.get(LONGIRSU)
     assert "EFFECT" in longirsu.type_names
     assert 0x11B in longirsu.setcodes

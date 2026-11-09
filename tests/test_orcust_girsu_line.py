@@ -70,9 +70,17 @@ GIRSU = 69811710
 WAND = 93920420
 GALATEA = 30741503
 GALATEA_I = 48835607
-#: 🔴 **소재 조건을 읽지 않은** 링크 몬스터 (Phase 6-AF 가 갈라테아i 를
-#: 등록했으므로 그 자리를 이 카드가 맡는다). 오르페골 롱기르수 — LINK-3.
-UNREAD_LINK = 76145142
+#: 🔴 **소재 조건을 읽지 않은** 링크 몬스터. 잭나이츠 오르페골 엔릴기르수 —
+#: LINK-4.
+#:
+#: 🔴 **이 자리의 카드는 등록이 늘 때마다 바뀐다.** 6-AC 는 갈라테아i,
+#: 6-AF 뒤에는 롱기르수가 이 자리였고, Phase 6-AN 이 롱기르수의 소재 조건을
+#: 등록했으므로(``2+`` 를 적을 수 있게 된 것이 그 Phase 다) 다시 바뀌었다.
+#: **재는 것은 "미등록은 ``UNKNOWN`` 이다" 이고 특정 카드가 아니다** —
+#: 이전 단언이 틀렸던 것이 아니라, 그때는 그 카드가 정말 미등록이었다.
+UNREAD_LINK = 74820316
+#: Phase 6-AN 이 등록한 카드 — ``test_b04`` 가 "등록된 쪽" 으로 함께 적는다.
+LONGIRSU = 76145142
 FEATHERMAN = 21844576
 CRESCENDO = 703897
 P0, P1 = 0, 1
@@ -554,8 +562,11 @@ def test_b04_an_unread_link_monster_is_unknown_not_invalid(repository):
     assert held[0].validity is ActionValidity.UNKNOWN
     assert held[0].is_rule_refusal is False
     assert material_rule_for(UNREAD_LINK) is None
-    #: 🔴 갈라테아i 는 **등록되었다** — 그 사실을 여기서 함께 적어 둔다.
+    #: 🔴 갈라테아i 와 롱기르수는 **등록되었다** — 그 사실을 여기서 함께
+    #: 적어 둔다. 미등록 예시가 이 둘로 옮겨 가지 않게 하는 것이 이 두 줄의
+    #: 일이다.
     assert material_rule_for(GALATEA_I) is not None
+    assert material_rule_for(LONGIRSU) is not None
 
 
 @pytest.mark.real_card
@@ -658,12 +669,18 @@ def test_b07_a_link_monster_as_material_counts_as_one_or_its_link_rating(
     #: 🔴 **장수와 기여를 가른다** — 이름은 남아 있고 뜻이 바뀌었다
     #: (그 상수의 설명).
     assert material_contribution(repository.get(GALATEA_I)) == 1
-    assert material_contribution(repository.get(UNREAD_LINK)) == 3
+    #: 🔴 **LINK-3 의 예시는 롱기르수다.** 이 두 줄은 "소재로 쓰는 쪽" 의
+    #: 기여를 재므로 **등록 여부와 무관하다** — 6-AN 이 그 카드를 등록한 것이
+    #: 이 사실을 바꾸지 않는다. 그래서 미등록 예시 상수(``UNREAD_LINK``) 가
+    #: 아니라 카드를 직접 적는다: 그 상수는 등록이 늘 때마다 다른 카드를
+    #: 가리키므로, 링크 수치를 재는 자리에 쓰면 수치까지 함께 바뀐다
+    #: (실측: 엔릴기르수로 옮겨 가자 4 가 되었다).
+    assert material_contribution(repository.get(LONGIRSU)) == 3
     assert LINK_MATERIAL_AS_LINK_RULE
     #: 🔴 **그리고 "또는" 이 실제로 집합으로 적혀 있다** (Phase 6-AG) —
     #: LINK-3 은 1 **또는** 3 이고 사이의 2 는 없다.
     assert material_contribution_options(
-        repository.get(UNREAD_LINK)
+        repository.get(LONGIRSU)
     ) == frozenset({1, 3})
     assert material_contribution_options(
         repository.get(GALATEA_I)
@@ -719,11 +736,14 @@ def test_b10_only_read_link_monsters_are_registered():
     그때 그 카드의 소재 조건을 **읽었는지** 사람이 확인해야 한다.
     """
     #: 🔴 **Phase 6-AF 가 한 장을 더했다** (갈라테아i — 토큰 경로가 그것을
-    #: 소환한다). 늘어난 것은 **읽은 카드**이고, 읽지 않은 카드는 여전히
-    #: 등록되지 않는다 (``test_b04`` 의 롱기르수).
+    #: 소환한다). 🔴 **Phase 6-AN 이 또 한 장을 더했다** (롱기르수 — 소재 줄이
+    #: ``2+`` 인 첫 카드이고, 그 Phase 가 ``count_max`` 를 더해 그 모양을 적을
+    #: 수 있게 했다). 늘어난 것은 **읽은 카드**이고, 읽지 않은 카드는 여전히
+    #: 등록되지 않는다 (``test_b04`` 의 엔릴기르수).
     assert [rule.card_id for rule in LINK_MATERIAL_RULES] == [
         GALATEA,
         GALATEA_I,
+        LONGIRSU,
     ]
     rule = LINK_MATERIAL_RULES[0]
     assert rule.count == 2

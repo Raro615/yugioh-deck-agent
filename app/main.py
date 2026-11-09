@@ -863,6 +863,11 @@ def _print_bounded_search(agent: DeckAgent, recipe_text: str,
 #: 이 효과" 같은 분기가 없다 (``agent.bounded_search`` 의 설명).
 SEARCH_GOALS: dict = {
     "galatea": 30741503,
+    #: Phase 6-AN — 소재 조건을 등재한 **두 번째** 링크 몬스터다
+    #: (:data:`~engine.link_rules.LINK_MATERIAL_RULES`). 🔴 이름을 여기 적는
+    #: 것은 **목표로 고를 수 있게** 하는 것뿐이고, 탐색기가 이 카드를 향해
+    #: 다르게 움직이지 않는다 — 목표 판정은 ``FieldGoal`` 하나다.
+    "longirsu": 76145142,
 }
 
 

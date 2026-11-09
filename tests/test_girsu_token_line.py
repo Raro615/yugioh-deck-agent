@@ -126,6 +126,10 @@ PACHY = 42009836
 BLUE_EYES_SPIRIT = 59822133
 FEATHERMAN = 21844576
 LONGIRSU = 76145142
+#: 🔴 **소재 조건을 읽지 않은** 링크 몬스터 (잭나이츠 오르페골 엔릴기르수,
+#: LINK-4). Phase 6-AN 이 롱기르수를 등록했으므로 ``test_d05`` 의 미등록
+#: 예시가 이 카드로 옮겨졌다.
+ENLILGIRSU = 74820316
 #: 🔴 **판을 채우는 몬스터**. 특수 소환 금지 신호가 ``()`` 인 **실제 카드**를
 #: 쓴다 — 스크립트가 없는 통상 몬스터를 쓰면 금지 판정이 ``UNDETERMINED``
 #: 가 되고 (``special_summon_restriction_signals is None``), 재려는 사실이
@@ -982,15 +986,19 @@ def test_d05_duplicate_and_unread_materials_are_still_separated(repository):
     🔴 **중복 소재는 규칙이 막고, 읽지 않은 소재 조건은 모른다** (ADR-006).
     """
     duel, field, extra = _board(
-        repository, mine=(GIRSU,), extra=[GALATEA_I, LONGIRSU]
+        repository, mine=(GIRSU,), extra=[GALATEA_I, ENLILGIRSU]
     )
     duplicate = assess_link_materials(
         duel.view(P0), P0, extra[0], (field[0], field[0])
     )
     assert duplicate.eligibility is LinkMaterialEligibility.ILLEGAL
 
-    #: 롱기르수의 소재 조건은 등록하지 않았다 — ``UNKNOWN`` 이다.
-    assert material_rule_for(LONGIRSU) is None
+    #: 🔴 **미등록 예시가 롱기르수에서 엔릴기르수로 옮겨졌다** (Phase 6-AN).
+    #: 그때까지 롱기르수가 미등록이었던 것은 사실이고, 6-AN 이 ``count_max``
+    #: 를 더해 ``2+`` 모양을 적을 수 있게 되자 등록되었다. 재는 것은 "읽지
+    #: 않은 소재 조건은 모른다" 이므로, **여전히 읽지 않은** 카드로 잰다.
+    assert material_rule_for(LONGIRSU) is not None
+    assert material_rule_for(ENLILGIRSU) is None
     unread = assess_link_materials(
         duel.view(P0), P0, extra[1], (field[0],)
     )

@@ -1313,8 +1313,14 @@ class Duel:
 
         🔴 **조합을 만드는 범위를 좁게 적는다.** 소재 후보는 자신 필드의
         몬스터이고 (``LINK_MATERIAL_ZONES``), 장수는 등록된 소재 조건이 적은
-        **정확한 한 수**다. 그래서 조합 수가 ``C(필드 몬스터, 장수)`` 로
-        닫힌다 — 필드가 여섯 칸이므로 한 카드당 최대 20 조합이다.
+        **장수들**이다 (:meth:`~engine.link_rules.LinkMaterialRule.counts`).
+        그래서 조합 수가 ``Σ C(필드 몬스터, 장수)`` 로 닫힌다 — 필드가 여섯
+        칸이므로 한 카드당 최대 ``2**6 = 64`` 조합이다.
+
+        🔴 **Phase 6-AN 까지 장수는 "정확한 한 수" 였다.** ``2+`` 류(롱기르수)
+        는 장수가 범위이고, 그때 **어느 장수로 소환할 것인가**를 고르는 자리가
+        바로 여기다 — 범위의 장수마다 조합을 만들어 검증기에게 물어본다.
+        한 수인 카드는 범위가 한 값이므로 **6-AM 과 한 글자도 다르지 않다.**
 
         🔴 **소재 조건이 등록되지 않은 링크 몬스터는 장수를 모른다.** 그때
         조합을 만들 수 없으므로 **소재 없는 짝을 만들지 않고** 보류에 이유만
@@ -1367,20 +1373,25 @@ class Duel:
                 ).append(
                     f"자신 필드의 몬스터가 {len(field)}장이라 소재 "
                     f"{rule.count}장을 고를 수 없습니다 "
-                    f"(소재 조건: {rule.describe_ko()})."
+                    f"({rule.count_ko()} — 소재 조건: {rule.describe_ko()})."
                 )
                 continue
-            for picked in combinations(field, rule.count):
-                action = PlayerAction.link_summon(
-                    actor=seat, source=card.instance_id, materials=picked
-                )
-                verdict = validator.validate(action)
-                if verdict.validity is ActionValidity.VALID:
-                    allowed.append(action)
-                    continue
-                groups.setdefault(
-                    (verdict.code, verdict.missing_rule), []
-                ).append(verdict.reason)
+            #: 🔴 **장수마다 조합을 만든다** (Phase 6-AN). 범위를 가진
+            #: 카드는 "효과 몬스터 3장" 과 "링크 2 + 효과 몬스터 1장" 이
+            #: 둘 다 합법일 수 있고, 어느 쪽도 조용히 빠지면 안 된다.
+            #: 필드보다 많은 장수는 조합이 0가지이므로 자연히 건너뛴다.
+            for size in rule.counts():
+                for picked in combinations(field, size):
+                    action = PlayerAction.link_summon(
+                        actor=seat, source=card.instance_id, materials=picked
+                    )
+                    verdict = validator.validate(action)
+                    if verdict.validity is ActionValidity.VALID:
+                        allowed.append(action)
+                        continue
+                    groups.setdefault(
+                        (verdict.code, verdict.missing_rule), []
+                    ).append(verdict.reason)
 
         held: list[WithheldAction] = []
         if unread:
