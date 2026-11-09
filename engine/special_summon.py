@@ -75,7 +75,12 @@ class SpecialSummonError(SummonError):
 #:
 #: 여기 없는 자리는 **"규칙상 안 된다" 가 아니라 "아직 옮기지 못했다"** 이고,
 #: 검증기가 ``RULE_NOT_IMPLEMENTED`` 로 그렇게 말한다.
-SPECIAL_SUMMON_FROM_ZONES: frozenset[Zone] = frozenset({Zone.HAND, Zone.GRAVE})
+#: 🔴 **덱이 들어왔다** (Phase 6-AO). 「덱에서 … 1장을 특수 소환한다」 를
+#: 실행하는 자리이고 (오르페골 디베르 ①), 옮기는 계층은 이미 있었다 —
+#: :class:`~engine.summon.SummonProcedure` 는 출발 존의 목록만 본다.
+SPECIAL_SUMMON_FROM_ZONES: frozenset[Zone] = frozenset(
+    {Zone.HAND, Zone.GRAVE, Zone.DECK}
+)
 
 #: 놓이는 자리. 엑스트라 몬스터 존은 엑스트라 덱 절차와 함께 들어온다.
 SPECIAL_SUMMON_TO_ZONE: Zone = Zone.MZONE

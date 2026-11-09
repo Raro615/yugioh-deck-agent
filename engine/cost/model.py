@@ -270,6 +270,94 @@ class CardCost(Cost):
 
 
 @dataclass(frozen=True, slots=True)
+class SelfCardCost(Cost):
+    """
+    **이 카드 자신**을 내놓는 비용 (Phase 6-AO).
+
+    공식 스크립트의 ``Cost.SelfBanish`` 류가 이것이다 — ``c57835716.lua`` 의
+    ``e1:SetCost(Cost.SelfBanish)``.
+
+    🔴 **:class:`CardCost` 와 다른 이유: 고르는 것이 아니다.** 저쪽은 존과
+    조건으로 **후보를 만들고 그중 하나를 고르게** 한다. 그 모양으로 "자신"
+    을 적으면 같은 존의 다른 카드가 후보로 올라가고, 고르는 쪽이 다른 카드를
+    내놓아도 통과한다. 자신을 내놓는 비용에는 **고를 것이 없다** — 어느
+    카드인지는 효과가 이미 정했다.
+
+    그래서 :meth:`choice_spec` 이 ``None`` 이다. 그 값은
+    :meth:`CostGroup.choice_specs` 가 "고를 것이 있는 비용" 을 모을 때
+    빠진다는 뜻이고, 그래서 고르는 계층을 지나지 않고도 치를 수 있다
+    (:class:`LifeCost` 와 같은 자리다).
+
+    :attr:`zones` 는 **자신이 그 존에 있어야 한다**는 요구다. 비용이
+    치러지는 시점에 카드가 다른 자리로 갔으면 치를 수 없고, 그것을
+    ``SOURCE_WRONG_ZONE`` 으로 말한다 — 조용히 옮기지 않는다.
+    """
+
+    kind: CostSemantics
+    zones: frozenset[Zone]
+    who: PlayerRef = PlayerRef.CONTROLLER
+
+    def __post_init__(self) -> None:
+        if self.kind is CostSemantics.PAY_LIFE:
+            raise ValueError("라이프 지불은 LifeCost 로 표현하세요.")
+        if self.kind is CostSemantics.UNKNOWN:
+            raise ValueError(
+                "무엇을 하는지 모르는 비용은 UnimplementedCost 로 "
+                "표현하세요 — 자신을 내놓는 것만으로는 사건을 말할 수 "
+                "없습니다."
+            )
+        if not isinstance(self.zones, frozenset):
+            raise TypeError("zones 는 frozenset 이어야 합니다 — 비용은 불변입니다.")
+        if not self.zones:
+            raise ValueError("자신이 어디에 있어야 하는지 적어야 합니다.")
+
+    @property
+    def semantics(self) -> CostSemantics:
+        return self.kind
+
+    def choice_spec(self) -> None:
+        """🔴 **고를 것이 없다** — 어느 카드인지는 효과가 정했다."""
+        return None
+
+    @classmethod
+    def banish(
+        cls,
+        zones: frozenset[Zone],
+        *,
+        who: PlayerRef = PlayerRef.CONTROLLER,
+    ) -> "SelfCardCost":
+        """``Cost.SelfBanish`` — 자신을 제외한다."""
+        return cls(kind=CostSemantics.BANISH, zones=zones, who=who)
+
+    def canonical_state(self) -> tuple:
+        return (
+            "self_card_cost",
+            self.kind.value,
+            tuple(sorted(z.value for z in self.zones)),
+            self.who.value,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "self_card_cost",
+            "semantics": self.kind.value,
+            "zones": sorted(z.value for z in self.zones),
+            "who": self.who.value,
+        }
+
+    def describe_ko(self) -> str:
+        korean = {
+            CostSemantics.RELEASE: "릴리스",
+            CostSemantics.DISCARD: "패에서 버림",
+            CostSemantics.BANISH: "제외",
+            CostSemantics.SEND_TO_GRAVE: "묘지로 보냄",
+            CostSemantics.DETACH: "소재 제거",
+        }[self.kind]
+        where = " · ".join(sorted(z.value for z in self.zones))
+        return f"{where} 의 이 카드 자신을 {korean}"
+
+
+@dataclass(frozen=True, slots=True)
 class LifeCost(Cost):
     """
     라이프를 지불한다. **실제로 깎지 않는다** — 낼 수 있는지만 본다.
@@ -390,6 +478,7 @@ __all__ = [
     "CostSemantics",
     "Cost",
     "CardCost",
+    "SelfCardCost",
     "LifeCost",
     "UnimplementedCost",
     "CostGroup",

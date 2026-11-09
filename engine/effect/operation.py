@@ -146,6 +146,20 @@ class OperationKind(str, Enum):
     :class:`~engine.effect.delta.MonsterSummoned` 가 함께 들어가므로
     「특수 소환되었을 경우」 유발이 토큰을 본다.
     """
+    RESTRICT_SPECIAL_SUMMON = "restrict_special_summon"
+    """
+    **이 턴 남은 동안 무엇을 특수 소환할 수 없는지 적는다** (Phase 6-AO).
+
+    카드를 움직이지 않으므로 ``CardOperation`` 의 모양이 아니고,
+    ``SHUFFLE`` 과 같은 자리다 — 존의 내용이 아니라 **판의 다른 축**을
+    바꾼다.
+
+    🔴 **금지를 판정하지 않는다.** 이 일은 :mod:`engine.state.summon_limit`
+    에 한 줄 적을 뿐이고, "그래서 이 소환이 막히는가" 는
+    :func:`~engine.summon_restriction.assess_special_summon_permission` 이
+    답한다 — 적는 자리와 읽는 자리를 가르는 것이 세 사용 기록 표와 같은
+    규율이다.
+    """
     UNKNOWN = "unknown"
     """무엇을 하는지 구조화하지 못했다."""
 
@@ -177,6 +191,10 @@ REASON_NAMES: dict[OperationKind, tuple[str, ...]] = {
     # ``REASON_EFFECT`` 조차 주장하지 않는다. 여기에 이유를 적는 순간
     # 트리거 계층이 이것을 "효과로 묘지에 갔다" 로 읽게 된다.
     OperationKind.MOVE: (),
+    # 🔴 **비어 있는 것이 사실이다** (Phase 6-AO). 제한을 적는 일은 카드를
+    # 움직이지 않으므로 어떤 ``REASON_*`` 도 주장할 수 없다 — ``SHUFFLE`` 과
+    # 같은 자리다.
+    OperationKind.RESTRICT_SPECIAL_SUMMON: (),
     OperationKind.UNKNOWN: (),
 }
 
@@ -846,6 +864,87 @@ class SpecialSummonOperation(Operation):
 
 
 @dataclass(frozen=True, slots=True)
+class RestrictSpecialSummonOperation(Operation):
+    """
+    **이 턴 남은 동안 한 속성밖에 특수 소환할 수 없게 한다** (Phase 6-AO).
+
+    공식 스크립트가 이것을 해결 중에 **효과를 등록하는** 방식으로 적는다 —
+    ``c57835716.lua`` 의 ``s.spop`` 끝에서::
+
+        local e1=Effect.CreateEffect(e:GetHandler())
+        e1:SetType(EFFECT_TYPE_FIELD)
+        e1:SetCode(EFFECT_CANNOT_SPECIAL_SUMMON)
+        e1:SetProperty(EFFECT_FLAG_PLAYER_TARGET+EFFECT_FLAG_OATH)
+        e1:SetTargetRange(1,0)
+        e1:SetTarget(s.splimit)         -- not c:IsAttribute(ATTRIBUTE_DARK)
+        e1:SetReset(RESET_PHASE|PHASE_END)
+        Duel.RegisterEffect(e1,tp)
+
+    네 자리를 그대로 옮긴다.
+
+    ===============================  ==================================
+    ``SetTargetRange(1,0)``           :attr:`who` — 그 효과의 컨트롤러
+    ``s.splimit`` 의 ``IsAttribute``  :attr:`attribute` — **허용되는** 속성
+    ``RESET_PHASE|PHASE_END``         이 턴 (:mod:`engine.state.summon_limit`
+                                      의 열쇠에 턴 번호가 들어간다)
+    ``EFFECT_FLAG_OATH``              **순서**로 지킨다 (아래)
+    ===============================  ==================================
+
+    🔴 **``EFFECT_FLAG_OATH`` 를 순서로 옮겼다.** 그 깃발은 "이 효과가
+    등록되기 전에 이미 진행 중이던 처리에는 걸리지 않는다" 는 뜻이고, 공식
+    스크립트가 ``Duel.SpecialSummon`` 을 **먼저** 하고 등록을 **나중에**
+    한다. 그래서 같은 해결 안의 그 소환은 제한을 받지 않는다 — 이 저장소도
+    ``operations`` 의 순서로 같은 것을 지킨다 (소환 다음에 이 일이 온다).
+    깃발 자체를 표현하는 계층은 만들지 않았고, 그 사실을 효과의
+    ``provenance`` 가 적는다.
+
+    🔴 **소환법을 가리지 않는다.** ``s.splimit`` 은 ``sumtype`` 을 보지 않고
+    속성만 본다 — 그래서 링크 · 융합 · 효과에 의한 특수 소환 **전부**에
+    걸린다. 존도 가리지 않는다. 그 범위를 좁혀 적으면 다른 소환 경로로
+    우회된다.
+    """
+
+    attribute: str
+    who: PlayerRef = PlayerRef.CONTROLLER
+    basis: str = ""
+    """무엇을 읽고 이 제한을 적었는가. **비울 수 없다.**"""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.attribute, str) or not self.attribute:
+            raise ValueError(
+                f"허용되는 속성 이름이 필요합니다: {self.attribute!r}"
+            )
+        object.__setattr__(self, "attribute", self.attribute.upper())
+        if not isinstance(self.who, PlayerRef):
+            raise TypeError(f"who 는 PlayerRef 입니다: {self.who!r}")
+        if not self.basis.strip():
+            raise ValueError(
+                "이 제한을 어느 스크립트에서 읽었는지 적어야 합니다 — "
+                "근거 없는 제한은 추측입니다."
+            )
+
+    @property
+    def kind(self) -> OperationKind:
+        return OperationKind.RESTRICT_SPECIAL_SUMMON
+
+    def canonical_state(self) -> tuple:
+        return ("restrict_special_summon", self.attribute, self.who.value)
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "restrict_special_summon",
+            "attribute": self.attribute,
+            "who": self.who.value,
+        }
+
+    def describe_ko(self) -> str:
+        return (
+            f"{self.who} 는 이 턴 {self.attribute} 속성 몬스터밖에 특수 "
+            "소환할 수 없게 한다"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class TokenSpec:
     """
     토큰 **한 장**을 어느 쪽에 어떤 표시 형식으로 놓을 것인가 (Phase 6-AF).
@@ -977,5 +1076,6 @@ __all__ = [
     "LifeChangeOperation",
     "MoveOperation",
     "SpecialSummonOperation",
+    "RestrictSpecialSummonOperation",
     "UnimplementedOperation",
 ]

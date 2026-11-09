@@ -1609,6 +1609,21 @@ assert ACTIVATION_KINDS_IN_SCOPE | set(MONSTER_ACTIVATION_MISSING_BY_KIND) == se
 #: 선언하면 그것이 규칙처럼 굳는다.
 IGNITION_ACTIVATION_ZONES: frozenset[Zone] = frozenset({Zone.MZONE})
 
+#: **앞뒷면이 뜻을 갖는 자리** (Phase 6-AO).
+#:
+#: 뒷면 몬스터의 효과는 유효하지 않지만 (그래서
+#: :data:`FACEDOWN_EFFECT_MISSING` 이 있다), 그 질문은 **필드에서만** 생긴다.
+#: 묘지 · 제외 · 패의 카드에는 앞뒷면이 없고, 룰북도 묘지를 공개된 자리로
+#: 적는다 — *"Cards in the Graveyard are kept face-up"*.
+#:
+#: 🔴 **실측으로 고친 결함이다.** 6-AO 가 묘지에서 발동하는 첫 효과를
+#: 등재했을 때, 그 효과가 ``facedown-monster-effect`` 로 보류되었다 —
+#: 묘지의 카드는 ``position`` 이 없어 ``is_faceup`` 이 거짓이기 때문이다.
+#: 즉 **묻지 않아야 할 질문**이 그 자리에서 물어졌다.
+FACE_SENSITIVE_ZONES: frozenset[Zone] = frozenset(
+    {Zone.MZONE, Zone.EMZONE, Zone.SZONE}
+)
+
 #: 기동 효과인데 자리가 :data:`IGNITION_ACTIVATION_ZONES` 가 아닐 때.
 IGNITION_LOCATION_MISSING = (
     "ignition-effect-location (효과마다 발동 위치가 EffectDefinition 에 "
@@ -1619,6 +1634,25 @@ IGNITION_LOCATION_MISSING = (
 FACEDOWN_EFFECT_MISSING = (
     "facedown-monster-effect (뒷면 몬스터의 효과가 유효한지 판정하는 "
     "계층이 없다)"
+)
+
+#: 마법 카드의 발동인데 자리가 **패도 필드도 아닐** 때 (Phase 6-AO).
+#:
+#: 🔴 **왜 이 이름을 따로 만드는가.** 이 자리는 6-AO 전까지 닿지 않았다 —
+#: :data:`~engine.duel.ACTIVATION_SOURCE_ZONES` 가 패 · 마법 & 함정 존 ·
+#: 몬스터 존 · 엑스트라 몬스터 존만 보았으므로, 패를 떠난 카드가 발동
+#: 후보로 올라오는 자리는 **필드뿐**이었다. 6-AO 가 묘지를 더하자 (디베르
+#: ① 이 묘지에서 발동한다) 묘지의 마법이 이 갈래에 닿게 되었고, 그때
+#: ``on-field-activation-timing`` 은 **틀린 이름**이다 — 그 카드는 필드에
+#: 없다.
+#:
+#: 🔴 **이름만 가른다.** 판정은 그대로 ``UNKNOWN`` 이고 (실제 규칙에는
+#: 묘지에서 발동하는 마법이 있다 — 그것을 ``INVALID`` 로 적으면 "규칙이
+#: 금지한다" 는 거짓이 된다), 발동 자리를 적어 둔 효과는 이 갈래에 닿기
+#: 전에 :func:`_monster_activation_out_of_scope` · 좁은 요구가 답한다.
+OFF_FIELD_ACTIVATION_MISSING = (
+    "off-field-activation-timing (패도 필드도 아닌 자리에서 마법이 자기 "
+    "효과를 발동하는 타이밍)"
 )
 
 _OUT_OF_SCOPE_TYPES: tuple[tuple[str, str], ...] = (
@@ -1964,7 +1998,10 @@ def _monster_activation_out_of_scope(
     if zones is not None:
         if card.zone not in zones:
             return ()
-        if not card.face_up:
+        #: 🔴 **앞뒷면은 필드에서만 뜻을 갖는다** (Phase 6-AO —
+        #: :data:`FACE_SENSITIVE_ZONES` 의 실측). 묘지에서 발동하는 효과에
+        #: 이 질문을 걸면 **언제나** 보류된다.
+        if card.zone in FACE_SENSITIVE_ZONES and not card.face_up:
             return (("뒷면 몬스터의 효과 발동이다", FACEDOWN_EFFECT_MISSING),)
         return ()
     if card.zone not in IGNITION_ACTIVATION_ZONES:
@@ -2069,11 +2106,17 @@ def _activation_out_of_scope(
         # (RULE-SPELLTRAP-007 · 009).
         if _is_set_spell(card, definition, names):
             return ()
+        #: 🔴 **필드와 필드 밖을 가른다** (Phase 6-AO —
+        #: :data:`OFF_FIELD_ACTIVATION_MISSING` 의 주석에 이유를 적었다).
+        #: 판정은 둘 다 ``UNKNOWN`` 이고 이름만 다르다.
+        on_field = card is not None and card.zone in FACE_SENSITIVE_ZONES
         return (
             (
                 f"패가 아니라 {where} 에서의 발동이다",
                 "on-field-activation-timing (필드의 카드가 자기 효과를 "
-                "발동하는 타이밍)",
+                "발동하는 타이밍)"
+                if on_field
+                else OFF_FIELD_ACTIVATION_MISSING,
             ),
         )
     return ()

@@ -761,8 +761,11 @@ ORCUST_GIRSU_LINE = ComboLine(
     note=(
         "🔴 이 경로는 **검증용**이다. 최선 전개라고 주장하지 않는다 — "
         "실제 오르페골 전개는 「오르페골 디베르」 · 「오르페골 스켈레촌」 의 "
-        "묘지 제외 효과로 이어지고, 그 효과들은 이 저장소에 등재되지 "
-        "않았다 (덱에서의 특수 소환 · 제외 소재가 범위 밖이다)."
+        "묘지 제외 효과로 이어진다. "
+        "🔴 **Phase 6-AO 가 그중 디베르 ① 을 등재했다** (덱에서의 특수 "
+        "소환이 그 Phase 로 들어왔다) — 그 경로는 "
+        ":data:`ORCUST_HARP_HORROR_LINE` 이고, **이 경로를 바꾸지 "
+        "않았다.** 스켈레촌 · 카노네의 ① 은 여전히 등재되지 않았다."
     ),
 )
 
@@ -904,11 +907,138 @@ ORCUST_GIRSU_TOKEN_LINE = ComboLine(
 #: :func:`~deck.opening.first_meaningful` 을 쓴다 — 사용자가 고르지 않은
 #: 정책이 조용히 다른 요청의 행동 선택을 바꾸지 않게 하는 것이 이 Phase 의
 #: 규율이다 (§5).
+#: 🔴 **디베르 경로의 시작 패** (Phase 6-AO).
+#:
+#: 🔴 **기존 두 패를 바꾸지 않았다** — 새 경로에는 새 패를 적는다.
+#: 다섯 장 모두 :data:`ORCUST_VERIFICATION_RECIPE` 의 메인 덱에 있다
+#: (실측: 69811710 x3 · 703897 x3 · 2930675 x3 · 12989604 x3 ·
+#: 61654098 x3). 🔴 **레시피는 기존 것을 그대로 쓴다** — 디베르(57835716)가
+#: 이미 x3 들어 있으므로 새 레시피를 만들 이유가 없고, 만들면 같은 덱이 두
+#: 벌이 된다.
+#:
+#: 🔴 **「성유물－『성장』」(93920420) 이 없다.** 그래서 기르수 ① 이 덱에서
+#: 꺼내 올 카드가 **디베르**이고, 패의 『성장』 을 특수 소환하는 기존 경로와
+#: 갈린다.
+#:
+#: 🔴 **「오르페골 바벨」(90351981) 도 없다.** 바벨이 앞면으로 있으면 디베르
+#: ① 은 발동할 수 없고 (``s.spcon1``) 그때 쓰이는 ② 는 유발즉시이므로
+#: 미지원이다 — 그 경계는 시험이 따로 잰다.
+ORCUST_HARP_HORROR_HAND: tuple[int, ...] = (
+    69811710,  # 잭나이츠 오르페골 기르수
+    703897,  # 오르페골 클리막스
+    2930675,  # 성유물에 이르는 열쇠
+    12989604,  # 성유물로부터의 자각
+    61654098,  # 성유물과의 해후
+)
+
+
+#: 🔴 **디베르 ① 로 덱에서 몬스터를 늘려 갈라테아까지 가는 경로**
+#: (Phase 6-AO).
+#:
+#: ===  ============================================================
+#: 1    「잭나이츠 오르페골 기르수」(69811710) 일반 소환
+#: 2    기르수 ① 발동 — 덱의 **「오르페골 디베르」**(57835716) 를 묘지로
+#: 3    묘지의 디베르 ① 발동 — **자신을 제외**하고 덱에서
+#:      「오르페골 스켈레촌」(21441617) 을 특수 소환
+#: 4    기르수 + 스켈레촌 을 소재로 「오르페골 갈라테아」(30741503) 링크 소환
+#: ===  ============================================================
+#:
+#: 🔴 **2 단계의 대상이 디베르인 것이 이 경로의 요점이다.** 기르수 ① 은 덱의
+#: 「오르페골」 · 「성유물」 카드 **아무거나** 보낼 수 있고, 그중 **묘지에서
+#: 스스로 발동하는** 카드를 고를 때만 3 단계가 열린다.
+#:
+#: 🔴 **3 단계의 제한을 4 단계가 지난다.** 디베르 ① 은 「턴 종료시까지 어둠
+#: 속성 몬스터밖에 특수 소환할 수 없다」 를 걸고, 갈라테아는 **어둠
+#: 속성**이므로 그 제한을 지난다 (실측: data/cards.cdb 의 attribute). 그
+#: 제한이 실제로 판정된다는 것은 시험이 **어둠이 아닌 카드**로 잰다.
+#:
+#: 🔴 **3 단계에서 특수 소환한 스켈레촌의 ① 은 등재하지 않았다** — 이번
+#: 범위가 아니다. 그 카드는 이 경로에서 **링크 소재**로만 쓰인다.
+ORCUST_HARP_HORROR_LINE = ComboLine(
+    name="orcust-harp-horror",
+    title_ko=(
+        "기르수 → 디베르 묘지행 → 디베르 제외로 덱에서 스켈레촌 특수 소환 "
+        "→ 갈라테아 링크"
+    ),
+    steps=(
+        PlannedAction(
+            kind="normal_summon",
+            card_id=69811710,
+            label="「잭나이츠 오르페골 기르수」 를 일반 소환",
+        ),
+        PlannedAction(
+            kind="activate_effect",
+            card_id=69811710,
+            effect_ref=(69811710, 0),
+            #: 🔴 **발동 시점에 고르지 않는다** — ``s.tgfilter`` 로 후보의
+            #: 존재만 보고 고르는 것은 ``Duel.SelectMatchingCard`` 다.
+            resolution_card_ids=(57835716,),
+            label=(
+                "기르수 ① 발동 — 덱에서 「오르페골 디베르」 를 묘지로 보낸다 "
+                "(고르는 것은 해결 중이다)"
+            ),
+        ),
+        PlannedAction(
+            kind="activate_effect",
+            card_id=57835716,
+            effect_ref=(57835716, 0),
+            resolution_card_ids=(21441617,),
+            label=(
+                "묘지의 디베르 ① 발동 — 자신을 제외하고 덱에서 "
+                "「오르페골 스켈레촌」 을 특수 소환 (고르는 것은 해결 중이다)"
+            ),
+        ),
+        PlannedAction(
+            kind="link_summon",
+            card_id=30741503,
+            material_card_ids=(69811710, 21441617),
+            label=(
+                "기르수 + 스켈레촌 을 소재로 「오르페골 갈라테아」 링크 소환"
+            ),
+        ),
+    ),
+    basis=(
+        "① 기르수(69811710) 공식 텍스트 「덱에서 「오르페골」 또는 「성유물」 "
+        "카드 1장을 묘지로 보낸다」 와 c69811710.lua 의 e1 "
+        "(EVENT_SUMMON_SUCCESS · s.tgfilter · Duel.SendtoGrave) — "
+        "디베르는 setcode 0x11b(오르페골)이므로 그 후보다 "
+        "(data/cards.cdb 로 대조했다). "
+        "② 디베르(57835716) 공식 텍스트 「묘지의 이 카드를 제외하고 발동할 "
+        "수 있다. 덱에서 「오르페골 디베르」 이외의 「오르페골」 몬스터 1장을 "
+        "특수 소환한다. 이 효과의 발동 후, 턴 종료시까지 자신은 어둠 속성 "
+        "몬스터밖에 특수 소환할 수 없다」 와 c57835716.lua 의 e1 "
+        "(EFFECT_TYPE_IGNITION · SetRange(LOCATION_GRAVE) · "
+        "Cost.SelfBanish · s.filter · Duel.SpecialSummon · "
+        "EFFECT_CANNOT_SPECIAL_SUMMON) — 스켈레촌(21441617)은 setcode "
+        "0x11b 이고 디베르가 아니므로 그 후보다. "
+        "③ 갈라테아(30741503) 공식 텍스트 「효과 몬스터 2장 (「오르페골」 "
+        "몬스터를 포함)」 와 c30741503.lua 의 Link.AddProcedure(..., "
+        "Card.IsType(TYPE_EFFECT), 2, nil, s.matcheck). "
+        "소재 적격: 기르수와 스켈레촌 모두 효과 몬스터이고 setcode 0x11b "
+        "를 가진다. 그리고 갈라테아는 **어둠 속성**이므로 디베르 ① 이 건 "
+        "제한을 지난다 (data/cards.cdb 의 attribute=DARK)."
+    ),
+    hand=ORCUST_HARP_HORROR_HAND,
+    recipe_ydk=ORCUST_VERIFICATION_RECIPE,
+    note=(
+        "🔴 이 경로도 **검증용**이고 최선 전개라고 주장하지 않는다. "
+        "스켈레촌 · 카노네의 묘지 효과는 등재하지 않았으므로 이 경로는 "
+        "거기서 더 나아가지 않는다. 🔴 그리고 **금지 · 제한 데이터로 "
+        "검증하지 않았으므로 대회 합법 덱이라고 부르지 않는다** (레시피는 "
+        "기존 검증용 레시피 그대로다)."
+    ),
+)
+
+
 COMBO_LINES: dict[str, ComboLine] = {
     line.name: line
-    for line in (ORCUST_GIRSU_LINE, ORCUST_GIRSU_TOKEN_LINE)
+    for line in (
+        ORCUST_GIRSU_LINE,
+        ORCUST_GIRSU_TOKEN_LINE,
+        ORCUST_HARP_HORROR_LINE,
+    )
 }
-assert len(COMBO_LINES) == 2, (
+assert len(COMBO_LINES) == 3, (
     "같은 이름의 경로가 두 번 적혀 있습니다 — 어느 쪽이 이기는지 말할 수 "
     f"없습니다: {sorted(COMBO_LINES)}"
 )
@@ -924,6 +1054,8 @@ def line_named(name: "str | None") -> "ComboLine | None":
 __all__ = [
     "COMBO_LINES",
     "ORCUST_GIRSU_LINE",
+    "ORCUST_HARP_HORROR_LINE",
+    "ORCUST_HARP_HORROR_HAND",
     "ORCUST_GIRSU_TOKEN_HAND",
     "ORCUST_GIRSU_TOKEN_LINE",
     "ORCUST_VERIFICATION_HAND",

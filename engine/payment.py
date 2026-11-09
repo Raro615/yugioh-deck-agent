@@ -63,6 +63,7 @@ from engine.cost import (
     LifeCost,
     Selection,
     SelectionValidator,
+    SelfCardCost,
     UnimplementedCost,
 )
 from engine.effect.delta import LifeChanged, StateDelta, ZoneMoved
@@ -82,6 +83,17 @@ from engine.vocabulary import Zone
 COST_OPERATION: dict[CostSemantics, OperationKind] = {
     CostSemantics.DISCARD: OperationKind.DISCARD,
     CostSemantics.RELEASE: OperationKind.RELEASE,
+    #: 🔴 **제외가 들어왔다** (Phase 6-AO). 「묘지의 이 카드를 제외하고
+    #: 발동할 수 있다」 를 치르는 자리이고, 옮기는 계층은 이미 있었다 —
+    #: ``DESTINATION[BANISH]`` 가 ``Zone.REMOVED`` 이고 ``_apply`` 의 고리가
+    #: 그것을 그대로 쓴다. 없던 것은 **표의 한 줄**이다.
+    #:
+    #: 🔴 이것이 "모든 제외 비용을 치를 수 있다" 는 뜻은 아니다. 고르는
+    #: 비용(:class:`~engine.cost.CardCost`)은 ``Duel`` 이 아직 비용 선택을
+    #: 넘기지 않으므로 (``Duel._apply_activation`` 이 ``cost_selections`` 를
+    #: 주지 않는다) 치를 수 없고, 치를 수 있는 것은 **고를 것이 없는**
+    #: :class:`~engine.cost.SelfCardCost` 쪽이다.
+    CostSemantics.BANISH: OperationKind.BANISH,
 }
 
 #: 이번 단계가 실제로 치를 수 있는 비용.
@@ -93,7 +105,8 @@ SUPPORTED_COSTS: frozenset[CostSemantics] = frozenset(COST_OPERATION) | {
 
 #: 지원하지 않는 비용과, 무엇이 없어서 못 하는가.
 UNSUPPORTED_REASON: dict[CostSemantics, str] = {
-    CostSemantics.BANISH: "비용으로서의 제외 (Phase 2-F~)",
+    #: ``BANISH`` 는 Phase 6-AO 가 ``COST_OPERATION`` 에 더했으므로 여기
+    #: 없다 — 두 표에 함께 있으면 어느 쪽이 참인지 말할 수 없다.
     CostSemantics.SEND_TO_GRAVE: "비용으로서의 묘지送り — 덱에서 보내는 경우 포함",
     CostSemantics.DETACH: "엑시즈 소재 모델 (Phase 3~)",
     CostSemantics.UNKNOWN: "표현되지 않은 비용",
@@ -468,6 +481,17 @@ class CostPayer:
                 )
                 continue
 
+            if isinstance(cost, SelfCardCost):
+                #: 🔴 **자신을 내놓는 비용은 고르지 않는다** (Phase 6-AO).
+                #: 어느 카드인지는 효과가 이미 정했으므로
+                #: ``context.selection_for`` 를 묻지 않는다 — 물으면
+                #: "고른 카드가 없습니다" 로 치를 수 없는 비용이 된다.
+                step = self._plan_self_cost(state, cost, context, condition_context)
+                if isinstance(step, CostPaymentResult):
+                    return step
+                steps.append(step)
+                continue
+
             assert isinstance(cost, CardCost)  # 지원 검사가 나머지를 걸렀다
             step = self._plan_card_cost(
                 state, cost, index, context, condition_context, selections
@@ -476,6 +500,54 @@ class CostPayer:
                 return step
             steps.append(step)
         return steps
+
+    def _plan_self_cost(
+        self,
+        state: GameState,
+        cost: SelfCardCost,
+        context: PaymentContext,
+        condition_context: ConditionContext,
+    ) -> "_CardStep | CostPaymentResult":
+        """
+        **자신 한 장**을 옮길 계획 (Phase 6-AO).
+
+        :meth:`_plan_card_cost` 와 **같은 자료형**(:class:`_CardStep`)을
+        돌려주므로 지불 단계(:meth:`_apply`)는 한 벌이다 — 비용의 종류가
+        늘어도 판을 바꾸는 코드는 하나다.
+
+        🔴 **검증기가 이미 본 것을 다시 본다.** 검증은 관측으로 하고 지불은
+        판으로 하므로, 그 사이에 어긋나면 **옮기지 않고 멈춘다** (그쪽의
+        같은 자리와 같은 규율).
+        """
+        instance = context.source
+        if instance is None:  # pragma: no cover - 검증기가 먼저 막는다
+            return CostPaymentResult(
+                PaymentStatus.CANNOT_PAY,
+                ValidationCode.SOURCE_REQUIRED,
+                f"{cost.describe_ko()}: 어느 카드를 내놓는지 가리키지 "
+                "않았습니다.",
+            )
+        card = state.find_instance(instance)
+        if card is None:  # pragma: no cover - 검증기가 먼저 막는다
+            return CostPaymentResult(
+                PaymentStatus.CANNOT_PAY,
+                ValidationCode.CANDIDATE_NOT_FOUND,
+                f"{instance} 가 이 듀얼에 없습니다.",
+            )
+        if card.zone not in cost.zones:
+            return CostPaymentResult(
+                PaymentStatus.CANNOT_PAY,
+                ValidationCode.SOURCE_WRONG_ZONE,
+                f"{instance} 가 {card.zone.value} 에 있어 "
+                f"{cost.describe_ko()} 의 비용이 될 수 없습니다.",
+            )
+        operation = COST_OPERATION[cost.semantics]
+        return _CardStep(
+            semantics=cost.semantics,
+            instances=(instance,),
+            owners=(destination_player(operation, card),),
+            player=cost.who.resolve(condition_context),
+        )
 
     def _check_supported(self, cost: Cost) -> CostPaymentResult | None:
         """이 지불기가 다룰 수 있는 비용인가. 아니면 **지어내지 않는다.**"""
@@ -486,7 +558,7 @@ class CostPayer:
                 f"이 비용을 표현할 수 없습니다: {cost.rule}",
                 missing=cost.rule,
             )
-        if not isinstance(cost, (CardCost, LifeCost)):
+        if not isinstance(cost, (CardCost, SelfCardCost, LifeCost)):
             return CostPaymentResult(
                 PaymentStatus.UNSUPPORTED_COST,
                 ValidationCode.COST_NOT_IMPLEMENTED,

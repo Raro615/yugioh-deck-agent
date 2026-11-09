@@ -20,10 +20,23 @@ from __future__ import annotations
 
 from engine.condition import ConditionContext
 from engine.cost.choice import CandidateSet, ChoiceSpec, Selection
-from engine.cost.model import CardCost, Cost, CostGroup, LifeCost, UnimplementedCost
+from engine.cost.model import (
+    CardCost,
+    Cost,
+    CostGroup,
+    LifeCost,
+    SelfCardCost,
+    UnimplementedCost,
+)
 from engine.cost.resolver import CandidateResolver
 from engine.game_state_view import GameStateView
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
+
+
+#: 자신을 내놓는 비용에서 **그 카드를 가리키지 못했을** 때의 이름 (6-AO).
+SELF_COST_SOURCE_MISSING: str = (
+    "self-cost-source (자신을 내놓는 비용인데 그 카드를 가리키지 못했다)"
+)
 
 
 class CostValidator:
@@ -62,6 +75,8 @@ class CostValidator:
             )
         if isinstance(cost, LifeCost):
             return self._validate_life(cost, context)
+        if isinstance(cost, SelfCardCost):
+            return self._validate_self(cost, context)
         if isinstance(cost, CardCost):
             return self._validate_card(cost, context)
         return ValidationResult.unknown(
@@ -116,6 +131,53 @@ class CostValidator:
             )
         return ValidationResult.valid(
             f"라이프 {player.life_points} 중 {cost.amount} 를 지불할 수 있습니다."
+        )
+
+    def _validate_self(
+        self, cost: SelfCardCost, context: ConditionContext
+    ) -> ValidationResult:
+        """
+        **자신을 내놓는 비용** (Phase 6-AO). 고를 것이 없으므로 후보를 세지
+        않고, 대신 **그 카드가 지금 어디에 있는가**를 본다.
+
+        세 갈래가 각각 다른 사실이다.
+
+        - 가리키는 카드가 없다 → ``UNKNOWN`` (무엇을 내놓아야 하는지 모른다)
+        - 관측에 보이지 않는다 → ``UNKNOWN`` (가려진 자리의 카드일 수 있다)
+        - 보이는데 그 존이 아니거나 남의 카드다 → ``INVALID`` (확정 거부)
+        """
+        if context.source is None:
+            return ValidationResult.unknown(
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{cost.describe_ko()}: 어느 카드를 내놓는지 가리키지 "
+                "않았습니다.",
+                missing_rule=SELF_COST_SOURCE_MISSING,
+            )
+        card = self._view.find(context.source)
+        if card is None:
+            return ValidationResult.unknown(
+                ValidationCode.HIDDEN_CARD,
+                f"{context.source} 가 관측에 보이지 않아 "
+                f"{cost.describe_ko()} 를 치를 수 있는지 알 수 없습니다.",
+                missing_rule=SELF_COST_SOURCE_MISSING,
+            )
+        payer = cost.who.resolve(context)
+        if card.controller != payer:
+            return ValidationResult.invalid(
+                ValidationCode.SOURCE_NOT_CONTROLLED,
+                f"{context.source} 는 P{card.controller} 의 카드입니다 "
+                f"(P{payer} 가 비용으로 내놓으려 했습니다).",
+            )
+        if card.zone not in cost.zones:
+            allowed = " · ".join(sorted(z.value for z in cost.zones))
+            return ValidationResult.invalid(
+                ValidationCode.SOURCE_WRONG_ZONE,
+                f"{context.source} 가 {card.zone.value} 에 있어 "
+                f"{cost.describe_ko()} 의 비용이 될 수 없습니다 "
+                f"({allowed} 에 있어야 합니다).",
+            )
+        return ValidationResult.valid(
+            f"{cost.describe_ko()} 를 치를 수 있습니다."
         )
 
     def _validate_card(

@@ -280,6 +280,68 @@ class CardDrawn(CardMovement):
 
 
 @dataclass(frozen=True, slots=True)
+class SpecialSummonLimited(StateDelta):
+    """
+    **특수 소환 제한이 걸렸다** (Phase 6-AO).
+
+    카드가 움직이지 않았으므로 :class:`CardMovement` 이 아니다 —
+    :class:`ZoneShuffled` 와 같은 자리다. 바뀐 것은 **이 턴에 할 수 있는
+    일**이고, 그것이 상태의 일부다 (:mod:`engine.state.summon_limit`).
+
+    🔴 **제한의 내용을 적는다.** "제한이 걸렸다" 만 적으면 읽는 쪽이 무엇이
+    막히는지 알 수 없고, 그러면 사용자 출력이 안내문 하나로 끝난다.
+    """
+
+    player: int
+    attribute: str
+    turn_number: int
+    source_card_id: int
+    ordinal: int
+
+    def __post_init__(self) -> None:
+        if self.player not in (0, 1):
+            raise ValueError(f"player 는 0 또는 1 입니다: {self.player}")
+        if not self.attribute:
+            raise ValueError("허용되는 속성 이름이 비어 있습니다.")
+        if self.turn_number < 1:
+            raise ValueError(f"턴 번호는 1 이상이어야 합니다: {self.turn_number}")
+        if self.source_card_id <= 0:
+            raise ValueError(f"카드 ID 는 양수입니다: {self.source_card_id}")
+        if self.ordinal < 0:
+            raise ValueError(f"ordinal 은 0 이상입니다: {self.ordinal}")
+
+    @property
+    def kind(self) -> str:
+        return "special_summon_limited"
+
+    def canonical_state(self) -> tuple:
+        return (
+            "special_summon_limited",
+            self.player,
+            self.attribute,
+            self.turn_number,
+            self.source_card_id,
+            self.ordinal,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "special_summon_limited",
+            "player": self.player,
+            "attribute": self.attribute,
+            "turn_number": self.turn_number,
+            "source_card_id": self.source_card_id,
+            "ordinal": self.ordinal,
+        }
+
+    def describe_ko(self) -> str:
+        return (
+            f"P{self.player} 는 이 턴 {self.attribute} 속성 몬스터밖에 "
+            f"특수 소환할 수 없다 ([{self.source_card_id}]:e[{self.ordinal}])"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ZoneShuffled(StateDelta):
     """
     한 존의 순서가 **무작위로 다시 정해졌다** (Phase 2-Z).
@@ -823,6 +885,7 @@ __all__ = [
     "CardDrawn",
     "LifeChanged",
     "ZoneShuffled",
+    "SpecialSummonLimited",
     "PhaseChanged",
     "SummonKind",
     "SPECIAL_SUMMON_KINDS",

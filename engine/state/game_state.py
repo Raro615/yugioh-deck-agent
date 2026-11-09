@@ -32,6 +32,7 @@ from engine.state.card_instance import CardInstance
 from engine.state.player import DEFAULT_LIFE_POINTS, PlayerState
 from engine.state.turn import TurnState
 from engine.state.rule_usage import RuleUsageRegistry
+from engine.state.summon_limit import SummonLimitRegistry
 from engine.state.summon_usage import SummonUsageRegistry
 from engine.state.use_registry import UseRegistry
 from engine.state.zones import ZoneContainer, move_card
@@ -63,6 +64,7 @@ class GameState:
         "uses",
         "rule_uses",
         "summon_uses",
+        "summon_limits",
         "chain",
         "pending",
         "journal",
@@ -83,6 +85,7 @@ class GameState:
         uses: UseRegistry | None = None,
         rule_uses: RuleUsageRegistry | None = None,
         summon_uses: SummonUsageRegistry | None = None,
+        summon_limits: SummonLimitRegistry | None = None,
         seed: int | None = None,
         rng: "random.Random | RandomSource | None" = None,
     ):
@@ -118,6 +121,15 @@ class GameState:
         # ``(player, card_id)`` 칸을 갈라테아i 의 ① 이 **이미 쓴다**는 것이다.
         self.summon_uses: SummonUsageRegistry = (
             summon_uses if summon_uses is not None else SummonUsageRegistry()
+        )
+
+        # 🔴 **효과가 걸어 둔 특수 소환 제한은 네 번째 표다** (Phase 6-AO).
+        # 위의 셋은 "무엇을 했는가" 를 세고 이것은 **"무엇을 할 수 없는가"**
+        # 를 적는다 — 왜 섞을 수 없는지는
+        # :mod:`engine.state.summon_limit` 머리말에 있다. 요점은 이 제한을
+        # 만든 카드가 그때 **필드에 없다**는 것이다 (비용으로 제외된다).
+        self.summon_limits: SummonLimitRegistry = (
+            summon_limits if summon_limits is not None else SummonLimitRegistry()
         )
 
         # 무작위는 주입된 seed 에서만 나온다. seed 가 없으면 난수원도 없고,
@@ -411,6 +423,7 @@ class GameState:
             uses=self.uses.clone(),
             rule_uses=self.rule_uses.clone(),
             summon_uses=self.summon_uses.clone(),
+            summon_limits=self.summon_limits.clone(),
             seed=self._seed,
             rng=rng,
         )
@@ -454,6 +467,9 @@ class GameState:
             uses=self.uses.clone(),
             rule_uses=self.rule_uses.clone(),
             summon_uses=self.summon_uses.clone(),
+            #: 🔴 **제한도 복제한다** (Phase 6-AO). 공유하면 한 분기가 걸어
+            #: 둔 제약이 다른 분기의 소환을 막는다 (그 모듈의 ``clone``).
+            summon_limits=self.summon_limits.clone(),
             seed=self._seed,
             # **복제하지 않는다.** 같은 난수원을 함께 쓴다.
             rng=self._random,
@@ -526,6 +542,12 @@ class GameState:
             #: 소환했는가" 는 뒤의 소환이 적법한지를 바꾸므로 (갈라테아i),
             #: 해시에 들어가야 같은 해시가 같은 판을 뜻한다.
             self.summon_uses.canonical_state(),
+            #: 🔴 **이것도 판의 모양이다** (Phase 6-AO). "이 턴에 어둠
+            #: 속성밖에 특수 소환할 수 없다" 가 걸린 판과 걸리지 않은 판은
+            #: **뒤에 할 수 있는 일이 다르다** — 빼면 탐색의 중복 제거가 둘을
+            #: 같은 상태로 합치고, 한쪽에서만 합법인 소환이 다른 쪽 경로로
+            #: 보고된다.
+            self.summon_limits.canonical_state(),
             self.result.as_tuple() if self.result else None,
         )
 

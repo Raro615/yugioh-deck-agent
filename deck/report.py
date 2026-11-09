@@ -380,6 +380,40 @@ def render_opening_board(setup, repository=None) -> str:
 
         names = ", ".join(_label(c) for c in cards) or "없음"
         lines.append(f"  {label}: {len(cards)}장 — {names}")
+
+    #: 🔴 **효과가 걸어 둔 특수 소환 제한을 적는다** (Phase 6-AO).
+    #:
+    #: 존만 적으면 읽는 쪽이 **뒤에 무엇을 할 수 있는지**를 알 수 없다 —
+    #: 「어둠 속성밖에 특수 소환할 수 없다」 가 걸린 판과 걸리지 않은 판은
+    #: 같은 존 목록을 갖지만 다음 걸음이 다르다. 엑스트라 몬스터 존이
+    #: 6-AC 에서 추가된 것과 **같은 이유**다: 판에 있는 것을 적지 않는 것은
+    #: 보고의 결함이다.
+    #:
+    #: 🔴 **안내문이 아니라 판정에 쓰이는 그 기록이다** —
+    #: :mod:`engine.state.summon_limit` 의 표를 그대로 읽는다.
+    limits = getattr(state, "summon_limits", None)
+    active = (
+        limits.entries(state.turn.turn_number) if limits is not None else ()
+    )
+    if active:
+        lines.append("")
+        lines.append("  🔴 이 턴에 걸린 특수 소환 제한 (효과가 건 것):")
+        for limit in active:
+            who = "자신" if limit.player == 0 else "상대"
+            found = (
+                repository.get(limit.source_card_id) if repository else None
+            )
+            source = (
+                f"{found.display_name()} [{limit.source_card_id}]"
+                if found
+                else f"[{limit.source_card_id}]"
+            )
+            lines.append(
+                f"    - {who}: {limit.attribute} 속성 몬스터밖에 특수 "
+                f"소환할 수 없습니다 — {source} 의 "
+                f"e[{limit.ordinal}] 가 걸었습니다 (턴 종료까지)"
+            )
+
     lines.append("")
     lines.append("  🔴 집의 강도 평가는 미구현입니다 (Phase 6-V). 위에 적은"
                  " 것은 검증된 현재 자원뿐이고, 방해 수단의 수를 카드"

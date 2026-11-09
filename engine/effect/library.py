@@ -42,8 +42,10 @@ from dataclasses import dataclass
 from engine.archetype_compiler import compile_archetype_condition
 from engine.condition import (
     And,
+    CardIdIs,
     Condition,
     ConditionResult,
+    FaceUpCardPresent,
     IsMonster,
     IsSpellTrap,
     Not,
@@ -53,7 +55,7 @@ from engine.condition import (
     ZoneCountAtLeast,
     ZoneHasFreeSlot,
 )
-from engine.cost import CandidateSource, ChoiceSpec
+from engine.cost import CandidateSource, ChoiceSpec, CostGroup, SelfCardCost
 from engine.effect.definition import (
     EffectDefinition,
     EffectDefinitionError,
@@ -72,6 +74,7 @@ from engine.effect.operation import (
     DrawOperation,
     LifeChangeOperation,
     OperationKind,
+    RestrictSpecialSummonOperation,
     ShuffleOperation,
     SpecialSummonOperation,
     TokenSpec,
@@ -232,6 +235,16 @@ HONEST = 37742478
 GIRSU = 69811710
 WORLD_WAND = 93920420
 GALATEA = 30741503
+#: 오르페골 디베르 (Phase 6-AO) — 묘지에서 발동하는 **첫 효과**이고 비용을
+#: 치르는 **첫 등재 효과**다.
+HARP_HORROR = 57835716
+#: 오르페골 바벨 — 디베르의 ``s.spcon1`` 이 이름을 대는 필드 마법
+#: (``CARD_ORCUSTRATED_BABEL``). 이 카드 자신의 효과는 등재하지 않았다.
+ORCUSTRATED_BABEL = 90351981
+#: 디베르 ① 이 덱에서 특수 소환할 수 있는 「오르페골」 몬스터들 (Phase 6-AO) —
+#: 검증용 레시피에 들어 있는 것만 읽었다. 🔴 **「오르페골」 전체가 아니다.**
+CYMBAL_SKELETON = 21441617
+CANNONE = 94046012
 
 #: 욕망의 항아리 — "①: 자신은 덱에서 2장 드로우한다."
 #:
@@ -1690,6 +1703,221 @@ _WORLD_WAND_TRIGGER_ENTRY = LibraryEntry(
 )
 
 
+#: 🔴 **오르페골 디베르 ① — 묘지에서 자신을 제외하고 덱에서 특수 소환**
+#: (Phase 6-AO).
+#:
+#: 공식 한국어 텍스트 (``data/cards.cdb`` 57835716)::
+#:
+#:     이 카드명의 효과는 1턴에 1번밖에 사용할 수 없다.
+#:     ①: 묘지의 이 카드를 제외하고 발동할 수 있다. 덱에서 "오르페골 디베르"
+#:     이외의 "오르페골" 몬스터 1장을 특수 소환한다. 이 효과의 발동 후,
+#:     턴 종료시까지 자신은 어둠 속성 몬스터밖에 특수 소환할 수 없다.
+#:
+#: 무엇을 옮겼는가 — ``c57835716.lua`` 의 ``e1``
+#: --------------------------------------------
+#: =========================================  =============================
+#: ``e1:SetType(EFFECT_TYPE_IGNITION)``        ``activation_kind=IGNITION``
+#: ``e1:SetRange(LOCATION_GRAVE)``             ``activation_zones={GRAVE}``
+#: ``e1:SetCost(Cost.SelfBanish)``             ``cost=SelfCardCost.banish(``
+#:                                             ``{GRAVE})``
+#: ``s.spcon1`` — ``not IsPlayerAffected``     ``Not(FaceUpCardPresent(…,``
+#: ``ByEffect(tp,CARD_ORCUSTRATED_BABEL))``    ``ORCUSTRATED_BABEL))``
+#: ``s.sptg`` — ``GetLocationCount(tp,``       ``ZoneHasFreeSlot(자신,``
+#: ``LOCATION_MZONE)>0``                       ``MZONE)``
+#: ``s.sptg`` — ``IsExistingMatchingCard(``    선택 명세의 존재 검사
+#: ``s.filter,tp,LOCATION_DECK,…)``            (``existence_requires_gate``)
+#: ``s.filter`` — ``IsSetCard(SET_ORCUST)``    ``require`` 의 카드군 조건
+#: ``s.filter`` — ``not c:IsCode(id)``         ``Not(CardIdIs(HARP_HORROR))``
+#: ``s.filter`` — ``IsCanBeSpecialSummoned``   관문
+#:                                             (``MAY_BE_SPECIAL_SUMMONED``)
+#: ``s.spop`` 첫 줄의 ``return``               ``resolution_condition``
+#: ``SelectMatchingCard(…,1,1,…)``             ``chosen_at_resolution=True``
+#: ``Duel.SpecialSummon(g,0,tp,tp,``           ``SpecialSummonOperation``
+#: ``false,false,POS_FACEUP)``
+#: ``RegisterEffect`` 의                        ``RestrictSpecial``
+#: ``EFFECT_CANNOT_SPECIAL_SUMMON``            ``SummonOperation("DARK")``
+#: ``e1:SetCountLimit(1,id)``                  ``use_limit=PER_CARD_NAME``
+#: =========================================  =============================
+#:
+#: 🔴 **비용과 해결을 한 단계로 뭉개지 않았다.** 제외는 **발동 시점**에
+#: 치러지고 (``SetCost``), 특수 소환은 **해결 시점**에 일어난다. 그래서 이
+#: 효과가 무효화되거나 해결이 불발되어도 **제외는 되돌아오지 않는다** —
+#: ``CostPayer`` 가 발동 경로에서 판을 바꾸고, 해결기는 그것을 모른다.
+#:
+#: 🔴 **고르는 시점이 해결 중이다.** ``s.sptg`` 는 후보의 **존재만** 확인하고
+#: (``IsExistingMatchingCard``) 고르는 것은 ``s.spop`` 의
+#: ``Duel.SelectMatchingCard`` 다 — 성유물－『성장』 ② 와 같은 모양이고 같은
+#: 이유로 ``chosen_at_resolution=True`` 다. 대상 지정이 아니다
+#: (``SetOperationInfo`` 의 카드 인자가 ``nil`` 이다).
+#:
+#: 🔴 **제한은 소환 **다음**에 온다.** ``EFFECT_FLAG_OATH`` 가 "등록 전에
+#: 진행 중이던 처리에는 걸리지 않는다" 는 뜻이고, 공식 스크립트도 소환을
+#: 먼저 하고 등록을 나중에 한다. 조작 묶음의 **순서**가 그것을 지킨다
+#: (:class:`~engine.effect.operation.RestrictSpecialSummonOperation` 의 설명).
+#:
+#: 🔴 **``e2`` 는 등재하지 않았다.** 그쪽은 ``EFFECT_TYPE_QUICK_O`` 이고
+#: 조건이 ``s.spcon2`` (바벨이 적용되고 있다) 다. 유발즉시의 발동 시점을
+#: 룰북에서 읽지 못했으므로 (``ACTIVATION_KINDS_IN_SCOPE`` · ADR-006) 이
+#: 저장소는 그 분류를 허가하지 않고, 바벨 자신의 효과도 등재되어 있지
+#: 않다. 즉 **바벨이 깔린 판에서 디베르는 발동할 수 없다** — ①은
+#: ``s.spcon1`` 이 거짓이고 ②는 미지원이다. 그것이 지금의 정직한 범위다.
+#:
+#: 무엇을 옮기지 **못했는가**
+#: --------------------------
+#: - ``IsPlayerAffectedByEffect`` 자체. 지속 효과가 플레이어에게 걸려 있는가를
+#:   적는 계층이 없어 **바벨이 앞면으로 필드에 있는가**로 옮겼다
+#:   (:class:`~engine.condition.FaceUpCardPresent` 의 설명). 무효화된 바벨을
+#:   구별하지 못한다 — 무효화 계층이 없다.
+#: - ``EFFECT_FLAG_OATH`` 깃발 자체 (순서로만 지킨다, 위 설명).
+#: - ``#g>0`` 밖의 ``RegisterEffect``. 공식 스크립트는 **고를 후보가 0장이어도
+#:   제한을 건다.** 이 저장소는 ``ResolutionSkip(when_no_candidate=True)`` 로
+#:   조작 묶음을 통째로 생략하므로 그때 제한도 걸리지 않는다 — **다른
+#:   동작이고, 제한을 덜 거는 쪽이다.** 🔴 지금 등재된 효과로는 그 자리에
+#:   닿을 수 없다 (발동 시점에 후보의 존재를 확인했고, 발동과 해결 사이에
+#:   덱을 비우는 등재 효과가 없다). 그 사실과 함께 보고서 §8 에 적는다.
+#: - ``aux.RegisterClientHint`` (표시용 안내).
+_HARP_HORROR_GRAVE_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(HARP_HORROR, 0),
+        source_card_id=HARP_HORROR,
+        #: 🔴 **비용을 치르는 첫 등재 효과다.** 고를 것이 없는 비용이므로
+        #: ``Duel`` 이 비용 선택을 넘기지 않아도 치를 수 있다
+        #: (:class:`~engine.cost.SelfCardCost` 의 설명).
+        cost=CostGroup((SelfCardCost.banish(frozenset({Zone.GRAVE})),)),
+        targets=TargetBinding.single(
+            TargetSpec.choosing(
+                ChoiceSpec(
+                    source=CandidateSource(
+                        # ``LOCATION_DECK, 0`` — 자신 덱만이다.
+                        zones=frozenset({Zone.DECK}),
+                        owner=PlayerRef.CONTROLLER,
+                        require=And(
+                            (
+                                #: ``s.filter`` 는 ``IsMonster`` 를 적지 않고
+                                #: ``IsCanBeSpecialSummoned`` 가 그것을
+                                #: 함의하는데, 그 술어는 관문이 들고 갔으므로
+                                #: 여기서 몬스터 여부를 명시한다 (성장 ② 와
+                                #: 같은 자리).
+                                IsMonster(),
+                                compile_archetype_condition(
+                                    ("SET_ORCUST",)
+                                ).condition,
+                                #: 🔴 **「"오르페골 디베르" 이외의」** —
+                                #: ``not c:IsCode(id)``. 카드명 기준이므로
+                                #: 덱의 다른 사본도 함께 빠진다.
+                                Not(CardIdIs(HARP_HORROR)),
+                            )
+                        ),
+                    ),
+                    minimum=1,
+                    maximum=1,
+                ),
+                chosen_at_resolution=True,
+                existence_requires_gate=True,
+            )
+        ),
+        operations=(
+            SpecialSummonOperation(PRIMARY_TARGET),
+            #: 🔴 **소환 다음이다** (위 설명의 ``EFFECT_FLAG_OATH``).
+            RestrictSpecialSummonOperation(
+                attribute="DARK",
+                who=PlayerRef.CONTROLLER,
+                basis=(
+                    "c57835716.lua 의 s.spop 끝 — EFFECT_TYPE_FIELD + "
+                    "EFFECT_CANNOT_SPECIAL_SUMMON, SetTargetRange(1,0), "
+                    "SetTarget(s.splimit) = not c:IsAttribute(ATTRIBUTE_DARK), "
+                    "SetReset(RESET_PHASE|PHASE_END)"
+                ),
+            ),
+        ),
+        activation=And(
+            (
+                ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.MZONE),
+                SpecialSummonPermitted(),
+                #: 🔴 ``s.spcon1`` — 바벨이 적용되고 있으면 **이쪽(①)이
+                #: 아니라 ②(유발즉시)** 가 쓰인다. 그 분류는 미지원이므로
+                #: 바벨이 깔린 판에서는 어느 쪽도 발동되지 않는다.
+                Not(
+                    FaceUpCardPresent(
+                        PlayerRef.CONTROLLER,
+                        frozenset({Zone.FZONE}),
+                        ORCUSTRATED_BABEL,
+                    )
+                ),
+            )
+        ),
+        activation_kind=ActivationKind.IGNITION,
+        #: 🔴 **묘지에서 발동한다** — 적어 두면 "그 자리가 아니다" 가 모름이
+        #: 아니라 확정 거부가 된다 (``_monster_activation_out_of_scope``).
+        activation_zones=frozenset({Zone.GRAVE}),
+        #: 🔴 **해결 시점에 다시 보는 것은 빈 칸 하나다.** ``s.spop`` 의 첫
+        #: 줄이 ``GetLocationCount`` 만 다시 보고 ``SetCondition`` 도 후보의
+        #: 존재도 다시 보지 않는다 (실측 — 그 함수에 그 호출이 없다).
+        resolution_condition=ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.MZONE),
+        resolution_skip=ResolutionSkip(
+            when_condition_false=True,
+            when_no_candidate=True,
+            basis=(
+                "c57835716.lua 의 s.spop — "
+                "if Duel.GetLocationCount(tp,LOCATION_MZONE)<=0 then return end "
+                "과 if #g>0 then Duel.SpecialSummon(...) end. 빈 칸이 없으면 "
+                "조작 없이 끝나고, SelectMatchingCard 가 빈 묶음을 주면 "
+                "소환하지 않는다 (s.filter 가 IsCanBeSpecialSummoned 로 "
+                "거르므로 금지된 판에서는 후보가 0장이 된다). 🔴 후보가 "
+                "0장일 때 공식 스크립트는 제한을 그대로 거는데 이 저장소는 "
+                "묶음을 통째로 생략한다 — 위 설명의 마지막 항목."
+            ),
+        ),
+        use_limit=UseLimit(LimitScope.PER_CARD_NAME),
+        provenance=EffectProvenance.official_lua(
+            "c57835716.lua 의 e1 (EFFECT_TYPE_IGNITION, "
+            "SetRange(LOCATION_GRAVE)) 에서 발동 분류와 발동 자리를, "
+            "SetCost(Cost.SelfBanish) 에서 비용을, s.spcon1 의 "
+            "not Duel.IsPlayerAffectedByEffect(tp,CARD_ORCUSTRATED_BABEL) 에서 "
+            "발동 조건 하나를, s.sptg 의 "
+            "Duel.GetLocationCount(tp,LOCATION_MZONE)>0 에서 빈 칸 조건을, "
+            "Duel.IsExistingMatchingCard(s.filter,tp,LOCATION_DECK,...) 에서 "
+            "후보의 존재를, s.filter 의 IsSetCard(SET_ORCUST) · "
+            "not c:IsCode(id) 에서 후보 조건을, s.spop 의 "
+            "Duel.SelectMatchingCard(...,1,1,...) 에서 고르는 시점을, "
+            "Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP) 에서 하는 "
+            "일을, 그 뒤 RegisterEffect 의 "
+            "EFFECT_CANNOT_SPECIAL_SUMMON+SetTargetRange(1,0)+s.splimit+"
+            "SetReset(RESET_PHASE|PHASE_END) 에서 걸리는 제한을, "
+            "SetCountLimit(1,id) 에서 사용 제한을 옮겼다. "
+            "s.filter 의 IsCanBeSpecialSummoned 는 관문으로 남겼고 "
+            "(existence_requires_gate 로 발동 시점의 존재 검사까지 그 관문을 "
+            "보게 했다), IsPlayerAffectedByEffect 는 "
+            "FaceUpCardPresent 로 옮겨 **무효화된 바벨을 구별하지 못한다**. "
+            "EFFECT_FLAG_OATH 는 조작 순서로만 지키고 깃발 자체는 옮기지 "
+            "못했다. 후보가 0장일 때도 제한을 거는 동작 (RegisterEffect 가 "
+            "if #g>0 밖에 있다) 과 e2(EFFECT_TYPE_QUICK_O, 바벨이 적용될 때) "
+            "와 aux.RegisterClientHint 는 옮기지 못했다."
+        ),
+    ),
+    lua_file="c57835716.lua",
+    lua_excerpt=(
+        "e1:SetType(EFFECT_TYPE_IGNITION); e1:SetRange(LOCATION_GRAVE); "
+        "e1:SetCountLimit(1,id); e1:SetCost(Cost.SelfBanish); "
+        "s.spcon1 = not Duel.IsPlayerAffectedByEffect(tp,"
+        "CARD_ORCUSTRATED_BABEL); "
+        "s.filter = c:IsSetCard(SET_ORCUST) and "
+        "c:IsCanBeSpecialSummoned(e,0,tp,false,false) and not c:IsCode(id); "
+        "s.sptg = Duel.GetLocationCount(tp,LOCATION_MZONE)>0 and "
+        "Duel.IsExistingMatchingCard(s.filter,tp,LOCATION_DECK,0,1,nil,e,tp); "
+        "s.spop: Duel.SelectMatchingCard(tp,s.filter,tp,LOCATION_DECK,0,1,1,"
+        "nil,e,tp); Duel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP); "
+        "e1:SetCode(EFFECT_CANNOT_SPECIAL_SUMMON); e1:SetTargetRange(1,0); "
+        "s.splimit = not c:IsAttribute(ATTRIBUTE_DARK); "
+        "e1:SetReset(RESET_PHASE|PHASE_END)"
+    ),
+    executable=True,
+)
+
+
+
+
+
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
     _POT_OF_GREED_ENTRY,
@@ -1720,6 +1948,9 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     _GIRSU_TOKEN_ENTRY,
     # Phase 6-AC — 두 번째 유발, 그리고 **특수 소환을 실행하는 첫 효과**.
     _WORLD_WAND_TRIGGER_ENTRY,
+    # Phase 6-AO — **묘지에서 발동하는 첫 효과**, **비용을 치르는 첫 효과**,
+    # 그리고 **특수 소환 제한을 거는 첫 효과**.
+    _HARP_HORROR_GRAVE_ENTRY,
 )
 
 
@@ -1816,9 +2047,30 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
         #: 🔴 **그래서 기르수 ① 의 해결은 여전히 멈춘다.** 막는 것은 이
         #: 카드가 아니라 **덱에서 고른 카드**의 ``MAY_BE_SENT_TO_GRAVE``
         #: 이고, 그 카드들은 여기 등록되어 있지 않다 (6-V 보고서 §11).
+        #: 🔴 **Phase 6-AO 가 질문 하나에 답했다** — "이 카드를 특수 소환할
+        #: 수 있는가". 디베르 ① 이 **덱에서 고른 카드**에 그것을 묻고
+        #: (``s.filter`` 의 ``IsCanBeSpecialSummoned``), 기르수는 그 후보
+        #: 중 하나다 (「오르페골」 몬스터이고 디베르가 아니다).
         CardRuleFacts(
             card_id=GIRSU,
-            answers={},
+            answers={
+                RuleQuestion.MAY_BE_SPECIAL_SUMMONED: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "잭나이츠 오르페골 기르수: 공식 텍스트 전문을 읽었고 "
+                    "소환 조건이 **없다** — 「일반 소환할 수 없다」 도 "
+                    "「특수 소환으로만 특수 소환할 수 있다」 도 적혀 있지 "
+                    "않은 레벨 4 메인 덱 효과 몬스터다 (① 덱에서 묘지로 · "
+                    "② 토큰 두 장). 기계로 읽은 근거도 같은 방향이다: "
+                    "normal_summon_restriction_signals 와 "
+                    "special_summon_restriction_signals 가 **둘 다 ()** 이다 "
+                    "(스크립트를 끝까지 읽었고 제약 상수가 0건). "
+                    "🔴 이 답이 **소생 제한을 판정한 것은 아니다** — 그 "
+                    "질문은 패 · 덱에서 나오는 특수 소환에 생기지 않고, 그 "
+                    "구분은 engine.effect.ruling.REVIVAL_LIMIT_FREE_ZONES 가 "
+                    "한다.",
+                ),
+            },
             restricts_others=False,
             restriction_basis=RuleBasis.CARD_TEXT,
             restriction_note=f"기르수: {_SPELL_TRAP_READ}",
@@ -1897,6 +2149,101 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                 "거짓이 되고, 그것을 _WORLD_WAND_RESTRICTION_GUARD 가 "
                 "기계로 지킨다."
             ),
+        ),
+        #: 🔴 **오르페골 디베르** (Phase 6-AO). 두 질문을 읽었다.
+        #:
+        #: 1. ``MAY_BE_SENT_TO_GRAVE`` — 기르수 ① 이 **덱에서 고른 카드**에
+        #:    묻는다 (``gated=True``). 이 답이 없으면 기르수 ① 로 디베르를
+        #:    묘지에 둘 수 없고, 그러면 이번 경로의 첫 걸음이 막힌다.
+        #: 2. ``MAY_BE_SPECIAL_SUMMONED`` — 디베르 ① 이 **덱에서 고른
+        #:    카드**에 묻는다. 디베르 자신은 「"오르페골 디베르" 이외의」 로
+        #:    **후보 조건에서** 빠지지만 (``Not(CardIdIs(...))``), 그 사실과
+        #:    "이 카드를 특수 소환할 수 있는가" 는 다른 질문이다 — 둘을
+        #:    섞으면 "후보에서 빠졌다" 가 "소환할 수 없는 카드다" 로 읽힌다.
+        #:
+        #: 🔴 ``restricts_others`` 가 **``False``** 인 근거는 이 카드가
+        #: **필드에 있다는 사실**이 남의 조작을 막지 않는다는 것이다. ① 이
+        #: 거는 제한은 발동 **뒤**에 걸리고 (그때 이 카드는 제외되어 있다),
+        #: 그것을 적는 자리는 engine.state.summon_limit 이다 — 같은 구분을
+        #: engine.summon_restriction 의 표가 같은 근거로 적는다.
+        CardRuleFacts(
+            card_id=HARP_HORROR,
+            answers={
+                RuleQuestion.MAY_BE_SENT_TO_GRAVE: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "오르페골 디베르: 공식 텍스트 전문을 읽었고, 자기가 "
+                    "묘지로 가는 것을 막는 문장이 없다. ① 이 「묘지의 이 "
+                    "카드를 제외하고」 라고 적어 **묘지에 있는 상황을 스스로 "
+                    "전제한다.** 메인 덱의 효과 몬스터이므로 토큰도 엑스트라 "
+                    "덱 카드도 아니다.",
+                ),
+                RuleQuestion.MAY_BE_SPECIAL_SUMMONED: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "오르페골 디베르: 공식 텍스트 전문을 읽었고 소환 조건이 "
+                    "**없다** — 「일반 소환할 수 없다」 도 「특수 소환으로만 "
+                    "특수 소환할 수 있다」 도 적혀 있지 않은 레벨 4 메인 덱 "
+                    "효과 몬스터다. 기계로 읽은 근거도 같은 방향이다: "
+                    "normal_summon_restriction_signals 가 () 이다. "
+                    "🔴 special_summon_restriction_signals 에는 "
+                    "EFFECT_CANNOT_SPECIAL_SUMMON 이 **있지만** 그것은 이 "
+                    "카드가 **남에게 거는** 제한이고 (① 의 해결이 등록한다) "
+                    "자기 자신의 소환 조건이 아니다 — 두 축을 섞지 않는다.",
+                ),
+            },
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "오르페골 디베르: 공식 텍스트 전문을 읽었다. ① 이 거는 "
+                "「턴 종료시까지 어둠 속성 몬스터밖에 특수 소환할 수 없다」 "
+                "는 **발동한 뒤**에 걸리는 제한이고, 그때 이 카드는 비용으로 "
+                "제외되어 필드에 없다. 그래서 '이 카드가 필드에 있다' 는 "
+                "사실이 남의 조작을 막지 않는다. 🔴 그 제한을 버린 것이 "
+                "아니다 — Phase 6-AO 가 engine.state.summon_limit 에 적고 "
+                "assess_special_summon_permission 이 판정한다."
+            ),
+        ),
+        #: 🔴 **오르페골 스켈레촌 · 카노네** (Phase 6-AO). 디베르 ① 이 덱에서
+        #: 특수 소환할 **후보**이므로 그 질문 하나를 읽었다. 둘의 ① 은
+        #: 등재하지 않았다 (이번 범위 밖).
+        #:
+        #: 🔴 ``restricts_others=False`` 의 근거는 **등재 범위**다 — 둘의 ① 이
+        #: 등재되지 않았으므로 이 엔진에서 그 제한이 걸릴 수 없다. 등재하면
+        #: 이 줄을 디베르와 같은 근거로 다시 적어야 한다 (성유물－『성장』 ③
+        #: 과 같은 자리).
+        *(
+            CardRuleFacts(
+                card_id=card_id,
+                answers={
+                    RuleQuestion.MAY_BE_SPECIAL_SUMMONED: RuleFact(
+                        ConditionResult.TRUE,
+                        RuleBasis.CARD_TEXT,
+                        f"{name}: 공식 텍스트 전문을 읽었고 소환 조건이 "
+                        "**없다** — 「일반 소환할 수 없다」 도 「특수 "
+                        "소환으로만 특수 소환할 수 있다」 도 적혀 있지 않은 "
+                        "메인 덱 효과 몬스터다. 기계로 읽은 근거도 같은 "
+                        "방향이다: normal_summon_restriction_signals 가 () "
+                        "이다. 🔴 special_summon_restriction_signals 의 "
+                        "EFFECT_CANNOT_SPECIAL_SUMMON 은 이 카드가 **남에게 "
+                        "거는** 제한이고 자기 자신의 소환 조건이 아니다.",
+                    ),
+                },
+                restricts_others=False,
+                restriction_basis=RuleBasis.CARD_TEXT,
+                restriction_note=(
+                    f"{name}: 공식 텍스트 전문을 읽었다. ① 이 거는 「턴 "
+                    "종료시까지 어둠 속성 몬스터밖에 특수 소환할 수 없다」 "
+                    "는 **그 효과를 발동했을 때에만** 걸리고, ① 은 "
+                    "EFFECT_LIBRARY 에 등재되지 않았으므로 이 엔진에서 "
+                    "발동될 수 없다. 즉 이 '막지 않는다' 는 카드가 아니라 "
+                    "**등재 범위**에 근거한다 — 등재하면 거짓이 된다."
+                ),
+            )
+            for card_id, name in (
+                (CYMBAL_SKELETON, "오르페골 스켈레촌"),
+                (CANNONE, "오르페골 카노네"),
+            )
         ),
         #: 🔴 **오르페골 갈라테아** (Phase 6-AC). 링크 소환으로 필드에 놓이고,
         #: 그 뒤의 어떤 관문이든 판을 훑을 때 이 카드를 만난다

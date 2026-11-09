@@ -30,6 +30,7 @@ from engine.cost.model import (
     CostGroup,
     CostSemantics,
     LifeCost,
+    SelfCardCost,
     UnimplementedCost,
 )
 from engine.cost.receipt import CostPayment
@@ -40,6 +41,7 @@ __all__ = [
     "CostSemantics",
     "Cost",
     "CardCost",
+    "SelfCardCost",
     "LifeCost",
     "UnimplementedCost",
     "CostGroup",

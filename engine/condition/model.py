@@ -1360,6 +1360,142 @@ class InAnyZone(Condition):
 
 
 @dataclass(frozen=True, slots=True)
+class CardIdIs(Condition):
+    """
+    그 카드의 **카드명**이 이것인가 (Phase 6-AO).
+
+    공식 스크립트의 ``c:IsCode(id)`` 를 옮긴 것이다. 디베르(57835716)의
+    후보 조건이 ``not c:IsCode(id)`` 이므로 (「"오르페골 디베르" 이외의」),
+    그 문장을 ``Not(CardIdIs(...))`` 로 적는다.
+
+    🔴 **:class:`IsSetCard` 와 다른 축이다.** 저쪽은 카드군이고 이쪽은
+    카드명 하나다. 같은 이름의 다른 개체도 **같은 카드명**이므로 ``TRUE``
+    이고, 그것이 「이름 지정 제외」 의 뜻이다 — ``instance_id`` 로 한 장만
+    빼면 덱의 다른 사본이 조용히 통과한다.
+
+    정의를 읽을 수 없으면 ``UNKNOWN`` 이다. 🔴 모름을 ``FALSE`` 로 접으면
+    "이름이 다르다" 가 되어 **제외해야 할 카드가 후보로 올라간다.**
+    """
+
+    card_id: int
+    instance: InstanceId | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.card_id, bool) or not isinstance(self.card_id, int):
+            raise ValueError(f"카드 ID 는 정수입니다: {self.card_id!r}")
+        if self.card_id <= 0:
+            raise ValueError(f"카드 ID 는 양수입니다: {self.card_id}")
+
+    def evaluate(self, view, context) -> ConditionResult:
+        definition, _ = _resolve_definition(view, context, self.instance)
+        if definition is None:
+            return ConditionResult.UNKNOWN
+        return ConditionResult.from_bool(definition.card_id == self.card_id)
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        _, reason = _resolve_definition(view, context, self.instance)
+        return (reason,) if reason else ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "card_id_is",
+            self.card_id,
+            self.instance.value if self.instance is not None else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "card_id_is", "card_id": self.card_id}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 의 카드명이 [{self.card_id}]"
+
+
+@dataclass(frozen=True, slots=True)
+class FaceUpCardPresent(Condition):
+    """
+    그 카드명이 **그 존들에 앞면으로** 있는가 (Phase 6-AO).
+
+    디베르의 ``s.spcon1`` 이 ``not Duel.IsPlayerAffectedByEffect(tp,
+    CARD_ORCUSTRATED_BABEL)`` 인데, 이 저장소에는 **지속 효과가 플레이어에게
+    걸려 있는가**를 적는 계층이 없다. 그 질문을 옮길 수 있는 가장 가까운
+    사실이 「그 카드가 앞면으로 필드에 있는가」 다 — 「오르페골 바벨」 의
+    그 효과는 그 카드가 앞면으로 있는 동안에만 존재하기 때문이다.
+
+    🔴 **같은 뜻이라고 주장하지 않는다.** 바벨이 무효화된 판과 앞면으로
+    있는 판을 이 조건은 구별하지 못하고 (무효화 계층이 없다), 그 사실은
+    이 조건을 쓰는 효과의 ``provenance`` 가 적는다.
+
+    🔴 **모름을 참으로도 거짓으로도 바꾸지 않는다.** 그 존에 정체를 알 수
+    없는 앞면 카드가 하나라도 있으면 ``UNKNOWN`` 이다 — "그 카드가 아니다"
+    라고 말할 수 없기 때문이다.
+    """
+
+    who: PlayerRef
+    zones: frozenset[Zone]
+    card_id: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.zones, frozenset):
+            raise TypeError("zones 는 frozenset 이어야 합니다 — 조건은 불변입니다.")
+        if not self.zones:
+            raise ValueError("FaceUpCardPresent 에는 존이 최소 하나 필요합니다.")
+        if isinstance(self.card_id, bool) or not isinstance(self.card_id, int):
+            raise ValueError(f"카드 ID 는 정수입니다: {self.card_id!r}")
+        if self.card_id <= 0:
+            raise ValueError(f"카드 ID 는 양수입니다: {self.card_id}")
+
+    def _scan(self, view, context):
+        player = view.player(self.who.resolve(context))
+        for zone in sorted(self.zones, key=lambda z: z.value):
+            for card in player.zone(zone).occupied():
+                yield card
+
+    def evaluate(self, view, context) -> ConditionResult:
+        unknown = False
+        for card in self._scan(view, context):
+            if not card.face_up:
+                continue
+            if card.card_id == self.card_id:
+                return ConditionResult.TRUE
+            if card.card_id is None:
+                unknown = True
+        return ConditionResult.UNKNOWN if unknown else ConditionResult.FALSE
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        for card in self._scan(view, context):
+            if card.face_up and card.card_id is None:
+                return (
+                    f"{card.instance_id} 가 앞면인데 어떤 카드인지 읽을 수 "
+                    f"없어 [{self.card_id}] 가 아니라고 말할 수 없음",
+                )
+        return ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "face_up_card_present",
+            self.who.value,
+            tuple(sorted(z.value for z in self.zones)),
+            self.card_id,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "face_up_card_present",
+            "who": self.who.value,
+            "zones": sorted(z.value for z in self.zones),
+            "card_id": self.card_id,
+        }
+
+    def describe_ko(self) -> str:
+        where = "/".join(sorted(z.value for z in self.zones))
+        return f"{self.who} {where} 에 [{self.card_id}] 가 앞면으로 있음"
+
+
+@dataclass(frozen=True, slots=True)
 class NotMonster(Condition):
     """
     몬스터가 **아닌가**.

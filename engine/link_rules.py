@@ -834,7 +834,6 @@ def assess_link_materials(
        소재가 확실히 틀린 행동은 판을 못 읽는 것과 무관하게 틀렸으므로,
        모름이 확정 거부를 가리지 않게 한다.
     """
-    permission = assess_special_summon_permission(view, actor)
     if source is None:
         return _illegal("소환할 링크 몬스터가 지목되지 않았습니다.")
 
@@ -866,6 +865,18 @@ def assess_link_materials(
             f"{source} 는 P{card.controller} 의 카드입니다 "
             f"(P{actor} 가 소환하려 했습니다)."
         )
+
+    #: 🔴 **소환되는 카드를 아는 자리이므로 그것을 함께 넘긴다**
+    #: (Phase 6-AO). 넘기지 않으면 효과가 걸어 둔 카드별 제한
+    #: (「어둠 속성밖에 특수 소환할 수 없다」) 이 **링크 소환으로 우회된다** —
+    #: 링크 소환도 특수 소환이다.
+    #:
+    #: 🔴 **자리가 여기로 내려왔다** (6-AO). 6-AD 는 함수 맨 위에서
+    #: 물었는데, 그러면 ``definition`` 을 읽기 전이라 넘길 것이 없다. 묻는
+    #: 시점이 내려왔을 뿐이고 **쓰이는 순서는 그대로다** (아래 두 자리).
+    permission = assess_special_summon_permission(
+        view, actor, summoned=definition
+    )
 
     #: 🔴 **확인된 특수 소환 금지가 소재보다 먼저다** (Phase 6-AD).
     if permission.forbidden:

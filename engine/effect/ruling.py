@@ -551,11 +551,21 @@ class RulingVerdict:
 #: 소환을 거쳤는가" 라는 질문이 생기지 않는다. 질문이 생기지 않는 것과
 #: 질문의 답을 아는 것은 다르고, 이 표가 적는 것은 앞쪽이다.
 #:
-#: 🔴 **덱 · 엑스트라 덱도 여기 없다.** 그 자리에서 나오는 특수 소환은
-#: :data:`~engine.special_summon.SPECIAL_SUMMON_FROM_ZONES` 가 애초에 옮기지
-#: 못한 자리이므로 (절차가 멈춘다) 이 표를 넓혀 봐야 의미가 없고, 넓히면
-#: 「엑스트라 덱에서 정규 소환 없이 특수 소환」 이 조용히 허가된다.
-REVIVAL_LIMIT_FREE_ZONES: frozenset[Zone] = frozenset({Zone.HAND})
+#: 🔴 **메인 덱이 들어왔다** (Phase 6-AO). 덱의 카드도 **아직 한 번도 필드에
+#: 나온 적이 없으므로** 패와 같은 이유로 그 질문이 생기지 않는다 — 위 공식
+#: 규칙이 이름을 댄 자리는 "from the Graveyard or while banished" 두 곳이고
+#: 덱은 거기 없다.
+#:
+#: 🔴 **소생 제한과 소환 조건은 다른 질문이다.** 「특수 소환으로만 특수 소환할
+#: 수 있다」 류의 **소환 조건**은 어느 자리에서든 걸리고, 이 표는 그것을 열지
+#: 않는다 — 그 질문은 :attr:`RuleQuestion.MAY_BE_SPECIAL_SUMMONED` 가 카드별로
+#: 묻고, 등재되지 않은 카드는 여전히 ``UNKNOWN`` 이다 (ADR-006). 즉 넓어진
+#: 것은 "소생 제한을 묻지 않는다" 하나이고 카드별 판정은 그대로다.
+#:
+#: 🔴 **엑스트라 덱은 여기 없다.** 그쪽에서 나오는 특수 소환은 융합 · 싱크로 ·
+#: 엑시즈 · 링크 **절차**의 일이고, 넓히면 「엑스트라 덱에서 정규 소환 없이
+#: 특수 소환」 이 조용히 허가된다 (6-AC 가 적어 둔 그 걱정은 그대로 참이다).
+REVIVAL_LIMIT_FREE_ZONES: frozenset[Zone] = frozenset({Zone.HAND, Zone.DECK})
 
 #: 소생 제한을 판정하려면 무엇이 있어야 하는가. ``missing_rule`` 에 쓰인다.
 SUMMON_HISTORY_RULE: str = (
@@ -730,7 +740,13 @@ class BoardRuling:
         #: 판정은 :mod:`engine.summon_restriction` 하나가 하고, 링크 소환의
         #: 요구(``_SpecialSummonPermitted``)도 **같은 함수**를 부른다 —
         #: 두 경로가 같은 판에서 다른 답을 낼 수 없다.
-        permission = assess_special_summon_permission(self._view, card.controller)
+        #: 🔴 **어느 카드를 소환하는지 아는 자리다** (Phase 6-AO) — 그래서
+        #: 효과가 걸어 둔 카드별 제한까지 함께 묻는다. 넘기지 않으면
+        #: 「어둠 속성밖에 특수 소환할 수 없다」 가 효과에 의한 특수 소환
+        #: 전부를 그냥 지나간다.
+        permission = assess_special_summon_permission(
+            self._view, card.controller, summoned=card.definition
+        )
         if permission.forbidden:
             return RulingVerdict(ConditionResult.FALSE, permission.reason)
         if card.zone not in REVIVAL_LIMIT_FREE_ZONES:

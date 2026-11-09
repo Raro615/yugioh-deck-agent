@@ -279,6 +279,106 @@ SPECIAL_SUMMON_PROHIBITIONS: tuple[SummonProhibitionRule, ...] = (
             "금지가 아니라 엑시즈 소재 제약이므로 이 판정과 무관하다."
         ),
     ),
+    #: 🔴 **오르페골 디베르** (Phase 6-AO). 신호
+    #: (``EFFECT_CANNOT_SPECIAL_SUMMON``) 는 실제로 있고, ① 은 **등재되어
+    #: 있다** — 성유물－『성장』 ③ 과 다른 점이 그것이다. 그래도 이 표의 답은
+    #: ``prohibits=False`` 이고 그 이유가 정확히 적혀야 한다.
+    #:
+    #: 그 제한은 **카드에 붙은 지속 효과가 아니다.** ``s.spop`` 이 해결 중에
+    #: 만들어 플레이어에게 등록하는 효과이고, 그때 디베르는 비용으로
+    #: **제외되어 필드에 없다.** 즉 "이 카드가 앞면으로 필드에 있다" 는 이
+    #: 표의 질문과 그 제한은 **연결되어 있지 않다.**
+    #:
+    #: 🔴 **그 제한을 버린 것이 아니다** — Phase 6-AO 가 그것을 적는 계층을
+    #: 만들었고 (:mod:`engine.state.summon_limit`),
+    #: :func:`assess_special_summon_permission` 이 ``summoned`` 를 받은
+    #: 자리에서 판정한다. 이 표에서 ``prohibits=False`` 인 것은 "**필드에
+    #: 있다는 사실**이 특수 소환을 막지 않는다" 는 뜻이다.
+    SummonProhibitionRule(
+        card_id=57835716,
+        prohibits=False,
+        text_ko=(
+            "오르페골 디베르: ① 의 발동 후에만 「턴 종료시까지 어둠 속성 "
+            "몬스터밖에 특수 소환할 수 없다」 가 걸린다. 카드가 필드에 "
+            "있는 것만으로는 아무것도 막지 않는다 (그 제한은 발동 비용으로 "
+            "**제외된 뒤**에 걸린다)."
+        ),
+        lua_file="c57835716.lua",
+        lua_excerpt=(
+            "function s.spop(...): local e1=Effect.CreateEffect("
+            "e:GetHandler()); e1:SetType(EFFECT_TYPE_FIELD); "
+            "e1:SetCode(EFFECT_CANNOT_SPECIAL_SUMMON); "
+            "e1:SetProperty(EFFECT_FLAG_PLAYER_TARGET+EFFECT_FLAG_OATH); "
+            "e1:SetTargetRange(1,0); e1:SetTarget(s.splimit); "
+            "e1:SetReset(RESET_PHASE|PHASE_END); Duel.RegisterEffect(e1,tp)"
+        ),
+        note=(
+            "그 금지는 c:RegisterEffect 로 카드에 붙은 지속 효과가 아니라 "
+            "**① 의 해결(s.spop)이 그때 만들어 플레이어에게 등록하는** "
+            "효과다. 그리고 그 시점에 이 카드는 비용(Cost.SelfBanish)으로 "
+            "제외되어 필드에 없으므로, 이 표가 묻는 '필드의 앞면 카드' 와 "
+            "그 제한은 연결되어 있지 않다. "
+            "🔴 제한 자체는 Phase 6-AO 가 engine.state.summon_limit 에 적고 "
+            "assess_special_summon_permission 이 summoned 를 받은 자리에서 "
+            "판정한다 — 갈라테아i 와 같은 규율이다 (prohibits=False 는 "
+            "'특수 소환 전체를 막지 않는다' 는 뜻이고 '아무 제약도 없다' 는 "
+            "뜻이 아니다)."
+        ),
+    ),
+    #: 🔴 **오르페골 스켈레촌 · 카노네** (Phase 6-AO). 같은 신호를 적고 같은
+    #: 제한을 걸지만 **그 효과들은 등재되지 않았다** — 성유물－『성장』 ③ 과
+    #: 같은 자리이고 같은 근거다. 등재하면 이 줄의 근거(등재 범위)가 아니라
+    #: 디베르와 같은 근거(제한을 적는 계층)로 옮겨 적어야 한다.
+    #:
+    #: 🔴 **왜 지금 등재하는가**: 이 둘은 디베르 ① 이 덱에서 특수 소환할
+    #: 후보이고, 필드에 나오면 그 뒤의 모든 특수 소환 판정이 이 카드를
+    #: 만난다. 표에 없으면 신호 때문에 그 판 전체가 ``UNDETERMINED`` 가
+    #: 되고, 정상 전개가 "막는지 모른다" 로 멈춘다.
+    SummonProhibitionRule(
+        card_id=21441617,
+        prohibits=False,
+        text_ko=(
+            "오르페골 스켈레촌: ① 의 발동 후에만 「턴 종료시까지 어둠 속성 "
+            "몬스터밖에 특수 소환할 수 없다」 가 걸린다. 카드가 필드에 "
+            "있는 것만으로는 아무것도 막지 않는다."
+        ),
+        lua_file="c21441617.lua",
+        lua_excerpt=(
+            "function s.spop(...): e1:SetType(EFFECT_TYPE_FIELD); "
+            "e1:SetCode(EFFECT_CANNOT_SPECIAL_SUMMON); "
+            "e1:SetProperty(EFFECT_FLAG_PLAYER_TARGET+EFFECT_FLAG_OATH); "
+            "e1:SetTargetRange(1,0); e1:SetTarget(s.splimit); "
+            "Duel.RegisterEffect(e1,tp)"
+        ),
+        note=(
+            "디베르와 같은 모양의 제한이고 같은 이유로 필드에 있다는 사실과 "
+            "연결되어 있지 않다. 그리고 이 카드의 ① 은 EFFECT_LIBRARY 에 "
+            "등재되지 않았으므로 이 엔진에서 발동될 수 없다 — 성유물－"
+            "『성장』 ③ 과 같은 근거다. 등재하면 이 줄을 디베르와 같은 "
+            "근거로 다시 적어야 한다."
+        ),
+    ),
+    SummonProhibitionRule(
+        card_id=94046012,
+        prohibits=False,
+        text_ko=(
+            "오르페골 카노네: ① 의 발동 후에만 「턴 종료시까지 어둠 속성 "
+            "몬스터밖에 특수 소환할 수 없다」 가 걸린다. 카드가 필드에 "
+            "있는 것만으로는 아무것도 막지 않는다."
+        ),
+        lua_file="c94046012.lua",
+        lua_excerpt=(
+            "function s.spop(...): e1:SetType(EFFECT_TYPE_FIELD); "
+            "e1:SetCode(EFFECT_CANNOT_SPECIAL_SUMMON); "
+            "e1:SetProperty(EFFECT_FLAG_PLAYER_TARGET+EFFECT_FLAG_OATH); "
+            "e1:SetTargetRange(1,0); e1:SetTarget(s.splimit); "
+            "Duel.RegisterEffect(e1,tp)"
+        ),
+        note=(
+            "스켈레촌과 같다 — 같은 모양의 제한이고, 이 카드의 ① 도 "
+            "EFFECT_LIBRARY 에 등재되지 않았다."
+        ),
+    ),
 )
 
 #: 🔴 **"한 번에 2장 이상" 을 막는 금지** (Phase 6-AF) — 위의 표와 **다른
@@ -354,6 +454,17 @@ if len(_BY_CARD) != len(SPECIAL_SUMMON_PROHIBITIONS):  # pragma: no cover - 방�
     raise ValueError("한 카드의 금지를 두 줄로 적었습니다.")
 
 
+#: 관측이 제한 칸을 싣지 않을 때의 이름 (Phase 6-AO).
+SUMMON_LIMIT_VIEW_MISSING: str = (
+    "summon-limit-view (관측이 효과가 걸어 둔 특수 소환 제한을 싣지 않는다)"
+)
+
+#: 소환하려는 카드의 속성을 읽지 못할 때의 이름 (Phase 6-AO).
+SUMMON_LIMIT_ATTRIBUTE_MISSING: str = (
+    "summon-limit-attribute (제한이 보는 속성을 읽을 수 없다)"
+)
+
+
 def prohibition_for(card_id: int) -> "SummonProhibitionRule | None":
     """손으로 읽은 금지. **적히지 않았으면 ``None``** (ADR-006)."""
     return _BY_CARD.get(card_id)
@@ -401,18 +512,92 @@ class SummonPermissionAssessment:
         )
 
 
+def _limit_refusal(view, actor: int, summoned) -> "SummonPermissionAssessment | None":
+    """
+    효과가 걸어 둔 **카드별 제한**이 이 소환을 막는가 (Phase 6-AO).
+
+    막지 않으면 ``None`` 이다 — 이 함수는 "허가" 를 돌려주지 않는다. 허가는
+    판 전체를 읽은 뒤에만 할 수 있는 말이고, 그 판단은 부르는 쪽의 것이다.
+
+    세 갈래다.
+
+    - 제한이 없다 → ``None``
+    - 제한이 있고 그 속성이 **아니다** → ``FORBIDDEN`` (확인된 금지)
+    - 제한이 있는데 **속성을 읽을 수 없다** → ``UNDETERMINED``
+      (:meth:`AttributeOnlyLimit.permits` 가 ``None``)
+    """
+    if summoned is None:
+        return None
+    limits = getattr(view, "special_summon_limits", None)
+    if limits is None:
+        #: 🔴 이 관측에는 제한 칸이 없다 — 옛 관측 객체이거나 시험용
+        #: 대역이다. **없는 것을 허가로도 금지로도 바꾸지 않는다**: 제한을
+        #: 볼 수 없다는 사실을 모름으로 적는다.
+        return SummonPermissionAssessment(
+            SpecialSummonPermission.UNDETERMINED,
+            "이 관측은 효과가 걸어 둔 특수 소환 제한을 싣지 않습니다 — "
+            "막는지 알 수 없습니다.",
+            missing_rule=SUMMON_LIMIT_VIEW_MISSING,
+        )
+    attribute = getattr(summoned, "attribute_name", None)
+    for limit in limits(actor):
+        verdict = limit.permits(attribute)
+        if verdict is True:
+            continue
+        if verdict is None:
+            return SummonPermissionAssessment(
+                SpecialSummonPermission.UNDETERMINED,
+                f"{limit.describe_ko()} — 그런데 소환하려는 카드의 속성을 "
+                "읽을 수 없어 그 제한을 지나는지 알 수 없습니다.",
+                missing_rule=SUMMON_LIMIT_ATTRIBUTE_MISSING,
+                blocker_card_id=limit.source_card_id,
+            )
+        return SummonPermissionAssessment(
+            SpecialSummonPermission.FORBIDDEN,
+            f"{limit.describe_ko()} — 소환하려는 카드는 "
+            f"{attribute} 속성입니다.",
+            blocker_card_id=limit.source_card_id,
+        )
+    return None
+
+
 def assess_special_summon_permission(
-    view, actor: int
+    view, actor: int, *, summoned=None
 ) -> SummonPermissionAssessment:
     """
-    P{actor} 가 **지금 특수 소환을 할 수 있는가.** 소환되는 카드와 무관하다.
+    P{actor} 가 **지금 특수 소환을 할 수 있는가.**
 
     **관측만 읽는다.** 판을 바꾸지 않고 ``GameState`` 를 받지 않는다.
 
     순서가 뜻을 가진다 — **확인된 금지를 먼저** 찾는다. 모름을 먼저 돌려
     주면 금지된 판이 "모른다" 로 집계되고, 그것은 규칙이 막은 것을 엔진
     미지원으로 적는 일이다 (Phase 6-AB 보완6 · 보완8 이 세운 구분).
+
+    ``summoned`` (Phase 6-AO)
+    -------------------------
+    **무엇을 소환하려는지 아는 자리**는 그 카드 정의(``CardDefinitionView``)
+    를 함께 준다. 그러면 효과가 걸어 둔 **카드별 제한**까지 본다
+    (:mod:`engine.state.summon_limit`) — 「어둠 속성밖에 특수 소환할 수
+    없다」 처럼 **무엇을 소환하는가에 따라 답이 갈리는** 제한이다.
+
+    🔴 **주지 않으면 그 제한을 보지 않는다.** 판 전체에 걸리는 금지와 달리
+    이 제한은 카드를 모르면 답할 수 없고, 모르는 것을 금지로 바꾸면
+    **발동 시점에 고를 카드가 정해지지 않은 효과**(성유물－『성장』 ② ·
+    디베르 ① 자신)가 전부 막힌다. 그 자리의 질문은 "지금 아무것도 특수
+    소환할 수 없는가" 이고, 그것은 이 제한이 답하는 질문이 아니다.
+
+    🔴 **카드를 아는 자리는 전부 주어야 한다.** 주지 않은 경로가 남으면 그
+    경로로 제한이 우회된다 — 지금 주는 곳은 둘이다: 링크 소환 판정
+    (:func:`~engine.link_rules.assess_link_materials`) 과 효과 해결의 관문
+    (:meth:`~engine.effect.ruling.BoardRuling.explain_special_summon`).
     """
+    #: 🔴 **카드별 제한이 필드 훑기보다 먼저다.** 이것은 **확인된** 금지이고
+    #: (효과가 공개 해결되어 적힌 기록이다), 필드 훑기는 모름을 낼 수 있다 —
+    #: 뒤에 두면 확인된 금지가 모름에 가린다 (위 문단의 순서 규율).
+    decided = _limit_refusal(view, actor, summoned)
+    if decided is not None:
+        return decided
+
     undetermined: "SummonPermissionAssessment | None" = None
     for player in view.players:
         for zone in player.zones:
@@ -571,6 +756,8 @@ __all__ = [
     "SIMULTANEOUS_SUMMON_BLIND_SPOTS",
     "SIMULTANEOUS_SUMMON_PROHIBITIONS",
     "SIMULTANEOUS_SUMMON_RULE_MISSING",
+    "SUMMON_LIMIT_ATTRIBUTE_MISSING",
+    "SUMMON_LIMIT_VIEW_MISSING",
     "SPECIAL_SUMMON_PROHIBITIONS",
     "ProhibitionScope",
     "SpecialSummonPermission",

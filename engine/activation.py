@@ -70,7 +70,7 @@ from engine.action import PlayerAction, PlayerActionKind
 from engine.action_validation import ActionValidator
 from engine.chain import Chain, ChainError, ChainLink
 from engine.condition import ConditionContext, ConditionEvaluator, ConditionResult
-from engine.cost import CostPayment
+from engine.cost import CostPayment, CostValidator
 from engine.effect.definition import (
     EffectDefinition,
     EffectDefinitionSource,
@@ -93,7 +93,7 @@ from engine.payment import (
 from engine.priority import PriorityState
 from engine.state.game_state import GameState
 from engine.target_bridge import decided_at_resolution
-from engine.validation import ValidationCode, ValidationResult
+from engine.validation import ActionValidity, ValidationCode, ValidationResult
 
 
 class ActivationStatus(str, Enum):
@@ -431,16 +431,30 @@ class EffectActivator:
         "할 수 있는가" 의 어휘는 이미 있고, 발동만을 위한 세 번째 어휘를
         만들 이유가 없다.
 
-        비용은 **치르지 않는다.** 치를 수 있는지까지는 여기서 답하지
-        못한다 — ``CostPayer`` 의 preflight 가 비공개이고, 그것을 밖에서
-        흉내 내면 두 벌이 갈린다. 그래서 이 판정이 ``VALID`` 라도
-        :meth:`activate` 가 비용에서 멈출 수 있고, 그때도 링크는 생기지
-        않는다 (STRUCTURAL-56).
+        비용은 **치르지 않는다.** 치를 수 **있는지**는 Phase 6-AO 부터
+        여기서 답한다 (:meth:`_check_cost` — 관측만 읽는
+        :class:`~engine.cost.CostValidator` 를 쓴다).
+
+        🔴 **STRUCTURAL-56 은 6-AO 가 닫았다.** 6-AN 까지 이 메서드는
+        비용을 보지 않았고 ("``CostPayer`` 의 preflight 가 비공개이고 밖에서
+        흉내 내면 두 벌이 갈린다"), 그래서 이 판정이 ``VALID`` 라도
+        :meth:`activate` 가 비용에서 멈출 수 있었다. 등재 효과 전부가 비용이
+        없어 실제 차이는 없었지만 (STRUCTURAL-120), 「오르페골 디베르」 ① 이
+        **비용 있는 첫 등재 효과**가 되면서 그 차이가 후보 목록과 실제 실행을
+        가르게 되었다. 두 벌이 갈리지 않게 하는 방법은 흉내가 아니라
+        **같은 판정기를 쓰는 것**이다 —
+        :class:`~engine.cost.CostValidator` 는 지불 경로의
+        ``CostPayer._preflight`` 도 쓰는 것과 같은 계층이다.
+
+        🔴 **그래도 "치를 수 있다" 가 "치렀다" 는 아니다.** 지불은
+        :meth:`activate` 의 일이고, 관측 뒤에 판이 바뀌면 그때 멈출 수 있다.
         """
         blocked = self._check(state, chain, action, selections, authorization)
         if blocked is None:
             return ValidationResult.valid(
-                f"{action.effect_ref} 를 발동할 수 있습니다 (비용 판정 제외)."
+                f"{action.effect_ref} 를 발동할 수 있습니다 "
+                "(비용을 치를 수 있는지까지 보았다 · 지불은 아직 하지 "
+                "않았다)."
             )
         if blocked.status in _UNKNOWN_STATUSES:
             return ValidationResult.unknown(
@@ -706,7 +720,71 @@ class EffectActivator:
         limited = self._check_use_limit(state, definition, action, chain, verdict)
         if limited is not None:
             return limited
+
+        #: 🔴 **비용을 치를 수 있는가를 여기서 본다** (Phase 6-AO).
+        #:
+        #: 6-AN 까지 비용은 :meth:`activate` **안에서만** 판정되었고
+        #: (``CostPayer.pay`` 의 preflight), 그래서 ``can_activate`` 는 비용을
+        #: 보지 않았다. 등재된 효과 전부가 비용이 없어서 아무 차이가 없었지만
+        #: (STRUCTURAL-120), 비용 있는 효과가 등재되는 순간 **후보 목록과
+        #: 실제 실행이 갈린다** — 치를 수 없는 비용의 발동이 후보로 올라가고
+        #: ``apply`` 에서만 거절된다.
+        #:
+        #: 🔴 **치르지 않는다.** :class:`~engine.cost.CostValidator` 는
+        #: 관측만 읽고 판을 바꾸지 않는다 — 지불은 :meth:`activate` 의 일이다.
+        #:
+        #: 🔴 **순서가 사용 제한 뒤다.** 「이미 썼다」 는 비용과 무관하게
+        #: 참이고, 먼저 보면 이미 쓴 효과가 "비용을 치를 수 없다" 로
+        #: 보고된다.
+        payable = self._check_cost(state, definition, action, chain, verdict)
+        if payable is not None:
+            return payable
         return None
+
+    def _check_cost(
+        self,
+        state: GameState,
+        definition,
+        action: PlayerAction,
+        chain: Chain,
+        verdict: ValidationResult,
+    ) -> ActivationResult | None:
+        """
+        그 비용을 **지금 치를 수 있는가.** 치를 수 있으면 ``None``.
+
+        🔴 **비용이 없는 효과는 그냥 통과한다** — 없는 것을 기본값으로
+        메꾸지 않는다 (:meth:`_check_use_limit` 과 같은 태도). 그래서 이
+        메서드가 생긴 뒤에도 비용 없는 등재 효과의 동작은 한 건도 바뀌지
+        않는다.
+
+        🔴 **고르는 비용은 여기서 판정만 한다** — 후보가 충분한지 보고, 어느
+        카드를 내놓을지는 고르는 계층의 일이다. 지금 ``Duel`` 은 비용 선택을
+        넘기지 않으므로 (``Duel._apply_activation``) 고르는 비용은 지불
+        단계에서 거절되고, 그 사실은 후보 생성이 **따로** 적는다
+        (``Duel._activation_actions``).
+        """
+        group = definition.cost
+        if group.is_free:
+            return None
+        view = GameStateView.from_state(state, viewer=action.actor)
+        context = self._condition_context(action, ())
+        result = CostValidator(view).validate_group(group, context)
+        if result.validity is ActionValidity.VALID:
+            return None
+        status = (
+            ActivationStatus.COST_UNKNOWN
+            if result.validity is ActionValidity.UNKNOWN
+            else ActivationStatus.COST_UNPAYABLE
+        )
+        return self._fail(
+            status,
+            action,
+            chain,
+            result.code,
+            f"비용을 치를 수 없습니다: {result.reason}",
+            missing=result.missing_rule,
+            authorization=verdict,
+        )
 
     def _check_use_limit(
         self,

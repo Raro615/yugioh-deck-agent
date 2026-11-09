@@ -709,6 +709,23 @@ class GameStateView:
     assess_link_materials`). 판정은 관측만 보므로 (ADR-007), 여기에 실리지
     않으면 "이미 이 턴에 링크 소환했는가" 를 판정할 길이 없다.
     """
+    summon_limits: tuple = ()
+    """
+    **이번 턴에 걸려 있는 특수 소환 제한**들 — :class:`~engine.state.
+    summon_limit.AttributeOnlyLimit` 의 짝 (Phase 6-AO).
+
+    :attr:`summons_by_name` 과 **반대 방향의 사실**이다. 저쪽은 "무엇을
+    했는가" 이고 이쪽은 **"무엇을 할 수 없는가"** 다.
+
+    가릴 것이 없다 — 제한은 공개 해결된 효과가 만든다.
+
+    **판정기가 이것을 읽는다** (:func:`~engine.summon_restriction.
+    assess_special_summon_permission`). 관측에 실리지 않으면 링크 소환
+    판정도 효과 해결의 관문도 이 제한을 볼 수 없다 (ADR-007).
+
+    🔴 **값 타입만 싣는다.** ``AttributeOnlyLimit`` 은 frozen dataclass 이고
+    필드가 전부 정수 · 문자열이므로 관측의 규율을 어기지 않는다.
+    """
 
     # ------------------------------------------------------------------
     # 만들기
@@ -796,6 +813,7 @@ class GameStateView:
                 state.turn.turn_number, RuleActionKind.ATTACK
             ),
             summons_by_name=state.summon_uses.entries(state.turn.turn_number),
+            summon_limits=state.summon_limits.entries(state.turn.turn_number),
         )
 
     # ------------------------------------------------------------------
@@ -840,6 +858,18 @@ class GameStateView:
             if seat == player and found == card_id and kind == name:
                 return count
         return 0
+
+    def special_summon_limits(self, player: int) -> tuple:
+        """
+        P{player} 에게 **이번 턴 걸려 있는** 특수 소환 제한들 (Phase 6-AO).
+
+        비어 있으면 제한이 없다는 **사실**이다 — 제한은 공개 해결된 효과가
+        만들므로 기록이 없는 것이 곧 걸리지 않은 것이다
+        (:meth:`summons_of` 와 같은 규약).
+        """
+        return tuple(
+            limit for limit in self.summon_limits if limit.player == player
+        )
 
     def player(self, player_id: int) -> PlayerView:
         return self.players[player_id]
@@ -887,6 +917,7 @@ class GameStateView:
             self.normal_summons_used,
             self.attacks_used,
             self.summons_by_name,
+            tuple(limit.canonical_state() for limit in self.summon_limits),
         )
 
     def to_dict(self) -> dict:
@@ -902,6 +933,7 @@ class GameStateView:
             "normal_summons_used": list(self.normal_summons_used),
             "attacks_used": [list(pair) for pair in self.attacks_used],
             "summons_by_name": [list(row) for row in self.summons_by_name],
+            "summon_limits": [limit.to_dict() for limit in self.summon_limits],
         }
 
     def __str__(self) -> str:

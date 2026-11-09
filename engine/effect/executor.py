@@ -74,10 +74,13 @@ from engine.cost.resolver import CandidateResolver
 from engine.effect.delta import (
     CardDrawn,
     LifeChanged,
+    SpecialSummonLimited,
     StateDelta,
     ZoneMoved,
     ZoneShuffled,
 )
+from engine.state.summon_limit import AttributeOnlyLimit
+from engine.summon_restriction import assess_special_summon_permission
 from engine.effect.definition import (
     EffectDefinition,
     EffectImplementationLookup,
@@ -95,6 +98,7 @@ from engine.effect.operation import (
     MoveOperation,
     Operation,
     OperationKind,
+    RestrictSpecialSummonOperation,
     SpecialSummonOperation,
 )
 from engine.effect.journal import EventJournal
@@ -385,6 +389,16 @@ class _Step:
     **하려고 한 장수** (Phase 2-AF). 실제로 한 장수(``instances``)와 다를
     수 있다 — 규칙이 막은 것이 있고 카드가 "가능한 만큼" 이라고 적어
     두었을 때다. ``None`` 이면 장수를 세지 않는 종류의 일이다.
+    """
+    limit: "AttributeOnlyLimit | None" = None
+    """
+    이 일이 적을 **특수 소환 제한** (Phase 6-AO). 제한을 거는 일이 아니면
+    ``None`` 이다.
+
+    🔴 **계획 단계가 전부 확정한다** — 누구에게 · 어느 속성 · 어느 턴 · 어느
+    효과가 걸었는가. 적용 단계는 그것을 표에 넣기만 한다
+    (:meth:`EffectExecutor._plan_shuffle` 이 섞을 순서를 계획에서 정하는
+    것과 같은 규율).
     """
     blind: tuple[str, ...] = ()
     """
@@ -2506,6 +2520,31 @@ class EffectExecutor:
                     f"토큰 데이터를 대조하지 못했습니다: {mismatch}",
                     missing=TOKEN_DATA_RULE_MISSING,
                 )
+            #: 🔴 **효과가 걸어 둔 특수 소환 제한을 토큰에도 묻는다**
+            #: (Phase 6-AO). 토큰도 특수 소환이고, 묻지 않으면 「어둠
+            #: 속성밖에 특수 소환할 수 없다」 가 **토큰 경로로 우회된다.**
+            #:
+            #: 🔴 묻는 자리가 다른 두 경로와 다른 이유: 토큰의 개체는 아직
+            #: 없으므로 ``BoardRuling.explain_special_summon`` 에 넘길
+            #: ``InstanceId`` 가 없다. 대신 **손으로 읽어 대조한 토큰
+            #: 데이터**(:class:`~engine.token.TokenRule`) 가 속성을 들고
+            #: 있고, 바로 위에서 그것을 카드 정의와 대조했다.
+            #:
+            #: 🔴 **묻는 사람은 소환하는 쪽이다** (``context.controller``).
+            #: 토큰이 상대 필드에 놓여도 특수 소환을 하는 것은 이쪽이다
+            #: (``SpecialSummonStep(tk,0,tp,1-tp,...)`` 의 ``sumplayer``).
+            limited = assess_special_summon_permission(
+                GameStateView.from_state(state, viewer=context.controller),
+                context.controller,
+                summoned=rule,
+            )
+            if limited.forbidden:
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.EXECUTION_FORBIDDEN,
+                    f"토큰 {spec.card_id} 를 특수 소환할 수 없습니다: "
+                    f"{limited.reason}",
+                )
             controller = spec.to.resolve(context.condition_context())
             try:
                 plan = token.plan_token(
@@ -2566,6 +2605,56 @@ class EffectExecutor:
             player=step.player,
         )
         return applied, tuple(changes)
+
+    def _plan_restrict_special_summon(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        operation: RestrictSpecialSummonOperation,
+        values: ExecutionValues,
+    ) -> "_Step | EffectResult":
+        """
+        제한을 **누구에게** 걸지만 정한다 (Phase 6-AO).
+
+        고를 것도 옮길 것도 없으므로 계획 단계에서 할 일이 그것뿐이다. 턴
+        번호는 적용 단계가 판에서 읽는다 — 계획과 적용 사이에 턴이 바뀔 수
+        없고 (한 해결 안이다), 두 곳에서 읽으면 어긋날 자리가 생긴다.
+        """
+        player = _resolve_player(operation.who, context)
+        return _Step(
+            operation,
+            player=player,
+            limit=AttributeOnlyLimit(
+                turn_number=state.turn.turn_number,
+                player=player,
+                attribute=operation.attribute,
+                source_card_id=definition.effect_ref.card_id,
+                ordinal=definition.effect_ref.ordinal,
+                basis=operation.basis,
+            ),
+        )
+
+    def _apply_restrict_special_summon(
+        self, state: GameState, step: _Step
+    ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
+        """
+        :mod:`engine.state.summon_limit` 에 **한 줄 적는다.**
+
+        🔴 **판정하지 않는다.** 여기서 "이 소환이 막히는가" 를 묻지 않는다 —
+        적는 자리와 읽는 자리를 가르는 것이 세 사용 기록 표와 같은 규율이다.
+        """
+        limit = step.limit
+        assert limit is not None  # 계획이 정했다
+        state.summon_limits.record(limit)
+        changed = SpecialSummonLimited(
+            player=limit.player,
+            attribute=limit.attribute,
+            turn_number=limit.turn_number,
+            source_card_id=limit.source_card_id,
+            ordinal=limit.ordinal,
+        )
+        return step.record(), (changed,)
 
     def _apply_shuffle(
         self, state: GameState, step: _Step
@@ -2697,6 +2786,11 @@ OPERATION_HANDLERS: dict[OperationKind, OperationHandler] = {
         EffectExecutor._plan_shuffle,
         EffectExecutor._apply_shuffle,
         "RandomSource.shuffle + ZoneContainer.reorder (Phase 2-Z)",
+    ),
+    OperationKind.RESTRICT_SPECIAL_SUMMON: OperationHandler(
+        EffectExecutor._plan_restrict_special_summon,
+        EffectExecutor._apply_restrict_special_summon,
+        "engine.state.summon_limit (Phase 6-AO)",
     ),
     OperationKind.MOVE: OperationHandler(
         EffectExecutor._plan_card_operation,

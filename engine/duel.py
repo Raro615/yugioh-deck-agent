@@ -127,6 +127,17 @@ TRIGGER_HISTORY_MISSING = (
     "이 듀얼의 사건 기록 (Phase 6-Z — 유발 후보는 기록된 사건에서 나온다)"
 )
 
+#: 🔴 **내놓을 카드를 고르는 비용을 아직 넘기지 못한다** (Phase 6-AO).
+#:
+#: ``Duel._apply_activation`` 이 ``EffectActivator.activate`` 에
+#: ``cost_selections`` 를 넘기지 않으므로, 고를 것이 있는 비용은 지불
+#: 단계에서 "고른 카드가 없습니다" 로 거절된다. 그래서 후보로 내놓지 않고 그
+#: 사실을 보류에 적는다 — **고를 것이 없는 비용은 후보가 된다.**
+COST_SELECTION_MISSING = (
+    "cost-selection (내놓을 카드를 고르는 비용의 선택을 듀얼 고리가 아직 "
+    "넘기지 않는다)"
+)
+
 #: 🔴 **「때 / 경우」 를 판정할 수 없을 때 빠진 것** (Phase 6-AB).
 #:
 #: 공식 재정이 둘을 다르게 다루는데 (「때」 는 놓친 타이밍이 있고 「경우」 는
@@ -216,6 +227,18 @@ ACTIVATION_SOURCE_ZONES: tuple[Zone, ...] = (
     Zone.SZONE,
     Zone.MZONE,
     Zone.EMZONE,
+    #: 🔴 **묘지가 다섯째로 들어왔다** (Phase 6-AO). 「묘지의 이 카드를
+    #: 제외하고 발동할 수 있다」 는 **묘지에서** 발동하고
+    #: (``c57835716.lua`` 의 ``e1:SetRange(LOCATION_GRAVE)``), 그 자리를 보지
+    #: 않으면 **어떤 관문도 판정할 기회를 얻지 못한다** — 몬스터 존이 6-K 에
+    #: 들어온 것과 정확히 같은 이유다.
+    #:
+    #: **여기서 넓어지는 것은 없다.** 다음 줄의 ``activatable_effects`` 가
+    #: 실행 구현이 등록된 효과만 돌려주고, 등록되지 않은 묘지의 카드는
+    #: 후보를 만들지 않는다. 등록되었어도 발동 자리가 맞지 않으면 관문이
+    #: 거절한다 (``_monster_activation_out_of_scope`` 의 ``activation_zones``
+    #: 갈래).
+    Zone.GRAVE,
 )
 
 
@@ -1501,11 +1524,37 @@ class Duel:
                 definition = self._activator.definitions.definition_for(effect_ref)
                 if definition is None:  # pragma: no cover - 목록이 보증한다
                     continue
-                if definition.cost.costs:
-                    # 🔴 **비용 있는 효과는 관문을 지나지 않는다** — 그래서
-                    # 여기서 적을 판정이 없다. 이 자리의 한계는 보고서가
-                    # 적는다 (등재된 효과 전부가 비용이 없으므로 지금은
-                    # 아무것도 걸리지 않는다 — STRUCTURAL-120).
+                if definition.cost.choice_specs():
+                    # 🔴 **고르는 비용이 있는 효과는 아직 후보가 되지 못한다**
+                    # (Phase 6-AO 가 좁힌 자리).
+                    #
+                    # 6-AN 까지 이 줄은 ``if definition.cost.costs`` 였다 —
+                    # **비용이 있으면 전부** 건너뛰었고, 그래서 비용 있는
+                    # 효과는 등재해도 후보가 되지 않았다 (STRUCTURAL-120).
+                    # 그 조건이 넓었던 것은 ``Duel`` 이 **비용 선택**을
+                    # 넘기지 않기 때문인데 (:meth:`_apply_activation` 이
+                    # ``cost_selections`` 를 주지 않는다), 그 한계는
+                    # **고를 것이 있는 비용**에만 해당한다.
+                    #
+                    # 고를 것이 없는 비용(라이프 지불 ·
+                    # :class:`~engine.cost.SelfCardCost`)은 선택 없이 치를 수
+                    # 있고, **치를 수 있는지는 관문이 판정한다** (6-AO 가
+                    # ``EffectActivator._check_cost`` 를 더했다). 그래서 이제
+                    # 후보 목록과 실제 실행이 같은 답을 본다.
+                    #
+                    # 🔴 **조용히 건너뛰지 않는다.** 왜 후보가 되지 못했는지
+                    # 보류에 적는다 — 적지 않으면 "그 효과가 없다" 로 읽힌다.
+                    withheld.append(
+                        WithheldAction(
+                            PlayerActionKind.ACTIVATE_EFFECT,
+                            f"{effect_ref} 의 비용은 내놓을 카드를 **고르는** "
+                            "비용입니다. 이 듀얼 고리는 아직 비용 선택을 "
+                            "넘기지 않으므로 후보를 만들지 않았습니다 "
+                            "(고를 것이 없는 비용은 후보가 됩니다).",
+                            ValidationCode.RULE_NOT_IMPLEMENTED,
+                            missing=COST_SELECTION_MISSING,
+                        )
+                    )
                     continue
                 if definition.activation_kind is ActivationKind.TRIGGER:
                     # **유발은 판에서 만들지 않는다** (Phase 6-Z).
