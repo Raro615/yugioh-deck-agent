@@ -488,8 +488,24 @@ def choice_paths():
 
 
 def _result(index, path, resources, *, reached_at, role, followups=0):
+    """
+    경로 자료형만으로 만든 결과 하나.
+
+    🔴 **검증된 것으로 만든다** — 요약은 **재생 검증된** 후속 후보만 그리므로
+    (6-AL §6), 검증되지 않은 스텁으로는 기준점 연결이 출력에 나타나지
+    않는다. 재생 결과도 **그 경로의 자원 요약 그대로** 넣어, "검증됐다" 는
+    말이 거짓이 되지 않게 한다.
+    """
     return bs.PathResult(
         index=index, path=path, resources=resources, goal_reason="[스텁]",
+        rerun=bs.RerunResult(
+            ok=True, reason="[스텁] 같은 판에 닿았다", steps=len(path),
+            goal_reached=True, matches_search=True, resources=resources,
+            first_arrival_at=(reached_at
+                              if role is ResultRole.CONTINUED else 0),
+            first_arrival_confirmed=True, goal_kept=True,
+        ),
+        resources_match=True,
         meta=FoundMeta(role=role, reached_at=reached_at,
                        followup_actions=followups,
                        goal_kept=True),
