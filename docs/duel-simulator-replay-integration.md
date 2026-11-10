@@ -251,12 +251,40 @@ REMOVED [57835716, 21441617]    제한    어둠 속성만 2건
 
 | 명령 | 실측 |
 | --- | --- |
-| `pytest tests/test_replay_export.py` | 아래 §7.1 |
-| `pytest tests/test_combo_brief_and_detail.py tests/test_combo_output_consistency.py tests/test_discord_bot.py` | 아래 §7.1 |
+| `pytest tests/test_replay_export.py` | **25 passed** (새 파일) |
+| `pytest tests/test_combo_brief_and_detail.py tests/test_withheld_reason_propagation.py` | **81 passed** |
+| `pytest tests/test_combo_output_consistency.py tests/test_orcust_girsu_line.py tests/test_girsu_token_line.py tests/test_token_and_galateai_summon_gates.py tests/test_skeleton_revival_and_longirsu.py tests/test_line_progress_resolution_evidence.py` | **152 passed** |
+| `pytest tests/test_discord_bot.py tests/test_harp_horror_graveyard_effect.py` | **106 passed** |
+| 전개 기록 대조 (`verify_replay`) | 두 경로 모두 **일치** (§3.2) |
 
-### 7.1 결과
+### 7.1 핵심 확인 사항 — 무엇을 어떻게 쟀는가
 
-*(실행 결과는 이 절 아래에 실측값으로 적는다 — §8 참조)*
+| 확인 사항 | 결과 | 어디서 |
+| --- | --- | --- |
+| 기존 전개가 그대로 실행되는가 | ✅ 6/6단계, 최종 판 동일 | `test_b01` · 기존 경로 시험 152건 |
+| 기록의 카드 이동과 최종 상태가 일치하는가 | ✅ 일치 | `test_b02` · `test_b03` · `test_c02` |
+| 시각 재현이 실행에 없는 행동을 더하지 않는가 | ✅ 사건 수가 `EventJournal` 과 같고, 걸음들이 그 구간을 겹치지 않고 전부 덮는다 | `test_d01` · `test_d02` |
+| 디스코드 기본 출력이 짧아졌는가 | ✅ 2메시지 2,198자 → 1메시지 1,096자 | `test_f01` |
+| 상세 기록에 접근할 수 있는가 | ✅ 첨부 두 개 · 긴 요약이 그 안에 있다 | `test_f01` · `test_f02` |
+| 공유 링크가 실제 그 전개를 여는가 | 🔴 **잴 수 없었다 — 링크를 만들지 못했다.** 대신 *없는 링크를 약속하지 않는다*를 쟀다 | `test_f03` |
+| 외부 연동 실패 시에도 실행 결과가 보존되는가 | ✅ 기록을 못 만들어도 요약 · 상세는 그대로 | `test_f04` · `test_m09` |
+
+### 7.2 고친 기존 시험 (지운 단언은 없다)
+
+긴 요약이 **첨부로 옮겨졌으므로**, 그 문장을 세던 시험들을 *옮긴 자리*에서
+세도록 고치고 요약 쪽에는 짧은 모양을 함께 세게 했다. 🔴 **단언을 지우거나
+기대값을 느슨하게 만들지 않았다.**
+
+| 파일 | 고친 시험 |
+| --- | --- |
+| `test_combo_brief_and_detail.py` | `test_a02` · `test_b01` · `test_b02` · `test_b04` · `test_m09` · 도구 `_detail` |
+| `test_combo_output_consistency.py` | `test_08` |
+| `test_orcust_girsu_line.py` | `test_e03` |
+| `test_withheld_reason_propagation.py` | `test_e01` · `test_e03` |
+
+🔴 그 과정에서 **출력의 오류 하나를 고쳤다**: 자율 실행(`first_meaningful`)
+결과에 *"사람이 적어 둔 경로를 끝까지 밟았다"* 고 적히고 있었다. 자율
+실행은 경로를 따라간 것이 아니므로 문장을 갈랐다.
 
 ---
 
