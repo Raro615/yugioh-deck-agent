@@ -378,7 +378,15 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     #: 🔴 **셋이 되었다** (Phase 6-AO). 디베르 ① 의 덱 후보 조건이
     #: ``IsSetCard(SET_ORCUST)`` 이므로 같은 컴파일러를 쓴다 — 늘어난 것은
     #: **읽은 카드**이고 컴파일러는 한 글자도 바뀌지 않았다.
-    assert using_archetype == [GIRSU, WORLD_WAND, 57835716], using_archetype
+    #: 🔴 **넷이 되었다** (Phase 6-AQ) — 스켈레촌 ① 의 대상 조건도
+    #: ``compile_archetype_condition(("SET_ORCUST",))`` 로 적었다 (숫자를
+    #: 손으로 적지 않았다).
+    assert using_archetype == [
+        GIRSU,
+        WORLD_WAND,
+        57835716,
+        21441617,
+    ], using_archetype
     #: 🔴 조건을 만드는 자리는 **여전히 한 곳**이다 — 기르수의 정의도
     #: ``IsSetCard`` 를 직접 부르지 않고 ``compile_archetype_condition`` 을
     #: 통한다 (위 ② 의 단언이 그것을 지킨다).
@@ -957,4 +965,5 @@ def test_j_the_archetype_condition_is_used_by_exactly_the_two_orcust_effects():
     ]
     #: 🔴 **셋이 되었다** (Phase 6-AO) — 디베르 ① 의 덱 후보 조건이
     #: ``IsSetCard(SET_ORCUST)`` 다.
-    assert using == [GIRSU, WORLD_WAND, 57835716], using
+    #: 🔴 **넷이 되었다** (Phase 6-AQ, 스켈레촌 ①).
+    assert using == [GIRSU, WORLD_WAND, 57835716, 21441617], using

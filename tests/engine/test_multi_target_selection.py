@@ -378,7 +378,10 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: (``SelectMatchingCard(...,1,1,...)``). 이 시험이 지키는 사실은
     #: "여러 장 선택은 하나뿐이고 가변 장수는 없다" 이고, 그 둘은 아래
     #: 단언들이 그대로 들고 있다.
-    assert len(exact_one) == 8, exact_one
+    #: 🔴 8 → **9** (Phase 6-AQ) — 스켈레촌 ① 도 **정확히 1장**을
+    #: 지정한다 (``SelectTarget(...,1,1,...)``). 여러 장 선택은 하나뿐이고
+    #: 가변 장수는 없다 — 그 둘은 위 단언들이 들고 있다.
+    assert len(exact_one) == 9, exact_one
     assert variable == [], "가변 장수 효과가 생겼다 — §6 을 다시 읽어야 한다"
     assert optional == [], optional
     assert duplicates == [], duplicates

@@ -984,4 +984,6 @@ def test_g05_the_verdict_distribution_changed_only_one_way(repository):
     #: (「묘지의 이 카드를 제외하고」 는 자기 묘지행 유발의 문장이 아니다).
     #: 🔴 뒤집힌 카드는 여전히 0장이다.
     assert already == 687, already
-    assert newly_true + already == 1676
+    #: 🔴 1,676 → **1,677** (Phase 6-AQ) — ``already`` 가 하나 늘었다
+    #: (위 단언의 설명). ``newly_true`` 는 그대로 990 이다.
+    assert newly_true + already == 1677

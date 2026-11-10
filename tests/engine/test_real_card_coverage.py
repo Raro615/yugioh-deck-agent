@@ -394,8 +394,19 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     #: 이고 ``EFFECT_TYPE_ACTIVATE`` 가 아니므로 그 슬라이스에 들어오지
     #: 않는다 — 네 장 다 "막는 것이 있다" 가 아니라 **세는 범위가 다르다** 다.
     assert 57835716 not in set(activate_only)
+    #: 🔴 **스켈레촌도 같은 이유로 예외다** (Phase 6-AQ).
+    #: ``EFFECT_TYPE_IGNITION`` 이고 ``EFFECT_TYPE_ACTIVATE`` 가 아니므로 그
+    #: 슬라이스에 들어오지 않는다 — 다섯 장 다 "막는 것이 있다" 가 아니라
+    #: **세는 범위가 다르다** 다.
+    assert 21441617 not in set(activate_only)
     assert executable <= set(clean) | {
-        53129443, 83764718, HONEST, GIRSU, WORLD_WAND, 57835716
+        53129443,
+        83764718,
+        HONEST,
+        GIRSU,
+        WORLD_WAND,
+        57835716,
+        21441617,
     }
 
 

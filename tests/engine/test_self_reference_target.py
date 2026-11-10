@@ -1104,7 +1104,16 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     #: 바꾸지 않고 그대로 적는다.
     #: 🔴 **Phase 6-AO 가 다섯째를 더했다** — 오르페골 디베르 ① 이고
     #: **묘지에서** 발동하는 첫 등재다.
-    assert monsters == [HONEST, GIRSU, GIRSU, WORLD_WAND, 57835716], monsters
+    #: 🔴 **여섯째가 들어왔다** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이다.
+    #: 목록은 **등재 단위**로 세므로 기르수가 두 번 나오는 것이 정상이다.
+    assert monsters == [
+        HONEST,
+        GIRSU,
+        GIRSU,
+        WORLD_WAND,
+        57835716,
+        21441617,
+    ], monsters
 
 
 # ======================================================================

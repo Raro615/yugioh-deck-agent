@@ -1322,7 +1322,10 @@ def test_k02_the_library_grew_no_executable_entry():
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: Phase 6-AF — 기르수 ③ 이 실행 가능으로 더해졌다 (16 → 17).
     #: 🔴 Phase 6-AO — 디베르 ① 이 실행 가능으로 더해졌다 (17 → 18).
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 18
+    #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이다. 이 시험이 지키는
+    #: 사실은 "이 Phase 가 실행 가능 항목을 늘리지 않았다" 이고, 그 수가
+    #: 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 19
 
 
 def test_k03_only_one_registered_operation_declares_its_origin():
