@@ -161,41 +161,69 @@ COMBO_DETAIL_FILENAME = "combo-detail.txt"
 #: 들어가지 않는다.
 COMBO_REPLAY_FILENAME = "combo-replay.json"
 
-#: 🔴 **외부 재생 링크가 없다는 사실을 적는 줄** (Phase 6-AR).
+#: 🔴 **시각 재생을 아직 지원하지 않는다는 한 줄** (Phase 6-AR · 6-AS 정정).
 #:
-#: 왜 링크를 내지 않는가: 대상 사이트(Duel Simulator)는 덱 **이미지**를
-#: 올려 사람이 손으로 盤面을 만들고, 그 조작을 기록해 공유 URL 을 발행하는
-#: 도구다. 외부 전개 기록을 가져오는 기능 · 공개 API · 가져오기 형식이
-#: 화면 · 매뉴얼 · 이용 가이드라인 · 이용 규약 어디에도 **없다**. 그래서
-#: 이 저장소가 만들 수 있는 재생 링크가 없다 (조사: ``docs/
-#: duel-simulator-replay-integration.md``).
+#: 🔴 **엔진 실행 상태를 말하지 않는다** (6-AS). 전에는 이 줄에 "엔진 실행은
+#: 정상입니다" 가 **고정**되어 있었다 — 실행이 중단되거나 거절된 응답에도
+#: 같은 문장이 붙었고, 그것은 거짓이다. 실행의 성공 · 중단 · 실패는
+#: **실행 요약 한 곳**에서만 말한다 (:func:`~deck.report.
+#: render_opening_headline`). 이 줄이 말하는 것은 *외부 재생 지원 여부*
+#: 하나다 — 둘은 서로 독립이다.
 #:
 #: 🔴 **사이트 첫 화면 링크를 "이 전개의 재생 링크" 로 적지 않는다** — 그
-#: 링크는 이 전개를 열지 못한다.
-#:
-#: 🔴 **엔진 실행 실패와 구분한다.** 이 줄은 외부 연동이 없다는 말뿐이고,
-#: 실행 결과와 상세 기록은 위와 첨부에 그대로 있다.
+#: 링크는 이 전개를 열지 못한다. 고정된 예제 링크도 붙이지 않는다.
 COMBO_REPLAY_VIEW_UNAVAILABLE = (
-    "🎞 **전개 보기: 아직 없습니다** — 외부 시뮬레이터에 이 전개의 재생"
-    " 링크를 만드는 연동이 없습니다 (가져오기 기능 · 공개 API 가 없습니다)."
-    " 🔴 **엔진 실행은 정상입니다** — 위 요약과 아래 첨부가 그 기록입니다."
+    "🎞 **전개 보기: 시각 재생은 아직 지원하지 않습니다.**"
 )
 
-#: 🔴 전개 기록을 만들지 못했을 때. 실행 결과를 지우지 않는다.
-COMBO_REPLAY_FAILED_NOTICE = (
-    "🔴 **전개 기록 파일을 만들지 못했습니다** — 실행 결과와 상세 기록은"
-    " 그대로입니다 (외부 연동용 기록만 빠졌습니다)."
-)
-
-#: 🔴 상세 기록조차 다 담지 못한 응답에는 전개 기록을 **더 붙이지 않는다.**
+#: 전개 기록의 **상태** — 사용자에게는 짧은 원인 한 줄, 로그에는 진단값.
 #:
-#: 전송 상한이 이미 모자란 자리다. 거기에 JSON 한 덩어리를 더하면 상세
-#: 기록이 더 밀려나고, **먼저 지켜야 하는 것은 실행 결과를 확인할 수 있게
-#: 두는 쪽**이다. 조용히 빼지 않고 그 사실을 적는다.
-COMBO_REPLAY_SKIPPED_NOTICE = (
-    "🧾 **전개 기록은 이번 응답에 붙이지 않았습니다** — 상세 기록도 일부만"
-    " 담았기 때문입니다 (전송 상한). 실행 결과는 위 요약과 첨부에 있습니다."
-)
+#: 🔴 **다섯을 구분한다** (Phase 6-AS). 전에는 "만들지 못했다" 하나뿐이었고,
+#: 그나마 ``replay`` 가 있을 때만 적혀서 **생성 자체가 실패하면 아무 말도
+#: 남지 않았다.**
+class ReplayState(str, Enum):
+    NOT_RUN = "not_run"
+    """실행하지 않아 **내보낼 기록이 없다** (입력 검증 거절 · 레시피 없음)."""
+    EXPORTED = "exported"
+    """내보내기 성공 — 첨부가 간다."""
+    BUILD_FAILED = "build_failed"
+    """기록을 **만들다** 실패했다 (``export_opening_replay``)."""
+    SERIALIZE_FAILED = "serialize_failed"
+    """만든 기록을 **JSON 으로 쓰다** 실패했다."""
+    TOO_LARGE = "too_large"
+    """파일 하나의 크기 상한을 넘었다 — 🔴 JSON 은 나눌 수 없다."""
+    NO_ROOM = "no_room"
+    """첨부 개수 · 전송 상한 때문에 자리가 없었다."""
+
+    @property
+    def notice(self) -> str:
+        """사용자에게 보일 **짧은 원인**. 빈 문자열이면 적지 않는다."""
+        return _REPLAY_NOTICES.get(self, "")
+
+
+#: 🔴 **실행 결과를 지우는 문장이 하나도 없다.** 어느 갈래든 실행 요약과
+#: 상세 기록은 그대로 간다 — 빠진 것은 외부 연동용 기록뿐이다.
+_REPLAY_NOTICES: "dict[ReplayState, str]" = {
+    ReplayState.NOT_RUN: "",
+    ReplayState.EXPORTED: "",
+    ReplayState.BUILD_FAILED: (
+        "🧾 **전개 기록을 만들지 못했습니다.** 실행 요약과 상세 기록은"
+        " 그대로입니다."
+    ),
+    ReplayState.SERIALIZE_FAILED: (
+        "🧾 **전개 기록을 파일로 쓰지 못했습니다.** 실행 요약과 상세 기록은"
+        " 그대로입니다."
+    ),
+    ReplayState.TOO_LARGE: (
+        "🧾 **전개 기록이 첨부 크기 상한을 넘어 붙이지 못했습니다.** 실행"
+        " 요약과 상세 기록은 그대로입니다."
+    ),
+    ReplayState.NO_ROOM: (
+        "🧾 **전개 기록은 이번 응답에 붙이지 않았습니다** — 상세 기록도"
+        " 일부만 담았기 때문입니다 (전송 상한). 실행 요약과 상세 기록은"
+        " 그대로입니다."
+    ),
+}
 
 
 class MissingTokenError(RuntimeError):
@@ -678,6 +706,14 @@ class OpeningReport:
     그대로다 — 외부 연동용 기록이 없는 것과 실행이 실패한 것은 다른
     사실이다.
     """
+    replay_state: "ReplayState | None" = None
+    """
+    🔴 **기록이 왜 없는가** (Phase 6-AS). ``None`` 은 "아직 첨부 단계를
+    지나지 않았다" 이고, 첨부 단계가 :class:`ReplayState` 로 끝을 적는다.
+
+    전에는 이 칸이 없어서 **생성 자체가 실패하면 아무 말도 남지 않았다** —
+    ``combo_response`` 가 ``replay`` 가 있을 때만 안내를 적었기 때문이다.
+    """
 
 
 def _run_opening(agent, recipe_text: str,
@@ -815,15 +851,26 @@ def _run_opening(agent, recipe_text: str,
     #: 만들지 못해도 위의 둘은 그대로 간다 — 외부 연동용 기록이 없는 것과
     #: 실행이 실패한 것은 다른 사실이다.
     replay = None
-    if setup.can_run:
+    replay_state: "ReplayState | None" = None
+    if not setup.can_run:
+        replay_state = ReplayState.NOT_RUN
+    else:
         try:
             replay = export_opening_replay(
                 setup, run, agent.repository, line=line, progress=progress
             )
-        except Exception:  # pragma: no cover - 방어용
-            replay = None
+        except Exception as error:  # pragma: no cover - 방어용
+            #: 🔴 **진단은 로그에, 원인 한 줄은 사용자에게.** 예외의 종류와
+            #: 메시지만 적는다 — 토큰 · 비밀값은 이 경로에 들어오지 않고,
+            #: 패 · 레시피 같은 입력도 싣지 않는다.
+            logger.warning(
+                "전개 기록을 만들지 못했습니다: %s: %s",
+                type(error).__name__, error,
+            )
+            replay, replay_state = None, ReplayState.BUILD_FAILED
     return OpeningReport(brief=tuple(brief), detail=tuple(detail),
-                         refused=not setup.can_run, ran=True, replay=replay)
+                         refused=not setup.can_run, ran=True, replay=replay,
+                         replay_state=replay_state)
 
 
 def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
@@ -1315,23 +1362,41 @@ def _detail_pointer_lines(detail: ComboDetail,
     return said
 
 
-def replay_attachment(record) -> "ComboAttachment | None":
+def replay_attachment(record) -> "tuple[ComboAttachment | None, ReplayState]":
     """
-    **전개 기록 첨부 하나** (Phase 6-AR). 없거나 상한을 넘으면 ``None``.
+    **전개 기록 첨부 하나**와 그 끝 상태 (Phase 6-AR · 6-AS).
 
     🔴 **나누지 않는다.** 상세 기록(텍스트)은 줄 단위로 나눌 수 있지만 이
     파일은 JSON 한 덩어리라서, 반으로 자르면 **읽을 수 없는 조각**이 된다.
     상한을 넘으면 붙이지 않고 그 사실을 적는다 (조용히 자르지 않는다).
+
+    🔴 **왜 실패했는지를 돌려준다** (6-AS). 전에는 ``None`` 하나였고, 부르는
+    쪽은 "기록이 없다" 와 "직렬화가 터졌다" 와 "너무 크다" 를 구분할 수
+    없었다.
     """
     if not record:
-        return None
+        return None, ReplayState.NOT_RUN
     from deck.replay_export import replay_json
 
-    item = ComboAttachment(filename=COMBO_REPLAY_FILENAME,
-                           text=replay_json(record))
+    try:
+        text = replay_json(record)
+    except Exception as error:  # pragma: no cover - 방어용
+        #: 🔴 진단은 로그에, 원인 한 줄은 사용자에게 (``_run_opening`` 과
+        #: 같은 규율 — 입력값도 비밀값도 싣지 않는다).
+        logger.warning(
+            "전개 기록을 파일로 쓰지 못했습니다: %s: %s",
+            type(error).__name__, error,
+        )
+        return None, ReplayState.SERIALIZE_FAILED
+
+    item = ComboAttachment(filename=COMBO_REPLAY_FILENAME, text=text)
     if item.size > COMBO_ATTACHMENT_LIMIT:
-        return None
-    return item
+        logger.warning(
+            "전개 기록이 첨부 상한을 넘었습니다: %d > %d 바이트",
+            item.size, COMBO_ATTACHMENT_LIMIT,
+        )
+        return None, ReplayState.TOO_LARGE
+    return item, ReplayState.EXPORTED
 
 
 def _overflow_notice(detail: ComboDetail) -> str:
@@ -1580,23 +1645,29 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     #: 붙이고, 첨부 수 상한에 걸리면 **상세 기록을 밀어내지 않는다** —
     #: 어느 쪽이 더 중요한지는 "실행 결과를 확인할 수 있어야 한다" 가
     #: 정한다 (§6: 외부 연동이 없어도 실행 결과와 상세 기록은 남는다).
+    #: 🔴 **전개 기록의 끝 상태를 하나로 모은다** (Phase 6-AS). 생성 ·
+    #: 직렬화 · 첨부 준비의 어느 자리에서 멈췄든 **한 줄로** 말한다.
     attachments = list(detail.attachments)
-    replay_item = replay_attachment(executed.replay) if executed.ran else None
-    replay_dropped = bool(executed.ran and executed.replay and
-                          replay_item is None)
-    replay_skipped = False
+    replay_item: "ComboAttachment | None" = None
+    if not executed.ran:
+        replay_state = ReplayState.NOT_RUN
+    elif executed.replay_state is ReplayState.BUILD_FAILED:
+        replay_state = ReplayState.BUILD_FAILED
+    else:
+        replay_item, replay_state = replay_attachment(executed.replay)
     if replay_item is not None:
         room = len(attachments) < COMBO_ATTACHMENT_COUNT_LIMIT
         if detail.complete and room:
             attachments.append(replay_item)
         else:
-            #: 🔴 상세 기록을 먼저 지킨다 (``COMBO_REPLAY_SKIPPED_NOTICE``).
-            replay_item, replay_skipped = None, True
+            #: 🔴 상세 기록을 먼저 지킨다 — 전송 상한이 모자란 자리에 JSON
+            #: 한 덩어리를 더하면 실행 기록이 더 밀려난다.
+            replay_item, replay_state = None, ReplayState.NO_ROOM
 
     lines.append("")
     if executed.ran:
-        #: 🔴 **없는 링크를 약속하지 않는다.** 사이트 첫 화면 주소를 이
-        #: 전개의 재생 링크처럼 적지 않는다 (상수의 설명).
+        #: 🔴 **외부 재생 지원 여부만** 말한다 — 실행의 성공 · 중단 · 실패는
+        #: 위 실행 요약이 말한다 (상수의 설명).
         lines.append(COMBO_REPLAY_VIEW_UNAVAILABLE)
     lines.extend(_detail_pointer_lines(detail))
     if replay_item is not None:
@@ -1605,10 +1676,8 @@ def combo_response(agent, hand_text: str, board_text: str = "",
             f" 시작 판 · 걸음마다의 카드 이동 · 비용 · 대상 · 최종 판"
             f" (한 걸음씩 다시 그리는 데 쓰는 값입니다)."
         )
-    elif replay_skipped:
-        lines.append(COMBO_REPLAY_SKIPPED_NOTICE)
-    elif replay_dropped:
-        lines.append(COMBO_REPLAY_FAILED_NOTICE)
+    elif replay_state.notice:
+        lines.append(replay_state.notice)
 
     return ComboResponse(
         messages=tuple(paginate(

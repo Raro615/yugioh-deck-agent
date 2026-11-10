@@ -883,6 +883,10 @@ def render_opening_headline(setup, run, repository=None, *,
                     f" ({progress.done}/{total}단계)")
         else:
             head = f"▶ 고정 경로 `{line.name}` 으로 실행했습니다."
+    elif run.stopped_kind == "rejected":
+        #: 🔴 자율 실행이 **거절로 멈춘** 자리. 완료도 중단 경로도 아니다.
+        head = ("⏹ **중단** · 자율 실행 (기준점 `first_meaningful`) —"
+                " 행동이 거절되어 멈췄습니다.")
     else:
         head = ("▶ **자율 실행** (기준점 `first_meaningful`) —"
                 " 사람이 적어 둔 경로를 쓰지 않았습니다.")
@@ -910,10 +914,15 @@ def render_opening_headline(setup, run, repository=None, *,
             f"  🔴 미지원 {len(run.unsupported)}건 — 규칙이 막은 것이 아니라"
             f" **이 저장소에 그 규칙이 없다**는 뜻입니다 (사유는 상세 기록)."
         )
-    #: 🔴 **실행 방식마다 다른 문장이다.** 자율 실행에 "사람이 적어 둔
-    #: 경로를 밟았다" 고 적으면 거짓이다 — 그때 따라간 것은 기준점이 집은
-    #: 수이고 경로가 아니다.
-    if line is not None:
+    #: 🔴 **실행 방식과 결과마다 다른 문장이다** (Phase 6-AS).
+    #:
+    #: 전에는 ``line`` 이 있으면 ``progress.completed`` 와 무관하게 "경로를
+    #: 끝까지 밟았다" 를 붙였다 — **중단된 결과에 완료를 암시하는 문장이
+    #: 붙었다.** 세 갈래를 실제 결과에서 가른다.
+    if line is not None and progress is not None and not progress.completed:
+        lines.append("  🔴 **경로를 끝까지 밟지 못했습니다** — 위 걸음까지가"
+                     " 실행된 전부입니다.")
+    elif line is not None:
         lines.append("  🔴 사람이 적어 둔 경로를 끝까지 밟았다는 뜻이고,"
                      " **최선 전개도 이 패로 가능한 전개 전부도"
                      " 아닙니다.**")
