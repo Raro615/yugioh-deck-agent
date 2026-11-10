@@ -1033,7 +1033,10 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: ``SpecialSummonPermitted`` · ``Not(FaceUpCardPresent(…))`` 를
     #: ``And`` 로 묶은 것이고 전부 판정 가능한 상태 조건이다. 같은 이유로
     #: 이 테스트가 지키는 사실은 그대로다.
-    assert len(activations) == 12
+    #: 🔴 12 → **13** (Phase 6-AQ). 스켈레촌 ① 의 ``activation`` 도
+    #: ``UnimplementedRule`` 이 아니다 — 디베르와 글자 그대로 같은 셋을
+    #: ``And`` 로 묶은 것이고 전부 판정 가능한 상태 조건이다.
+    assert len(activations) == 13
     assert not any(isinstance(a, UnimplementedRule) for a in activations)
 
     #: 열 개 전부 **판정 가능한** 조건이다 — 자리표시자가 아니다.

@@ -688,6 +688,11 @@ def test_17_all_sixteen_effect_definitions_are_untouched(repository):
                     #: 적는다. 이전 표가 틀렸던 것이 아니라 그때는 이
                     #: 카드가 등재되지 않았다.
                     57835716: 3,  # 디베르   — ①기동 · ②유발즉시 · 내부
+                    #: 🔴 **Phase 6-AQ 에서 기동 효과가 넷이 됐다** —
+                    #: 오르페골 스켈레촌 ① 이고 블록 수가 디베르와 **같다**
+                    #: (①기동 · ②유발즉시 클론 · 해결이 등록하는
+                    #: EFFECT_CANNOT_SPECIAL_SUMMON). 실측으로 적는다.
+                    21441617: 3,  # 스켈레촌 — ①기동 · ②유발즉시 · 내부
                 }[ref.card_id], ref
                 assert ref.resolve(card).code is None, ref
             else:

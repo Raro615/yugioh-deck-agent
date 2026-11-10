@@ -542,7 +542,9 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 한 카드에 둘을 등재한 자리가 없어 두 수가 같았다.
     #: 🔴 19 → **20** (Phase 6-AO) — 디베르는 **새 카드**이므로 카드 수도
     #: 하나 늘었다 (등재 21 · 카드 20 · 차이는 기르수 한 장에 둘).
-    assert len(card_ids) == 20
+    #: 🔴 20 → **21** (Phase 6-AQ) — 스켈레촌도 **새 카드**이므로 카드
+    #: 수도 하나 늘었다 (등재 22 · 카드 21 · 차이는 기르수 한 장에 둘).
+    assert len(card_ids) == 21
 
     kinds = collections.Counter()
     executable_kinds = collections.Counter()
@@ -569,7 +571,9 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 🔴 3 → **4** (Phase 6-AO, 오르페골 디베르 ①). 마법 · 함정 쪽 16 은
     #: **그대로**이고, 그것이 "늘어난 쪽이 몬스터이고 거기뿐" 을 센다.
     #: **이전 수가 틀렸던 것이 아니라** 그때는 셋이었다.
-    assert kinds["monster"] == 4, dict(kinds)
+    #: 🔴 4 → **5** (Phase 6-AQ, 오르페골 스켈레촌 ①). 마법 11 ·
+    #: 함정 5 는 **그대로**이고, 늘어난 쪽이 몬스터이고 거기뿐이다.
+    assert kinds["monster"] == 5, dict(kinds)
     assert kinds["spell"] + kinds["trap"] == 16, dict(kinds)
     #: 🔴 **실행되는 몬스터가 하나 있다** (Phase 6-L · 어니스트 ①). 6-K
     #: 시점에는 0이었고 그것이 그때의 사실이었다. 단언을 지우지 않는다 —
@@ -579,11 +583,14 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 마법 · 함정 쪽 13 은 **그대로**이고, 그것이 "늘어난 쪽이 몬스터이고
     #: 거기뿐" 을 센다.
     #: 🔴 3 → **4** (Phase 6-AO, 디베르 ① · ``executable=True``).
-    assert executable_kinds["monster"] == 4, dict(executable_kinds)
+    #: 🔴 4 → **5** (Phase 6-AQ, 스켈레촌 ① 은 ``executable=True`` 다).
+    assert executable_kinds["monster"] == 5, dict(executable_kinds)
     assert executable_kinds["spell"] + executable_kinds["trap"] == 13, dict(
         executable_kinds
     )
-    assert sum(executable_kinds.values()) == 17, dict(executable_kinds)
+    #: 🔴 17 → **18** (Phase 6-AQ) — 늘어난 쪽은 몬스터뿐이다
+    #: (마법 9 · 함정 4 는 그대로).
+    assert sum(executable_kinds.values()) == 18, dict(executable_kinds)
 
 
 def test_13_the_engine_splits_on_effect_ref_not_on_card_versus_effect(repository):

@@ -694,10 +694,16 @@ def test_11_no_registered_effect_drops_an_existing_set_condition(analyses):
     #: 로 — 그 옮김의 손실은 보고서 §2.3 에 적었다) 위의
     #: ``dropped == []`` 가 그대로 참이고, 그것이 이 시험이 재는 사실이다.
     #: **이전 목록이 틀렸던 것이 아니라** 그때는 둘이었다.
+    #: 🔴 **Phase 6-AQ 에서 넷이 되었다** — 「오르페골 스켈레촌」 ① 의
+    #: Lua 에도 ``SetCondition`` 이 있다 (``s.spcon1`` — 디베르와 글자
+    #: 그대로 같다). 그 조건도 **버려지지 않고** 옮겨져 있으므로 위의
+    #: ``dropped == []`` 가 그대로 참이다. **이전 목록이 틀렸던 것이
+    #: 아니라** 그때는 셋이었다.
     assert [ref.card_id for ref in with_lua_condition] == [
         GALLANTRY,
         GIRSU,
         57835716,
+        21441617,
     ]
 
 
@@ -748,7 +754,10 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: ``ZoneHasFreeSlot`` · ``SpecialSummonPermitted`` ·
     #: ``Not(FaceUpCardPresent(…, 바벨))`` 를 ``And`` 로 묶은 것이고,
     #: 공식 ``s.spcon1`` 과 ``s.sptg`` 에서 옮겼다.
-    assert len(with_activation) == 12
+    #: 🔴 12 → **13** (Phase 6-AQ, 스켈레촌 ①). 그 조건도 상태
+    #: 조건이고 디베르와 같은 셋이다 — 공식 ``s.spcon1`` 과 ``s.sptg``
+    #: 에서 옮겼다.
+    assert len(with_activation) == 13
 
     #: 🔴 **Phase 6-AF — ``card_id → ordinal`` 사전으로는 더 가를 수 없다.**
     #: 기르수가 블록 둘을 등재했으므로 (① 과 ③) 사전은 하나를 덮어쓴다.

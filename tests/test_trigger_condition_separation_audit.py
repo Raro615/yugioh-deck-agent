@@ -361,7 +361,9 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
     #: 🔴 20 → **21** (Phase 6-AO, 디베르 ①).
-    assert len(codes) == 21
+    #: 🔴 21 → **22** (Phase 6-AQ, 스켈레촌 ①). 유발 쪽 둘과 코드 없음
+    #: 쪽은 그대로이고, 늘어난 것은 **기동(코드 없음)** 하나다.
+    assert len(codes) == 22
     assert set(codes) == {
         "EVENT_FREE_CHAIN",
         "EVENT_SUMMON_SUCCESS",
@@ -375,7 +377,10 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 디베르 ① 은 **기동 효과**이므로 ``SetCode`` 가 없다 — 사건이 아니라
     #: 선언으로 발동한다. 자유 체인 16 과 유발 둘은 **하나도** 움직이지
     #: 않았고, 그것이 이 분포가 말하는 사실이다.
-    assert len([c for c in codes if c is None]) == 3
+    #: 🔴 3 → **4** (Phase 6-AQ). 스켈레촌 ① 도 **기동 효과**이므로
+    #: ``SetCode`` 가 없다. 자유 체인 16 과 유발 둘은 여전히 하나도
+    #: 움직이지 않았다.
+    assert len([c for c in codes if c is None]) == 4
 
 
 @pytest.mark.real_card
@@ -412,7 +417,11 @@ def test_05_the_eight_activation_conditions_are_state_conditions(repository):
     #: 앞면 「오르페골 바벨」 이 **없다**. 사건을 묻는 것이 하나도 없고,
     #: 아래 검사가 그것을 그대로 센다. **이전 수가 틀렸던 것이 아니라**
     #: 그때는 열이었다.
-    assert len(with_condition) == 11
+    #:
+    #: 🔴 11 → **12** (Phase 6-AQ, 오르페골 스켈레촌 ①). 그 조건도
+    #: **상태 조건**이다 — 디베르와 글자 그대로 같은 셋(빈 칸 · 특수
+    #: 소환 허가 · 앞면 바벨이 없다)이다. 사건을 묻는 것이 하나도 없다.
+    assert len(with_condition) == 12
     #: 사례로 쓰는 넷의 종류를 못박는다.
     assert with_condition[POT_OF_GREED]["types"] == ["SPELL"]
     assert with_condition[RELOAD]["types"] == ["QUICKPLAY", "SPELL"]
@@ -697,7 +706,16 @@ def test_14_no_registered_effect_can_special_summon():
     #: 지우는 대신 **그 둘을 못박는다**: 셋이 되면 깨진다. 위 표의 "그것을
     #: 쓰는 등재 효과 0개" 는 6-AC 가 끝냈고, 이 Phase 가 그 수를 둘로
     #: 올렸다 — **이전 목록이 틀렸던 것이 아니다.**
-    assert users == ["93920420:e[1]", "57835716:e[0]"], users
+    #:
+    #: 🔴 **Phase 6-AQ 에서 셋이 되었다** — 「오르페골 스켈레촌」 ① 이
+    #: **묘지에서** 특수 소환한다 (6-AC 는 패에서, 6-AO 는 덱에서였다).
+    #: 다시 지우는 대신 **그 셋을 못박는다**: 넷이 되면 깨진다 —
+    #: **이전 목록이 틀렸던 것이 아니다.**
+    assert users == [
+        "93920420:e[1]",
+        "57835716:e[0]",
+        "21441617:e[0]",
+    ], users
 
     #: **빈 목록이 엉뚱한 이유로 비지 않았다는 것까지 본다.** ``kind`` 조회가
     #: 깨지면 위 단정이 **그냥 통과**한다 — 그래서 실제로 읽힌 연산 종류를
