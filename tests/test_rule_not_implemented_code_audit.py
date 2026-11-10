@@ -540,12 +540,24 @@ RESOLUTION_UNKNOWN_NAMES = {
     "UNSUPPORTED_OPERATION",
 }
 
-#: ``.code`` 를 **판단 입력**으로 읽는 production 자리 — 넷뿐이다.
+#: ``.code`` 를 **판단 입력**으로 읽는 production 자리.
+#:
+#: 🔴 **넷 → 다섯** (Phase 6-AQ). 다섯째는 ``engine/effect/executor.py`` 의
+#: ``failure.code not in UNUSABLE_TARGET_CODES`` 다 — 「대상이 그 때 그
+#: 필드에서 벗어났을 경우」를 적은 효과가 **그 실패를 용서할 수 있는가**
+#: 를 가리는 자리이고, 용서할 수 있는 실패의 종류를 코드로 좁힌다
+#: (``CANDIDATE_NOT_ELIGIBLE`` · ``TARGET_RELATION_LOST`` 둘뿐이다 —
+#: Phase 6-AQ 후속이 둘째를 더했다). 미구현 · 정보 없음 · 실행 오류를
+#: 용서로 접지 않기 위해 **코드를 읽어야** 하는 자리다.
+#:
+#: 이 시험이 지키는 사실은 그대로다 — 다섯째가 생겼다는 것을 여기 적었고,
+#: 여섯째가 조용히 생기면 여전히 깨진다.
 CODE_READERS = {
     ("engine/trigger.py", "self.result.code is ValidationCode.EXECUTION_FORBIDDEN"),
     ("engine/trigger_chain.py", "verdict.code is ValidationCode.RULE_NOT_IMPLEMENTED"),
     ("engine/trigger_chain.py", "verdict.code is not ValidationCode.OK"),
     ("agent/simulation.py", "step.code in _UNKNOWN_CODES"),
+    ("engine/effect/executor.py", "failure.code not in UNUSABLE_TARGET_CODES"),
 }
 
 
@@ -763,7 +775,10 @@ def test_01_the_enum_itself_forbids_attaching_this_code_to_a_refusal():
     #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
     #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(ValidationCode) == 55
 
 
 def test_02_the_string_count_is_79_but_the_code_count_is_67():
@@ -1454,7 +1469,9 @@ def test_20_only_four_production_sites_read_the_code_as_a_decision():
                 continue
             readers.add((rel, _unparse(node)))
     assert readers == CODE_READERS
-    assert len(readers) == 4
+    #: 🔴 넷 → **다섯** (Phase 6-AQ) — ``CODE_READERS`` 의 주석이 다섯째가
+    #: 무엇이고 왜 코드를 읽어야 하는지 적는다.
+    assert len(readers) == 5
 
 
 def test_21_the_ai_sees_unknown_instead_of_refused_but_ranks_them_the_same():
@@ -1691,7 +1708,10 @@ def test_26_the_distinctions_from_phase_3e24_to_3e35_still_hold():
     #: ``INVALID``** 이므로 ``unknown_codes()`` 는 7 그대로다 — 모름을 늘려
     #: 문제를 덮은 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(ValidationCode) == 55
     assert len(ConditionResult) == 3
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5

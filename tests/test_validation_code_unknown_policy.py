@@ -189,7 +189,10 @@ def test_01_the_enum_declares_every_member_it_uses():
     #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
     #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(ValidationCode) == 55
     #: 그리고 ``str`` enum 이라는 성질도 그대로다 — policy 가 멤버를 만들지 않았다.
     assert issubclass(ValidationCode, str)
 
@@ -216,7 +219,11 @@ def test_02_no_new_member_was_added_and_none_was_renamed():
     #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
     #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(declared) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — ``TARGET_RELATION_LOST`` 가
+    #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
+    #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
+    #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
+    assert len(declared) == 55
     assert declared == list(ValidationCode.__members__)
     #: 값도 이름의 소문자형 그대로다.
     for name in declared:
@@ -259,7 +266,10 @@ def test_04_the_policy_is_total_and_breaks_at_import_if_a_member_is_missed():
     #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
     #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(CODE_VALIDITY) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(CODE_VALIDITY) == 55
 
     #: 검사가 실제로 있는지 구문으로 확인한다.
     source = source_of("engine/validation.py")
@@ -461,7 +471,11 @@ def test_16_unknown_is_not_invalid():
     #: 7 그대로이고 ``INVALID`` 가 42 → 44 다. 둘 다 **확인된** 제한 ·
     #: 확인된 소재 조건의 위반에만 쓰고, 읽지 못한 쪽은
     #: ``RULE_NOT_IMPLEMENTED`` 로 모름에 남는다.
-    assert len(invalid_set) == 45
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — ``TARGET_RELATION_LOST`` 가
+    #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
+    #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
+    #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
+    assert len(invalid_set) == 46
 
 
 def test_17_unknown_is_not_a_loss_and_not_a_zero_score():
@@ -619,9 +633,21 @@ def test_24_the_four_buckets_partition_the_enum_without_a_remainder():
     #: 🔴 Phase 6-AC 가 둘을 더했다 — ``EFFECT_USE_LIMIT_REACHED`` ·
     #: ``LINK_MATERIAL_INVALID``. **둘 다 ``INVALID``** 이므로 모름 쪽은
     #: 그대로이고 확정 거부 쪽만 늘었다 (보완8 과 같은 결).
-    assert (len(valid), len(invalid), len(unknown), len(undecided)) == (1, 45, 7, 1)
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — ``TARGET_RELATION_LOST`` 가
+    #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
+    #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
+    #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
+    assert (len(valid), len(invalid), len(unknown), len(undecided)) == (
+        1,
+        46,
+        7,
+        1,
+    )
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(valid | invalid | unknown | undecided) == 54 == len(ValidationCode)
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(valid | invalid | unknown | undecided) == 55 == len(ValidationCode)
     assert valid == frozenset({ValidationCode.OK})
 
 
@@ -841,7 +867,10 @@ def test_33_the_only_thing_this_phase_changed_is_where_the_policy_lives():
     #: 쪽은 7 그대로이고 ``INVALID`` 가 39 → 42 다 — 모름을 늘려 문제를 덮은
     #: 것이 아니라 **모름이던 자리를 규칙 거절로 옮긴** 것이다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(ValidationCode) == 55
     assert len(SimulationStatus) == 5
     assert len(ActionValidity) == 3
     #: 🔴 14 → **15** (Phase 6-AD 후속2): ``RESOLVED_WITHOUT_EFFECT`` 하나가

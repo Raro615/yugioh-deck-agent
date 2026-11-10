@@ -288,7 +288,10 @@ def test_07_seven_of_forty_eight_codes_are_in_the_set():
     #: ``_UNKNOWN_CODES`` 는 **7 그대로**다 — 보완8 은 모름을 늘리지 않았고
     #: **모름이던 흐름 거절을 규칙 거절로 옮겼다.**
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(ValidationCode) == 55
     #: 집합의 정의가 ``frozenset`` 이다 — 런타임에 늘어날 수 없다.
     assert isinstance(_UNKNOWN_CODES, frozenset)
 
@@ -682,7 +685,7 @@ def test_25_no_new_enum_member_was_added_anywhere():
         "SPECIAL_SUMMON_FORBIDDEN",
     }
     assert added <= set(ValidationCode.__members__)
-    assert len(ValidationCode) - len(added) == 48
+    assert len(ValidationCode) - len(added) == 49
     #: 🔴 셋 다 ``INVALID`` 이므로 이 파일의 모름 집합은 7 그대로다.
     assert len(_UNKNOWN_CODES) == 7
     assert not (added & {c.name for c in _UNKNOWN_CODES})
@@ -929,7 +932,8 @@ def test_32_the_agent_layer_no_longer_writes_the_policy_down():
     #: ``_UNKNOWN_CODES`` 는 **7 그대로**다 — 보완8 은 모름을 늘리지 않았고
     #: **모름이던 흐름 거절을 규칙 거절로 옮겼다.**
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert sizes["ValidationCode"] == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속, TARGET_RELATION_LOST).
+    assert sizes["ValidationCode"] == 55
     assert sizes["ActionValidity"] == 3
 
 
@@ -960,8 +964,13 @@ def test_33_the_forty_eight_codes_partition_without_a_remainder():
     #: ``INVALID`` 다 (**확인된** 금지이고, 누구에게 걸리는지 읽지 못한 쪽은
     #: ``RULE_NOT_IMPLEMENTED`` 로 모름에 남는다). 그래서 41 → **42** 이고
     #: 모름 쪽 12 는 그대로다 — 그것이 이 파일이 재는 사실이다.
-    assert len(rest) == 42
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — ``TARGET_RELATION_LOST`` 가
+    #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
+    #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
+    #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
+    assert len(rest) == 43
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(named) + len(rest) == len(ValidationCode) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속, TARGET_RELATION_LOST).
+    assert len(named) + len(rest) == len(ValidationCode) == 55
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(all_names) == 54 == len(named) + len(rest)
+    assert len(all_names) == 55 == len(named) + len(rest)

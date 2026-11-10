@@ -544,14 +544,17 @@ def test_14_no_validation_code_was_added_or_redefined():
         "SPECIAL_SUMMON_FORBIDDEN",
     }
     assert added <= set(ValidationCode.__members__)
-    assert len(ValidationCode) - len(added) == 48
+    assert len(ValidationCode) - len(added) == 49
     #: 🔴 셋 다 ``INVALID`` 다 — 모름 쪽은 늘지 않았다.
     for name in added:
         assert CODE_VALIDITY[ValidationCode[name]] is ActionValidity.INVALID
     #: 🔴 policy 가 enum 전부를 덮는다는 성질은 그대로다 (import 때 터진다).
     assert set(CODE_VALIDITY) == set(ValidationCode)
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(CODE_VALIDITY) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(CODE_VALIDITY) == 55
     for name in (
         "OK",
         "CANDIDATE_NOT_ELIGIBLE",

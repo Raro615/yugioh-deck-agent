@@ -267,11 +267,15 @@ def test_06_the_validity_is_not_stored_but_is_derivable_from_the_code():
     #: ``CODE_VALIDITY`` 에 분류를 적었고 (적지 않으면 import 가 터진다),
     #: 그래서 ``DuelStep`` 에 ``validity`` 를 더할 이유가 생기지 않았다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(recoverable) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — ``TARGET_RELATION_LOST`` 가
+    #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
+    #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
+    #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
+    assert len(recoverable) == 55
     #: 🔴 Phase 6-AC 가 둘을 더했다 — ``EFFECT_USE_LIMIT_REACHED`` ·
     #: ``LINK_MATERIAL_INVALID``. **둘 다 ``INVALID``** 이므로 모름 쪽은
     #: 그대로이고 확정 거부 쪽만 늘었다 (보완8 과 같은 결).
-    assert sum(1 for v in recoverable.values() if v is not None) == 53
+    assert sum(1 for v in recoverable.values() if v is not None) == 54
     assert [n for n, v in recoverable.items() if v is None] == [
         "CHAIN_DEFINITION_UNAVAILABLE"
     ]
@@ -1237,7 +1241,10 @@ def test_29_the_validation_vocabulary_is_unchanged():
     #: ``unknown_codes()`` 는 7 그대로이고, 그것이 이 변경이 "모름을 늘려
     #: 문제를 덮은 것" 이 아님을 말한다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(ValidationCode) == 55
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5
     assert len(unknown_codes()) == 7
@@ -1285,7 +1292,10 @@ def test_31_this_phase_changed_no_production_file():
     assert len({f.name for f in dataclasses.fields(ValidationResult)}) == 5
     #: policy 는 3-E-40 의 것을 그대로 쓴다 — 새로 만들지 않았다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(CODE_VALIDITY) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(CODE_VALIDITY) == 55
     assert "CODE_VALIDITY" in source_of("engine/validation.py")
     #: 🔴 **표를 만드는 자리는 여전히 하나다.** 듀얼은 읽기만 한다 —
     #: ``CODE_VALIDITY = {`` 같은 선언이 그쪽에 없다는 것으로 센다.
@@ -1312,7 +1322,11 @@ def test_32_adding_validity_to_the_step_would_recreate_the_copy_3e40_removed():
     #: 문제를 덮은 것" 이 아니라는 사실이 이 네 줄에 함께 적힌다.
     #: 🔴 42 → **44** (Phase 6-AC 의 둘). 모름 · 통과 · 미분류는 **또**
     #: 그대로다 — 같은 이유로 늘어난 둘이 전부 확정 거부다.
-    assert len(codes_declaring(ActionValidity.INVALID)) == 45
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — ``TARGET_RELATION_LOST`` 가
+    #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
+    #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
+    #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
+    assert len(codes_declaring(ActionValidity.INVALID)) == 46
     assert len(codes_declaring(ActionValidity.UNKNOWN)) == 7
     assert len(codes_declaring(ActionValidity.VALID)) == 1
     assert len(codes_declaring(None)) == 1

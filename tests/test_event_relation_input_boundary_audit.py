@@ -784,7 +784,10 @@ def test_17_the_relation_result_fits_the_existing_validation_vocabulary():
     #: 쓰는 코드 셋(``OK`` · ``CANDIDATE_NOT_ELIGIBLE`` ·
     #: ``INFORMATION_UNAVAILABLE``)은 그대로이고 모름 쪽도 7 그대로다.
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(CODE_VALIDITY) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(CODE_VALIDITY) == 55
     assert CODE_VALIDITY[ValidationCode.OK] is ActionValidity.VALID
     assert (
         CODE_VALIDITY[ValidationCode.CANDIDATE_NOT_ELIGIBLE] is ActionValidity.INVALID
@@ -938,7 +941,10 @@ def test_20_this_phase_changed_nothing(repository):
     #: 전부 ``INVALID`` 이고, 이 파일이 의존하는 어휘는 그대로다 (``test_17``
     #: 의 설명).
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(CODE_VALIDITY) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(CODE_VALIDITY) == 55
 
     #: dormant 파이프라인을 연결하지 않았다.
     duel_source = source_of("engine/duel.py")

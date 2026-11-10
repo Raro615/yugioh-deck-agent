@@ -908,7 +908,10 @@ def test_33_the_vocabulary_this_phase_depends_on_is_unchanged():
     assert len(SimulationStatus) == 5
     assert len(Terminal) == 4
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(ValidationCode) == 54
+    #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
+    #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
+    #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
+    assert len(ValidationCode) == 55
     assert len(ActionValidity) == 3
     #: 🔴 enum 이 셋 늘었는데도 **모름은 7 그대로**다.
     assert len(unknown_codes()) == 7
