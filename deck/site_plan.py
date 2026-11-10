@@ -104,18 +104,22 @@ def _zone_name(zone: str, index=None, seat: int = 0) -> str:
 # ======================================================================
 # 덱 자리
 # ======================================================================
-def _deck_slots(record) -> tuple[list[dict], list[dict], dict]:
+def _deck_slots(record, registration=None):
     """
     기록의 시작 판 → 덱 이미지의 자리들.
 
-    돌려주는 것은 ``(main, extra, instance -> slot)`` 이다. 🔴 **시작 패가
-    맨 앞**이라, 사이트에서 「왼쪽 위 5장」 을 패로 옮기면 기록의 시작 패와
-    같아진다.
+    등록된 덱 이미지가 **없으면** (자리표시 시트 모드) 시작 패가 맨 앞에
+    오도록 자리를 매긴다 — 시트를 우리가 굽기 때문에 그렇게 만들 수 있다.
+
+    🔴 등록된 이미지가 **있으면** 그 순서를 그대로 쓴다. 사용자에게
+    "이미지의 카드 순서를 바꿔 달라" 고 요구하지 않는다 —
+    :func:`deck.deck_image_registry.assign_slots` 가 패스코드로 자리를
+    찾는다.
     """
     cards = record.get("cards") or {}
     zones = ((record.get("initial") or {}).get("zones") or {}).get("0") or {}
 
-    def _entry(instance, where: str) -> dict:
+    def _entry(instance, where: str, slot: str) -> dict:
         card = cards.get(str(instance)) or {}
         return {
             "instance": int(instance),
@@ -123,26 +127,40 @@ def _deck_slots(record) -> tuple[list[dict], list[dict], dict]:
             "name": card.get("name"),
             "kind": card.get("kind"),
             "where": where,
+            "slot": slot,
         }
 
-    main = [_entry(i, "hand") for i in (zones.get("HAND") or ())]
-    main += [_entry(i, "deck") for i in (zones.get("DECK") or ())]
-    extra = [_entry(i, "extra") for i in (zones.get("EXTRA") or ())]
+    if registration is None:
+        main = [_entry(i, "hand", f"main-{n}")
+                for n, i in enumerate(zones.get("HAND") or ())]
+        offset = len(main)
+        main += [_entry(i, "deck", f"main-{offset + n}")
+                 for n, i in enumerate(zones.get("DECK") or ())]
+        extra = [_entry(i, "extra", f"extra-{n}")
+                 for n, i in enumerate(zones.get("EXTRA") or ())]
+        at = {entry["instance"]: entry["slot"] for entry in main + extra}
+        return main, extra, at, ()
 
-    at: dict[int, str] = {}
-    for position, entry in enumerate(main):
-        entry["slot"] = f"main-{position}"
-        at[entry["instance"]] = entry["slot"]
-    for position, entry in enumerate(extra):
-        entry["slot"] = f"extra-{position}"
-        at[entry["instance"]] = entry["slot"]
-    return main, extra, at
+    from deck.deck_image_registry import assign_slots
+
+    assignment = assign_slots(record, registration)
+    at = dict(assignment.by_instance)
+    main, extra = [], []
+    for where, key in (("hand", "HAND"), ("deck", "DECK"), ("extra", "EXTRA")):
+        for instance in zones.get(key) or ():
+            slot = at.get(int(instance))
+            if slot is None:
+                continue
+            (extra if slot.startswith("extra-") else main).append(
+                _entry(instance, where, slot))
+    return main, extra, at, assignment.problems
 
 
+# ======================================================================
 # ======================================================================
 # 조작
 # ======================================================================
-def build_site_plan(record) -> dict:
+def build_site_plan(record, registration=None) -> dict:
     """
     실행 기록 하나 → 사이트 조작 계획 하나.
 
@@ -150,22 +168,27 @@ def build_site_plan(record) -> dict:
     ``activate_effect`` 일 때만, 대상 표시는 걸음에 ``targets`` 가 있을 때만
     나온다. 사이트에 대응이 없는 사건은 ``unsupported`` 에 남는다.
     """
-    main, extra, slot_of = _deck_slots(record)
+    main, extra, slot_of, slot_problems = _deck_slots(record, registration)
     cards = record.get("cards") or {}
     events = {int(event["seq"]): event for event in (record.get("events") or ())}
-    unsupported: list[str] = []
+    unsupported: list[str] = list(slot_problems)
 
     def _label(instance) -> str:
         card = cards.get(str(instance)) or {}
         return card.get("name") or f"[{card.get('passcode')}]"
 
+    _missing_said = [False]
+
     def _slot(instance) -> "str | None":
         got = slot_of.get(int(instance))
-        if got is None:
+        if got is None and not _missing_said[0]:
+            #: 🔴 같은 말을 사건마다 되풀이하지 않는다 — 한 번만 적는다.
+            _missing_said[0] = True
             unsupported.append(
-                f"개체 #{instance} ({_label(instance)}) 는 시작 판에 없어서 "
-                f"덱 이미지의 자리를 묶을 수 없습니다 — 이 조작은 계획에서 "
-                f"빠집니다."
+                f"개체 #{instance} ({_label(instance)}) 에 줄 자리를 "
+                + ("등록한 덱 이미지에서 찾지 못했습니다"
+                   if registration is not None else "시작 판에서 찾지 못했습니다")
+                + " — 이 개체가 나오는 조작은 계획에서 빠집니다."
             )
         return got
 
@@ -255,8 +278,23 @@ def build_site_plan(record) -> dict:
         record, slot_of, _label)
     unsupported.extend(unplaced)
 
+    #: 🔴 **어느 이미지로 도는가**를 계획이 들고 있다. 자리표시 시트와
+    #: 등록된 실제 덱 이미지를 섞어 말하지 않는다.
+    deck_image = {"mode": "placeholder-sheet", "registration_id": None,
+                  "image_path": None, "verified": False}
+    if registration is not None:
+        deck_image = {
+            "mode": "registered",
+            "registration_id": registration.registration_id,
+            "image_path": registration.image_path,
+            "image_sha256": registration.image_sha256,
+            "verified": bool(registration.verified),
+            "recipe_sha256": registration.recipe_sha256,
+        }
     return {
         "format": PLAN_FORMAT,
+        "deck_image": deck_image,
+        "slots_ok": not slot_problems,
         "source": dict(record.get("source") or {}),
         "result": dict(record.get("result") or {}),
         "deck": {"main": main, "extra": extra},

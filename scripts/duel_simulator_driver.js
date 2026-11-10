@@ -34,7 +34,8 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 //: 🔴 **판정부는 따로 있다** (6-AY) — 브라우저 없이도 시험이 돌릴 수 있게.
-const { normalizeZone, identityOf, compareFinal } =
+const { identityOf, compareFinal, decideMove, decideMenu,
+        movedBetween } =
   require(path.join(__dirname, 'duel_simulator_verify.js'));
 
 const SITE = 'https://duel-simulator.miyauchidp.dev/';
@@ -48,6 +49,9 @@ const DIR = process.argv[2];
 const WANT_SHARE = process.argv.includes('--share');
 const TITLE = arg('--title', 'galatea opening line');
 const RUN_ID = arg('--run-id', '');
+//: 🔴 **실제 덱 이미지 모드** — 등록해 둔 사용자의 Neuron 이미지를 올린다.
+//: 주지 않으면 글자 자리표시 시트를 구워서 올린다 (기존 모드).
+const DECK_IMAGE = arg('--deck-image', '');
 const HEADLESS = !process.argv.includes('--headed');
 
 if (!DIR || !fs.existsSync(path.join(DIR, 'plan.json'))) {
@@ -62,6 +66,10 @@ const result = {
   //: 맞춰 보고, 다르면 남아 있던 옛 결과로 보고 버린다.
   run_id: RUN_ID,
   plan_run_id: plan.run_id || null,
+  //: 🔴 **계획한 조작 수**. 중간에 멈추면 실제로 한 수와 달라지고,
+  //: 부르는 쪽이 둘을 맞춰 "다 했는가" 를 판정한다 (6-AZ).
+  operations_planned: (plan.operations || []).length,
+  deck_image_mode: DECK_IMAGE ? 'registered' : 'placeholder-sheet',
   site: SITE, share_requested: WANT_SHARE,
   stages: {}, operations: [], share_url: null,
   stopped_at: null, stopped_reason: null, notes: [],
@@ -210,6 +218,28 @@ async function cardBox(page, slot) {
   }, slot);
 }
 
+/** 🔴 **그 지점에 있는 카드가 누구인가** — 개체 확정의 1차 근거다. */
+async function cardAtPoint(page, x, y) {
+  return page.evaluate(([x, y]) => {
+    const el = document.elementFromPoint(x, y);
+    if (!el) { return null; }
+    const card = el.closest('[data-card-id]');
+    if (!card) { return null; }
+    return card.getAttribute('data-card-id').split('-').slice(0, 2).join('-');
+  }, [x, y]);
+}
+
+/** 카드 상세 패널이 말하는 칸 (읽히면 보조 근거로 쓴다). */
+async function panelZone(page) {
+  return page.evaluate(() => {
+    const text = document.body.innerText || '';
+    const m = text.match(/Card details\s+([^\n]*)/);
+    if (!m) { return null; }
+    const said = m[1].trim();
+    return /Operate a card/.test(said) ? null : said;
+  });
+}
+
 async function drag(page, from, to) {
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
@@ -248,16 +278,29 @@ async function expandPileIfNeeded(page, slot) {
 // ---------------------------------------------------------------- 본체
 (async () => {
   const browser = await chromium.launch({ headless: HEADLESS });
-  const sheetPage = await browser.newPage({ viewport: { width: 1169, height: 600 },
-                                            deviceScaleFactor: 1 });
-  await sheetPage.setContent(
-    fs.readFileSync(path.join(DIR, 'deck-sheet.html'), 'utf8'), { waitUntil: 'load' });
-  await sleep(400);
-  const sheetPng = path.join(DIR, 'deck-sheet.png');
-  await sheetPage.screenshot({ path: sheetPng, fullPage: true });
-  await sheetPage.close();
-  result.stages.deck_sheet = { file: sheetPng,
-    main: plan.deck.main.length, extra: plan.deck.extra.length };
+  let sheetPng;
+  if (DECK_IMAGE) {
+    //: 🔴 **사용자가 등록한 이미지를 그대로 올린다.** 굽지 않는다.
+    if (!fs.existsSync(DECK_IMAGE)) {
+      stop('deck-image', `등록된 덱 이미지를 찾지 못했습니다: ${DECK_IMAGE}`);
+      await browser.close(); finish(1);
+    }
+    sheetPng = DECK_IMAGE;
+    result.stages.deck_sheet = { file: sheetPng, source: 'registered',
+      main: plan.deck.main.length, extra: plan.deck.extra.length };
+  } else {
+    const sheetPage = await browser.newPage({
+      viewport: { width: 1169, height: 600 }, deviceScaleFactor: 1 });
+    await sheetPage.setContent(
+      fs.readFileSync(path.join(DIR, 'deck-sheet.html'), 'utf8'),
+      { waitUntil: 'load' });
+    await sleep(400);
+    sheetPng = path.join(DIR, 'deck-sheet.png');
+    await sheetPage.screenshot({ path: sheetPng, fullPage: true });
+    await sheetPage.close();
+    result.stages.deck_sheet = { file: sheetPng, source: 'placeholder-sheet',
+      main: plan.deck.main.length, extra: plan.deck.extra.length };
+  }
 
   const context = await browser.newContext({
     viewport: { width: 1560, height: 1100 }, deviceScaleFactor: 1,
@@ -333,60 +376,81 @@ async function expandPileIfNeeded(page, slot) {
       await page.evaluate(() => /Recording/.test(document.body.innerText));
 
     let rows = await historyRows(page);
+    let board = await observeBoard(page, zones);
     for (const op of plan.operations) {
       const entry = { n: op.n, op: op.op, card: op.card, expect: op.expect,
                       why: op.why, basis: op.basis };
       const box = await expandPileIfNeeded(page, op.card);
       if (!box || !box.w) {
-        entry.ok = false; entry.saw = '카드를 찾지 못했거나 읽을 수 없습니다';
-      } else if (op.op === 'move') {
-        const target = zones[op.to];
-        if (!target) { entry.ok = false; entry.saw = `존 ${op.to} 을 찾지 못했습니다`; }
-        else {
-          await drag(page, box, target);
+        entry.ok = false;
+        entry.saw = '카드를 찾지 못했거나 읽을 수 없습니다';
+        entry.reasons = ['판에서 이 개체를 집지 못했습니다'];
+      } else {
+        //: 🔴 **1차 근거**: 건드릴 지점에 정말 그 개체가 있는가.
+        const clickHit = await cardAtPoint(page, box.x, box.y);
+        if (op.op === 'move') {
+          const target = zones[op.to];
+          if (!target) {
+            entry.ok = false; entry.saw = `존 ${op.to} 을 찾지 못했습니다`;
+            entry.reasons = [entry.saw];
+          } else {
+            await drag(page, box, target);
+            const after = await historyRows(page);
+            const seen = await observeBoard(page, zones);
+            const row = after[after.length - 1];
+            const evidence = {
+              clickHit,
+              moved: movedBetween(board, seen),
+              where: seen.bySlot[op.card] || null,
+              historyGrew: after.length === rows.length + 1,
+              historyText: row ? row.text : '',
+              problems: seen.problems,
+            };
+            const verdict = decideMove(op, evidence);
+            entry.saw = evidence.historyText || '(이력 없음)';
+            entry.where = evidence.where;
+            entry.moved = evidence.moved;
+            entry.click_hit = clickHit;
+            //: 그림은 **보조 근거**로만 적는다 — 판정에 쓰지 않는다.
+            entry.thumbnail = identityOf(row, box.src, seen.srcOf).how;
+            entry.ok = verdict.ok;
+            entry.reasons = verdict.why;
+            rows = after; board = seen;
+          }
+        } else if (op.op === 'activate' || op.op === 'target') {
+          const item = op.op === 'activate' ? 'Activate Effect' : 'Target';
+          const picked = await cardMenu(page, box, item);
           const after = await historyRows(page);
           const seen = await observeBoard(page, zones);
           const row = after[after.length - 1];
-          const grew = after.length === rows.length + 1;
-          const where = normalizeZone(seen.bySlot[op.card]);
-          const ident = identityOf(row, box.src, seen.srcOf);
-          //: 🔴 **셋을 모두 본다**: 이력이 한 줄 늘었는가 · 그 줄이 이
-          //: 카드의 줄인가 · 카드가 **정말 그 칸에** 있는가.
-          entry.saw = row ? row.text : '(이력 없음)';
-          entry.where = where;
-          entry.identity = ident.how;
-          entry.ok = grew && ident.ok && where === normalizeZone(op.to)
-                     && !seen.problems.length;
-          if (seen.problems.length) { entry.problems = seen.problems.slice(0, 4); }
-          rows = after;
+          const evidence = {
+            clickHit, picked,
+            moved: movedBetween(board, seen),
+            where: seen.bySlot[op.card] || null,
+            historyGrew: after.length === rows.length + 1,
+            historyText: row ? row.text : '',
+            panelZone: await panelZone(page),
+            problems: seen.problems,
+          };
+          const verdict = decideMenu(op, evidence);
+          entry.saw = evidence.historyText || '(이력 없음)';
+          entry.where = evidence.where;
+          entry.click_hit = clickHit;
+          entry.panel = evidence.panelZone;
+          entry.thumbnail = identityOf(row, box.src, seen.srcOf).how;
+          entry.ok = verdict.ok;
+          entry.reasons = verdict.why;
+          rows = after; board = seen;
+        } else {
+          entry.ok = false; entry.saw = `모르는 조작 ${op.op}`;
+          entry.reasons = [entry.saw];
         }
-      } else if (op.op === 'activate' || op.op === 'target') {
-        const item = op.op === 'activate' ? 'Activate Effect' : 'Target';
-        const picked = await cardMenu(page, box, item);
-        const after = await historyRows(page);
-        const seen = await observeBoard(page, zones);
-        const row = after[after.length - 1];
-        const grew = after.length === rows.length + 1;
-        const where = normalizeZone(seen.bySlot[op.card]);
-        const ident = picked ? identityOf(row, box.src, seen.srcOf)
-                             : { ok: false, how: `메뉴에 ${item} 이 없습니다` };
-        //: 🔴 **이력이 늘었다는 사실만으로 성공 처리하지 않는다.** 줄의
-        //: 종류와 칸이 맞아야 하고, 썸네일이 이 카드의 것이어야 한다.
-        const said = row ? row.text : '';
-        const kindOk = new RegExp(`${item} · `).test(said);
-        const zoneOk = where && said.endsWith('· ' + where);
-        entry.saw = said || `(이력 없음)`;
-        entry.where = where;
-        entry.identity = ident.how;
-        entry.ok = picked && grew && ident.ok && kindOk && zoneOk;
-        if (!zoneOk) { entry.note = `이력의 칸과 카드의 칸이 다릅니다 (카드: ${where})`; }
-        rows = after;
-      } else { entry.ok = false; entry.saw = `모르는 조작 ${op.op}`; }
+      }
       result.operations.push(entry);
       if (!entry.ok) {
         stop(`operation#${op.n}`,
-             `${op.op} ${op.card} — 기대 "${op.expect}", 화면 "${entry.saw}"`
-             + (entry.identity ? ` (개체 확인: ${entry.identity})` : ''));
+             `${op.op} ${op.card} — 기대 "${op.expect}" · `
+             + (entry.reasons || []).join(' / '));
         await page.screenshot({ path: shot(`op-${op.n}-fail`) });
         break;
       }

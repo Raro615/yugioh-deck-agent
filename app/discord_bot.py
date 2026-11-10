@@ -1487,8 +1487,74 @@ SHARE_DESCRIPTION = (
 )
 
 
+REGISTER_DESCRIPTION = (
+    "Neuron 에서 저장한 덱 이미지를 등록합니다 (한 번만 · 30~60초)"
+)
+
+#: 등록 안내 — 🔴 **짧게**. 긴 설명은 보고서에 있다.
+REGISTER_INTRO = (
+    "🗂 **덱 이미지 등록** — 사이트가 자리마다 어느 카드로 읽는지 확인하고"
+    " 레시피와 맞춰 봅니다. 확인된 등록만 외부 공유에 쓸 수 있습니다."
+)
+
+
+def register_deck_response(agent, owner: str, image_bytes, image_name: str,
+                           recipe_text: str, confirm_text: str = "",
+                           *, register=None) -> "list[str]":
+    """
+    ``/register-deck`` 의 순수 함수 (Phase 6-AZ).
+
+    🔴 **디스코드 첨부 URL 을 들고 있지 않는다** — 바이트를 받아 저장소
+    아래에 복사해 둔다. 그 뒤로는 그 사본만 읽는다.
+    """
+    run = register if register is not None else _default_register
+    lines = [REGISTER_INTRO]
+    if not image_bytes:
+        lines.append("🔴 **덱 이미지 첨부가 없습니다.**")
+        return lines
+    if not recipe_text.strip():
+        lines.append("🔴 **레시피가 없습니다** — 이미지와 맞춰 볼 기준이"
+                     " 있어야 합니다.")
+        return lines
+    confirms = [part.strip() for part in str(confirm_text or "").split(",")
+                if part.strip()]
+    outcome = run(agent, owner, image_bytes, image_name, recipe_text, confirms)
+    if not outcome.ok:
+        lines.append(f"🔴 **등록하지 못했습니다** — {outcome.reason}")
+        return lines
+    if outcome.verified:
+        lines.append(
+            f"✅ **등록 완료 — `{outcome.registration_id}`** "
+            f"(자리 {outcome.read_slots}개 확인)")
+        lines.append(
+            f"다음부터는 `/share-replay registration:"
+            f"{outcome.registration_id}` 으로 같은 덱의 **다른 패**도 바로"
+            f" 돌릴 수 있습니다.")
+        return lines
+    lines.append(f"⚠ **확인되지 않은 등록 — `{outcome.registration_id}`** "
+                 f"(식별 못 한 자리 {outcome.uncertain}개)")
+    lines.append("이 등록으로는 외부 공유를 시작하지 않습니다. 무엇이 "
+                 "다른지:")
+    for line in outcome.problems[:5]:
+        lines.append(f"· {line}")
+    lines.append("못 읽은 자리는 `confirm:` 에 `main-7=57835716` 처럼 "
+                 "쉼표로 적어 다시 등록해 주십시오.")
+    return lines
+
+
+def _default_register(agent, owner, image_bytes, image_name, recipe_text,
+                      confirms):
+    from deck.deck_register import run_registration
+
+    return run_registration(
+        owner=owner, image=image_bytes, image_name=image_name,
+        recipe_text=recipe_text,
+        repository=getattr(agent, "repository", None), confirms=confirms)
+
+
 def share_replay_response(agent, hand_text: str, recipe_text: str = "",
                           line_text: str = "", title: str = "",
+                          registration_id: str = "", owner: str = "local",
                           *, runner=None) -> "list[str]":
     """
     ``/share-replay`` 의 순수 함수 (Phase 6-AX).
@@ -1520,7 +1586,24 @@ def share_replay_response(agent, hand_text: str, recipe_text: str = "",
     if not report.ran or not report.replay:
         lines.append(ShareState.NO_RECORD.notice)
         return lines
-    outcome = use.share(report.replay, title=title or "galatea opening line")
+    registration = None
+    if registration_id:
+        from deck.deck_image_registry import load_registration
+
+        registration = load_registration(owner, registration_id)
+        if registration is None:
+            lines.append(f"🔴 **등록을 찾지 못했습니다**: `{registration_id}`")
+            return lines
+        if not registration.verified:
+            #: 🔴 추측한 자리 대응으로 외부 공유를 시작하지 않는다.
+            lines.append(f"🔴 **확인되지 않은 등록입니다**: "
+                         f"`{registration_id}` — 먼저 `/register-deck` 로 "
+                         f"확인을 끝내 주십시오.")
+            return lines
+        lines.append(f"🗂 등록된 덱 이미지 `{registration_id}` 로 돕니다 "
+                     f"(실제 카드 그림).")
+    outcome = use.share(report.replay, title=title or "galatea opening line",
+                        registration=registration)
     lines.extend(site_share_lines(outcome))
     return lines
 
@@ -2051,8 +2134,26 @@ class SearchService:
                              results_text, followups_text)
             return ComboResponse(messages=(COMBO_ERROR_MESSAGE,))
 
+    def register_deck_texts(self, owner: str, image_bytes, image_name: str,
+                            recipe_text: str,
+                            confirm_text: str = "") -> "list[str]":
+        """덱 이미지 한 장을 등록한다 (Phase 6-AZ). 🔴 예외를 밖으로 내지 않는다."""
+        if self._agent is None:
+            return [COMBO_UNAVAILABLE_MESSAGE]
+        try:
+            return register_deck_response(self._agent, owner, image_bytes,
+                                          image_name, recipe_text,
+                                          confirm_text)
+        except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
+            logger.exception("덱 이미지 등록에 실패했습니다. 파일=%r",
+                             image_name)
+            return [REGISTER_INTRO, "🔴 **등록 중 오류가 났습니다** "
+                                    "(원인은 봇 로그에 있습니다)."]
+
     def share_replay_texts(self, hand_text: str, recipe_text: str = "",
-                           line_text: str = "", title: str = "") -> "list[str]":
+                           line_text: str = "", title: str = "",
+                           registration_id: str = "",
+                           owner: str = "local") -> "list[str]":
         """
         전개 하나를 **외부 Duel Simulator 에 공개 리플레이로** 올린다
         (Phase 6-AX).
@@ -2064,7 +2165,8 @@ class SearchService:
             return [COMBO_UNAVAILABLE_MESSAGE]
         try:
             return share_replay_response(self._agent, hand_text, recipe_text,
-                                         line_text, title)
+                                         line_text, title, registration_id,
+                                         owner)
         except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
             logger.exception("외부 공유에 실패했습니다. 패=%r 레시피=%r 경로=%r",
                              hand_text, recipe_text, line_text)
@@ -2176,6 +2278,14 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
     import discord
     from discord import app_commands
 
+    #: 🔴 **문자열 주석을 풀 수 있게 한다** (Phase 6-AZ). 이 모듈은 맨 위에서
+    #: ``discord`` 를 import 하지 않는다 (봇 전용 의존성이라 없을 수 있다).
+    #: 그런데 ``from __future__ import annotations`` 때문에 아래 명령들의
+    #: 주석은 **글자**로 남고, ``app_commands`` 가 그것을 모듈 전역에서
+    #: 풀려다 ``NameError`` 로 죽는다. 여기서 한 번 묶어 둔다 — 이 함수는
+    #: discord 가 실제로 있을 때만 돈다.
+    globals().setdefault("discord", discord)
+
     #: 🔴 이름을 ``search`` 로 두면 안 된다. 아래 ``@tree.command`` 가
     #: 데코레이트한 함수를 **같은 스코프에 같은 이름으로 다시 바인딩**해서
     #: 이 변수를 가린다 — 핸들러가 ``Command`` 객체에서 ``search_text`` 를
@@ -2185,8 +2295,9 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
     #: 않는다. 이름을 따로 두는 것은 핸들러가 읽히게 하기 위한 것뿐이다.
     deck_service = search_service
     combo_service = search_service
-    #: ``/share-replay`` 도 **같은 서비스**다.
+    #: ``/share-replay`` 와 ``/register-deck`` 도 **같은 서비스**다.
     share_service = search_service
+    register_service = search_service
 
     intents = discord.Intents.default()
     client = discord.Client(intents=intents)
@@ -2268,10 +2379,13 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         recipe="실제 덱 레시피 (필수) — 이 레시피로 엔진을 돌린 기록을"
                " 사이트에 옮깁니다",
         line="(선택) 검증용 전개 경로 이름",
-        title="(선택) 공유 리플레이의 제목")
+        title="(선택) 공유 리플레이의 제목",
+        registration="(선택) 등록해 둔 덱 이미지의 등록 ID — 주면 실제 카드"
+                     " 그림으로 돕니다 (/register-deck 로 만듭니다)")
     async def share_replay_command(interaction: "discord.Interaction",
                                    hand: str, recipe: str,
-                                   line: str = "", title: str = "") -> None:
+                                   line: str = "", title: str = "",
+                                   registration: str = "") -> None:
         #: 🔴 **브라우저 조작은 1~2분이다.** ``/combo`` 와 같은 구조로
         #: ``defer()`` 로 먼저 응답을 열고, 실제 조작은 스레드로 보내
         #: 이벤트 루프를 막지 않는다.
@@ -2279,8 +2393,28 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         await interaction.response.defer()
         await interaction.followup.send(SITE_SHARE_WARNING + " 조작 중입니다…")
         texts = await asyncio.to_thread(
-            share_service.share_replay_texts, hand, recipe, line, title)
+            share_service.share_replay_texts, hand, recipe, line, title,
+            registration, str(interaction.user.id))
         for text in texts[1:] or texts:
+            await interaction.followup.send(text)
+
+    @tree.command(name="register-deck", description=REGISTER_DESCRIPTION)
+    @app_commands.describe(
+        image="Neuron 에서 저장한 덱 이미지 (첨부)",
+        recipe="이 이미지의 덱 레시피 — 이미지와 맞춰 봅니다",
+        confirm="(선택) 사이트가 못 읽은 자리를 직접 확정. 예:"
+                " main-7=57835716, main-8=57835716")
+    async def register_deck_command(interaction: "discord.Interaction",
+                                    image: "discord.Attachment",
+                                    recipe: str, confirm: str = "") -> None:
+        #: 🔴 **첨부 URL 을 들고 있지 않는다** — 지금 바이트를 받아 둔다.
+        #: 🔴 브라우저가 30~60초 걸리므로 ``defer`` 뒤 스레드로 보낸다.
+        await interaction.response.defer()
+        data = await image.read()
+        texts = await asyncio.to_thread(
+            register_service.register_deck_texts,
+            str(interaction.user.id), data, image.filename, recipe, confirm)
+        for text in texts:
             await interaction.followup.send(text)
 
     @client.event

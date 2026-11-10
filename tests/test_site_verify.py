@@ -150,27 +150,33 @@ def test_a07_the_screen_count_cross_check_catches_a_hidden_card():
 # ======================================================================
 # B. 개체 확인 — 이력이 늘었다는 사실만으로는 모자란다
 # ======================================================================
-def test_b01_a_history_row_without_this_cards_thumbnail_is_not_identity():
+def test_b01_a_history_row_without_this_cards_thumbnail_does_not_match():
     got = _identity({"text": "Activate Effect · Grave", "srcs": ["data:x"]},
                     "data:y", {"main-0": "data:y"})
-    assert not got["ok"]
+    assert not got["match"]
 
 
-def test_b02_a_matching_thumbnail_is_identity():
+def test_b02_a_matching_thumbnail_is_reported_as_matching_and_unique():
     got = _identity({"text": "Grave → Banish1", "srcs": ["data:y"]},
                     "data:y", {"main-0": "data:y"})
-    assert got["ok"] and got["how"] == "썸네일 일치"
+    assert got["match"] and got["unique"]
 
 
-def test_b03_two_cards_with_the_same_picture_are_called_ambiguous():
-    """🔴 같은 그림이 둘이면 **맞았다고 하지 않고 모호하다고 적는다**."""
+def test_b03_the_same_picture_twice_is_reported_as_not_unique():
+    """
+    🔴 **6-AZ 정정.** 전에는 "모호" 라고 적으면서 ``ok: true`` 를 돌려줬다.
+    실제 덱 이미지에서는 같은 카드가 여러 장인 것이 정상이므로, 이제
+    **사실만** 돌려주고 (맞는가 · 유일한가) 통과 여부는 ``decideMove`` ·
+    ``decideMenu`` 가 안정 ID 로 정한다.
+    """
     got = _identity({"text": "Deck → Grave", "srcs": ["data:y"]}, "data:y",
                     {"main-0": "data:y", "main-5": "data:y"})
-    assert got["ok"] and "모호" in got["how"]
+    assert got["match"] and not got["unique"]
+    assert "보조 근거" in got["how"]
 
 
-def test_b04_a_row_with_no_thumbnail_is_not_identity():
-    assert not _identity({"text": "x", "srcs": []}, "data:y", {})["ok"]
+def test_b04_a_row_with_no_thumbnail_does_not_match():
+    assert not _identity({"text": "x", "srcs": []}, "data:y", {})["match"]
 
 
 # ======================================================================
@@ -209,6 +215,8 @@ def _ok_payload(run_id, **over):
         "run_id": run_id, "stopped_at": None, "share_requested": True,
         "share_url": "https://example.test/replay/new",
         "operations": [{"ok": True}, {"ok": True}],
+        #: 🔴 6-AZ — 계획한 조작 수를 결과가 들고 있어야 "다 했는가" 를 센다.
+        "operations_planned": 2,
         "stages": {"final": {"all_ok": True}}, "notes": [],
     }
     payload.update(over)
@@ -352,7 +360,7 @@ def test_c09_the_discord_runner_gets_a_fresh_folder_each_time(tmp_path):
         reason = ""
         run_id = "rid"
 
-    def session(record, *, base_dir, title, share):
+    def session(record, *, base_dir, title, share, registration=None):
         bases.append(Path(base_dir))
         return _Run()
 

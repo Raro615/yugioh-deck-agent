@@ -205,6 +205,8 @@ def _fake_runner(result: dict):
     def run(command, path):
         payload = dict(result)
         payload.setdefault("run_id", command[command.index("--run-id") + 1])
+        payload.setdefault("operations_planned",
+                           len(payload.get("operations") or ()))
         (path / "result.json").write_text(json.dumps(payload), encoding="utf-8")
         class _Done:
             returncode = 0
@@ -290,7 +292,7 @@ def test_d03_two_requests_do_not_share_one_browser(tmp_path):
     started = threading.Event()
     release = threading.Event()
 
-    def _slow(record, *, base_dir, title, share):
+    def _slow(record, *, base_dir, title, share, registration=None):
         started.set()
         release.wait(5)
         class _Run:

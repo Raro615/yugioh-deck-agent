@@ -107,7 +107,8 @@ class SiteShareRunner:
     def busy(self) -> bool:
         return self._lock.locked()
 
-    def share(self, record, *, title: str) -> SiteShareOutcome:
+    def share(self, record, *, title: str,
+              registration=None) -> SiteShareOutcome:
         """🔴 동기다 — 부르는 쪽이 스레드로 보낸다."""
         if not record:
             return SiteShareOutcome(ShareState.NO_RECORD)
@@ -125,7 +126,8 @@ class SiteShareRunner:
                     return SiteShareOutcome(
                         ShareState.FAILED,
                         reason="이 서버에 브라우저가 준비되지 않았습니다")
-            run = self._run(record, title=title)
+            run = self._run(record, title=title,
+                            registration=registration)
         except Exception as error:  # pragma: no cover - 방어용
             logger.warning("외부 공유 중 예외: %s: %s",
                            type(error).__name__, error)
@@ -147,15 +149,15 @@ class SiteShareRunner:
             operations_ok=run.operations_ok,
             operations_total=run.operations_total)
 
-    def _run(self, record, *, title: str):
+    def _run(self, record, *, title: str, registration=None):
         if self._session is not None:
             return self._session(record, base_dir=self._base, title=title,
-                                 share=True)
+                                 share=True, registration=registration)
         from deck.site_session import run_site_session
 
         #: 🔴 ``base_dir`` 이라서 **이번 실행만의 새 폴더**가 만들어진다.
         return run_site_session(record, base_dir=self._base, title=title,
-                                share=True)
+                                share=True, registration=registration)
 
 
 def site_share_lines(outcome: SiteShareOutcome) -> list[str]:

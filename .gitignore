@@ -19,6 +19,10 @@ data/rules/sources/
 # 받는 방법: python3 -m scripts.make_replay_viewer --line <경로> --out <파일>
 docs/viewer/local/
 
+# 🔴 사용자가 등록한 Neuron 덱 이미지. 사용자의 파일이고 카드 그림이
+# 들어 있으므로 저장소에 넣지 않는다 (Phase 6-AZ).
+data/deck_images/
+
 # 한국어 카드 데이터는 저장소에 포함한다 (data/ko/ko-KR.json).
 # 수집 과정의 페이지 캐시만 제외한다.
 data/ko/.cache/

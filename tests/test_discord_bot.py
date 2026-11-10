@@ -320,8 +320,10 @@ def test_18_future_commands_are_marked_unimplemented_not_claimed():
     #: 🔴 Phase 6-AX 가 ``share-replay`` 를 더했다 (실행 기록 하나를
     #: 외부 Duel Simulator 에 공개 리플레이로 올린다). 집합은 여전히
     #: **정확히** 고정한다.
+    #: 🔴 Phase 6-AZ 가 ``register-deck`` 을 더했다 (사용자의 Neuron
+    #: 덱 이미지 한 장을 등록한다). 집합은 여전히 정확히 고정한다.
     assert registered == {"ping", "search", "deck", "combo",
-                          "share-replay"}, registered
+                          "share-replay", "register-deck"}, registered
 
 def test_19_the_real_command_tree_registers_ping_and_sends_the_text():
     r"""🟢 §5-4 — **실제 ``app_commands`` 핸들러**를 거쳐 문구를 확인한다.
@@ -343,8 +345,10 @@ def test_19_the_real_command_tree_registers_ping_and_sends_the_text():
     #: 🔴 Phase 6-AX 가 ``share-replay`` 를 더했다 (실행 기록 하나를
     #: 외부 Duel Simulator 에 공개 리플레이로 올린다). 집합은 여전히
     #: **정확히** 고정한다.
+    #: 🔴 Phase 6-AZ 가 ``register-deck`` 을 더했다 (사용자의 Neuron
+    #: 덱 이미지 한 장을 등록한다). 집합은 여전히 정확히 고정한다.
     assert set(commands) == {"ping", "search", "deck", "combo",
-                             "share-replay"}
+                             "share-replay", "register-deck"}
     ping = commands["ping"]
     assert ping.description == bot.PING_DESCRIPTION
 
@@ -843,8 +847,10 @@ def test_32_the_deck_command_is_registered_with_one_request_argument():
     #: 🔴 Phase 6-AX 가 ``share-replay`` 를 더했다 (실행 기록 하나를
     #: 외부 Duel Simulator 에 공개 리플레이로 올린다). 집합은 여전히
     #: **정확히** 고정한다.
+    #: 🔴 Phase 6-AZ 가 ``register-deck`` 을 더했다 (사용자의 Neuron
+    #: 덱 이미지 한 장을 등록한다). 집합은 여전히 정확히 고정한다.
     assert set(commands) == {"ping", "search", "deck", "combo",
-                             "share-replay"}
+                             "share-replay", "register-deck"}
 
     deck = commands["deck"]
     assert deck.description == bot.DECK_DESCRIPTION
@@ -1365,8 +1371,10 @@ def test_44_the_combo_command_is_registered_with_its_four_arguments():
     #: 🔴 Phase 6-AX 가 ``share-replay`` 를 더했다 (실행 기록 하나를
     #: 외부 Duel Simulator 에 공개 리플레이로 올린다). 집합은 여전히
     #: **정확히** 고정한다.
+    #: 🔴 Phase 6-AZ 가 ``register-deck`` 을 더했다 (사용자의 Neuron
+    #: 덱 이미지 한 장을 등록한다). 집합은 여전히 정확히 고정한다.
     assert set(commands) == {"ping", "search", "deck", "combo",
-                             "share-replay"}
+                             "share-replay", "register-deck"}
 
     combo = commands["combo"]
     assert combo.description == bot.COMBO_DESCRIPTION

@@ -101,12 +101,30 @@ def main(argv: "list[str] | None" = None) -> int:
                         help="계획과 덱 시트만 만들고 브라우저를 열지 않는다")
     parser.add_argument("--share", action="store_true",
                         help="🔴 공유 URL 까지 만든다 — 되돌릴 수 없는 공개다")
+    parser.add_argument("--registration",
+                        help="등록해 둔 덱 이미지의 등록 ID "
+                             "(scripts.register_deck_image 로 만듭니다)")
+    parser.add_argument("--owner", default="local",
+                        help="등록 소유자 (기본 local)")
     parser.add_argument("--title", default="galatea opening line",
                         help="공유 리플레이의 제목")
     args = parser.parse_args(argv)
 
     record = (json.loads(Path(args.json).read_text(encoding="utf-8"))
               if args.json else _run_line(args.line))
+
+    registration = None
+    if args.registration:
+        from deck.deck_image_registry import load_registration
+
+        registration = load_registration(args.owner, args.registration)
+        if registration is None:
+            print(f"🔴 등록을 찾지 못했습니다: {args.registration} "
+                  f"(소유자 {args.owner})", file=sys.stderr)
+            return 2
+        mark = "확인됨" if registration.verified else "🔴 미확인"
+        print(f"덱 이미지 등록 {registration.registration_id} — {mark} · "
+              f"{registration.image_path}")
 
     from deck.site_session import (
         new_run_id,
@@ -125,15 +143,17 @@ def main(argv: "list[str] | None" = None) -> int:
 
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         out = base / f"{stamp}-{run_id}"
-    plan = prepare_run_dir(record, out, title=args.title, run_id=run_id)
+    plan = prepare_run_dir(record, out, title=args.title, run_id=run_id,
+                           registration=registration)
 
     counts = plan["counts"]
     print(f"계획: 엔진 걸음 {counts['engine_steps']} · 엔진 사건 "
           f"{counts['engine_events']} → 사이트 조작 "
           f"{counts['site_operations']} (+ 시작 패 "
           f"{counts['site_setup_operations']})")
-    print(f"덱 시트: 메인 {len(plan['deck']['main'])} · 엑스트라 "
-          f"{len(plan['deck']['extra'])} — {out / 'deck-sheet.html'}")
+    mode = plan["deck_image"]["mode"]
+    print(f"덱 이미지 모드: {mode} · 메인 {len(plan['deck']['main'])} · "
+          f"엑스트라 {len(plan['deck']['extra'])}")
     if plan["unsupported"]:
         #: 🔴 **조용히 빠뜨리지 않는다** — 실행 전에 적는다.
         print("사이트에 대응 조작이 없는 사건:")
@@ -153,7 +173,8 @@ def main(argv: "list[str] | None" = None) -> int:
         print(SHARE_WARNING)
     print(f"조작기 실행 중… (실행 ID {run_id} · 실측 1~2분)")
     run = run_site_session(record, workdir=out, title=args.title,
-                           share=args.share, run_id=run_id)
+                           share=args.share, run_id=run_id,
+                           registration=registration)
     if not run.raw:
         print(f"🔴 {run.status.value}: {run.reason}", file=sys.stderr)
         return 1
@@ -176,10 +197,14 @@ def _report(result: dict) -> None:
         mark = "✅" if op.get("ok") else "❌"
         print(f"   {mark} {op['n']:2d} {op['op']:8s} {op['card']:9s} "
               f"기대 {op.get('expect','')!r} ← 화면 {op.get('saw','')!r}"
-              f" · 카드가 있는 칸 {op.get('where','?')!r}"
-              f" · 개체 {op.get('identity','?')}")
-        if op.get("note"):
-            print(f"      ↳ {op['note']}")
+              f" · 카드가 있는 칸 {op.get('where','?')!r}")
+        #: 🔴 **개체를 무엇으로 확정했는지** 적는다 (6-AZ).
+        print(f"      ↳ 클릭 지점의 개체 {op.get('click_hit','?')}"
+              + (f" · 자리 이동 {op['moved']}" if op.get("moved") else "")
+              + (f" · 상세 패널 {op['panel']}" if op.get("panel") else "")
+              + (f" · (보조) {op['thumbnail']}" if op.get("thumbnail") else ""))
+        for line in op.get("reasons") or ():
+            print(f"      ↳ 🔴 {line}")
         for line in op.get("problems") or ():
             print(f"      ↳ 판 읽기 문제: {line}")
     final = stages.get("final") or {}
