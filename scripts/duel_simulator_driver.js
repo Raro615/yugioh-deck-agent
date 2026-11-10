@@ -1,20 +1,31 @@
 /*
- * 외부 Duel Simulator 자동 조작기 (Phase 6-AX).
+ * 외부 Duel Simulator 자동 조작기 (Phase 6-AX · 6-AY 에서 검증 강화).
  *
  * 하는 일: 조작 계획(plan.json) 과 덱 시트(deck-sheet.html) 를 받아
  *   1) 덱 시트를 PNG 로 굽고
  *   2) 사이트에 올려 메인/엑스트라 장수를 맞춰 판에 적용하고
  *   3) 시작 패를 꺼낸 뒤 기록을 시작하고
- *   4) 계획의 조작을 하나씩 수행하며 **매번 화면의 History 줄로 확인**하고
- *   5) 기록을 끝내고, (--share 일 때만) 공유 URL 을 만든다.
+ *   4) 계획의 조작을 하나씩 수행하며 **매번 카드 개체까지 확인**하고
+ *   5) 최종 판을 **존별 카드 집합**으로 대조하고
+ *   6) 기록을 끝내고, (--share 일 때만, 그리고 검증을 통과했을 때만)
+ *      공유 URL 을 만든다.
  *
- * 🔴 사람이 쓰는 UI 그대로만 조작한다. 내부 엔드포인트를 부르지 않고,
- *    자바스크립트 번들을 뜯어보지 않는다.
+ * 🔴 사람이 쓰는 UI 그대로만 조작한다. 내부 엔드포인트를 부르지 않는다.
  * 🔴 조작이 기대한 결과를 내지 않으면 **그 자리에서 멈춘다.** 확인 없이
- *    다시 시도해 두 번 움직이는 일을 만들지 않는다.
+ *    다시 시도해 두 번 움직이거나 두 번 공유하는 일을 만들지 않는다.
  * 🔴 --share 는 **되돌릴 수 없는 공개**다. 기본값은 꺼져 있다.
  *
- * 사용: node scripts/duel_simulator_driver.js <작업디렉터리> [--share] [--title "..."]
+ * 개체를 어떻게 묶는가 (6-AY)
+ * ---------------------------
+ * 판의 카드는 ``data-card-id``(``main-11-…``) 로 식별한다 — 이동해도
+ * 바뀌지 않는다. 조작 이력(History) 의 각 줄에는 **그 조작에 쓰인 카드의
+ * 썸네일**이 붙고, 그 ``src`` 는 판 위 카드의 ``src`` 와 **바이트 단위로
+ * 같다**(실측). 그래서 "이 줄이 그 카드의 줄인가" 를 확인할 수 있다.
+ * 같은 그림이 둘 이상이면 **모호하다고 적고** 넘어가지, 맞았다고 하지
+ * 않는다.
+ *
+ * 사용: node scripts/duel_simulator_driver.js <작업디렉터리>
+ *          [--run-id <id>] [--share] [--title "..."] [--headed]
  * 결과: <작업디렉터리>/result.json  (stdout 에도 같은 JSON 한 줄)
  */
 'use strict';
@@ -22,9 +33,12 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
+//: 🔴 **판정부는 따로 있다** (6-AY) — 브라우저 없이도 시험이 돌릴 수 있게.
+const { normalizeZone, identityOf, compareFinal } =
+  require(path.join(__dirname, 'duel_simulator_verify.js'));
 
 const SITE = 'https://duel-simulator.miyauchidp.dev/';
-const STEP_PAUSE = 700;          // 조작 사이의 틈 (사람 속도에 가깝게)
+const STEP_PAUSE = 700;
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
@@ -33,16 +47,21 @@ function arg(name, fallback) {
 const DIR = process.argv[2];
 const WANT_SHARE = process.argv.includes('--share');
 const TITLE = arg('--title', 'galatea opening line');
+const RUN_ID = arg('--run-id', '');
 const HEADLESS = !process.argv.includes('--headed');
 
 if (!DIR || !fs.existsSync(path.join(DIR, 'plan.json'))) {
-  console.error('사용: node scripts/duel_simulator_driver.js <작업디렉터리> [--share]');
+  console.error('사용: node scripts/duel_simulator_driver.js <작업디렉터리> [--run-id <id>] [--share]');
   process.exit(2);
 }
 const plan = JSON.parse(fs.readFileSync(path.join(DIR, 'plan.json'), 'utf8'));
 const shot = n => path.join(DIR, `shot-${n}.png`);
 
 const result = {
+  //: 🔴 **이 결과가 어느 요청의 것인가.** 부르는 쪽이 자기 실행 ID 와
+  //: 맞춰 보고, 다르면 남아 있던 옛 결과로 보고 버린다.
+  run_id: RUN_ID,
+  plan_run_id: plan.run_id || null,
   site: SITE, share_requested: WANT_SHARE,
   stages: {}, operations: [], share_url: null,
   stopped_at: null, stopped_reason: null, notes: [],
@@ -55,9 +74,9 @@ function finish(code) {
 }
 function stop(where, why) { result.stopped_at = where; result.stopped_reason = why; }
 
-// ---------------------------------------------------------------- 도구
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// ------------------------------------------------------------ 입력 보조
 async function setCount(page, id, value) {
   const el = page.locator('#' + id);
   await el.click();
@@ -68,8 +87,7 @@ async function setCount(page, id, value) {
   await sleep(350);
 }
 
-/** 판의 드롭 존들을 이름으로 묶는다. 🔴 이름은 사이트의 History 줄이 쓰는
- *  글자와 같아야 하고, 조작마다 그 줄로 다시 확인한다. */
+/** 판의 드롭 존을 **이름**으로 묶는다. 이름은 History 줄의 글자와 같다. */
 async function zoneMap(page) {
   const zones = await page.evaluate(() =>
     [...document.querySelectorAll('[data-droppable]')].map(e => {
@@ -80,18 +98,15 @@ async function zoneMap(page) {
                label: (e.innerText || '').trim() };
     }));
   const map = {};
-  const labelled = { 'Free': 'Free', 'Grave': 'Grave', 'Banish': 'Banish',
-                     'Hand': 'Hand', 'Extra Deck': 'Extra Deck', 'Deck': 'Deck' };
+  const named = ['Free', 'Grave', 'Banish', 'Hand', 'Extra Deck', 'Deck'];
   const rest = [];
   for (const z of zones) {
-    const name = Object.keys(labelled).find(k => z.label.startsWith(k + ' ('));
+    const name = named.find(k => z.label.startsWith(k + ' ('));
     if (name) { map[name] = z; } else { rest.push(z); }
   }
-  // 이름표가 없는 칸들: 윗줄부터 EM 2칸 / 필드존+몬스터존 5 / ?+마함존 5
   const rows = {};
   rest.forEach(z => { (rows[z.top] = rows[z.top] || []).push(z); });
-  const tops = Object.keys(rows).map(Number).sort((a, b) => a - b);
-  tops.forEach((top, ri) => {
+  Object.keys(rows).map(Number).sort((a, b) => a - b).forEach((top, ri) => {
     const row = rows[top].sort((a, b) => a.left - b.left);
     if (ri === 0 && row.length === 2) {
       map['Extra Monster Zone1'] = row[0];
@@ -108,14 +123,90 @@ async function zoneMap(page) {
   return map;
 }
 
+// ------------------------------------------------------- 판을 **읽는다**
+/**
+ * 지금 판에 있는 모든 카드를 **자리별로** 읽는다.
+ *
+ * 🔴 **읽을 수 없는 상태를 성공으로 치지 않는다.** 크기가 0이거나 어느
+ *    칸에도 들어가지 않거나 같은 자리가 두 번 나오면 ``problems`` 에
+ *    남고, 부르는 쪽이 그것만으로 실패 처리한다.
+ */
+async function observeBoard(page, zones) {
+  const rects = Object.fromEntries(Object.entries(zones).map(
+    ([k, z]) => [k, { x: z.left, y: z.top, w: z.w, h: z.h }]));
+  return page.evaluate(rects => {
+    const bySlot = {}, byZone = {}, problems = [], srcOf = {};
+    const seen = {};
+    document.querySelectorAll('[data-card-id]').forEach(e => {
+      const id = e.getAttribute('data-card-id');
+      const slot = id.split('-').slice(0, 2).join('-');
+      // 같은 자리가 여러 요소로 그려진다 (감싸는 div 들) — 가장 안쪽 하나만.
+      if (e.querySelector('[data-card-id]')) { return; }
+      const r = e.getBoundingClientRect();
+      if (seen[slot]) {
+        problems.push(`${slot}: 같은 자리가 화면에 두 번 있습니다`);
+        return;
+      }
+      seen[slot] = true;
+      if (r.width < 2 || r.height < 2) {
+        problems.push(`${slot}: 크기가 0 입니다 (가려졌거나 그려지지 않았습니다)`);
+        return;
+      }
+      const img = e.querySelector('img');
+      if (img) { srcOf[slot] = img.src; }
+      const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+      const hits = Object.entries(rects).filter(([, z]) =>
+        cx >= z.x && cx <= z.x + z.w && cy >= z.y && cy <= z.y + z.h);
+      if (!hits.length) {
+        problems.push(`${slot}: 어느 칸에도 들어가지 않습니다`);
+        return;
+      }
+      hits.sort((a, b) => a[1].w * a[1].h - b[1].w * b[1].h);
+      const zone = hits[0][0];
+      bySlot[slot] = zone;
+      (byZone[zone] = byZone[zone] || []).push(slot);
+    });
+    return { bySlot, byZone, problems, srcOf };
+  }, rects);
+}
+
+/** 화면의 장수 표시 — 좌표로 읽은 집합과 **교차 확인**하는 데 쓴다. */
+async function zoneCounts(page) {
+  return page.evaluate(() => {
+    const out = {};
+    ((document.body.innerText || '')
+      .match(/(Free|Grave|Banish|Hand|Extra Deck|Deck) \(\d+\)/g) || [])
+      .forEach(s => { const m = s.match(/^(.*) \((\d+)\)$/); out[m[1]] = Number(m[2]); });
+    return out;
+  });
+}
+
+/** 조작 이력의 줄들 — 각 줄의 **썸네일 src** 까지 읽는다. */
+async function historyRows(page) {
+  return page.evaluate(() => {
+    const all = [...document.querySelectorAll('*')].filter(
+      e => /#\d+ · /.test(e.innerText || '') && e.querySelector('img'));
+    // 가장 안쪽(자식 중에 같은 모양이 없는) 요소만 남긴다.
+    const leaves = all.filter(e => !all.some(o => o !== e && e.contains(o)));
+    return leaves.map(e => ({
+      text: (e.innerText || '').replace(/\n/g, ' ').trim(),
+      srcs: [...e.querySelectorAll('img')].map(i => i.src),
+    }));
+  });
+}
+
+// ------------------------------------------------------------- 조작
 async function cardBox(page, slot) {
   return page.evaluate(slot => {
-    const e = document.querySelector(`[data-card-id^="${slot}-"]`);
+    const nodes = [...document.querySelectorAll(`[data-card-id^="${slot}-"]`)]
+      .filter(e => !e.querySelector('[data-card-id]'));
+    const e = nodes[0];
     if (!e) { return null; }
     const r = e.getBoundingClientRect();
     return { id: e.getAttribute('data-card-id'),
              x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2),
-             w: Math.round(r.width), h: Math.round(r.height) };
+             w: Math.round(r.width), h: Math.round(r.height),
+             src: (e.querySelector('img') || {}).src || null };
   }, slot);
 }
 
@@ -132,59 +223,30 @@ async function drag(page, from, to) {
   await sleep(STEP_PAUSE);
 }
 
-/** 마지막 조작 이력 한 줄. 사이트가 "#n · You\n<출발> → <도착>" 으로 적는다. */
-async function lastHistory(page) {
-  return page.evaluate(() => {
-    const m = (document.body.innerText || '').match(/#\d+ · [^\n]*\n[^\n]*/g);
-    return m ? m[m.length - 1].replace(/\n/g, ' ') : '';
-  });
-}
-async function historyCount(page) {
-  return page.evaluate(() =>
-    ((document.body.innerText || '').match(/#\d+ · /g) || []).length);
-}
-async function zoneCounts(page) {
-  return page.evaluate(() => {
-    const out = {};
-    ((document.body.innerText || '')
-      .match(/(Free|Grave|Banish|Hand|Extra Deck|Deck) \(\d+\)/g) || [])
-      .forEach(s => { const m = s.match(/^(.*) \((\d+)\)$/); out[m[1]] = Number(m[2]); });
-    return out;
-  });
-}
-
-/** 우클릭 메뉴에서 항목 하나를 고른다. */
 async function cardMenu(page, box, item) {
   await page.mouse.click(box.x, box.y, { button: 'right' });
   await sleep(600);
   const entry = page.getByRole('menuitem', { name: item, exact: true });
-  if (await entry.count() === 0) {
-    const any = page.locator(`[role=menuitem]:text-is("${item}")`);
-    if (await any.count() === 0) { return false; }
-    await any.first().click();
-  } else {
-    await entry.first().click();
-  }
+  if (await entry.count() === 0) { return false; }
+  await entry.first().click();
   await sleep(STEP_PAUSE);
   return true;
 }
 
-/** 묘지·제외는 쌓이는 자리라, 카드가 가려져 있으면 펼친다. */
 async function expandPileIfNeeded(page, slot) {
   const box = await cardBox(page, slot);
-  if (box && box.w > 0 && box.h > 0) { return box; }
+  if (box && box.w > 1 && box.h > 1) { return box; }
   for (const label of ['Grave', 'Banish']) {
     const btn = page.locator(`button:has-text("${label} (")`);
     if (await btn.count()) { await btn.first().click(); await sleep(600); }
     const again = await cardBox(page, slot);
-    if (again && again.w > 0) { return again; }
+    if (again && again.w > 1) { return again; }
   }
   return await cardBox(page, slot);
 }
 
 // ---------------------------------------------------------------- 본체
 (async () => {
-  // 1) 덱 시트를 PNG 로
   const browser = await chromium.launch({ headless: HEADLESS });
   const sheetPage = await browser.newPage({ viewport: { width: 1169, height: 600 },
                                             deviceScaleFactor: 1 });
@@ -206,17 +268,14 @@ async function expandPileIfNeeded(page, slot) {
   page.on('pageerror', e => pageErrors.push(String(e.message).slice(0, 160)));
 
   try {
-    // 2) 덱 이미지 올리기
     await page.goto(SITE, { waitUntil: 'networkidle', timeout: 90000 });
     await sleep(2500);
     await page.setInputFiles('input[type=file]', sheetPng);
     await sleep(9000);
-    const detected = await page.evaluate(() => {
-      const t = document.body.innerText;
-      const m = t.match(/Detected Deck Configuration\n([^\n]*)/);
+    result.stages.upload = { auto_detected: await page.evaluate(() => {
+      const m = (document.body.innerText).match(/Detected Deck Configuration\n([^\n]*)/);
       return m ? m[1] : '';
-    });
-    result.stages.upload = { auto_detected: detected };
+    }) };
 
     await page.locator('input[type=checkbox]').first().check();
     await sleep(600);
@@ -239,70 +298,95 @@ async function expandPileIfNeeded(page, slot) {
     const zones = await zoneMap(page);
     result.stages.zones = Object.fromEntries(
       Object.entries(zones).map(([k, v]) => [k, { x: v.x, y: v.y }]));
-    for (const need of ['Hand', 'Grave', 'Banish', 'Deck', 'Extra Deck']) {
-      if (!zones[need]) {
-        stop('zones', `판에서 ${need} 칸을 찾지 못했습니다`);
-        await context.close(); await browser.close(); finish(1);
-      }
+    const missingZone = Object.keys(plan.expect_final)
+      .filter(name => !zones[name]);
+    if (missingZone.length) {
+      stop('zones', `판에서 칸을 찾지 못했습니다: ${missingZone.join(', ')}`);
+      await context.close(); await browser.close(); finish(1);
     }
 
-    // 3) 시작 패 — 기록 전에 끝낸다
     for (const op of plan.setup) {
       const box = await cardBox(page, op.card);
       if (!box) { stop('setup', `${op.card} 를 판에서 찾지 못했습니다`); break; }
       await drag(page, box, zones['Hand']);
     }
-    if (result.stopped_at) {
-      await page.screenshot({ path: shot('setup-fail') });
-      await context.close(); await browser.close(); finish(1);
+    if (!result.stopped_at) {
+      counts = await zoneCounts(page);
+      result.stages.opening = counts;
+      const seen = await observeBoard(page, zones);
+      const hand = (seen.byZone['Hand'] || []).slice().sort();
+      const want = plan.setup.map(op => op.card).slice().sort();
+      if (JSON.stringify(hand) !== JSON.stringify(want)) {
+        stop('setup', `시작 패가 다릅니다 — 기대 ${JSON.stringify(want)} / `
+                      + `화면 ${JSON.stringify(hand)}`);
+      }
     }
-    counts = await zoneCounts(page);
-    result.stages.opening = counts;
-    if (counts['Hand'] !== plan.setup.length) {
-      stop('setup', `시작 패가 ${counts['Hand']}장입니다 (기대 ${plan.setup.length})`);
+    if (result.stopped_at) {
       await page.screenshot({ path: shot('setup-fail') });
       await context.close(); await browser.close(); finish(1);
     }
     await page.screenshot({ path: shot('02-opening') });
 
-    // 4) 기록 시작
     await page.getByRole('button', { name: /Start Recording/i }).click();
     await sleep(1500);
     result.stages.recording_started =
       await page.evaluate(() => /Recording/.test(document.body.innerText));
 
-    // 5) 조작
-    let before = await historyCount(page);
+    let rows = await historyRows(page);
     for (const op of plan.operations) {
       const entry = { n: op.n, op: op.op, card: op.card, expect: op.expect,
                       why: op.why, basis: op.basis };
-      let box = await expandPileIfNeeded(page, op.card);
-      if (!box) { entry.ok = false; entry.saw = '카드를 찾지 못했습니다'; }
-      else if (op.op === 'move') {
+      const box = await expandPileIfNeeded(page, op.card);
+      if (!box || !box.w) {
+        entry.ok = false; entry.saw = '카드를 찾지 못했거나 읽을 수 없습니다';
+      } else if (op.op === 'move') {
         const target = zones[op.to];
         if (!target) { entry.ok = false; entry.saw = `존 ${op.to} 을 찾지 못했습니다`; }
         else {
           await drag(page, box, target);
-          const line = await lastHistory(page);
-          const after = await historyCount(page);
-          entry.saw = line;
-          // 🔴 **도착지로만 확인한다** — 출발지 칸 번호는 기록에 없을 수 있다.
-          entry.ok = after > before && line.includes('→ ' + op.to);
-          before = after;
+          const after = await historyRows(page);
+          const seen = await observeBoard(page, zones);
+          const row = after[after.length - 1];
+          const grew = after.length === rows.length + 1;
+          const where = normalizeZone(seen.bySlot[op.card]);
+          const ident = identityOf(row, box.src, seen.srcOf);
+          //: 🔴 **셋을 모두 본다**: 이력이 한 줄 늘었는가 · 그 줄이 이
+          //: 카드의 줄인가 · 카드가 **정말 그 칸에** 있는가.
+          entry.saw = row ? row.text : '(이력 없음)';
+          entry.where = where;
+          entry.identity = ident.how;
+          entry.ok = grew && ident.ok && where === normalizeZone(op.to)
+                     && !seen.problems.length;
+          if (seen.problems.length) { entry.problems = seen.problems.slice(0, 4); }
+          rows = after;
         }
       } else if (op.op === 'activate' || op.op === 'target') {
         const item = op.op === 'activate' ? 'Activate Effect' : 'Target';
         const picked = await cardMenu(page, box, item);
-        const line = await lastHistory(page);
-        const after = await historyCount(page);
-        entry.saw = picked ? line : `메뉴에 ${item} 이 없습니다`;
-        entry.ok = picked && after > before;
-        before = after;
+        const after = await historyRows(page);
+        const seen = await observeBoard(page, zones);
+        const row = after[after.length - 1];
+        const grew = after.length === rows.length + 1;
+        const where = normalizeZone(seen.bySlot[op.card]);
+        const ident = picked ? identityOf(row, box.src, seen.srcOf)
+                             : { ok: false, how: `메뉴에 ${item} 이 없습니다` };
+        //: 🔴 **이력이 늘었다는 사실만으로 성공 처리하지 않는다.** 줄의
+        //: 종류와 칸이 맞아야 하고, 썸네일이 이 카드의 것이어야 한다.
+        const said = row ? row.text : '';
+        const kindOk = new RegExp(`${item} · `).test(said);
+        const zoneOk = where && said.endsWith('· ' + where);
+        entry.saw = said || `(이력 없음)`;
+        entry.where = where;
+        entry.identity = ident.how;
+        entry.ok = picked && grew && ident.ok && kindOk && zoneOk;
+        if (!zoneOk) { entry.note = `이력의 칸과 카드의 칸이 다릅니다 (카드: ${where})`; }
+        rows = after;
       } else { entry.ok = false; entry.saw = `모르는 조작 ${op.op}`; }
       result.operations.push(entry);
       if (!entry.ok) {
         stop(`operation#${op.n}`,
-             `${op.op} ${op.card} — 기대 "${op.expect}", 화면 "${entry.saw}"`);
+             `${op.op} ${op.card} — 기대 "${op.expect}", 화면 "${entry.saw}"`
+             + (entry.identity ? ` (개체 확인: ${entry.identity})` : ''));
         await page.screenshot({ path: shot(`op-${op.n}-fail`) });
         break;
       }
@@ -316,56 +400,33 @@ async function expandPileIfNeeded(page, slot) {
     }
     await page.screenshot({ path: shot('04-final-board') });
 
-    // 6) 최종 상태 확인 — 계획의 기대와 맞춘다
+    // ------------------------------------------------- 최종 판 대조
     counts = await zoneCounts(page);
-    const whereIs = await page.evaluate((named) => {
-      const zs = [...document.querySelectorAll('[data-droppable]')].map(e => {
-        const r = e.getBoundingClientRect();
-        const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
-        // 🔴 이름표가 없는 칸은 앞서 만든 이름 지도에서 **좌표로** 찾는다.
-        const hit = Object.entries(named).find(([, p]) =>
-          Math.abs(p.x - cx) < 4 && Math.abs(p.y - cy) < 4);
-        return { label: hit ? hit[0] : (e.innerText || '').trim(),
-                 x: r.x, y: r.y, w: r.width, h: r.height };
-      });
-      const out = {};
-      document.querySelectorAll('[data-card-id]').forEach(e => {
-        const r = e.getBoundingClientRect();
-        const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
-        const hit = zs.filter(z => cx >= z.x && cx <= z.x + z.w && cy >= z.y && cy <= z.y + z.h)
-                      .sort((a, b) => a.w * a.h - b.w * b.h)[0];
-        const slot = e.getAttribute('data-card-id').split('-').slice(0, 2).join('-');
-        out[slot] = hit ? (hit.label.split(' (')[0] || 'zone@' + Math.round(hit.x) + ',' + Math.round(hit.y))
-                        : 'off-board';
-      });
-      return out;
-    }, result.stages.zones);
-    const checks = [];
-    for (const [zone, want] of Object.entries(plan.expect_final)) {
-      if (counts[zone] !== undefined) {
-        checks.push({ zone, want: want.count, saw: counts[zone],
-                      ok: counts[zone] === want.count });
-      } else {
-        const saw = want.slots.map(s => whereIs[s]);
-        checks.push({ zone, want: want.slots, saw,
-                      ok: want.slots.length > 0 && saw.every(v => v !== undefined) });
-      }
-    }
-    result.stages.final = { counts, checks, card_zones: whereIs };
-    result.stages.final.all_ok = checks.every(c => c.ok);
+    const seen = await observeBoard(page, zones);
+    const verdict = compareFinal(plan.expect_final, seen, counts);
+    result.stages.final = {
+      counts,
+      checks: verdict.checks,
+      cross_check: verdict.crossCheck,
+      problems: verdict.problems,
+      card_zones: seen.bySlot,
+      all_ok: verdict.allOk,
+    };
 
-    // 7) 기록 종료
     await page.getByRole('button', { name: /Stop Recording/i }).click();
     await sleep(2500);
     result.stages.recording_stopped = true;
     await page.screenshot({ path: shot('05-recorded') });
 
-    // 8) 공유 — 🔴 **되돌릴 수 없는 공개**. 요청했을 때만 한다.
+    // ------------------------------------------------------- 공유
     if (!WANT_SHARE) {
       result.notes.push('공유하지 않았습니다 (--share 를 주지 않았습니다). '
                         + '기록은 이 브라우저 세션에만 있습니다.');
     } else if (!result.stages.final.all_ok) {
-      result.notes.push('🔴 최종 상태가 기대와 달라서 공유하지 않았습니다.');
+      //: 🔴 **검증에 실패하면 공유하지 않는다.**
+      const bad = result.stages.final.checks.filter(c => !c.ok);
+      stop('verify', '최종 판이 기록과 다릅니다: ' + JSON.stringify(bad).slice(0, 400));
+      result.notes.push('🔴 최종 검증에 실패해서 공유하지 않았습니다.');
     } else {
       await page.getByRole('button', { name: /^Share$/i }).first().click();
       await sleep(1800);
@@ -387,7 +448,13 @@ async function expandPileIfNeeded(page, slot) {
       });
       result.share_url = url;
       await page.screenshot({ path: shot('06-share') });
-      if (!url) { result.notes.push('🔴 공유 URL 을 화면에서 읽지 못했습니다.'); }
+      if (!url) {
+        //: 🔴 **다시 누르지 않는다** — 두 번 공개할 수 있다.
+        result.notes.push('🔴 공유 URL 을 화면에서 읽지 못했습니다. '
+                          + '자동으로 다시 시도하지 않았습니다 (중복 공개를 '
+                          + '막기 위해서입니다). 사이트에 리플레이가 '
+                          + '만들어졌을 수 있습니다.');
+      }
     }
   } catch (error) {
     stop(result.stopped_at || 'exception', String(error.message).slice(0, 300));

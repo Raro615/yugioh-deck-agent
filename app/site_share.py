@@ -12,8 +12,14 @@
 기다리지 않고 **바쁘다고 답한다** — 두 세션이 같은 사이트에서 동시에
 조작하면 어느 쪽 기록인지 알 수 없게 된다.
 
-🔴 **URL 이 실제로 만들어졌을 때만 성공 링크를 적는다.** 실패하면 짧은
-이유와 함께, 기존 HTML 리플레이로 계속 볼 수 있다고 적는다.
+🔴 **URL 하나로 성공을 판정하지 않는다** (6-AY). 이번 실행이 끝까지 갔고,
+조작이 모두 확인됐고, 최종 판 검증을 통과했고, 그러고도 URL 이 있을 때만
+성공이다 (``SiteRunResult.shared``). 실패하면 짧은 이유와 함께, 기존 HTML
+리플레이로 계속 볼 수 있다고 적는다.
+
+🔴 **요청마다 다른 폴더에서 돈다** (6-AY). 전에는 고정 폴더를 써서, 새
+실행이 결과를 쓰기 전에 죽으면 지난번 성공 URL 이 이번 요청의 성공으로
+돌아올 수 있었다. 이제 실행 ID 로 폴더를 가르고 결과의 ID 를 맞춘다.
 
 🔴 **외부 공유가 일어나는 조작임을 입구에서 알린다.** 공유 URL 은 접근
 제어가 없고, 올린 것을 이용자가 스스로 지울 수 없다 (사이트 가이드라인
@@ -78,6 +84,7 @@ class SiteShareOutcome:
     state: ShareState
     url: "str | None" = None
     reason: "str | None" = None
+    run_id: str = ""
     operations_ok: int = 0
     operations_total: int = 0
 
@@ -89,9 +96,10 @@ class SiteShareRunner:
     ``session`` 을 주면 그것을 대신 부른다 (시험용 — 브라우저를 열지 않는다).
     """
 
-    def __init__(self, workdir="docs/viewer/local/duel-simulator-discord",
+    def __init__(self, base_dir="docs/viewer/local/duel-simulator-discord",
                  *, session=None):
-        self._workdir = Path(workdir)
+        #: 🔴 **기준 폴더**다. 실제 실행은 그 아래의 새 폴더에서 돈다.
+        self._base = Path(base_dir)
         self._lock = threading.Lock()
         self._session = session
 
@@ -107,6 +115,16 @@ class SiteShareRunner:
         if not self._lock.acquire(blocking=False):
             return SiteShareOutcome(ShareState.BUSY)
         try:
+            #: 🔴 **브라우저가 없으면 바로 말한다** — 1~2분 기다리게 하지
+            #: 않는다 (사용자 PC 에 node·playwright 가 없을 수 있다).
+            if self._session is None:
+                from deck.site_session import preflight
+
+                ready = preflight()
+                if not ready.ready:
+                    return SiteShareOutcome(
+                        ShareState.FAILED,
+                        reason="이 서버에 브라우저가 준비되지 않았습니다")
             run = self._run(record, title=title)
         except Exception as error:  # pragma: no cover - 방어용
             logger.warning("외부 공유 중 예외: %s: %s",
@@ -119,23 +137,24 @@ class SiteShareRunner:
         if run.shared:
             return SiteShareOutcome(
                 ShareState.SHARED, url=run.share_url,
+                run_id=run.run_id,
                 operations_ok=run.operations_ok,
                 operations_total=run.operations_total)
-        reason = run.stopped_reason or (
-            "최종 상태가 기록과 달라 공유하지 않았습니다"
-            if not run.final_ok else "공유 URL 을 받지 못했습니다")
+        #: 🔴 **URL 이 있어도** 검증을 통과하지 못했으면 성공이 아니다.
         return SiteShareOutcome(
-            ShareState.FAILED, reason=reason,
+            ShareState.FAILED, reason=run.reason or "확인하지 못했습니다",
+            run_id=run.run_id,
             operations_ok=run.operations_ok,
             operations_total=run.operations_total)
 
     def _run(self, record, *, title: str):
         if self._session is not None:
-            return self._session(record, workdir=self._workdir, title=title,
+            return self._session(record, base_dir=self._base, title=title,
                                  share=True)
         from deck.site_session import run_site_session
 
-        return run_site_session(record, workdir=self._workdir, title=title,
+        #: 🔴 ``base_dir`` 이라서 **이번 실행만의 새 폴더**가 만들어진다.
+        return run_site_session(record, base_dir=self._base, title=title,
                                 share=True)
 
 

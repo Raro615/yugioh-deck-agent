@@ -197,11 +197,19 @@ def test_b03_a_card_name_cannot_inject_markup():
 # C. 세션 — 공유는 URL 이 생겼을 때만이다
 # ======================================================================
 def _fake_runner(result: dict):
+    """
+    🔴 **실행 ID 를 결과에 넣어 준다** (6-AY). 조작기는 받은 ``--run-id``
+    를 그대로 결과에 옮기고, 부르는 쪽이 그것으로 "이번 요청의 결과인가"
+    를 가른다 — 넣지 않으면 옛 결과로 취급돼 버려진다.
+    """
     def run(command, path):
-        (path / "result.json").write_text(json.dumps(result), encoding="utf-8")
+        payload = dict(result)
+        payload.setdefault("run_id", command[command.index("--run-id") + 1])
+        (path / "result.json").write_text(json.dumps(payload), encoding="utf-8")
         class _Done:
             returncode = 0
             stderr = ""
+            timed_out = False
         return _Done()
     return run
 
@@ -282,7 +290,7 @@ def test_d03_two_requests_do_not_share_one_browser(tmp_path):
     started = threading.Event()
     release = threading.Event()
 
-    def _slow(record, *, workdir, title, share):
+    def _slow(record, *, base_dir, title, share):
         started.set()
         release.wait(5)
         class _Run:
@@ -291,6 +299,8 @@ def test_d03_two_requests_do_not_share_one_browser(tmp_path):
             operations_ok = operations_total = 1
             stopped_reason = None
             final_ok = True
+            reason = ""
+            run_id = "one"
         return _Run()
 
     runner = SiteShareRunner(tmp_path, session=_slow)

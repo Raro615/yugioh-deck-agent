@@ -1,0 +1,16 @@
+{
+  "name": "galatea-site-automation",
+  "private": true,
+  "version": "0.0.0",
+  "description": "외부 Duel Simulator 자동 조작기(scripts/duel_simulator_driver.js)가 쓰는 Node 의존성. 🔴 이 저장소의 본체는 Python 이고, 이 파일은 브라우저 조작 한 가지만 위한 것이다.",
+  "scripts": {
+    "preflight": "node scripts/check_browser.js",
+    "postinstall-hint": "echo 'playwright install chromium 으로 브라우저를 받으십시오'"
+  },
+  "dependencies": {
+    "playwright": "1.56.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

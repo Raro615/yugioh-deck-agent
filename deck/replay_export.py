@@ -93,11 +93,19 @@ import json
 #: (링크면 ``link``) · ``attribute_ko`` · ``race_ko`` · ``link_markers``.
 #: 저장소가 읽은 것만 싣고, 없으면 **싣지 않는다** (읽는 쪽이 "미기록" 으로
 #: 그린다). 🔴 **더한 것이 전부이고**, 옛 형식도 그대로 읽는다.
-REPLAY_FORMAT = "engine-replay/4"
+#:
+#: 🔴 ``/4`` → ``/5`` (Phase 6-AY): ``final`` 에 **마지막 판의 칸 번호**
+#: (``slots``) 를 더했다. 최종 존 구성(``zones``) 에는 칸 번호가 없어서,
+#: 바깥에서 "롱기르수가 **몇 번** 엑스트라 몬스터 존에 있는가" 를 맞춰
+#: 보려면 번호를 지어내는 수밖에 없었다. 칸이 있는 존만 싣는다 — 묘지처럼
+#: 칸이 없는 자리는 나오지 않는다. 🔴 **더한 것이 전부이고**, 옛 형식도
+#: 그대로 읽는다.
+REPLAY_FORMAT = "engine-replay/5"
 
 #: 이 저장소가 읽을 수 있는 형식들. 뷰어가 쓴다.
 REPLAY_FORMATS_READ = ("engine-replay/1", "engine-replay/2",
-                       "engine-replay/3", "engine-replay/4")
+                       "engine-replay/3", "engine-replay/4",
+                       "engine-replay/5")
 
 #: 사건 종류 — ``EventJournal`` 의 세 가지를 그대로 옮긴 이름이다.
 EVENT_ACTION = "action"
@@ -326,7 +334,8 @@ def export_opening_replay(setup, run, repository=None, *,
         },
         "steps": [_step_block(step) for step in run.steps],
         "events": [_event_block(event) for event in events],
-        "final": _final_block(state, final_rows),
+        "final": _final_block(state, final_rows,
+                              getattr(run, "final_slots", ())),
         "unsupported": list(run.unsupported),
     }
     return record
@@ -441,9 +450,16 @@ def _event_block(event) -> dict:
     return block
 
 
-def _final_block(state, rows) -> dict:
-    """최종 판 — 존 구성 · 특수 소환 제한 · 상태 해시."""
+def _final_block(state, rows, slots=()) -> dict:
+    """최종 판 — 존 구성 · **칸 번호** · 특수 소환 제한 · 상태 해시."""
     block: dict = {"zones": _grouped(rows)}
+    #: 🔴 **칸이 있는 존만** 번호가 있다 (Phase 6-AY). 이 칸이 비어 있는
+    #: 것과 **없는 것**은 다르다 — 옛 형식의 기록에는 칸 자체가 없고,
+    #: 읽는 쪽이 그것을 "칸 번호 미기록" 으로 적는다.
+    block["slots"] = [
+        {"seat": seat, "zone": zone, "index": index, "instance": instance}
+        for seat, zone, index, instance in slots
+    ]
     if state is None:
         return block
     limits = getattr(state, "summon_limits", None)

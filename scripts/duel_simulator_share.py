@@ -108,10 +108,24 @@ def main(argv: "list[str] | None" = None) -> int:
     record = (json.loads(Path(args.json).read_text(encoding="utf-8"))
               if args.json else _run_line(args.line))
 
-    from deck.site_session import prepare_run_dir, run_site_session
+    from deck.site_session import (
+        new_run_id,
+        preflight,
+        prepare_run_dir,
+        run_site_session,
+    )
 
-    out = Path(args.out)
-    plan = prepare_run_dir(record, out, title=args.title)
+    #: 🔴 **요청마다 다른 실행 ID 와 폴더.** 남아 있던 옛 결과를 이번
+    #: 요청의 성공으로 읽을 길을 없앤다 (6-AY).
+    run_id = new_run_id()
+    base = Path(args.out)
+    out = base if args.plan_only else None
+    if out is None:
+        from datetime import datetime, timezone
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        out = base / f"{stamp}-{run_id}"
+    plan = prepare_run_dir(record, out, title=args.title, run_id=run_id)
 
     counts = plan["counts"]
     print(f"계획: 엔진 걸음 {counts['engine_steps']} · 엔진 사건 "
@@ -128,15 +142,24 @@ def main(argv: "list[str] | None" = None) -> int:
     if args.plan_only:
         return 0
 
+    #: 🔴 **브라우저가 있는지 먼저 본다.** 없는 채로 띄우면 사용자는
+    #: 알 수 없는 오류만 본다.
+    ready = preflight()
+    print(ready.message())
+    if not ready.ready:
+        return 2
+
     if args.share:
         print(SHARE_WARNING)
-    print("조작기 실행 중… (실측 1~2분)")
+    print(f"조작기 실행 중… (실행 ID {run_id} · 실측 1~2분)")
     run = run_site_session(record, workdir=out, title=args.title,
-                           share=args.share)
+                           share=args.share, run_id=run_id)
     if not run.raw:
-        print(f"🔴 {run.stopped_reason}", file=sys.stderr)
+        print(f"🔴 {run.status.value}: {run.reason}", file=sys.stderr)
         return 1
     _report(run.raw)
+    print(f"\n  실행 상태: {run.status.value}"
+          f" · 공유 성공 판정: {'예' if run.shared else '아니오'}")
     return 0 if run.ok else 1
 
 
@@ -152,15 +175,33 @@ def _report(result: dict) -> None:
     for op in result.get("operations") or ():
         mark = "✅" if op.get("ok") else "❌"
         print(f"   {mark} {op['n']:2d} {op['op']:8s} {op['card']:9s} "
-              f"기대 {op.get('expect','')!r} ← 화면 {op.get('saw','')!r}")
+              f"기대 {op.get('expect','')!r} ← 화면 {op.get('saw','')!r}"
+              f" · 카드가 있는 칸 {op.get('where','?')!r}"
+              f" · 개체 {op.get('identity','?')}")
+        if op.get("note"):
+            print(f"      ↳ {op['note']}")
+        for line in op.get("problems") or ():
+            print(f"      ↳ 판 읽기 문제: {line}")
     final = stages.get("final") or {}
     if final:
         print("  최종 상태 확인:", "✅ 기대와 같음" if final.get("all_ok")
               else "❌ 기대와 다름")
         for check in final.get("checks") or ():
             mark = "✅" if check.get("ok") else "❌"
-            print(f"   {mark} {check['zone']}: 기대 {check['want']} / "
-                  f"화면 {check['saw']}")
+            extra = ""
+            if check.get("missing"):
+                extra += f" · 빠진 카드 {check['missing']}"
+            if check.get("unexpected"):
+                extra += f" · 예상 밖 카드 {check['unexpected']}"
+            print(f"   {mark} {check['zone']}: 기대 {check['want']}장 / "
+                  f"화면 {check['saw']}장{extra}")
+        #: 🔴 좌표로 읽은 것과 **화면의 장수 표시**를 맞춰 본다.
+        for cross in final.get("cross_check") or ():
+            if not cross.get("ok"):
+                print(f"   ❌ {cross['zone']}: 화면 표시 {cross['label']} / "
+                      f"좌표로 읽은 수 {cross['geometry']}")
+        for line in final.get("problems") or ():
+            print(f"   ❌ 판 읽기 문제: {line}")
     if result.get("share_url"):
         print("\n  공유 URL:", result["share_url"])
     elif result.get("share_requested"):

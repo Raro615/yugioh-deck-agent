@@ -23,6 +23,11 @@ docs/viewer/local/
 # 수집 과정의 페이지 캐시만 제외한다.
 data/ko/.cache/
 
+# 외부 사이트 조작기(scripts/duel_simulator_driver.js)가 쓰는 Node 의존성.
+# 받는 방법: npm install && npx playwright install chromium
+node_modules/
+package-lock.json
+
 __pycache__/
 *.py[cod]
 .pytest_cache/

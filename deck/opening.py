@@ -599,6 +599,17 @@ class OpeningRun:
     토큰처럼 사라지는 카드는 그것으로도 모자란다). 시각 재현은 시작 판에서
     출발해야 하므로, 실행 직전에 **값으로만** 한 장 찍어 둔다.
     """
+    final_slots: tuple[tuple[int, str, int, int], ...] = ()
+    """
+    🔴 **마지막 걸음 뒤의 칸 번호** — ``(좌석, 존 이름, 칸 번호,
+    instance_id)`` 의 줄들이다 (Phase 6-AY).
+
+    왜 따로 적는가: 최종 판의 존 구성(``_grouped``)에는 **칸 번호가 없다**.
+    그래서 "롱기르수가 엑스트라 몬스터 존에 있다" 까지는 알아도 "몇 번
+    칸인가" 는 알 수 없었고, 바깥에서 그것을 맞춰 보려면 번호를 지어내는
+    수밖에 없었다. 칸이 있는 존만 찍는다 — 묘지처럼 칸이 없는 자리는
+    여기 나오지 않는다.
+    """
     initial_limits: tuple[tuple[int, str, int], ...] = ()
     """
     🔴 **첫 걸음 전에 걸려 있던 특수 소환 제한** —
@@ -998,6 +1009,34 @@ def _board_snapshot(state) -> "tuple[tuple[int, str, int, int], ...]":
     return tuple(rows)
 
 
+def _slot_snapshot(state) -> "tuple[tuple[int, str, int, int], ...]":
+    """
+    칸이 있는 존만 **칸 번호까지** 한 장 찍는다 —
+    ``(좌석, 존 이름, 칸 번호, instance_id)``.
+
+    🔴 **판정하지 않는다.** 비어 있는 칸은 줄이 없고, 칸이 없는 존
+    (묘지 · 제외 · 덱 …) 은 아예 나오지 않는다. 없는 번호를 지어내지
+    않으려고 ``ZONE_KIND`` 가 ``SLOTTED`` 라고 말하는 존만 읽는다.
+    """
+    from engine.vocabulary import ZONE_KIND, Zone, ZoneKind
+
+    rows: list[tuple[int, str, int, int]] = []
+    for seat, player in enumerate(state.players):
+        for zone in Zone:
+            if ZONE_KIND.get(zone) is not ZoneKind.SLOTTED:
+                continue
+            try:
+                cards = list(player.zone(zone))
+            except (KeyError, ValueError, AttributeError):
+                continue
+            for index, card in enumerate(cards):
+                if card:
+                    rows.append(
+                        (seat, zone.value, index, card.instance_id.value)
+                    )
+    return tuple(rows)
+
+
 def _limit_snapshot(state) -> "tuple[tuple[int, str, int], ...]":
     """
     지금 걸려 있는 특수 소환 제한을 값으로 — ``(좌석, 속성, 출처)``.
@@ -1281,6 +1320,10 @@ def execute_opening(
             f"이 단계가 선언한 상한 {max_actions}걸음에 닿았습니다"
             " (전개가 끝났다는 뜻이 아닙니다 — Phase 6-U 가 넓힙니다)"
         )
+    #: 🔴 **마지막 판의 칸 번호를 값으로 찍어 둔다** (Phase 6-AY). 존
+    #: 구성만으로는 "몇 번 칸인가" 를 알 수 없고, 바깥에서 맞춰 보려면
+    #: 번호를 지어내는 수밖에 없었다.
+    run.final_slots = _slot_snapshot(duel.state)
     return run
 
 

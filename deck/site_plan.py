@@ -251,15 +251,9 @@ def build_site_plan(record) -> dict:
         "site_operations": len(operations),
     }
 
-    final_zones = ((record.get("final") or {}).get("zones") or {}).get("0") or {}
-    expect_final = {}
-    for zone, instances in final_zones.items():
-        slots = [slot_of.get(int(i)) for i in instances]
-        expect_final[_zone_name(zone)] = {
-            "count": len(instances),
-            "slots": [s for s in slots if s],
-            "names": [_label(i) for i in instances],
-        }
+    expect_final, slots_known, unplaced = _expect_final(
+        record, slot_of, _label)
+    unsupported.extend(unplaced)
 
     return {
         "format": PLAN_FORMAT,
@@ -270,8 +264,64 @@ def build_site_plan(record) -> dict:
         "operations": operations,
         "counts": counts,
         "expect_final": expect_final,
+        "final_slots_known": slots_known,
         "unsupported": unsupported,
     }
+
+
+#: 🔴 **사이트에서 관측할 수 있는 칸 전부.** 기대 집합을 이 목록 위에
+#: 펼쳐 두어야 "여기 있어야 한다" 뿐 아니라 **"여기 있으면 안 된다"** 까지
+#: 비교할 수 있다. 빈 칸은 빈 집합으로 남고, 실제로 비어 있으면 통과한다.
+SITE_ZONES_ALL: tuple[str, ...] = (
+    "Free", "Grave", "Banish", "Hand", "Extra Deck", "Deck", "Field Zone",
+    "Monster Zone1", "Monster Zone2", "Monster Zone3", "Monster Zone4",
+    "Monster Zone5", "Extra Monster Zone1", "Extra Monster Zone2",
+    "Spell & Trap Zone1", "Spell & Trap Zone2", "Spell & Trap Zone3",
+    "Spell & Trap Zone4", "Spell & Trap Zone5",
+)
+
+
+def _expect_final(record, slot_of, label):
+    """
+    최종 판의 **존별 카드 집합**. 🔴 장수만 세지 않는다.
+
+    칸이 있는 존(몬스터 존 · 엑스트라 몬스터 존 · 마법함정 존 · 필드 존)은
+    기록의 ``final.slots`` 가 주는 **칸 번호**로 나눈다. 그 칸이 없는 옛
+    기록에서는 번호를 **지어내지 않고**, 그 개체를 ``unplaced`` 로 돌려
+    보내 계획이 "칸까지는 맞출 수 없다" 고 적게 한다.
+    """
+    final = record.get("final") or {}
+    zones = (final.get("zones") or {}).get("0") or {}
+    raw_slots = final.get("slots")
+    slots_known = raw_slots is not None
+    placed: dict[int, str] = {}
+    for row in raw_slots or ():
+        if int(row.get("seat", 0)) != 0:
+            continue
+        placed[int(row["instance"])] = _zone_name(
+            row.get("zone"), row.get("index"), seat=0)
+
+    expect = {name: {"slots": [], "names": []} for name in SITE_ZONES_ALL}
+    unplaced: list[str] = []
+    for zone, instances in zones.items():
+        for instance in instances:
+            slot = slot_of.get(int(instance))
+            if not slot:
+                continue
+            where = placed.get(int(instance)) or _zone_name(zone)
+            if where not in expect:
+                #: 🔴 칸이 있는 존인데 번호를 모른다 — 지어내지 않는다.
+                unplaced.append(
+                    f"최종 판의 {zone} 에 있는 #{instance} "
+                    f"({label(instance)}) 의 칸 번호가 기록에 없어 "
+                    f"칸까지는 맞춰 보지 않습니다."
+                )
+                continue
+            expect[where]["slots"].append(slot)
+            expect[where]["names"].append(label(instance))
+    for value in expect.values():
+        value["count"] = len(value["slots"])
+    return expect, slots_known, unplaced
 
 
 def plan_json(plan) -> str:
