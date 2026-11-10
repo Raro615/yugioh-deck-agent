@@ -317,7 +317,11 @@ def test_18_future_commands_are_marked_unimplemented_not_claimed():
     #: 🔴 Phase 5-B 가 ``search``, 5-C 가 ``deck``, 5-D 가 ``combo`` 를
     #: 더했다. 집합을 **정확히** 고정하므로 구현 없는 명령이 등록되면
     #: 이 테스트가 실패한다. 네 개가 지금 구현된 전부다.
-    assert registered == {"ping", "search", "deck", "combo"}, registered
+    #: 🔴 Phase 6-AX 가 ``share-replay`` 를 더했다 (실행 기록 하나를
+    #: 외부 Duel Simulator 에 공개 리플레이로 올린다). 집합은 여전히
+    #: **정확히** 고정한다.
+    assert registered == {"ping", "search", "deck", "combo",
+                          "share-replay"}, registered
 
 def test_19_the_real_command_tree_registers_ping_and_sends_the_text():
     r"""🟢 §5-4 — **실제 ``app_commands`` 핸들러**를 거쳐 문구를 확인한다.
@@ -336,7 +340,11 @@ def test_19_the_real_command_tree_registers_ping_and_sends_the_text():
     #: 5-C 가 ``/deck``, 5-D 가 ``/combo`` 를 실제로 등록했으므로 사실이
     #: 세 번 바뀌었다 — 목록을 이름 집합으로 고정하고 ``/ping`` 을 이름으로
     #: 꺼낸다. 느슨해진 게 아니라 등록 집합을 여전히 정확히 고정한다.
-    assert set(commands) == {"ping", "search", "deck", "combo"}
+    #: 🔴 Phase 6-AX 가 ``share-replay`` 를 더했다 (실행 기록 하나를
+    #: 외부 Duel Simulator 에 공개 리플레이로 올린다). 집합은 여전히
+    #: **정확히** 고정한다.
+    assert set(commands) == {"ping", "search", "deck", "combo",
+                             "share-replay"}
     ping = commands["ping"]
     assert ping.description == bot.PING_DESCRIPTION
 
@@ -832,7 +840,11 @@ def test_32_the_deck_command_is_registered_with_one_request_argument():
 
     _client, tree = bot.build_client(dev_guild_id=None, service=object())
     commands = {command.name: command for command in tree.get_commands()}
-    assert set(commands) == {"ping", "search", "deck", "combo"}
+    #: 🔴 Phase 6-AX 가 ``share-replay`` 를 더했다 (실행 기록 하나를
+    #: 외부 Duel Simulator 에 공개 리플레이로 올린다). 집합은 여전히
+    #: **정확히** 고정한다.
+    assert set(commands) == {"ping", "search", "deck", "combo",
+                             "share-replay"}
 
     deck = commands["deck"]
     assert deck.description == bot.DECK_DESCRIPTION
@@ -1350,7 +1362,11 @@ def test_44_the_combo_command_is_registered_with_its_four_arguments():
 
     _client, tree = bot.build_client(dev_guild_id=None, service=object())
     commands = {command.name: command for command in tree.get_commands()}
-    assert set(commands) == {"ping", "search", "deck", "combo"}
+    #: 🔴 Phase 6-AX 가 ``share-replay`` 를 더했다 (실행 기록 하나를
+    #: 외부 Duel Simulator 에 공개 리플레이로 올린다). 집합은 여전히
+    #: **정확히** 고정한다.
+    assert set(commands) == {"ping", "search", "deck", "combo",
+                             "share-replay"}
 
     combo = commands["combo"]
     assert combo.description == bot.COMBO_DESCRIPTION

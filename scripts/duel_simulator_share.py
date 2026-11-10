@@ -1,0 +1,175 @@
+"""
+외부 Duel Simulator 에서 전개 하나를 **직접 조작하고 기록**한다 (Phase 6-AX).
+
+하는 일
+-------
+1. 이 저장소의 엔진으로 전개를 실행한다 (고정 경로, 또는 이미 있는 기록).
+2. 실행 기록을 **사이트 조작 계획**으로 바꾼다 (``deck.site_plan``).
+3. 계획의 덱 자리를 그대로 그린 **자체 제작 자리표시 덱 시트**를 만든다.
+4. 브라우저 자동 조작기(``scripts/duel_simulator_driver.js``) 를 불러
+   사이트에서 덱을 올리고 조작하고 기록한다.
+5. ``--share`` 를 줬을 때만 **공유 URL** 까지 만든다.
+
+사용
+----
+::
+
+    # 조작만 하고 공유하지 않는다 (기본)
+    python3 -m scripts.duel_simulator_share --line orcust-skeleton-longirsu
+
+    # 🔴 공유까지 — 되돌릴 수 없는 공개다
+    python3 -m scripts.duel_simulator_share --line orcust-skeleton-longirsu \
+        --share --title "オルフェゴール ロンギルス 展開"
+
+    # 계획만 보고 브라우저는 열지 않는다
+    python3 -m scripts.duel_simulator_share --line <경로> --plan-only
+
+필요한 것
+---------
+* 이 컨테이너에 설치된 Chromium 과 Playwright (Node). 추가 설치는 없다.
+* 바깥 통신: ``duel-simulator.miyauchidp.dev`` 하나.
+
+🔴 **공유는 되돌릴 수 없다.** 사이트의 공유 URL 은 접근 제어가 없는
+미수록 형식이고, 이용자가 스스로 지우는 기능이 없다 (사이트 가이드라인
+7절). 그래서 ``--share`` 는 기본으로 꺼져 있고, 켜면 아래 경고를 찍는다.
+
+🔴 **덱 시트에 카드 그림을 넣지 않는다.** 카드 그림은 권리자의 저작물이고,
+이용할 권한이 없는 이미지를 올려 공유로 공개하는 것은 그 사이트의
+가이드라인 5절이 금지한다. 그래서 시트는 카드 이름과 패스코드만 담은
+자리표시 카드이고, **공식 앱의 내보내기 이미지가 아니다.**
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:  # pragma: no cover - 실행 편의
+    sys.path.insert(0, str(ROOT))
+
+DRIVER = ROOT / "scripts" / "duel_simulator_driver.js"
+
+SHARE_WARNING = """\
+🔴 공유(--share)를 켰습니다. 이 조작은 **외부 사이트에 리플레이를 공개**합니다.
+   · 공유 URL 은 접근 제어가 없고, 링크를 아는 사람은 누구나 열 수 있습니다.
+   · 올린 덱 시트 · 리플레이 · 미리보기 이미지가 운영 서버에 저장됩니다.
+   · 이용자가 스스로 지우는 기능은 없습니다 (사이트 가이드라인 7절).
+"""
+
+
+def _run_line(name: str) -> dict:
+    """고정 경로를 돌려 기록을 만든다 — 디스코드 ``/combo`` 와 같은 생산 경로."""
+    from app.main import opening_wiring
+    from core.card_repository import CardRepository
+    from deck.combo_policy import (
+        COMBO_LINES,
+        ORCUST_VERIFICATION_RECIPE,
+        line_progress,
+    )
+    from deck.opening import build_opening, execute_opening
+    from deck.recipe import parse_recipe
+    from deck.replay_export import export_opening_replay
+
+    repository = CardRepository.build(
+        db_path=ROOT / "data" / "cards.cdb", script_dir=ROOT
+    )
+    line = COMBO_LINES[name]
+    draft = parse_recipe(ORCUST_VERIFICATION_RECIPE, repository).draft
+    chooser, triggers = opening_wiring(repository, line)
+    setup = build_opening(repository, draft, list(line.hand),
+                          chooser=chooser, triggers=triggers)
+    run = execute_opening(setup, repository, choose=line.policy())
+    progress = line_progress(run, line)
+    return export_opening_replay(setup, run, repository,
+                                 line=line, progress=progress)
+
+
+def main(argv: "list[str] | None" = None) -> int:
+    from deck.site_plan import build_site_plan, plan_json, render_deck_sheet_html
+
+    parser = argparse.ArgumentParser(
+        description="외부 Duel Simulator 에서 전개를 조작하고 기록한다")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--line", help="고정 경로 이름")
+    group.add_argument("--json", help="이미 있는 전개 기록 JSON")
+    parser.add_argument("--out", default="docs/viewer/local/duel-simulator",
+                        help="작업 디렉터리 (기본: docs/viewer/local/duel-simulator)")
+    parser.add_argument("--plan-only", action="store_true",
+                        help="계획과 덱 시트만 만들고 브라우저를 열지 않는다")
+    parser.add_argument("--share", action="store_true",
+                        help="🔴 공유 URL 까지 만든다 — 되돌릴 수 없는 공개다")
+    parser.add_argument("--title", default="galatea opening line",
+                        help="공유 리플레이의 제목")
+    args = parser.parse_args(argv)
+
+    record = (json.loads(Path(args.json).read_text(encoding="utf-8"))
+              if args.json else _run_line(args.line))
+
+    from deck.site_session import prepare_run_dir, run_site_session
+
+    out = Path(args.out)
+    plan = prepare_run_dir(record, out, title=args.title)
+
+    counts = plan["counts"]
+    print(f"계획: 엔진 걸음 {counts['engine_steps']} · 엔진 사건 "
+          f"{counts['engine_events']} → 사이트 조작 "
+          f"{counts['site_operations']} (+ 시작 패 "
+          f"{counts['site_setup_operations']})")
+    print(f"덱 시트: 메인 {len(plan['deck']['main'])} · 엑스트라 "
+          f"{len(plan['deck']['extra'])} — {out / 'deck-sheet.html'}")
+    if plan["unsupported"]:
+        #: 🔴 **조용히 빠뜨리지 않는다** — 실행 전에 적는다.
+        print("사이트에 대응 조작이 없는 사건:")
+        for line in plan["unsupported"]:
+            print("  -", line)
+    if args.plan_only:
+        return 0
+
+    if args.share:
+        print(SHARE_WARNING)
+    print("조작기 실행 중… (실측 1~2분)")
+    run = run_site_session(record, workdir=out, title=args.title,
+                           share=args.share)
+    if not run.raw:
+        print(f"🔴 {run.stopped_reason}", file=sys.stderr)
+        return 1
+    _report(run.raw)
+    return 0 if run.ok else 1
+
+
+def _report(result: dict) -> None:
+    stages = result.get("stages") or {}
+    print("\n--- 사이트에서 실제로 일어난 일 ---")
+    if stages.get("applied"):
+        print("  판에 적용:", stages["applied"])
+    if stages.get("opening"):
+        print("  시작 패 꺼낸 뒤:", stages["opening"])
+    ok = sum(1 for op in result.get("operations") or () if op.get("ok"))
+    print(f"  조작 {ok} / {len(result.get('operations') or ())} 건 확인됨")
+    for op in result.get("operations") or ():
+        mark = "✅" if op.get("ok") else "❌"
+        print(f"   {mark} {op['n']:2d} {op['op']:8s} {op['card']:9s} "
+              f"기대 {op.get('expect','')!r} ← 화면 {op.get('saw','')!r}")
+    final = stages.get("final") or {}
+    if final:
+        print("  최종 상태 확인:", "✅ 기대와 같음" if final.get("all_ok")
+              else "❌ 기대와 다름")
+        for check in final.get("checks") or ():
+            mark = "✅" if check.get("ok") else "❌"
+            print(f"   {mark} {check['zone']}: 기대 {check['want']} / "
+                  f"화면 {check['saw']}")
+    if result.get("share_url"):
+        print("\n  공유 URL:", result["share_url"])
+    elif result.get("share_requested"):
+        print("\n  🔴 공유 URL 을 만들지 못했습니다.")
+    if result.get("stopped_at"):
+        print(f"\n  🔴 멈춤 — {result['stopped_at']}: {result['stopped_reason']}")
+    for note in result.get("notes") or ():
+        print("  ·", note)
+
+
+if __name__ == "__main__":  # pragma: no cover - 실행 편의
+    raise SystemExit(main())

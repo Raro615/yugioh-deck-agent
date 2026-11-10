@@ -80,6 +80,13 @@ TOKEN_ENV = "DISCORD_BOT_TOKEN"
 GUILD_ENV = "DISCORD_DEV_GUILD_ID"
 
 LOGGER_NAME = "galatea"
+from app.site_share import (
+    SITE_SHARE_WARNING,
+    ShareState,
+    SiteShareRunner,
+    site_share_lines,
+)
+
 logger = logging.getLogger(LOGGER_NAME)
 
 #: Discord 한 메시지의 문자 상한. 넘기면 전송이 거부된다.
@@ -1470,6 +1477,54 @@ def viewer_attachment(record) -> "tuple[ComboAttachment | None, ReplayState]":
     return item, ReplayState.EXPORTED
 
 
+#: 🔴 **외부 공유는 한 번에 하나만** (Phase 6-AX). 두 요청이 같은 사이트를
+#: 동시에 조작하면 어느 쪽 기록인지 알 수 없게 된다. 모듈 하나짜리 러너를
+#: 두고, 돌고 있으면 기다리지 않고 "바쁘다" 로 답한다.
+SITE_SHARE_RUNNER = SiteShareRunner()
+
+SHARE_DESCRIPTION = (
+    "전개를 외부 Duel Simulator 에 공개 리플레이로 올립니다 (1~2분 걸립니다)"
+)
+
+
+def share_replay_response(agent, hand_text: str, recipe_text: str = "",
+                          line_text: str = "", title: str = "",
+                          *, runner=None) -> "list[str]":
+    """
+    ``/share-replay`` 의 순수 함수 (Phase 6-AX).
+
+    🔴 **같은 생산 경로로 엔진을 한 번 돌린다** (``_run_opening``) —
+    ``/combo`` 가 쓰는 그 절이다. 그 기록을 사이트 조작 계획으로 바꿔
+    브라우저가 조작하고, **공유 URL 이 실제로 생겼을 때만** 링크를 적는다.
+
+    🔴 **오래 걸린다** (실측 1~2분). 부르는 쪽이 ``asyncio.to_thread`` 로
+    보내 이벤트 루프를 막지 않는다.
+    """
+    use = runner if runner is not None else SITE_SHARE_RUNNER
+    #: 🔴 **입구에서 먼저 알린다** — 바깥으로 공개되는 조작이다.
+    lines = [SITE_SHARE_WARNING]
+    from app.main import _parse_card_ids
+
+    hand_ids, unresolved = _parse_card_ids(hand_text or "", agent)
+    if unresolved:
+        lines.append("🔴 **패를 읽지 못했습니다**: " + ", ".join(unresolved))
+        return lines
+    if not hand_ids:
+        lines.append("🔴 **패가 비어 있습니다.**")
+        return lines
+    if not recipe_text:
+        lines.append("🔴 **레시피(recipe)가 없어 엔진을 돌릴 수 없습니다** —"
+                     " 외부 공유는 실행 기록 하나를 그대로 옮기는 기능입니다.")
+        return lines
+    report = _run_opening(agent, recipe_text, list(hand_ids), line_text)
+    if not report.ran or not report.replay:
+        lines.append(ShareState.NO_RECORD.notice)
+        return lines
+    outcome = use.share(report.replay, title=title or "galatea opening line")
+    lines.extend(site_share_lines(outcome))
+    return lines
+
+
 def _overflow_notice(detail: ComboDetail) -> str:
     """
     :func:`paginate` 가 메시지를 끊을 때 **어디서 전체를 볼 수 있는가**.
@@ -1996,6 +2051,25 @@ class SearchService:
                              results_text, followups_text)
             return ComboResponse(messages=(COMBO_ERROR_MESSAGE,))
 
+    def share_replay_texts(self, hand_text: str, recipe_text: str = "",
+                           line_text: str = "", title: str = "") -> "list[str]":
+        """
+        전개 하나를 **외부 Duel Simulator 에 공개 리플레이로** 올린다
+        (Phase 6-AX).
+
+        🔴 ``/combo`` 와 **같은 카드 데이터 · 같은 실행 절**을 쓴다.
+        🔴 **예외를 밖으로 내보내지 않는다** — 봇을 죽이지 않는다.
+        """
+        if self._agent is None:
+            return [COMBO_UNAVAILABLE_MESSAGE]
+        try:
+            return share_replay_response(self._agent, hand_text, recipe_text,
+                                         line_text, title)
+        except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
+            logger.exception("외부 공유에 실패했습니다. 패=%r 레시피=%r 경로=%r",
+                             hand_text, recipe_text, line_text)
+            return [SITE_SHARE_WARNING, ShareState.FAILED.notice]
+
     def deck_texts(self, request_text: str) -> "list[str]":
         """
         덱 초안을 만들어 **메시지 목록**을 돌려준다.
@@ -2111,6 +2185,8 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
     #: 않는다. 이름을 따로 두는 것은 핸들러가 읽히게 하기 위한 것뿐이다.
     deck_service = search_service
     combo_service = search_service
+    #: ``/share-replay`` 도 **같은 서비스**다.
+    share_service = search_service
 
     intents = discord.Intents.default()
     client = discord.Client(intents=intents)
@@ -2185,6 +2261,27 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
             combo_service.combo_response, hand, board, deck, recipe, line,
             search, results, followups)
         await send_combo_response(interaction.followup, response)
+
+    @tree.command(name="share-replay", description=SHARE_DESCRIPTION)
+    @app_commands.describe(
+        hand="초기 패 — 카드 이름이나 ID 를 쉼표로",
+        recipe="실제 덱 레시피 (필수) — 이 레시피로 엔진을 돌린 기록을"
+               " 사이트에 옮깁니다",
+        line="(선택) 검증용 전개 경로 이름",
+        title="(선택) 공유 리플레이의 제목")
+    async def share_replay_command(interaction: "discord.Interaction",
+                                   hand: str, recipe: str,
+                                   line: str = "", title: str = "") -> None:
+        #: 🔴 **브라우저 조작은 1~2분이다.** ``/combo`` 와 같은 구조로
+        #: ``defer()`` 로 먼저 응답을 열고, 실제 조작은 스레드로 보내
+        #: 이벤트 루프를 막지 않는다.
+        #: 🔴 **외부 공개임을 먼저 알린다** — 기다리는 동안 보이게 한다.
+        await interaction.response.defer()
+        await interaction.followup.send(SITE_SHARE_WARNING + " 조작 중입니다…")
+        texts = await asyncio.to_thread(
+            share_service.share_replay_texts, hand, recipe, line, title)
+        for text in texts[1:] or texts:
+            await interaction.followup.send(text)
 
     @client.event
     async def on_ready() -> None:
