@@ -1078,7 +1078,10 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: 🔴 2 → **3** (Phase 6-AO). 디베르 ① 의 발동 조건에도
     #: ``SpecialSummonPermitted`` 가 들어 있다 — 같은 이유로 대상이 하나 더
     #: 늘었고, 아래 루프가 셋을 **각각** 확인한다.
-    assert len(noisy) == 3, noisy
+    #: 🔴 3 → **4** (Phase 6-AQ). 스켈레촌 ① 의 발동 조건에도
+    #: ``SpecialSummonPermitted`` 가 들어 있다 — 같은 이유로 대상이
+    #: 하나 더 늘었고, 아래 루프가 넷을 **각각** 확인한다.
+    assert len(noisy) == 4, noisy
     for condition in noisy:
         assert not isinstance(condition, UnimplementedRule), condition
 
