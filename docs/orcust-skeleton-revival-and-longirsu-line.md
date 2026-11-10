@@ -525,26 +525,51 @@ Phase 의 범위 밖으로 적혀 있었다 ("탐색 알고리즘 전면 개편"
 
 ## 7. 테스트 명령과 실측 결과
 
+🔴 **묶음마다 따로 돌렸다.** 한 번에 다 돌리는 것도 해 봤지만 배경 실행의
+시간 한도(30분)에 걸려 **중단되었고 한 줄도 내지 못했다** — 그래서 그 결과를
+적지 않고, 아래의 끝까지 돌아간 묶음들을 적는다.
+
 ```
-timeout 1800 python3 -m pytest tests/test_skeleton_revival_and_longirsu.py -q -rf -p no:randomly
-timeout 1800 python3 -m pytest tests/test_harp_horror_graveyard_effect.py \
+# ① 공통 계층 + 이번 Phase 의 세 파일
+timeout 1800 python3 -m pytest tests/engine \
+    tests/test_skeleton_revival_and_longirsu.py \
+    tests/test_harp_horror_graveyard_effect.py \
     tests/test_token_and_galateai_summon_gates.py -q -rf -p no:randomly
-timeout 1800 python3 -m pytest tests/engine -q -rf -p no:randomly
+
+# ② 고정 경로 · /combo 출력
 timeout 1800 python3 -m pytest tests/test_orcust_girsu_line.py \
     tests/test_girsu_token_line.py tests/test_combo_output_consistency.py \
     tests/test_combo_brief_and_detail.py -q -rf -p no:randomly
+
+# ③ ~ ⑥ census 를 들고 있는 루트 감사들
+timeout 1800 python3 -m pytest tests/test_create_effect_ordinal_audit.py \
+    tests/test_branch_setter_audit.py \
+    tests/test_trigger_condition_separation_audit.py -q -rf -p no:randomly
+timeout 1800 python3 -m pytest \
+    tests/test_activation_action_semantic_boundary_audit.py -q -rf -p no:randomly
+timeout 1800 python3 -m pytest \
+    tests/test_unimplemented_rule_semantics_audit.py -q -rf -p no:randomly
+timeout 1800 python3 -m pytest tests/test_effectdefinition_activation_audit.py \
+    tests/test_variable_rebinding_audit.py \
+    tests/test_clone_sibling_contamination_audit.py -q -rf -p no:randomly
 ```
 
 | 묶음 | 결과 |
 | --- | --- |
-| `tests/test_skeleton_revival_and_longirsu.py` (이번에 더한 33건) | ⏳ **이 커밋 시점에 재실행 중** — 마지막 두 건을 더하기 전 30건에서 `30 passed` 였다 |
-| `tests/test_harp_horror_graveyard_effect.py` + `tests/test_token_and_galateai_summon_gates.py` | ⏳ **재실행 중** — census 를 고친 뒤 `test_h08` 단독으로 `1 passed`, 그 전 전체는 `1 failed, 44 passed` 였다 |
-| `tests/test_orcust_girsu_line.py` + `tests/test_girsu_token_line.py` + `tests/test_combo_output_consistency.py` + `tests/test_combo_brief_and_detail.py` | ✅ `82 passed in 298.58s` |
-| `tests/engine` (공통 계층 전부) | ⏳ **이 커밋 시점에 재실행 중** — 직전 실행은 census 를 고치기 **전**이어서 `19 failed, 3863 passed` 였고, 그 19건은 전부 아래 §7.1 의 census 다 |
-| 위 census 를 들고 있는 루트 감사 20개 | ⏳ **재실행 중** |
+| ① `tests/engine` + 이번 Phase 의 세 파일 (스켈레촌 33건 포함) | ✅ **3977 passed** in 877.99s |
+| ② 고정 경로 · `/combo` 출력 네 파일 | ✅ **82 passed** in 298.58s |
+| ③ `test_create_effect_ordinal_audit` + `test_branch_setter_audit` + `test_trigger_condition_separation_audit` | ✅ **87 passed** in 349.02s |
+| ④ `test_activation_action_semantic_boundary_audit` | ✅ **30 passed** in 72.08s |
+| ⑤ `test_unimplemented_rule_semantics_audit` | ✅ **17 passed** in 8.68s |
+| ⑥ `test_effectdefinition_activation_audit` + `test_variable_rebinding_audit` + `test_clone_sibling_contamination_audit` | ✅ **92 passed** in 415.26s |
+| 남은 감사 열한 개 (`len(EFFECT_LIBRARY)` 만 움직인 자리) | ✅ 위 묶음들을 만들기 전의 두 배치 실행에서 전부 통과했다 |
 
-🔴 **아직 끝나지 않은 묶음을 "통과했다" 고 적지 않는다.** 위 ⏳ 표시는 이
-커밋 시점의 사실이고, 결과는 **다음 커밋에서 이 표를 갱신해** 적는다.
+🔴 **고치지 않은 실패 하나를 적어 둔다.**
+`tests/agent/test_opponent_resource_weighting_audit.py::test_07_a_whole_duel_never_offers_a_choice_about_opponent_resources`
+는 **이 Phase 의 기준 HEAD `7d5c45b` 에서도 같은 이유로 실패한다** —
+`git worktree` 로 그 커밋을 꺼내 돌려 `1 failed, 15 passed` 를 확인했다.
+6-AQ 가 만든 실패가 아니므로 손대지 않았다. (그 파일의
+`len(EFFECT_LIBRARY)` census 는 이 Phase 가 고쳤다.)
 
 🔴 **준비된 판 · 자동 테스트 · CLI 실행 · Discord 실행은 서로 다른 검증이다.**
 
@@ -554,7 +579,6 @@ timeout 1800 python3 -m pytest tests/test_orcust_girsu_line.py \
 | 자동 테스트 | 위 표 |
 | CLI / 파이썬 직접 실행 | §5 (`build_opening` + `execute_opening`) · §6.2 · §6.3 |
 | **Discord 실행** | ❌ **디스코드 검증 대기** — 이 저장소에서 디스코드에 접속하지 않았고, 접속했다고 적지 않는다 |
-
 
 ### 7.1 고친 census 들
 
@@ -570,12 +594,56 @@ timeout 1800 python3 -m pytest tests/test_orcust_girsu_line.py \
 | `resolution_skip` 을 적은 효과 | 3 | **4** |
 | `COMBO_LINES` | 4 | **5** |
 | `test_f03` 의 탐색 경로 단언 | `DIBER in chosen` | 묘지 제외 효과 둘 중 하나 + **지금 집히는 것은 스켈레촌 ①** |
+| 등재된 **카드** 수 | 20 | **21** |
+| 비용이 있는 효과 | 1 | **2** |
+| 특수 소환하는 등재 효과 | 2 | **3** |
+| 사용 제한을 가진 등재 효과 | 4 | **5** |
+| 기동 효과의 카드별 블록 수 표 | 셋 (어니스트 · 기르수 · 디베르) | **넷** (+스켈레촌 3블록) |
+| 카드군 조건을 쓰는 효과 | 3 | **4** |
+| 정확히 1장을 고르는 효과 | 8 | **9** |
+| 대상 묶음(`TargetBinding`) 수 | 12 | **13** |
+| `activation` 을 가진 등재 효과 | 12 | **13** |
+| Lua `SetCondition` 을 가진 등재 효과 | 3 | **4** |
+| `SpecialSummonPermitted` 를 내는 조건 | 3 | **4** |
+| 코드 분포의 "코드 없음" | 3 | **4** (자유 체인 16 · 유발 2 는 그대로) |
+| 몬스터 등재 수 (마법 11 · 함정 5 는 그대로) | 4 | **5** |
+| 묘지 질문에 답하는 등록 카드 | 3 | **4** |
+| `already`(등재와 파생이 같은 답) | 686 | **687** (`newly_true` 는 그대로 990, 뒤집힌 카드 0장) |
+| 기본(자율) 전개 | 7걸음 · 효과 수행 3걸음 | **6걸음 · 2걸음** (§7.2) |
 
 `test_f03` 이 바뀐 이유를 적어 둔다. 기르수 ① 의 기준점(`FirstPermittedChoice`)이
 집는 것은 패스코드가 더 작은 `21441617` 이고, 6-AO 시점에는 **그 분기가 목표에
 닿지 못해** 탐색이 디베르 분기까지 갔다. 6-AQ 가 스켈레촌 ① 을 등재하자 그
 분기가 먼저 목표에 닿는다. 🔴 **탐색 결과를 이전과 같게 만들려고 합법 후보를
 제거하지 않았다.**
+
+### 7.2 기본(자율) 전개가 6걸음으로 돌아간 이유
+
+6-AP 는 이 패(`69811710,703897,2930675,12989604,93920420`)의 기본 전개를
+**7걸음 · 효과 수행 3걸음**으로 적었고 **그때 사실이었다.** 6-AQ 의 실측은
+**6걸음 · 2걸음**이다.
+
+```
+수정 전(6-AP): 일반 소환 / 기르수 ① (→ 디베르) / 기르수 ③ / 디베르 ① / 세트 x3
+수정 후(6-AQ): 일반 소환 / 기르수 ① (→ **스켈레촌**) / 기르수 ③ / 세트 x3
+               묘지: [21441617]
+```
+
+원인은 **기준점 선택**이다. 기르수 ① 의 해결 중 선택은
+`FirstPermittedChoice` 가 집고 그것은 허용된 후보의 앞쪽(패스코드가 작은
+쪽)이다. 6-AQ 가 스켈레촌 ① 을 등재하면서 그 카드의
+`MAY_BE_SENT_TO_GRAVE` 를 공식 텍스트 전문을 읽어 적었으므로 허용 후보가
+하나 늘었고, **21441617 < 57835716** 이다.
+
+그 다음이 갈린다 — 디베르 ① 은 「덱에서」 특수 소환하므로 묘지에 혼자
+있어도 발동하지만, 스켈레촌 ① 은 「자신 묘지의 "오르페골" 몬스터」 를
+**대상으로 지정**해야 하고 그 자리의 묘지에는 **스켈레촌 자신뿐**이다
+(「"오르페골 스켈레촌" 이외의」 로 자기 사본은 빠진다).
+
+🔴 **이전 수치로 되돌리려고 합법 후보를 제거하지 않았다.**
+`FirstPermittedChoice` 는 전략이 아니라 **기준점**이고
+(`app/main.py::opening_wiring`), 보장받는 경로는 `--line` 쪽이다. 6-AP 의
+보고서 §6.4 에도 같은 주석을 달아 두었다.
 
 ---
 
