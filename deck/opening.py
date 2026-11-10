@@ -599,6 +599,16 @@ class OpeningRun:
     토큰처럼 사라지는 카드는 그것으로도 모자란다). 시각 재현은 시작 판에서
     출발해야 하므로, 실행 직전에 **값으로만** 한 장 찍어 둔다.
     """
+    initial_limits: tuple[tuple[int, str, int], ...] = ()
+    """
+    🔴 **첫 걸음 전에 걸려 있던 특수 소환 제한** —
+    ``(좌석, 속성, 출처 카드 ID)`` 의 줄들이다 (Phase 6-AV).
+
+    왜 따로 적는가: 제한은 **등록 사건**으로만 기록에 남는다. 그래서 읽는
+    쪽이 "지금 걸려 있는 제한" 을 세려면 **시작값**이 있어야 한다 — 없으면
+    「시작 시점 제한 정보 미기록」 과 「제한 없음」 을 구분할 수 없고, 둘은
+    다른 사실이다.
+    """
     stopped_reason: str | None = None
     """왜 멈췄는가. 🔴 "더 할 수 없다" 와 "상한에 닿았다" 를 가른다."""
     stopped_kind: str = ""
@@ -988,6 +998,24 @@ def _board_snapshot(state) -> "tuple[tuple[int, str, int, int], ...]":
     return tuple(rows)
 
 
+def _limit_snapshot(state) -> "tuple[tuple[int, str, int], ...]":
+    """
+    지금 걸려 있는 특수 소환 제한을 값으로 — ``(좌석, 속성, 출처)``.
+
+    🔴 **판정하지 않는다.** ``summon_limits`` 표를 그대로 읽을 뿐이고, 표가
+    없으면 빈 tuple 이다 (그것은 "제한 없음" 이 아니라 **이 실행이 그 표를
+    들고 있지 않다** 는 뜻이며, 내보내기 쪽이 그 구분을 적는다).
+    """
+    limits = getattr(state, "summon_limits", None)
+    if limits is None:
+        return ()
+    rows: list[tuple[int, str, int]] = []
+    for seat in range(len(state.players)):
+        for limit in limits.active(state.turn.turn_number, seat):
+            rows.append((seat, limit.attribute, limit.source_card_id))
+    return tuple(rows)
+
+
 def execute_opening(
     setup: OpeningSetup, repository, *, choose=None,
     max_actions: int = MAX_EXECUTED_ACTIONS,
@@ -1024,6 +1052,7 @@ def execute_opening(
     #: 🔴 **첫 걸음 전의 판을 값으로 찍어 둔다** (Phase 6-AR). 아래 루프가
     #: 판을 바꾸고 나면 이 사실은 어디에도 남지 않는다.
     run.initial_board = _board_snapshot(duel.state)
+    run.initial_limits = _limit_snapshot(duel.state)
 
     #: 🔴 **해결 시점의 선택을 걸음마다 읽는다** (Phase 6-AD).
     #:

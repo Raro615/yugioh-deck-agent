@@ -33,16 +33,17 @@ main { display: grid; grid-template-columns: 1fr 320px; gap: 14px;
 .row { display: grid; gap: 6px; margin-bottom: 6px; }
 .row.five { grid-template-columns: repeat(5, 1fr); }
 .row.piles { grid-template-columns: repeat(5, 1fr); }
-.slot { min-height: 74px; border: 1px dashed var(--line); border-radius: 6px;
-        padding: 4px; }
-.slot .label { font-size: 10px; color: var(--dim); }
+.slot { min-height: 86px; border: 1px dashed var(--line); border-radius: 6px;
+        padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+.slot .label { font-size: 10px; color: var(--dim); white-space: nowrap;
+               overflow: hidden; text-overflow: ellipsis; }
 .pile { min-height: 74px; border: 1px solid var(--line); border-radius: 6px;
         padding: 6px; background: #151822; }
 .pile .label { font-size: 11px; color: var(--dim); margin-bottom: 4px; }
 .cards { display: flex; flex-wrap: wrap; gap: 4px; }
 .card { border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px;
-        background: #202536; min-width: 92px; max-width: 150px;
-        cursor: pointer; line-height: 1.25; }
+        background: #202536; min-width: 96px; max-width: 160px;
+        cursor: pointer; line-height: 1.3; overflow-wrap: anywhere; }
 .card .nm { font-size: 11px; font-weight: 600; word-break: keep-all; }
 .card .ty { font-size: 10px; color: var(--dim); }
 .card.sel { outline: 2px solid var(--hot); }
@@ -50,8 +51,19 @@ main { display: grid; grid-template-columns: 1fr 320px; gap: 14px;
 .card.cost { border-color: var(--cost); box-shadow: 0 0 0 1px var(--cost); }
 .card.mat  { border-color: var(--mat);  box-shadow: 0 0 0 1px var(--mat); }
 .card.tgt  { border-color: var(--tgt);  box-shadow: 0 0 0 1px var(--tgt); }
-.card .tag { font-size: 9px; border-radius: 3px; padding: 0 3px;
-             margin-right: 3px; }
+.card .tag { font-size: 9px; border-radius: 3px; padding: 0 4px;
+             margin-bottom: 2px; display: inline-block; font-weight: 700;
+             color: #11131a; }
+.card .tag.move { background: var(--move); }
+.card .tag.cost { background: var(--cost); }
+.card .tag.mat  { background: var(--mat); }
+.card .tag.tgt  { background: var(--tgt); }
+.box.now { border-color: #3c4a6b; }
+.act { font-size: 13px; color: var(--hot); margin-top: 2px; }
+.nav { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.nav button { font-size: 15px; padding: 8px 14px; }
+.seat.mine { border-color: #3c4a6b; background: #1b2030; }
+.seat.mine h2 { color: var(--ink); }
 aside { display: grid; gap: 10px; }
 .box { border: 1px solid var(--line); border-radius: 8px; padding: 10px;
        background: var(--panel); }
@@ -81,30 +93,37 @@ li { margin-bottom: 4px; font-size: 12px; }
 </header>
 <main>
   <section>
-    <div class="box">
+    <div class="box now">
       <div id="stepline" class="stepline"></div>
+      <div id="stepact" class="act"></div>
       <div id="stepsub" class="muted"></div>
-      <div style="margin-top:8px">
+      <div class="nav">
         <button id="first">처음으로</button>
-        <button id="prev">← 이전 단계</button>
-        <button id="next" class="primary">다음 단계 →</button>
+        <button id="prev">← 이전 장면</button>
+        <button id="next" class="primary">다음 장면 →</button>
       </div>
       <ul id="notes"></ul>
     </div>
     <div id="board" class="board" style="margin-top:12px"></div>
   </section>
   <aside>
-    <div class="box" id="result"></div>
+    <div class="box">
+      <h3>지금 장면의 특수 소환 제한</h3>
+      <div id="limits-now"></div>
+    </div>
+    <div class="box" id="result">
+      <h3>전체 실행 결과</h3>
+    </div>
     <div class="box">
       <h3>선택한 카드</h3>
       <div id="selected"></div>
     </div>
     <div class="box legend">
-      <h3>강조 표시</h3>
+      <h3>강조 표시 (카드에 글자로도 적습니다)</h3>
       <span><i class="dot" style="background:#4fc3f7"></i>이동</span>
-      <span><i class="dot" style="background:#ff8a7a"></i>비용</span>
-      <span><i class="dot" style="background:#b388ff"></i>링크 소재</span>
-      <span><i class="dot" style="background:#7bdc9a"></i>효과 대상</span>
+      <span><i class="dot" style="background:#ff8a7a"></i>코스트</span>
+      <span><i class="dot" style="background:#b388ff"></i>소재</span>
+      <span><i class="dot" style="background:#7bdc9a"></i>대상</span>
     </div>
     <details>
       <summary id="unsupported-count">미지원</summary>
@@ -116,10 +135,10 @@ li { margin-bottom: 4px; font-size: 12px; }
     </details>
   </aside>
 </main>
-<script id="replay-data" type="application/json">{"format":"engine-replay/2","source":{"mode":"line","seat":0,"hand":[69811710,703897,2930675,12989604,61654098],"line":"orcust-skeleton-longirsu","title":"기르수 → 디베르 묘지행 → 디베르 제외로 스켈레촌 특수 소환 → 갈라테아 링크 → 스켈레촌 제외로 묘지의 기르수 소생 → 롱기르수 링크"},"result":{"status":"completed","executed":6,"state_changes":6,"effects_resolved":3,"stopped_kind":"not_chosen","stopped_reason":"검증용 선택 방식이 고를 행동을 찾지 못했습니다 (후보 6건: ['end_phase', 'link_summon', 'set_spell_trap'])","line_done":6,"line_total":6,"line_completed":true},"cards":{"0":{"passcode":703897,"owner":0,"name":"오르페골 클리막스","kind":"trap","type_ko":"함정/카운터"},"1":{"passcode":703897,"owner":0,"name":"오르페골 클리막스","kind":"trap","type_ko":"함정/카운터"},"2":{"passcode":2930675,"owner":0,"name":"성유물에 이르는 열쇠","kind":"spell","type_ko":"마법/지속"},"3":{"passcode":2930675,"owner":0,"name":"성유물에 이르는 열쇠","kind":"spell","type_ko":"마법/지속"},"4":{"passcode":12989604,"owner":0,"name":"성유물로부터의 자각","kind":"trap","type_ko":"함정"},"5":{"passcode":12989604,"owner":0,"name":"성유물로부터의 자각","kind":"trap","type_ko":"함정"},"6":{"passcode":21441617,"owner":0,"name":"오르페골 스켈레촌","kind":"monster","type_ko":"몬스터/효과"},"7":{"passcode":21441617,"owner":0,"name":"오르페골 스켈레촌","kind":"monster","type_ko":"몬스터/효과"},"8":{"passcode":21441617,"owner":0,"name":"오르페골 스켈레촌","kind":"monster","type_ko":"몬스터/효과"},"9":{"passcode":26845680,"owner":0,"name":"오르페골 프라임","kind":"spell","type_ko":"마법"},"10":{"passcode":26845680,"owner":0,"name":"오르페골 프라임","kind":"spell","type_ko":"마법"},"11":{"passcode":26845680,"owner":0,"name":"오르페골 프라임","kind":"spell","type_ko":"마법"},"12":{"passcode":40441990,"owner":0,"name":"성유물－『성건』","kind":"monster","type_ko":"몬스터/효과"},"13":{"passcode":40441990,"owner":0,"name":"성유물－『성건』","kind":"monster","type_ko":"몬스터/효과"},"14":{"passcode":40441990,"owner":0,"name":"성유물－『성건』","kind":"monster","type_ko":"몬스터/효과"},"15":{"passcode":47171541,"owner":0,"name":"오르페골 릴리스","kind":"trap","type_ko":"함정"},"16":{"passcode":47171541,"owner":0,"name":"오르페골 릴리스","kind":"trap","type_ko":"함정"},"17":{"passcode":55051920,"owner":0,"name":"오르페골 코어","kind":"trap","type_ko":"함정/지속"},"18":{"passcode":55051920,"owner":0,"name":"오르페골 코어","kind":"trap","type_ko":"함정/지속"},"19":{"passcode":57835716,"owner":0,"name":"오르페골 디베르","kind":"monster","type_ko":"몬스터/효과"},"20":{"passcode":57835716,"owner":0,"name":"오르페골 디베르","kind":"monster","type_ko":"몬스터/효과"},"21":{"passcode":57835716,"owner":0,"name":"오르페골 디베르","kind":"monster","type_ko":"몬스터/효과"},"22":{"passcode":61654098,"owner":0,"name":"성유물과의 해후","kind":"spell","type_ko":"마법/필드"},"23":{"passcode":61654098,"owner":0,"name":"성유물과의 해후","kind":"spell","type_ko":"마법/필드"},"24":{"passcode":69811710,"owner":0,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"25":{"passcode":69811710,"owner":0,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"26":{"passcode":90351981,"owner":0,"name":"오르페골 바벨","kind":"spell","type_ko":"마법/필드"},"27":{"passcode":90351981,"owner":0,"name":"오르페골 바벨","kind":"spell","type_ko":"마법/필드"},"28":{"passcode":90351981,"owner":0,"name":"오르페골 바벨","kind":"spell","type_ko":"마법/필드"},"29":{"passcode":93920420,"owner":0,"name":"성유물－『성장』","kind":"monster","type_ko":"몬스터/효과"},"30":{"passcode":93920420,"owner":0,"name":"성유물－『성장』","kind":"monster","type_ko":"몬스터/효과"},"31":{"passcode":93920420,"owner":0,"name":"성유물－『성장』","kind":"monster","type_ko":"몬스터/효과"},"32":{"passcode":94046012,"owner":0,"name":"오르페골 카노네","kind":"monster","type_ko":"몬스터/효과/튜너"},"33":{"passcode":94046012,"owner":0,"name":"오르페골 카노네","kind":"monster","type_ko":"몬스터/효과/튜너"},"34":{"passcode":94046012,"owner":0,"name":"오르페골 카노네","kind":"monster","type_ko":"몬스터/효과/튜너"},"75":{"passcode":69811710,"owner":0,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"76":{"passcode":703897,"owner":0,"name":"오르페골 클리막스","kind":"trap","type_ko":"함정/카운터"},"77":{"passcode":2930675,"owner":0,"name":"성유물에 이르는 열쇠","kind":"spell","type_ko":"마법/지속"},"78":{"passcode":12989604,"owner":0,"name":"성유물로부터의 자각","kind":"trap","type_ko":"함정"},"79":{"passcode":61654098,"owner":0,"name":"성유물과의 해후","kind":"spell","type_ko":"마법/필드"},"80":{"passcode":3134857,"owner":0,"name":"오르페골 오케스트리언","kind":"monster","type_ko":"몬스터/효과/링크"},"81":{"passcode":30741503,"owner":0,"name":"오르페골 갈라테아","kind":"monster","type_ko":"몬스터/효과/링크"},"82":{"passcode":48835607,"owner":0,"name":"오르페골 갈라테아i","kind":"monster","type_ko":"몬스터/효과/링크"},"83":{"passcode":74820316,"owner":0,"name":"잭나이츠 오르페골 엔릴기르수","kind":"monster","type_ko":"몬스터/효과/링크"},"84":{"passcode":76145142,"owner":0,"name":"오르페골 롱기르수","kind":"monster","type_ko":"몬스터/효과/링크"},"85":{"passcode":93854893,"owner":0,"name":"시오르페골 딩기르수","kind":"monster","type_ko":"몬스터/효과/엑시즈"},"35":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"36":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"37":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"38":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"39":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"40":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"41":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"42":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"43":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"44":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"45":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"46":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"47":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"48":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"49":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"50":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"51":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"52":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"53":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"54":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"55":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"56":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"57":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"58":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"59":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"60":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"61":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"62":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"63":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"64":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"65":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"66":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"67":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"68":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"69":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"70":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"71":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"72":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"73":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"74":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"}},"initial":{"zones":{"0":{"DECK":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34],"HAND":[75,76,77,78,79],"EXTRA":[80,81,82,83,84,85]},"1":{"DECK":[35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74]}}},"steps":[{"order":1,"actor":0,"kind":"normal_summon","accepted":true,"resolved":true,"state_changed":true,"events":[0],"card":{"passcode":69811710,"name":"잭나이츠 오르페골 기르수"},"reason":"normal_summon 를 적용했습니다 (1건).","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 6장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]},{"order":2,"actor":0,"kind":"activate_effect","accepted":true,"resolved":true,"state_changed":true,"events":[1],"card":{"passcode":69811710,"name":"잭나이츠 오르페골 기르수"},"effect_ref":"69811710:e[0]","resolution_choices":["69811710:e[0] · 오르페골 디베르 [57835716] (후보 9장)"],"reason":"체인1 P0 69811710:e[0] 를 해결했습니다.","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 6장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]},{"order":3,"actor":0,"kind":"activate_effect","accepted":true,"resolved":true,"state_changed":true,"events":[2,3],"card":{"passcode":57835716,"name":"오르페골 디베르"},"effect_ref":"57835716:e[0]","resolution_choices":["57835716:e[0] · 오르페골 스켈레촌 [21441617] (후보 8장)"],"reason":"체인1 P0 57835716:e[0] 를 해결했습니다.","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 6장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]},{"order":4,"actor":0,"kind":"link_summon","accepted":true,"resolved":true,"state_changed":true,"events":[4],"card":{"passcode":30741503,"name":"오르페골 갈라테아"},"materials":["잭나이츠 오르페골 기르수","오르페골 스켈레촌"],"material_passcodes":[69811710,21441617],"reason":"link_summon 를 적용했습니다 (3건).","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 5장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]},{"order":5,"actor":0,"kind":"activate_effect","accepted":true,"resolved":true,"state_changed":true,"events":[5,6],"card":{"passcode":21441617,"name":"오르페골 스켈레촌"},"effect_ref":"21441617:e[0]","targets":["#75"],"reason":"체인1 P0 21441617:e[0] 대상 @primary=[#75] 를 해결했습니다.","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 5장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]},{"order":6,"actor":0,"kind":"link_summon","accepted":true,"resolved":true,"state_changed":true,"events":[7],"card":{"passcode":76145142,"name":"오르페골 롱기르수"},"materials":["오르페골 갈라테아","잭나이츠 오르페골 기르수"],"material_passcodes":[30741503,69811710],"reason":"link_summon 를 적용했습니다 (3건).","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 4장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]}],"events":[{"seq":0,"type":"action","actor":0,"changes":[{"kind":"monster_summoned","summon":"normal","instance":75,"player":0,"owner":0,"from":{"zone":"HAND"},"to":{"zone":"MZONE","index":0,"position":"FACEUP_ATTACK"}}],"source":75,"action_kind":"normal_summon"},{"seq":1,"type":"effect","actor":0,"changes":[{"kind":"zone_moved","operation":"send_to_grave","reasons":["EFFECT"],"instance":19,"from":{"player":0,"zone":"DECK"},"to":{"player":0,"zone":"GRAVE"}},{"kind":"zone_shuffled","player":0,"zone":"DECK","size":34,"draw":0}],"source":75,"effect_ref":"69811710:e[0]"},{"seq":2,"type":"cost_payment","actor":0,"changes":[{"kind":"zone_moved","operation":"banish","reasons":["EFFECT"],"instance":19,"from":{"player":0,"zone":"GRAVE"},"to":{"player":0,"zone":"REMOVED"}}],"source":19,"effect_ref":"57835716:e[0]","payments":["P0 #19 제외"]},{"seq":3,"type":"effect","actor":0,"changes":[{"kind":"monster_summoned","summon":"special","instance":6,"player":0,"owner":0,"from":{"zone":"DECK"},"to":{"zone":"MZONE","index":1,"position":"FACEUP_ATTACK"}},{"kind":"special_summon_limited","player":0,"attribute":"DARK","turn_number":1,"source_card_id":57835716,"ordinal":0},{"kind":"zone_shuffled","player":0,"zone":"DECK","size":33,"draw":1}],"source":19,"effect_ref":"57835716:e[0]"},{"seq":4,"type":"action","actor":0,"changes":[{"kind":"zone_moved","operation":"send_to_grave","reasons":["EFFECT"],"instance":75,"from":{"player":0,"zone":"MZONE"},"to":{"player":0,"zone":"GRAVE"}},{"kind":"zone_moved","operation":"send_to_grave","reasons":["EFFECT"],"instance":6,"from":{"player":0,"zone":"MZONE"},"to":{"player":0,"zone":"GRAVE"}},{"kind":"monster_summoned","summon":"link","instance":81,"player":0,"owner":0,"from":{"zone":"EXTRA"},"to":{"zone":"EMZONE","index":0,"position":"FACEUP_ATTACK"}}],"source":81,"action_kind":"link_summon"},{"seq":5,"type":"cost_payment","actor":0,"changes":[{"kind":"zone_moved","operation":"banish","reasons":["EFFECT"],"instance":6,"from":{"player":0,"zone":"GRAVE"},"to":{"player":0,"zone":"REMOVED"}}],"source":6,"effect_ref":"21441617:e[0]","payments":["P0 #6 제외"]},{"seq":6,"type":"effect","actor":0,"changes":[{"kind":"monster_summoned","summon":"special","instance":75,"player":0,"owner":0,"from":{"zone":"GRAVE"},"to":{"zone":"MZONE","index":0,"position":"FACEUP_ATTACK"}},{"kind":"special_summon_limited","player":0,"attribute":"DARK","turn_number":1,"source_card_id":21441617,"ordinal":0}],"source":6,"effect_ref":"21441617:e[0]"},{"seq":7,"type":"action","actor":0,"changes":[{"kind":"zone_moved","operation":"send_to_grave","reasons":["EFFECT"],"instance":81,"from":{"player":0,"zone":"EMZONE"},"to":{"player":0,"zone":"GRAVE"}},{"kind":"zone_moved","operation":"send_to_grave","reasons":["EFFECT"],"instance":75,"from":{"player":0,"zone":"MZONE"},"to":{"player":0,"zone":"GRAVE"}},{"kind":"monster_summoned","summon":"link","instance":84,"player":0,"owner":0,"from":{"zone":"EXTRA"},"to":{"zone":"EMZONE","index":0,"position":"FACEUP_ATTACK"}}],"source":84,"action_kind":"link_summon"}],"final":{"zones":{"0":{"DECK":[2,33,29,13,10,27,17,25,23,18,16,21,5,9,34,26,8,24,28,7,12,0,1,3,14,31,20,22,30,4,32,15,11],"HAND":[76,77,78,79],"EMZONE":[84],"GRAVE":[81,75],"REMOVED":[19,6],"EXTRA":[80,82,83,85]},"1":{"DECK":[35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74]}},"summon_limits":[{"attribute":"DARK","source":21441617},{"attribute":"DARK","source":57835716}],"state_hash":"7495fa22f878607b9541e04c7b1d79e701809a782ac96931ff49f2f531fb27e4"},"unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다.","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다."]}</script>
+<script id="replay-data" type="application/json">{"format":"engine-replay/3","source":{"mode":"line","seat":0,"hand":[69811710,703897,2930675,12989604,61654098],"line":"orcust-skeleton-longirsu","title":"기르수 → 디베르 묘지행 → 디베르 제외로 스켈레촌 특수 소환 → 갈라테아 링크 → 스켈레촌 제외로 묘지의 기르수 소생 → 롱기르수 링크"},"result":{"status":"completed","executed":6,"state_changes":6,"effects_resolved":3,"stopped_kind":"not_chosen","stopped_reason":"검증용 선택 방식이 고를 행동을 찾지 못했습니다 (후보 6건: ['end_phase', 'link_summon', 'set_spell_trap'])","line_done":6,"line_total":6,"line_completed":true},"cards":{"0":{"passcode":703897,"owner":0,"name":"오르페골 클리막스","kind":"trap","type_ko":"함정/카운터"},"1":{"passcode":703897,"owner":0,"name":"오르페골 클리막스","kind":"trap","type_ko":"함정/카운터"},"2":{"passcode":2930675,"owner":0,"name":"성유물에 이르는 열쇠","kind":"spell","type_ko":"마법/지속"},"3":{"passcode":2930675,"owner":0,"name":"성유물에 이르는 열쇠","kind":"spell","type_ko":"마법/지속"},"4":{"passcode":12989604,"owner":0,"name":"성유물로부터의 자각","kind":"trap","type_ko":"함정"},"5":{"passcode":12989604,"owner":0,"name":"성유물로부터의 자각","kind":"trap","type_ko":"함정"},"6":{"passcode":21441617,"owner":0,"name":"오르페골 스켈레촌","kind":"monster","type_ko":"몬스터/효과"},"7":{"passcode":21441617,"owner":0,"name":"오르페골 스켈레촌","kind":"monster","type_ko":"몬스터/효과"},"8":{"passcode":21441617,"owner":0,"name":"오르페골 스켈레촌","kind":"monster","type_ko":"몬스터/효과"},"9":{"passcode":26845680,"owner":0,"name":"오르페골 프라임","kind":"spell","type_ko":"마법"},"10":{"passcode":26845680,"owner":0,"name":"오르페골 프라임","kind":"spell","type_ko":"마법"},"11":{"passcode":26845680,"owner":0,"name":"오르페골 프라임","kind":"spell","type_ko":"마법"},"12":{"passcode":40441990,"owner":0,"name":"성유물－『성건』","kind":"monster","type_ko":"몬스터/효과"},"13":{"passcode":40441990,"owner":0,"name":"성유물－『성건』","kind":"monster","type_ko":"몬스터/효과"},"14":{"passcode":40441990,"owner":0,"name":"성유물－『성건』","kind":"monster","type_ko":"몬스터/효과"},"15":{"passcode":47171541,"owner":0,"name":"오르페골 릴리스","kind":"trap","type_ko":"함정"},"16":{"passcode":47171541,"owner":0,"name":"오르페골 릴리스","kind":"trap","type_ko":"함정"},"17":{"passcode":55051920,"owner":0,"name":"오르페골 코어","kind":"trap","type_ko":"함정/지속"},"18":{"passcode":55051920,"owner":0,"name":"오르페골 코어","kind":"trap","type_ko":"함정/지속"},"19":{"passcode":57835716,"owner":0,"name":"오르페골 디베르","kind":"monster","type_ko":"몬스터/효과"},"20":{"passcode":57835716,"owner":0,"name":"오르페골 디베르","kind":"monster","type_ko":"몬스터/효과"},"21":{"passcode":57835716,"owner":0,"name":"오르페골 디베르","kind":"monster","type_ko":"몬스터/효과"},"22":{"passcode":61654098,"owner":0,"name":"성유물과의 해후","kind":"spell","type_ko":"마법/필드"},"23":{"passcode":61654098,"owner":0,"name":"성유물과의 해후","kind":"spell","type_ko":"마법/필드"},"24":{"passcode":69811710,"owner":0,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"25":{"passcode":69811710,"owner":0,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"26":{"passcode":90351981,"owner":0,"name":"오르페골 바벨","kind":"spell","type_ko":"마법/필드"},"27":{"passcode":90351981,"owner":0,"name":"오르페골 바벨","kind":"spell","type_ko":"마법/필드"},"28":{"passcode":90351981,"owner":0,"name":"오르페골 바벨","kind":"spell","type_ko":"마법/필드"},"29":{"passcode":93920420,"owner":0,"name":"성유물－『성장』","kind":"monster","type_ko":"몬스터/효과"},"30":{"passcode":93920420,"owner":0,"name":"성유물－『성장』","kind":"monster","type_ko":"몬스터/효과"},"31":{"passcode":93920420,"owner":0,"name":"성유물－『성장』","kind":"monster","type_ko":"몬스터/효과"},"32":{"passcode":94046012,"owner":0,"name":"오르페골 카노네","kind":"monster","type_ko":"몬스터/효과/튜너"},"33":{"passcode":94046012,"owner":0,"name":"오르페골 카노네","kind":"monster","type_ko":"몬스터/효과/튜너"},"34":{"passcode":94046012,"owner":0,"name":"오르페골 카노네","kind":"monster","type_ko":"몬스터/효과/튜너"},"75":{"passcode":69811710,"owner":0,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"76":{"passcode":703897,"owner":0,"name":"오르페골 클리막스","kind":"trap","type_ko":"함정/카운터"},"77":{"passcode":2930675,"owner":0,"name":"성유물에 이르는 열쇠","kind":"spell","type_ko":"마법/지속"},"78":{"passcode":12989604,"owner":0,"name":"성유물로부터의 자각","kind":"trap","type_ko":"함정"},"79":{"passcode":61654098,"owner":0,"name":"성유물과의 해후","kind":"spell","type_ko":"마법/필드"},"80":{"passcode":3134857,"owner":0,"name":"오르페골 오케스트리언","kind":"monster","type_ko":"몬스터/효과/링크"},"81":{"passcode":30741503,"owner":0,"name":"오르페골 갈라테아","kind":"monster","type_ko":"몬스터/효과/링크"},"82":{"passcode":48835607,"owner":0,"name":"오르페골 갈라테아i","kind":"monster","type_ko":"몬스터/효과/링크"},"83":{"passcode":74820316,"owner":0,"name":"잭나이츠 오르페골 엔릴기르수","kind":"monster","type_ko":"몬스터/효과/링크"},"84":{"passcode":76145142,"owner":0,"name":"오르페골 롱기르수","kind":"monster","type_ko":"몬스터/효과/링크"},"85":{"passcode":93854893,"owner":0,"name":"시오르페골 딩기르수","kind":"monster","type_ko":"몬스터/효과/엑시즈"},"35":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"36":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"37":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"38":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"39":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"40":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"41":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"42":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"43":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"44":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"45":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"46":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"47":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"48":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"49":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"50":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"51":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"52":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"53":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"54":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"55":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"56":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"57":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"58":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"59":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"60":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"61":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"62":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"63":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"64":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"65":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"66":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"67":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"68":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"69":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"70":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"71":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"72":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"73":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"},"74":{"passcode":69811710,"owner":1,"name":"잭나이츠 오르페골 기르수","kind":"monster","type_ko":"몬스터/효과"}},"initial":{"zones":{"0":{"DECK":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34],"HAND":[75,76,77,78,79],"EXTRA":[80,81,82,83,84,85]},"1":{"DECK":[35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74]}},"summon_limits":[]},"steps":[{"order":1,"actor":0,"kind":"normal_summon","accepted":true,"resolved":true,"state_changed":true,"events":[0],"card":{"passcode":69811710,"name":"잭나이츠 오르페골 기르수"},"reason":"normal_summon 를 적용했습니다 (1건).","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 6장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]},{"order":2,"actor":0,"kind":"activate_effect","accepted":true,"resolved":true,"state_changed":true,"events":[1],"card":{"passcode":69811710,"name":"잭나이츠 오르페골 기르수"},"effect_ref":"69811710:e[0]","resolution_choices":["69811710:e[0] · 오르페골 디베르 [57835716] (후보 9장)"],"reason":"체인1 P0 69811710:e[0] 를 해결했습니다.","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 6장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]},{"order":3,"actor":0,"kind":"activate_effect","accepted":true,"resolved":true,"state_changed":true,"events":[2,3],"card":{"passcode":57835716,"name":"오르페골 디베르"},"effect_ref":"57835716:e[0]","resolution_choices":["57835716:e[0] · 오르페골 스켈레촌 [21441617] (후보 8장)"],"reason":"체인1 P0 57835716:e[0] 를 해결했습니다.","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 6장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]},{"order":4,"actor":0,"kind":"link_summon","accepted":true,"resolved":true,"state_changed":true,"events":[4],"card":{"passcode":30741503,"name":"오르페골 갈라테아"},"materials":["잭나이츠 오르페골 기르수","오르페골 스켈레촌"],"material_passcodes":[69811710,21441617],"reason":"link_summon 를 적용했습니다 (3건).","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 5장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]},{"order":5,"actor":0,"kind":"activate_effect","accepted":true,"resolved":true,"state_changed":true,"events":[5,6],"card":{"passcode":21441617,"name":"오르페골 스켈레촌"},"effect_ref":"21441617:e[0]","targets":["#75"],"reason":"체인1 P0 21441617:e[0] 대상 @primary=[#75] 를 해결했습니다.","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 5장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]},{"order":6,"actor":0,"kind":"link_summon","accepted":true,"resolved":true,"state_changed":true,"events":[7],"card":{"passcode":76145142,"name":"오르페골 롱기르수"},"materials":["오르페골 갈라테아","잭나이츠 오르페골 기르수"],"material_passcodes":[30741503,69811710],"reason":"link_summon 를 적용했습니다 (3건).","unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다. (엑스트라 덱 4장 중 3장이 같은 이유)","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다. (패 4장 중 4장이 같은 이유)"]}],"events":[{"seq":0,"type":"action","actor":0,"changes":[{"kind":"monster_summoned","summon":"normal","instance":75,"player":0,"owner":0,"from":{"zone":"HAND"},"to":{"zone":"MZONE","index":0,"position":"FACEUP_ATTACK"}}],"source":75,"action_kind":"normal_summon"},{"seq":1,"type":"effect","actor":0,"changes":[{"kind":"zone_moved","operation":"send_to_grave","reasons":["EFFECT"],"instance":19,"from":{"player":0,"zone":"DECK"},"to":{"player":0,"zone":"GRAVE"}},{"kind":"zone_shuffled","player":0,"zone":"DECK","size":34,"draw":0}],"source":75,"effect_ref":"69811710:e[0]"},{"seq":2,"type":"cost_payment","actor":0,"changes":[{"kind":"zone_moved","operation":"banish","reasons":["EFFECT"],"instance":19,"from":{"player":0,"zone":"GRAVE"},"to":{"player":0,"zone":"REMOVED"}}],"source":19,"effect_ref":"57835716:e[0]","payments":["P0 #19 제외"]},{"seq":3,"type":"effect","actor":0,"changes":[{"kind":"monster_summoned","summon":"special","instance":6,"player":0,"owner":0,"from":{"zone":"DECK"},"to":{"zone":"MZONE","index":1,"position":"FACEUP_ATTACK"}},{"kind":"special_summon_limited","player":0,"attribute":"DARK","turn_number":1,"source_card_id":57835716,"ordinal":0},{"kind":"zone_shuffled","player":0,"zone":"DECK","size":33,"draw":1}],"source":19,"effect_ref":"57835716:e[0]"},{"seq":4,"type":"action","actor":0,"changes":[{"kind":"zone_moved","operation":"send_to_grave","reasons":["EFFECT"],"instance":75,"from":{"player":0,"zone":"MZONE"},"to":{"player":0,"zone":"GRAVE"}},{"kind":"zone_moved","operation":"send_to_grave","reasons":["EFFECT"],"instance":6,"from":{"player":0,"zone":"MZONE"},"to":{"player":0,"zone":"GRAVE"}},{"kind":"monster_summoned","summon":"link","instance":81,"player":0,"owner":0,"from":{"zone":"EXTRA"},"to":{"zone":"EMZONE","index":0,"position":"FACEUP_ATTACK"}}],"source":81,"action_kind":"link_summon"},{"seq":5,"type":"cost_payment","actor":0,"changes":[{"kind":"zone_moved","operation":"banish","reasons":["EFFECT"],"instance":6,"from":{"player":0,"zone":"GRAVE"},"to":{"player":0,"zone":"REMOVED"}}],"source":6,"effect_ref":"21441617:e[0]","payments":["P0 #6 제외"]},{"seq":6,"type":"effect","actor":0,"changes":[{"kind":"monster_summoned","summon":"special","instance":75,"player":0,"owner":0,"from":{"zone":"GRAVE"},"to":{"zone":"MZONE","index":0,"position":"FACEUP_ATTACK"}},{"kind":"special_summon_limited","player":0,"attribute":"DARK","turn_number":1,"source_card_id":21441617,"ordinal":0}],"source":6,"effect_ref":"21441617:e[0]"},{"seq":7,"type":"action","actor":0,"changes":[{"kind":"zone_moved","operation":"send_to_grave","reasons":["EFFECT"],"instance":81,"from":{"player":0,"zone":"EMZONE"},"to":{"player":0,"zone":"GRAVE"}},{"kind":"zone_moved","operation":"send_to_grave","reasons":["EFFECT"],"instance":75,"from":{"player":0,"zone":"MZONE"},"to":{"player":0,"zone":"GRAVE"}},{"kind":"monster_summoned","summon":"link","instance":84,"player":0,"owner":0,"from":{"zone":"EXTRA"},"to":{"zone":"EMZONE","index":0,"position":"FACEUP_ATTACK"}}],"source":84,"action_kind":"link_summon"}],"final":{"zones":{"0":{"DECK":[2,33,29,13,10,27,17,25,23,18,16,21,5,9,34,26,8,24,28,7,12,0,1,3,14,31,20,22,30,4,32,15,11],"HAND":[76,77,78,79],"EMZONE":[84],"GRAVE":[81,75],"REMOVED":[19,6],"EXTRA":[80,82,83,85]},"1":{"DECK":[35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74]}},"summon_limits":[{"attribute":"DARK","source":21441617},{"attribute":"DARK","source":57835716}],"state_hash":"7495fa22f878607b9541e04c7b1d79e701809a782ac96931ff49f2f531fb27e4"},"unsupported":["link_summon [link-material-requirement (이 링크 몬스터의 소재 조건을 아직 읽지 않았다)]: 엑스트라 덱 카드의 링크 소재 조건을 이 저장소가 아직 읽지 않았습니다. 장수와 링크 수치만 맞춰 통과시키지 않으므로 후보를 만들지 않았습니다.","activate_card [activation-timing (Phase 2-C/2-F)]: activate_card 의 남은 적법성을 판정할 규칙 계층이 아직 없습니다. 확인할 수 있는 것은 전부 통과했습니다."]}</script>
 <script>
 'use strict';
-var FORMATS = ["engine-replay/1", "engine-replay/2"];
+var FORMATS = ["engine-replay/1", "engine-replay/2", "engine-replay/3"];
 var ZONES_MAIN = ['MZONE', 'EMZONE', 'SZONE'];
 var PILES = [['HAND', '패'], ['DECK', '덱'], ['EXTRA', '엑스트라 덱'],
              ['GRAVE', '묘지'], ['REMOVED', '제외']];
@@ -190,9 +209,21 @@ function buildFrames(rec) {
     (st.events || []).forEach(function (seq) { stepOf[seq] = st; });
   });
 
+  /* 🔴 제한은 **등록 사건**으로만 남는다. 그래서 시작값이 있어야 "지금
+     걸린 제한" 을 셀 수 있다. 시작값 칸이 없는 옛 기록은 null 로 두고
+     화면이 「시작 시점 제한 정보 미기록」 이라고 적는다. */
+  var startLimits = (rec.initial && rec.initial.summon_limits) || null;
+  var startKnown = !!startLimits;
+  var limits = startLimits ? startLimits.map(function (l) {
+    return {seat: (l.seat === undefined ? 0 : l.seat),
+            attribute: l.attribute, source: l.source};
+  }) : null;
+
   var frames = [{seq: -1, step: null, kind: 'start', title: '시작 상태',
                  text: '아직 아무 행동도 하지 않았습니다.',
-                 where: snapshot(), roles: {}, notes: [], shuffled: {}}];
+                 where: snapshot(), roles: {}, notes: [], shuffled: {},
+                 limits: limits ? limits.slice() : null,
+                 startKnown: startKnown}];
   /* 🔴 섞인 자리만 「순서 미기록」 이다 — 상대 덱까지 싸잡지 않는다 */
   var shuffled = {};
 
@@ -224,6 +255,11 @@ function buildFrames(rec) {
                    + ' 를 섞었습니다 (' + ch.size
                    + '장) — 섞은 뒤의 순서는 기록에 없습니다.');
       } else if (ch.kind === 'special_summon_limited') {
+        /* 🔴 **이 장면부터** 걸린다. 해제 · 만료 정보는 기록에 없으므로
+           임의로 풀지 않는다. */
+        if (limits === null) { limits = []; }
+        limits.push({seat: (ch.player === undefined ? 0 : ch.player),
+                     attribute: ch.attribute, source: ch.source_card_id});
         notes.push('특수 소환 제한이 걸렸습니다 — ' + ch.attribute
                    + ' 속성만 (출처 ' + ch.source_card_id + ')');
       } else if (ch.kind === 'life_changed') {
@@ -244,19 +280,23 @@ function buildFrames(rec) {
                  title: frameTitle(rec, ev, st),
                  text: frameText(rec, ev, st),
                  where: snapshot(), roles: roles, notes: notes,
-                 shuffled: Object.assign({}, shuffled)});
+                 shuffled: Object.assign({}, shuffled),
+                 limits: limits ? limits.slice() : null,
+                 startKnown: startKnown});
   });
   return frames;
 }
 
 function frameTitle(rec, ev, st) {
-  var head = ev.type === 'cost_payment' ? '비용 지불'
+  /* 🔴 **"걸음" 이라는 한 낱말로 두 숫자를 부르지 않는다** (6-AV).
+     장면 번호는 아래 renderStepHead 가 적고, 여기는 **엔진 행동**만
+     말한다. */
+  var head = ev.type === 'cost_payment' ? '코스트 지불'
            : ev.type === 'effect' ? '효과 해결' : '행동';
   if (st) {
     var k = STEP_KO[st.kind] || st.kind;
     var nm = st.card ? (st.card.name || ('[' + st.card.passcode + ']')) : '';
-    return '걸음 ' + st.order + ' · ' + k + (nm ? ' — ' + nm : '')
-           + ' · ' + head;
+    return k + (nm ? ' — ' + nm : '') + ' · ' + head;
   }
   return head;
 }
@@ -288,10 +328,16 @@ function frameText(rec, ev, st) {
 }
 
 /* ---------- 그리기 ------------------------------------------------ */
+var ROLE_KO = {move: '이동', cost: '코스트', mat: '소재', tgt: '대상'};
+
 function cardNode(rec, id, role, frame) {
   var n = el('div', 'card');
   if (role) { n.classList.add(role); }
   if (state.selected === id) { n.classList.add('sel'); }
+  if (role && ROLE_KO[role]) {
+    /* 🔴 **색만으로 구분하지 않는다** — 짧은 글자를 함께 적는다. */
+    n.appendChild(el('div', 'tag ' + role, ROLE_KO[role]));
+  }
   var nm = el('div', 'nm', cardName(rec, id));
   var ty = el('div', 'ty', cardType(rec, id) + ' · #' + id);
   n.appendChild(nm); n.appendChild(ty);
@@ -307,7 +353,8 @@ function cardNode(rec, id, role, frame) {
 }
 
 function seatNode(rec, frame, seat, label) {
-  var box = el('div', 'seat');
+  /* 🔴 자기 필드가 눈에 먼저 들어오게 한다 (6-AV 가독성). */
+  var box = el('div', String(seat) === '0' ? 'seat mine' : 'seat');
   box.appendChild(el('h2', null, label));
   var byZone = {};
   Object.keys(frame.where).forEach(function (id) {
@@ -380,9 +427,37 @@ function render() {
   board.appendChild(seatNode(rec, frame, 1, '상대 (P1)'));
   board.appendChild(seatNode(rec, frame, 0, '자신 (P0)'));
 
-  document.getElementById('stepline').textContent =
-    '걸음 ' + state.at + ' / ' + (state.frames.length - 1) + ' — ' + frame.title;
+  var last = state.frames.length - 1;
+  var head = '재생 장면 ' + state.at + ' / ' + last;
+  if (state.at === last) { head += ' · 재생 끝'; }
+  document.getElementById('stepline').textContent = head;
+
+  var actions = (rec.steps || []).length;
+  var doneBy = frame.step ? frame.step.order : 0;
+  document.getElementById('stepact').textContent =
+    '엔진 행동 ' + doneBy + ' / ' + actions + ' · ' + frame.title;
   document.getElementById('stepsub').textContent = frame.text;
+
+  /* 🔴 **지금 걸린 제한** — 최종 결과와 다른 칸이다. */
+  var now = document.getElementById('limits-now');
+  clear(now);
+  if (frame.limits === null) {
+    now.appendChild(el('div', 'warn', '시작 시점 제한 정보 미기록 — 이 '
+      + '기록에는 시작값이 없어서 지금 걸린 제한을 셀 수 없습니다.'));
+    (frame.notes || []).length;
+  } else if (!frame.limits.length) {
+    now.appendChild(el('div', 'muted', '걸린 특수 소환 제한이 없습니다.'));
+  } else {
+    frame.limits.forEach(function (l) {
+      now.appendChild(el('div', null, 'P' + l.seat + ' · ' + l.attribute
+        + ' 속성만 특수 소환 (출처 ' + l.source + ')'));
+    });
+    if (!frame.startKnown) {
+      /* 🔴 시작값이 없는 옛 기록 — 아래는 **재생 중 등록된 것만**이다. */
+      now.appendChild(el('div', 'warn', '⚠ 시작 시점 제한 정보 미기록 — '
+        + '위는 재생 중 등록된 것만입니다.'));
+    }
+  }
 
   var notes = document.getElementById('notes');
   clear(notes);
@@ -416,12 +491,15 @@ function summarize(rec) {
   var r = rec.result || {};
   var head = document.getElementById('result');
   clear(head);
+  head.appendChild(el('h3', null, '전체 실행 결과'));
   var status = r.status === 'completed' ? '✅ 전개 완료'
              : r.status === 'stopped' ? '⏹ 중단'
              : r.status === 'not_run' ? '❌ 실행하지 않음' : '▶ 실행함';
   var src = rec.source || {};
   var way = src.mode === 'line' ? ('고정 경로 ' + (src.line || '')) : '자율 실행';
   head.appendChild(el('div', 'stepline', status + ' · ' + way));
+  head.appendChild(el('div', 'muted', '🔴 전체 실행의 결과입니다 — '
+    + '지금 보고 있는 장면의 상태가 아닙니다.'));
   if (r.line_total) {
     head.appendChild(el('div', 'muted',
       (r.line_done || 0) + ' / ' + r.line_total + '단계'));
@@ -429,9 +507,11 @@ function summarize(rec) {
   if (r.stopped_reason && r.status !== 'completed') {
     head.appendChild(el('div', 'warn', '중단 사유: ' + r.stopped_reason));
   }
+  /* 🔴 **최종 결과의 제한이다** — 지금 장면의 제한이 아니다 (6-AV).
+     전에는 이 줄이 시작 화면에서도 최종 제한을 보여 주었다. */
   var limits = (rec.final && rec.final.summon_limits) || [];
   if (limits.length) {
-    head.appendChild(el('div', 'muted', '특수 소환 제한 ' + limits.length
+    head.appendChild(el('div', 'muted', '최종 결과의 제한 ' + limits.length
       + '건 — ' + limits.map(function (l) {
           return l.attribute + ' (출처 ' + l.source + ')'; }).join(' · ')));
   }

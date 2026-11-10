@@ -827,3 +827,42 @@ def test_g09_a_build_failure_is_reported_and_keeps_the_run(repository, monkeypat
     assert bot.COMBO_REPLAY_FILENAME not in [
         item.filename for item in response.attachments
     ]
+
+
+# ======================================================================
+# H. 시작 시점의 제한 (Phase 6-AV)
+# ======================================================================
+@requires_official_db
+@pytest.mark.real_card
+def test_h01_the_record_carries_the_limits_at_the_start(longirsu):
+    """
+    🔴 **제한은 등록 사건으로만 남는다.** 그래서 시작값이 함께 있어야
+    읽는 쪽이 「지금 걸린 제한」 을 셀 수 있다 — 없으면 「미기록」 과
+    「제한 없음」 을 구분하지 못한다.
+    """
+    _setup, _run, _progress, record = longirsu
+    assert "summon_limits" in record["initial"]
+    #: 이 전개는 아무것도 걸리지 않은 판에서 시작한다.
+    assert record["initial"]["summon_limits"] == []
+    #: 그리고 최종 결과에는 둘이 있다 — **다른 칸이다**.
+    assert len(record["final"]["summon_limits"]) == 2
+
+
+@requires_official_db
+@pytest.mark.real_card
+def test_h02_the_limits_appear_only_after_their_events(longirsu):
+    """
+    등록 사건이 **어느 장면에 있는지**가 기록에 있다 — 뷰어는 그것으로
+    장면마다의 제한을 센다 (화면 확인은 보고서 §14).
+    """
+    _setup, _run, _progress, record = longirsu
+    seen = [
+        (event["seq"], change["source_card_id"])
+        for event in record["events"] for change in event["changes"]
+        if change["kind"] == "special_summon_limited"
+    ]
+    assert len(seen) == 2
+    #: 🔴 첫 사건은 시작(0번)이 아니다 — 시작 화면에 최종 제한을 보이면
+    #: 안 되는 이유가 이것이다.
+    assert seen[0][0] > 0
+    assert seen[0][0] < seen[1][0]

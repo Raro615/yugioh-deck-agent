@@ -81,10 +81,17 @@ import json
 #: (「몬스터/효과/링크」 같은 한국어 종류). 뷰어가 카드를 직사각형으로
 #: 그릴 때 이름만으로는 종류를 알 수 없었다. 🔴 **더한 것이 전부이고**,
 #: ``/1`` 을 읽던 쪽은 그대로 읽을 수 있다.
-REPLAY_FORMAT = "engine-replay/2"
+#:
+#: 🔴 ``/2`` → ``/3`` (Phase 6-AV): ``initial`` 에 **시작 시점의 특수 소환
+#: 제한**(``summon_limits``) 을 더했다. 제한은 등록 **사건**으로만 남아
+#: 있어서, 읽는 쪽이 「지금 걸려 있는 제한」 을 세려면 시작값이 있어야
+#: 한다 — 없으면 「시작 시점 제한 정보 미기록」 과 「제한 없음」 을 구분할
+#: 수 없다. 🔴 **더한 것이 전부이고**, 옛 형식도 그대로 읽는다.
+REPLAY_FORMAT = "engine-replay/3"
 
 #: 이 저장소가 읽을 수 있는 형식들. 뷰어가 쓴다.
-REPLAY_FORMATS_READ = ("engine-replay/1", "engine-replay/2")
+REPLAY_FORMATS_READ = ("engine-replay/1", "engine-replay/2",
+                       "engine-replay/3")
 
 #: 사건 종류 — ``EventJournal`` 의 세 가지를 그대로 옮긴 이름이다.
 EVENT_ACTION = "action"
@@ -241,7 +248,18 @@ def export_opening_replay(setup, run, repository=None, *,
         "cards": _card_table(
             tuple(initial_rows) + tuple(final_rows), repository, tokens
         ),
-        "initial": {"zones": _grouped(initial_rows)},
+        "initial": {
+            "zones": _grouped(initial_rows),
+            #: 🔴 **시작 시점의 제한** (6-AV). 빈 목록은 "그때 걸린 제한이
+            #: 없었다" 이고, 이 칸이 **없는** 기록은 "모른다" 다 — 읽는
+            #: 쪽이 둘을 다르게 적는다.
+            "summon_limits": [
+                {"seat": seat, "attribute": attribute, "source": source}
+                for seat, attribute, source in getattr(
+                    run, "initial_limits", ()
+                )
+            ],
+        },
         "steps": [_step_block(step) for step in run.steps],
         "events": [_event_block(event) for event in events],
         "final": _final_block(state, final_rows),

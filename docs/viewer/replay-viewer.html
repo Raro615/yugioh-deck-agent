@@ -33,16 +33,17 @@ main { display: grid; grid-template-columns: 1fr 320px; gap: 14px;
 .row { display: grid; gap: 6px; margin-bottom: 6px; }
 .row.five { grid-template-columns: repeat(5, 1fr); }
 .row.piles { grid-template-columns: repeat(5, 1fr); }
-.slot { min-height: 74px; border: 1px dashed var(--line); border-radius: 6px;
-        padding: 4px; }
-.slot .label { font-size: 10px; color: var(--dim); }
+.slot { min-height: 86px; border: 1px dashed var(--line); border-radius: 6px;
+        padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+.slot .label { font-size: 10px; color: var(--dim); white-space: nowrap;
+               overflow: hidden; text-overflow: ellipsis; }
 .pile { min-height: 74px; border: 1px solid var(--line); border-radius: 6px;
         padding: 6px; background: #151822; }
 .pile .label { font-size: 11px; color: var(--dim); margin-bottom: 4px; }
 .cards { display: flex; flex-wrap: wrap; gap: 4px; }
 .card { border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px;
-        background: #202536; min-width: 92px; max-width: 150px;
-        cursor: pointer; line-height: 1.25; }
+        background: #202536; min-width: 96px; max-width: 160px;
+        cursor: pointer; line-height: 1.3; overflow-wrap: anywhere; }
 .card .nm { font-size: 11px; font-weight: 600; word-break: keep-all; }
 .card .ty { font-size: 10px; color: var(--dim); }
 .card.sel { outline: 2px solid var(--hot); }
@@ -50,8 +51,19 @@ main { display: grid; grid-template-columns: 1fr 320px; gap: 14px;
 .card.cost { border-color: var(--cost); box-shadow: 0 0 0 1px var(--cost); }
 .card.mat  { border-color: var(--mat);  box-shadow: 0 0 0 1px var(--mat); }
 .card.tgt  { border-color: var(--tgt);  box-shadow: 0 0 0 1px var(--tgt); }
-.card .tag { font-size: 9px; border-radius: 3px; padding: 0 3px;
-             margin-right: 3px; }
+.card .tag { font-size: 9px; border-radius: 3px; padding: 0 4px;
+             margin-bottom: 2px; display: inline-block; font-weight: 700;
+             color: #11131a; }
+.card .tag.move { background: var(--move); }
+.card .tag.cost { background: var(--cost); }
+.card .tag.mat  { background: var(--mat); }
+.card .tag.tgt  { background: var(--tgt); }
+.box.now { border-color: #3c4a6b; }
+.act { font-size: 13px; color: var(--hot); margin-top: 2px; }
+.nav { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.nav button { font-size: 15px; padding: 8px 14px; }
+.seat.mine { border-color: #3c4a6b; background: #1b2030; }
+.seat.mine h2 { color: var(--ink); }
 aside { display: grid; gap: 10px; }
 .box { border: 1px solid var(--line); border-radius: 8px; padding: 10px;
        background: var(--panel); }
@@ -81,30 +93,37 @@ li { margin-bottom: 4px; font-size: 12px; }
 </header>
 <main>
   <section>
-    <div class="box">
+    <div class="box now">
       <div id="stepline" class="stepline"></div>
+      <div id="stepact" class="act"></div>
       <div id="stepsub" class="muted"></div>
-      <div style="margin-top:8px">
+      <div class="nav">
         <button id="first">처음으로</button>
-        <button id="prev">← 이전 단계</button>
-        <button id="next" class="primary">다음 단계 →</button>
+        <button id="prev">← 이전 장면</button>
+        <button id="next" class="primary">다음 장면 →</button>
       </div>
       <ul id="notes"></ul>
     </div>
     <div id="board" class="board" style="margin-top:12px"></div>
   </section>
   <aside>
-    <div class="box" id="result"></div>
+    <div class="box">
+      <h3>지금 장면의 특수 소환 제한</h3>
+      <div id="limits-now"></div>
+    </div>
+    <div class="box" id="result">
+      <h3>전체 실행 결과</h3>
+    </div>
     <div class="box">
       <h3>선택한 카드</h3>
       <div id="selected"></div>
     </div>
     <div class="box legend">
-      <h3>강조 표시</h3>
+      <h3>강조 표시 (카드에 글자로도 적습니다)</h3>
       <span><i class="dot" style="background:#4fc3f7"></i>이동</span>
-      <span><i class="dot" style="background:#ff8a7a"></i>비용</span>
-      <span><i class="dot" style="background:#b388ff"></i>링크 소재</span>
-      <span><i class="dot" style="background:#7bdc9a"></i>효과 대상</span>
+      <span><i class="dot" style="background:#ff8a7a"></i>코스트</span>
+      <span><i class="dot" style="background:#b388ff"></i>소재</span>
+      <span><i class="dot" style="background:#7bdc9a"></i>대상</span>
     </div>
     <details>
       <summary id="unsupported-count">미지원</summary>
@@ -119,7 +138,7 @@ li { margin-bottom: 4px; font-size: 12px; }
 <script id="replay-data" type="application/json"></script>
 <script>
 'use strict';
-var FORMATS = ["engine-replay/1", "engine-replay/2"];
+var FORMATS = ["engine-replay/1", "engine-replay/2", "engine-replay/3"];
 var ZONES_MAIN = ['MZONE', 'EMZONE', 'SZONE'];
 var PILES = [['HAND', '패'], ['DECK', '덱'], ['EXTRA', '엑스트라 덱'],
              ['GRAVE', '묘지'], ['REMOVED', '제외']];
@@ -190,9 +209,21 @@ function buildFrames(rec) {
     (st.events || []).forEach(function (seq) { stepOf[seq] = st; });
   });
 
+  /* 🔴 제한은 **등록 사건**으로만 남는다. 그래서 시작값이 있어야 "지금
+     걸린 제한" 을 셀 수 있다. 시작값 칸이 없는 옛 기록은 null 로 두고
+     화면이 「시작 시점 제한 정보 미기록」 이라고 적는다. */
+  var startLimits = (rec.initial && rec.initial.summon_limits) || null;
+  var startKnown = !!startLimits;
+  var limits = startLimits ? startLimits.map(function (l) {
+    return {seat: (l.seat === undefined ? 0 : l.seat),
+            attribute: l.attribute, source: l.source};
+  }) : null;
+
   var frames = [{seq: -1, step: null, kind: 'start', title: '시작 상태',
                  text: '아직 아무 행동도 하지 않았습니다.',
-                 where: snapshot(), roles: {}, notes: [], shuffled: {}}];
+                 where: snapshot(), roles: {}, notes: [], shuffled: {},
+                 limits: limits ? limits.slice() : null,
+                 startKnown: startKnown}];
   /* 🔴 섞인 자리만 「순서 미기록」 이다 — 상대 덱까지 싸잡지 않는다 */
   var shuffled = {};
 
@@ -224,6 +255,11 @@ function buildFrames(rec) {
                    + ' 를 섞었습니다 (' + ch.size
                    + '장) — 섞은 뒤의 순서는 기록에 없습니다.');
       } else if (ch.kind === 'special_summon_limited') {
+        /* 🔴 **이 장면부터** 걸린다. 해제 · 만료 정보는 기록에 없으므로
+           임의로 풀지 않는다. */
+        if (limits === null) { limits = []; }
+        limits.push({seat: (ch.player === undefined ? 0 : ch.player),
+                     attribute: ch.attribute, source: ch.source_card_id});
         notes.push('특수 소환 제한이 걸렸습니다 — ' + ch.attribute
                    + ' 속성만 (출처 ' + ch.source_card_id + ')');
       } else if (ch.kind === 'life_changed') {
@@ -244,19 +280,23 @@ function buildFrames(rec) {
                  title: frameTitle(rec, ev, st),
                  text: frameText(rec, ev, st),
                  where: snapshot(), roles: roles, notes: notes,
-                 shuffled: Object.assign({}, shuffled)});
+                 shuffled: Object.assign({}, shuffled),
+                 limits: limits ? limits.slice() : null,
+                 startKnown: startKnown});
   });
   return frames;
 }
 
 function frameTitle(rec, ev, st) {
-  var head = ev.type === 'cost_payment' ? '비용 지불'
+  /* 🔴 **"걸음" 이라는 한 낱말로 두 숫자를 부르지 않는다** (6-AV).
+     장면 번호는 아래 renderStepHead 가 적고, 여기는 **엔진 행동**만
+     말한다. */
+  var head = ev.type === 'cost_payment' ? '코스트 지불'
            : ev.type === 'effect' ? '효과 해결' : '행동';
   if (st) {
     var k = STEP_KO[st.kind] || st.kind;
     var nm = st.card ? (st.card.name || ('[' + st.card.passcode + ']')) : '';
-    return '걸음 ' + st.order + ' · ' + k + (nm ? ' — ' + nm : '')
-           + ' · ' + head;
+    return k + (nm ? ' — ' + nm : '') + ' · ' + head;
   }
   return head;
 }
@@ -288,10 +328,16 @@ function frameText(rec, ev, st) {
 }
 
 /* ---------- 그리기 ------------------------------------------------ */
+var ROLE_KO = {move: '이동', cost: '코스트', mat: '소재', tgt: '대상'};
+
 function cardNode(rec, id, role, frame) {
   var n = el('div', 'card');
   if (role) { n.classList.add(role); }
   if (state.selected === id) { n.classList.add('sel'); }
+  if (role && ROLE_KO[role]) {
+    /* 🔴 **색만으로 구분하지 않는다** — 짧은 글자를 함께 적는다. */
+    n.appendChild(el('div', 'tag ' + role, ROLE_KO[role]));
+  }
   var nm = el('div', 'nm', cardName(rec, id));
   var ty = el('div', 'ty', cardType(rec, id) + ' · #' + id);
   n.appendChild(nm); n.appendChild(ty);
@@ -307,7 +353,8 @@ function cardNode(rec, id, role, frame) {
 }
 
 function seatNode(rec, frame, seat, label) {
-  var box = el('div', 'seat');
+  /* 🔴 자기 필드가 눈에 먼저 들어오게 한다 (6-AV 가독성). */
+  var box = el('div', String(seat) === '0' ? 'seat mine' : 'seat');
   box.appendChild(el('h2', null, label));
   var byZone = {};
   Object.keys(frame.where).forEach(function (id) {
@@ -380,9 +427,37 @@ function render() {
   board.appendChild(seatNode(rec, frame, 1, '상대 (P1)'));
   board.appendChild(seatNode(rec, frame, 0, '자신 (P0)'));
 
-  document.getElementById('stepline').textContent =
-    '걸음 ' + state.at + ' / ' + (state.frames.length - 1) + ' — ' + frame.title;
+  var last = state.frames.length - 1;
+  var head = '재생 장면 ' + state.at + ' / ' + last;
+  if (state.at === last) { head += ' · 재생 끝'; }
+  document.getElementById('stepline').textContent = head;
+
+  var actions = (rec.steps || []).length;
+  var doneBy = frame.step ? frame.step.order : 0;
+  document.getElementById('stepact').textContent =
+    '엔진 행동 ' + doneBy + ' / ' + actions + ' · ' + frame.title;
   document.getElementById('stepsub').textContent = frame.text;
+
+  /* 🔴 **지금 걸린 제한** — 최종 결과와 다른 칸이다. */
+  var now = document.getElementById('limits-now');
+  clear(now);
+  if (frame.limits === null) {
+    now.appendChild(el('div', 'warn', '시작 시점 제한 정보 미기록 — 이 '
+      + '기록에는 시작값이 없어서 지금 걸린 제한을 셀 수 없습니다.'));
+    (frame.notes || []).length;
+  } else if (!frame.limits.length) {
+    now.appendChild(el('div', 'muted', '걸린 특수 소환 제한이 없습니다.'));
+  } else {
+    frame.limits.forEach(function (l) {
+      now.appendChild(el('div', null, 'P' + l.seat + ' · ' + l.attribute
+        + ' 속성만 특수 소환 (출처 ' + l.source + ')'));
+    });
+    if (!frame.startKnown) {
+      /* 🔴 시작값이 없는 옛 기록 — 아래는 **재생 중 등록된 것만**이다. */
+      now.appendChild(el('div', 'warn', '⚠ 시작 시점 제한 정보 미기록 — '
+        + '위는 재생 중 등록된 것만입니다.'));
+    }
+  }
 
   var notes = document.getElementById('notes');
   clear(notes);
@@ -416,12 +491,15 @@ function summarize(rec) {
   var r = rec.result || {};
   var head = document.getElementById('result');
   clear(head);
+  head.appendChild(el('h3', null, '전체 실행 결과'));
   var status = r.status === 'completed' ? '✅ 전개 완료'
              : r.status === 'stopped' ? '⏹ 중단'
              : r.status === 'not_run' ? '❌ 실행하지 않음' : '▶ 실행함';
   var src = rec.source || {};
   var way = src.mode === 'line' ? ('고정 경로 ' + (src.line || '')) : '자율 실행';
   head.appendChild(el('div', 'stepline', status + ' · ' + way));
+  head.appendChild(el('div', 'muted', '🔴 전체 실행의 결과입니다 — '
+    + '지금 보고 있는 장면의 상태가 아닙니다.'));
   if (r.line_total) {
     head.appendChild(el('div', 'muted',
       (r.line_done || 0) + ' / ' + r.line_total + '단계'));
@@ -429,9 +507,11 @@ function summarize(rec) {
   if (r.stopped_reason && r.status !== 'completed') {
     head.appendChild(el('div', 'warn', '중단 사유: ' + r.stopped_reason));
   }
+  /* 🔴 **최종 결과의 제한이다** — 지금 장면의 제한이 아니다 (6-AV).
+     전에는 이 줄이 시작 화면에서도 최종 제한을 보여 주었다. */
   var limits = (rec.final && rec.final.summon_limits) || [];
   if (limits.length) {
-    head.appendChild(el('div', 'muted', '특수 소환 제한 ' + limits.length
+    head.appendChild(el('div', 'muted', '최종 결과의 제한 ' + limits.length
       + '건 — ' + limits.map(function (l) {
           return l.attribute + ' (출처 ' + l.source + ')'; }).join(' · ')));
   }
