@@ -161,6 +161,18 @@ COMBO_DETAIL_FILENAME = "combo-detail.txt"
 #: 들어가지 않는다.
 COMBO_REPLAY_FILENAME = "combo-replay.json"
 
+#: 전개 **뷰어** 첨부의 고정 파일명 (Phase 6-AU).
+COMBO_VIEWER_FILENAME = "combo-replay.html"
+
+#: 🔴 **디스코드 안에서 재생되지 않는다** — 정확히 그렇게 적는다.
+#:
+#: 첨부한 HTML 은 **파일**이고 호스팅한 페이지가 아니다. "전개 보기 링크"
+#: 라고 적으면 눌러서 바로 열리는 것처럼 읽힌다.
+COMBO_VIEWER_NOTICE = (
+    "🖥 **전개 보기 — 첨부 `{name}` 를 내려받아 브라우저에서 여세요.**"
+    " 디스코드 안에서는 재생되지 않습니다 (서버 설치는 필요 없습니다)."
+)
+
 #: 🔴 **시각 재생을 아직 지원하지 않는다는 한 줄** (Phase 6-AR · 6-AS 정정).
 #:
 #: 🔴 **엔진 실행 상태를 말하지 않는다** (6-AS). 전에는 이 줄에 "엔진 실행은
@@ -1399,6 +1411,36 @@ def replay_attachment(record) -> "tuple[ComboAttachment | None, ReplayState]":
     return item, ReplayState.EXPORTED
 
 
+def viewer_attachment(record) -> "tuple[ComboAttachment | None, ReplayState]":
+    """
+    **전개 뷰어 첨부 하나** (Phase 6-AU) — 기록을 담은 정적 HTML.
+
+    🔴 **같은 기록의 네 번째 표현이다** (요약 · 상세 · 기록 · 뷰어). 엔진을
+    다시 돌리지 않고, 만들지 못해도 앞의 셋은 그대로 간다.
+    """
+    if not record:
+        return None, ReplayState.NOT_RUN
+    from deck.replay_viewer import render_replay_html
+
+    try:
+        text = render_replay_html(record)
+    except Exception as error:  # pragma: no cover - 방어용
+        logger.warning(
+            "전개 뷰어를 만들지 못했습니다: %s: %s",
+            type(error).__name__, error,
+        )
+        return None, ReplayState.BUILD_FAILED
+
+    item = ComboAttachment(filename=COMBO_VIEWER_FILENAME, text=text)
+    if item.size > COMBO_ATTACHMENT_LIMIT:
+        logger.warning(
+            "전개 뷰어가 첨부 상한을 넘었습니다: %d > %d 바이트",
+            item.size, COMBO_ATTACHMENT_LIMIT,
+        )
+        return None, ReplayState.TOO_LARGE
+    return item, ReplayState.EXPORTED
+
+
 def _overflow_notice(detail: ComboDetail) -> str:
     """
     :func:`paginate` 가 메시지를 끊을 때 **어디서 전체를 볼 수 있는가**.
@@ -1664,8 +1706,24 @@ def combo_response(agent, hand_text: str, board_text: str = "",
             #: 한 덩어리를 더하면 실행 기록이 더 밀려난다.
             replay_item, replay_state = None, ReplayState.NO_ROOM
 
+    #: 🔴 **뷰어는 기록 다음이다** (Phase 6-AU). 기록을 붙이지 못한 자리에
+    #: 뷰어만 붙이지 않는다 — 기계가 읽는 값이 먼저다.
+    viewer_item: "ComboAttachment | None" = None
+    if replay_item is not None:
+        viewer_item, viewer_state = viewer_attachment(executed.replay)
+        if viewer_item is not None:
+            if len(attachments) < COMBO_ATTACHMENT_COUNT_LIMIT:
+                attachments.append(viewer_item)
+            else:
+                viewer_item, viewer_state = None, ReplayState.NO_ROOM
+    else:
+        viewer_state = replay_state
+
     lines.append("")
-    if executed.ran:
+    if viewer_item is not None:
+        #: 🔴 **볼 수 있는 것이 생겼을 때만** 전개 보기를 적는다 (6-AU).
+        lines.append(COMBO_VIEWER_NOTICE.format(name=viewer_item.filename))
+    elif executed.ran:
         #: 🔴 **외부 재생 지원 여부만** 말한다 — 실행의 성공 · 중단 · 실패는
         #: 위 실행 요약이 말한다 (상수의 설명).
         lines.append(COMBO_REPLAY_VIEW_UNAVAILABLE)
@@ -1676,6 +1734,10 @@ def combo_response(agent, hand_text: str, board_text: str = "",
             f" 시작 판 · 걸음마다의 카드 이동 · 비용 · 대상 · 최종 판"
             f" (한 걸음씩 다시 그리는 데 쓰는 값입니다)."
         )
+        if viewer_item is None and viewer_state.notice:
+            #: 🔴 뷰어만 못 붙인 자리 — 기록과 상세는 그대로다.
+            lines.append("🖥 " + viewer_state.notice.lstrip("🧾 ").replace(
+                "전개 기록", "전개 보기 파일", 1))
     elif replay_state.notice:
         lines.append(replay_state.notice)
 

@@ -75,7 +75,16 @@ from __future__ import annotations
 import json
 
 #: 내보내기 형식의 번호. 칸이 바뀌면 올린다.
-REPLAY_FORMAT = "engine-replay/1"
+#:
+#: 🔴 ``/1`` → ``/2`` (Phase 6-AU): ``cards`` 의 각 칸에 **보여 주기 위한
+#: 두 값**을 더했다 — ``kind`` (몬스터 · 마법 · 함정) 과 ``type_ko``
+#: (「몬스터/효과/링크」 같은 한국어 종류). 뷰어가 카드를 직사각형으로
+#: 그릴 때 이름만으로는 종류를 알 수 없었다. 🔴 **더한 것이 전부이고**,
+#: ``/1`` 을 읽던 쪽은 그대로 읽을 수 있다.
+REPLAY_FORMAT = "engine-replay/2"
+
+#: 이 저장소가 읽을 수 있는 형식들. 뷰어가 쓴다.
+REPLAY_FORMATS_READ = ("engine-replay/1", "engine-replay/2")
 
 #: 사건 종류 — ``EventJournal`` 의 세 가지를 그대로 옮긴 이름이다.
 EVENT_ACTION = "action"
@@ -91,6 +100,7 @@ _MOVE_KINDS = frozenset(
 
 __all__ = [
     "REPLAY_FORMAT",
+    "REPLAY_FORMATS_READ",
     "EVENT_ACTION",
     "EVENT_EFFECT",
     "EVENT_COST",
@@ -173,6 +183,17 @@ def _card_table(rows, repository=None, tokens=()) -> dict:
         found = repository.get(card_id) if repository is not None else None
         if found is not None:
             entry["name"] = found.display_name()
+            #: 🔴 **보여 주기 위한 값 둘** (Phase 6-AU). 그림 없이 직사각형
+            #: 으로 그리는 화면은 이름만으로 종류를 알 수 없다. 저장소가
+            #: 읽은 것을 그대로 싣고, 없으면 **싣지 않는다** (지어내지
+            #: 않는다 — 읽는 쪽이 "미기록" 으로 그린다).
+            kind = ("monster" if found.is_monster else
+                    "spell" if found.is_spell else
+                    "trap" if found.is_trap else None)
+            if kind is not None:
+                entry["kind"] = kind
+            if found.type_ko:
+                entry["type_ko"] = found.type_ko
         table[key] = entry
 
     for seat, _zone, instance, card_id in rows:

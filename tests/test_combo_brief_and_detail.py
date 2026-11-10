@@ -322,12 +322,13 @@ def test_b04_the_detail_attachment_keeps_the_whole_record(repository):
     """**B** — 첨부가 **원래의 기록**을 하나도 잃지 않았다."""
     response = _response(repository)
     detail = _detail(response)
-    #: 🔴 **정정 (Phase 6-AR).** 첨부가 둘이 되었다 — 상세 기록과 **전개
-    #: 기록**(JSON) 이다. 상세 기록 쪽은 한 줄도 잃지 않았고, 아래가 그것을
-    #: 그대로 센다.
-    assert len(response.attachments) == 2
+    #: 🔴 **정정 (Phase 6-AR · 6-AU).** 첨부가 셋이 되었다 — 상세 기록 ·
+    #: **전개 기록**(JSON) · **전개 뷰어**(HTML) 다. 상세 기록 쪽은 한 줄도
+    #: 잃지 않았고, 아래가 그것을 그대로 센다.
+    assert len(response.attachments) == 3
     assert [item.filename for item in response.attachments] == [
         bot.COMBO_DETAIL_FILENAME, bot.COMBO_REPLAY_FILENAME,
+        bot.COMBO_VIEWER_FILENAME,
     ]
     for needle in (
         "선공 상태 구성",                    # 입력과 초기 상태

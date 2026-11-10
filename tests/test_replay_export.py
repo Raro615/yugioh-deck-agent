@@ -555,9 +555,12 @@ def test_f03_no_replay_link_is_promised(repository):
         line_text=LONGIRSU_LINE,
     )
     summary = "\n".join(response.messages)
-    #: 🔴 **정정 (Phase 6-AS).** 이 줄은 *외부 재생 지원 여부*만 말한다 —
-    #: 엔진 실행 상태를 함께 단정하던 문구는 뺐다 (``test_g04``).
-    assert "전개 보기: 시각 재생은 아직 지원하지 않습니다" in summary
+    #: 🔴 **정정 (Phase 6-AS · 6-AU).** 6-AS 까지 이 자리는 *외부 재생 지원
+    #: 여부*만 말했고 (「시각 재생은 아직 지원하지 않습니다」), 6-AU 가
+    #: **볼 수 있는 파일**을 붙이면서 그 자리를 전개 보기 안내가 대신한다.
+    #: 🔴 **이 시험이 재던 사실은 그대로다** — 없는 링크를 약속하지 않는다.
+    assert "내려받아 브라우저에서 여세요" in summary
+    assert "디스코드 안에서는 재생되지 않습니다" in summary
     assert "duel-simulator" not in summary
     assert "http" not in summary
 
