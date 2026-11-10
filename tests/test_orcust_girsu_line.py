@@ -1321,8 +1321,11 @@ def test_g04_no_format_legality_is_claimed():
     #: 🔴 **Phase 6-AF 가 경로를 하나 더 등록했고, Phase 6-AO 가 또 하나를
     #: 더했다** (토큰 경로 · 디베르 경로). 기존 이름은 그대로다 — 새 경로는
     #: **따로** 등록되었다.
+    #: 🔴 **Phase 6-AP 가 또 하나를 더했다** (토큰이 남은 채 디베르 ① 을
+    #: 쓰고 그 토큰을 링크 소재로 쓰는 경로). 기존 이름은 그대로다.
     assert set(COMBO_LINES) == {
         "orcust-girsu",
         "orcust-girsu-token",
         "orcust-harp-horror",
+        "orcust-token-diber",
     }

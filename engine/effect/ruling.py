@@ -260,7 +260,27 @@ def normal_monster_facts(card_id: int, name: str = "") -> CardRuleFacts:
 #: effects" 가 그 카드들에는 성립하지 않고, **모른다로 남는다.**
 #:
 #: 토큰은 :func:`token_facts` 가 따로 답한다 — 룰북의 다른 줄이다.
+#: 🔴 **Phase 6-AP 가 그 "따로" 를 실제로 연결했다.** 6-AF 가
+#: :func:`token_facts` 를 적어 두고 production 에서 부르지 않았고, 그래서
+#: 필드에 토큰이 있는 판의 모든 조작 판정이 ``UNKNOWN`` 이었다
+#: (``BoardRuling._interference``). 지금은 :func:`rulebook_facts` 가 그
+#: 함수를 부른다.
 NOT_PLAIN_NORMAL: frozenset[str] = frozenset({"PENDULUM", "TOKEN"})
+
+#: 토큰인데 **룰북의 통상 몬스터 줄이 적용되지 않는** 종류 이름들
+#: (Phase 6-AP).
+#:
+#: 🔴 **"토큰이니까 아무 제약도 없다" 를 쓰지 않는다.** 실측으로
+#: ``data/cards.cdb`` 의 토큰은 241장이고 그중 238장이 정확히
+#: ``MONSTER|NORMAL|TOKEN`` 이며 (``EFFECT`` 도 ``PENDULUM`` 도 없다)
+#: **스크립트가 한 장도 없다.** 남은 3장은 ``type`` 이 ``0x4000`` 뿐인
+#: 자리표시자 줄(9995767 · 10000110 · 10000120)이고 몬스터로도 적혀 있지
+#: 않다 — 그 셋은 **모름으로 남긴다.**
+#:
+#: 그 셋이 걸러지는 것은 아래 :func:`rulebook_facts` 의 ``is_monster`` ·
+#: ``NORMAL`` 검사이고, 이 목록은 **나중에 효과 있는 토큰이 생길 때**를
+#: 위한 자리다. 그때 조용히 "효과 없음" 으로 읽히면 틀린다.
+TOKEN_NOT_PLAIN: frozenset[str] = frozenset({"EFFECT", "PENDULUM"})
 
 
 def rulebook_facts(
@@ -271,11 +291,17 @@ def rulebook_facts(
 
     확정할 수 없으면 ``None`` 이고, 그것이 "모른다" 다 — 지어내지 않는다.
 
-    지금 답할 수 있는 것은 **통상 몬스터 하나**다. 근거는
-    :data:`NORMAL_MONSTER_RULE` 이고, 그 줄에서 나오는 결론은
-    :func:`normal_monster_facts` 가 **이미** 적어 두었다. 6-O 가 더한 것은
-    규칙이 아니라 **연결**이다 — 그 줄이 덮는 카드가 저장소에 684장인데
-    손으로 적힌 것이 1장이었다 (실측).
+    답할 수 있는 것이 **둘**이다.
+
+    1. **통상 몬스터.** 근거는 :data:`NORMAL_MONSTER_RULE` 이고, 그 줄에서
+       나오는 결론은 :func:`normal_monster_facts` 가 **이미** 적어 두었다.
+       6-O 가 더한 것은 규칙이 아니라 **연결**이다 — 그 줄이 덮는 카드가
+       저장소에 684장인데 손으로 적힌 것이 1장이었다 (실측).
+    2. **토큰** (Phase 6-AP). 근거는 :data:`TOKEN_RULE` 이고, 결론은
+       :func:`token_facts` 가 **이미** 적어 두었다. 6-AF 가 그 함수를 적고
+       **production 에서 부르지 않았으므로** 필드에 토큰이 있는 판의 모든
+       조작 판정이 ``UNKNOWN`` 이었다 — 6-AP 가 더한 것도 규칙이 아니라
+       **연결**이다.
 
     🔴 **카드 ID 를 보지 않는다.** 보는 것은 관측이 실어 준 카드 **종류**
     뿐이고 (``is_monster`` · ``type_names`` · ``is_extra_deck``), 그래서
@@ -292,6 +318,21 @@ def rulebook_facts(
         return None
     if "NORMAL" not in definition.type_names:
         return None
+    if "TOKEN" in definition.type_names:
+        #: 🔴 **토큰은 토큰의 줄로 답한다** (Phase 6-AP). 통상 몬스터의
+        #: 줄과 **다른 줄**이고 (:data:`TOKEN_RULE`), 그래서 답도 다르다 —
+        #: 저쪽은 "패로 되돌릴 수 있다" 가 참이고 이쪽은 **거짓**이다.
+        #:
+        #: 🔴 **효과를 가진 토큰은 여기서 답하지 않는다**
+        #: (:data:`TOKEN_NOT_PLAIN`). 지금 저장소에 그런 토큰이 0장이라는
+        #: 것이 실측이고, 생기는 날 조용히 "효과 없음" 으로 읽히면 틀린다.
+        if TOKEN_NOT_PLAIN & set(definition.type_names):
+            return None
+        if definition.is_extra_deck:  # pragma: no cover - 실측 0장
+            #: 엑스트라 덱 토큰은 없다. 조건만 적어 둔다 (위 ``NORMAL`` 쪽과
+            #: 같은 이유).
+            return None
+        return token_facts(definition.card_id, definition.name)
     if NOT_PLAIN_NORMAL & set(definition.type_names):
         return None
     if definition.is_extra_deck:

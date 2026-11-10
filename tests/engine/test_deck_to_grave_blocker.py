@@ -742,7 +742,7 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
     #: 디베르 ① 이 덱에서 특수 소환할 **후보**이므로 그 질문 하나만 적었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 ``UNKNOWN``
     #: 이다 (ADR-006).
-    assert len(OPERATION_RULINGS) == 25
+    assert len(OPERATION_RULINGS) == 26
     assert set(OPERATION_RULINGS.card_ids) & set(pool) == set(covered)
 
 
@@ -1130,7 +1130,7 @@ def test_i02_the_production_registry_is_untouched():
     #: 디베르 ① 이 덱에서 특수 소환할 **후보**이므로 그 질문 하나만 적었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 ``UNKNOWN``
     #: 이다 (ADR-006).
-    assert len(OPERATION_RULINGS) == 25
+    assert len(OPERATION_RULINGS) == 26
     #: 🔴 **이 카드는 이제 원본에 있다** (Phase 6-AC). 그래서 "새지 않았다"
     #: 를 유무로는 더 이상 셀 수 없고, **사유로** 센다: 원본이 들고 있는
     #: 문장은 6-AC 가 적은 등재 사유이고, ``test_i01`` 이 사본에 적은

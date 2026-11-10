@@ -177,9 +177,9 @@ def test_a01_the_registry_holds_twenty_one_hand_written_cards():
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
     #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네를
     #: 읽어 등재했다 (디베르는 두 질문, 나머지 둘은 한 질문).
-    assert len(OPERATION_RULINGS) == 25
+    assert len(OPERATION_RULINGS) == 26
     #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네.
-    assert len(OPERATION_RULINGS.card_ids) == 25
+    assert len(OPERATION_RULINGS.card_ids) == 26
     assert PACHYCEPHALO in OPERATION_RULINGS.card_ids
     assert FEATHERMAN in OPERATION_RULINGS.card_ids
     assert HONEST in OPERATION_RULINGS.card_ids
@@ -892,7 +892,7 @@ def test_g02_the_registry_data_was_not_expanded():
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
     #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네를
     #: 읽어 등재했다 (디베르는 두 질문, 나머지 둘은 한 질문).
-    assert len(OPERATION_RULINGS) == 25
+    assert len(OPERATION_RULINGS) == 26
     #: 라이브러리 쪽은 6-O 가 건드리지 않았다 — 유도는 ruling.py 에 있다.
     assert "rulebook_facts" not in library
 

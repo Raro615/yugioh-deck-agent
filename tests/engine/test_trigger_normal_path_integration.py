@@ -1253,7 +1253,7 @@ def test_c07_the_ruling_registry_was_not_widened():
     #: 디베르 ① 이 덱에서 특수 소환할 **후보**이므로 그 질문 하나만 적었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 ``UNKNOWN``
     #: 이다 (ADR-006).
-    assert len(OPERATION_RULINGS) == 25
+    assert len(OPERATION_RULINGS) == 26
 
 
 def test_c08_the_defaults_are_the_old_behaviour():

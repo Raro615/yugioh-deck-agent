@@ -236,6 +236,11 @@ HONEST = 37742478
 GIRSU = 69811710
 WORLD_WAND = 93920420
 GALATEA = 30741503
+#: 🔴 **오르페골 갈라테아i** (LINK-1). 등재된 효과는 **없고**, 들고 있는
+#: 것은 소재 조건(:data:`~engine.link_rules.LINK_MATERIAL_RULES`) 과
+#: 금지 표의 한 줄뿐이다. Phase 6-AP 가 판정 사실을 더했다 — 그 이유는
+#: 그 줄의 주석에 있다.
+GALATEA_I = 48835607
 #: 오르페골 디베르 (Phase 6-AO) — 묘지에서 발동하는 **첫 효과**이고 비용을
 #: 치르는 **첫 등재 효과**다.
 HARP_HORROR = 57835716
@@ -2281,6 +2286,39 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                 "이 카드는 전투로 파괴되지 않는다」 는 **자기 자신**이고, "
                 "나머지는 제외된 자신의 기계족을 덱으로 되돌리고 「오르페골」 "
                 "마법 · 함정을 세트하는 효과다. 남의 조작을 막는 문장이 없다."
+            ),
+        ),
+        #: 🔴 **오르페골 갈라테아i** (Phase 6-AP). 갈라테아와 **같은 이유**로
+        #: 필요하다 — 링크 소환으로 필드에 놓이고, 그 뒤 판을 훑는 모든
+        #: 관문이 이 카드를 만난다 (``BoardRuling._interference``). 등록하지
+        #: 않으면 그 뒤의 모든 조작 판정이 ``UNKNOWN`` 이 되고, 실제로
+        #: 디스코드 실행에서 "EMZONE 의 48835607 에 대해 확인된 것이 없어,
+        #: 그것이 막는지 알 수 없습니다" 가 나왔다 (6-AP 보고서 §1).
+        CardRuleFacts(
+            card_id=GALATEA_I,
+            answers={},
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "오르페골 갈라테아i: 공식 텍스트 전문과 c48835607.lua 의 "
+                "등록 효과 **다섯 개를 하나하나 읽었다**. (1) e1 — EVENT_SPSUMMON_SUCCESS 로 "
+                "s.regop 을 돌려 EFFECT_CANNOT_SPECIAL_SUMMON 을 거는데, "
+                "SetTarget 이 `c:IsCode(id) and sumtype&SUMMON_TYPE_LINK` "
+                "이므로 **「갈라테아i」 자신의 링크 소환만** 막는다. 그리고 "
+                "그것은 필드에 있다는 것만으로 걸리는 것이 아니라 **이 "
+                "카드를 링크 소환했을 때** 걸린다 — 이 저장소는 그 사실을 "
+                "engine.link_rules.LINK_SUMMON_ONCE_PER_TURN 과 "
+                "GameState.summon_uses 로 따로 들고 판정한다 (Phase 6-AF). "
+                "(2) e2 — EFFECT_CANNOT_BE_XYZ_MATERIAL 은 **자기 자신**이 "
+                "엑시즈 소재가 되지 못한다는 뜻이다. (3) e3 · e3a — 덱 · "
+                "묘지의 「성유물」 몬스터나 「오르페골 바벨」 을 패에 "
+                "넣는다. (4) e4 · e4a — 자신을 묘지에서 특수 소환한다. "
+                "**남의 조작을 막는 문장이 하나도 없다.** "
+                "🔴 그러므로 이 'False' 는 '이 카드의 효과를 전부 "
+                "구현했다' 는 뜻이 **아니다** — e3 · e4 는 등재되지 "
+                "않았고(EFFECT_LIBRARY 에 없다) 이 저장소에서 발동될 수 "
+                "없다. 여기서 말하는 것은 **「필드에 있다는 것만으로 다른 "
+                "카드의 조작을 막는가」 하나**이고, 그 답이 거짓이다."
             ),
         ),
     )

@@ -1144,10 +1144,14 @@ def test_e05_both_lines_are_registered_separately(repository):
     """🔴 **새 경로를 따로 등록했다.** 기존 이름은 그대로다."""
     #: 🔴 **Phase 6-AO 가 또 하나를 따로 등록했다** (디베르 경로). 기존 두
     #: 이름은 그대로다.
+    #: 🔴 **Phase 6-AP 가 또 하나를 더했다** — 토큰을 소재로 쓰는 경로가
+    #: 둘이 되었다 (이 파일의 ``orcust-girsu-token`` 과, 디베르를 함께 쓰는
+    #: ``orcust-token-diber``). 기존 이름은 그대로다.
     assert sorted(COMBO_LINES) == [
         "orcust-girsu",
         "orcust-girsu-token",
         "orcust-harp-horror",
+        "orcust-token-diber",
     ]
     assert line_named("orcust-girsu") is ORCUST_GIRSU_LINE
     assert line_named("orcust-girsu-token") is ORCUST_GIRSU_TOKEN_LINE

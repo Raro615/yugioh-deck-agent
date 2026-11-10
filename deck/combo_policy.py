@@ -1030,15 +1030,131 @@ ORCUST_HARP_HORROR_LINE = ComboLine(
 )
 
 
+#: 🔴 **토큰이 남은 판에서 디베르 ① 을 발동하고, 그 토큰을 링크 소재로 쓰는
+#: 경로** (Phase 6-AP).
+#:
+#: ===  ============================================================
+#: 1    「잭나이츠 오르페골 기르수」(69811710) 일반 소환
+#: 2    기르수 ① — 덱의 「오르페골 디베르」(57835716) 를 묘지로
+#: 3    기르수 ③ — 서로의 필드에 「성유물 토큰」(46647145) 1장씩
+#: 4    묘지의 디베르 ① — 자신을 제외하고 덱에서
+#:      「오르페골 스켈레촌」(21441617) 특수 소환
+#: 5    자신의 **토큰**을 소재로 「오르페골 갈라테아i」(48835607) 링크 소환
+#: ===  ============================================================
+#:
+#: 🔴 **4 단계가 이 Phase 전까지 막혀 있었다.** 3 단계가 만든 토큰이 필드에
+#: 있으면 ``BoardRuling._interference`` 가 그 토큰에 대해 확인된 사실을 찾지
+#: 못해 디베르의 덱 후보 판정이 ``UNKNOWN`` 이 되었고, 그래서 디베르가 후보
+#: 목록에서 사라졌다 (디스코드 실측 — 보고서
+#: ``docs/orcust-token-and-galateai-summon-gates.md`` §1).
+#:
+#: 🔴 **순서가 중요하다.** 기르수 ③ 의 공식 조건이 「자신 필드에 이 카드
+#: 이외의 몬스터가 존재하지 않을 경우」 이므로 (``c69811710.lua`` 의 e3
+#: ``SetCondition``), 디베르 ① 로 스켈레촌을 세우면 그 뒤에는 토큰을 만들 수
+#: 없다. 그래서 **3 단계가 4 단계보다 앞**이다 — 불가능한 순서를 강제한
+#: 것이 아니라 발동 조건이 정한 순서다.
+#:
+#: 🔴 **5 단계가 갈라테아i 인 것도 조건이 정한다.** 갈라테아(30741503)는
+#: 「효과 몬스터 2장」 을 요구하므로 통상 몬스터인 토큰을 소재로 쓸 수 없고
+#: (실측: 후보 목록이 ``[기르수, 스켈레촌]`` 조합만 낸다), 갈라테아i 는
+#: 「「오르페골」 몬스터 또는 「성유물」 몬스터 1장」 이므로 setcode
+#: 0xfe(성유물) 인 토큰이 소재가 된다. 그리고 4 단계가 건 **어둠 속성
+#: 제한**을 갈라테아i 가 지난다 (어둠 속성 — data/cards.cdb).
+ORCUST_TOKEN_DIBER_LINE = ComboLine(
+    name="orcust-token-diber",
+    title_ko=(
+        "기르수 → 디베르 묘지행 → 성유물 토큰 2장 → 토큰이 남은 채 디베르 "
+        "① 로 스켈레촌 특수 소환 → 토큰을 소재로 갈라테아i 링크"
+    ),
+    steps=(
+        PlannedAction(
+            kind="normal_summon",
+            card_id=69811710,
+            label="「잭나이츠 오르페골 기르수」 를 일반 소환",
+        ),
+        PlannedAction(
+            kind="activate_effect",
+            card_id=69811710,
+            effect_ref=(69811710, 0),
+            resolution_card_ids=(57835716,),
+            label=(
+                "기르수 ① 발동 — 덱에서 「오르페골 디베르」 를 묘지로 보낸다 "
+                "(고르는 것은 해결 중이다)"
+            ),
+        ),
+        PlannedAction(
+            kind="activate_effect",
+            card_id=69811710,
+            effect_ref=(69811710, 2),
+            label=(
+                "기르수 ③ 발동 — 서로의 필드에 「성유물 토큰」 1장씩을 "
+                "앞면 수비 표시로 특수 소환"
+            ),
+        ),
+        PlannedAction(
+            kind="activate_effect",
+            card_id=57835716,
+            effect_ref=(57835716, 0),
+            resolution_card_ids=(21441617,),
+            label=(
+                "🔴 **토큰이 필드에 남은 채** 묘지의 디베르 ① 발동 — 자신을 "
+                "제외하고 덱에서 「오르페골 스켈레촌」 을 특수 소환 "
+                "(고르는 것은 해결 중이다)"
+            ),
+        ),
+        PlannedAction(
+            kind="link_summon",
+            card_id=48835607,
+            material_card_ids=(46647145,),
+            label=(
+                "자신의 「성유물 토큰」 **한 장**을 소재로 「오르페골 "
+                "갈라테아i」 링크 소환 (토큰이 소멸한다 — 묘지에도 제외에도 "
+                "남지 않는다)"
+            ),
+        ),
+    ),
+    basis=(
+        "① 기르수(69811710) ① 과 ③ · 디베르(57835716) ① · "
+        "갈라테아i(48835607) 의 소재 조건은 각각 "
+        "ORCUST_GIRSU_LINE · ORCUST_HARP_HORROR_LINE · "
+        "ORCUST_GIRSU_TOKEN_LINE 의 근거와 **같은 것**이고 여기서 다시 "
+        "읽지 않았다 — 이 경로가 새로 보이는 것은 그 셋의 **조합**이다. "
+        "② 이 조합이 성립하는 근거: 성유물 토큰(46647145)은 "
+        "data/cards.cdb 로 대조해 setcode 254(0xfe) · 통상 몬스터 · 어둠 "
+        "속성 · 기계족 · 레벨 1 · 0/0 이고, 스크립트가 없다 (실측: 저장소의 "
+        "토큰 241장 중 238장이 MONSTER|NORMAL|TOKEN 이고 그 238장 전부 "
+        "c*.lua 가 없다). 그래서 룰북의 「토큰은 필드의 통상 몬스터로 "
+        "취급된다」 한 줄로 '필드에 있다는 것만으로 남의 조작을 막지 "
+        "않는다' 가 나오고, 그것을 engine.effect.ruling.token_facts 가 "
+        "적어 두었다 (Phase 6-AF) — Phase 6-AP 가 그 함수를 "
+        "rulebook_facts 에 **연결**했다. "
+        "③ 4 단계가 3 단계보다 뒤인 이유는 기르수 ③ 의 "
+        "SetCondition(not Duel.IsExistingMatchingCard(nil,tp,"
+        "LOCATION_MZONE,0,1,e:GetHandler())) 이고, 5 단계가 갈라테아 가 "
+        "아닌 이유는 c30741503.lua 의 Card.IsType(TYPE_EFFECT) 필터다."
+    ),
+    hand=ORCUST_HARP_HORROR_HAND,
+    recipe_ydk=ORCUST_VERIFICATION_RECIPE,
+    note=(
+        "🔴 이 경로도 **검증용**이고 최선 전개라고 주장하지 않는다 — 사람이 "
+        "적어 둔 다섯 걸음을 그대로 밟는다. 🔴 **상대 필드의 토큰은 쓰지 "
+        "않는다**: 링크 소재는 자신이 컨트롤하는 몬스터이고, 엔진이 그것을 "
+        "거절한다 (실측). 🔴 금지 · 제한 데이터로 검증하지 않았으므로 대회 "
+        "합법 덱이라고 부르지 않는다 (레시피 · 시작 패는 기존 것 그대로다)."
+    ),
+)
+
+
 COMBO_LINES: dict[str, ComboLine] = {
     line.name: line
     for line in (
         ORCUST_GIRSU_LINE,
         ORCUST_GIRSU_TOKEN_LINE,
         ORCUST_HARP_HORROR_LINE,
+        ORCUST_TOKEN_DIBER_LINE,
     )
 }
-assert len(COMBO_LINES) == 3, (
+assert len(COMBO_LINES) == 4, (
     "같은 이름의 경로가 두 번 적혀 있습니다 — 어느 쪽이 이기는지 말할 수 "
     f"없습니다: {sorted(COMBO_LINES)}"
 )

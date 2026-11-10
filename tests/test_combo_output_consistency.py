@@ -308,13 +308,21 @@ def test_06_the_stop_reason_is_scoped_to_what_this_repo_supports(repository):
     #: 🔴 그리고 **지원하지 않아 후보가 되지 못한 것**을 적는다 — 몇 건인지와
     #: **무엇인지**를 함께 적는다.
     assert "지원하지 않아 후보가 되지" in run.stopped_reason
-    assert "2건" in run.stopped_reason
-    #: 🔴 **두 보류가 각각 무엇인지 글자로 남는다.**
+    #: 🔴 **Phase 6-AP 에서 그 보류가 둘에서 하나로 줄었다.** 6-AO 때 둘
+    #: 중 하나는 디베르 ①(``57835716:e[0]``) 이었고, 그 보류 사유는
+    #: "기르수 ③ 이 만든 성유물 토큰(46647145)에 대해 확인된 것이 없어
+    #: 막는지 알 수 없다" 였다 — 디스코드 실행에서 사용자가 본 것이
+    #: 그것이다. 6-AP 가 룰북의 토큰 한 줄을 판정 계층에 **연결**하자 그
+    #: 보류가 사라지고 **디베르 ① 이 실제로 발동된다** (아래 ``test_07``
+    #: 이 걸음 수로 센다). **이전 기대값이 틀렸던 것이 아니라** 그때는
+    #: 정말 보류가 둘이었다.
+    assert "1건" in run.stopped_reason
+    #: 🔴 **남은 하나가 무엇인지 글자로 남는다** — 6-AB 부터 있던
+    #: ``activate_card`` 이고, 이 Phase 가 고친 것이 아니다.
     assert "activate_card" in run.stopped_reason
-    assert "57835716:e[0]" in run.stopped_reason
-    #: 🔴 **새로 등재한 효과의 보류 사유가 "모른다" 다** — 카드 ID 를 보고
-    #: 통과시키지도, 그 카드만 검증을 건너뛰지도 않았다.
-    assert "확인하지 못했습니다" in run.stopped_reason
+    #: 🔴 **토큰 때문에 생기던 보류는 없다.**
+    assert "57835716:e[0]" not in run.stopped_reason
+    assert "46647145" not in run.stopped_reason
 
 
 # ======================================================================
@@ -341,23 +349,31 @@ def test_07_resolved_steps_and_resolved_effects_are_different_numbers(repository
     바뀌었다. 이유는 ``test_06`` 의 표에 적었다 — 기르수 ① 의 기준점 선택이
     디베르를 집게 되어 『성장』 이 묘지에 가지 않는다. **이전 기대값이
     틀렸던 것이 아니라** 그때 기본 전개가 지난 길이 그랬다.
+
+    🔴 **Phase 6-AP 에서 둘 다 늘었다** — 실측: ``executed`` 7 ·
+    ``resolved`` 7 · ``effects_resolved`` **3**. 늘어난 걸음이 **디베르
+    ①**(``57835716:e[0]``) 이고, 6-AO 때 그 걸음은 기르수 ③ 이 만든 토큰
+    때문에 보류되어 있었다 (``test_06`` 의 설명). 🔴 **재는 것은 수가
+    아니라 두 수가 다르다는 사실**이고 그것은 그대로다.
     """
     setup = _opened(repository, [69811710, 703897, 2930675, 12989604, 93920420])
     run = execute_opening(setup, repository)
 
-    assert run.executed == 6, run.executed
-    assert run.resolved == 6, run.resolved
+    assert run.executed == 7, run.executed
+    assert run.resolved == 7, run.resolved
     #: 🔴 **둘이 다르다** — 그것이 이 시험의 전부다.
-    assert run.effects_resolved == 2, run.effects_resolved
-    #: 그 둘이 유발 발동이다 — 기록이 말한다.
+    assert run.effects_resolved == 3, run.effects_resolved
+    #: 그 셋이 어느 효과인지 기록이 말한다.
     effect_steps = [s for s in run.steps if s.effect_events]
     assert [s.kind for s in effect_steps] == [
+        "activate_effect",
         "activate_effect",
         "activate_effect",
     ]
     assert [s.effect_events for s in effect_steps] == [
         ("69811710:e[0]",),
         ("69811710:e[2]",),
+        ("57835716:e[0]",),
     ]
 
 
@@ -377,16 +393,18 @@ def test_08_the_output_says_what_resolved_means(repository):
     #: ① 🔴 **상세 기록이 세 수를 전부 들고 있다** — 하나도 사라지지 않았다.
     assert "막히지 않고 끝난 걸음" in detail
     assert "효과를 그만큼 해결했다는 뜻이 **아닙니다**" in detail
-    assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in detail
+    #: 🔴 Phase 6-AP 에서 2 → **3걸음** (``test_07`` 의 설명 — 토큰
+    #: 때문에 보류되던 디베르 ① 이 실제로 발동된다).
+    assert "효과의 조작이 실제로 수행된 걸음** 3걸음" in detail
     #: ② 기본 응답은 **조작이 수행된 수 하나**만 적는다.
-    assert "**효과의 조작 수행 2걸음**" in blob
+    assert "**효과의 조작 수행 3걸음**" in blob
     assert "막히지 않고 끝난 걸음" not in blob
     #: Phase 6-AC 에서 1 → 2 (위 ``test_07`` 의 설명).
     #: ③ 🔴 **Phase 6-AD 후속2 의 낱말이 두 자리에 그대로 있다.** "해결된
     #: 걸음" 은 규칙상 **해결됐지만 아무 일도 하지 않은 걸음**까지 포함하는
     #: 말이고 (공식 ``s.spop1`` 의 조기 종료), 그러면 그 수가 "소환이 N번
     #: 일어났다" 로 읽힌다 (보고서 §15.3).
-    assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in detail
+    assert "효과의 조작이 실제로 수행된 걸음** 3걸음" in detail
     #: ④ 🔴 **이 전개에는 조작 없는 걸음이 없으므로 그 줄이 어디에도 없다.**
     for text in (blob, detail):
         assert "해결됐지만 조작이 없었던 걸음" not in text
