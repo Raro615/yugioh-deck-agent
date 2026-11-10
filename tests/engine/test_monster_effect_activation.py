@@ -406,6 +406,10 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
         #: 정의가 적어 두므로 (``activation_zones={GRAVE}``) 그 자리가
         #: 아닐 때의 답이 모름이 아니라 확정 거부가 된다.
         EffectRef(57835716, 0): ActivationKind.IGNITION,
+        #: 🔴 Phase 6-AQ — **대상 지정**(``EFFECT_FLAG_CARD_TARGET``) 몬스터
+        #: 효과의 첫 등재다. 분류는 디베르와 같은 기동이고, 발동 자리도
+        #: 묘지다.
+        EffectRef(21441617, 0): ActivationKind.IGNITION,
     }
     entry = next(e for e in EFFECT_LIBRARY if e.definition.effect_ref == HONEST_REF)
     #: 🔴 **Phase 6-L 에서 실행된다.** 6-K 시점에는 ``executable=False`` ·

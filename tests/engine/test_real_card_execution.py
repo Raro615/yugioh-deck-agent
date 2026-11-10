@@ -329,7 +329,10 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
     #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
     #: 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 21
+    #: 🔴 21 → **22** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이 등재되었다.
+    #: 같은 성질의 고침이고, 다른 점은 이것이 목록의 **첫 대상 지정 몬스터
+    #: 효과**라는 것이다 (``TargetRequirement.TARGETING``).
+    assert len(EFFECT_LIBRARY) == 22
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -350,6 +353,10 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
         #: **비용을 치르는 첫 등재**, **덱에서 특수 소환하는 첫 등재**,
         #: 그리고 **특수 소환 제한을 거는 첫 등재**다.
         57835716,
+        #: 🔴 Phase 6-AQ — 오르페골 스켈레촌. **대상 지정 몬스터 효과의 첫
+        #: 등재**이고 (``EFFECT_FLAG_CARD_TARGET``), **묘지에서 묘지를
+        #: 대상으로 특수 소환하는 첫 등재**다.
+        21441617,
     }
 
 
@@ -386,7 +393,13 @@ def test_a_fifteen_real_effect_refs_are_executable():
     #: 아래 ``EffectRef(cid, 0)`` 묶음에 들어가지 않는다. 억지로 0 에 맞추지
     #: 않고 그 효과의 실제 ref 를 따로 더한다.
     #: 🔴 **Phase 6-AO 가 하나 더했다** — ``EffectRef(57835716, 0)`` 이다.
-    assert executable == {EffectRef(GIRSU, 2), EffectRef(57835716, 0)} | {
+    #: 🔴 **Phase 6-AQ 가 하나 더했다** — ``EffectRef(21441617, 0)``,
+    #: 오르페골 스켈레촌 ① 이고 목록의 **첫 대상 지정 몬스터 효과**다.
+    assert executable == {
+        EffectRef(GIRSU, 2),
+        EffectRef(57835716, 0),
+        EffectRef(21441617, 0),
+    } | {
         EffectRef(cid, 0)
         for cid in OLD_CARDS
         + NEW_CARDS
@@ -408,7 +421,8 @@ def test_a_fifteen_real_effect_refs_are_executable():
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 Phase 6-AF — 기르수 ③(토큰 생성)이 더해졌다 (16 → **17**).
     #: 🔴 Phase 6-AO — 디베르 ① 이 더해졌다 (17 → **18**).
-    assert len(executable) == 18
+    #: 🔴 Phase 6-AQ — 스켈레촌 ① 이 더해졌다 (18 → **19**).
+    assert len(executable) == 19
 
 
 def test_a_every_declined_card_says_what_is_missing():
@@ -1043,15 +1057,55 @@ def test_j_exactly_one_real_card_special_summons():
     #: 그 자리의 소생 제한은 묘지 · 제외에만 생기므로
     #: ``REVIVAL_LIMIT_FREE_ZONES`` 에 덱이 들어왔다 — **엑스트라 덱은 그대로
     #: 밖**이다.
+    #:
+    #: 🔴 **셋이 되었다** (Phase 6-AQ). 스켈레촌 ① 은 **묘지에서** 소환하고,
+    #: 그래서 이 시험의 두 번째 사실도 좁아졌다 — 아래를 보라.
     assert [entry.effect_ref for entry in summoners] == [
         EffectRef(WORLD_WAND, 1),
         EffectRef(57835716, 0),
+        EffectRef(21441617, 0),
     ]
     #: 🔴 여전히 못 하는 쪽 — 빼 버리지 않는다.
     reborn = entry_for(EffectRef(MONSTER_REBORN, 0))
     assert reborn is not None
     assert reborn.executable is False
     assert "IsCanBeSpecialSummoned" in reborn.note
+
+    #: 🔴 **"묘지에서의 특수 소환은 전부 UNKNOWN" 은 Phase 6-AQ 에서
+    #: 끝났다.** 위 docstring 이 적은 "그 이력이 없으므로 소생은 UNKNOWN
+    #: 으로 남는다" 는 **6-AC~6-AO 동안 사실이었다.** 6-AQ 가 룰북
+    #: ``RULE-SUMMON-014`` 를 읽고 그 질문이 **누구에게 걸리는가**를
+    #: 구분했다 — 「"Special Summon Monsters"」 와 엑스트라 덱 몬스터다.
+    #: 그래서 일반 소환 가능한 메인 덱 몬스터는 묘지에서도 그 질문이
+    #: 생기지 않는다.
+    #:
+    #: 🔴 **죽은 자의 소생이 열린 것이 아니다** — 그 카드는 여전히
+    #: ``executable=False`` 다 (바로 위 단언). 달라진 것은 **소생 제한
+    #: 판정 한 자리**이고, 등재 범위는 한 글자도 넓어지지 않았다.
+    from engine.effect.ruling import revival_limit_applies
+    from engine.condition import ConditionResult
+
+    class _Girsu:
+        is_monster = True
+        is_extra_deck = False
+        type_names = ("MONSTER", "EFFECT")
+        normal_summon_restriction_signals = ()
+
+    class _Link:
+        is_monster = True
+        is_extra_deck = True
+        type_names = ("MONSTER", "EFFECT", "LINK")
+        normal_summon_restriction_signals = ()
+
+    class _Unread:
+        is_monster = True
+        is_extra_deck = False
+        type_names = ("MONSTER", "EFFECT")
+        normal_summon_restriction_signals = None
+
+    assert revival_limit_applies(_Girsu()) is ConditionResult.FALSE
+    assert revival_limit_applies(_Link()) is ConditionResult.TRUE
+    assert revival_limit_applies(_Unread()) is ConditionResult.UNKNOWN
 
 
 def test_j_the_summon_path_still_refuses_without_a_ruling():
@@ -1210,13 +1264,16 @@ def test_k_exactly_one_real_card_has_a_cost():
     with_cost = [
         entry.card_id for entry in EFFECT_LIBRARY if entry.definition.has_cost
     ]
-    assert with_cost == [57835716], with_cost
+    #: 🔴 **둘이 되었다** (Phase 6-AQ) — 오르페골 스켈레촌 ① 도
+    #: ``Cost.SelfBanish`` 다 (``c21441617.lua`` 의 ``e1:SetCost``).
+    #: 🔴 이전 수가 틀렸던 것이 아니라 6-AO 시점에 하나였다.
+    assert with_cost == [57835716, 21441617], with_cost
     for entry in EFFECT_LIBRARY:
         for cost in entry.definition.cost.costs:
             assert isinstance(cost, SelfCardCost), (entry.card_id, cost)
             assert cost.choice_spec() is None
-        #: 🔴 **비용이 없는 효과는 그대로 비어 있다** — 하나만 늘었다.
-        if entry.card_id != 57835716:
+        #: 🔴 **비용이 없는 효과는 그대로 비어 있다** — 둘만 늘었다.
+        if entry.card_id not in (57835716, 21441617):
             assert entry.definition.cost.is_free is True, entry.card_id
 
 

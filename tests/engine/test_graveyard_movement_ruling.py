@@ -979,5 +979,9 @@ def test_g05_the_verdict_distribution_changed_only_one_way(repository):
     #: 🔴 **이 시험이 지키는 사실은 그대로다** — 뒤집힌 카드가 0장이다.
     #: 등재가 늘어도 파생의 답을 덮어쓰지 않는다.
     assert newly_true == 990, newly_true
-    assert already == 686, already
+    #: 🔴 **686 → 687** (Phase 6-AQ). 오르페골 스켈레촌(21441617)이
+    #: 등재로 들어왔고, 그 카드의 ``self_grave_text_fact`` 도 ``None`` 이다
+    #: (「묘지의 이 카드를 제외하고」 는 자기 묘지행 유발의 문장이 아니다).
+    #: 🔴 뒤집힌 카드는 여전히 0장이다.
+    assert already == 687, already
     assert newly_true + already == 1676

@@ -606,12 +606,111 @@ class RulingVerdict:
 #: 🔴 **엑스트라 덱은 여기 없다.** 그쪽에서 나오는 특수 소환은 융합 · 싱크로 ·
 #: 엑시즈 · 링크 **절차**의 일이고, 넓히면 「엑스트라 덱에서 정규 소환 없이
 #: 특수 소환」 이 조용히 허가된다 (6-AC 가 적어 둔 그 걱정은 그대로 참이다).
+#:
+#: 🔴 **이 표가 그 질문의 유일한 관문이 아니게 되었다** (Phase 6-AQ). 이
+#: 표 **밖**의 자리에서도 :func:`revival_limit_applies` 가 ``FALSE`` 면 그
+#: 질문이 생기지 않는다 — 룰북 ``RULE-SUMMON-014`` 가 그 제한을 「"Special
+#: Summon Monsters"」 와 엑스트라 덱 몬스터에만 걸기 때문이다. 이 표는 그대로
+#: "그 **자리**에서는 아직 한 번도 필드에 나온 적이 없다" 를 말한다.
+#:
+#: 🔴 **좁히지 않은 쪽을 적어 둔다.** 같은 룰북 문장은 그 제한을 "hand,
+#: Deck, or the Graveyard" 전부에 건다. 즉 특수 소환 몬스터 · 엑스트라 덱
+#: 몬스터에 대해서는 **패 · 덱도 그 질문이 생기는 자리**인데 이 표가 그것을
+#: 열어 둔다. 6-AQ 는 그쪽을 조이지 않았다 (보고서
+#: ``docs/orcust-skeleton-revival-and-longirsu-line.md`` §2.4 · §8).
 REVIVAL_LIMIT_FREE_ZONES: frozenset[Zone] = frozenset({Zone.HAND, Zone.DECK})
 
 #: 소생 제한을 판정하려면 무엇이 있어야 하는가. ``missing_rule`` 에 쓰인다.
 SUMMON_HISTORY_RULE: str = (
     "special-summon-history (소생 제한 — 이 카드가 정규 소환을 거쳤는가)"
 )
+
+
+#: 소생 제한이 **생기는 카드 종류** (Phase 6-AQ).
+#:
+#: 근거는 룰북 ``RULE-SUMMON-014`` 전문이다 (``data/rules/documents/
+#: sd-rulebook-en-v10.json``)::
+#:
+#:     Monsters can also be Special Summoned onto the field through the
+#:     effect of another card. **This is different from "Special Summon
+#:     Monsters."** You cannot use a card effect to Special Summon **those
+#:     monsters** from your hand, Deck, or the Graveyard unless it was
+#:     properly Special Summoned first. For example, if a Synchro Monster
+#:     is sent from your Extra Deck to the Graveyard without being Synchro
+#:     Summoned, you cannot use a Spell Card to Special Summon it from the
+#:     Graveyard, **because Synchro Monsters have to be properly Special
+#:     Summoned first**, before they can be Special Summoned by another
+#:     card's effect.
+#:
+#: 🔴 **"those monsters" 가 누구인가가 이 값이다.** 바로 앞 문장이 가리키는
+#: 것은 「"Special Summon Monsters"」 이고, 예시가 가리키는 것은 **엑스트라
+#: 덱 몬스터**다. 즉 소생 제한은 "묘지에 있는 모든 몬스터" 의 문제가
+#: **아니다** — 정규 소환 절차를 거쳐야만 특수 소환될 수 있는 종류의
+#: 문제다.
+#:
+#: 🔴 **``SPSUMMON`` 비트가 그 종류를 적는다.** 이 저장소는 이미 그것을
+#: 읽고 있다 — :data:`engine.summon_rules.NEVER_NORMAL_SUMMONABLE` 이
+#: ``{"RITUAL", "TOKEN", "SPSUMMON"}`` 이고, 그 근거가 Phase 6-C 의 전수
+#: 측정이다 (「(이 카드는) 일반 소환할 수 없다」 를 EDOPro 는 스크립트가
+#: 아니라 ``TYPE_SPSUMMON`` 비트로 적는다). 여기서는 그중 **의식과 특수
+#: 소환 몬스터** 둘만 쓴다 — 토큰은 애초에
+#: :attr:`RuleQuestion.MAY_BE_SPECIAL_SUMMONED` 의 답이 없어
+#: (:func:`token_facts`) 이 함수에 닿기 전에 ``UNKNOWN`` 이 된다.
+REVIVAL_LIMIT_TYPE_NAMES: frozenset[str] = frozenset({"SPSUMMON", "RITUAL"})
+
+
+def revival_limit_applies(definition) -> ConditionResult:
+    """
+    🔴 **이 카드에 소생 제한이 걸리는가** (Phase 6-AQ).
+
+    ``RULE-SUMMON-014`` 를 그대로 옮긴 세 값짜리 판정이다
+    (:data:`REVIVAL_LIMIT_TYPE_NAMES` 의 설명에 전문이 있다).
+
+    - ``TRUE`` — 걸린다. 엑스트라 덱 몬스터이거나 의식 · 특수 소환
+      몬스터다. 그러면 "정규 소환을 거쳤는가" 를 알아야 하고, 이 엔진은
+      소환 이력을 적지 않으므로 부르는 쪽은 ``UNKNOWN`` 을 돌려주어야
+      한다.
+    - ``FALSE`` — **걸리지 않는다.** 일반 소환할 수 있는 메인 덱
+      몬스터이고 (``SPSUMMON`` · ``RITUAL`` 비트가 없다), 스크립트를
+      끝까지 읽어 조건부 일반 소환 제약도 한 건도 없다. 룰북이 "those
+      monsters" 로 가리킨 쪽이 아니므로 그 질문 자체가 생기지 않는다.
+    - ``UNKNOWN`` — 읽지 못했다. 정의가 없거나, 스크립트가 없거나
+      (``None``), 조건부 제약 상수를 찾았지만 그것이 **누구에게** 걸리는지
+      이 신호가 말하지 않는다.
+
+    🔴 **마지막 갈래가 이 함수의 안전장치다.** ``normal_summon_restriction_
+    signals`` 는 판정이 아니라 신호이고 (``core.card_model``), 비어 있지
+    않다는 것은 "제약일 수 있는 것을 찾았다" 다. 그것을 ``FALSE`` 로 접으면
+    「이 카드는 일반 소환할 수 없다」 를 조건부로 적은 카드가 조용히 소생
+    제한 없는 카드가 된다.
+
+    🔴 **이 함수는 "소환 조건" 을 묻지 않는다.** 그 질문은
+    :attr:`RuleQuestion.MAY_BE_SPECIAL_SUMMONED` 가 카드별로 묻고 (등재되지
+    않은 카드는 ``UNKNOWN`` 이다 — ADR-006), 이 함수는 **그 앞의 다른
+    질문** 하나만 답한다. 둘을 합치면 "소생 제한이 없다" 가 "특수 소환해도
+    된다" 로 읽힌다.
+
+    실측 (``data/cards.cdb`` 의 몬스터 9,224장)::
+
+        FALSE  (일반 소환 가능 메인 덱)        5,460
+        TRUE   (엑스트라 덱)                   2,157
+        TRUE   (SPSUMMON · RITUAL)               492
+        UNKNOWN(스크립트 없음)                   958
+        UNKNOWN(조건부 제약 신호 있음)           157
+    """
+    if definition is None:
+        return ConditionResult.UNKNOWN
+    if not getattr(definition, "is_monster", False):
+        #: 몬스터가 아니면 특수 소환될 일이 없다 — 이 질문에 답하지 않는다.
+        return ConditionResult.UNKNOWN
+    if getattr(definition, "is_extra_deck", False):
+        return ConditionResult.TRUE
+    if REVIVAL_LIMIT_TYPE_NAMES & set(getattr(definition, "type_names", ())):
+        return ConditionResult.TRUE
+    signals = getattr(definition, "normal_summon_restriction_signals", None)
+    if signals is None or signals:
+        return ConditionResult.UNKNOWN
+    return ConditionResult.FALSE
 
 
 class BoardRuling:
@@ -791,16 +890,37 @@ class BoardRuling:
         if permission.forbidden:
             return RulingVerdict(ConditionResult.FALSE, permission.reason)
         if card.zone not in REVIVAL_LIMIT_FREE_ZONES:
-            allowed = " · ".join(
-                sorted(z.value for z in REVIVAL_LIMIT_FREE_ZONES)
-            )
-            return RulingVerdict(
-                ConditionResult.UNKNOWN,
-                f"{instance} 가 {card.zone.value} 에 있습니다. 그 자리에서 "
-                f"나오는 특수 소환은 소생 제한을 묻고, 이 엔진은 소환 "
-                f"이력을 적지 않습니다 ({SUMMON_HISTORY_RULE}). 특수 소환이 "
-                f"판정되는 자리는 {allowed} 뿐입니다.",
-            )
+            #: 🔴 **자리가 아니라 카드 종류가 그 질문을 만든다**
+            #: (Phase 6-AQ). 6-AC · 6-AO 는 출발 **자리**만 보고 "묘지면
+            #: 소생 제한을 묻는다" 고 했다. 룰북 ``RULE-SUMMON-014`` 는
+            #: 그 질문을 **"those monsters"** 에만 걸고, 그것은 「"Special
+            #: Summon Monsters"」 와 엑스트라 덱 몬스터다
+            #: (:func:`revival_limit_applies` 에 전문이 있다).
+            #:
+            #: 🔴 **완화가 아니다.** ``FALSE`` 는 "이 카드는 룰북이 가리킨
+            #: 종류가 아니다" 를 **읽어서** 답한 것이고, 읽지 못한 카드는
+            #: 그대로 ``UNKNOWN`` 이다. 그리고 아래 두 걸음(등재된 사실 ·
+            #: 판의 간섭)은 한 글자도 달라지지 않는다 — 종류가 아니라는
+            #: 사실이 "특수 소환해도 된다" 가 되지는 않는다.
+            limited = revival_limit_applies(card.definition)
+            if limited is not ConditionResult.FALSE:
+                allowed = " · ".join(
+                    sorted(z.value for z in REVIVAL_LIMIT_FREE_ZONES)
+                )
+                said = (
+                    "이 카드는 정규 소환 절차를 거쳐야 특수 소환될 수 있는 "
+                    "종류입니다 (엑스트라 덱 · 의식 · 특수 소환 몬스터)"
+                    if limited is ConditionResult.TRUE
+                    else "이 카드가 그 종류인지 읽지 못했습니다"
+                )
+                return RulingVerdict(
+                    ConditionResult.UNKNOWN,
+                    f"{instance} 가 {card.zone.value} 에 있고 {said}. "
+                    "그러면 「정규 소환을 거쳤는가」 를 알아야 하는데 이 "
+                    f"엔진은 소환 이력을 적지 않습니다 "
+                    f"({SUMMON_HISTORY_RULE}). 그 질문이 생기지 않는 자리는 "
+                    f"{allowed} 뿐입니다.",
+                )
         decided = self._explain_fact(RuleQuestion.MAY_BE_SPECIAL_SUMMONED, instance)
         if decided.answer is not ConditionResult.TRUE or permission.allowed:
             return decided
@@ -936,5 +1056,7 @@ __all__ = [
     "RulingVerdict",
     "BoardRuling",
     "REVIVAL_LIMIT_FREE_ZONES",
+    "REVIVAL_LIMIT_TYPE_NAMES",
+    "revival_limit_applies",
     "SUMMON_HISTORY_RULE",
 ]

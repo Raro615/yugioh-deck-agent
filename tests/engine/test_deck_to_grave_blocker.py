@@ -726,7 +726,12 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
         )
         is not None
     ]
-    assert answered == [57835716, SELF_GRAVE_TRIGGER], answered
+    #: 🔴 **답이 셋이 되었다** (Phase 6-AQ) — 스켈레촌 ① 을 등재하면서 그
+    #: 카드의 ``MAY_BE_SENT_TO_GRAVE`` · ``MAY_BE_BANISHED`` 도 공식 텍스트
+    #: 전문을 읽어 적었다 (기르수 ① 이 **덱에서 고른 카드**에 묻는 질문이고,
+    #: ① 의 비용이 **자기 자신을 묘지에서 제외**한다). 🔴 이전 수가 틀렸던
+    #: 것이 아니라 6-AO 시점에 둘이었다.
+    assert answered == [21441617, 57835716, SELF_GRAVE_TRIGGER], answered
 
     #: 등록소는 21장이고 그 안에 든 후보는 **그 한 장**이다.
     #: Phase 6-AC 가 둘을 더했다 — 성유물－『성장』 · 오르페골 갈라테아 (19 → 21).
@@ -1153,6 +1158,9 @@ def test_i02_the_production_registry_is_untouched():
         )
         is not None
     ]
+    #: 🔴 **넷이 되었다** (Phase 6-AQ) — 오르페골 스켈레촌이 늘었다 (그
+    #: ① 을 등재하면서 그 카드의 묘지 질문도 함께 읽었다). 🔴 이전 수가
+    #: 틀렸던 것이 아니라 6-AO 시점에 셋이었다.
     assert sorted(answering) == sorted(
-        [FEATHERMAN, SELF_GRAVE_TRIGGER, 57835716]
+        [FEATHERMAN, SELF_GRAVE_TRIGGER, 57835716, 21441617]
     ), answering

@@ -941,9 +941,15 @@ def test_h_no_real_card_uses_move_yet():
     #: 소환하므로 관문의 범위도 함께 넓어졌다 —
     #: ``REVIVAL_LIMIT_FREE_ZONES`` 에 덱이 들어왔고 (소생 제한은 묘지 ·
     #: 제외에만 생긴다) **엑스트라 덱은 그대로 밖**이다.
+    #: 🔴 **셋이 되었다** (Phase 6-AQ). 스켈레촌 ① 은 **묘지에서** 소환하고,
+    #: 그 자리는 자리 표가 아니라 **카드 종류**로 열렸다 — 룰북
+    #: ``RULE-SUMMON-014`` 가 소생 제한을 「"Special Summon Monsters"」 와
+    #: 엑스트라 덱 몬스터에만 걸기 때문이다
+    #: (``engine.effect.ruling.revival_limit_applies``).
     assert [str(entry.effect_ref) for entry in summoning] == [
         "93920420:e[1]",
         "57835716:e[0]",
+        "21441617:e[0]",
     ]
     from engine.effect.ruling import REVIVAL_LIMIT_FREE_ZONES
     from engine.vocabulary import Zone as _Zone

@@ -58,7 +58,7 @@ from engine.condition import Condition
 from engine.cost import CostGroup
 from engine.effect.operation import COUNTING_KINDS, Operation
 from engine.effect.target import SELF_TARGET, CountKind, TargetBinding, TargetRef
-from engine.effect.target import SelectionCount
+from engine.effect.target import SelectionCount, TargetRequirement
 from engine.execution import (
     DeclarationBinding,
     NumericTest,
@@ -263,11 +263,60 @@ class ResolutionSkip:
     기본값은 :attr:`~NoCandidateScope.WHOLE_EFFECT` — 6-AO 까지의 유일한
     동작이고, 선언하지 않은 효과는 한 글자도 달라지지 않는다.
     """
+    when_target_unusable: bool = False
+    """
+    🔴 **발동 시점에 지정한 대상을 해결 시점에 쓸 수 없으면 그 대상을 쓰는
+    일만 생략하고 정상 해결한다** (Phase 6-AQ).
+
+    :attr:`when_no_candidate` 와 **다른 축이다.** 그쪽은 "해결 중에 고를
+    후보가 없었다" 이고 (고르기 효과 · ``Duel.SelectMatchingCard``), 이쪽은
+    "**발동 시점에 이미 지정해 둔** 그 한 장을 지금은 쓸 수 없다" 다
+    (대상 지정 효과 · ``EFFECT_FLAG_CARD_TARGET`` · ``Duel.SelectTarget``).
+
+    ``c21441617.lua`` 의 ``s.spop`` (오르페골 스켈레촌 ①)::
+
+        local tc=Duel.GetFirstTarget()
+        if tc and tc:IsRelateToEffect(e) then
+            Duel.SpecialSummon(tc,0,tp,tp,false,false,POS_FACEUP)
+        end
+        local e1=Effect.CreateEffect(e:GetHandler())   -- ← if 밖이다
+        ...
+        Duel.RegisterEffect(e1,tp)
+
+    공식 스크립트가 **두 가지**를 그렇게 적는다.
+
+    1. ``if tc and tc:IsRelateToEffect(e)`` — 지정한 그 한 장이 효과와의
+       관계를 잃었으면 **소환을 시도하지 않는다.**
+    2. ``Duel.SpecialSummon`` 의 **반환값을 보지 않는다** — 빈 칸이 없거나
+       그 소환이 금지되어 0장이 소환되어도 그 뒤가 그대로 실행된다.
+
+    둘 다 "효과가 불발했다" 가 아니다. ``RegisterEffect`` 는 ``if`` **밖**에
+    있으므로 어둠 속성 제한은 **소환하지 못해도 걸린다.**
+
+    🔴 **범위는 고정이다.** :attr:`no_candidate_scope` 처럼 고르지 않는다 —
+    이 선언이 읽어 온 모양 자체가 "그 대상을 쓰는 ``if`` 안쪽만 건너뛴다"
+    이고, 어느 일이 그 대상을 쓰는지는
+    :attr:`~engine.effect.operation.Operation.target_refs` 가 답한다.
+
+    🔴 **좁게 삼킨다.** 실행기는 ``INVALID_TARGET`` + ``candidate_not_eligible``
+    **하나만** 이 생략으로 바꾼다 ("그 카드가 있는데 지금 조건을 만족하지
+    않는다"). 장수가 어긋났다 · 대상이 아예 없다 (``too_few_selected`` 등)
+    는 부르는 쪽의 잘못이고, ``UNCHECKED_TARGET`` · ``UNCHECKED_RULES`` 는
+    **모름**이다 — 어느 쪽도 생략으로 바뀌지 않는다.
+
+    🔴 **대상 지정 효과에만 적을 수 있다.** 그렇지 않은 정의에 적으면
+    :class:`EffectDefinition` 이 만들 때 거절한다 — 고르기 효과의 "후보가
+    없었다" 는 이 칸이 아니라 :attr:`when_no_candidate` 의 일이다.
+    """
     basis: str = ""
     """어느 스크립트의 어느 줄에서 읽었는가. **비울 수 없다.**"""
 
     def __post_init__(self) -> None:
-        if not (self.when_condition_false or self.when_no_candidate):
+        if not (
+            self.when_condition_false
+            or self.when_no_candidate
+            or self.when_target_unusable
+        ):
             raise ValueError(
                 "생략할 조건을 하나도 적지 않았습니다 — 그러면 이 선언은 "
                 "아무 뜻도 없고, 읽는 쪽은 '무언가 완화되었다' 고 읽습니다."
@@ -294,10 +343,13 @@ class ResolutionSkip:
     def canonical_state(self) -> tuple:
         #: 🔴 **범위도 정규 표현에 들어간다** (Phase 6-AO 후속). 범위만
         #: 다른 두 선언은 **다른 선언**이다 — 빼면 같은 것으로 읽힌다.
+        #: 🔴 **대상 생략도 정규 표현에 들어간다** (Phase 6-AQ). 빼면
+        #: 그것을 선언한 효과와 선언하지 않은 효과가 같은 것으로 읽힌다.
         return (
             self.when_condition_false,
             self.when_no_candidate,
             self.no_candidate_scope.value,
+            self.when_target_unusable,
         )
 
     def to_dict(self) -> dict:
@@ -305,6 +357,7 @@ class ResolutionSkip:
             "when_condition_false": self.when_condition_false,
             "when_no_candidate": self.when_no_candidate,
             "no_candidate_scope": self.no_candidate_scope.value,
+            "when_target_unusable": self.when_target_unusable,
             "basis": self.basis,
         }
 
@@ -320,6 +373,8 @@ class ResolutionSkip:
                 else "고를 후보가 없음"
             )
             bits.append(scope)
+        if self.when_target_unusable:
+            bits.append("지정한 대상을 쓸 수 없음 (그 대상을 쓰는 일만 생략)")
         return "해결 시 생략: " + " · ".join(bits)
 
 
@@ -629,6 +684,44 @@ class EffectDefinition:
         self._check_value_links()
         self._check_requirements()
         self._check_guards()
+        self._check_resolution_skip()
+
+    def _check_resolution_skip(self) -> None:
+        """
+        🔴 **대상 생략은 대상 지정 효과에만 적을 수 있다** (Phase 6-AQ).
+
+        :attr:`ResolutionSkip.when_target_unusable` 이 읽어 온 모양은
+        ``Duel.GetFirstTarget()`` + ``IsRelateToEffect`` 다 — **발동 시점에
+        지정해 둔 한 장**이 있어야 뜻이 있는 문장이고, 그 사실을 이 저장소는
+        :attr:`~engine.effect.target.TargetRequirement.TARGETING` 으로
+        적는다. 고르기 효과에 적으면 "후보가 없었다" 와 뒤섞이고
+        (:attr:`ResolutionSkip.when_no_candidate` 가 그쪽 일이다), 읽는 쪽은
+        무엇이 완화되었는지 알 수 없다.
+        """
+        skip = self.resolution_skip
+        if skip is None or not skip.when_target_unusable:
+            return
+        targeting = [
+            binding.ref
+            for binding in self.targets
+            if binding.spec.requirement is TargetRequirement.TARGETING
+        ]
+        if not targeting:
+            raise EffectDefinitionError(
+                "when_target_unusable 을 적었는데 대상 지정(TARGETING) 선언이 "
+                "없습니다: "
+                + (
+                    ", ".join(
+                        f"{b.ref.name}={b.spec.requirement.value}"
+                        for b in self.targets
+                    )
+                    or "선언된 대상이 없음"
+                )
+                + ". 이 생략은 발동 시점에 지정해 둔 한 장이 해결 시점에 "
+                "쓸 수 없게 된 경우의 것이고 (EFFECT_FLAG_CARD_TARGET · "
+                "Duel.GetFirstTarget), 해결 중에 고를 후보가 없는 경우는 "
+                "when_no_candidate 의 일입니다."
+            )
 
     def _check_target_links(self) -> None:
         """

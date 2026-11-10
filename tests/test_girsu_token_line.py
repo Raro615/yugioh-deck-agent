@@ -1147,10 +1147,13 @@ def test_e05_both_lines_are_registered_separately(repository):
     #: 🔴 **Phase 6-AP 가 또 하나를 더했다** — 토큰을 소재로 쓰는 경로가
     #: 둘이 되었다 (이 파일의 ``orcust-girsu-token`` 과, 디베르를 함께 쓰는
     #: ``orcust-token-diber``). 기존 이름은 그대로다.
+    #: 🔴 **Phase 6-AQ 가 또 하나를 더했다** — 스켈레촌 ① 로 묘지의
+    #: 기르수를 소생시켜 롱기르수까지 가는 경로다. 기존 이름은 그대로다.
     assert sorted(COMBO_LINES) == [
         "orcust-girsu",
         "orcust-girsu-token",
         "orcust-harp-horror",
+        "orcust-skeleton-longirsu",
         "orcust-token-diber",
     ]
     assert line_named("orcust-girsu") is ORCUST_GIRSU_LINE

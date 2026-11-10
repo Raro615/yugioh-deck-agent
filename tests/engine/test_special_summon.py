@@ -942,9 +942,13 @@ def test_i_only_one_library_effect_special_summons_and_it_was_read_by_hand():
     #: 🔴 **Phase 6-AO 가 두 번째를 등재했다** — 오르페골 디베르 ① 이고,
     #: 그 카드의 답도 **공식 텍스트 전문을 읽어** 등록소에 적혀 있다
     #: (아래 고리가 그것을 센다). 늘어난 것은 **읽은 카드**다.
+    #: 🔴 **Phase 6-AQ 가 세 번째를 등재했다** — 오르페골 스켈레촌 ① 이고,
+    #: 그 카드의 답도 공식 텍스트 전문을 읽어 등록소에 적혀 있다 (아래 고리가
+    #: 그것을 센다). 🔴 이전 수가 틀렸던 것이 아니라 6-AO 시점에 둘이었다.
     assert [str(entry.effect_ref) for entry in summoning] == [
         "93920420:e[1]",
         "57835716:e[0]",
+        "21441617:e[0]",
     ]
     for entry in summoning:
         facts = OPERATION_RULINGS.facts_for(entry.card_id)

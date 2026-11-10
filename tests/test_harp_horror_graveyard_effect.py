@@ -1139,15 +1139,36 @@ def test_f03_the_general_search_finds_it_and_the_rerun_verifies(repository):
     assert outcome.reached is True, outcome.goal_reason
     #: 🔴 탐색은 원본을 밟지 않는다.
     assert duel.state.state_hash() == before
-    #: 경로에 디베르 ① 의 발동과 링크 소환이 들어 있다.
-    chosen = [
-        card_id
-        for step in outcome.path
-        for ask in step.choices
-        for card_id in ask.chosen_card_ids
-    ]
-    assert DIBER in chosen, outcome.describe_ko()
+    #: 경로에 링크 소환이 들어 있다.
     assert any(step.kind == PlayerActionKind.LINK_SUMMON.value for step in outcome.path)
+
+    #: 🔴 **경로에 묘지에서 자신을 제외하는 등재 효과가 들어 있다.**
+    #:
+    #: 🔴 **Phase 6-AQ 에서 이 단언이 좁아졌다.** 6-AO 때 이 자리는
+    #: ``assert DIBER in chosen`` 이었고 **그때 사실이었다** — 그 시점에
+    #: 묘지에서 발동하는 등재 효과가 디베르 ① 하나뿐이었으므로, 목표에
+    #: 닿는 경로도 그것을 쓰는 것뿐이었다.
+    #:
+    #: 6-AQ 가 스켈레촌 ①(``21441617:e[0]``) 을 등재하자 탐색기가 **더
+    #: 먼저 닿는 다른 경로**를 찾는다 (실측): 기르수 일반 소환 → 기르수 ①
+    #: 로 **스켈레촌**을 묘지로 → 기르수 ③ 토큰 → 갈라테아i 링크 →
+    #: 스켈레촌 ① 로 묘지의 기르수 소생 → 갈라테아 링크. 기르수 ① 의
+    #: 기준점(``FirstPermittedChoice``)이 집는 것은 패스코드가 더 작은
+    #: 21441617 이고, 6-AO 시점에는 그 분기가 목표에 닿지 못해 탐색이
+    #: 디베르 분기까지 갔던 것이다.
+    #:
+    #: 🔴 **탐색기에 수순을 적지 않았으므로 그것을 고정하지 않는다.** 재는
+    #: 것은 "등재가 탐색 경로까지 닿았는가" 이고, 둘 중 어느 쪽이 먼저
+    #: 닿는지는 예산 · 기준점이 정한다.
+    grave_effects = {
+        tuple(step.action_key[4])
+        for step in outcome.path
+        if step.kind == PlayerActionKind.ACTIVATE_EFFECT.value
+        and step.action_key[4] is not None
+    }
+    assert grave_effects & {(DIBER, 0), (SKELETON, 0)}, outcome.describe_ko()
+    #: 🔴 그리고 **지금 실제로 집히는 것**은 스켈레촌 ① 이다 (6-AQ 실측).
+    assert (SKELETON, 0) in grave_effects, outcome.describe_ko()
 
     rerun = rerun_steps(
         _fresh(),
@@ -1682,18 +1703,48 @@ def test_h08_the_scope_is_declared_not_assumed():
 
     #: 🔴 **다른 선언들은 전부 전체 생략이다** — 성유물－『성장』 ② ·
     #: 기르수 ③ 의 뜻이 한 글자도 달라지지 않았다.
+    #:
+    #: 🔴 **Phase 6-AQ 에서 선언 하나가 늘었다** (스켈레촌 ① ·
+    #: ``21441617:e[0]``). 그쪽은 ``when_no_candidate`` 를 **적지 않고**
+    #: ``when_target_unusable`` 만 적으므로 "후보가 없을 때의 범위" 는
+    #: 기본값 그대로다. 🔴 **이전 수가 틀렸던 것이 아니다**: 6-AO 후속
+    #: 시점에 ``resolution_skip`` 을 적은 효과가 셋뿐이었다.
     others = {
         str(entry.definition.effect_ref)
         for entry in EFFECT_LIBRARY
         if entry.definition.resolution_skip is not None
         and str(entry.definition.effect_ref) != str(DIBER_EFFECT)
     }
-    assert others == {"69811710:e[2]", "93920420:e[1]"}, others
+    assert others == {
+        "69811710:e[2]",
+        "93920420:e[1]",
+        "21441617:e[0]",
+    }, others
     for entry in EFFECT_LIBRARY:
         skip = entry.definition.resolution_skip
         if skip is None or str(entry.definition.effect_ref) == str(DIBER_EFFECT):
             continue
         assert skip.no_candidate_scope is NoCandidateScope.WHOLE_EFFECT
+
+    #: 🔴 **``resolution_skip`` 을 적은 효과 전부의 census** (6-AQ 에서 넷).
+    declared = {
+        str(entry.definition.effect_ref): (
+            entry.definition.resolution_skip.when_condition_false,
+            entry.definition.resolution_skip.when_no_candidate,
+            entry.definition.resolution_skip.no_candidate_scope.value,
+            entry.definition.resolution_skip.when_target_unusable,
+        )
+        for entry in EFFECT_LIBRARY
+        if entry.definition.resolution_skip is not None
+    }
+    assert declared == {
+        "93920420:e[1]": (True, True, "whole_effect", False),
+        "69811710:e[2]": (True, False, "whole_effect", False),
+        str(DIBER_EFFECT): (True, True, "target_operations", False),
+        #: 🔴 스켈레촌 ① 은 **대상 생략 하나만** 적는다 — 그 ``s.spop`` 에
+        #: 조건 재검사도 (``GetLocationCount`` 가 없다) 고르기도 없다.
+        "21441617:e[0]": (False, False, "whole_effect", True),
+    }, declared
 
 
 def test_h09_the_executor_names_no_card(repository):

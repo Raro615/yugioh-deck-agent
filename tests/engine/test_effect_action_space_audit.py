@@ -838,7 +838,10 @@ def test_15_no_library_effect_has_a_cost_so_the_cost_path_is_untravelled():
     #: 🔴 **Phase 6-AO 가 비용 경로를 밟게 했다** — 디베르 ① 의
     #: ``Cost.SelfBanish`` 다. 그때까지 비어 있었던 것은 사실이고, 이제
     #: **그 하나**를 적는다: 느슨하게 하지 않고 어느 효과인지 고정한다.
-    assert with_cost == [57835716], with_cost
+    #: 🔴 **둘이 되었다** (Phase 6-AQ) — 오르페골 스켈레촌 ① 도
+    #: ``Cost.SelfBanish`` 다. 이전 수가 틀렸던 것이 아니라 6-AO 시점에
+    #: 하나였다.
+    assert with_cost == [57835716, 21441617], with_cost
     # 🔴 16 → 17 (6-K, 어니스트 ①) → **18** (6-V, 기르수 ①). 늘어난 두
     # 건 다 비용이 없으므로 위의 ``with_cost == []`` 는 그대로 참이다 —
     # 이 테스트가 지키는 것은 수가 아니라 그 사실이다.
@@ -854,7 +857,9 @@ def test_15_no_library_effect_has_a_cost_so_the_cost_path_is_untravelled():
     #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
     #: 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 21
+    #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 22
 
 
 # ======================================================================

@@ -798,14 +798,25 @@ def test_c01_the_player_declared_special_summon_is_still_unknown(repository):
 @pytest.mark.real_card
 def test_c02_a_card_in_the_graveyard_is_not_authorised(repository):
     """
-    🔴 **소생 제한은 카드가 아니라 이력이다.** 묘지에서 나오는 특수 소환은
-    확인된 카드여도 ``UNKNOWN`` 이다 — 소환 이력을 적는 자리가 없다.
+    🔴 **소생 제한은 카드가 아니라 이력이다** — 그 문장은 지금도 맞다.
+    바뀐 것은 **그 이력을 누구에게 묻는가** 다 (Phase 6-AQ).
+
+    🔴 **6-AC~6-AO 동안 이 시험은 "묘지에서 나오는 특수 소환은 확인된
+    카드여도 ``UNKNOWN`` 이다" 를 고정했고, 그때 사실이었다.** 6-AQ 가 룰북
+    ``RULE-SUMMON-014`` 를 읽었다 — 그 제한은 「"Special Summon Monsters"」 와
+    엑스트라 덱 몬스터에만 걸린다 ("because Synchro Monsters have to be
+    properly Special Summoned first"). 성유물－『성장』 은 일반 소환할 수 있는
+    메인 덱 효과 몬스터이므로 **그 질문이 생기지 않는다.**
+
+    그래서 이 시험은 **두 카드로** 갈라 센다 — 질문이 생기지 않는 쪽과
+    생기는 쪽. 느슨해진 것이 아니라 **구분이 생겼다.**
     """
     from engine.condition import ConditionResult
     from engine.effect.library import OPERATION_RULINGS
     from engine.effect.ruling import (
         SUMMON_HISTORY_RULE,
         BoardRuling,
+        revival_limit_applies,
     )
     from engine.game_state_view import GameStateView
 
@@ -826,12 +837,28 @@ def test_c02_a_card_in_the_graveyard_is_not_authorised(repository):
     )
     assert told.answer is ConditionResult.TRUE
 
-    #: 묘지에서는 모른다 — 그리고 **그 이유에 이름이 있다.**
+    #: 🔴 **묘지에서도 답이 나온다** (Phase 6-AQ) — 이 카드에는 소생 제한이
+    #: 걸리지 않는다. 등재된 사실과 판의 간섭 판정은 그대로 지난다.
     buried = ruling(in_grave.instance_id, Zone.GRAVE).explain_special_summon(
         in_grave.instance_id
     )
-    assert buried.answer is ConditionResult.UNKNOWN
-    assert SUMMON_HISTORY_RULE in buried.reason
+    assert buried.answer is ConditionResult.TRUE
+    #: 그리고 그 근거는 **카드 종류**다 — 룰북이 가리킨 종류가 아니다.
+    assert (
+        revival_limit_applies(repository.get(WAND)) is ConditionResult.FALSE
+    )
+    assert (
+        revival_limit_applies(repository.get(GALATEA)) is ConditionResult.TRUE
+    )
+
+    #: 🔴 **엑스트라 덱 몬스터는 여전히 모른다 — 그리고 그 이유에 이름이
+    #: 있다.** 룰북의 예시가 가리키는 쪽이고, 소환 이력을 적는 자리가 없다.
+    link_in_grave = state.create_instance(GALATEA, owner=P0, zone=Zone.GRAVE)
+    limited = ruling(
+        link_in_grave.instance_id, Zone.GRAVE
+    ).explain_special_summon(link_in_grave.instance_id)
+    assert limited.answer is ConditionResult.UNKNOWN
+    assert SUMMON_HISTORY_RULE in limited.reason
 
 
 @pytest.mark.real_card
@@ -983,11 +1010,16 @@ def test_d03_an_effect_without_a_recorded_limit_is_untouched():
     #: ``PER_CARD_NAME`` 이다. **이전 수가 틀렸던 것이 아니라** 그때는 그
     #: 효과가 등재되지 않았다 (ADR-006 — 등재하지 않은 것은 없는 것처럼
     #: 동작한다).
+    #: 🔴 **Phase 6-AQ 가 하나를 더했다** — 「오르페골 스켈레촌」 ① 의
+    #: ``c21441617.lua`` ``e1:SetCountLimit(1,21441617)`` 이고 범위도
+    #: ``PER_CARD_NAME`` 이다. **이전 수가 틀렸던 것이 아니라** 그때는 그
+    #: 효과가 등재되지 않았다.
     assert limited == {
         f"{GIRSU}:e[0]",
         f"{GIRSU}:e[2]",
         f"{WAND}:e[1]",
         "57835716:e[0]",
+        "21441617:e[0]",
     }, limited
 
 
@@ -1323,9 +1355,12 @@ def test_g04_no_format_legality_is_claimed():
     #: **따로** 등록되었다.
     #: 🔴 **Phase 6-AP 가 또 하나를 더했다** (토큰이 남은 채 디베르 ① 을
     #: 쓰고 그 토큰을 링크 소재로 쓰는 경로). 기존 이름은 그대로다.
+    #: 🔴 **Phase 6-AQ 가 또 하나를 더했다** — 스켈레촌 ① 로 묘지의
+    #: 기르수를 소생시켜 롱기르수까지 가는 경로다. 기존 이름은 그대로다.
     assert set(COMBO_LINES) == {
         "orcust-girsu",
         "orcust-girsu-token",
         "orcust-harp-horror",
+        "orcust-skeleton-longirsu",
         "orcust-token-diber",
     }

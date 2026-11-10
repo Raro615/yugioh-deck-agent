@@ -249,7 +249,15 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
     #: 세므로 카드가 중복되는 것이 정상이고, 그 사실을 억지로 집합으로
     #: 바꾸지 않고 그대로 적는다.
     #: 🔴 **다섯째가 들어왔다** (Phase 6-AO) — 오르페골 디베르 ① 이다.
-    assert not_activate == [HONEST, GIRSU, GIRSU, WORLD_WAND, 57835716], (
+    #: 🔴 **여섯째가 들어왔다** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이다.
+    assert not_activate == [
+        HONEST,
+        GIRSU,
+        GIRSU,
+        WORLD_WAND,
+        57835716,
+        21441617,
+    ], (
         not_activate
     )
 
@@ -320,7 +328,15 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
     #: 세므로 카드가 중복되는 것이 정상이고, 그 사실을 억지로 집합으로
     #: 바꾸지 않고 그대로 적는다.
     #: 🔴 **다섯째가 들어왔다** (Phase 6-AO) — 오르페골 디베르 ① 이다.
-    assert skipped == [HONEST, GIRSU, GIRSU, WORLD_WAND, 57835716], skipped
+    #: 🔴 **여섯째가 들어왔다** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이다.
+    assert skipped == [
+        HONEST,
+        GIRSU,
+        GIRSU,
+        WORLD_WAND,
+        57835716,
+        21441617,
+    ], skipped
     assert corpus[HONEST]["blocks"] == 3
     assert corpus[GIRSU]["blocks"] >= 3
     assert corpus[WORLD_WAND]["blocks"] >= 3
@@ -355,7 +371,8 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     executable = {e.card_id for e in EFFECT_LIBRARY if e.executable}
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 16 → **17** (Phase 6-AO) — 디베르 ① 이다.
-    assert len(executable) == 17
+    #: 🔴 17 → **18** (Phase 6-AQ) — 스켈레촌 ① 이다 (카드 단위 집합이다).
+    assert len(executable) == 18
     # 실행되는 카드는 **하나도 빠짐없이** 막는 것이 없어야 한다.
     #
     # 🔴 어니스트는 예외 집합에 있다 (Phase 6-L). ``clean`` 은

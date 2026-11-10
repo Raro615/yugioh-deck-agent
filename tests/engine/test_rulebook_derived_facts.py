@@ -817,12 +817,14 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
     #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
     #: 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 21
+    #: 🔴 21 → **22** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이 등재되었다.
+    assert len(EFFECT_LIBRARY) == 22
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
     #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
     #: 🔴 17 → **18** (Phase 6-AO) — 디베르 ① 이 실행 가능으로 더해졌다.
-    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 18
+    #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이 실행 가능으로 더해졌다.
+    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 19
 
     definition = definition_registry().definition_for(
         EffectRef(POT_OF_GREED, 0)

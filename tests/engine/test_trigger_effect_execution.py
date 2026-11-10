@@ -697,7 +697,9 @@ def test_16_the_library_now_has_exactly_two_triggers(repository=None):
     #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
     #: 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 21
+    #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 22
     #: 🔴 Phase 6-AF 가 **셋째 ordinal** 을 열었다 — 기르수 ③(토큰 생성)은
     #: 공식 Lua 의 세 번째 블록이므로 2 다. 억지로 0 이나 1 에 맞추지 않고
     #: **그 효과의 실제 사실**을 적는다 (``c69811710.lua`` e3,
@@ -711,7 +713,8 @@ def test_16_the_library_now_has_exactly_two_triggers(repository=None):
     #: 🔴 실행 수 16 → **17** (Phase 6-AF). 기르수 ③ 은 실제로 실행되는
     #: 효과다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 수행한다.
     #: 🔴 17 → **18** (Phase 6-AO) — 디베르 ① 이 실행 가능으로 더해졌다.
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 18
+    #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이다.
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 19
     #: 🔴 등재된 발동 분류 — 유발이 **정확히 둘**이고 유발 즉시 · 플립은 없다.
     kinds = [entry.definition.activation_kind for entry in EFFECT_LIBRARY]
     assert set(kinds) == {None, ActivationKind.IGNITION, ActivationKind.TRIGGER}

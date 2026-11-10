@@ -1145,6 +1145,158 @@ ORCUST_TOKEN_DIBER_LINE = ComboLine(
 )
 
 
+#: 🔴 **스켈레촌 ① 로 기르수를 소생시켜 롱기르수까지 가는 경로**
+#: (Phase 6-AQ).
+#:
+#: ===  ============================================================
+#: 1    「잭나이츠 오르페골 기르수」(69811710) 일반 소환
+#: 2    기르수 ① — 덱의 「오르페골 디베르」(57835716) 를 묘지로
+#: 3    묘지의 디베르 ① — 자신을 제외하고 덱에서
+#:      「오르페골 스켈레촌」(21441617) 특수 소환
+#: 4    기르수 + 스켈레촌 을 소재로 「오르페골 갈라테아」(30741503) 링크 소환
+#: 5    묘지의 스켈레촌 ① — 자신을 제외하고 **묘지의 기르수를 대상으로**
+#:      지정해 특수 소환
+#: 6    갈라테아 + 기르수 를 소재로 「오르페골 롱기르수」(76145142) 링크 소환
+#: ===  ============================================================
+#:
+#: 🔴 **4 단계가 5 단계의 재료를 만든다.** 링크 소환의 소재가 묘지로 가므로
+#: 그 순간 묘지에 **스켈레촌과 기르수가 함께** 생긴다 — 5 단계의 발동 자리와
+#: 대상이 동시에 만들어지는 것이고, 순서를 바꿀 수 없다.
+#:
+#: 🔴 **5 단계는 대상 지정이다** (디베르와 갈리는 자리). 그래서 이 걸음은
+#: ``target_card_ids`` 를 채운다 — ``resolution_card_ids`` 가 아니다.
+#: ``c21441617.lua`` 의 ``e1`` 이 ``EFFECT_FLAG_CARD_TARGET`` 이고
+#: ``s.sptg`` 가 ``Duel.SelectTarget`` 으로 **발동 시점에** 한 장을 고정한다.
+#:
+#: 🔴 **소생 제한이 이 경로의 관문이다.** 기르수는 묘지에서 나오지만
+#: 룰북 ``RULE-SUMMON-014`` 가 그 질문을 거는 대상이 **아니다** — 엑스트라
+#: 덱도 의식도 특수 소환 몬스터도 아닌 일반 소환 가능한 메인 덱 효과
+#: 몬스터다 (:func:`~engine.effect.ruling.revival_limit_applies` 가 그
+#: 판정을 적는다, Phase 6-AQ). 그래서 "묘지에서의 소생" 이 열린 것이 아니라
+#: **룰북이 그 질문을 걸지 않는 카드**가 구분된 것이다.
+#:
+#: 🔴 **두 번 걸리는 어둠 속성 제한을 두 링크 소환이 지난다.** 3 단계(디베르
+#: ①)와 5 단계(스켈레촌 ①)가 각각 「턴 종료시까지 어둠 속성 몬스터밖에 특수
+#: 소환할 수 없다」 를 걸고, 갈라테아 · 롱기르수 모두 어둠 속성이다 (실측:
+#: ``data/cards.cdb`` 의 ``attribute``).
+#:
+#: 🔴 **6 단계는 이미 필드에 있는 링크 몬스터를 소재로 쓴다.** 갈라테아는
+#: 링크 2 이므로 링크 수치 합이 2 + 1 = 3 이고 롱기르수의 링크 수와 같다
+#: (Phase 6-AG 가 장수와 수치 합을 분리 판정한다). 소재가 된 갈라테아가
+#: 엑스트라 몬스터 존을 비우고 롱기르수가 그 자리에 놓인다 (6-AN).
+#:
+#: 🔴 **기르수 ① 이 다시 발동되지 않는다.** 5 단계는 **특수 소환**이고,
+#: ``c69811710.lua`` 의 그 유발은 ``e1``(``EVENT_SUMMON_SUCCESS``) 과
+#: ``e2``(``EVENT_SPSUMMON_SUCCESS``) 둘로 나뉘어 있는데 이 저장소는
+#: ``e[0]`` 만 등재했다 — ``e[1]`` 은 등재되지 않았으므로 특수 소환으로는
+#: 유발되지 않는다 (**미지원이고, 이번 범위에서 더하지 않았다**). 그리고
+#: ``e[0]`` 은 이미 2 단계에서 썼고 ``use_limit`` 이 카드명 기준이다.
+ORCUST_SKELETON_LONGIRSU_LINE = ComboLine(
+    name="orcust-skeleton-longirsu",
+    title_ko=(
+        "기르수 → 디베르 묘지행 → 디베르 제외로 스켈레촌 특수 소환 → "
+        "갈라테아 링크 → 스켈레촌 제외로 묘지의 기르수 소생 → 롱기르수 링크"
+    ),
+    steps=(
+        PlannedAction(
+            kind="normal_summon",
+            card_id=69811710,
+            label="「잭나이츠 오르페골 기르수」 를 일반 소환",
+        ),
+        PlannedAction(
+            kind="activate_effect",
+            card_id=69811710,
+            effect_ref=(69811710, 0),
+            resolution_card_ids=(57835716,),
+            label=(
+                "기르수 ① 발동 — 덱에서 「오르페골 디베르」 를 묘지로 보낸다 "
+                "(고르는 것은 해결 중이다)"
+            ),
+        ),
+        PlannedAction(
+            kind="activate_effect",
+            card_id=57835716,
+            effect_ref=(57835716, 0),
+            resolution_card_ids=(21441617,),
+            label=(
+                "묘지의 디베르 ① 발동 — 자신을 제외하고 덱에서 "
+                "「오르페골 스켈레촌」 을 특수 소환 (고르는 것은 해결 중이다)"
+            ),
+        ),
+        PlannedAction(
+            kind="link_summon",
+            card_id=30741503,
+            material_card_ids=(69811710, 21441617),
+            label=(
+                "기르수 + 스켈레촌 을 소재로 「오르페골 갈라테아」 링크 소환 "
+                "(소재 둘이 묘지로 간다 — 다음 걸음의 발동 자리와 대상이 "
+                "그때 생긴다)"
+            ),
+        ),
+        PlannedAction(
+            kind="activate_effect",
+            card_id=21441617,
+            effect_ref=(21441617, 0),
+            #: 🔴 **발동 시점에 지정한다** — ``resolution_card_ids`` 가
+            #: 아니다. 디베르와 갈리는 유일한 자리이고, 근거는
+            #: ``EFFECT_FLAG_CARD_TARGET`` + ``Duel.SelectTarget`` 이다.
+            target_card_ids=(69811710,),
+            label=(
+                "묘지의 스켈레촌 ① 발동 — 자신을 제외하고 **묘지의 기르수를 "
+                "대상으로 지정**해 특수 소환"
+            ),
+        ),
+        PlannedAction(
+            kind="link_summon",
+            card_id=76145142,
+            material_card_ids=(30741503, 69811710),
+            label=(
+                "갈라테아 + 소생한 기르수 를 소재로 「오르페골 롱기르수」 "
+                "링크 소환 (링크 수치 합 2 + 1 = 3)"
+            ),
+        ),
+    ),
+    basis=(
+        "① 기르수(69811710) ① 과 디베르(57835716) ① · 갈라테아(30741503) 의 "
+        "소재 조건은 ORCUST_HARP_HORROR_LINE 의 근거와 **같은 것**이고 "
+        "여기서 다시 읽지 않았다. "
+        "② 스켈레촌(21441617) 공식 텍스트 「묘지의 이 카드를 제외하고, "
+        "「오르페골 스켈레촌」 이외의 자신 묘지의 「오르페골」 몬스터 1장을 "
+        "대상으로 하여 발동할 수 있다. 그 몬스터를 특수 소환한다. 이 효과의 "
+        "발동 후, 턴 종료시까지 자신은 어둠 속성 몬스터밖에 특수 소환할 수 "
+        "없다」 와 c21441617.lua 의 e1 (EFFECT_FLAG_CARD_TARGET · "
+        "EFFECT_TYPE_IGNITION · SetRange(LOCATION_GRAVE) · "
+        "Cost.SelfBanish · s.spfilter · Duel.SelectTarget · "
+        "Duel.SpecialSummon · EFFECT_CANNOT_SPECIAL_SUMMON) — 기르수는 "
+        "setcode 0x10c011b 로 0x11b(오르페골)를 포함하고 스켈레촌이 "
+        "아니므로 그 대상이다 (data/cards.cdb 로 대조했다). "
+        "③ 그 소생이 적법한 근거는 룰북 RULE-SUMMON-014 다 — 소생 제한은 "
+        "「\"Special Summon Monsters\"」 와 엑스트라 덱 몬스터에만 걸리고 "
+        "(\"because Synchro Monsters have to be properly Special Summoned "
+        "first\"), 기르수는 type_names 가 ['MONSTER','EFFECT'] 이고 "
+        "is_extra_deck 이 False 다 (실측). "
+        "④ 롱기르수(76145142) 공식 텍스트 「효과 몬스터 2장 이상 (「오르페골」 "
+        "몬스터를 포함)」 과 c76145142.lua 의 Link.AddProcedure(..., 2, 3, "
+        "...) — 갈라테아는 링크 2 이므로 소재 장수 2 · 링크 수치 합 3 이고 "
+        "둘 다 효과 몬스터이며 0x11b 를 가진다 (Phase 6-AG · 6-AN). "
+        "⑤ 두 번 걸리는 어둠 속성 제한을 갈라테아 · 롱기르수가 지난다 "
+        "(둘 다 attribute=DARK — data/cards.cdb)."
+    ),
+    hand=ORCUST_HARP_HORROR_HAND,
+    recipe_ydk=ORCUST_VERIFICATION_RECIPE,
+    note=(
+        "🔴 이 경로도 **검증용**이고 최선 전개라고 주장하지 않는다 — 사람이 "
+        "적어 둔 여섯 걸음을 그대로 밟는다. 🔴 **기르수 ① 은 다시 발동되지 "
+        "않는다**: 특수 소환 쪽 유발(c69811710.lua 의 e2)은 등재되지 "
+        "않았고 (미지원), e[0] 은 이미 2 단계에서 카드명 기준 사용 제한을 "
+        "썼다. 🔴 **STRUCTURAL-50 은 그대로다**: 5 단계의 대상이 묘지를 "
+        "떠났다가 **돌아온** 경우를 이 엔진은 구별하지 못한다. 🔴 금지 · "
+        "제한 데이터로 검증하지 않았으므로 대회 합법 덱이라고 부르지 않는다 "
+        "(레시피 · 시작 패는 기존 검증용 그대로다)."
+    ),
+)
+
+
 COMBO_LINES: dict[str, ComboLine] = {
     line.name: line
     for line in (
@@ -1152,9 +1304,10 @@ COMBO_LINES: dict[str, ComboLine] = {
         ORCUST_GIRSU_TOKEN_LINE,
         ORCUST_HARP_HORROR_LINE,
         ORCUST_TOKEN_DIBER_LINE,
+        ORCUST_SKELETON_LONGIRSU_LINE,
     )
 }
-assert len(COMBO_LINES) == 4, (
+assert len(COMBO_LINES) == 5, (
     "같은 이름의 경로가 두 번 적혀 있습니다 — 어느 쪽이 이기는지 말할 수 "
     f"없습니다: {sorted(COMBO_LINES)}"
 )

@@ -355,26 +355,52 @@ def test_07_resolved_steps_and_resolved_effects_are_different_numbers(repository
     ①**(``57835716:e[0]``) 이고, 6-AO 때 그 걸음은 기르수 ③ 이 만든 토큰
     때문에 보류되어 있었다 (``test_06`` 의 설명). 🔴 **재는 것은 수가
     아니라 두 수가 다르다는 사실**이고 그것은 그대로다.
+
+    🔴 **Phase 6-AQ 에서 둘 다 다시 줄었다 — 실측: ``executed`` 6 ·
+    ``resolved`` 6 · ``effects_resolved`` 2.** 이번에도 **이 패의 기본(자율)
+    전개가 지나는 길**이 바뀐 것이고, 이전 기대값이 틀렸던 것이 아니다.
+
+    원인은 ``test_06`` 이 적어 둔 그 자리와 **같다**. 기르수 ① 의 해결 중
+    선택은 기준점 ``FirstPermittedChoice`` 가 집고, 그것은 **허용된 후보의
+    앞쪽**(패스코드가 작은 쪽)이다. 6-AQ 가 스켈레촌 ① 을 등재하면서 그
+    카드의 ``MAY_BE_SENT_TO_GRAVE`` 를 공식 텍스트 전문을 읽어 적었으므로
+    허용 후보가 하나 늘었고, **21441617 < 57835716** 이다. 그래서 기르수 ①
+    이 디베르 대신 **스켈레촌**을 묘지로 보낸다.
+
+    그 다음이 갈린다 — 디베르 ① 은 「덱에서」 특수 소환하므로 묘지에 혼자
+    있어도 발동할 수 있지만, 스켈레촌 ① 은 「자신 묘지의 "오르페골"
+    몬스터」 를 **대상으로 지정**해야 하고 그 자리의 묘지에는 **스켈레촌
+    자신뿐**이다 (「"오르페골 스켈레촌" 이외의」 로 자기 사본은 빠진다).
+    그래서 그 걸음이 후보가 되지 않는다.
+
+    🔴 **이전 수치와 같게 만들려고 합법 후보를 제거하지 않았다.**
+    ``FirstPermittedChoice`` 는 **전략이 아니라 기준점**이고, 보장받는
+    경로는 ``--line`` 쪽이다 (``orcust-skeleton-longirsu`` 가 그 경로를
+    끝까지 돈다 — ``tests/test_skeleton_revival_and_longirsu.py::test_g01``).
     """
     setup = _opened(repository, [69811710, 703897, 2930675, 12989604, 93920420])
     run = execute_opening(setup, repository)
 
-    assert run.executed == 7, run.executed
-    assert run.resolved == 7, run.resolved
+    assert run.executed == 6, run.executed
+    assert run.resolved == 6, run.resolved
     #: 🔴 **둘이 다르다** — 그것이 이 시험의 전부다.
-    assert run.effects_resolved == 3, run.effects_resolved
-    #: 그 셋이 어느 효과인지 기록이 말한다.
+    assert run.effects_resolved == 2, run.effects_resolved
+    #: 그 둘이 어느 효과인지 기록이 말한다.
     effect_steps = [s for s in run.steps if s.effect_events]
     assert [s.kind for s in effect_steps] == [
-        "activate_effect",
         "activate_effect",
         "activate_effect",
     ]
     assert [s.effect_events for s in effect_steps] == [
         ("69811710:e[0]",),
         ("69811710:e[2]",),
-        ("57835716:e[0]",),
     ]
+    #: 🔴 **묘지에 간 것이 스켈레촌이다** — 위 설명의 근거를 수로 고정한다.
+    from engine.vocabulary import Zone
+
+    assert [
+        card.card_id for card in setup.duel.state.zone(0, Zone.GRAVE)
+    ] == [21441617]
 
 
 @pytest.mark.real_card
@@ -395,16 +421,18 @@ def test_08_the_output_says_what_resolved_means(repository):
     assert "효과를 그만큼 해결했다는 뜻이 **아닙니다**" in detail
     #: 🔴 Phase 6-AP 에서 2 → **3걸음** (``test_07`` 의 설명 — 토큰
     #: 때문에 보류되던 디베르 ① 이 실제로 발동된다).
-    assert "효과의 조작이 실제로 수행된 걸음** 3걸음" in detail
+    #: 🔴 Phase 6-AQ 에서 3 → **2걸음** — 기본 전개가 지나는 길이 다시
+    #: 바뀌었다 (``test_07`` 의 설명). 이전 수가 틀렸던 것이 아니다.
+    assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in detail
     #: ② 기본 응답은 **조작이 수행된 수 하나**만 적는다.
-    assert "**효과의 조작 수행 3걸음**" in blob
+    assert "**효과의 조작 수행 2걸음**" in blob
     assert "막히지 않고 끝난 걸음" not in blob
     #: Phase 6-AC 에서 1 → 2 (위 ``test_07`` 의 설명).
     #: ③ 🔴 **Phase 6-AD 후속2 의 낱말이 두 자리에 그대로 있다.** "해결된
     #: 걸음" 은 규칙상 **해결됐지만 아무 일도 하지 않은 걸음**까지 포함하는
     #: 말이고 (공식 ``s.spop1`` 의 조기 종료), 그러면 그 수가 "소환이 N번
     #: 일어났다" 로 읽힌다 (보고서 §15.3).
-    assert "효과의 조작이 실제로 수행된 걸음** 3걸음" in detail
+    assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in detail
     #: ④ 🔴 **이 전개에는 조작 없는 걸음이 없으므로 그 줄이 어디에도 없다.**
     for text in (blob, detail):
         assert "해결됐지만 조작이 없었던 걸음" not in text

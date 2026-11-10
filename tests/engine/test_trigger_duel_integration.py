@@ -282,7 +282,9 @@ def test_03_exactly_one_compiled_trigger_has_a_definition(repository):
     #: 수만 움직였다. 다만 등재 수와 카드 수가 같다는 사실은
     #: 끝났다 — 기르수 ① 와 ③ 가 **한 카드에 둘** 이다.
     #: 🔴 20 → **21** (Phase 6-AO) — 디베르 ① 이다.
-    assert len(definitions) == len(EFFECT_LIBRARY) == 21
+    #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(definitions) == len(EFFECT_LIBRARY) == 22
     #: 🔴 0 뿐이던 집합이 {0, 1} 이 되었다 — 공식 ②를 등재한 첫 자리다.
     #: 🔴 Phase 6-AF 가 **셋째 ordinal** 을 열었다 — 기르수 ③(토큰 생성)은
     #: 공식 Lua 의 세 번째 블록이므로 2 다. 억지로 0 이나 1 에 맞추지 않고

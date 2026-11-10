@@ -362,12 +362,17 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
     #: 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 21, "정의 수가 바뀌면 이 Phase 를 다시 읽는다"
+    #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 22, "정의 수가 바뀌면 이 Phase 를 다시 읽는다"
     #: 🔴 11 → **12** (Phase 6-AO) — 디베르 ① 이 대상 묶음 하나를 더했다
     #: (덱에서 1장을 해결 중에 고른다). **여러 장 선택도 가변 장수도
     #: 아니다** — 이 시험이 지키는 사실은 그 둘이 하나뿐이라는 것이고,
     #: 아래 단언들이 그대로 들고 있다.
-    assert bindings == 12
+    #: 🔴 12 → **13** (Phase 6-AQ) — 스켈레촌 ① 이 대상 묶음 하나를
+    #: 더했다 (묘지에서 1장을 **발동 시점에 지정**한다). 여러 장 선택도
+    #: 가변 장수도 아니다.
+    assert bindings == 13
     assert multi == [FINE], multi
     #: 🔴 7 → **8** (Phase 6-AO) — 디베르 ① 도 **정확히 1장**을 고른다
     #: (``SelectMatchingCard(...,1,1,...)``). 이 시험이 지키는 사실은

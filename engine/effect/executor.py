@@ -108,6 +108,7 @@ from engine.effect.target import (
     SelectionCount,
     Shortfall,
     TargetRef,
+    TargetRequirement,
     TargetSelection,
 )
 from engine.execution import (
@@ -362,6 +363,30 @@ class EffectExecutionError(RuntimeError):
     :attr:`ResolutionStatus.EXECUTION_ERROR` 로 올라간다. 일어나서는 안
     되는 경우이고, 일어났다면 결함이다.
     """
+
+
+#: 🔴 **"지정한 그 대상을 지금 쓸 수 없다" 로 읽어도 되는 거절 코드**
+#: (Phase 6-AQ).
+#:
+#: :attr:`~engine.effect.definition.ResolutionSkip.when_target_unusable` 을
+#: 선언한 효과에서 **이 코드 하나만** 생략으로 바뀐다. 뜻은 "그 카드가
+#: 관측에 있는데 지금 그 조작의 조건을 만족하지 않는다" 다 — 자리를
+#: 벗어났거나 (``TargetResolver`` 의 후보 판정), 그 소환이 금지되었거나
+#: (관문이 ``FALSE``), 놓을 칸이 없다 (``special_summon_procedure``).
+#:
+#: 🔴 **빠진 것들이 핵심이다.**
+#:
+#: * ``too_few_selected`` · ``too_many_selected`` · ``duplicate_selection`` ·
+#:   ``target_count_mismatch`` — 대상 **선언 자체**가 어긋났다는 뜻이고,
+#:   부르는 쪽의 잘못이다. 공식 스크립트의 ``if tc and …`` 는 "대상을 적지
+#:   않았다" 를 눈감아 주는 문장이 아니다.
+#: * ``hidden_card`` · ``information_unavailable`` — **모름**이다. 그쪽은
+#:   애초에 :attr:`ResolutionStatus.UNCHECKED_TARGET` 으로 올라가므로 이
+#:   표에 닿지 않지만, 적어 둔다: 판정하지 못한 것을 생략으로 바꾸면 그
+#:   결정을 엔진이 지어낸 것이 된다.
+UNUSABLE_TARGET_CODES: frozenset[ValidationCode] = frozenset(
+    {ValidationCode.CANDIDATE_NOT_ELIGIBLE}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -712,7 +737,8 @@ class EffectExecutor:
         planned = self._plan(state, definition, context)
         if isinstance(planned, EffectResult):
             return planned  # 계획 실패 — 판은 그대로다
-        #: 🔴 **하지 않은 일의 설명을 함께 받는다** (Phase 6-AO 후속).
+        #: 🔴 **하지 않은 일의 설명을 함께 받는다** (Phase 6-AO 후속에서
+        #: 후보 0장, 6-AQ 에서 지정한 대상을 쓸 수 없는 경우).
         plan, skipped = planned
 
         applied: list[AppliedOperation] = []
@@ -797,8 +823,17 @@ class EffectExecutor:
         를 돌려주고, 그때 판은 아직 손대지 않은 상태다.
 
         🔴 **돌려주는 것이 둘이다** (Phase 6-AO 후속) — 계획한 일들과,
-        **후보가 없어 건너뛴 대상에 대한 설명들**. 뒤쪽은 결과 문장에
-        그대로 실린다: 한 일과 하지 않은 일이 기록에서 갈려야 한다.
+        **하지 않은 일에 대한 설명들**. 뒤쪽은 결과 문장에 그대로 실린다:
+        한 일과 하지 않은 일이 기록에서 갈려야 한다.
+
+        설명이 들어오는 자리가 둘이다.
+
+        1. 고를 후보가 하나도 없었던 대상 (Phase 6-AO 후속 ·
+           :class:`~engine.effect.definition.NoCandidateScope`).
+        2. **발동 시점에 지정해 둔 대상**을 해결 시점에 쓸 수 없는 조작
+           (Phase 6-AQ · :meth:`_unusable_target_note`).
+
+        둘 다 "그 대상을 쓰는 일만" 건너뛰고 나머지는 그대로 계획한다.
         """
         if context.effect_ref != definition.effect_ref:
             return _fail(
@@ -858,6 +893,10 @@ class EffectExecutor:
         values = ExecutionValues(declarations=declared)
 
         vacant_refs = {empty.ref for empty in vacant}
+        #: 🔴 **하지 않은 일의 설명을 모은다.** 후보가 없어 건너뛴 대상
+        #: (6-AO 후속) 과 지정한 대상을 쓸 수 없어 건너뛴 조작 (6-AQ) 이
+        #: 같은 자리로 모여 결과 문장에 그대로 실린다.
+        notes: list[str] = [empty.note for empty in vacant]
         steps: list[_Step] = []
         for index, operation in enumerate(definition.operations):
             if vacant_refs and set(operation.target_refs) & vacant_refs:
@@ -900,7 +939,22 @@ class EffectExecutor:
                 board, definition, context, operation, values
             )
             if isinstance(step, EffectResult):
-                return step
+                #: 🔴 **지정한 대상을 쓸 수 없는 경우만** 생략으로 바꾼다
+                #: (Phase 6-AQ). 선언하지 않은 효과에서는 ``None`` 이
+                #: 돌아오고 한 글자도 달라지지 않는다.
+                forgiven = self._unusable_target_note(
+                    definition, index, operation, step
+                )
+                if forgiven is None:
+                    return step
+                values = values.with_result(
+                    OperationResult(
+                        operation_index=index,
+                        outcome=OperationOutcome.NOT_APPLIED,
+                    )
+                )
+                notes.append(forgiven)
+                continue
             steps.append(step)
             # 계획이 끝난 일의 결과는 **계획 단계에서 이미 확정**이다.
             # 적용은 계획한 그대로만 하므로, 뒤의 일이 읽는 수와 실제로
@@ -939,7 +993,72 @@ class EffectExecutor:
             steps[-1] = replace(
                 steps[-1], blind=steps[-1].blind + tuple(unshuffled)
             )
-        return steps, tuple(empty.note for empty in vacant)
+        return steps, tuple(notes)
+
+    def _unusable_target_note(
+        self,
+        definition: EffectDefinition,
+        index: int,
+        operation: Operation,
+        failure: EffectResult,
+    ) -> "str | None":
+        """
+        🔴 **이 거절을 "그 대상을 쓸 수 없어 하지 않았다" 로 읽어도 되는가**
+        (Phase 6-AQ). 읽어도 되면 기록에 남길 문장을, 아니면 ``None``.
+
+        네 가지가 **동시에** 참일 때만이다 — 하나라도 어긋나면 거절은 그대로
+        올라간다.
+
+        1. 정의가 :attr:`~engine.effect.definition.ResolutionSkip.
+           when_target_unusable` 을 **선언했다.** 선언하지 않은 효과는 한
+           글자도 달라지지 않는다 (ADR-006).
+        2. 거절이 :attr:`ResolutionStatus.INVALID_TARGET` 이다 — 모름
+           (``UNCHECKED_TARGET`` · ``UNCHECKED_RULES``) 도 실행 오류도
+           아니다.
+        3. 거절 코드가 :data:`UNUSABLE_TARGET_CODES` 에 있다. 장수가
+           어긋났다 · 대상이 아예 없다 는 부르는 쪽의 잘못이다.
+        4. 이 조작이 **대상 지정된 이름**을 쓴다. 어느 조작이 그 이름을
+           쓰는지는 :attr:`~engine.effect.operation.Operation.target_refs`
+           가 답한다 — 실행기에 카드 ID 가 들어가지 않는다.
+
+        🔴 **비용과 사용 기록은 건드리지 않는다.** 둘 다 **발동 경로**가 이미
+        치르고 적는다 (:mod:`engine.cost` 와 ``GameState.uses``). 해결이 일부
+        불발했다는 사실로 그것을 되돌리면 공식 스크립트가 하지 않는 일을 하는
+        것이다 — 그리고 이 실행기는 비용을 치르는 코드를 **들고 있지 않다**.
+        """
+        skip = definition.resolution_skip
+        if skip is None or not skip.when_target_unusable:
+            return None
+        if failure.status is not ResolutionStatus.INVALID_TARGET:
+            return None
+        if failure.code not in UNUSABLE_TARGET_CODES:
+            return None
+        designated = [
+            ref
+            for ref in operation.target_refs
+            if ref != SELF_TARGET
+            and self._is_designated(definition, ref)
+        ]
+        if not designated:
+            return None
+        names = " · ".join(ref.name for ref in designated)
+        return (
+            f"{index}번 조작({operation.kind.value})은 지정한 대상"
+            f"({names})을 쓸 수 없어 하지 않았습니다: {failure.reason} "
+            "나머지 일은 그대로 했습니다."
+        )
+
+    @staticmethod
+    def _is_designated(definition: EffectDefinition, ref: TargetRef) -> bool:
+        """그 이름이 **대상 지정**으로 선언되었는가 (Phase 6-AQ)."""
+        try:
+            spec = definition.target_spec(ref)
+        except KeyError:  # pragma: no cover - 정의 생성이 막는다
+            return False
+        return (
+            spec is not None
+            and spec.requirement is TargetRequirement.TARGETING
+        )
 
     def _shuffle_searched_decks(
         self,

@@ -916,12 +916,16 @@ def test_21_exactly_one_registered_effect_has_a_cost():
     #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
     #: 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 21
+    #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 22
     #: 🔴 **정확히 하나**다 — 디베르 ①. 이전 측정이 틀렸던 것이 아니라
     #: 그때는 하나도 없었다.
-    assert [str(ref) for ref in costed_entries] == ["57835716:e[0]"], (
-        costed_entries
-    )
+    #: 🔴 **둘이 되었다** (Phase 6-AQ) — 스켈레촌 ① 도 ``Cost.SelfBanish`` 다.
+    assert [str(ref) for ref in costed_entries] == [
+        "57835716:e[0]",
+        "21441617:e[0]",
+    ], costed_entries
     #: 🔴 **거름이 좁혀졌다** — 6-AN 까지는 ``if definition.cost.costs:`` 로
     #: 비용 있는 효과를 **전부** 뺐고, 6-AO 는 **내놓을 카드를 고르는 비용**
     #: 만 뺀다 (그 자리를 고르는 계층이 아직 없다). 비용이 있어도 고르지

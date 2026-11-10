@@ -1016,7 +1016,9 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
     #: 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 21
+    #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 22
     #: 🔴 8 → **9** (Phase 6-V). 기르수 ① 의 ``activation`` 도
     #: ``UnimplementedRule`` 이 아니다 (``ZoneCountAtLeast``) — 이 테스트가
     #: 지키는 사실이 그것이므로 그대로다.

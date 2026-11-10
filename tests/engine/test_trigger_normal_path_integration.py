@@ -958,7 +958,10 @@ def test_b12_activation_time_targeting_is_untouched(repository):
     #: 🔴 13 → **14** (Phase 6-AF, 기르수 ③). 그 효과는 고를 것이
     #: 없으므로 (토큰을 **만든다** — 후보를 고르지 않는다) 미루는 쪽이
     #: 아니고, 미루는 셋은 하나도 움직이지 않았다.
-    assert len(kept) == 14, kept
+    #: 🔴 14 → **15** (Phase 6-AQ, 스켈레촌 ①). 그 효과는 **발동 시점에
+    #: 대상을 지정**하므로 (``EFFECT_FLAG_CARD_TARGET``) 미루는 쪽이
+    #: 아니고, 미루는 넷은 하나도 움직이지 않았다.
+    assert len(kept) == 15, kept
     from engine.effect.library import WORLD_WAND
 
     #: 🔴 **이제 미루는 쪽이다** (Phase 6-AD) — 6-AC 는 이 줄을 ``in kept``

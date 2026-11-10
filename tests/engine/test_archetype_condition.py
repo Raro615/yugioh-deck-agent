@@ -365,7 +365,9 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
     #: 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 21
+    #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 22
     using_archetype = [
         entry.card_id for entry in EFFECT_LIBRARY
         if entry.definition.targets
@@ -938,11 +940,14 @@ def test_j_the_archetype_condition_is_used_by_exactly_the_two_orcust_effects():
     #: 🔴 20 → **21** (Phase 6-AO) — 오르페골 디베르 ① 이 등재되었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
     #: 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 21
+    #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 22
     #: 🔴 실행 수 16 → **17** (Phase 6-AF). 기르수 ③ 은 실제로 실행되는
     #: 효과다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 수행한다.
     #: 🔴 17 → **18** (Phase 6-AO).
-    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 18
+    #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이다.
+    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 19
     #: 🔴 실행되는 효과 중 카드군 조건을 쓰는 것이 **정확히 둘**이다.
     using = [
         entry.card_id
