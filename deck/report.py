@@ -698,6 +698,235 @@ def _support_lines(run) -> "list[str]":
     return lines
 
 
+#: 요약 한 줄에 적는 전개 걸음의 상한. 넘으면 **버리지 않고** 몇 걸음을
+#: 뺐는지 적는다 (6-AE 와 같은 규율).
+_HEADLINE_STEPS = 8
+
+#: 효과 번호를 ①②③ 으로. 없는 번호는 그대로 적는다 (지어내지 않는다).
+_ORDINALS = "①②③④⑤⑥⑦⑧⑨"
+
+
+def _attribute_ko(name: str) -> str:
+    """
+    ``"DARK"`` → ``"어둠"``. 🔴 **모르는 이름은 그대로 둔다** — 없는 번역을
+    지어내지 않는다. 표는 ``core.constants`` 의 것을 그대로 쓴다 (사본을
+    만들면 둘이 갈라진다).
+    """
+    from core.constants import ATTRIBUTE_KO, ATTRIBUTE_NAMES
+
+    for value, english in ATTRIBUTE_NAMES.items():
+        if english == name:
+            return ATTRIBUTE_KO.get(value, name)
+    return name
+
+
+def _short_name(name: str) -> str:
+    """
+    **표시용으로만** 짧게 — 「잭나이츠 오르페골 기르수」 → 「기르수」.
+
+    🔴 **이름을 바꾸는 것이 아니다.** 한 줄 요약이 읽히게 하려고 마지막
+    낱말만 쓰고, 전체 이름은 상세 기록과 전개 기록에 그대로 남는다
+    (:func:`render_opening_run` · ``deck.replay_export``). 낱말이 하나뿐이면
+    그대로 둔다.
+    """
+    parts = [part for part in str(name).split() if part]
+    if len(parts) >= 2 and len(parts[-1]) >= 2:
+        return parts[-1]
+    return str(name)
+
+
+def _headline_flow(run, limit: int = _HEADLINE_STEPS) -> str:
+    """
+    **핵심 전개 한 줄** — 실행 기록에서 뽑는다 (Phase 6-AR).
+
+    🔴 **사람이 적어 둔 경로의 제목을 베끼지 않는다.** 경로가 무엇을
+    하려 했는가가 아니라 **무엇이 실제로 수락되었는가**를 적는다 — 둘은
+    경로가 중간에 막히면 갈라진다.
+
+    🔴 **수락된 걸음만** 넣는다. 거절된 걸음은 이 줄에 오지 않고, 그
+    사실은 결과 줄과 상세 기록이 말한다.
+    """
+    bits: list[str] = []
+    for step in run.steps:
+        if not step.accepted:
+            continue
+        name = _short_name(step.card_name) if step.card_name != "—" else ""
+        kind = step.kind
+        if kind == "normal_summon":
+            bits.append(f"{name} 일반소환")
+        elif kind == "link_summon":
+            bits.append(f"{name} 링크")
+        elif kind == "special_summon":
+            bits.append(f"{name} 특수소환")
+        elif kind == "activate_effect":
+            mark = ""
+            ref = step.effect_ref or ""
+            if ref.endswith("]") and ":e[" in ref:
+                try:
+                    index = int(ref.rsplit("[", 1)[1][:-1])
+                except ValueError:
+                    index = -1
+                if 0 <= index < len(_ORDINALS):
+                    mark = _ORDINALS[index]
+            bits.append(f"{name}{mark or ' 효과'}")
+        elif kind in ("pass", "end_phase"):
+            continue
+        else:
+            bits.append(f"{name} {kind}".strip())
+    if not bits:
+        return ""
+    hidden = len(bits) - limit
+    if hidden > 0:
+        bits = bits[:limit] + [f"… {hidden}걸음 더"]
+    return " → ".join(bits)
+
+
+def _headline_field(setup, repository=None) -> "list[str]":
+    """
+    **최종 필드와 주요 잔여 자원** 두 줄. 🔴 판에서 읽는다 — 경로가 바라던
+    결과가 아니라 ``GameState`` 에 있는 것이다.
+    """
+    from engine.vocabulary import Zone
+
+    if setup.duel is None:
+        return ["  최종 필드: 상태가 없습니다."]
+    state = setup.duel.state
+
+    def _names(zone) -> "list[str]":
+        out = []
+        for card in state.player(0).zone(zone):
+            if not card:
+                continue
+            found = repository.get(card.card_id) if repository else None
+            out.append(_short_name(found.display_name()) if found
+                       else f"[{card.card_id}]")
+        return out
+
+    def _count(zone) -> int:
+        return len([card for card in state.player(0).zone(zone) if card])
+
+    field_bits = []
+    for label, zone in (("EM존", Zone.EMZONE), ("몬스터존", Zone.MZONE),
+                        ("마법함정존", Zone.SZONE)):
+        names = _names(zone)
+        if names:
+            field_bits.append(f"{label} {' · '.join(names)}")
+    lines = [
+        "  최종 필드: " + (" / ".join(field_bits) or "비어 있습니다")
+    ]
+    lines.append(
+        f"  잔여: 패 {_count(Zone.HAND)} · 묘지 {_count(Zone.GRAVE)}"
+        f" · 제외 {_count(Zone.REMOVED)} · 덱 {_count(Zone.DECK)}"
+        f" · 엑스트라 {_count(Zone.EXTRA)}"
+    )
+
+    #: 🔴 **뒤에 할 수 있는 일을 바꾸는 기록은 요약에 남긴다** (6-AO).
+    limits = getattr(state, "summon_limits", None)
+    if limits is not None:
+        active = list(limits.active(state.turn.turn_number, 0))
+        if active:
+            sources = []
+            for limit in active:
+                found = (repository.get(limit.source_card_id)
+                         if repository else None)
+                sources.append(_short_name(found.display_name()) if found
+                               else str(limit.source_card_id))
+            attributes = " · ".join(
+                sorted({_attribute_ko(limit.attribute) for limit in active})
+            )
+            lines.append(
+                f"  특수 소환 제한: {attributes} 속성만"
+                f" ({len(active)}건 — {' · '.join(sources)})"
+            )
+    return lines
+
+
+def render_opening_headline(setup, run, repository=None, *,
+                            line=None, progress=None) -> str:
+    """
+    **기본 응답용 한눈 요약** (Phase 6-AR).
+
+    🔴 **판정하지 않는다** — 이미 기록된 ``setup`` · ``run`` 만 읽는다
+    (:func:`render_opening_brief` 와 같은 규율). 엔진을 다시 돌리지도
+    상태를 건드리지도 않는다.
+
+    🔴 **짧게 적는 것과 숨기는 것은 다르다.** 여기서 줄인 것은 전부 상세
+    기록에 그대로 있고 (:func:`render_opening_brief` 가 첨부의 첫 절이
+    되었다), 이 함수는 **지우면 뜻이 달라지는 네 가지**를 반드시 남긴다.
+
+    1. 실행 방식 — 고정 경로인가 자율 실행인가
+    2. 결과 — 완료 · 중단 · 실행 안 함
+    3. 실제로 수락된 전개와 최종 판
+    4. 🔴 "완료" 가 **최선 전개도, 이 패로 가능한 전개 전부도 아니라는 것**
+       과 미지원 건수
+
+    🔴 **전개 보기 링크는 여기서 만들지 않는다.** 외부 재생 링크가 있는지는
+    표시 계층이 아는 사실이고, 보고 계층이 "있다" 고 적으면 없는 링크를
+    약속하게 된다.
+    """
+    if not setup.can_run:
+        lines = ["❌ **실행하지 않았습니다** — 입력 검증을 통과하지 못했습니다."]
+        for blocker in setup.blockers:
+            lines.append(f"  - {blocker}")
+        for finding in setup.violations:
+            lines.append(f"  - 🔴 {finding.rule}: {finding.detail}")
+        lines.append("  🔴 실행하지 않았으므로 걸음 수도 성공 표시도 없습니다.")
+        return "\n".join(lines)
+
+    if line is not None:
+        total = len(line.steps)
+        if progress is not None and progress.completed:
+            head = (f"✅ **전개 완료** · 고정 경로 `{line.name}`"
+                    f" ({progress.done}/{total}단계)")
+        elif progress is not None:
+            head = (f"⏹ **중단** · 고정 경로 `{line.name}`"
+                    f" ({progress.done}/{total}단계)")
+        else:
+            head = f"▶ 고정 경로 `{line.name}` 으로 실행했습니다."
+    else:
+        head = ("▶ **자율 실행** (기준점 `first_meaningful`) —"
+                " 사람이 적어 둔 경로를 쓰지 않았습니다.")
+
+    lines = [head]
+    flow = _headline_flow(run)
+    if flow:
+        lines.append(f"  전개: {flow}")
+    else:
+        lines.append("  전개: 수락된 걸음이 없습니다.")
+    lines.extend(_headline_field(setup, repository))
+
+    #: 🔴 **막힌 자리는 요약에 남긴다** — 중단을 완료처럼 읽히게 두지 않는다.
+    if progress is not None and not progress.completed:
+        if progress.blocked_at is not None:
+            lines.append(f"  🔴 막힌 단계: {progress.blocked_at.describe_ko()}")
+        if progress.reason:
+            lines.append(f"  🔴 사유: {progress.reason}")
+    elif run.stopped_kind == "rejected" and run.stopped_reason:
+        lines.append(f"  🔴 중단: {run.stopped_reason}")
+
+    #: 🔴 **이 두 줄은 줄이지 않는다** (6-AE §2-④ 가 세운 계약).
+    if run.unsupported:
+        lines.append(
+            f"  🔴 미지원 {len(run.unsupported)}건 — 규칙이 막은 것이 아니라"
+            f" **이 저장소에 그 규칙이 없다**는 뜻입니다 (사유는 상세 기록)."
+        )
+    #: 🔴 **실행 방식마다 다른 문장이다.** 자율 실행에 "사람이 적어 둔
+    #: 경로를 밟았다" 고 적으면 거짓이다 — 그때 따라간 것은 기준점이 집은
+    #: 수이고 경로가 아니다.
+    if line is not None:
+        lines.append("  🔴 사람이 적어 둔 경로를 끝까지 밟았다는 뜻이고,"
+                     " **최선 전개도 이 패로 가능한 전개 전부도"
+                     " 아닙니다.**")
+    else:
+        lines.append("  🔴 기준점(`first_meaningful`)이 집은 수를 따라갔을"
+                     " 뿐이고, **최선 전개도 이 패로 가능한 전개 전부도"
+                     " 아닙니다.**")
+    if setup.unverifiable:
+        lines.append(f"  ⚠️ 검증 불가 {len(setup.unverifiable)}건"
+                     " — **문제 없음이 아닙니다** (상세 기록에 목록).")
+    return "\n".join(lines)
+
+
 def render_opening_brief(setup, run, repository=None, *,
                          line=None, progress=None) -> str:
     """

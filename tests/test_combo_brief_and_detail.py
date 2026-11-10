@@ -72,7 +72,16 @@ def _summary(response: bot.ComboResponse) -> str:
 
 
 def _detail(response: bot.ComboResponse) -> str:
-    return "\n".join(item.text for item in response.attachments)
+    """
+    **상세 기록 첨부만** 잇는다.
+
+    🔴 **정정 (Phase 6-AR).** 전에는 첨부 전부를 이었고, 그때는 첨부가
+    하나(상세 기록)뿐이라 같은 말이었다. 6-AR 이 **전개 기록**(JSON) 을
+    두 번째 첨부로 더했으므로, 둘을 한 덩어리로 보면 "상세 기록에 무엇이
+    적혔나" 를 묻는 시험들이 기계용 기록까지 세게 된다.
+    """
+    return "\n".join(item.text for item in response.attachments
+                     if item.filename == bot.COMBO_DETAIL_FILENAME)
 
 
 # ======================================================================
@@ -175,32 +184,51 @@ def test_a01_the_normal_run_fits_in_the_default_answer(repository):
 @pytest.mark.real_card
 @requires_official_db
 def test_a02_the_default_answer_keeps_the_five_sections(repository):
-    """**A** — 요약이 §2 의 다섯 절을 전부 들고 있다."""
-    summary = _summary(_response(repository))
+    """
+    **A** — §2 의 다섯 절이 **하나도 사라지지 않았다.**
+
+    🔴 **정정 (Phase 6-AR).** 이 시험은 다섯 절이 **기본 응답에** 있는지를
+    쟀고, 그때 그것이 계약이었다. 6-AR 이 기본 응답을 한눈 요약으로 줄이면서
+    그 다섯 절을 **첨부의 첫 절로 내렸다** — 지운 것이 아니다. 그래서 이
+    시험은 이제 **어디에 있는가**까지 함께 센다: 다섯 절은 상세 기록에,
+    지우면 뜻이 달라지는 것들은 요약에.
+    """
+    response = _response(repository)
+    summary = _summary(response)
+    detail = _detail(response)
     #: ① 실행 결과 요약
-    assert f"검증용 전개 경로 `{LINE}`" in summary
-    assert "경로를 끝까지 실행했습니다 (4/4단계)" in summary
-    assert "실행 5걸음" in summary
-    assert "**효과의 조작 수행 2걸음**" in summary
+    assert f"검증용 전개 경로 `{LINE}`" in detail
+    assert "경로를 끝까지 실행했습니다 (4/4단계)" in detail
+    assert "실행 5걸음" in detail
+    assert "**효과의 조작 수행 2걸음**" in detail
     #: 🔴 "지정 경로이고 자율 탐색이 아니다" 는 **한 번만** 적는다.
-    assert summary.count("최선 전개 탐색도") == 1
+    assert detail.count("최선 전개 탐색도") == 1
     #: ② 실제 실행한 주요 행동 — 한국어 카드명으로
-    assert "일반 소환 — 잭나이츠 오르페골 기르수" in summary
-    assert "링크 소환 — 오르페골 갈라테아" in summary
-    assert "소재: 잭나이츠 오르페골 기르수 · 성유물－『성장』" in summary
-    assert "해결 중 선택: 성유물－『성장』" in summary
+    assert "일반 소환 — 잭나이츠 오르페골 기르수" in detail
+    assert "링크 소환 — 오르페골 갈라테아" in detail
+    assert "소재: 잭나이츠 오르페골 기르수 · 성유물－『성장』" in detail
+    assert "해결 중 선택: 성유물－『성장』" in detail
     #: ③ 최종 상태 — 두 몬스터 존을 가르고 이름을 적는다
-    assert "몬스터 존: 없음" in summary
-    assert "엑스트라 몬스터 존: 오르페골 갈라테아" in summary
-    assert "마법·함정 존: 없음" in summary
-    assert "패 3장: 오르페골 클리막스" in summary
-    assert "묘지 3장:" in summary
-    assert "남은 덱 34장 · 엑스트라 덱 5장" in summary
+    assert "몬스터 존: 없음" in detail
+    assert "엑스트라 몬스터 존: 오르페골 갈라테아" in detail
+    assert "마법·함정 존: 없음" in detail
+    assert "패 3장: 오르페골 클리막스" in detail
+    assert "묘지 3장:" in detail
+    assert "남은 덱 34장 · 엑스트라 덱 5장" in detail
     #: ④ 멈춘 이유 — 원문이 아니라 뜻
-    assert "지정 경로를 완료했습니다" in summary
-    assert "이후 행동은 이 검증 경로에 지정되지 않았습니다" in summary
+    assert "지정 경로를 완료했습니다" in detail
+    assert "이후 행동은 이 검증 경로에 지정되지 않았습니다" in detail
+    #: 🔴 **원문 코드는 사용자가 보는 자리에 쓰지 않는다** — 그 규율이 재던
+    #: 자리는 **요약**이다. 전체 기록은 원문도 들고 있어야 한다 (그것을
+    #: 읽는 사람이 쓰는 값이다).
     assert "not_chosen" not in summary
-    #: ⑤ 검증의 한계 — 짧지만 "검증 불가" 를 지우지 않는다
+
+    #: 🔴 **요약은 네 가지를 반드시 들고 있다** (6-AR 의 계약).
+    assert "전개 완료" in summary and f"`{LINE}`" in summary
+    assert "최종 필드" in summary
+    assert "오르페골 갈라테아" in summary or "갈라테아" in summary
+    assert "최선 전개" in summary
+    #: ⑤ 검증의 한계 — 짧지만 "검증 불가" 를 지우지 않는다 (요약에 남는다)
     assert "검증 불가 2건" in summary
     assert "문제 없음이 아닙니다" in summary
 
@@ -213,17 +241,28 @@ def test_b01_route_completion_and_unsupported_scope_stay_separate(repository):
 
     🔴 **미지원 경고가 있다는 이유로 실행한 경로를 실패처럼 적지 않는다.**
     """
-    summary = _summary(_response(repository))
-    assert "✅" in summary and "경로를 끝까지 실행했습니다" in summary
-    assert "엔진이 지원하지 않아 후보가 되지 못한 것이 2건" in summary
+    response = _response(repository)
+    summary = _summary(response)
+    detail = _detail(response)
+    #: 🔴 **정정 (Phase 6-AR).** 긴 요약은 첨부로 내려갔다 — 아래의 두
+    #: 문장은 거기 그대로 있고, 요약은 같은 구분을 **짧게** 들고 있다.
+    assert "✅" in detail and "경로를 끝까지 실행했습니다" in detail
+    assert "엔진이 지원하지 않아 후보가 되지 못한 것이 2건" in detail
     #: 🔴 **두 문장이 따로 있다** — 경로 완료는 "이 패의 전개를 다 했다" 가
     #: 아니고, 미지원은 "규칙이 막았다" 가 아니다.
-    assert "이 패로 가능한 전개를 다 보았다는 뜻이 아닙니다" in summary
-    assert "이 패의 전개를 다 했다**로 읽을 수 없습니다" in summary
+    assert "이 패로 가능한 전개를 다 보았다는 뜻이 아닙니다" in detail
+    assert "이 패의 전개를 다 했다**로 읽을 수 없습니다" in detail
     #: 🔴 경로 완료 줄에 실패 표시가 붙지 않는다.
-    completion = next(l for l in summary.splitlines()
+    completion = next(l for l in detail.splitlines()
                       if "경로를 끝까지 실행했습니다" in l)
     assert "🔴" not in completion
+
+    #: 🔴 **요약에서도 둘이 섞이지 않는다** — 완료 줄과 미지원 줄이 다른
+    #: 줄이고, 미지원이 있다고 완료가 실패로 적히지 않는다.
+    done_line = next(l for l in summary.splitlines() if "전개 완료" in l)
+    assert "✅" in done_line and "🔴" not in done_line
+    assert "미지원 2건" in summary
+    assert "이 패로 가능한 전개 전부도 아닙니다" in summary
 
 
 @pytest.mark.real_card
@@ -234,15 +273,26 @@ def test_b02_each_unsupported_reason_appears_once(repository):
 
     실측 (6-AD): 같은 두 사유가 응답 안에 **6번씩** 있었다.
     """
-    summary = _summary(_response(repository))
+    response = _response(repository)
+    summary = _summary(response)
+    detail = _detail(response)
+    #: 🔴 **정정 (Phase 6-AR).** 사유의 본문은 첨부로 내려갔다. 거기서도
+    #: **한 번씩만** 나온다는 것이 이 시험이 재던 사실이다.
+    #: 상세 기록의 **요약 절**만 본다 — 그 아래 걸음별 기록은 걸음마다
+    #: 그 자리에서 만난 것을 적는 자리이고, 거기서 같은 사유가 다시 나오는
+    #: 것은 중복이 아니라 **그 걸음의 사실**이다.
+    head = detail.split("선공 상태 구성")[0]
     for needle in ("link-material-requirement", "activation-timing"):
-        assert summary.count(needle) == 1, (needle, summary.count(needle))
+        assert head.count(needle) == 1, (needle, head.count(needle))
     #: 🔴 **합치면서 구분을 잃지 않았다** — 행동 종류와 빠진 규칙의 이름이
     #: 둘 다 남아 있고, 그래서 두 줄이 서로 다른 줄이다.
-    assert "link_summon [link-material-requirement" in summary
-    assert "activate_card [activation-timing" in summary
+    assert "link_summon [link-material-requirement" in head
+    assert "activate_card [activation-timing" in head
     #: 🔴 "어디서 만났는가" 를 적는다 — 자리와 도중을 섞지 않는다.
-    assert "걸음이 끝난 자리" in summary
+    assert "걸음이 끝난 자리" in head
+    #: 🔴 **요약은 건수만 적고 긴 문장을 반복하지 않는다** (6-AR §6).
+    assert "미지원 2건" in summary
+    assert "link-material-requirement" not in summary
 
 
 @pytest.mark.real_card
@@ -272,8 +322,13 @@ def test_b04_the_detail_attachment_keeps_the_whole_record(repository):
     """**B** — 첨부가 **원래의 기록**을 하나도 잃지 않았다."""
     response = _response(repository)
     detail = _detail(response)
-    assert len(response.attachments) == 1
-    assert response.attachments[0].filename == bot.COMBO_DETAIL_FILENAME
+    #: 🔴 **정정 (Phase 6-AR).** 첨부가 둘이 되었다 — 상세 기록과 **전개
+    #: 기록**(JSON) 이다. 상세 기록 쪽은 한 줄도 잃지 않았고, 아래가 그것을
+    #: 그대로 센다.
+    assert len(response.attachments) == 2
+    assert [item.filename for item in response.attachments] == [
+        bot.COMBO_DETAIL_FILENAME, bot.COMBO_REPLAY_FILENAME,
+    ]
     for needle in (
         "선공 상태 구성",                    # 입력과 초기 상태
         "검증 통과 10건",
@@ -292,6 +347,11 @@ def test_b04_the_detail_attachment_keeps_the_whole_record(repository):
         assert needle in detail, needle
     #: 🔴 첨부는 UTF-8 바이트로 나간다 (파일명에 사용자 입력이 없다).
     assert response.attachments[0].data.decode("utf-8") == detail
+    #: 🔴 전개 기록은 **같은 실행**의 세 번째 표현이다 — 새 실행이 아니다.
+    import json as _json
+
+    record = _json.loads(response.attachments[1].text)
+    assert record["result"]["line_completed"] is True
 
 
 # ======================================================================
@@ -892,6 +952,13 @@ def test_m09_a_partial_attachment_is_not_called_the_whole_record(
     assert len(response.attachments) <= 2
     #: ④ 전체를 어디서 볼 수 있는지 적는다.
     assert "CLI" in summary
+    #: ⑤ 🔴 **전개 기록을 더 붙이지 않는다** (Phase 6-AR). 상세 기록조차
+    #: 다 담지 못한 자리에 JSON 한 덩어리를 더하면 실행 기록이 더 밀려난다 —
+    #: 조용히 빼지 않고 그 사실을 적는다.
+    assert bot.COMBO_REPLAY_FILENAME not in [
+        item.filename for item in response.attachments
+    ]
+    assert "전개 기록은 이번 응답에 붙이지 않았습니다" in summary
 
 
 # ======================================================================

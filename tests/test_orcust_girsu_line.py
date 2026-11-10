@@ -1102,12 +1102,17 @@ def test_e03_the_combo_answer_marks_the_execution_as_a_verification_policy(
     blob = "\n".join(response.messages)
     detail = "\n".join(item.text for item in response.attachments)
 
-    assert "검증용 전개 경로 `orcust-girsu`" in blob
-    assert "최선 전개 탐색도" in blob
-    assert "경로를 끝까지 실행했습니다 (4/4단계)" in blob
-    #: 🔴 소재가 **이름으로** 남는다 (§7 — 무엇을 보냈는가). 요약은 짧은
-    #: 모양으로, 상세는 그 전의 모양 그대로.
-    assert "소재: 잭나이츠 오르페골 기르수 · 성유물－『성장』" in blob
+    #: 🔴 **정정 (Phase 6-AR).** 기본 응답이 한눈 요약으로 줄면서 아래 긴
+    #: 문장들이 **상세 기록의 첫 절**로 내려갔다 — 지운 것이 아니다. 요약은
+    #: 같은 사실을 짧은 모양으로 들고 있고, 이 시험은 **둘 다** 센다.
+    assert "검증용 전개 경로 `orcust-girsu`" in detail
+    assert "최선 전개 탐색도" in detail
+    assert "경로를 끝까지 실행했습니다 (4/4단계)" in detail
+    assert "고정 경로 `orcust-girsu`" in blob
+    assert "전개 완료" in blob and "(4/4단계)" in blob
+    assert "최선 전개" in blob
+    #: 🔴 소재가 **이름으로** 남는다 (§7 — 무엇을 보냈는가).
+    assert "소재: 잭나이츠 오르페골 기르수 · 성유물－『성장』" in detail
     assert "소재 2장: 잭나이츠 오르페골 기르수 · 성유물－『성장』" in detail
     #: 🔴 **링크 몬스터가 보고의 판에 보인다** (Phase 6-AC 가 고친 결함).
     #: 실측: 그 전까지 이 표에 엑스트라 몬스터 존이 없어서 갈라테아가
@@ -1115,13 +1120,17 @@ def test_e03_the_combo_answer_marks_the_execution_as_a_verification_policy(
     #: 줄어 있어서, 읽는 쪽이 카드가 어디로 갔는지 알 수 없었다. 링크
     #: 소환이 실행되기 전에는 그 자리가 언제나 비어 있어 결함이 보이지
     #: 않았다. 🔴 **그 자리가 요약에도 있다** (6-AE §2-③).
-    assert "엑스트라 몬스터 존: 오르페골 갈라테아" in blob
-    assert "몬스터 존: 없음" in blob
+    assert "엑스트라 몬스터 존: 오르페골 갈라테아" in detail
+    assert "몬스터 존: 없음" in detail
     assert "엑스트라 몬스터 존: 1장 — 오르페골 갈라테아 [30741503]" in detail
     assert "몬스터 존: 0장 — 없음" in detail
+    #: 🔴 **요약에도 그 자리가 있다** — 짧은 모양으로.
+    assert "최종 필드: EM존 갈라테아" in blob
     #: 🔴 **"자율 전략 AI 가 아니다" 를 기본 응답이 한 번 적는다** — 이
     #: 묶음의 제목이 재려는 것이 그 한 줄이다 (6-AE §2-① 의 "한 번만").
-    assert blob.count("최선 전개 탐색도, 자율 탐색도, 범용 AI 도 아닙니다") == 1
+    assert detail.count("최선 전개 탐색도, 자율 탐색도, 범용 AI 도 아닙니다") == 1
+    #: 요약에서도 **한 번만** 적는다 (짧은 모양으로).
+    assert blob.count("최선 전개도 이 패로 가능한 전개 전부도 아닙니다") == 1
     #: 🔴 실제 실행과 정적 계획이 갈린다 — 그 경계가 첨부 안에 있다.
     assert "[아래는 실행하지 않은 정적 계획입니다]" in detail
     assert "**[정적 계획은 첨부에 있습니다]**" in blob

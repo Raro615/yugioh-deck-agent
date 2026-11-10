@@ -741,12 +741,15 @@ def test_e01_the_user_five_card_run_is_preserved(repository):
     #: 🔴 **Phase 6-AE 가 두 자리로 갈랐다** — 수는 **요약**에, 걸음마다의
     #: 기록은 **상세 첨부**에 있다. 보존하는 대상은 "사용자가 확인한 결과"
     #: 이므로 양쪽을 다 센다.
-    assert "실행 6걸음 · 상태 변경 6걸음" in blob
+    #: 🔴 **정정 (Phase 6-AR).** 기본 응답이 한눈 요약으로 줄면서 걸음 수는
+    #: 상세 기록으로 내려갔다 — 수가 **사라진 것이 아니다**. 요약은 대신
+    #: 무엇을 했는지를 한 줄(`전개: …`)로 적는다.
     assert "실행 6걸음 · 상태 변경 6걸음" in detail
+    assert "전개:" in blob
     #: 🔴 **Phase 6-AD 후속2 가 이 낱말을 고쳤다** — 세는 것은 "조작이
     #: 실제로 수행된 걸음" 이고, "해결된 걸음" 에는 규칙상 해결됐지만 아무
     #: 일도 하지 않은 걸음까지 들어온다 (보고서 §15.3).
-    assert "**효과의 조작 수행 2걸음**" in blob
+    assert "**효과의 조작 수행 2걸음**" in detail
     assert "효과의 조작이 실제로 수행된 걸음** 2걸음" in detail
 
     #: ② 판 — 🔴 **한 걸음이 늘어난 만큼 달라졌다.** 패에 있던 성유물－
@@ -760,9 +763,11 @@ def test_e01_the_user_five_card_run_is_preserved(repository):
     assert "묘지: 1장 — 성유물－『성장』 [93920420]" in detail
     assert "남은 덱: 34장" in detail
     #: 🔴 **요약에도 그 판이 보인다** — 이름으로 (6-AE §2-③).
-    assert "몬스터 존: 잭나이츠 오르페골 기르수, 성유물－『성장』" in blob
-    assert "묘지 1장: 성유물－『성장』" in blob
-    assert "남은 덱 34장" in blob
+    #: 🔴 **정정 (Phase 6-AR).** 요약의 모양이 짧아졌다 — 필드의 카드는
+    #: 이름으로, 긴 구역(패 · 묘지 · 덱)은 **수로** 적는다. 전체 이름
+    #: 목록은 상세 기록에 그대로 있다 (위 단언들).
+    assert "최종 필드: 몬스터존 기르수 · 성유물－『성장』" in blob
+    assert "묘지 1" in blob and "덱 34" in blob
 
     #: ③ 멈춘 자리 — 🔴 **흐름만 남았고, 그 자리의 보류는 0건이다**
     #: (Phase 6-AC). 세트를 모두 끝낸 뒤라 패에 발동 후보가 남지 않는다.
@@ -771,8 +776,15 @@ def test_e01_the_user_five_card_run_is_preserved(repository):
     assert "end_phase" in detail
     assert "activate_card [activation-timing" in detail
     #: 🔴 요약은 그 사유를 **한 번** 적고, 남은 후보를 뜻으로 적는다.
-    assert blob.count("activate_card [activation-timing") == 1
-    assert "턴 종료" in blob
+    #: 🔴 **정정 (Phase 6-AR).** 사유의 본문은 상세 기록으로 내려갔고
+    #: (위 단언), 요약은 **건수만** 적는다 — 긴 문장을 요약에서 반복하지
+    #: 않는다는 것이 6-AR §6 의 요구다.
+    assert detail.count("activate_card [activation-timing") >= 1
+    assert "미지원 1건" in blob
+    #: 🔴 자율 실행에 "사람이 적어 둔 경로를 밟았다" 고 적지 않는다.
+    assert "사람이 적어 둔 경로를 끝까지 밟았다" not in blob
+    assert "사람이 적어 둔 경로를 쓰지 않았습니다" in blob
+    assert "기준점(`first_meaningful`)이 집은 수" in blob
 
 
 @pytest.mark.real_card
@@ -915,9 +927,13 @@ def test_e03_the_output_separates_what_ran_from_what_did_not(repository):
     #: ④ 지원 범위 내 실행을 전체 합법성 보장으로 적지 않는다.
     #: 🔴 요약은 그 한 줄을 들고 (6-AE §2-① 의 "한 번만"), 자세한 한계는
     #: 첨부에 있다 — **"검증 불가" 를 "검증 통과" 로 바꾸지 않았다.**
-    assert "최선 전개 탐색도" in blob
-    assert "최선의 전개가 아닙니다" in blob
-    assert "`first-permitted`" in blob
+    #: 🔴 **정정 (Phase 6-AR).** 긴 한 줄은 상세 기록으로 내려갔고, 요약은
+    #: **같은 경계를 짧게** 적는다. 둘 다 센다 — 어느 쪽에도 없으면 사라진
+    #: 것이다.
+    assert "최선 전개 탐색도" in detail
+    assert "최선의 전개가 아닙니다" in detail
+    assert "`first-permitted`" in detail
+    assert "최선 전개도 이 패로 가능한 전개 전부도 아닙니다" in blob
     assert "검증 불가" in blob and "문제 없음이 아닙니다" in blob
     assert "사람이 확인해야" in detail
 
