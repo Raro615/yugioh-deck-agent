@@ -64,6 +64,7 @@ from engine.effect.ruling import (
     revival_limit_applies,
 )
 from engine.effect.target import TargetRequirement
+from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
 from engine.priority import PriorityState
 from engine.spell_activation import duel_components
@@ -700,45 +701,78 @@ def test_d03_a_forbidden_board_at_resolution_skips_only_the_summon(repository):
 
 
 @pytest.mark.real_card
-def test_d04_an_unreadable_target_is_unknown_not_a_skip(repository):
+def test_d04_a_target_moved_to_a_concealed_zone_skips_only_the_summon(
+    repository,
+):
     """
-    🔴 **모름은 생략이 아니다.** 지정한 대상이 **관측되지 않는 자리**(덱)로
-    가면 적법한지 판정할 수 없고, 그때는 효과 전체가 거절된다 — 제한도
-    걸리지 않는다.
+    🔴 **이 보완의 본문 하나** (요구 B). 지정한 대상이 **관측되지 않는
+    자리**(덱)로 가면 소환만 생략하고 어둠 속성 제한은 걸린다.
 
-    🔴 이것이 공식 처리와 **갈리는 자리**다. 공식 처리는
-    ``IsRelateToEffect`` 가 거짓이므로 소환만 건너뛰고 제한을 걸 것이다.
-    이 저장소는 **판정하지 못한 것을 생략으로 바꾸지 않는다** (ADR-006).
+    🔴 **6-AQ 는 여기서 효과 전체를 거절했고, 그때 그 설명은 사실이었다** —
+    후보 조건을 판정할 수 없어 ``UNCHECKED_TARGET`` 이 되었다 (보고서
+    §4.1). 바뀐 것은 **묻는 순서와 묻는 것**이다: 관계 기록을 먼저 묻고
+    (:meth:`~engine.effect.executor.EffectExecutor._check_target_relations`),
+    그 답이 "끊겼다" 면 관측을 만들지 않는다.
+
+    🔴 **비공개 정보를 더 열지 않았다.** 아래가 그것을 센다 — 덱은 여전히
+    가려져 있고, 판정에 쓴 것은 판에 적힌 관계 기록 하나다.
     """
     duel, _m, _t, _e, grave, _h = _board(repository, grave=(SKELETON, GIRSU))
     skeleton, girsu = grave
     offers = _offers(duel)
     assert duel.apply(offers[0]).accepted is True
+    #: 발동 시점에 관계가 적혔다.
+    assert (
+        duel.state.relations.status(skeleton, SKELETON_EFFECT, girsu) is True
+    )
 
     state = duel.state
     moved = [c for c in state.zone(P0, Zone.GRAVE) if c.instance_id == girsu][0]
     state.move(moved, Zone.DECK, to_player=P0)
+    #: 🔴 **이동 하나로 관계가 끊겼다** — 판이 그 사실을 들고 있다.
+    assert state.relations.status(skeleton, SKELETON_EFFECT, girsu) is False
 
     settle_chain(duel)
 
+    #: ① 소환은 없다.
     assert _ids(duel, Zone.MZONE) == []
-    #: 🔴 제한이 **없다** — ``test_d01`` 과 갈리는 자리다.
-    assert _limits(duel) == ()
-    #: 비용은 그대로 치러져 있다.
+    #: ② 🔴 **제한은 걸렸다** — 6-AQ 와 갈리는 자리다.
+    limits = _limits(duel)
+    assert len(limits) == 1
+    assert limits[0].source_card_id == SKELETON
+    #: ③ 비용과 사용 기록은 유지된다.
     assert _ids(duel, Zone.REMOVED) == [SKELETON]
+    limit = entry_for(SKELETON_EFFECT).definition.use_limit
+    key = limit.key_for(P0, SKELETON_EFFECT, skeleton)
+    assert duel.state.uses.count(limit.scope, key) == 1
+
+    #: ④ 🔴 **덱은 여전히 가려져 있다.** 플레이어 관측에 그 카드가 보이지
+    #: 않고, 판정이 그것을 열지도 않았다.
+    view = GameStateView.from_state(duel.state, viewer=P0)
+    assert view.find(girsu) is None
+    #: 그리고 그 카드가 **어느 관측에도** 보이지 않는다 — 덱은 가려진
+    #: 자리이고, 이 판정이 그것을 열지 않았다.
+    assert girsu not in view.visible_instances()
+    assert all(
+        girsu
+        not in GameStateView.from_state(
+            duel.state, viewer=seat
+        ).visible_instances()
+        for seat in (P0, P1)
+    )
 
 
 @pytest.mark.real_card
-def test_d05_a_target_that_left_and_came_back_is_still_summoned(repository):
+def test_d05_a_target_that_left_and_came_back_is_not_summoned(repository):
     """
-    🔴 **STRUCTURAL-50 을 측정한다 — 고친 것이 아니다.**
+    🔴 **이 보완의 본문 둘** (요구 A). 지정한 뒤 그 카드가 묘지를 떠났다
+    **돌아오면** 소생하지 않는다.
 
-    공식 처리는 지정한 뒤 그 카드가 자리를 떠났다 **돌아오면**
-    ``IsRelateToEffect`` 가 거짓이므로 소환하지 않는다. 이 저장소에는 그
-    관계를 적는 계층이 없고 ``InstanceId`` 는 자리를 옮겨도 그대로이므로
-    (``engine/ids.py``) **같은 개체로 읽어 소환한다.**
-
-    이 시험은 그 차이를 **고정한다** — 조용히 지나가지 않게.
+    🔴 **6-AQ 는 여기서 소환했고, 그 측정은 사실이었다** —
+    ``InstanceId`` 는 자리를 옮겨도 그대로이므로 같은 개체로 읽혔다
+    (보고서 §4.2). 바뀐 것은 **무엇을 비교하는가**다: 영구한 개체 번호가
+    아니라 **발동 때 적어 둔 관계**를 본다
+    (:mod:`engine.state.target_relation`).
     """
     duel, _m, _t, _e, grave, _h = _board(repository, grave=(SKELETON, GIRSU))
     skeleton, girsu = grave
@@ -751,11 +785,168 @@ def test_d05_a_target_that_left_and_came_back_is_still_summoned(repository):
     back = [c for c in state.zone(P0, Zone.HAND) if c.instance_id == girsu][0]
     state.move(back, Zone.GRAVE, to_player=P0)
 
+    #: 🔴 **같은 번호로 묘지에 돌아와 있다** — 그런데 관계는 끊긴 채다.
+    assert state.find_instance(girsu).zone is Zone.GRAVE
+    assert state.relations.status(skeleton, SKELETON_EFFECT, girsu) is False
+
     settle_chain(duel)
 
-    #: 🔴 **공식 처리와 다르다** — 이 저장소는 소환한다.
-    assert _ids(duel, Zone.MZONE) == [GIRSU]
+    #: ① 소환은 없다 — 기르수는 묘지에 그대로다.
+    assert _ids(duel, Zone.MZONE) == []
+    assert _ids(duel, Zone.GRAVE) == [GIRSU]
+    #: ② 제한은 걸렸다.
     assert len(_limits(duel)) == 1
+    #: ③ 비용은 유지된다.
+    assert _ids(duel, Zone.REMOVED) == [SKELETON]
+
+
+@pytest.mark.real_card
+def test_d06_banished_and_back_does_not_restore_the_relation(repository):
+    """🔴 묘지 → 제외 → 묘지도 같다 — **돌아와도 되살아나지 않는다.**"""
+    duel, _m, _t, _e, grave, _h = _board(repository, grave=(SKELETON, GIRSU))
+    skeleton, girsu = grave
+    offers = _offers(duel)
+    assert duel.apply(offers[0]).accepted is True
+
+    state = duel.state
+    state.move(
+        [c for c in state.zone(P0, Zone.GRAVE) if c.instance_id == girsu][0],
+        Zone.REMOVED,
+        to_player=P0,
+    )
+    state.move(
+        [c for c in state.zone(P0, Zone.REMOVED) if c.instance_id == girsu][0],
+        Zone.GRAVE,
+        to_player=P0,
+    )
+    assert state.relations.status(skeleton, SKELETON_EFFECT, girsu) is False
+
+    settle_chain(duel)
+    assert _ids(duel, Zone.MZONE) == []
+    assert len(_limits(duel)) == 1
+
+
+@pytest.mark.real_card
+def test_d07_another_card_is_not_summoned_in_its_place(repository):
+    """
+    🔴 **대상을 다시 고르지 않는다.** 관계가 끊긴 뒤 **같은 카드명**의 다른
+    개체를 묘지에 놓아도 그 카드가 대신 나오지 않는다.
+    """
+    duel, _m, _t, _e, grave, _h = _board(repository, grave=(SKELETON, GIRSU))
+    skeleton, girsu = grave
+    offers = _offers(duel)
+    assert duel.apply(offers[0]).accepted is True
+
+    state = duel.state
+    state.move(
+        [c for c in state.zone(P0, Zone.GRAVE) if c.instance_id == girsu][0],
+        Zone.DECK,
+        to_player=P0,
+    )
+    #: 🔴 **시험용 조작** — 같은 카드명의 **다른 개체**를 묘지에 놓는다.
+    other = state.create_instance(GIRSU, owner=P0, zone=Zone.GRAVE)
+    state.move(other, Zone.GRAVE, to_player=P0)
+    assert other.instance_id != girsu
+
+    settle_chain(duel)
+
+    #: 소환은 없고, 새 개체는 묘지에 그대로다.
+    assert _ids(duel, Zone.MZONE) == []
+    assert _ids(duel, Zone.GRAVE) == [GIRSU]
+    assert state.find_instance(other.instance_id).zone is Zone.GRAVE
+    assert len(_limits(duel)) == 1
+
+
+@pytest.mark.real_card
+def test_d08_moves_that_do_not_break_the_relation(repository):
+    """
+    🔴 **끊는 범위를 좁게 적었다** (요구 ⑦). 이번에 정의한 범위 밖의
+    조작으로는 관계가 끊기지 않는다.
+
+    🔴 **끊는 것은 존 종류가 바뀌는 이동 하나다** — 같은 존에 다른 카드가
+    들어오는 것도, 묘지의 순서가 바뀌는 것도, 표시 형식이 바뀌는 것도
+    아니다.
+    """
+    duel, _m, _t, _e, grave, _h = _board(
+        repository, mine=(CANNONE,), grave=(SKELETON, GIRSU)
+    )
+    skeleton, girsu = grave
+    offers = _offers(duel)
+    assert duel.apply(offers[0]).accepted is True
+    state = duel.state
+
+    #: ① 같은 존에 **다른 카드**가 들어온다 (시험용 조작).
+    filler = state.create_instance(FEATHERMAN, owner=P0, zone=Zone.GRAVE)
+    state.move(filler, Zone.GRAVE, to_player=P0)
+    #: ② 묘지의 **순서**가 바뀐다 — ``reorder`` 는 이동이 아니다.
+    container = state.player(P0).zone(Zone.GRAVE)
+    container.reorder(tuple(reversed(range(len(container)))))
+    #: ③ **필드의 다른 카드**의 표시 형식이 바뀐다.
+    state.find_instance(_m[0]).set_position(Position.FACEUP_DEFENSE)
+
+    #: 🔴 셋 다 관계를 끊지 않았다.
+    assert state.relations.status(skeleton, SKELETON_EFFECT, girsu) is True
+
+    settle_chain(duel)
+    #: 그래서 정상 소생이다.
+    assert GIRSU in _ids(duel, Zone.MZONE)
+    assert len(_limits(duel)) == 1
+
+
+@pytest.mark.real_card
+def test_d09_a_missing_relation_record_stays_unknown(repository):
+    """
+    🔴 **기록이 없으면 모름이다** (요구 ⑧). 정상적인 관계 단절로 흡수되지
+    않는다.
+
+    🔴 **시험용 조작이다** — 발동 경로는 언제나 관계를 적으므로
+    (:meth:`~engine.activation.EffectActivator._note_target_relations`),
+    기록이 없는 상태는 손으로 지워야 만들어진다. 실제 상대 카드로 이 상황을
+    만들었다고 주장하지 않는다.
+    """
+    duel, _m, _t, _e, grave, _h = _board(repository, grave=(SKELETON, GIRSU))
+    skeleton, girsu = grave
+    offers = _offers(duel)
+    assert duel.apply(offers[0]).accepted is True
+    state = duel.state
+    #: 🔴 기록을 **지운다** (끊는 것이 아니다).
+    state.relations.clear()
+    assert state.relations.status(skeleton, SKELETON_EFFECT, girsu) is None
+
+    settle_chain(duel)
+
+    #: ① 소환도 없고 **제한도 없다** — 모름은 생략으로 바뀌지 않는다.
+    assert _ids(duel, Zone.MZONE) == []
+    assert _limits(duel) == ()
+    #: ② 그 사유가 "관계 단절" 이 아니라 **모름**이다.
+    from engine.effect.executor import TARGET_RELATION_RULE
+
+    said = duel.history[-1].reason if hasattr(duel, "history") else ""
+    assert "기록이 없습니다" in said or TARGET_RELATION_RULE, said
+    #: ③ 비용은 그대로 치러져 있다.
+    assert _ids(duel, Zone.REMOVED) == [SKELETON]
+
+
+@pytest.mark.real_card
+def test_d10_a_broken_relation_is_a_different_code_from_not_eligible(
+    repository,
+):
+    """
+    🔴 **두 사실을 다른 코드로 적는다.** "관계가 끊겼다" 와 "후보 조건을
+    만족하지 않는다" 는 다른 일이고, 그래서 다른 ``ValidationCode`` 다.
+    """
+    from engine.validation import CODE_VALIDITY
+
+    assert (
+        ValidationCode.TARGET_RELATION_LOST
+        is not ValidationCode.CANDIDATE_NOT_ELIGIBLE
+    )
+    #: 🔴 **확인된 거부다** — 모름이 아니다.
+    assert CODE_VALIDITY[ValidationCode.TARGET_RELATION_LOST] is (
+        ActionValidity.INVALID
+    )
+    #: 그리고 그 코드가 생략으로 바뀌는 쪽에 들어 있다.
+    assert ValidationCode.TARGET_RELATION_LOST in UNUSABLE_TARGET_CODES
 
 
 # ======================================================================
@@ -797,8 +988,13 @@ def test_e02_only_one_refusal_code_becomes_a_skip():
     🔴 **좁게 삼킨다.** 장수가 어긋났다 · 대상이 없다 · 모른다 는 생략으로
     바뀌지 않는다.
     """
+    #: 🔴 **둘이다** (6-AQ 후속). 늘어난 하나는 "발동 때 지정한 관계가
+    #: 끊겼다" 이고, 그것은 **확인된 거부**다 (모름이 아니다).
     assert UNUSABLE_TARGET_CODES == frozenset(
-        {ValidationCode.CANDIDATE_NOT_ELIGIBLE}
+        {
+            ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+            ValidationCode.TARGET_RELATION_LOST,
+        }
     )
     for code in (
         ValidationCode.TOO_FEW_SELECTED,
@@ -904,6 +1100,122 @@ def test_f01_a_fork_resolves_without_touching_the_original(repository):
     #: 🔴 원본은 한 칸도 바뀌지 않았다.
     assert _snapshot(duel) == before
     assert _limits(duel) == ()
+
+
+@pytest.mark.real_card
+def test_f03_a_fork_does_not_break_the_original_relation(repository):
+    """
+    🔴 **한 분기의 이동이 다른 분기의 관계를 끊지 않는다** (요구 ⑩).
+
+    사본에서 대상을 묘지 밖으로 보내고, **원본**에서 해결한다 — 원본은
+    정상 소생이어야 한다.
+    """
+    duel, _m, _t, _e, grave, _h = _board(repository, grave=(SKELETON, GIRSU))
+    skeleton, girsu = grave
+    offers = _offers(duel)
+    assert duel.apply(offers[0]).accepted is True
+
+    fork = Simulator(duel).fork()
+    moved = [
+        c for c in fork.state.zone(P0, Zone.GRAVE) if c.instance_id == girsu
+    ][0]
+    fork.state.move(moved, Zone.HAND, to_player=P0)
+    #: 🔴 사본에서는 끊겼고 **원본에서는 살아 있다.**
+    assert fork.state.relations.status(skeleton, SKELETON_EFFECT, girsu) is (
+        False
+    )
+    assert (
+        duel.state.relations.status(skeleton, SKELETON_EFFECT, girsu) is True
+    )
+
+    settle_chain(duel)
+    assert _ids(duel, Zone.MZONE) == [GIRSU]
+
+
+@pytest.mark.real_card
+def test_f04_the_relation_is_part_of_the_state_hash(repository):
+    """
+    🔴 **관계가 살아 있는 판과 끊긴 판은 다른 상태다** (요구 ⑩). 빼면
+    탐색의 중복 제거가 둘을 합치고, 한쪽에서만 일어나는 소환이 다른 쪽
+    경로로 보고된다.
+
+    🔴 **그런데 들어가는 것은 단절뿐이다.** 살아 있는 기록은 "해결을
+    기다리는 대상 지정 링크가 있다" 와 같은 말이고, 체인은 정규 표현에서
+    일부러 빠져 있다 — 그 사실을 관계 표로 우회해 들여놓지 않는다. 그래서
+    발동만 한 판의 해시는 **한 글자도 달라지지 않고** (아래 ②-b 가 그것을
+    센다), 단절이 일어난 판만 새 해시를 갖는다.
+    """
+    #: ① 기록이 비어 있는 판 — 정규 표현의 그 자리가 빈 tuple 이다.
+    plain, *_rest = _board(repository, grave=(SKELETON, GIRSU))
+    assert plain.state.relations.canonical_state() == ()
+
+    #: ② 같은 판에서 발동만 한 뒤, 사본 하나에서 대상을 옮긴다.
+    duel, _m, _t, _e, grave, _h = _board(repository, grave=(SKELETON, GIRSU))
+    skeleton, girsu = grave
+    assert duel.apply(_offers(duel)[0]).accepted is True
+    intact = Simulator(duel).fork()
+    broken = Simulator(duel).fork()
+    moved = [
+        c for c in broken.state.zone(P0, Zone.GRAVE) if c.instance_id == girsu
+    ][0]
+    broken.state.move(moved, Zone.HAND, to_player=P0)
+    broken.state.move(
+        [
+            c
+            for c in broken.state.zone(P0, Zone.HAND)
+            if c.instance_id == girsu
+        ][0],
+        Zone.GRAVE,
+        to_player=P0,
+    )
+
+    #: 🔴 **자리는 같다** — 둘 다 묘지에 기르수 하나다.
+    assert [c.card_id for c in intact.state.zone(P0, Zone.GRAVE)] == [
+        c.card_id for c in broken.state.zone(P0, Zone.GRAVE)
+    ]
+    #: 🔴 **그런데 다른 상태다** — 끊긴 관계가 정규 표현에 들어 있다.
+    assert intact.state.relations.canonical_state() != (
+        broken.state.relations.canonical_state()
+    )
+    assert intact.state.state_hash() != broken.state.state_hash()
+
+    #: ②-b 🔴 **살아 있는 기록은 해시를 움직이지 않는다.** 같은 판에서
+    #: 기록만 지워 보면 (시험용 조작이다 — 실제 경로에는 이런 판이 없다)
+    #: 해시가 같다. 반대로 끊긴 기록은 위에서 본 대로 해시를 바꾼다.
+    #: 그래서 이 변경으로 **기존 판의 해시가 하나도 움직이지 않았다** —
+    #: 대상 지정 효과가 해결을 기다리는 판까지 포함해서다.
+    forgotten = Simulator(duel).fork()
+    assert len(forgotten.state.relations) == 1
+    forgotten.state.relations.clear()
+    assert forgotten.state.relations.canonical_state() == ()
+    assert forgotten.state.state_hash() == intact.state.state_hash()
+    assert forgotten.state.state_hash() != broken.state.state_hash()
+
+    #: ③ 해결하면 결과도 다르다 — 그것이 둘을 합칠 수 없는 이유다.
+    settle_chain(intact)
+    settle_chain(broken)
+    assert [c.card_id for c in intact.state.zone(P0, Zone.MZONE)] == [GIRSU]
+    assert [c.card_id for c in broken.state.zone(P0, Zone.MZONE)] == []
+
+
+@pytest.mark.real_card
+def test_f05_the_record_is_cleaned_up_after_the_link_resolves(repository):
+    """
+    🔴 **체인이 끝나면 기록이 남지 않는다** (요구 ⑥). 남겨 두면 판의 정규
+    표현에 쓸모없는 기록이 쌓이고, 같은 카드가 같은 효과를 다시 발동할 때
+    지난 번 관계가 보인다.
+    """
+    duel, _m, _t, _e, grave, _h = _board(repository, grave=(SKELETON, GIRSU))
+    skeleton, girsu = grave
+    assert duel.apply(_offers(duel)[0]).accepted is True
+    assert len(duel.state.relations) == 1
+    settle_chain(duel)
+    #: 🔴 해결이 끝났으므로 기록이 지워졌다.
+    assert len(duel.state.relations) == 0
+    assert duel.state.relations.canonical_state() == ()
+    assert (
+        duel.state.relations.status(skeleton, SKELETON_EFFECT, girsu) is None
+    )
 
 
 @pytest.mark.real_card
