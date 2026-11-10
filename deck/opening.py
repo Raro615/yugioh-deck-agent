@@ -511,6 +511,21 @@ class ExecutedStep:
     카드 이름을 담는다. 인스턴스 번호가 아니라 **무엇을 보냈는가**가
     §7 이 요구하는 기록이고, 번호는 판마다 달라 재현에 쓸 수 없다.
     """
+    journal_from: int = 0
+    journal_to: int = 0
+    """
+    🔴 **이 걸음이 늘린 ``EventJournal`` 구간** ``[journal_from, journal_to)``
+    (Phase 6-AR).
+
+    :attr:`effect_events` 는 **효과 사건의 이름만** 들고 있어서, 어느 걸음이
+    어떤 카드 이동을 만들었는지는 알 수 없었다. 시각 재현은 그 연결이
+    있어야 한 걸음씩 그릴 수 있다 — 그래서 **번호 두 개**만 더한다. 기록을
+    복사하지 않으므로 같은 사실이 두 곳에 생기지 않는다.
+
+    둘이 같으면 **이 걸음은 판을 바꾸는 사건을 하나도 만들지 않았다** 는
+    뜻이다 (거절 · 해결됐지만 조작 없음 · 자동 패스). 🔴 그것을 "일을 했다"
+    로 바꾸지 않는다.
+    """
 
     @property
     def step_validity(self):
@@ -574,6 +589,16 @@ class OpeningRun:
 
     setup: OpeningSetup
     steps: list[ExecutedStep] = field(default_factory=list)
+    initial_board: tuple[tuple[int, str, int, int], ...] = ()
+    """
+    🔴 **첫 걸음 전의 판** — ``(좌석, 존 이름, instance_id, card_id)`` 의
+    줄들이다 (Phase 6-AR).
+
+    실행이 끝난 ``GameState`` 만으로는 **시작 상태를 되돌릴 수 없다** (어느
+    카드가 처음에 어디 있었는지는 이동 기록을 거꾸로 밟아야 알 수 있고,
+    토큰처럼 사라지는 카드는 그것으로도 모자란다). 시각 재현은 시작 판에서
+    출발해야 하므로, 실행 직전에 **값으로만** 한 장 찍어 둔다.
+    """
     stopped_reason: str | None = None
     """왜 멈췄는가. 🔴 "더 할 수 없다" 와 "상한에 닿았다" 를 가른다."""
     stopped_kind: str = ""
@@ -939,6 +964,30 @@ def _resolution_choices(records, repository) -> tuple:
     return tuple(ids), tuple(text)
 
 
+def _board_snapshot(state) -> "tuple[tuple[int, str, int, int], ...]":
+    """
+    판을 **값으로만** 한 장 찍는다 — ``(좌석, 존 이름, instance, card_id)``.
+
+    🔴 **판정하지 않는다.** 지금 어디에 무엇이 있는지만 읽고, 가려진 자리도
+    그대로 적는다 (이 기록은 **엔진 내부용**이고 관측 경계가 아니다 —
+    내보내기 쪽이 무엇을 공개할지 따로 정한다).
+    """
+    from engine.vocabulary import Zone
+
+    rows: list[tuple[int, str, int, int]] = []
+    for seat, player in enumerate(state.players):
+        for zone in Zone:
+            try:
+                cards = [card for card in player.zone(zone) if card]
+            except (KeyError, ValueError, AttributeError):
+                continue
+            for card in cards:
+                rows.append(
+                    (seat, zone.value, card.instance_id.value, card.card_id)
+                )
+    return tuple(rows)
+
+
 def execute_opening(
     setup: OpeningSetup, repository, *, choose=None,
     max_actions: int = MAX_EXECUTED_ACTIONS,
@@ -972,6 +1021,9 @@ def execute_opening(
     journal = setup.journal
     picker = choose or first_meaningful
     seen_events = len(list(journal)) if journal is not None else 0
+    #: 🔴 **첫 걸음 전의 판을 값으로 찍어 둔다** (Phase 6-AR). 아래 루프가
+    #: 판을 바꾸고 나면 이 사실은 어디에도 남지 않는다.
+    run.initial_board = _board_snapshot(duel.state)
 
     #: 🔴 **해결 시점의 선택을 걸음마다 읽는다** (Phase 6-AD).
     #:
@@ -1138,12 +1190,15 @@ def execute_opening(
             picked_ids, picked_text = _resolution_choices(fresh, repository)
 
         events = []
+        #: 🔴 이 걸음이 늘린 기록의 **구간**을 그대로 들고 나간다 (6-AR).
+        journal_from = seen_events
         if journal is not None:
             all_events = list(journal)
             for event in all_events[seen_events:]:
                 if event.kind.name == "EFFECT":
                     events.append(str(event.effect_ref))
             seen_events = len(all_events)
+        journal_to = seen_events
 
         final = settled or step
         #: 🔴 **"해결됐지만 일을 하지 않았다" 를 기록에서 읽는다**
@@ -1174,6 +1229,8 @@ def execute_opening(
             resolved=bool(step.accepted and resolved),
             state_changed=before_hash != after_hash,
             effect_events=tuple(events),
+            journal_from=journal_from,
+            journal_to=journal_to,
             next_candidates=len(duel.legal_actions(duel.to_act).allowed),
             note=("체인이 끝까지 풀리지 않았습니다" if step.accepted
                   and not resolved else ""),
