@@ -326,6 +326,11 @@ when_target_unusable: bool = False
 | B2 | 묘지의 **갈라테아**(엑스트라 덱)를 대상으로 지정 | 발동은 수락되지만 해결이 `UNCHECKED_RULES` — **소환도 제한도 없다** |
 | C5 | 부적격 카드를 대상으로 / 대상 없이 발동 선언 | **발동 자체가 `INVALID`**, 판은 한 글자도 바뀌지 않는다 (비용도 치러지지 않는다) |
 
+> 🔴 **정정 안내 (Phase 6-AQ 후속).** 위 표의 **D4 · D5 두 줄은 6-AQ 시점의
+> 실측**이고, 그 뒤 후속 보완이 둘을 고쳤다 — 지금은 **둘 다 소환만 생략하고
+> 어둠 속성 제한을 건다**. 과거 기록을 지우지 않고 그대로 둔다 (그때 그것이
+> 사실이었다). 바뀐 뒤의 실측은 **§10** 에 있다.
+
 ### 4.1 D4 — 모름은 생략이 아니다
 
 대상이 **관측되지 않는 자리**(덱)로 가면 `TargetResolver` 가 `HIDDEN_CARD` →
@@ -342,6 +347,20 @@ limits []
 그 결정을 엔진이 지어낸 것이 되므로 (ADR-006), 이 저장소는 거절을 고른다.
 `test_d04` 가 그 차이를 고정한다.
 
+> 🔴 **정정 (Phase 6-AQ 후속) — 고쳤다.** 위 문단은 **6-AQ 시점의 사실**이고
+> 그때 틀린 것이 아니다. 그때 이 저장소에는 "발동 때 지정한 관계" 를 적는
+> 자리가 없었으므로, 남은 길은 *현재* 대상을 다시 관측해 후보 조건을 묻는
+> 것뿐이었고 덱은 가려져 있으니 `UNCHECKED_TARGET` 이 맞았다.
+>
+> 후속 보완이 그 자리를 만들었다 (`engine/state/target_relation.py`). 이제
+> 해결기는 **관측을 묻기 전에 판에 적힌 관계 기록을 먼저 묻는다** — "그 개체가
+> 그 뒤 존을 떠났는가" 는 가려진 카드를 열지 않고 알 수 있는 사실이고, 그
+> 답이 "떠났다" 면 **확정**이므로 모름이 아니다. 결과: **소환만 생략하고 어둠
+> 속성 제한을 건다** (§10.1 · §10.3 의 실측).
+>
+> `test_d04` 는 **올바른 동작을 요구하는 회귀 시험**으로 바뀌었다 —
+> `test_d04_a_target_moved_to_a_concealed_zone_skips_only_the_summon`.
+
 ### 4.2 D5 — STRUCTURAL-50 은 그대로다
 
 지정한 뒤 그 카드가 자리를 떠났다 **돌아오면** 공식 처리는
@@ -357,6 +376,20 @@ limits []
 그것을 만들지 않았다 — 만들면 대상 지정 효과 전부의 관계 모델을 새로
 세우는 일이 되고, 그것은 §7 의 범위 밖이다. `test_d05` 가 현재 동작을
 **측정**해 고정한다.
+
+> 🔴 **정정 (Phase 6-AQ 후속) — 이 한 갈래는 고쳤다.** 위 문단도 **6-AQ 시점의
+> 사실**이다. 후속 보완이 `InstanceId`(개체의 영구 번호) 와 **그 효과가 발동
+> 때 지정했던 관계**를 분리했고, 존 종류가 바뀌는 이동에서 관계를 끊는다.
+> 이제 떠났다 **돌아온** 대상은 `InstanceId` 가 같아도 **소생하지 않고**,
+> 어둠 속성 제한만 걸린다 (§10.1 의 실측).
+>
+> 🔴 **STRUCTURAL-50 전체를 해결한 것이 아니다 — 부분 해결이다.** 옮긴 것은
+> "지정한 뒤 그 카드가 존을 떠났는가" 하나이고, 체인 무효화 · 효과 무효화 ·
+> 같은 체인 안의 다른 효과가 만드는 관계는 여전히 없다. §10.8 이 남은
+> 사례를 이름으로 적는다.
+>
+> `test_d05` 도 **올바른 동작을 요구하는 회귀 시험**으로 바뀌었다 —
+> `test_d05_a_target_that_left_and_came_back_is_not_summoned`.
 
 ---
 
@@ -651,8 +684,8 @@ timeout 1800 python3 -m pytest tests/test_effectdefinition_activation_audit.py \
 
 | 항목 | 상태 |
 | --- | --- |
-| `Card.IsRelateToEffect` 자체 | ❌ STRUCTURAL-50 — 떠났다 **돌아온** 대상을 구별하지 못한다 (§4.2) |
-| 관측되지 않는 자리로 간 대상 | ❌ `UNCHECKED_TARGET` 으로 효과 전체 거절 (§4.1) |
+| `Card.IsRelateToEffect` 자체 | 🔺 **부분 해결** (STRUCTURAL-50, Phase 6-AQ 후속) — "지정한 뒤 존을 떠났는가" 는 판정한다. 무효화 계열의 관계는 여전히 없다 (§10.8) |
+| 관측되지 않는 자리로 간 대상 | ✅ **해결** (Phase 6-AQ 후속) — 소환만 생략하고 제한은 건다 (§10.1) |
 | 스켈레촌 `e2` (바벨 적용 시 유발즉시) | ❌ 유발즉시 발동 시점 미지원 |
 | 기르수 `e[1]` (특수 소환 유발) | ❌ 등재하지 않았다 (§5.5) |
 | 카노네 ① | ❌ 등재하지 않았다 — `_CANNONE_RESTRICTION_GUARD` 가 그 사실에 근거한 `restricts_others=False` 를 import 시점에 지킨다 |
@@ -682,6 +715,11 @@ Duel Simulator 시각화 연동**이다. 이번 Phase 로 그 전개가 연결�
    어느 쪽 필드를 그려야 하는지 알 수 없다.
 
 🔴 **이번 범위에서 연동을 구현하지 않았다** — 위 넷은 다음 작업의 목록이다.
+
+> 🔴 **정정 안내 (Phase 6-AQ 후속).** 위 표의 두 줄(`IsRelateToEffect` 자체 ·
+> 관측되지 않는 자리로 간 대상)은 **6-AQ 시점에 ❌ 였고**, 후속 보완이 각각
+> 부분 해결 · 해결로 바꿨다. 과거 기록은 §4.1 · §4.2 에 그대로 남겨 두었다.
+> 나머지 줄은 **하나도 바뀌지 않았다** — 후속 보완이 건드린 범위가 아니다.
 
 ---
 
@@ -729,3 +767,258 @@ search: longirsu    → §6.3 — 🔴 기본 예산 안에서 찾지 못한다 
 3. 여섯째 걸음의 링크 소재가 **갈라테아 + 기르수** 두 장인가 (장수 2 ·
    링크 수치 합 3).
 4. 어둠 속성 제한이 **두 건** 적히는가 (디베르 · 스켈레촌).
+
+---
+
+## 10. 후속 보완 — 대상 관계 단절 (Phase 6-AQ 후속)
+
+6-AQ 가 남긴 **두 결함**을 고쳤다. §4.1 · §4.2 · §8 에 정정 안내를 달았고
+과거 기록은 지우지 않았다 — 그때 그 설명은 사실이었다.
+
+### 10.1 두 결함과 수정 전 · 후 (실측)
+
+| 발동 후 바꾼 것 | 6-AQ (수정 전) | 후속 보완 (수정 후) |
+| --- | --- | --- |
+| **A.** 대상을 묘지 → 패 → **다시 묘지로** | ✅ 소환된다 (같은 `InstanceId` 라서 같은 대상으로 읽었다) | ❌ **소환하지 않는다** · 어둠 제한 ✅ · 비용 · 사용 기록 유지 |
+| **B.** 대상을 묘지 → **덱**(비공개 존)으로 | ❌ `UNCHECKED_TARGET` 으로 **효과 전체 거절** (제한도 걸리지 않았다) | ❌ 소환 생략 · 어둠 제한 ✅ · 비용 · 사용 기록 유지 · 덱은 열지 않는다 |
+
+🔴 **발동 후의 변화는 시험용 조작이다** — 실제 등재된 상대 카드로 이 상황을
+만들었다고 주장하지 않는다. 묘지 → 패 · 묘지 → 덱 · 묘지 → 제외는 시험이
+`GameState.move` 를 직접 불러 만든다.
+
+해결기의 실제 문장 (수정 후, 두 갈래가 같은 문장을 쓴다):
+
+```
+status: resolved | code: ok
+reason: 21441617:e[0] 를 적용했습니다 (1건). 0번 조작(special_summon)은
+        지정한 대상(primary)을 쓸 수 없어 하지 않았습니다: @primary 로 지정한
+        #41 는 그 뒤에 존을 떠나 이 효과와의 관계가 끊겼습니다. 공식 처리도
+        그때 그 카드를 쓰지 않습니다 (Card.IsRelateToEffect 가 거짓).
+        나머지 일은 그대로 했습니다.
+MZONE   []            ← 소환 없음
+REMOVED [21441617]    ← 비용 유지
+limits  [('DARK', 21441617)]   ← 제한 걸림
+```
+
+대상이 묘지에 **그대로** 있을 때는 바뀌지 않았다 (회귀):
+
+```
+status: resolved | code: ok
+reason: 21441617:e[0] 를 적용했습니다 (2건).
+MZONE   [69811710]    ← 소생
+limits  [('DARK', 21441617)]
+```
+
+### 10.2 무엇을 적고, 무엇이 관계를 끊는가
+
+새 상태 표 하나다 — `engine/state/target_relation.py` 의
+`TargetRelationRegistry`. `uses` · `rule_uses` · `summon_uses` ·
+`summon_limits` 에 이어지는 **다섯 번째 표**이고 `GameState` 가 들고 있다.
+
+* **적는 때**: `engine/activation.py` 가 체인 링크를 쌓을 때. 그 효과의
+  **TARGETING 바인딩**에서 고른 개체만 적는다 (`CHOOSING` · `ALL` 은 대상
+  지정이 아니므로 적지 않는다 — 디베르 ① 은 여기 들어오지 않는다).
+* **열쇠**: `(발동한 개체, 카드 ID, 효과 번호, 대상 개체)`. 같은 카드명 두
+  장이 각각 같은 효과를 발동할 수 있으므로 **어느 개체가 발동했는지**까지
+  적어야 한 링크의 관계가 다른 링크의 것과 섞이지 않는다.
+* **지우는 때**: `engine/chain.py` 가 그 링크을 해결하면 그 링크의 기록만
+  지운다 (`forget`). 불발된 링크의 기록은 남기지 않는다.
+
+🔴 **적용 범위를 좁게 적는다.** 끊는 것은 **존 종류가 바뀌는 이동 하나**이고,
+`GameState.move` 가 그 자리다 (`move_card` 의 유일한 호출자).
+
+| 조작 | 관계 |
+| --- | --- |
+| 묘지 → 패 · 묘지 → 덱 · 묘지 → 제외 · 필드 → 묘지 | 🔴 **끊는다** |
+| 같은 존 안의 순서 변경 · 섞기 (`ZoneContainer.reorder`) | 끊지 않는다 |
+| 표시 형식 변경 (`set_position`) | 끊지 않는다 |
+
+근거는 EDOPro 의 `Card::clear_relate_effect()` 가 **위치 변경**에서 불린다는
+것이다. 표시 형식 · 컨트롤 변경은 그 자리가 아니고, 이 저장소에는 컨트롤만
+바꾸는 primitive 가 **없다** (실측: `GameState` 에 `take_control` 류가 없다) —
+그래서 그 갈래는 지금 구현할 것이 없다. `test_d08` 이 끊지 않는 셋(묘지에
+카드 추가 · `reorder` · `set_position`)을 센다.
+
+🔴 **같은 개체 번호 하나로 판단하지 않는다.** `InstanceId` 는 개체의 영구
+번호이고 (한 번 쓴 번호는 재사용하지 않는다), 관계는 **그 효과가 그 때
+지정했다** 는 따로 적힌 사실이다. `test_d06` 이 제외를 거쳐 돌아온 경우도
+관계가 회복되지 않음을 센다. `test_d07` 은 관계가 끊긴 뒤 **같은 카드명의
+다른 카드**를 같은 자리에 놓아도 그것이 대신 소환되지 않음을 센다.
+
+### 10.3 비공개 정보를 열지 않는 판정
+
+바뀐 것은 **묻는 순서와 묻는 것**이다. 조작 하나를 계획하기 전에
+`EffectExecutor._check_target_relations` 가 먼저 묻는다.
+
+| 판에 적힌 관계 | 답 | 결과 |
+| --- | --- | --- |
+| 끊겼다 (`intact=False`) | **확정 거부** — `TARGET_RELATION_LOST` | 소환만 생략, 제한은 건다 |
+| 살아 있다 (`intact=True`) | 통과 | 기존 적법성 · 소환 제한 검사를 **그대로** 지난다 |
+| 기록이 없다 | **모름** — `UNCHECKED_TARGET` + `INFORMATION_UNAVAILABLE` | 실행하지 않는다 (`missing=effect-target-relation`) |
+
+🔴 **현재 대상의 비공개 위치 · 정체를 찾아 정책에 넘기지 않는다.** 판정에
+쓰는 것은 판에 적힌 관계 기록 하나이고, 덱에 있는 카드를 열어 보지 않는다.
+`test_d04` 가 그것을 센다 — 해결 뒤에도 그 카드는 **어느 관측에도** 보이지
+않는다 (`GameStateView.visible_instances()` 두 좌석 모두).
+
+🔴 **모든 `HIDDEN_CARD` / `UNCHECKED_TARGET` 을 대상 이탈로 바꾸지 않았다.**
+기록이 없으면 모름이 그대로 남고 (`test_d09`: 기록을 지운 판에서는 **소환도
+제한도 없다**), 잘못된 대상 ID · 누락된 대상 · 후보 밖 선택 · 실행 예외는
+기존 코드와 기존 자리를 그대로 쓴다 (`test_c05` · `test_e02` ·
+`test_d10`). `test_d10` 은 끊긴 관계가 `CANDIDATE_NOT_ELIGIBLE` 과 **다른
+코드**임을 센다.
+
+`ValidationCode.TARGET_RELATION_LOST` 는 **`INVALID` 쪽**이다 — 관계가
+끊겼다는 것은 가려진 카드를 읽지 않고 아는 **확정된** 사실이므로 모름이
+아니다. 그 코드가 `engine/validation.py` 에서 자기 묶음(`대상 관계 (Phase
+6-AQ 후속)`)을 갖는다.
+
+### 10.4 비용 · 사용 기록 · 제한 · 소환 이벤트
+
+| 항목 | 두 갈래 모두 |
+| --- | --- |
+| 자기 제외 비용 | 유지 (`REMOVED [21441617]`) — 돌려주지 않는다 |
+| 카드명 기준 사용 제한 | 유지 (`uses.count(...) == 1`) — 두 번째 장이 막힌다 |
+| 어둠 속성 제한 | **걸린다** (한 건, 출처 21441617) |
+| 소환 이벤트 | **없다** — `EventJournal` 에 `special_summon` 기록이 남지 않는다 |
+| 대상 재선택 | 없다 — 해결 중에 다른 카드를 고르지 않는다 |
+
+🔴 **"관계 단절로 소생 생략" 과 "판정 불명으로 실행 불가" 가 다른 문장으로
+남는다.** 앞쪽은 `RESOLVED` + 생략 안내 문장, 뒤쪽은 `UNCHECKED_TARGET` +
+`missing` 이다 (§10.3 의 표).
+
+🔴 **스켈레촌 카드 ID 를 해결기에 하드코딩하지 않았다** — `test_e03` 이
+`engine/effect/executor.py` 에 `21441617` · `57835716` 이 없음을 센다. 쓰는
+것은 효과 정의의 `ResolutionSkip(when_target_unusable=True)` 선언 하나이고,
+`test_e05` 가 다른 등재 효과가 그 선언을 얻지 않았음을 센다.
+
+### 10.5 fork · 상태 해시 · 재생
+
+| 요구 | 결과 | 어디서 센다 |
+| --- | --- | --- |
+| 발동 때의 기록이 해결까지 남는다 | ✅ | `test_f05` |
+| `fork` · `project` 가 기록을 정확히 복사한다 | ✅ | `test_f03` |
+| 한 분기의 이동이 다른 분기의 관계를 끊지 않는다 | ✅ | `test_f03` (원본과 다른 분기 모두 유지) |
+| 해결 결과가 다른 판이 중복 제거에서 합쳐지지 않는다 | ✅ | `test_f04` |
+| 재생이 실제 발동 과정에서 기록을 다시 만든다 | ✅ | `test_f02` · `test_g03` · `search:galatea` 재생 |
+| 체인이 끝난 뒤 기록이 정리된다 | ✅ | `test_f05` |
+| `InstanceId` 를 재발급하거나 카드 선택 기록을 깨뜨리지 않는다 | ✅ | `test_f02`(같은 해시) · `test_g03` |
+
+🔴 **상태 해시에 들어가는 것은 단절뿐이다.** `canonical_state` 는
+`only_broken=True` 로 **끊긴 기록만** 싣는다. 살아 있는 기록은 "해결을
+기다리는 대상 지정 링크가 있다" 와 같은 말이고, 체인은 같은 판이 경로에 따라
+다른 해시를 갖지 않도록 **일부러** 정규 표현에서 빠져 있다 (Phase 2-D-3 ·
+2-F-1 · 2-F-2) — 그 사실을 관계 표로 우회해 들여놓지 않는다. 비어 있으면
+자리를 아예 만들지 않으므로 (`()` 를 끼워 넣기만 해도 JSON 이 길어진다),
+**단절이 일어난 판만** 새 해시를 갖는다.
+
+🔴 **그 결과 기존 판의 해시가 한 글자도 움직이지 않았다.** 처음에는 기록
+전부를 실었고, 그때는 **체인 해결을 기다리는 판**의 해시가 `tests/engine` 의
+8곳에서 움직였다 (싸이크론 등 대상 지정 효과의 보류 상태). 그것이 이 변경의
+범위가 아니라고 보아 단절만 싣도록 좁혔고, 그 8곳이 다시 원래 값으로
+돌아왔다 — 고정값을 고쳐 맞춘 것이 아니다. `test_f04` 가 양쪽을 함께 센다:
+살아 있는 기록을 지워도 해시가 같고, 끊긴 기록은 해시를 바꾼다.
+
+### 10.6 정상 전개가 그대로인가 (회귀)
+
+**고정 경로** `line: orcust-skeleton-longirsu` — 시작 패 · 레시피를 바꾸지
+않았다. 실측 (수정 후):
+
+```
+can_run: True []    completed: True  done: 6  blocked_at: None
+ 0 normal_summon    accepted=True
+ 1 activate_effect  69811710:e[0]
+ 2 activate_effect  57835716:e[0]
+ 3 link_summon      → 갈라테아
+ 4 activate_effect  21441617:e[0] 대상 @primary=[#75]
+ 5 link_summon      → 롱기르수
+
+EMZONE  [76145142]
+GRAVE   [30741503, 69811710]
+REMOVED [57835716, 21441617]
+limits  [('DARK', 21441617), ('DARK', 57835716)]
+```
+
+**일반 탐색** `search: galatea` — §6.2 의 측정값과 **완전히 같다**:
+
+```
+reached: True | termination: GOAL_REACHED
+nodes: 34  deepest: 5  budget_hit: ()   elapsed: 67.5s
+final_hash: 44e3cbe8e28e4e1dd459c731afcec19606aa7ef7358a4579a722990edda2c6bd
+rerun.ok: True  goal_reached: True  matches_search: True
+```
+
+🔴 **`search:longirsu` 는 여전히 기본 예산 안에서 찾지 못한다** (§6.3). 이
+보완의 성공 조건을 그 탐색의 성공으로 바꾸지 않았고, 탐색 알고리즘 · 예산 ·
+후보를 건드리지 않았다.
+
+### 10.7 실행한 테스트와 실제 결과
+
+🔴 **구현자(나)가 돌린 것이다.** 사용자에게 pytest 실행이나 테스트 작성을
+요구하지 않는다.
+
+| 명령 | 실측 |
+| --- | --- |
+| `pytest tests/test_skeleton_revival_and_longirsu.py` | **40 passed** (D 절이 10개로 늘었다) |
+| `pytest tests/engine/test_effect_activation.py …(5개 파일)… tests/test_skeleton_revival_and_longirsu.py` | **349 passed** — 대상 지정 효과의 보류 상태 해시 8곳 포함 |
+| `pytest tests/test_orcust_girsu_line.py tests/test_girsu_token_line.py tests/test_combo_output_consistency.py tests/test_combo_brief_and_detail.py` | **123 passed** |
+| `pytest`(ValidationCode census 9개 파일) | 아래 §10.9 |
+| `python3 runline.py` (고정 경로) | 6/6 · 위 §10.6 의 판 |
+| `python3 search_galatea.py` | 도달 + 재생 성공 · 위 §10.6 의 수치 |
+
+🔴 **디스코드에서 실행하지 않았다 — 디스코드 검증 대기.** §9 의 입력값은
+그대로다 (패 · 레시피 · `line:` 이 바뀌지 않았으므로).
+
+### 10.8 여전히 지원하지 않는 대상 관계 사례
+
+🔴 **모든 카드의 `IsRelateToEffect` 를 지원했다고 주장하지 않는다.**
+STRUCTURAL-50 은 **부분 해결**이다. 남은 것:
+
+| 사례 | 상태 |
+| --- | --- |
+| 체인 무효화 · 효과 무효화가 만드는 관계 단절 | ❌ 무효화 계층 자체가 없다 |
+| 같은 체인 안의 다른 효과가 대상을 건드려 생기는 관계 | ❌ |
+| 컨트롤 변경으로 끊기는 관계 | ❌ 컨트롤만 바꾸는 primitive 가 이 저장소에 없다 |
+| 표시 형식 변경이 관계에 영향을 주는 특수한 카드 | ❌ 일반 규칙(끊지 않는다)만 적었다 |
+| 필드 → 필드 이동(존 종류가 같은 이동)의 세부 | ❌ 지금은 "존 종류가 바뀌면 끊는다" 한 줄이다 |
+| 관계 기록이 없는 판 | 🔴 **모름으로 남긴다** — 정상 이탈로 흡수하지 않는다 (`test_d09`) |
+
+### 10.9 census 와 기준 HEAD 에서 이미 실패하던 감사들
+
+`ValidationCode` 가 54 → **55** 로 늘었으므로 (`TARGET_RELATION_LOST`), 그
+수를 들고 있던 census 들을 고쳤다. 숫자만 올리지 않고 **무엇이 늘었는지를
+이름으로** 고정하는 기존 방식을 따랐다 (`ADDED_IN_PHASE_6AQ_FOLLOWUP`).
+
+| 파일 | 고친 것 |
+| --- | --- |
+| `test_validation_code_consistency.py` · `test_validation_code_minimal_fix.py` · `test_trigger_unknown_reason.py` | 새 집합을 더해 48 의 산술을 유지 |
+| `test_validation_code_unknown_policy.py` | 멤버 55 · `INVALID` 46 · 묶음 분할 (1, 46, 7, 1) |
+| `test_validation_code_rejection_semantics_audit.py` | 선언 묶음에 `대상 관계 (Phase 6-AQ 후속): 1` 추가 |
+| `test_simulation_status_unknown_codes_audit.py` | 이름 붙인 12 는 그대로, 나머지 42 → 43 |
+| `test_duelstep_withheld_validation_audit.py` | 55 · 54 · `INVALID` 46 |
+| `test_rule_not_implemented_code_audit.py` | `CODE_READERS` 를 넷 → 다섯으로 (6-AQ 의 `UNUSABLE_TARGET_CODES` 자리) |
+| 기타 census 파일 9개 | 54 → 55 한 줄씩 |
+
+🔴 **모름 쪽은 7 그대로다** — 늘어난 하나가 `INVALID` 이므로, 모름을 늘려
+문제를 덮은 것이 아니다.
+
+🔴 **기준 HEAD 에서 이미 실패하던 감사 11개는 고치지 않았다.** 아래는
+`74acd0c`(이 보완의 기준) 과 `74acd0c~5`(6-AQ 전) **두 곳에서 모두** 같은
+이유로 실패한다 — 이 보완이 만든 것이 아니고, 이 보완의 범위도 아니다.
+
+```
+tests/test_validation_code_minimal_fix.py::test_17_legal_actions_and_search_are_unchanged
+tests/test_validation_code_minimal_fix.py::test_24_only_four_production_lines_changed_their_code
+tests/test_validation_code_unknown_policy.py::test_29_the_board_and_the_randomness_do_not_move
+tests/test_validation_code_rejection_semantics_audit.py::test_03 · test_22 · test_31
+tests/test_event_relation_minimal_fix.py::test_18_the_two_different_result_gates_were_left_alone
+tests/test_rule_not_implemented_code_audit.py::test_02 · test_05 · test_15
+tests/test_duelstep_withheld_validation_audit.py::test_09
+```
+
+둘은 고정된 상태 해시(`test_17` · `test_29`)이고 나머지는 production 소스의
+문자열 · 자리 수 census 다. 🔴 **그중 `test_rule_not_implemented_code_audit.py
+::test_02` 하나는 이 보완이 세는 수를 더 움직인다** — 기준 HEAD 에서 `127 ==
+125` 로 실패하고, 이 보완의 설명 문장들 때문에 `128 == 125` 가 된다. 어느
+Phase 가 그 수를 처음 어긋나게 했는지 확인하지 않은 채 고정값을 올리면 근거
+없는 완화가 되므로, **고치지 않고 이렇게 적어 둔다.**
