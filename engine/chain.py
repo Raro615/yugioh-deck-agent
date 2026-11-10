@@ -682,6 +682,15 @@ class ChainResolver:
         said = f"{link.describe_ko()} 를 해결했습니다."
         if not result.applied_any and result.reason:
             said += f" {result.reason}"
+        #: 🔴 **해결이 끝난 링크의 대상 관계 기록을 지운다**
+        #: (Phase 6-AQ 후속). 남겨 두면 같은 카드가 같은 효과를 다시 발동할
+        #: 때 지난 번 관계가 보이고, 판의 정규 표현에도 쓸모없는 기록이
+        #: 쌓인다 (:mod:`engine.state.target_relation` 의 ``forget``).
+        #:
+        #: 🔴 **해결하지 못한 링크의 기록은 남긴다.** 그 링크는 아직 체인에
+        #: 있고 다시 해결될 수 있으므로, 지우면 그때 "기록이 없다"(모름)가
+        #: 된다 — 위의 실패 갈래가 이 자리 **앞**에서 돌아가는 이유다.
+        state.relations.forget(link.source, link.effect_ref)
         return ChainResolution(
             ChainResolutionStatus.RESOLVED,
             chain.advanced(),

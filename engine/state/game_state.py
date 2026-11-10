@@ -34,6 +34,7 @@ from engine.state.turn import TurnState
 from engine.state.rule_usage import RuleUsageRegistry
 from engine.state.summon_limit import SummonLimitRegistry
 from engine.state.summon_usage import SummonUsageRegistry
+from engine.state.target_relation import TargetRelationRegistry
 from engine.state.use_registry import UseRegistry
 from engine.state.zones import ZoneContainer, move_card
 from engine.vocabulary import PLAYER_ZONES, Position, Zone
@@ -65,6 +66,7 @@ class GameState:
         "rule_uses",
         "summon_uses",
         "summon_limits",
+        "relations",
         "chain",
         "pending",
         "journal",
@@ -86,6 +88,7 @@ class GameState:
         rule_uses: RuleUsageRegistry | None = None,
         summon_uses: SummonUsageRegistry | None = None,
         summon_limits: SummonLimitRegistry | None = None,
+        relations: TargetRelationRegistry | None = None,
         seed: int | None = None,
         rng: "random.Random | RandomSource | None" = None,
     ):
@@ -130,6 +133,19 @@ class GameState:
         # 만든 카드가 그때 **필드에 없다**는 것이다 (비용으로 제외된다).
         self.summon_limits: SummonLimitRegistry = (
             summon_limits if summon_limits is not None else SummonLimitRegistry()
+        )
+
+        # 🔴 **발동 시점에 지정한 대상 관계는 다섯 번째 표다**
+        # (Phase 6-AQ 후속). 위의 넷은 "무엇을 했는가" · "무엇을 할 수
+        # 없는가" 를 적고, 이것은 **"어느 효과가 어느 카드를 지정했고 그
+        # 관계가 아직 살아 있는가"** 를 적는다.
+        #
+        # 왜 ``InstanceId`` 로는 안 되는지는 :mod:`engine.state.
+        # target_relation` 머리말에 있다 — 요점은 그 번호가 **자리를 옮겨도
+        # 그대로**라서 "떠났다 돌아온 카드" 와 "떠나지 않은 카드" 를
+        # 구별하지 못한다는 것이다.
+        self.relations: TargetRelationRegistry = (
+            relations if relations is not None else TargetRelationRegistry()
         )
 
         # 무작위는 주입된 seed 에서만 나온다. seed 가 없으면 난수원도 없고,
@@ -358,6 +374,18 @@ class GameState:
         카드를 존 사이로 옮긴다. **옮겨도 되는지는 판정하지 않는다.**
 
         옮기기 직전 상태는 ``instance.previous`` 에 남는다.
+
+        🔴 **존 종류가 바뀌면 그 카드를 가리키는 대상 관계가 끊긴다**
+        (Phase 6-AQ 후속). 공식 처리의 ``Card::clear_relate_effect()`` 가
+        위치 변경에서 불리는 자리이고, 끊는 범위를 좁게 적은 근거는
+        :mod:`engine.state.target_relation` 머리말에 있다.
+
+        🔴 **같은 존 안의 이동은 끊지 않는다.** 섞기 · 순서 변경은
+        :meth:`~engine.state.zones.ZoneContainer.reorder` 가 하고 이 메서드를
+        지나지 않으며, 같은 존으로 옮기는 호출(칸 번호 변경 등)도 종류가
+        같으므로 끊지 않는다. 표시 형식 변경은
+        :meth:`~engine.state.card_instance.CardInstance.set_position` 이고
+        여기 오지 않는다.
         """
         card = (
             instance
@@ -369,9 +397,15 @@ class GameState:
         source = self.locate(card.instance_id)
         owner = to_player if to_player is not None else card.controller
         destination = self.players[owner].zone(zone)
-        return move_card(
+        #: 🔴 **옮기기 전에 읽는다** — ``move_card`` 가 ``card.zone`` 을
+        #: 목적지로 바꾸므로 뒤에서 비교하면 언제나 같다.
+        left_its_zone = card.zone is not zone
+        moved = move_card(
             card, source, destination, index=index, position=position
         )
+        if left_its_zone:
+            self.relations.break_for(moved.instance_id)
+        return moved
 
     def draw(self, player_id: int, count: int = 1) -> list[CardInstance]:
         """
@@ -424,6 +458,7 @@ class GameState:
             rule_uses=self.rule_uses.clone(),
             summon_uses=self.summon_uses.clone(),
             summon_limits=self.summon_limits.clone(),
+            relations=self.relations.clone(),
             seed=self._seed,
             rng=rng,
         )
@@ -470,6 +505,10 @@ class GameState:
             #: 🔴 **제한도 복제한다** (Phase 6-AO). 공유하면 한 분기가 걸어
             #: 둔 제약이 다른 분기의 소환을 막는다 (그 모듈의 ``clone``).
             summon_limits=self.summon_limits.clone(),
+            #: 🔴 **대상 관계도 복제한다** (Phase 6-AQ 후속). 공유하면 계획이
+            #: 투영 위에서 옮긴 카드가 **진짜 판의 관계**까지 끊는다 — 전부
+            #: 아니면 무가 깨지는 자리다.
+            relations=self.relations.clone(),
             seed=self._seed,
             # **복제하지 않는다.** 같은 난수원을 함께 쓴다.
             rng=self._random,
@@ -533,7 +572,7 @@ class GameState:
         판이면 어떤 seed 로 도달했든 같은 해시다.
         """
         key = self.instance_numbering()
-        return (
+        head = (
             tuple(player.canonical_state(key) for player in self.players),
             self.turn.canonical_state(),
             self.uses.canonical_state(key),
@@ -548,8 +587,34 @@ class GameState:
             #: 같은 상태로 합치고, 한쪽에서만 합법인 소환이 다른 쪽 경로로
             #: 보고된다.
             self.summon_limits.canonical_state(),
-            self.result.as_tuple() if self.result else None,
         )
+        tail = (self.result.as_tuple() if self.result else None,)
+        #: 🔴 **이것도 판의 모양이다** (Phase 6-AQ 후속). "발동 때 지정한
+        #: 대상과의 관계가 **끊겼는가**" 는 그 체인 링크의 해결 결과를
+        #: 바꾸므로 (소생하는가 / 소환만 생략하는가), 빼면 탐색의 중복
+        #: 제거가 두 판을 같은 상태로 합치고 한쪽에서만 일어나는 소환이
+        #: 다른 쪽 경로로 보고된다.
+        #:
+        #: 🔴 **끊긴 기록만 싣는다** (``only_broken=True``). 살아 있는
+        #: 기록은 "해결을 기다리는 대상 지정 링크가 있다" 와 같은 말이고,
+        #: 체인은 위에 적은 이유로 **일부러** 정규 표현에서 빠져 있다 —
+        #: 그 사실을 관계 표로 우회해 들여놓지 않는다. 가르는 것은
+        #: 단절뿐이다: 같은 판 · 같은 보류 링크에서 관계가 살아 있으면
+        #: 소생하고 끊겼으면 소생하지 않는다.
+        #:
+        #: 🔴 **비어 있으면 자리를 아예 만들지 않는다.** ``()`` 를 끼워
+        #: 넣기만 해도 JSON 이 ``[]`` 한 조각만큼 길어져서 기존 판의 해시가
+        #: 전부 바뀐다. 두 규칙을 합치면 **단절이 일어난 판만** 새 해시를
+        #: 갖는다 (실측: ``tests/engine`` 의 체인 보류 판 해시 8곳이
+        #: 그대로다).
+        #:
+        #: 자리를 조건부로 만들어도 서로 다른 판이 같은 JSON 이 되지는
+        #: 않는다 — 기록이 있는 판은 원소가 하나 더 많아 길이부터 다르고,
+        #: 길이가 같은 두 판은 둘 다 같은 자리에 관계 tuple 을 갖는다.
+        relations = self.relations.canonical_state(key, only_broken=True)
+        if relations:
+            return head + (relations,) + tail
+        return head + tail
 
     def state_hash(self) -> str:
         """

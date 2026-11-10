@@ -65,6 +65,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Iterable
 
 from engine.action import PlayerAction, PlayerActionKind
 from engine.action_validation import ActionValidator
@@ -80,7 +81,7 @@ from engine.effect.definition import (
     execution_availability,
 )
 from engine.effect.delta import StateDelta
-from engine.effect.target import TargetSelection
+from engine.effect.target import TargetRequirement, TargetSelection
 from engine.effect.targeting import TargetLegality, TargetResolver
 from engine.game_state_view import GameStateView
 from engine.payment import (
@@ -550,6 +551,20 @@ class EffectActivator:
             selections=tuple(selections),
             payments=payment.payments,
         )
+
+        #: 🔴 **여기가 "대상을 지정했다" 를 판에 적는 자리다**
+        #: (Phase 6-AQ 후속). 공식 처리의 ``Duel.SelectTarget`` 이 비용
+        #: 뒤에 돌고 (``s.sptg``), 그 순간부터 그 카드가 이 효과와 **관계**를
+        #: 갖는다. 해결 시점에 그 관계가 아직 살아 있는지를 실행기가 묻는다
+        #: (:meth:`~engine.effect.executor.EffectExecutor.
+        #: _check_target_relations`).
+        #:
+        #: 🔴 **대상 지정(TARGETING)만 적는다.** 해결 중에 고르는 효과는
+        #: 발동 시점에 가리킨 카드가 **없고** (``chosen_at_resolution``),
+        #: 무작위 · 전부는 고르는 사람이 없다 — 그런 이름에 관계를 적으면
+        #: 지정하지 않은 것을 지정했다고 적는 것이 된다.
+        self._note_target_relations(state, definition, action, selections)
+
         return ActivationResult(
             ActivationStatus.ACTIVATED,
             action,
@@ -875,6 +890,35 @@ class EffectActivator:
                 f"체인이 이 링크를 받지 못합니다: {error}",
             )
         return None
+
+    @staticmethod
+    def _note_target_relations(
+        state: GameState,
+        definition: EffectDefinition,
+        action: PlayerAction,
+        selections: "Iterable[TargetSelection]",
+    ) -> None:
+        """
+        발동 시점에 지정된 대상 관계를 판에 적는다 (Phase 6-AQ 후속).
+
+        🔴 **판정하지 않는다.** 적기만 하고, "그래서 해결할 때 그 대상을
+        쓸 수 있는가" 는 실행기가 :meth:`~engine.state.target_relation.
+        TargetRelationRegistry.status` 의 세 값을 읽고 정한다.
+
+        🔴 **되살리는 길이 아니다.** 이 메서드는 발동 경로에서만 불리고,
+        해결 중에는 불리지 않는다 — 그래야 끊긴 관계가 복구되지 않는다
+        (그 모듈의 ``note`` 설명).
+        """
+        for chosen in selections:
+            try:
+                spec = definition.target_spec(chosen.ref)
+            except KeyError:  # pragma: no cover - 발동 검사가 막는다
+                continue
+            if spec is None or spec.requirement is not TargetRequirement.TARGETING:
+                continue
+            state.relations.note(
+                action.source, definition.effect_ref, chosen.selection.chosen
+            )
 
     def _verdict(
         self,
