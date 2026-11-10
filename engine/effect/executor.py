@@ -385,7 +385,23 @@ class EffectExecutionError(RuntimeError):
 #:   표에 닿지 않지만, 적어 둔다: 판정하지 못한 것을 생략으로 바꾸면 그
 #:   결정을 엔진이 지어낸 것이 된다.
 UNUSABLE_TARGET_CODES: frozenset[ValidationCode] = frozenset(
-    {ValidationCode.CANDIDATE_NOT_ELIGIBLE}
+    {
+        ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+        #: 🔴 **발동 시점에 지정한 관계가 끊겼다** (Phase 6-AQ 후속). 공식
+        #: 처리의 ``if tc and tc:IsRelateToEffect(e)`` 가 거짓인 바로 그
+        #: 갈래이고, 그래서 **소환만** 생략되고 그 뒤의 일은 그대로 된다.
+        ValidationCode.TARGET_RELATION_LOST,
+    }
+)
+
+#: 🔴 **대상 관계를 판정할 수 없을 때 적는 규칙 이름** (Phase 6-AQ 후속).
+#:
+#: ``when_target_unusable`` 을 선언한 효과는 "지정한 그 한 장이 아직 이
+#: 효과와 관계가 있는가" 를 **물어야** 한다. 판에 그 기록이 없으면 물을 수
+#: 없고, 그때는 **모름**이다 — 기록이 없다는 것을 "관계가 살아 있다" 로도
+#: "끊겼다" 로도 읽지 않는다 (ADR-006).
+TARGET_RELATION_RULE: str = (
+    "effect-target-relation (발동 시점에 지정한 대상과의 관계 기록)"
 )
 
 
@@ -935,9 +951,20 @@ class EffectExecutor:
                 )
                 continue
 
-            step = self._plan_operation(
-                board, definition, context, operation, values
+            #: 🔴 **지정한 대상과의 관계를 먼저 묻는다** (Phase 6-AQ 후속).
+            #:
+            #: 조작을 계획하기 **전**이어야 한다. 계획은 관측을 만들어 후보
+            #: 조건을 판정하는데 (``_check_target``), 대상이 덱 같은
+            #: 비공개 자리로 갔으면 그 판정은 ``HIDDEN_CARD`` 로 끝나
+            #: **관계가 끊겼다는 확정 사실이 모름에 덮인다.** 순서가 그
+            #: 구분을 지킨다.
+            step = self._check_target_relations(
+                board, definition, context, operation
             )
+            if step is None:
+                step = self._plan_operation(
+                    board, definition, context, operation, values
+                )
             if isinstance(step, EffectResult):
                 #: 🔴 **지정한 대상을 쓸 수 없는 경우만** 생략으로 바꾼다
                 #: (Phase 6-AQ). 선언하지 않은 효과에서는 ``None`` 이
@@ -994,6 +1021,92 @@ class EffectExecutor:
                 steps[-1], blind=steps[-1].blind + tuple(unshuffled)
             )
         return steps, tuple(notes)
+
+    def _check_target_relations(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        operation: Operation,
+    ) -> "EffectResult | None":
+        """
+        🔴 **발동 시점에 지정한 대상과의 관계가 아직 살아 있는가**
+        (Phase 6-AQ 후속). 살아 있으면 ``None``.
+
+        공식 처리의 ``local tc=Duel.GetFirstTarget(); if tc and
+        tc:IsRelateToEffect(e) then …`` 를 옮긴 자리다. 판에 적힌 기록
+        하나만 읽는다 (:mod:`engine.state.target_relation`) — **지금 그
+        카드가 어디에 있는지도, 무엇인지도 읽지 않는다.**
+
+        🔴 **그래서 비공개 정보가 새지 않는다.** 대상이 덱으로 들어가도 덱을
+        들여다보지 않고, 정책에 넘기는 것도 없다. 돌려주는 것은 "그 관계가
+        끊겼다" 하나다.
+
+        🔴 **묻는 효과를 좁게 고른다.** 세 가지가 **동시에** 참일 때만
+        묻는다 — 그래서 선언하지 않은 효과는 한 글자도 달라지지 않는다.
+
+        1. 정의가 :attr:`~engine.effect.definition.ResolutionSkip.
+           when_target_unusable` 을 **선언했다.** 그 선언이 "이 효과의 공식
+           해결 함수가 ``IsRelateToEffect`` 로 조작을 감싼다" 는 뜻이다.
+        2. 그 조작이 **대상 지정된 이름**을 쓴다
+           (:meth:`_is_designated` — 실행기에 카드 ID 가 들어가지 않는다).
+        3. 그 이름에 골라진 카드가 있다.
+
+        세 값으로 답한다.
+
+        - 관계 유지 → ``None`` (기존 적법성 · 소환 관문 검사가 그대로 돈다).
+        - 관계 단절 → :attr:`ValidationCode.TARGET_RELATION_LOST` 를 단
+          ``INVALID_TARGET``. :data:`UNUSABLE_TARGET_CODES` 에 있으므로
+          ``when_target_unusable`` 이 **그 조작만** 생략으로 바꾼다.
+        - **기록 없음** → ``UNCHECKED_TARGET`` 과 :data:`TARGET_RELATION_RULE`.
+          🔴 모름을 생략으로 바꾸지 않는다 — 잘못된 대상 ID 나 손으로 조립한
+          문맥이 이 길로 "정상 단절" 이 되어서는 안 된다.
+        """
+        skip = definition.resolution_skip
+        if skip is None or not skip.when_target_unusable:
+            return None
+        for ref in operation.target_refs:
+            if ref == SELF_TARGET or not self._is_designated(definition, ref):
+                continue
+            selection = context.selection_for(ref)
+            if selection is None:
+                #: 고른 것이 아예 없는 것은 **관계의 문제가 아니다** —
+                #: 아래 ``_resolve_selection`` 이 ``TOO_FEW_SELECTED`` 로
+                #: 거절하고, 그 코드는 생략으로 바뀌지 않는다.
+                continue
+            for instance in selection.chosen:
+                intact = state.relations.status(
+                    context.source, definition.effect_ref, instance
+                )
+                if intact is True:
+                    continue
+                if intact is False:
+                    return _fail(
+                        ResolutionStatus.INVALID_TARGET,
+                        ValidationCode.TARGET_RELATION_LOST,
+                        f"{ref} 로 지정한 {instance} 는 그 뒤에 존을 떠나 "
+                        "이 효과와의 관계가 끊겼습니다. 공식 처리도 그때 "
+                        "그 카드를 쓰지 않습니다 "
+                        "(Card.IsRelateToEffect 가 거짓).",
+                    )
+                #: 🔴 ``RULE_NOT_IMPLEMENTED`` 가 아니다. 그 코드는 "이
+                #: 엔진이 아직 못 한다" 이고, 관계 판정은 **이미 구현되어
+                #: 있다** — 없는 것은 그 판에 적힌 **기록**이므로
+                #: ``INFORMATION_UNAVAILABLE`` 이다 (Phase 3-E-26 의 가름).
+                return _fail(
+                    ResolutionStatus.UNCHECKED_TARGET,
+                    ValidationCode.INFORMATION_UNAVAILABLE,
+                    f"{ref} 로 지정한 {instance} 에 대해 **발동 시점의 관계 "
+                    "기록이 없습니다.** 이 효과는 그 관계를 묻는 효과이므로 "
+                    "(when_target_unusable) 기록 없이 쓸 수 없습니다 — "
+                    "판정할 수 없는 것을 허가로도 단절로도 바꾸지 않습니다.",
+                    #: 🔴 ``unchecked`` 에 넣지 않는다 — 그 칸은 "한 일이
+                    #: 보지 못한 규칙" 이고 (``EffectResult`` 가 생성 시점에
+                    #: 지킨다), 여기서는 **아무 일도 하지 못했다.** 무엇이
+                    #: 없는지는 ``missing`` 이 말한다.
+                    missing=TARGET_RELATION_RULE,
+                )
+        return None
 
     def _unusable_target_note(
         self,

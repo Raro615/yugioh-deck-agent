@@ -284,6 +284,24 @@ class ValidationCode(str, Enum):
     ``UNKNOWN`` 이다.
     """
 
+    # --- 대상 관계 (Phase 6-AQ 후속) --------------------------------------
+    TARGET_RELATION_LOST = "target_relation_lost"
+    """
+    🔴 **발동 시점에 지정한 대상과의 관계가 끊겼다** (Phase 6-AQ 후속).
+
+    ``CANDIDATE_NOT_ELIGIBLE`` 과 **다른 사실**이다. 저쪽은 "그 카드가 지금
+    후보 조건을 만족하지 않는다" 이고 (자리 · 카드군 · 소환 가능 여부를
+    **읽어서** 안다), 이쪽은 "지정한 **그 개체**가 그 뒤로 존을 떠났다" 다 —
+    지금 그 카드가 어디에 있는지 · 무엇인지 **읽지 않고** 판에 적힌 관계
+    기록만으로 안다 (:mod:`engine.state.target_relation`).
+
+    그 구분이 비공개 정보에서 뜻을 갖는다. 대상이 덱으로 들어가면 관측에
+    보이지 않으므로 후보 조건은 판정할 수 **없지만**(``HIDDEN_CARD`` →
+    ``UNCHECKED_TARGET``), 관계가 끊겼다는 것은 **확정**이다.
+
+    🔴 ``INVALID`` 쪽의 코드다 — "모른다" 가 아니라 확인된 거부다.
+    """
+
 
 # ======================================================================
 # 어느 판정 묶음의 말인가 — UNKNOWN policy (Phase 3-E-40)
@@ -371,6 +389,9 @@ CODE_VALIDITY: "dict[ValidationCode, ActionValidity | None]" = {
     #: (``PaymentStatus.INVALID_SELECTION`` · ``ResolutionStatus.INVALID_TARGET``).
     ValidationCode.CANDIDATE_NOT_FOUND: ActionValidity.INVALID,
     ValidationCode.CANDIDATE_NOT_ELIGIBLE: ActionValidity.INVALID,
+    #: 🔴 **확인된 거부다** (Phase 6-AQ 후속) — 관계가 끊겼다는 것은
+    #: 판에 적힌 사실이고 모름이 아니다.
+    ValidationCode.TARGET_RELATION_LOST: ActionValidity.INVALID,
     ValidationCode.INSUFFICIENT_LIFE: ActionValidity.INVALID,
     #: 묶음은 비용이지만 뜻은 미구현이다 — ``unknown`` 으로만 생산되고
     #: ``PaymentStatus.UNSUPPORTED_COST`` 와 짝지는다.
