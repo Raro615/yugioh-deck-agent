@@ -14,6 +14,11 @@ data/rulings/.cache/
 # 받는 곳: https://www.yugioh-card.com/en/rulebook
 data/rules/sources/
 
+# 🔴 카드 그림은 코나미의 저작물이라 저장소에 넣지 않는다 (룰북 PDF 와 같은
+# 취급). 받는 곳과 이용 조건은 deck/card_images.py 에 적어 두었다.
+# 받는 방법: python3 -m scripts.make_replay_viewer --line <경로> --out <파일>
+docs/viewer/local/
+
 # 한국어 카드 데이터는 저장소에 포함한다 (data/ko/ko-KR.json).
 # 수집 과정의 페이지 캐시만 제외한다.
 data/ko/.cache/

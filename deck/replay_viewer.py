@@ -1,30 +1,32 @@
 """
-전개 뷰어 — 실행 기록 하나를 **브라우저에서 한 걸음씩** 보는 정적 HTML
-(Phase 6-AU).
+전개 리플레이 화면 — 실행 기록 하나를 **실제 카드 그림이 있는 듀얼 필드에서
+자동 재생**하는 정적 HTML (Phase 6-AU → 6-AW).
 
 무엇이고 무엇이 아닌가
 ----------------------
 🔴 **듀얼 엔진이 아니다.** 규칙을 판정하지 않고, 카드 효과를 모르고,
 난수를 쓰지 않는다. 하는 일은 ``deck.replay_export`` 가 적어 둔 기록
-(``engine-replay/1`` · ``/2``) 을 **읽어서 그리는 것** 하나다. 그래서
-화면에 나오는 모든 이동은 **엔진이 실제로 적은 사건**이고, 기록에 없는
-이동은 화면에도 없다.
+(``engine-replay/1`` … ``/4``) 을 **읽어서 그리는 것** 하나다. 재생 중에
+엔진을 다시 부르지 않으므로, 몇 번을 재생해도 같은 최종 판이 나온다.
 
-🔴 **외부 Duel Simulator 연동과는 별개다.** 그 사이트는 덱 이미지를 올려
-사람이 손으로 盤面을 만드는 도구이고 (``docs/
-duel-simulator-replay-integration.md``), 이 뷰어는 이 저장소의 기록을
-그대로 여는 자리다. 둘은 서로를 대신하지 않는다.
+🔴 **외부 Duel Simulator 와 별개다.** 그 사이트는 덱 이미지를 올려 사람이
+손으로 盤面을 만드는 도구이고, 이 화면은 이 저장소의 기록을 그대로 여는
+갈라테아 자체 리플레이 화면이다. 둘은 서로를 대신하지 않는다.
 
-어떻게 그리는가
----------------
-기록의 ``initial.zones`` 에서 출발해 ``events`` 를 **순서대로** 적용한다.
-걸음(frame)은 **사건 하나**씩이다 — 그래야 「비용 지불」과 「효과 해결」이
-서로 다른 화면이 된다. 0번 걸음은 아무 사건도 적용하지 않은 **시작 판**
-이다.
+장면 · 박자 · 사건
+------------------
+========  ===========================================================
+**사건**   엔진이 적은 journal 한 줄. 되돌릴 수 없는 사실이다.
+**장면**   사건 하나 = 장면 하나. 0번 장면은 아무 사건도 적용하지 않은
+           시작 판이다. 🔴 **장면 수 = 사건 수 + 1** 로 고정이다.
+**박자**   한 장면 안의 연출 단계. ``pre`` 는 **이전 판 위에** 이 장면의
+           소재 · 대상 · 발동 카드를 강조만 하고, ``final`` 은 실제로
+           옮긴다. 🔴 **박자는 판정 상태가 아니다** — 박자를 나눠도 엔진
+           사건은 하나이고, 장면 번호도 하나다.
+========  ===========================================================
 
-🔴 **앞뒤로 움직여도 같은 상태가 나온다.** 걸음을 옮길 때마다 시작 판에서
-다시 쌓는다 (되돌리기 연산을 만들지 않는다). 엔진을 다시 부르지도, 난수를
-쓰지도 않는다.
+그래서 "소재 강조 → 소재 이동 → 링크 몬스터 등장" 이 눈에 보이지만, 그
+사이에 새로운 엔진 상태가 생기지는 않는다.
 
 🔴 **모르는 것은 모른다고 그린다.**
 
@@ -33,19 +35,37 @@ duel-simulator-replay-integration.md``), 이 뷰어는 이 저장소의 기록�
 ====================================  ================================
 ``monster_summoned`` 의 칸 번호 ·      그 자리에 그린다
 표시 형식
-``zone_moved`` (칸 번호 없음)          존 안에 두되 칸을 확정하지 않는다
+``zone_moved`` (칸 번호 없음)          존 안에 두되 **칸을 확정하지 않는다**
 덱 섞기 뒤의 덱 순서                   「순서 미기록」 으로 적는다
 ``token_vanished``                     판에서 **사라진다** (묘지가 아니다)
 수락되지 않은 걸음                     사건이 없으므로 **아무것도 움직이지
                                       않는다**
+``targets`` (걸음의 글자 설명)         대상 강조는 **연출**이라고 적는다
 ====================================  ================================
+
+공유 엑스트라 몬스터 존
+-----------------------
+🔴 엔진은 **좌석마다 ``EMZONE`` 1칸**을 갖는다
+(``engine.vocabulary.ZONE_CAPACITY[Zone.EMZONE] == 1``). 실제 듀얼의 공유
+2칸과 대응시키려고, 화면은 **가운데 한 줄에 두 칸만** 그리고 좌석 0 을 왼
+칸, 좌석 1 을 오른 칸에 놓는다. 같은 물리적 자리를 양쪽 필드에 중복해서
+만들지 않는다. 한 좌석에 두 장 이상이 들어오면 (엔진이 그렇게 적은 적은
+없다) 칸을 지어내지 않고 「칸 미확정」 으로 따로 적는다.
+
+카드 그림
+---------
+``deck.card_images`` 가 패스코드로 받아 둔 그림을 ``data:`` 로 **안에 담아**
+보낸다. 그래서 화면을 열 때 바깥으로 요청이 나가지 않고, 재생할 때마다 같은
+그림을 다시 받지 않는다. 그림이 없는 카드는 **이름으로** 그리고 누락을
+화면에 적는다 — 다른 카드 그림으로 메우지 않는다.
 
 안전
 ----
 🔴 **기록을 코드로 넣지 않는다.** JSON 은 ``<script
 type="application/json">`` 안에 들어가고 (브라우저가 실행하지 않는다),
 화면의 모든 글자는 ``textContent`` 로만 넣는다. 카드 이름 · 사유 문자열에
-무엇이 들어 있든 HTML 로 해석되지 않는다.
+무엇이 들어 있든 HTML 로 해석되지 않는다. 그림은 ``data:image/jpeg`` 만
+붙는다.
 """
 
 from __future__ import annotations
@@ -56,97 +76,160 @@ from deck.replay_export import REPLAY_FORMATS_READ
 
 __all__ = ["render_replay_html", "VIEWER_TITLE"]
 
-VIEWER_TITLE = "갈라테아 전개 뷰어"
+VIEWER_TITLE = "갈라테아 전개 리플레이"
 
 
-def _embed(record) -> str:
+def _embed(payload) -> str:
     """
-    기록을 ``<script type="application/json">`` 에 넣을 수 있게 만든다.
+    JSON 을 ``<script type="application/json">`` 에 넣을 수 있게 만든다.
 
     🔴 ``</`` 를 끊어 둔다 — 그 두 글자만이 스크립트 태그를 **밖에서**
     닫을 수 있고, 그것을 막으면 기록의 어떤 글자도 태그 구조를 바꾸지
     못한다. ``json.dumps`` 가 만든 문자열 안에서 ``<\\/`` 는 같은 값이다.
     """
-    raw = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     return raw.replace("</", "<\\/")
 
 
 _STYLE = """
 :root {
-  --bg: #11131a; --panel: #1a1d27; --line: #2c3040; --ink: #e8eaf2;
-  --dim: #9aa0b5; --hot: #ffcc55; --move: #4fc3f7; --cost: #ff8a7a;
-  --mat: #b388ff; --tgt: #7bdc9a;
+  --bg:#0e1016; --panel:#171a24; --line:#2a2f40; --ink:#e9ebf3; --dim:#99a0b6;
+  --hot:#ffcc55; --act:#ffb02e; --move:#4fc3f7; --cost:#ff8a7a;
+  --mat:#b388ff; --tgt:#7bdc9a;
+  --cw:52px; --ch:76px; --move-ms:460ms;
 }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink);
-       font-family: system-ui, "Noto Sans KR", sans-serif; font-size: 14px; }
-header { padding: 12px 16px; border-bottom: 1px solid var(--line);
-         display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-h1 { font-size: 16px; margin: 0; font-weight: 700; }
-.muted { color: var(--dim); }
-button { background: var(--panel); color: var(--ink);
-         border: 1px solid var(--line); border-radius: 6px;
-         padding: 6px 12px; cursor: pointer; font-size: 14px; }
-button:disabled { opacity: .4; cursor: default; }
-button.primary { background: #2a3550; }
-main { display: grid; grid-template-columns: 1fr 320px; gap: 14px;
-       padding: 14px 16px; align-items: start; }
-@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-.board { display: grid; gap: 10px; }
-.seat { border: 1px solid var(--line); border-radius: 8px; padding: 10px;
-        background: var(--panel); }
-.seat h2 { font-size: 13px; margin: 0 0 8px; color: var(--dim);
-           font-weight: 600; }
-.row { display: grid; gap: 6px; margin-bottom: 6px; }
-.row.five { grid-template-columns: repeat(5, 1fr); }
-.row.piles { grid-template-columns: repeat(5, 1fr); }
-.slot { min-height: 86px; border: 1px dashed var(--line); border-radius: 6px;
-        padding: 4px; display: flex; flex-direction: column; gap: 3px; }
-.slot .label { font-size: 10px; color: var(--dim); white-space: nowrap;
-               overflow: hidden; text-overflow: ellipsis; }
-.pile { min-height: 74px; border: 1px solid var(--line); border-radius: 6px;
-        padding: 6px; background: #151822; }
-.pile .label { font-size: 11px; color: var(--dim); margin-bottom: 4px; }
-.cards { display: flex; flex-wrap: wrap; gap: 4px; }
-.card { border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px;
-        background: #202536; min-width: 96px; max-width: 160px;
-        cursor: pointer; line-height: 1.3; overflow-wrap: anywhere; }
-.card .nm { font-size: 11px; font-weight: 600; word-break: keep-all; }
-.card .ty { font-size: 10px; color: var(--dim); }
-.card.sel { outline: 2px solid var(--hot); }
-.card.move { border-color: var(--move); box-shadow: 0 0 0 1px var(--move); }
-.card.cost { border-color: var(--cost); box-shadow: 0 0 0 1px var(--cost); }
-.card.mat  { border-color: var(--mat);  box-shadow: 0 0 0 1px var(--mat); }
-.card.tgt  { border-color: var(--tgt);  box-shadow: 0 0 0 1px var(--tgt); }
-.card .tag { font-size: 9px; border-radius: 3px; padding: 0 4px;
-             margin-bottom: 2px; display: inline-block; font-weight: 700;
-             color: #11131a; }
-.card .tag.move { background: var(--move); }
-.card .tag.cost { background: var(--cost); }
-.card .tag.mat  { background: var(--mat); }
-.card .tag.tgt  { background: var(--tgt); }
-.box.now { border-color: #3c4a6b; }
-.act { font-size: 13px; color: var(--hot); margin-top: 2px; }
-.nav { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
-.nav button { font-size: 15px; padding: 8px 14px; }
-.seat.mine { border-color: #3c4a6b; background: #1b2030; }
-.seat.mine h2 { color: var(--ink); }
-aside { display: grid; gap: 10px; }
-.box { border: 1px solid var(--line); border-radius: 8px; padding: 10px;
-       background: var(--panel); }
-.box h3 { font-size: 12px; margin: 0 0 6px; color: var(--dim); }
-.stepline { font-size: 15px; font-weight: 600; }
-.legend span { margin-right: 10px; font-size: 11px; }
-details { border: 1px solid var(--line); border-radius: 8px; padding: 8px;
-          background: var(--panel); }
-summary { cursor: pointer; font-size: 12px; color: var(--dim); }
-pre { white-space: pre-wrap; word-break: break-all; font-size: 11px;
-      color: var(--dim); margin: 8px 0 0; }
-ul { margin: 6px 0 0; padding-left: 18px; }
-li { margin-bottom: 4px; font-size: 12px; }
-.warn { color: var(--hot); }
-.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-       margin-right: 4px; vertical-align: middle; }
+* { box-sizing:border-box; }
+html, body { height:100%; }
+body { margin:0; background:var(--bg); color:var(--ink); font-size:13px;
+       font-family:system-ui,"Noto Sans KR",sans-serif; }
+header { display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+         padding:8px 14px; border-bottom:1px solid var(--line); }
+h1 { font-size:15px; margin:0; font-weight:700; }
+.muted { color:var(--dim); }
+.warn { color:var(--hot); }
+button { background:#222737; color:var(--ink); border:1px solid var(--line);
+         border-radius:6px; padding:6px 11px; cursor:pointer; font-size:13px; }
+button:hover:not(:disabled) { background:#2c3348; }
+button:disabled { opacity:.35; cursor:default; }
+button.primary { background:#2f4a78; border-color:#3f6099; }
+button.on { background:#3f6099; border-color:#5b81c4; }
+
+/* ---- 틀: 필드가 가운데, 컨트롤이 아래, 옆에 목록 ---- */
+main { display:grid; grid-template-columns:minmax(0,1fr) 310px; gap:12px;
+       padding:12px 14px; align-items:start; }
+@media (max-width:1040px) { main { grid-template-columns:1fr; } }
+aside { display:grid; gap:10px; }
+.box { border:1px solid var(--line); border-radius:9px; background:var(--panel);
+       padding:9px 10px; }
+.box h3 { font-size:11px; margin:0 0 6px; color:var(--dim); font-weight:700;
+          letter-spacing:.04em; }
+
+/* ---- 지금 행동 ---- */
+#hud { border:1px solid #39456b; border-radius:9px; background:#1a2033;
+       padding:9px 12px; margin-bottom:10px; }
+#scene { font-size:12px; color:var(--dim); }
+#act { font-size:17px; font-weight:700; color:var(--act); margin:1px 0 2px; }
+#detail { font-size:13px; }
+#basis { font-size:11px; color:var(--dim); margin-top:3px; }
+
+/* ---- 필드 ---- */
+#field { display:grid; gap:7px; }
+.side { border:1px solid var(--line); border-radius:9px; padding:8px;
+        background:var(--panel); }
+.side.me { border-color:#3b4a74; background:#191e2e; }
+.seatbar { font-size:11px; color:var(--dim); margin-bottom:5px;
+           display:flex; gap:8px; flex-wrap:wrap; }
+.side.me .seatbar { color:var(--ink); font-weight:600; }
+.zrow { display:grid; grid-template-columns:repeat(8, minmax(0,1fr)); gap:5px;
+        margin-bottom:5px; }
+/* 🔴 칸 높이를 **내용과 무관하게** 고정한다 — 더미에 카드가 쌓여도 판이
+   출렁이지 않고, 자리 이동 애니메이션이 어긋나지 않는다. */
+.slot { height:calc(var(--ch) + 15px); border:1px dashed var(--line);
+        border-radius:6px; position:relative; overflow:hidden; }
+.slot.pile { border-style:solid; background:#12151f; }
+.slot.em { border-color:#5a4a86; background:#1b1830; }
+.slot.fz { border-color:#4a6a52; }
+.slot > .tag0 { position:absolute; left:2px; right:2px; bottom:1px;
+                font-size:9px; color:var(--dim); line-height:1.25;
+                white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                text-align:center; z-index:5; pointer-events:none; }
+.slot .card { position:absolute; top:3px; left:50%;
+              margin-left:calc(var(--cw) / -2); }
+.slot.pile .card { left:4px; margin-left:0; }
+.emrow { display:grid; grid-template-columns:repeat(8, minmax(0,1fr)); gap:5px; }
+.emhead { grid-column:1 / -1; font-size:10px; color:var(--dim);
+          text-align:center; margin-bottom:2px; }
+.handrow { display:flex; gap:3px; align-items:flex-start; overflow-x:auto;
+           border:1px solid var(--line); border-radius:6px; padding:4px 6px;
+           background:#12151f; min-height:28px; }
+.handrow .tag0 { font-size:10px; color:var(--dim); flex:0 0 58px;
+                 align-self:center; }
+
+/* ---- 카드 ---- */
+.card { width:var(--cw); height:var(--ch); border-radius:4px; position:relative;
+        cursor:pointer; background:#20253a; border:1px solid #39405c;
+        overflow:visible; flex:0 0 auto; }
+.card img { width:100%; height:100%; object-fit:cover; border-radius:3px;
+            display:block; }
+.card .noimg { width:100%; height:100%; display:flex; align-items:center;
+               justify-content:center; text-align:center; font-size:9px;
+               padding:2px; line-height:1.2; word-break:keep-all;
+               overflow:hidden; color:var(--ink); }
+.card .back { width:100%; height:100%; border-radius:3px;
+              background:repeating-linear-gradient(45deg,#3a2f5c 0 6px,#2d2548 6px 12px); }
+.card.def img, .card.def .back, .card.def .noimg { transform:rotate(90deg) scale(.68); }
+.card .badge { position:absolute; left:-2px; top:-7px; font-size:8px;
+               font-weight:800; color:#0e1016; border-radius:3px;
+               padding:0 3px; white-space:nowrap; z-index:3; }
+.card .inst { position:absolute; right:1px; bottom:1px; font-size:8px;
+              color:#dfe3f0; background:rgba(0,0,0,.62); border-radius:2px;
+              padding:0 2px; z-index:2; }
+.card.sel { outline:2px solid var(--hot); outline-offset:1px; }
+.card.r-act  { box-shadow:0 0 0 2px var(--act), 0 0 13px var(--act); }
+.card.r-move { box-shadow:0 0 0 2px var(--move); }
+.card.r-cost { box-shadow:0 0 0 2px var(--cost); }
+.card.r-mat  { box-shadow:0 0 0 2px var(--mat); }
+.card.r-tgt  { box-shadow:0 0 0 2px var(--tgt); }
+.card.r-gone { opacity:.3; filter:grayscale(1); }
+.badge.r-act {background:var(--act);} .badge.r-move{background:var(--move);}
+.badge.r-cost{background:var(--cost);} .badge.r-mat {background:var(--mat);}
+.badge.r-tgt {background:var(--tgt);} .badge.r-gone{background:#8a90a6;}
+.card.flying { z-index:40; }
+.card.appear { animation:pop var(--move-ms) ease-out; }
+@keyframes pop { from { opacity:0; } to { opacity:1; } }
+
+/* ---- 컨트롤 ---- */
+#controls { display:flex; gap:7px; align-items:center; flex-wrap:wrap;
+            margin-top:9px; border:1px solid var(--line); border-radius:9px;
+            background:var(--panel); padding:8px 10px; }
+#controls button { font-size:15px; min-width:40px; }
+#bar { flex:1 1 180px; min-width:140px; accent-color:#5b81c4; }
+.speeds { display:flex; gap:3px; }
+.speeds button { font-size:11px; min-width:0; padding:4px 7px; }
+#count { font-size:12px; color:var(--dim); min-width:88px; text-align:right; }
+
+/* ---- 옆 칸 ---- */
+#scenes { max-height:270px; overflow:auto; display:grid; gap:3px; }
+#scenes button { text-align:left; width:100%; font-size:11px; padding:4px 6px;
+                 line-height:1.35; }
+#scenes button.cur { background:#2f4a78; border-color:#5b81c4; }
+#zoom img { width:100%; border-radius:5px; display:block; }
+#zoom .nm { font-size:14px; font-weight:700; margin-top:6px; }
+#zoom .desc { font-size:11px; color:#cdd3e4; margin-top:6px; line-height:1.55;
+              white-space:pre-wrap; max-height:210px; overflow:auto; }
+#zoom .noimg-big { border:1px dashed var(--line); border-radius:5px;
+                   padding:18px 8px; text-align:center; color:var(--dim); }
+.kv { font-size:11px; color:var(--dim); margin-top:2px; }
+details { border:1px solid var(--line); border-radius:9px; padding:7px 9px;
+          background:var(--panel); }
+summary { cursor:pointer; font-size:11px; color:var(--dim); }
+pre { white-space:pre-wrap; word-break:break-all; font-size:10px;
+      color:var(--dim); margin:7px 0 0; max-height:280px; overflow:auto; }
+ul { margin:5px 0 0; padding-left:17px; }
+li { margin-bottom:4px; font-size:11px; }
+.legend span { margin-right:9px; font-size:11px; white-space:nowrap; }
+.dot { display:inline-block; width:8px; height:8px; border-radius:50%;
+       margin-right:3px; vertical-align:middle; }
 """
 
 #: 🔴 **스크립트는 기록을 데이터로만 읽는다.** 화면의 글자는 전부
@@ -154,114 +237,146 @@ li { margin-bottom: 4px; font-size: 12px; }
 _SCRIPT = r"""
 'use strict';
 var FORMATS = __FORMATS__;
-var ZONES_MAIN = ['MZONE', 'EMZONE', 'SZONE'];
-var PILES = [['HAND', '패'], ['DECK', '덱'], ['EXTRA', '엑스트라 덱'],
-             ['GRAVE', '묘지'], ['REMOVED', '제외']];
-var ZONE_KO = {MZONE: '몬스터 존', EMZONE: '엑스트라 몬스터 존',
-               SZONE: '마법·함정 존', HAND: '패', DECK: '덱',
-               EXTRA: '엑스트라 덱', GRAVE: '묘지', REMOVED: '제외',
-               FZONE: '필드 존'};
-var POS_KO = {FACEUP_ATTACK: '앞면 공격', FACEUP_DEFENSE: '앞면 수비',
-              FACEDOWN_DEFENSE: '뒷면 수비', FACEDOWN: '뒷면'};
-var KIND_KO = {monster: '몬스터', spell: '마법', trap: '함정'};
-var STEP_KO = {normal_summon: '일반 소환', link_summon: '링크 소환',
-               special_summon: '특수 소환', activate_effect: '효과 발동',
-               set_spell_trap: '마법·함정 세트', end_phase: '턴 종료',
-               pass: '패스'};
 
-var state = {record: null, frames: [], at: 0, selected: null};
+/* 박자 길이 (배속 1 기준, ms). 🔴 재생 상태와 **무관한 숫자**다. */
+var PRE_MS = 520;    /* 강조만 보여 주는 앞 박자 */
+var MOVE_MS = 460;   /* 옮기는 동안 */
+var HOLD_MS = 430;   /* 다음 장면까지 */
 
+var ZONE_KO = {MZONE:'몬스터 존', EMZONE:'엑스트라 몬스터 존',
+               SZONE:'마법·함정 존', FZONE:'필드 존', HAND:'패', DECK:'덱',
+               EXTRA:'엑스트라 덱', GRAVE:'묘지', REMOVED:'제외',
+               PZONE:'펜듈럼 존', OVERLAY:'엑시즈 소재'};
+var POS_KO = {FACEUP_ATTACK:'앞면 공격', FACEUP_DEFENSE:'앞면 수비',
+              FACEDOWN_DEFENSE:'뒷면 수비', FACEDOWN:'뒷면',
+              FACEUP:'앞면'};
+var KIND_KO = {monster:'몬스터', spell:'마법', trap:'함정'};
+var STEP_KO = {normal_summon:'일반 소환', link_summon:'링크 소환',
+               special_summon:'특수 소환', activate_effect:'효과 발동',
+               set_spell_trap:'마법·함정 세트', end_phase:'턴 종료',
+               pass:'패스'};
+var ROLE_KO = {act:'발동', move:'이동', cost:'코스트', mat:'소재',
+               tgt:'대상', gone:'사라짐'};
+/* 🔴 강조가 **무엇에서 나왔는가**. 연출과 엔진 사건을 섞지 않는다. */
+var ROLE_BASIS = {
+  act:'엔진 사건의 source',
+  move:'엔진 사건 (delta)',
+  cost:'엔진 사건 (비용 지불)',
+  mat:'엔진 사건 (링크 소환 행동의 이동)',
+  tgt:'걸음 기록의 글자 설명 — 연출입니다',
+  gone:'엔진 사건 (토큰 소멸)'
+};
+var SPEEDS = [0.5, 1, 1.5, 2, 3];
+
+var state = {record:null, images:{uris:{}, missing:[], source:'', terms:''},
+             frames:[], at:0, beat:'final', selected:null,
+             playing:false, speed:1};
+/* 🔴 **재생 상태(state.playing)와 연출 상태(anim)는 다른 칸이다.** */
+var anim = {timer:null, phase:null, target:0, remain:0, markedAt:0, cleanup:[]};
+
+/* ---------- 쪽지 ---------------------------------------------------- */
 function el(tag, cls, text) {
   var n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text !== undefined && text !== null) n.textContent = String(text);
+  if (cls) { n.className = cls; }
+  if (text !== undefined && text !== null) { n.textContent = String(text); }
   return n;
 }
-function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+function clear(n) { while (n.firstChild) { n.removeChild(n.firstChild); } }
+function byId(id) { return document.getElementById(id); }
+function last() { return state.frames.length - 1; }
 
+function card(rec, id) { return (rec && rec.cards) ? rec.cards[String(id)] : null; }
 function cardName(rec, id) {
-  var c = rec.cards[String(id)];
+  var c = card(rec, id);
   if (!c) { return '#' + id; }
   return c.name || ('[' + c.passcode + ']');
 }
 function cardType(rec, id) {
-  var c = rec.cards[String(id)];
+  var c = card(rec, id);
   if (!c) { return '미기록'; }
   if (c.type_ko) { return c.type_ko; }
   if (c.kind) { return KIND_KO[c.kind] || c.kind; }
   return '종류 미기록';
 }
+function imageFor(rec, id) {
+  var c = card(rec, id);
+  if (!c) { return null; }
+  return state.images.uris[String(c.passcode)] || null;
+}
 
-/* ---------- 기록 → 걸음들 --------------------------------------- */
+/* ================================================================== */
+/* 기록 → 장면들                                                       */
+/* ================================================================== */
 function buildFrames(rec) {
-  var where = {};        /* instance -> {seat, zone, index, position} */
-  var order = [];        /* 화면에 그릴 때 쓰는 등장 순서 */
+  var where = {};   /* instance -> {seat, zone, index, position} */
   function place(id, seat, zone, index, position) {
-    if (!where[id]) { order.push(id); }
-    where[id] = {seat: String(seat), zone: zone,
-                 index: (index === undefined ? null : index),
-                 position: (position === undefined ? null : position)};
+    where[id] = {seat:String(seat), zone:zone,
+                 index:(index === undefined ? null : index),
+                 position:(position === undefined ? null : position)};
   }
   var zones = (rec.initial && rec.initial.zones) || {};
   Object.keys(zones).forEach(function (seat) {
     Object.keys(zones[seat]).forEach(function (zone) {
-      zones[seat][zone].forEach(function (id) { place(id, seat, zone, null, null); });
+      zones[seat][zone].forEach(function (id) {
+        place(id, seat, zone, null, null);
+      });
     });
   });
-
   function snapshot() {
     var copy = {};
     Object.keys(where).forEach(function (k) {
-      copy[k] = {seat: where[k].seat, zone: where[k].zone,
-                 index: where[k].index, position: where[k].position};
+      copy[k] = {seat:where[k].seat, zone:where[k].zone,
+                 index:where[k].index, position:where[k].position};
     });
     return copy;
   }
 
-  /* 걸음 ↔ 사건: 사건 번호로 되돌려 찾는다 */
+  /* 장면 ↔ 걸음: 사건 번호로 되돌려 찾는다 */
   var stepOf = {};
   (rec.steps || []).forEach(function (st) {
     (st.events || []).forEach(function (seq) { stepOf[seq] = st; });
   });
 
-  /* 🔴 제한은 **등록 사건**으로만 남는다. 그래서 시작값이 있어야 "지금
-     걸린 제한" 을 셀 수 있다. 시작값 칸이 없는 옛 기록은 null 로 두고
-     화면이 「시작 시점 제한 정보 미기록」 이라고 적는다. */
+  /* 🔴 제한은 **등록 사건**으로만 남는다. 시작값 칸이 없는 옛 기록은
+     null 로 두고, 화면이 「시작 시점 제한 정보 미기록」 이라고 적는다. */
   var startLimits = (rec.initial && rec.initial.summon_limits) || null;
   var startKnown = !!startLimits;
   var limits = startLimits ? startLimits.map(function (l) {
-    return {seat: (l.seat === undefined ? 0 : l.seat),
-            attribute: l.attribute, source: l.source};
+    return {seat:(l.seat === undefined ? 0 : l.seat),
+            attribute:l.attribute, source:l.source};
   }) : null;
 
-  var frames = [{seq: -1, step: null, kind: 'start', title: '시작 상태',
-                 text: '아직 아무 행동도 하지 않았습니다.',
-                 where: snapshot(), roles: {}, notes: [], shuffled: {},
-                 limits: limits ? limits.slice() : null,
-                 startKnown: startKnown}];
-  /* 🔴 섞인 자리만 「순서 미기록」 이다 — 상대 덱까지 싸잡지 않는다 */
+  var frames = [{seq:-1, step:null, kind:'start', title:'시작 상태',
+                 text:'아직 아무 행동도 하지 않았습니다.',
+                 where:snapshot(), roles:{}, notes:[], shuffled:{},
+                 limits:limits ? limits.slice() : null, startKnown:startKnown,
+                 basis:[]}];
   var shuffled = {};
 
   (rec.events || []).forEach(function (ev) {
-    var roles = {}, notes = [];
-    var role = ev.type === 'cost_payment' ? 'cost'
-             : ev.type === 'effect' ? 'move' : 'move';
+    var roles = {}, notes = [], basis = {};
     var st = stepOf[ev.seq] || null;
-    if (st && st.kind === 'link_summon') { role = 'mat'; }
+    /* 사건 종류가 기본 역할을 정한다. 링크 소환 행동의 이동은 소재다. */
+    var role = (ev.type === 'cost_payment') ? 'cost'
+             : (st && st.kind === 'link_summon' && ev.type === 'action') ? 'mat'
+             : 'move';
 
     (ev.changes || []).forEach(function (ch) {
       if (ch.kind === 'zone_moved' || ch.kind === 'card_drawn') {
         place(ch.instance, (ch.to.player === undefined ? 0 : ch.to.player),
               ch.to.zone, null, null);
-        roles[ch.instance] = role;
+        roles[ch.instance] = role; basis[role] = 1;
       } else if (ch.kind === 'monster_summoned') {
         place(ch.instance, ch.player, ch.to.zone, ch.to.index, ch.to.position);
-        roles[ch.instance] = (role === 'mat') ? 'move' : role;
+        /* 링크 몬스터 자신은 소재가 아니라 **등장**이다. */
+        roles[ch.instance] = 'move'; basis['move'] = 1;
       } else if (ch.kind === 'token_created') {
-        notes.push('토큰이 생겼습니다 — ' + cardName(rec, ch.instance));
-        roles[ch.instance] = 'move';
+        notes.push('토큰이 생겼습니다 — ' + cardName(rec, ch.instance)
+                   + ' (일반 카드의 이동이 아닙니다)');
+        roles[ch.instance] = 'move'; basis['move'] = 1;
       } else if (ch.kind === 'token_vanished') {
         if (where[ch.instance]) { delete where[ch.instance]; }
+        roles[ch.instance] = 'gone'; basis['gone'] = 1;
         notes.push('토큰이 판에서 사라졌습니다 (묘지로 가지 않습니다) — '
                    + cardName(rec, ch.instance));
       } else if (ch.kind === 'zone_shuffled') {
@@ -273,8 +388,8 @@ function buildFrames(rec) {
         /* 🔴 **이 장면부터** 걸린다. 해제 · 만료 정보는 기록에 없으므로
            임의로 풀지 않는다. */
         if (limits === null) { limits = []; }
-        limits.push({seat: (ch.player === undefined ? 0 : ch.player),
-                     attribute: ch.attribute, source: ch.source_card_id});
+        limits.push({seat:(ch.player === undefined ? 0 : ch.player),
+                     attribute:ch.attribute, source:ch.source_card_id});
         notes.push('특수 소환 제한이 걸렸습니다 — ' + ch.attribute
                    + ' 속성만 (출처 ' + ch.source_card_id + ')');
       } else if (ch.kind === 'life_changed') {
@@ -284,30 +399,36 @@ function buildFrames(rec) {
       }
     });
 
-    /* 효과의 대상은 걸음이 들고 있다 */
+    /* 발동·행동의 주체는 사건 자신이 들고 있다 (``source``). */
+    if (ev.source !== undefined && ev.source !== null && !roles[ev.source]) {
+      roles[ev.source] = 'act'; basis['act'] = 1;
+    }
+    /* 🔴 **대상은 연출이다.** 걸음이 글자로 적어 둔 것이라 시점 정보가
+       없다 — 강조는 하되 "엔진 사건" 이라고 말하지 않는다. */
     if (st && st.targets) {
       st.targets.forEach(function (t) {
         var m = /#(\d+)/.exec(String(t));
-        if (m) { var id = Number(m[1]); if (!roles[id]) { roles[id] = 'tgt'; } }
+        if (m) {
+          var id = Number(m[1]);
+          if (!roles[id]) { roles[id] = 'tgt'; basis['tgt'] = 1; }
+        }
       });
     }
-    frames.push({seq: ev.seq, step: st, kind: ev.type,
-                 title: frameTitle(rec, ev, st),
-                 text: frameText(rec, ev, st),
-                 where: snapshot(), roles: roles, notes: notes,
-                 shuffled: Object.assign({}, shuffled),
-                 limits: limits ? limits.slice() : null,
-                 startKnown: startKnown});
+    frames.push({seq:ev.seq, step:st, kind:ev.type,
+                 title:frameTitle(rec, ev, st),
+                 text:frameText(rec, ev, st),
+                 where:snapshot(), roles:roles, notes:notes,
+                 shuffled:Object.assign({}, shuffled),
+                 limits:limits ? limits.slice() : null,
+                 startKnown:startKnown,
+                 basis:Object.keys(basis)});
   });
   return frames;
 }
 
 function frameTitle(rec, ev, st) {
-  /* 🔴 **"걸음" 이라는 한 낱말로 두 숫자를 부르지 않는다** (6-AV).
-     장면 번호는 아래 renderStepHead 가 적고, 여기는 **엔진 행동**만
-     말한다. */
-  var head = ev.type === 'cost_payment' ? '코스트 지불'
-           : ev.type === 'effect' ? '효과 해결' : '행동';
+  var head = (ev.type === 'cost_payment') ? '코스트 지불'
+           : (ev.type === 'effect') ? '효과 해결' : '행동';
   if (st) {
     var k = STEP_KO[st.kind] || st.kind;
     var nm = st.card ? (st.card.name || ('[' + st.card.passcode + ']')) : '';
@@ -342,262 +463,651 @@ function frameText(rec, ev, st) {
   return bits.join(' ');
 }
 
-/* ---------- 그리기 ------------------------------------------------ */
-var ROLE_KO = {move: '이동', cost: '코스트', mat: '소재', tgt: '대상'};
+/* ================================================================== */
+/* 카드 · 칸 그리기                                                     */
+/* ================================================================== */
+function isFaceDown(rec, id, spot) {
+  if (!spot) { return false; }
+  if (spot.zone === 'DECK') { return true; }
+  if (spot.zone === 'HAND' && spot.seat !== '0') { return true; }
+  if (spot.position && String(spot.position).indexOf('FACEDOWN') === 0) {
+    return true;
+  }
+  return false;
+}
 
-function cardNode(rec, id, role, frame) {
+function cardNode(rec, id, role, spot) {
   var n = el('div', 'card');
-  if (role) { n.classList.add(role); }
-  if (state.selected === id) { n.classList.add('sel'); }
+  n.setAttribute('data-inst', String(id));
+  var name = cardName(rec, id);
+  n.title = name + ' · ' + cardType(rec, id) + ' · 개체 #' + id;
+  n.setAttribute('aria-label', n.title);
+  if (role) { n.classList.add('r-' + role); }
+  if (String(state.selected) === String(id)) { n.classList.add('sel'); }
+  if (spot && spot.position && String(spot.position).indexOf('DEFENSE') >= 0) {
+    n.classList.add('def');
+  }
+  if (isFaceDown(rec, id, spot)) {
+    n.appendChild(el('div', 'back'));
+  } else {
+    var uri = imageFor(rec, id);
+    if (uri) {
+      var img = document.createElement('img');
+      img.src = uri;           /* 🔴 안에 담은 data: 뿐이다 */
+      img.alt = name;
+      n.appendChild(img);
+    } else {
+      /* 🔴 **그림이 없으면 이름으로 그린다** — 다른 그림으로 메우지 않는다 */
+      n.appendChild(el('div', 'noimg', name));
+    }
+  }
   if (role && ROLE_KO[role]) {
     /* 🔴 **색만으로 구분하지 않는다** — 짧은 글자를 함께 적는다. */
-    n.appendChild(el('div', 'tag ' + role, ROLE_KO[role]));
+    n.appendChild(el('div', 'badge r-' + role, ROLE_KO[role]));
   }
-  var nm = el('div', 'nm', cardName(rec, id));
-  var ty = el('div', 'ty', cardType(rec, id) + ' · #' + id);
-  n.appendChild(nm); n.appendChild(ty);
-  var w = frame.where[id];
-  if (w && w.position) {
-    n.appendChild(el('div', 'ty', POS_KO[w.position] || w.position));
-  }
+  n.appendChild(el('div', 'inst', '#' + id));
   n.addEventListener('click', function () {
-    state.selected = (state.selected === id) ? null : id;
-    render();
+    state.selected = (String(state.selected) === String(id)) ? null : id;
+    renderZoom();
+    markSelected();
   });
   return n;
 }
 
-function seatNode(rec, frame, seat, label) {
-  /* 🔴 자기 필드가 눈에 먼저 들어오게 한다 (6-AV 가독성). */
-  var box = el('div', String(seat) === '0' ? 'seat mine' : 'seat');
-  box.appendChild(el('h2', null, label));
-  var byZone = {};
+function markSelected() {
+  var nodes = document.querySelectorAll('#field [data-inst]');
+  for (var i = 0; i < nodes.length; i++) {
+    var hit = String(state.selected) === nodes[i].getAttribute('data-inst');
+    nodes[i].classList.toggle('sel', hit);
+  }
+}
+
+function groupByZone(frame, seat) {
+  var out = {};
   Object.keys(frame.where).forEach(function (id) {
     var w = frame.where[id];
     if (w.seat !== String(seat)) { return; }
-    (byZone[w.zone] = byZone[w.zone] || []).push(Number(id));
+    (out[w.zone] = out[w.zone] || []).push(id);
   });
+  return out;
+}
 
-  ZONES_MAIN.forEach(function (zone) {
-    var row = el('div', 'row five');
-    var here = byZone[zone] || [];
-    var slots = zone === 'EMZONE' ? 2 : 5;
-    for (var i = 0; i < slots; i++) {
-      var slot = el('div', 'slot');
-      slot.appendChild(el('div', 'label',
-        (ZONE_KO[zone] || zone) + ' ' + (i + 1)));
-      here.forEach(function (id) {
-        var w = frame.where[id];
-        if (w.index === i) { slot.appendChild(cardNode(rec, id, frame.roles[id], frame)); }
-      });
-      row.appendChild(slot);
-    }
-    var loose = here.filter(function (id) { return frame.where[id].index === null; });
-    box.appendChild(row);
-    if (loose.length) {
-      var p = el('div', 'pile');
-      p.appendChild(el('div', 'label',
-        (ZONE_KO[zone] || zone) + ' — 칸 번호 미기록 ' + loose.length + '장'));
-      var cs = el('div', 'cards');
-      loose.forEach(function (id) { cs.appendChild(cardNode(rec, id, frame.roles[id], frame)); });
-      p.appendChild(cs); box.appendChild(p);
-    }
+function slotNode(rec, frame, label, ids, cls) {
+  var slot = el('div', 'slot' + (cls ? ' ' + cls : ''));
+  ids.forEach(function (id) {
+    slot.appendChild(cardNode(rec, id, frame.roles[id], frame.where[id]));
   });
+  slot.appendChild(el('div', 'tag0', label));
+  return slot;
+}
 
-  var piles = el('div', 'row piles');
-  PILES.forEach(function (pair) {
-    var zone = pair[0], name = pair[1];
-    var here = byZone[zone] || [];
-    var p = el('div', 'pile');
-    var label = name + ' ' + here.length + '장';
-    if (frame.shuffled[String(seat) + '/' + zone]) {
-      label += ' · 섞은 뒤 순서 미기록';
+function pileNode(rec, frame, seat, zone, name) {
+  var ids = (groupByZone(frame, seat)[zone] || []);
+  var label = name + ' ' + ids.length;
+  if (frame.shuffled[String(seat) + '/' + zone]) { label += ' · 순서 미기록'; }
+  var slot = el('div', 'slot pile');
+  if (zone === 'DECK') {
+    /* 덱은 가려진 자리다 — 뒷면 한 장과 장수만 적는다 */
+    if (ids.length) {
+      var back = el('div', 'card');
+      back.appendChild(el('div', 'back'));
+      slot.appendChild(back);
     }
-    p.appendChild(el('div', 'label', label));
-    var cs = el('div', 'cards');
-    if (zone === 'DECK') {
-      /* 덱은 가려진 자리다 — 장수만 적는다 */
-      cs.appendChild(el('div', 'ty', '뒷면 ' + here.length + '장'));
-    } else {
-      here.forEach(function (id) { cs.appendChild(cardNode(rec, id, frame.roles[id], frame)); });
+  } else {
+    /* 🔴 더미는 **겹쳐서** 쌓는다 — 칸 높이를 늘리지 않고, 몇 장인지는
+       아래 글자가 말한다. 위로 올수록 나중에 들어온 카드다. */
+    ids.forEach(function (id, i) {
+      var node = cardNode(rec, id, frame.roles[id], frame.where[id]);
+      node.style.left = (4 + i * 6) + 'px';
+      node.style.zIndex = String(10 + i);
+      slot.appendChild(node);
+    });
+  }
+  slot.appendChild(el('div', 'tag0', label));
+  return slot;
+}
+
+/* 🔴 **공유 엑스트라 몬스터 존.** 엔진은 좌석마다 EMZONE 1칸을 갖는다.
+   화면은 가운데 한 줄에 두 칸만 두고 좌석 0 → 왼 칸, 좌석 1 → 오른 칸으로
+   대응시킨다. 같은 자리를 양쪽 필드에 중복으로 만들지 않는다. */
+function emRow(rec, frame) {
+  var row = el('div', 'emrow');
+  row.appendChild(el('div', 'emhead',
+    '공유 엑스트라 몬스터 존 — 왼 칸 = 자신(P0) · 오른 칸 = 상대(P1)'));
+  for (var c = 0; c < 3; c++) { row.appendChild(el('div', 'spacer')); }
+  ['0', '1'].forEach(function (seat) {
+    var ids = groupByZone(frame, seat)['EMZONE'] || [];
+    var label = (seat === '0' ? '자신' : '상대') + ' EM';
+    var slot = slotNode(rec, frame, label, ids.slice(0, 1), 'em');
+    if (ids.length > 1) {
+      /* 엔진이 한 좌석에 두 장을 적은 적은 없다. 칸을 지어내지 않는다. */
+      slot.appendChild(el('div', 'tag0', '칸 미확정 ' + (ids.length - 1)));
     }
-    p.appendChild(cs); piles.appendChild(p);
+    row.appendChild(slot);
   });
-  box.appendChild(piles);
+  for (var d = 0; d < 3; d++) { row.appendChild(el('div', 'spacer')); }
+  return row;
+}
+
+function slottedRow(rec, frame, seat, zone, slots, leftCell, rightCells) {
+  var row = el('div', 'zrow');
+  var here = groupByZone(frame, seat)[zone] || [];
+  row.appendChild(leftCell);
+  for (var i = 0; i < slots; i++) {
+    var mine = here.filter(function (id) {
+      return frame.where[id].index === i;
+    });
+    row.appendChild(slotNode(rec, frame, (ZONE_KO[zone] || zone) + (i + 1),
+                             mine, null));
+  }
+  rightCells.forEach(function (cell) { row.appendChild(cell); });
+  /* 🔴 칸 번호가 기록에 없는 카드는 **칸을 확정하지 않는다** */
+  var loose = here.filter(function (id) {
+    return frame.where[id].index === null || frame.where[id].index === undefined;
+  });
+  if (loose.length) {
+    var tray = el('div', 'handrow');
+    tray.appendChild(el('div', 'tag0',
+      (ZONE_KO[zone] || zone) + ' — 칸 번호 미기록 ' + loose.length + '장'));
+    loose.forEach(function (id) {
+      tray.appendChild(cardNode(rec, id, frame.roles[id], frame.where[id]));
+    });
+    return [row, tray];
+  }
+  return [row];
+}
+
+function handRow(rec, frame, seat) {
+  var ids = groupByZone(frame, seat)['HAND'] || [];
+  var tray = el('div', 'handrow');
+  tray.appendChild(el('div', 'tag0',
+    (seat === 0 ? '자신' : '상대') + ' 패 ' + ids.length + '장'));
+  ids.forEach(function (id) {
+    tray.appendChild(cardNode(rec, id, frame.roles[id], frame.where[id]));
+  });
+  return tray;
+}
+
+function sideNode(rec, frame, seat, label) {
+  var box = el('div', seat === 0 ? 'side me' : 'side opp');
+  var bar = el('div', 'seatbar');
+  bar.appendChild(el('span', null, label));
+  box.appendChild(bar);
+
+  function monsters() {
+    return slottedRow(rec, frame, seat, 'MZONE', 5,
+      slotNode(rec, frame, '필드 존',
+               groupByZone(frame, seat)['FZONE'] || [], 'fz'),
+      [pileNode(rec, frame, seat, 'GRAVE', '묘지'),
+       pileNode(rec, frame, seat, 'REMOVED', '제외')]);
+  }
+  function spells() {
+    return slottedRow(rec, frame, seat, 'SZONE', 5,
+      pileNode(rec, frame, seat, 'EXTRA', '엑스트라'),
+      [pileNode(rec, frame, seat, 'DECK', '덱'), el('div', 'spacer')]);
+  }
+  /* 상대 필드는 위가 멀고, 자기 필드는 아래가 가깝다 — 가운데 EM 줄을
+     사이에 두고 몬스터 줄이 서로 마주 본다. */
+  var rows = (seat === 0) ? monsters().concat(spells())
+                          : spells().concat(monsters());
+  if (seat !== 0) { box.appendChild(handRow(rec, frame, seat)); }
+  rows.forEach(function (r) { box.appendChild(r); });
+  if (seat === 0) { box.appendChild(handRow(rec, frame, seat)); }
   return box;
 }
 
-function render() {
-  var rec = state.record;
-  var board = document.getElementById('board');
-  clear(board);
-  if (!rec) {
-    board.appendChild(el('div', 'box', '전개 기록(JSON)을 열면 여기에 판이 '
-      + '그려집니다. 위의 “기록 열기” 를 누르세요.'));
-    document.getElementById('stepline').textContent = '';
-    document.getElementById('stepsub').textContent = '';
-    return;
+/* ================================================================== */
+/* 칠하기 — 박자 둘                                                     */
+/* ================================================================== */
+function measure() {
+  var m = {}, nodes = document.querySelectorAll('#field [data-inst]');
+  for (var i = 0; i < nodes.length; i++) {
+    var r = nodes[i].getBoundingClientRect();
+    m[nodes[i].getAttribute('data-inst')] =
+      {x:r.left, y:r.top, w:r.width, h:r.height};
   }
-  var frame = state.frames[state.at];
-  board.appendChild(seatNode(rec, frame, 1, '상대 (P1)'));
-  board.appendChild(seatNode(rec, frame, 0, '자신 (P0)'));
+  return m;
+}
 
-  var last = state.frames.length - 1;
-  var head = '재생 장면 ' + state.at + ' / ' + last;
-  if (state.at === last) { head += ' · 재생 끝'; }
-  document.getElementById('stepline').textContent = head;
+function clearFlying() {
+  anim.cleanup.forEach(function (t) { clearTimeout(t); });
+  anim.cleanup = [];
+  var nodes = document.querySelectorAll('#field .card');
+  for (var i = 0; i < nodes.length; i++) {
+    nodes[i].classList.remove('flying');
+    nodes[i].classList.remove('appear');
+    nodes[i].style.transition = '';
+    nodes[i].style.transform = '';
+  }
+}
 
+function flip(before) {
+  var nodes = document.querySelectorAll('#field [data-inst]');
+  for (var i = 0; i < nodes.length; i++) {
+    var n = nodes[i], id = n.getAttribute('data-inst'), b = before[id];
+    var a = n.getBoundingClientRect();
+    if (!b) { n.classList.add('appear'); continue; }
+    var dx = b.x - a.x, dy = b.y - a.y;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) { continue; }
+    n.classList.add('flying');
+    n.style.transition = 'none';
+    n.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    void n.offsetWidth;                       /* 적용을 강제한다 */
+    n.style.transition = 'transform var(--move-ms) cubic-bezier(.4,0,.2,1)';
+    n.style.transform = '';
+    anim.cleanup.push(setTimeout((function (node) {
+      return function () {
+        node.classList.remove('flying');
+        node.style.transition = ''; node.style.transform = '';
+      };
+    })(n), MOVE_MS / state.speed + 60));
+  }
+}
+
+/** 판 하나를 그린다. ``roles`` 는 장면 ``at`` 의 것, 자리는 ``boardAt`` 의 것. */
+function paint(boardAt, at, animate) {
+  var rec = state.record, field = byId('field');
+  if (!rec) { clear(field); return; }
+  var before = animate ? measure() : null;
+  clearFlying();
+  var board = state.frames[boardAt], scene = state.frames[at];
+  /* 자리는 board 에서, 강조는 scene 에서 — 두 박자가 여기서 갈린다. */
+  var shown = {seq:board.seq, where:board.where, shuffled:board.shuffled,
+               roles:scene.roles};
+  clear(field);
+  field.appendChild(sideNode(rec, shown, 1, '상대 (P1)'));
+  field.appendChild(emRow(rec, shown));
+  field.appendChild(sideNode(rec, shown, 0, '자신 (P0)'));
+  if (animate && before) { flip(before); }
+  renderHud(at);
+  renderSide(at);
+}
+
+function showPre(at) {
+  /* 🔴 **앞 박자**: 이전 판 위에 이번 장면의 강조만 얹는다. 판정 상태가
+     바뀐 것이 아니라, 무엇이 쓰이는지를 먼저 보여 주는 연출이다. */
+  state.beat = 'pre';
+  paint(Math.max(0, at - 1), at, false);
+  renderControls();
+}
+function showFinal(at, animate) {
+  state.beat = 'final';
+  paint(at, at, !!animate);
+  renderControls();
+}
+
+/* ================================================================== */
+/* 시계 — 한 번에 하나만 예약한다                                       */
+/* ================================================================== */
+function cancelAnim() {
+  if (anim.timer) { clearTimeout(anim.timer); }
+  anim.timer = null; anim.phase = null;
+  anim.cleanup.forEach(function (t) { clearTimeout(t); });
+  anim.cleanup = [];
+}
+function arm(phase, target, baseMs) {
+  cancelAnim();
+  anim.phase = phase; anim.target = target;
+  anim.remain = baseMs; anim.markedAt = Date.now();
+  anim.timer = setTimeout(fire, Math.max(16, baseMs / state.speed));
+}
+function fire() {
+  var phase = anim.phase, target = anim.target;
+  anim.timer = null; anim.phase = null;
+  if (phase === 'settle') {
+    showFinal(target, true);
+    if (state.playing) {
+      if (target >= last()) { stopPlay(); }        /* 🔴 마지막에서 자동 정지 */
+      else { arm('advance', target + 1, HOLD_MS + MOVE_MS); }
+    }
+  } else if (phase === 'advance') {
+    state.at = target;
+    showPre(target);
+    arm('settle', target, PRE_MS);
+  }
+}
+/** 배속을 바꿔도 **남은 시간만** 다시 재므로 사건이 두 번 일어나지 않는다. */
+function setSpeed(value) {
+  var phase = anim.phase, target = anim.target;
+  var remain = anim.remain;
+  if (anim.timer) {
+    var used = (Date.now() - anim.markedAt) * state.speed;
+    remain = Math.max(0, anim.remain - used);
+    clearTimeout(anim.timer); anim.timer = null;
+  } else { phase = null; }
+  state.speed = value;
+  document.documentElement.style.setProperty(
+    '--move-ms', Math.round(MOVE_MS / value) + 'ms');
+  if (phase) {
+    anim.phase = phase; anim.target = target;
+    anim.remain = remain; anim.markedAt = Date.now();
+    anim.timer = setTimeout(fire, Math.max(16, remain / value));
+  }
+  renderControls();
+}
+
+function startPlay() {
+  if (state.at >= last()) { seek(0); }
+  state.playing = true;
+  arm('advance', state.at + 1, 120);
+  renderControls();
+}
+function stopPlay() {
+  state.playing = false;
+  cancelAnim();
+  /* 🔴 멈출 때는 **그 장면의 확정 상태**로 맞춘다 — 앞 박자에서 멈춰
+     있으면 사람이 보는 판과 장면 번호가 어긋난다. */
+  if (state.beat !== 'final') { showFinal(state.at, false); }
+  renderControls();
+}
+/** 진행 막대 · 이전 · 다음 · 처음으로 — 진행 중 연출을 **정리하고** 간다. */
+function seek(at) {
+  cancelAnim();
+  state.at = Math.max(0, Math.min(last(), at));
+  showFinal(state.at, false);
+}
+
+/* ================================================================== */
+/* 글자 칸                                                             */
+/* ================================================================== */
+function renderHud(at) {
+  var rec = state.record, f = state.frames[at];
+  var head = '장면 ' + at + ' / ' + last();
+  if (state.beat === 'pre') { head += ' · 준비'; }
+  else if (at === last()) { head += ' · 재생 끝'; }
   var actions = (rec.steps || []).length;
-  var doneBy = frame.step ? frame.step.order : 0;
-  document.getElementById('stepact').textContent =
-    '엔진 행동 ' + doneBy + ' / ' + actions + ' · ' + frame.title;
-  document.getElementById('stepsub').textContent = frame.text;
+  var doneBy = f.step ? f.step.order : 0;
+  byId('scene').textContent = head + ' · 엔진 행동 ' + doneBy + ' / ' + actions;
+  byId('act').textContent = f.title;
+  byId('detail').textContent = f.text;
+  var basis = (f.basis || []).map(function (r) {
+    return ROLE_KO[r] + ': ' + ROLE_BASIS[r];
+  });
+  byId('basis').textContent = basis.length ? ('강조 근거 — ' + basis.join(' / ')) : '';
+}
 
-  /* 🔴 **지금 걸린 제한** — 최종 결과와 다른 칸이다. */
-  var now = document.getElementById('limits-now');
+function renderControls() {
+  var l = last();
+  byId('bar').max = String(l);
+  byId('bar').value = String(state.at);
+  byId('count').textContent = state.at + ' / ' + l;
+  byId('play').textContent = state.playing ? '⏸' : '▶';
+  byId('play').title = state.playing ? '일시정지' : '재생';
+  byId('first').disabled = state.at === 0 && state.beat === 'final';
+  byId('prev').disabled = state.at === 0;
+  byId('next').disabled = state.at >= l;
+  var nodes = document.querySelectorAll('#scenes button');
+  for (var i = 0; i < nodes.length; i++) {
+    nodes[i].classList.toggle('cur', Number(nodes[i].dataset.at) === state.at);
+  }
+  var sp = document.querySelectorAll('.speeds button');
+  for (var j = 0; j < sp.length; j++) {
+    sp[j].classList.toggle('on', Number(sp[j].dataset.speed) === state.speed);
+  }
+}
+
+function renderSide(at) {
+  var f = state.frames[at];
+  var now = byId('limits-now');
   clear(now);
-  if (frame.limits === null) {
-    now.appendChild(el('div', 'warn', '시작 시점 제한 정보 미기록 — 이 '
-      + '기록에는 시작값이 없어서 지금 걸린 제한을 셀 수 없습니다.'));
-    (frame.notes || []).length;
-  } else if (!frame.limits.length) {
+  if (f.limits === null) {
+    now.appendChild(el('div', 'warn',
+      '시작 시점 제한 정보 미기록 — 이 기록에는 시작값이 없어 지금 걸린 '
+      + '제한을 셀 수 없습니다.'));
+  } else if (!f.limits.length) {
     now.appendChild(el('div', 'muted', '걸린 특수 소환 제한이 없습니다.'));
   } else {
-    frame.limits.forEach(function (l) {
+    f.limits.forEach(function (l) {
       now.appendChild(el('div', null, 'P' + l.seat + ' · ' + l.attribute
-        + ' 속성만 특수 소환 (출처 ' + l.source + ')'));
+        + ' 속성만 (출처 ' + l.source + ')'));
     });
-    if (!frame.startKnown) {
-      /* 🔴 시작값이 없는 옛 기록 — 아래는 **재생 중 등록된 것만**이다. */
-      now.appendChild(el('div', 'warn', '⚠ 시작 시점 제한 정보 미기록 — '
-        + '위는 재생 중 등록된 것만입니다.'));
+    if (!f.startKnown) {
+      now.appendChild(el('div', 'warn',
+        '⚠ 시작 시점 제한 미기록 — 위는 재생 중 등록된 것만입니다.'));
     }
   }
-
-  var notes = document.getElementById('notes');
+  var notes = byId('notes');
   clear(notes);
-  frame.notes.forEach(function (t) { notes.appendChild(el('li', null, t)); });
+  (f.notes || []).forEach(function (t) { notes.appendChild(el('li', null, t)); });
+  byId('notes-wrap').style.display = (f.notes || []).length ? '' : 'none';
+  renderZoom();
+}
 
-  var sel = document.getElementById('selected');
-  clear(sel);
-  if (state.selected !== null && rec.cards[String(state.selected)]) {
-    var c = rec.cards[String(state.selected)];
-    sel.appendChild(el('div', 'stepline', c.name || ('[' + c.passcode + ']')));
-    sel.appendChild(el('div', 'muted', '패스코드 ' + c.passcode
-      + ' · 개체 #' + state.selected));
-    sel.appendChild(el('div', 'muted', cardType(rec, state.selected)
-      + (c.token ? ' · 토큰' : '')));
-    var w = frame.where[state.selected];
-    sel.appendChild(el('div', 'muted', w
-      ? ('지금: P' + w.seat + ' ' + (ZONE_KO[w.zone] || w.zone)
-         + (w.index === null ? ' (칸 번호 미기록)' : ' ' + (w.index + 1) + '칸')
-         + (w.position ? ' · ' + (POS_KO[w.position] || w.position) : ''))
-      : '지금: 판에 없습니다'));
-  } else {
-    sel.appendChild(el('div', 'muted', '카드를 누르면 이름과 패스코드를 봅니다.'));
+function renderZoom() {
+  var rec = state.record, box = byId('zoom');
+  clear(box);
+  var id = state.selected;
+  var c = (id === null || id === undefined) ? null : card(rec, id);
+  if (!c) {
+    box.appendChild(el('div', 'muted',
+      '카드를 누르면 그림 · 한국어 이름 · 효과 텍스트를 봅니다.'));
+    return;
   }
+  var uri = state.images.uris[String(c.passcode)];
+  if (uri) {
+    var img = document.createElement('img');
+    img.src = uri; img.alt = c.name || String(c.passcode);
+    box.appendChild(img);
+  } else {
+    box.appendChild(el('div', 'noimg-big',
+      '카드 그림 없음 — 이름으로 표시합니다'));
+  }
+  box.appendChild(el('div', 'nm', c.name || ('[' + c.passcode + ']')));
+  box.appendChild(el('div', 'kv', cardType(rec, id)
+    + (c.token ? ' · 토큰' : '')
+    + (c.attribute_ko ? ' · ' + c.attribute_ko : '')
+    + (c.race_ko ? ' · ' + c.race_ko : '')));
+  var stats = [];
+  if (c.link) { stats.push('링크 ' + c.link); }
+  if (c.rank) { stats.push('랭크 ' + c.rank); }
+  if (c.level) { stats.push('레벨 ' + c.level); }
+  if (c.atk !== undefined) { stats.push('공 ' + c.atk); }
+  if (c['def'] !== undefined) { stats.push('수 ' + c['def']); }
+  if (c.link_markers && c.link_markers.length) {
+    stats.push('링크 마커 ' + c.link_markers.join('·'));
+  }
+  if (stats.length) { box.appendChild(el('div', 'kv', stats.join(' · '))); }
+  box.appendChild(el('div', 'kv', '패스코드 ' + c.passcode + ' · 개체 #' + id));
+  var w = state.frames[state.at].where[String(id)];
+  box.appendChild(el('div', 'kv', w
+    ? ('지금: P' + w.seat + ' ' + (ZONE_KO[w.zone] || w.zone)
+       + ((w.index === null || w.index === undefined)
+          ? ' (칸 번호 미기록)' : ' ' + (w.index + 1) + '칸')
+       + (w.position ? ' · ' + (POS_KO[w.position] || w.position) : ''))
+    : '지금: 판에 없습니다'));
+  /* 🔴 효과 텍스트는 **기록에 있을 때만**이다 — 지어내지 않는다. */
+  if (c.desc) { box.appendChild(el('div', 'desc', c.desc)); }
+  else { box.appendChild(el('div', 'kv', '효과 텍스트 미기록')); }
+}
 
-  document.getElementById('first').disabled = state.at === 0;
-  document.getElementById('prev').disabled = state.at === 0;
-  document.getElementById('next').disabled = state.at >= state.frames.length - 1;
+function renderScenes() {
+  var box = byId('scenes');
+  clear(box);
+  state.frames.forEach(function (f, i) {
+    var b = el('button', null, i + '. ' + f.title);
+    b.dataset.at = String(i);
+    b.addEventListener('click', function () {
+      /* 🔴 재생 중이어도 **사건을 건너뛰지 않는다** — 그 장면의 확정
+         상태로 맞추고, 재생 중이면 거기서 이어 간다. */
+      var wasPlaying = state.playing;
+      seek(i);
+      if (wasPlaying) {
+        if (i >= last()) { stopPlay(); }
+        else { arm('advance', i + 1, HOLD_MS); }
+      }
+      renderControls();
+    });
+    box.appendChild(b);
+  });
 }
 
 function summarize(rec) {
   var r = rec.result || {};
-  var head = document.getElementById('result');
+  var head = byId('result');
   clear(head);
-  head.appendChild(el('h3', null, '전체 실행 결과'));
+  head.appendChild(el('h3', null, '전체 실행 결과 (지금 장면이 아닙니다)'));
   var status = r.status === 'completed' ? '✅ 전개 완료'
              : r.status === 'stopped' ? '⏹ 중단'
              : r.status === 'not_run' ? '❌ 실행하지 않음' : '▶ 실행함';
   var src = rec.source || {};
   var way = src.mode === 'line' ? ('고정 경로 ' + (src.line || '')) : '자율 실행';
-  head.appendChild(el('div', 'stepline', status + ' · ' + way));
-  head.appendChild(el('div', 'muted', '🔴 전체 실행의 결과입니다 — '
-    + '지금 보고 있는 장면의 상태가 아닙니다.'));
+  head.appendChild(el('div', null, status + ' · ' + way));
   if (r.line_total) {
-    head.appendChild(el('div', 'muted',
+    head.appendChild(el('div', 'kv',
       (r.line_done || 0) + ' / ' + r.line_total + '단계'));
   }
   if (r.stopped_reason && r.status !== 'completed') {
     head.appendChild(el('div', 'warn', '중단 사유: ' + r.stopped_reason));
   }
-  /* 🔴 **최종 결과의 제한이다** — 지금 장면의 제한이 아니다 (6-AV).
-     전에는 이 줄이 시작 화면에서도 최종 제한을 보여 주었다. */
   var limits = (rec.final && rec.final.summon_limits) || [];
   if (limits.length) {
-    head.appendChild(el('div', 'muted', '최종 결과의 제한 ' + limits.length
+    head.appendChild(el('div', 'kv', '최종 결과의 제한 ' + limits.length
       + '건 — ' + limits.map(function (l) {
           return l.attribute + ' (출처 ' + l.source + ')'; }).join(' · ')));
   }
-  var un = document.getElementById('unsupported');
+
+  var un = byId('unsupported');
   clear(un);
   (rec.unsupported || []).forEach(function (t) {
     un.appendChild(el('li', null, t));
   });
-  document.getElementById('unsupported-count').textContent =
+  byId('unsupported-count').textContent =
     '미지원 ' + ((rec.unsupported || []).length) + '건 — 규칙이 막은 것이 '
     + '아니라 이 저장소에 그 규칙이 없다는 뜻입니다 (펼쳐 보기)';
-  document.getElementById('rawjson').textContent =
-    JSON.stringify(rec, null, 1);
+
+  var im = byId('imgnote');
+  clear(im);
+  var total = Object.keys(state.images.uris).length;
+  var missing = state.images.missing || [];
+  if (!total && !missing.length) {
+    im.appendChild(el('div', 'warn',
+      '카드 그림이 담겨 있지 않습니다 — 모든 카드를 이름으로 그립니다.'));
+  } else {
+    im.appendChild(el('div', 'kv', '그림 ' + total + '장 · 출처 '
+      + (state.images.source || '미기록')));
+    if (state.images.terms) {
+      im.appendChild(el('div', 'kv', state.images.terms));
+    }
+    if (missing.length) {
+      im.appendChild(el('div', 'warn', '그림 없음 ' + missing.length
+        + '장 (패스코드 ' + missing.join(', ')
+        + ') — 그 카드는 이름으로 그립니다.'));
+    }
+  }
+  byId('rawjson').textContent = JSON.stringify(rec, null, 1);
 }
 
-function load(rec) {
+/* ================================================================== */
+/* 열기                                                                */
+/* ================================================================== */
+function load(rec, images) {
   if (!rec || FORMATS.indexOf(rec.format) < 0) {
     alert('읽을 수 있는 전개 기록이 아닙니다 (format: '
           + (rec && rec.format) + ').');
     return;
   }
+  /* 🔴 **다른 기록을 열면 이전 재생 작업을 취소한다.** */
+  state.playing = false;
+  cancelAnim();
   state.record = rec;
+  state.images = images || {uris:{}, missing:[], source:'', terms:''};
+  if (!state.images.uris) { state.images.uris = {}; }
+  if (!state.images.missing) { state.images.missing = []; }
   state.frames = buildFrames(rec);
-  state.at = 0;
-  state.selected = null;
+  state.at = 0; state.selected = null; state.beat = 'final';
+  renderScenes();
   summarize(rec);
-  render();
+  showFinal(0, false);
 }
 
 window.addEventListener('DOMContentLoaded', function () {
-  document.getElementById('first').addEventListener('click', function () {
-    state.at = 0; render(); });
-  document.getElementById('prev').addEventListener('click', function () {
-    if (state.at > 0) { state.at--; render(); } });
-  document.getElementById('next').addEventListener('click', function () {
-    if (state.at < state.frames.length - 1) { state.at++; render(); } });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'ArrowLeft') { document.getElementById('prev').click(); }
-    if (e.key === 'ArrowRight') { document.getElementById('next').click(); }
+  byId('play').addEventListener('click', function () {
+    if (!state.record) { return; }
+    if (state.playing) { stopPlay(); } else { startPlay(); }
   });
-  document.getElementById('file').addEventListener('change', function (e) {
+  byId('first').addEventListener('click', function () {
+    var was = state.playing; state.playing = false; seek(0);
+    if (was) { startPlay(); } else { renderControls(); }
+  });
+  byId('prev').addEventListener('click', function () {
+    state.playing = false; seek(state.at - 1); renderControls();
+  });
+  byId('next').addEventListener('click', function () {
+    state.playing = false; seek(state.at + 1); renderControls();
+  });
+  byId('bar').addEventListener('input', function (e) {
+    var was = state.playing; state.playing = false;
+    seek(Number(e.target.value));
+    state.playing = was;
+    if (was && state.at < last()) { arm('advance', state.at + 1, HOLD_MS); }
+    else if (was) { stopPlay(); }
+    renderControls();
+  });
+  var speeds = document.querySelectorAll('.speeds button');
+  for (var i = 0; i < speeds.length; i++) {
+    speeds[i].addEventListener('click', function (e) {
+      setSpeed(Number(e.currentTarget.dataset.speed));
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.target && e.target.tagName === 'INPUT') { return; }
+    if (e.key === 'ArrowLeft') { byId('prev').click(); }
+    else if (e.key === 'ArrowRight') { byId('next').click(); }
+    else if (e.key === ' ') { e.preventDefault(); byId('play').click(); }
+  });
+  byId('file').addEventListener('change', function (e) {
     var f = e.target.files && e.target.files[0];
     if (!f) { return; }
     var reader = new FileReader();
     reader.onload = function () {
-      try { load(JSON.parse(String(reader.result))); }
-      catch (err) { alert('JSON 을 읽지 못했습니다: ' + err.message); }
+      try {
+        /* 🔴 밖에서 연 기록에는 그림이 없다 — 이름으로 그린다. */
+        load(JSON.parse(String(reader.result)),
+             {uris:{}, missing:[], source:'', terms:''});
+      } catch (err) { alert('JSON 을 읽지 못했습니다: ' + err.message); }
     };
     reader.readAsText(f);
   });
-  var node = document.getElementById('replay-data');
+
+  var imgNode = byId('replay-images');
+  var images = null;
+  if (imgNode && imgNode.textContent.trim()) {
+    try { images = JSON.parse(imgNode.textContent); } catch (err) { images = null; }
+  }
+  var node = byId('replay-data');
   if (node && node.textContent.trim()) {
-    try { load(JSON.parse(node.textContent)); }
+    try { load(JSON.parse(node.textContent), images); }
     catch (err) { alert('담아 둔 기록을 읽지 못했습니다: ' + err.message); }
   } else {
-    render();
+    byId('act').textContent = '전개 기록(JSON)을 열면 여기에 판이 그려집니다.';
+    byId('detail').textContent = '위의 “기록 열기” 를 누르세요.';
   }
 });
 """
 
 
-def render_replay_html(record=None, *, title: str = VIEWER_TITLE) -> str:
+def render_replay_html(record=None, *, title: str = VIEWER_TITLE,
+                       images=None) -> str:
     """
-    뷰어 HTML 한 장. ``record`` 를 주면 **그 기록을 담은 단일 파일**이다.
+    리플레이 화면 HTML 한 장. ``record`` 를 주면 **그 기록을 담은 단일
+    파일**이다.
 
-    🔴 **서버가 필요 없다.** 바깥에서 받아 오는 자원이 하나도 없으므로
-    파일을 그대로 브라우저에서 열면 된다. ``record`` 를 주지 않으면 화면에서
-    JSON 파일을 골라 여는 뷰어가 된다.
+    ``images`` 는 :class:`deck.card_images.ImageSet` 이 만든
+    ``{"uris": {...}, "missing": [...], "source": ..., "terms": ...}`` 이고,
+    그림은 ``data:`` 로 **안에 담긴다**. 주지 않으면 카드를 이름으로 그리고
+    화면이 "그림이 담겨 있지 않습니다" 라고 적는다.
+
+    🔴 **서버가 필요 없다.** 바깥에서 받아 오는 자원이 하나도 없으므로 파일을
+    그대로 브라우저에서 열면 된다.
     """
     data = _embed(record) if record else ""
+    image_data = _embed(images) if images else ""
     script = _SCRIPT.replace("__FORMATS__", json.dumps(list(REPLAY_FORMATS_READ)))
+    speed_buttons = "".join(
+        '<button data-speed="{0}"{1}>{0}x</button>'.format(
+            value, ' class="on"' if value == 1 else "")
+        for value in (0.5, 1, 1.5, 2, 3)
+    )
     return f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -609,7 +1119,7 @@ def render_replay_html(record=None, *, title: str = VIEWER_TITLE) -> str:
 <body>
 <header>
   <h1>{_text(title)}</h1>
-  <span class="muted">엔진이 적은 실행 기록을 그대로 그립니다 —
+  <span class="muted">엔진이 적은 실행 기록을 그대로 재생합니다 —
     규칙을 판정하지 않습니다.</span>
   <label class="muted">기록 열기
     <input id="file" type="file" accept="application/json,.json">
@@ -617,38 +1127,54 @@ def render_replay_html(record=None, *, title: str = VIEWER_TITLE) -> str:
 </header>
 <main>
   <section>
-    <div class="box now">
-      <div id="stepline" class="stepline"></div>
-      <div id="stepact" class="act"></div>
-      <div id="stepsub" class="muted"></div>
-      <div class="nav">
-        <button id="first">처음으로</button>
-        <button id="prev">← 이전 장면</button>
-        <button id="next" class="primary">다음 장면 →</button>
-      </div>
-      <ul id="notes"></ul>
+    <div id="hud">
+      <div id="scene"></div>
+      <div id="act"></div>
+      <div id="detail"></div>
+      <div id="basis"></div>
     </div>
-    <div id="board" class="board" style="margin-top:12px"></div>
+    <div id="field"></div>
+    <div id="controls">
+      <button id="first" title="처음으로">⏮</button>
+      <button id="prev" title="이전 장면">◀</button>
+      <button id="play" class="primary" title="재생">▶</button>
+      <button id="next" title="다음 장면">▶❙</button>
+      <input id="bar" type="range" min="0" max="0" step="1" value="0"
+             aria-label="진행 막대">
+      <span id="count">0 / 0</span>
+      <span class="speeds">{speed_buttons}</span>
+    </div>
   </section>
   <aside>
+    <div class="box">
+      <h3>카드 상세</h3>
+      <div id="zoom"></div>
+    </div>
+    <div class="box">
+      <h3>장면 목록</h3>
+      <div id="scenes"></div>
+    </div>
     <div class="box">
       <h3>지금 장면의 특수 소환 제한</h3>
       <div id="limits-now"></div>
     </div>
-    <div class="box" id="result">
-      <h3>전체 실행 결과</h3>
-    </div>
-    <div class="box">
-      <h3>선택한 카드</h3>
-      <div id="selected"></div>
+    <div class="box" id="notes-wrap">
+      <h3>이 장면의 기록</h3>
+      <ul id="notes"></ul>
     </div>
     <div class="box legend">
-      <h3>강조 표시 (카드에 글자로도 적습니다)</h3>
+      <h3>강조 (카드에 글자로도 적습니다)</h3>
+      <span><i class="dot" style="background:#ffb02e"></i>발동</span>
       <span><i class="dot" style="background:#4fc3f7"></i>이동</span>
       <span><i class="dot" style="background:#ff8a7a"></i>코스트</span>
       <span><i class="dot" style="background:#b388ff"></i>소재</span>
       <span><i class="dot" style="background:#7bdc9a"></i>대상</span>
     </div>
+    <div class="box" id="result"></div>
+    <details>
+      <summary>카드 그림 출처와 누락</summary>
+      <div id="imgnote"></div>
+    </details>
     <details>
       <summary id="unsupported-count">미지원</summary>
       <ul id="unsupported"></ul>
@@ -660,6 +1186,7 @@ def render_replay_html(record=None, *, title: str = VIEWER_TITLE) -> str:
   </aside>
 </main>
 <script id="replay-data" type="application/json">{data}</script>
+<script id="replay-images" type="application/json">{image_data}</script>
 <script>{script}</script>
 </body>
 </html>

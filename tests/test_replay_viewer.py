@@ -219,3 +219,143 @@ def test_c03_an_oversized_viewer_is_not_attached(monkeypatch):
     item, state = bot.viewer_attachment(_toy())
     assert item is None
     assert state is bot.ReplayState.TOO_LARGE
+
+
+# ======================================================================
+# D. 카드 그림 — 실제 그림을 **안에 담아** 보낸다 (Phase 6-AW)
+# ======================================================================
+def _images(uris=None, missing=()):
+    return {"uris": dict(uris or {}), "missing": [str(m) for m in missing],
+            "source": "시험용 출처", "terms": "시험용 조건"}
+
+
+_TINY_JPEG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ=="
+
+
+def test_d01_an_image_rides_inside_as_a_data_uri():
+    """
+    🔴 **그림도 바깥에서 받아 오지 않는다.** ``data:`` 로 안에 담기므로,
+    화면을 열 때도 재생할 때도 제공처로 요청이 나가지 않는다.
+    """
+    html = render_replay_html(_toy(), images=_images({"11": _TINY_JPEG}))
+    assert _TINY_JPEG in html
+    #: 바깥 주소가 하나도 없다 — 서버 없이 파일만으로 열린다.
+    assert "http://" not in html
+    assert "https://" not in html
+    assert 'src="http' not in html
+
+
+def test_d02_a_missing_image_is_said_out_loud():
+    """🔴 **없는 그림을 감추지 않는다** — 누락 패스코드가 화면으로 간다."""
+    html = render_replay_html(_toy(), images=_images({}, missing=[11]))
+    found = re.search(
+        r'<script id="replay-images" type="application/json">(.*?)</script>',
+        html, re.S,
+    )
+    assert found, "그림 묶음을 찾지 못했습니다"
+    payload = json.loads(found.group(1).replace("<\\/", "</"))
+    assert payload["missing"] == ["11"]
+    assert payload["uris"] == {}
+
+
+def test_d03_without_images_the_viewer_still_builds():
+    """그림을 주지 않아도 화면은 만들어진다 (카드는 이름으로 그린다)."""
+    html = render_replay_html(_toy())
+    body = re.search(
+        r'<script id="replay-images" type="application/json">(.*?)</script>',
+        html, re.S,
+    ).group(1)
+    assert body.strip() == ""
+
+
+def test_d04_only_the_cards_that_are_ever_seen_need_a_picture():
+    """
+    🔴 **끝까지 뒷면인 카드는 그림을 받지 않는다.** 상대 덱 40장까지 받으면
+    제공처에 요청만 늘고 화면에는 나오지 않는다.
+    """
+    from deck.card_images import record_passcodes
+
+    record = _toy()
+    record["cards"]["2"] = {"passcode": 22, "owner": 1}
+    record["initial"]["zones"]["1"] = {"DECK": [2]}
+    record["final"]["zones"]["1"] = {"DECK": [2]}
+    codes = record_passcodes(record)
+    assert 11 in codes          # 패 → 필드로 나온 카드
+    assert 22 not in codes      # 덱에만 있던 카드
+
+
+def test_d05_a_passcode_cannot_escape_the_cache_directory(tmp_path):
+    """🔴 **정수만 경로가 된다** — 패스코드로 디렉터리를 벗어나지 못한다."""
+    from deck.card_images import cache_path
+
+    path = cache_path(69811710, tmp_path)
+    assert path.parent == tmp_path / "data" / "cache" / "card_images"
+    assert path.name == "69811710.jpg"
+    with pytest.raises((ValueError, TypeError)):
+        cache_path("../../etc/passwd", tmp_path)
+
+
+def test_d06_the_discord_viewer_carries_whatever_pictures_are_on_hand(
+        monkeypatch, tmp_path):
+    """
+    디스코드로 가는 HTML 에 **받아 둔 그림이 담긴다**. 🔴 그림을 구하지
+    못해도 뷰어는 그대로 나간다 (그림은 덤이다).
+    """
+    import app.discord_bot as bot
+    import deck.card_images as card_images
+
+    seen = {}
+
+    def _fake_prepare(codes, **kw):
+        seen["codes"] = tuple(codes)
+        seen["limit"] = kw.get("max_downloads")
+        return card_images.ImageSet(uris={"11": _TINY_JPEG}, missing=())
+
+    monkeypatch.setattr(card_images, "prepare_images", _fake_prepare)
+    item, state = bot.viewer_attachment(_toy())
+    assert state is bot.ReplayState.EXPORTED
+    assert _TINY_JPEG in item.text
+    assert seen["codes"] == (11,)
+    #: 🔴 한 응답에서 새로 받을 장수에 상한이 있다.
+    assert seen["limit"] == bot.COMBO_IMAGE_FETCH_LIMIT
+
+
+def test_d07_a_broken_image_layer_does_not_take_the_viewer_down(monkeypatch):
+    """그림 준비가 터져도 화면은 나간다 — 카드는 이름으로 그려진다."""
+    import app.discord_bot as bot
+    import deck.card_images as card_images
+
+    def _boom(codes, **kw):
+        raise RuntimeError("그림 서버가 죽었습니다")
+
+    monkeypatch.setattr(card_images, "prepare_images", _boom)
+    item, state = bot.viewer_attachment(_toy())
+    assert state is bot.ReplayState.EXPORTED
+    assert "합성 카드" in item.text
+
+
+# ======================================================================
+# E. 재생 — 장면은 사건 수로 고정이고, 박자는 상태가 아니다
+# ======================================================================
+def test_e01_the_viewer_has_the_playback_controls_the_screen_promises():
+    """재생 · 일시정지 · 처음으로 · 이전 · 다음 · 배속 · 진행 막대."""
+    html = render_replay_html(_toy())
+    for needle in ('id="play"', 'id="first"', 'id="prev"', 'id="next"',
+                   'id="bar"', 'type="range"', 'data-speed="0.5"',
+                   'data-speed="3"'):
+        assert needle in html, needle
+
+
+def test_e02_the_beat_is_not_a_judged_state():
+    """
+    🔴 **한 사건의 연출을 둘로 나눠도 장면은 하나다.** 앞 박자(``showPre``)
+    는 이전 판 위에 강조만 얹고, 장면 번호를 늘리지 않는다.
+    """
+    import inspect
+
+    from deck import replay_viewer
+
+    source = inspect.getsource(replay_viewer)
+    assert "function showPre" in source
+    #: 앞 박자는 **이전 판**을 그린다 — 새 자리를 만들지 않는다.
+    assert "paint(Math.max(0, at - 1), at, false)" in source

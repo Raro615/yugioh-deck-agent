@@ -153,6 +153,11 @@ COMBO_ATTACHMENT_LIMIT = 8 * 1024 * 1024
 #: 한 메시지에 붙일 수 있는 첨부 수. Discord 의 상한이 10이다.
 COMBO_ATTACHMENT_COUNT_LIMIT = 10
 
+#: 🔴 **한 응답에서 새로 받을 카드 그림의 상한** (Phase 6-AW). 그림은 한 번
+#: 받으면 ``data/cache/card_images`` 에 남으므로 이 상한은 **처음 몇 번에만**
+#: 걸린다. 상한에 걸린 카드는 이름으로 그려진다 — 응답을 늦추지 않는다.
+COMBO_IMAGE_FETCH_LIMIT = 24
+
 #: 상세 기록 첨부의 **고정 파일명**. 🔴 사용자 입력으로 만들지 않는다 —
 #: 패 · 레시피 문자열이 파일명이나 경로가 되면 그 자체가 주입 경로다.
 COMBO_DETAIL_FILENAME = "combo-detail.txt"
@@ -169,8 +174,10 @@ COMBO_VIEWER_FILENAME = "combo-replay.html"
 #: 첨부한 HTML 은 **파일**이고 호스팅한 페이지가 아니다. "전개 보기 링크"
 #: 라고 적으면 눌러서 바로 열리는 것처럼 읽힌다.
 COMBO_VIEWER_NOTICE = (
-    "🖥 **전개 보기 — 첨부 `{name}` 를 내려받아 브라우저에서 여세요.**"
-    " 디스코드 안에서는 재생되지 않습니다 (서버 설치는 필요 없습니다)."
+    "🖥 **리플레이 보기 — 첨부 `{name}` 를 내려받아 브라우저에서 여세요.**"
+    " 카드 그림이 있는 듀얼 필드에서 ▶ 로 자동 재생합니다 (재생 · 일시정지 ·"
+    " 배속 · 장면 이동). 디스코드 안에서는 재생되지 않습니다"
+    " (서버 설치는 필요 없습니다)."
 )
 
 #: 🔴 **시각 재생을 아직 지원하지 않는다는 한 줄** (Phase 6-AR · 6-AS 정정).
@@ -1417,13 +1424,35 @@ def viewer_attachment(record) -> "tuple[ComboAttachment | None, ReplayState]":
 
     🔴 **같은 기록의 네 번째 표현이다** (요약 · 상세 · 기록 · 뷰어). 엔진을
     다시 돌리지 않고, 만들지 못해도 앞의 셋은 그대로 간다.
+
+    🔴 **실제 카드 그림을 담아 보낸다** (Phase 6-AW). 그림은 한 번만 받아
+    ``data/cache/card_images`` 에 보관하므로, 같은 카드를 다시 받지 않는다.
+    받지 못한 그림이 있어도 멈추지 않는다 — 그 카드는 이름으로 그려지고,
+    화면이 누락을 적는다.
     """
     if not record:
         return None, ReplayState.NOT_RUN
     from deck.replay_viewer import render_replay_html
 
+    images = None
     try:
-        text = render_replay_html(record)
+        from deck.card_images import prepare_images, record_passcodes
+
+        codes = record_passcodes(record)
+        #: 🔴 사람을 기다리게 하는 자리라 **한 번에 받는 장수를 묶는다**.
+        #: 상한에 걸린 카드는 이름으로 나가고, 다음 요청에서 그림이 붙는다.
+        images = prepare_images(codes, max_downloads=COMBO_IMAGE_FETCH_LIMIT
+                                ).to_payload()
+    except Exception as error:  # pragma: no cover - 방어용
+        #: 🔴 그림은 **덤이다** — 못 구해도 뷰어는 나간다.
+        logger.warning(
+            "카드 그림을 준비하지 못했습니다: %s: %s",
+            type(error).__name__, error,
+        )
+        images = None
+
+    try:
+        text = render_replay_html(record, images=images)
     except Exception as error:  # pragma: no cover - 방어용
         logger.warning(
             "전개 뷰어를 만들지 못했습니다: %s: %s",

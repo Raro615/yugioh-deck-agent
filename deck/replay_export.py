@@ -87,11 +87,17 @@ import json
 #: 있어서, 읽는 쪽이 「지금 걸려 있는 제한」 을 세려면 시작값이 있어야
 #: 한다 — 없으면 「시작 시점 제한 정보 미기록」 과 「제한 없음」 을 구분할
 #: 수 없다. 🔴 **더한 것이 전부이고**, 옛 형식도 그대로 읽는다.
-REPLAY_FORMAT = "engine-replay/3"
+#:
+#: 🔴 ``/3`` → ``/4`` (Phase 6-AW): 카드 표에 **확대 화면이 읽는 값들**을
+#: 더했다 — ``desc`` (한국어 효과 텍스트) · ``atk`` · ``def`` · ``level``
+#: (링크면 ``link``) · ``attribute_ko`` · ``race_ko`` · ``link_markers``.
+#: 저장소가 읽은 것만 싣고, 없으면 **싣지 않는다** (읽는 쪽이 "미기록" 으로
+#: 그린다). 🔴 **더한 것이 전부이고**, 옛 형식도 그대로 읽는다.
+REPLAY_FORMAT = "engine-replay/4"
 
 #: 이 저장소가 읽을 수 있는 형식들. 뷰어가 쓴다.
 REPLAY_FORMATS_READ = ("engine-replay/1", "engine-replay/2",
-                       "engine-replay/3")
+                       "engine-replay/3", "engine-replay/4")
 
 #: 사건 종류 — ``EventJournal`` 의 세 가지를 그대로 옮긴 이름이다.
 EVENT_ACTION = "action"
@@ -167,6 +173,59 @@ def _grouped(rows) -> dict:
     return out
 
 
+#: 수치 자리에 쓰이는 두 센티넬 (``core.constants``). ``-2`` 는 「?」 이고
+#: ``-1`` 은 「수치 없음」 (링크 몬스터의 수비력) 이다. 🔴 **둘 다 0 이
+#: 아니다** — 0 으로 바꿔 싣지 않는다.
+_STAT_UNKNOWN = -2
+_STAT_NONE = -1
+
+
+def _stat(value) -> "int | str | None":
+    """공격력 · 수비력 한 칸. 모르는 값은 ``"?"``, 없는 값은 ``None``."""
+    if not isinstance(value, int):
+        return None
+    if value == _STAT_UNKNOWN:
+        return "?"
+    if value == _STAT_NONE:
+        return None
+    return value
+
+
+def _put_detail(entry: dict, found) -> None:
+    """
+    카드 확대 화면이 읽는 값들 (Phase 6-AW).
+
+    🔴 **저장소가 읽은 것만 싣는다.** 효과 텍스트가 없으면 ``desc`` 칸이
+    아예 없고, 화면은 "효과 텍스트 미기록" 이라고 적는다 — 지어내지 않는다.
+    """
+    desc = getattr(found, "desc", "") or ""
+    if desc.strip():
+        entry["desc"] = desc.strip()
+    for key, value in (("attribute_ko", getattr(found, "attribute_ko", None)),
+                       ("race_ko", getattr(found, "race_ko", None))):
+        if value:
+            entry[key] = value
+    if not getattr(found, "is_monster", False):
+        return
+    atk = _stat(getattr(found, "atk", None))
+    if atk is not None:
+        entry["atk"] = atk
+    link_rating = getattr(found, "link_rating", None)
+    if link_rating:
+        entry["link"] = link_rating
+        markers = list(getattr(found, "link_markers", ()) or ())
+        if markers:
+            entry["link_markers"] = markers
+        return
+    #: 🔴 링크 몬스터는 수비력도 레벨도 없다 — 위에서 돌아갔다.
+    defense = _stat(getattr(found, "defense", None))
+    if defense is not None:
+        entry["def"] = defense
+    level = getattr(found, "monster_level", None)
+    if level:
+        entry["rank" if getattr(found, "is_xyz", False) else "level"] = level
+
+
 def _card_table(rows, repository=None, tokens=()) -> dict:
     """
     개체 번호 → 카드. 🔴 **같은 이름의 두 장이 다른 열쇠를 갖는다.**
@@ -201,6 +260,11 @@ def _card_table(rows, repository=None, tokens=()) -> dict:
                 entry["kind"] = kind
             if found.type_ko:
                 entry["type_ko"] = found.type_ko
+            #: 🔴 **확대 화면이 읽는 값들** (Phase 6-AW). 카드를 눌렀을 때
+            #: 한국어 이름 · 효과 텍스트 · 수치를 보여 준다. 저장소가 읽은
+            #: 것만 싣는다 — 없는 값은 칸 자체가 없고, 읽는 쪽이 그것을
+            #: "미기록" 으로 적는다 (0 이나 빈 글자로 채우지 않는다).
+            _put_detail(entry, found)
         table[key] = entry
 
     for seat, _zone, instance, card_id in rows:
