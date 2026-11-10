@@ -555,8 +555,9 @@ def test_f03_no_replay_link_is_promised(repository):
         line_text=LONGIRSU_LINE,
     )
     summary = "\n".join(response.messages)
-    assert "전개 보기: 아직 없습니다" in summary
-    assert "엔진 실행은 정상" in summary
+    #: 🔴 **정정 (Phase 6-AS).** 이 줄은 *외부 재생 지원 여부*만 말한다 —
+    #: 엔진 실행 상태를 함께 단정하던 문구는 뺐다 (``test_g04``).
+    assert "전개 보기: 시각 재생은 아직 지원하지 않습니다" in summary
     assert "duel-simulator" not in summary
     assert "http" not in summary
 
@@ -572,5 +573,254 @@ def test_f04_a_failed_export_does_not_erase_the_run():
 
     report = bot.OpeningReport(brief=("요약",), detail=("상세",), ran=True,
                                replay=None)
-    assert bot.replay_attachment(report.replay) is None
+    item, state = bot.replay_attachment(report.replay)
+    assert item is None
+    assert state is bot.ReplayState.NOT_RUN
     assert report.brief and report.detail
+
+
+# ======================================================================
+# G. 상태 표시의 갈래 — 🔴 **합성 기록**으로 잰다 (듀얼을 돌리지 않는다)
+# ======================================================================
+from deck.opening import ExecutedStep, OpeningRun, OpeningSetup  # noqa: E402
+from deck.report import render_opening_headline  # noqa: E402
+
+
+class _FakeCard:
+    def __init__(self, card_id: int):
+        self.card_id = card_id
+
+
+class _FakePlayer:
+    def __init__(self, zones):
+        self._zones = zones
+
+    def zone(self, zone):
+        return self._zones.get(zone, [])
+
+
+class _FakeTurn:
+    turn_number = 1
+
+
+class _FakeState:
+    def __init__(self, zones):
+        self._player = _FakePlayer(zones)
+        self.turn = _FakeTurn()
+        self.summon_limits = None
+
+    def player(self, index: int):
+        return self._player
+
+
+class _FakeDuel:
+    def __init__(self, zones):
+        self.state = _FakeState(zones)
+
+
+class _FakeLine:
+    def __init__(self, name: str, steps: int):
+        self.name = name
+        self.steps = tuple(range(steps))
+        self.title_ko = "합성 경로"
+        self.resolution_preferences = ()
+
+
+class _FakeProgress:
+    def __init__(self, line, done: int, *, blocked_at=None, reason=""):
+        self.line = line
+        self.done = done
+        self.blocked_at = blocked_at
+        self.reason = reason
+
+    @property
+    def completed(self) -> bool:
+        return self.done == len(self.line.steps)
+
+
+def _fake_setup(zones=None, *, blockers=()) -> OpeningSetup:
+    from engine.vocabulary import Zone
+
+    made = OpeningSetup()
+    made.duel = None if zones is None else _FakeDuel(
+        {getattr(Zone, name): [_FakeCard(c) for c in ids]
+         for name, ids in (zones or {}).items()}
+    )
+    made.blockers = list(blockers)
+    return made
+
+
+def _fake_step(order: int, kind: str, **over) -> ExecutedStep:
+    spec = dict(
+        order=order, actor=0, kind=kind, card_id=None, card_name="—",
+        effect_ref=None, targets=(), gate_code="OK", accepted=True,
+        step_code="OK", reason="(합성 기록)", chain_links_after=0,
+        chain_resolved_after=0, resolved=True, state_changed=True,
+        effect_events=(), next_candidates=0,
+    )
+    spec.update(over)
+    return ExecutedStep(**spec)
+
+
+def _fake_run(steps=(), **over) -> OpeningRun:
+    made = OpeningRun(setup=OpeningSetup())
+    made.steps = list(steps)
+    for key, value in over.items():
+        setattr(made, key, value)
+    return made
+
+
+def test_g01_a_completed_line_says_so():
+    """고정 경로 **완료** — 완료 표시와 "끝까지 밟았다" 가 함께 있다."""
+    line = _FakeLine("synthetic-line", 3)
+    said = render_opening_headline(
+        _fake_setup({"MZONE": [1]}),
+        _fake_run([_fake_step(1, "normal_summon")]),
+        line=line, progress=_FakeProgress(line, 3),
+    )
+    assert "✅ **전개 완료**" in said
+    assert "(3/3단계)" in said
+    assert "끝까지 밟았다는 뜻" in said
+    assert "밟지 못했습니다" not in said
+
+
+def test_g02_a_stopped_line_never_says_it_was_completed():
+    """
+    🔴 **이 보완의 본문 하나** — 고정 경로가 **중단**되었는데 완료를
+    암시하는 문장이 붙던 자리다 (6-AR 의 결함).
+    """
+    line = _FakeLine("synthetic-line", 6)
+    said = render_opening_headline(
+        _fake_setup({"MZONE": [1]}),
+        _fake_run([_fake_step(1, "normal_summon")]),
+        line=line, progress=_FakeProgress(line, 2, reason="합성 사유"),
+    )
+    assert "⏹ **중단**" in said
+    assert "(2/6단계)" in said
+    #: 🔴 완료를 암시하는 문장이 **하나도** 없다.
+    assert "끝까지 밟았다" not in said
+    assert "전개 완료" not in said
+    assert "✅" not in said
+    #: 그리고 **짧다** — 긴 경고를 늘리지 않았다.
+    assert "경로를 끝까지 밟지 못했습니다" in said
+    assert len(said.splitlines()) <= 9
+
+
+def test_g03_a_run_that_did_not_start_says_only_that():
+    """입력 검증으로 **실행하지 않음** — 걸음 수도 성공 표시도 없다."""
+    said = render_opening_headline(
+        _fake_setup(None, blockers=["합성 차단"]),
+        _fake_run(),
+    )
+    assert "실행하지 않았습니다" in said
+    assert "전개 완료" not in said
+    assert "끝까지" not in said
+    assert "합성 차단" in said
+
+
+def test_g04_the_external_notice_says_nothing_about_the_engine():
+    """
+    🔴 **외부 재생 지원 여부와 엔진 실행 상태는 서로 독립이다** (6-AS).
+
+    전에는 이 줄에 "엔진 실행은 정상입니다" 가 고정되어 있었고, 중단된
+    실행에도 같은 문장이 붙었다.
+    """
+    import app.discord_bot as bot
+
+    notice = bot.COMBO_REPLAY_VIEW_UNAVAILABLE
+    assert "시각 재생은 아직 지원하지 않습니다" in notice
+    for forbidden in ("정상", "성공", "완료", "실패", "중단"):
+        assert forbidden not in notice, forbidden
+    #: 🔴 고정된 예제 링크도 없다.
+    assert "http" not in notice
+
+
+def test_g05_every_replay_state_keeps_the_run_visible():
+    """
+    다섯 갈래가 **서로 다른 한 줄**을 갖고, 어느 줄도 실행 결과를 지우지
+    않는다.
+    """
+    import app.discord_bot as bot
+
+    states = bot.ReplayState
+    #: 내보낼 것이 없거나 성공한 자리는 **덧붙이는 말이 없다**.
+    assert states.NOT_RUN.notice == ""
+    assert states.EXPORTED.notice == ""
+    failures = (states.BUILD_FAILED, states.SERIALIZE_FAILED,
+                states.TOO_LARGE, states.NO_ROOM)
+    said = [state.notice for state in failures]
+    assert all(said), "실패 갈래는 모두 한 줄을 갖는다"
+    assert len(set(said)) == len(said), "갈래마다 다른 문장이다"
+    for line in said:
+        assert "실행 요약과 상세 기록은" in line
+
+
+def test_g06_a_serialization_failure_is_its_own_state():
+    """직렬화가 터지면 ``SERIALIZE_FAILED`` 다 — 크기 초과와 다르다."""
+    import app.discord_bot as bot
+
+    class _Unserializable:
+        pass
+
+    item, state = bot.replay_attachment({"format": "x", "bad": _Unserializable()})
+    assert item is None
+    assert state is bot.ReplayState.SERIALIZE_FAILED
+
+
+def test_g07_an_oversized_record_is_its_own_state(monkeypatch):
+    """크기 상한을 넘으면 ``TOO_LARGE`` 다 — 🔴 **나누지 않는다**."""
+    import app.discord_bot as bot
+
+    monkeypatch.setattr(bot, "COMBO_ATTACHMENT_LIMIT", 64)
+    item, state = bot.replay_attachment({"format": "x", "pad": "가" * 200})
+    assert item is None
+    assert state is bot.ReplayState.TOO_LARGE
+
+
+def test_g08_nothing_to_export_is_not_a_failure():
+    """기록이 없으면 ``NOT_RUN`` 이고, 사용자에게 적을 말이 없다."""
+    import app.discord_bot as bot
+
+    item, state = bot.replay_attachment(None)
+    assert item is None
+    assert state is bot.ReplayState.NOT_RUN
+    assert state.notice == ""
+
+
+@requires_official_db
+@pytest.mark.real_card
+def test_g09_a_build_failure_is_reported_and_keeps_the_run(repository, monkeypatch):
+    """
+    🔴 **생성 자체가 실패해도 안내가 남는다** (6-AR 의 결함: ``replay`` 가
+    있을 때만 안내를 적어서 **아무 말도 남지 않았다**).
+    """
+    import app.discord_bot as bot
+    import deck.replay_export as export
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("합성 실패")
+
+    monkeypatch.setattr(export, "export_opening_replay", _boom)
+
+    class _Agent:
+        def __init__(self, repo):
+            self.repository = repo
+
+    response = bot.combo_response(
+        _Agent(repository),
+        ",".join(str(card) for card in COMBO_LINES[LONGIRSU_LINE].hand),
+        recipe_text=ORCUST_VERIFICATION_RECIPE,
+        line_text=LONGIRSU_LINE,
+    )
+    summary = "\n".join(response.messages)
+    #: ① 원인 한 줄이 있다.
+    assert "전개 기록을 만들지 못했습니다" in summary
+    #: ② 🔴 실행 결과와 상세 기록은 그대로다.
+    assert "전개 완료" in summary
+    assert bot.COMBO_DETAIL_FILENAME in [
+        item.filename for item in response.attachments
+    ]
+    #: ③ 전개 기록 첨부만 빠졌다.
+    assert bot.COMBO_REPLAY_FILENAME not in [
+        item.filename for item in response.attachments
+    ]
