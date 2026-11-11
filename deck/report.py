@@ -2090,3 +2090,175 @@ def render_multi_search(outcome, repository=None, setup=None,
         for note in notes:
             lines.append(f"    - {note}")
     return "\n".join(lines)
+
+
+# ======================================================================
+# 자율 전개 탐색 — 목표 카드를 지정하지 않은 결과 (Phase 6-BB)
+# ======================================================================
+#: 🔴 **자율 탐색임을 제목이 말한다.** 사람이 적어 둔 고정 경로를 돌린
+#: 결과와 한눈에 갈려야 한다 (§7).
+OPEN_SEARCH_TITLE: str = "자율 전개 탐색 — 🔴 목표 카드를 지정하지 않았습니다"
+
+_OPEN_DISCLAIMER: str = (
+    "🔴 **전역 최적 전개가 아닙니다** — 예산(깊이 · 노드 · 시간 · 선택 분기 ·"
+    " 후보 수) 안에서 찾은 것들의 비교이고, 고정 경로도 영상 수순도 쓰지"
+    " 않았습니다."
+)
+
+_OPEN_FIXED_NOTE: str = (
+    "🔴 **아직 고정되어 있는 것**: 해결 중 선택은 탐색이 분기하지만"
+    " (`max_choice_branches`), 분기 상한을 넘는 대안은 **첫 허용 후보**로"
+    " 고정됩니다 — 그 자리가 남아 있으면 위의 '해결 중 선택' 줄이 몇 곳인지"
+    " 적습니다."
+)
+
+
+def _open_ranking_lines(ranking, repository=None) -> "list[str]":
+    """
+    자율 탐색의 **추천 절**. ``ranking`` 이 없으면 한 줄도 붙지 않는다.
+
+    🔴 **점수 하나로 합치지 않는다** — 축마다 센 값과 그 값이 증명하지
+    않는 것을 함께 적는다.
+    """
+    if ranking is None:
+        return []
+    lines = ["", f"  추천 (평가 {ranking.policy_label})"]
+    lines.append(f"    {_OPEN_DISCLAIMER}")
+    if ranking.note:
+        lines.append(f"    {ranking.note}")
+    best = ranking.recommended
+    if not best:
+        lines.append("    🔴 **추천할 후보가 없습니다** — 검증된 결과가"
+                     " 없거나 평가에 필요한 값을 읽지 못했습니다.")
+    for one in best:
+        lines.append(f"    ★ 결과 {one.index} — {ranking.reason_ko(one.index)}")
+    if len(best) >= 2:
+        lines.append("    🔴 **공동 추천입니다** — 세 축이 서로 주고받아"
+                     " 하나로 줄이지 않았습니다.")
+    others = [one for one in ranking.candidates
+              if one.eligible and not one.recommended]
+    for one in sorted(others, key=lambda c: (c.order, c.index))[:4]:
+        lines.append(f"    · 결과 {one.index} — {ranking.reason_ko(one.index)}")
+    skipped = [one for one in ranking.candidates if not one.eligible]
+    if skipped:
+        lines.append(f"    비교에서 빠진 결과 {len(skipped)}개 — 🔴 **경로는"
+                     " 그대로 남아 있습니다** (상세 기록에 사유가 있습니다).")
+    lines.append("    이 평가가 판정하지 않는 것:")
+    for note in ranking.unjudged:
+        lines.append(f"      · {note}")
+    return lines
+
+
+def render_open_search_brief(outcome, repository=None, ranking=None) -> str:
+    """
+    **자율 탐색의 기본 응답용 요약** (Phase 6-BB).
+
+    🔴 **판정하지 않는다** — 이미 끝난 탐색 결과만 읽고 엔진을 다시 돌리지
+    않는다. ``agent`` 를 import 하지 않고 결과의 **모양만** 읽는다.
+    """
+    lines = ["", OPEN_SEARCH_TITLE, _RULE]
+    lines.extend(_multi_head(outcome))
+    lines.append(f"  {_SEARCH_DISCLAIMER}")
+    lines.extend(_open_ranking_lines(ranking, repository))
+    shown = outcome.verified_results or outcome.results
+    lines.append("")
+    if not outcome.results:
+        lines.append("  찾은 결과가 없습니다 — 🔴 **이 패로 불가능하다는"
+                     " 뜻이 아닙니다.**")
+        return "\n".join(lines)
+    if not outcome.verified_results:
+        lines.append("  🔴 **검증된 결과가 없습니다** — 아래는 재생으로"
+                     " 뒷받침되지 않은 결과입니다.")
+    for result in shown:
+        lines.append("")
+        lines.append(f"  [결과 {result.index}]"
+                     + (f" (같은 결과에 닿은 다른 경로"
+                        f" {result.duplicates}개)" if result.duplicates
+                        else ""))
+        for step in result.path:
+            picked = " · ".join(
+                _card_ko(card_id, repository)
+                for ask in step.choices
+                for card_id in ask.chosen_card_ids
+            )
+            tail = f" (해결 중 선택 {picked})" if picked else ""
+            lines.append(f"    {step.order}. {_kind_ko(step.kind)}{tail}")
+        for label, value in _result_rows(result, repository):
+            lines.append(f"    {label}: {value}")
+    lines.append("")
+    lines.append(f"  {_OPEN_FIXED_NOTE}")
+    return "\n".join(lines)
+
+
+def render_open_search(outcome, repository=None, setup=None,
+                       ranking=None) -> str:
+    """
+    **자율 탐색의 상세 기록** — 후보 전부와 빠진 사유까지 (Phase 6-BB).
+    """
+    lines = ["", OPEN_SEARCH_TITLE + " (상세)", _RULE]
+    lines.extend(_multi_head(outcome))
+    if setup is not None:
+        lines.append("  입력 — 지정 패: " + " · ".join(
+            _card_ko(card_id, repository) for card_id in setup.hand))
+        lines.append(f"    남은 메인 덱 {len(setup.deck_rest)}장 ·"
+                     f" 엑스트라 {len(setup.extra)}장")
+        for note in setup.unknowns:
+            lines.append(f"    🔴 {note}")
+    lines.append(f"  예산: {outcome.budget.describe_ko()}")
+    lines.append(f"  해결 중 선택 — 만든 분기 {outcome.choice_branches}개 ·"
+                 f" 실제로 돌린 각본 {outcome.choice_plans}개 · 확인하지 못한"
+                 f" 대안이 남은 물음 {outcome.choice_offers_truncated}곳")
+    lines.append(f"  {_SEARCH_DISCLAIMER}")
+    lines.extend(_open_ranking_lines(ranking, repository))
+
+    lines.append("")
+    lines.append("  모은 후보 전부")
+    for result in outcome.results:
+        state = getattr(result.rerun_state, "value", str(result.rerun_state))
+        lines.append("")
+        lines.append(f"  [결과 {result.index}] 재생 {state}"
+                     + (f" · 같은 결과에 닿은 다른 경로 {result.duplicates}개"
+                        if result.duplicates else ""))
+        for step in result.path:
+            picked = " · ".join(
+                _card_ko(card_id, repository)
+                for ask in step.choices
+                for card_id in ask.chosen_card_ids
+            )
+            tail = f" (해결 중 선택 {picked})" if picked else ""
+            lines.append(f"    {step.order}. {_kind_ko(step.kind)}{tail}")
+        for label, value in _result_rows(result, repository):
+            lines.append(f"    {label}: {value}")
+        if ranking is not None:
+            lines.append(f"    평가: {ranking.reason_ko(result.index)}")
+
+    if outcome.unsupported:
+        lines.append("")
+        lines.append("  지원하지 않아 **후보가 되지 못한 수** (🔴 규칙상"
+                     " 불가능하다는 뜻이 아닙니다)")
+        for line in outcome.unsupported:
+            lines.append(f"    · {line}")
+    for label, rows in (
+        ("이번 범위 밖이라 펼치지 않은 수", outcome.out_of_scope),
+        ("상대 자리 때문에 더 펼치지 않은 자리", outcome.opponent_blocked),
+        ("실행 중 난 예외", outcome.errors),
+    ):
+        if not rows:
+            continue
+        lines.append("")
+        lines.append(f"  {label}")
+        for line in rows:
+            lines.append(f"    · {line}")
+    if getattr(outcome, "followup_notes", ()):
+        lines.append("")
+        lines.append("  후속 탐색이 멈춘 자리")
+        for line in outcome.followup_notes:
+            lines.append(f"    · {line}")
+    if getattr(outcome, "rerun_notes", ()):
+        lines.append("")
+        lines.append("  재생 기록")
+        for line in outcome.rerun_notes:
+            lines.append(f"    · {line}")
+    lines.append("")
+    lines.append(f"  {_OPEN_FIXED_NOTE}")
+    return "\n".join(lines)

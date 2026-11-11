@@ -1276,9 +1276,23 @@ def test_e15_production_never_says_replay():
 
     이 저장소의 말로 이것은 **재실행**이고, ``ChainResolution`` 직렬화
     재생이 없다는 증명이 그 단어의 부재다.
+
+    🔴 **정정 (Phase 6-BB).** 6-AR 이 **전개 기록 내보내기 모듈**
+    ``deck.replay_export`` 를 더하면서 그 모듈 **이름**이 세 파일에
+    들어왔다 (``deck/report.py`` 는 6-AR 부터, ``app/main.py`` 는 6-BB
+    부터). 그 이름은 `` ChainResolution`` 직렬화 재생이 아니라 **외부
+    연동용 기록 형식**(``engine-replay/N``) 을 가리킨다. 그래서 감사가
+    막으려던 것 — **재실행을 재생이라고 부르는 식별자** — 만 남기고,
+    그 모듈 이름은 예외로 둔다. 🔴 예외를 늘리지 않는다: 아래 목록에
+    없는 ``replay`` 는 그대로 실패다.
     """
     import pathlib
+    import re
 
+    #: 🔴 **이름 그대로만 허용한다** — ``replay_viewer`` 같은 다른 이름을
+    #: 조용히 통과시키지 않는다.
+    allowed = re.compile(r"deck\.replay_export|export_opening_replay")
     for path in ("agent/bounded_search.py", "deck/report.py", "app/main.py"):
         text = pathlib.Path(path).read_text(encoding="utf-8")
-        assert "replay" not in text, path
+        left = allowed.sub("", text)
+        assert "replay" not in left, path

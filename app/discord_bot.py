@@ -924,7 +924,9 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
     않은 모드로 조용히 바꾸지 않는다.
     """
     from app.main import (
+        AUTONOMOUS_SEARCH_NAME, autonomous_search_opening,
         bounded_search_many_opening, bounded_search_opening,
+        is_autonomous_search, rank_autonomous_results,
         rank_search_results, search_followup_count, search_goal_card_id,
         search_result_count,
     )
@@ -932,20 +934,24 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
     from deck.report import (
         render_bounded_search, render_bounded_search_brief,
         render_multi_search, render_multi_search_brief,
+        render_open_search, render_open_search_brief,
     )
 
     if not search_text or not search_text.strip():
         return None
 
-    head = ["**[제한 전개 탐색]**"]
-    card_id = search_goal_card_id(search_text)
-    if card_id is None:
+    #: 🔴 **자율 탐색과 고정 목표 탐색을 제목부터 가른다** (Phase 6-BB §7).
+    autonomous = is_autonomous_search(search_text)
+    head = ["**[자율 전개 탐색]**" if autonomous else "**[제한 전개 탐색]**"]
+    card_id = None if autonomous else search_goal_card_id(search_text)
+    if card_id is None and not autonomous:
         from app.main import SEARCH_GOALS
 
         names = " · ".join(f"`{name}`" for name in sorted(SEARCH_GOALS))
         said = tuple(head + [
             f"🔴 **하지 않았습니다** — `search:{search_text}` 라는 목표가"
-            f" 없습니다. 있는 목표: {names}",
+            f" 없습니다. 있는 목표: {names}"
+            f" · 목표 없이 돌리려면 `search:{AUTONOMOUS_SEARCH_NAME}`",
             "🔴 비슷한 목표를 골라 주지 않습니다 — 사용자가 고르지 않은"
             " 목표로 찾은 경로를 보여 주면 그것이 자기 목표인 줄로"
             " 읽힙니다.",
@@ -982,6 +988,44 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
             " 않았습니다.**",
         ])
         return OpeningReport(brief=said, detail=said, refused=False, ran=False)
+
+    if autonomous:
+        #: 🔴 **고정 경로 정책을 부르지 않는다** — ``ComboLine`` 도
+        #: ``line:`` 도 이 길에 들어오지 않는다 (``autonomous_search_opening``
+        #: 이 ``opening_wiring(repository, None)`` 을 쓴다).
+        actions, why_actions = search_followup_count(followups_text)
+        if actions is None:
+            said = tuple(head + [
+                f"🔴 **탐색하지 않았습니다** — `followups:{followups_text}`"
+                f" 를 행동 수로 읽지 못했습니다. {why_actions}",
+            ])
+            return OpeningReport(brief=said, detail=said, refused=False,
+                                 ran=False)
+        setup, found = autonomous_search_opening(
+            agent.repository, parsed.draft, hand_ids,
+            max_results=max(2, wanted),
+            **({"actions": actions} if actions else {}),
+        )
+        if found is None:
+            said = tuple(head + [
+                "🔴 **탐색하지 않았습니다** — 입력 검증을 통과하지"
+                " 못했습니다 (위 `[실제 엔진 실행]` 절에 이유가 있습니다).",
+            ])
+            return OpeningReport(brief=said, detail=said,
+                                 refused=not setup.can_run, ran=False)
+        ranking = rank_autonomous_results(found)
+        brief = list(head)
+        brief.extend(
+            render_open_search_brief(found, agent.repository,
+                                     ranking).splitlines()
+        )
+        detail = list(head)
+        detail.extend(
+            render_open_search(found, agent.repository, setup,
+                               ranking).splitlines()
+        )
+        return OpeningReport(brief=tuple(brief), detail=tuple(detail),
+                             refused=False, ran=True)
 
     if extra and wanted <= 1:
         #: 🔴 **조용히 켜 주지 않는다** — 후속 모드는 복수 결과 탐색의
@@ -1552,6 +1596,71 @@ def _default_register(agent, owner, image_bytes, image_name, recipe_text,
         repository=getattr(agent, "repository", None), confirms=confirms)
 
 
+#: ``/share-replay line:`` 에 적으면 **자율 탐색이 고른 전개**를 공유한다
+#: (Phase 6-BB §5). 🔴 ``/combo search:auto`` 와 **같은 이름**이다.
+AUTONOMOUS_LINE_NAME: str = "auto"
+
+
+def _run_autonomous_share(agent, recipe_text: str,
+                          hand_ids: "list[int]") -> OpeningReport:
+    """
+    **자율 탐색이 고른 전개 하나**를 공유용 기록으로 만든다 (Phase 6-BB §5).
+
+    🔴 **탐색 기록을 그대로 내보내지 않는다.** 추천 결과의 경로를 새 초기
+    상태에서 **다시 실행해** 그 한 번의 기록을 쓴다 — 여러 분기의 사건을
+    한 경로처럼 합치지 않는다.
+
+    🔴 **재실행이 어긋나면 기록을 만들지 않는다** — 그때는 공유도 하지
+    않는다 (부르는 쪽이 ``replay`` 가 없는 것을 본다).
+    """
+    from app.main import (
+        autonomous_rerun_record, autonomous_search_opening,
+        rank_autonomous_results,
+    )
+    from deck.recipe import parse_recipe
+    from deck.report import render_open_search_brief
+
+    head = ["**[자율 전개 탐색]**"]
+    parsed = parse_recipe(recipe_text, agent.repository)
+    if parsed.draft is None:
+        said = tuple(head + ["🔴 레시피에서 카드를 하나도 읽지 못해 **탐색하지"
+                             " 않았습니다.**"])
+        return OpeningReport(brief=said, detail=said, ran=False)
+    setup, found = autonomous_search_opening(
+        agent.repository, parsed.draft, list(hand_ids)
+    )
+    if found is None:
+        said = tuple(head + ["🔴 **탐색하지 않았습니다** — 입력 검증을"
+                             " 통과하지 못했습니다."])
+        return OpeningReport(brief=said, detail=said,
+                             refused=not setup.can_run, ran=False)
+    ranking = rank_autonomous_results(found)
+    lines = list(head)
+    lines.extend(render_open_search_brief(found, agent.repository,
+                                          ranking).splitlines())
+    best = ranking.recommended if ranking is not None else ()
+    if not best:
+        lines.append("🔴 **공유할 전개를 고르지 못했습니다** — 검증된 추천"
+                     " 후보가 없습니다.")
+        return OpeningReport(brief=tuple(lines), detail=tuple(lines),
+                             ran=True)
+    chosen = next(result for result in found.results
+                  if result.index == best[0].index)
+    record, why = autonomous_rerun_record(
+        agent.repository, parsed.draft, list(hand_ids), chosen
+    )
+    if record is None:
+        lines.append(f"🔴 **다시 실행한 기록을 만들지 못했습니다** — {why}")
+        lines.append("🔴 그래서 **공유하지 않습니다** — 어긋난 재실행을 성공"
+                     " 리플레이로 내보내지 않습니다.")
+        return OpeningReport(brief=tuple(lines), detail=tuple(lines),
+                             ran=True)
+    lines.append(f"🧭 자율 탐색이 고른 **결과 {chosen.index}** 를 새 초기"
+                 " 상태에서 다시 실행해 기록을 만들었습니다.")
+    return OpeningReport(brief=tuple(lines), detail=tuple(lines), ran=True,
+                         replay=record)
+
+
 def share_replay_response(agent, hand_text: str, recipe_text: str = "",
                           line_text: str = "", title: str = "",
                           registration_id: str = "", owner: str = "local",
@@ -1636,8 +1745,16 @@ def share_replay_response(agent, hand_text: str, recipe_text: str = "",
                      " 외부 공유는 실행 기록 하나를 그대로 옮기는 기능입니다."
                      " 등록해 둔 덱이면 `registration` 만 줘도 됩니다.")
         return lines
-    report = _run_opening(agent, recipe_text, list(hand_ids), line_text)
+    #: 🔴 **고정 경로와 자율 탐색을 사용자가 고른다** (Phase 6-BB §7).
+    #: ``line:auto`` 면 적어 둔 경로를 쓰지 않는다.
+    if (line_text or "").strip().lower() == AUTONOMOUS_LINE_NAME:
+        lines.append("🧭 **자율 탐색 모드** — 적어 둔 고정 경로를 쓰지 않고"
+                     " 엔진이 허가한 분기에서 고릅니다 (1~3분).")
+        report = _run_autonomous_share(agent, recipe_text, list(hand_ids))
+    else:
+        report = _run_opening(agent, recipe_text, list(hand_ids), line_text)
     if not report.ran or not report.replay:
+        lines.extend(report.brief[1:] if report.ran else ())
         lines.append(ShareState.NO_RECORD.notice)
         return lines
     outcome = use.share(report.replay, title=title or "galatea opening line",
@@ -2387,13 +2504,15 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
                " 예: 욕망의 항아리 x3, 11091375 x37 / 또는 YDK",
         line="(선택) 검증용 전개 경로 이름 — 적어 둔 경로를 따라 실행합니다."
              " 예: orcust-girsu",
-        search="(선택) 제한 전개 탐색의 목표 — 적어 둔 경로를 쓰지 않고"
-               " 엔진이 허가한 분기를 펼칩니다. 예: galatea",
+        search="(선택) 전개 탐색 — `auto` 면 **목표 카드 없는 자율 탐색**,"
+               " 카드 이름(예: galatea)이면 그 카드 도달을 목표로 합니다."
+               " 둘 다 적어 둔 고정 경로를 쓰지 않습니다",
         results="(선택) 모을 서로 다른 결과 수 (2~5, 기본은 1개) — 주면"
                 " 결과들의 남은 자원을 비교합니다. 강약 평가는 아닙니다",
-        followups="(선택) 목표 도달 뒤 더 탐색할 비흐름 행동 수 (0~3, 기본은"
-                  " 0 = 첫 도달에서 멈춤) — results 2 이상과 함께 주십시오."
-                  " 최선 전개도 최종 집 완성도 아닙니다")
+        followups="(선택) 더 탐색할 비흐름 행동 수 (0~10). 목표 탐색에서는"
+                  " 0 이 기본(첫 도달에서 멈춤)이고 results 2 이상과 함께"
+                  " 주십시오. search:auto 에서는 **전개 전체의 행동 예산**"
+                  " 이고 기본 6 입니다. 최선 전개도 최종 집 완성도 아닙니다")
     async def combo_command(interaction: "discord.Interaction",
                             hand: str, board: str = "",
                             deck: str = "", recipe: str = "",
@@ -2417,7 +2536,8 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         recipe="덱 레시피 — registration 을 주면 **빼도 됩니다** (등록에"
                " 저장된 레시피를 씁니다). 둘 다 주면 같은 덱인지 먼저"
                " 맞춰 봅니다",
-        line="(선택) 검증용 전개 경로 이름",
+        line="(선택) `auto` 면 **자율 탐색이 고른 전개**를, 경로 이름이면"
+             " 그 고정 경로를 공유합니다",
         title="(선택) 공유 리플레이의 제목",
         registration="(선택) 등록해 둔 덱 이미지의 등록 ID — 주면 실제 카드"
                      " 그림으로 돕니다 (/register-deck 로 만듭니다)")

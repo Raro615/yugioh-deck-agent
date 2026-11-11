@@ -121,7 +121,22 @@ DEFAULT_MAX_FOLLOWUP_ACTIONS: int = 0
 FOLLOWUP_DEFAULT_ACTIONS: int = 2
 #: 🔴 **옵션으로 노출할 수 있는 상한.** 기준점마다 분기가 늘어나므로 비용이
 #: 빠르게 커진다 — 크게 열어 두면 예산이 한 기준점에서 소진된다.
-FOLLOWUP_CAP: int = 3
+#:
+#: 🔴 **6-BB 에서 3 → 10 으로 올렸다.** 이유는 하나다: :class:`OpenGoal` 로
+#: 도는 **자율 탐색**은 기준점이 "첫 소환이 정리된 자리" 이므로 **전개의
+#: 거의 전부가 후속 행동**이다. 3 으로 두면 자율 탐색이 세 걸음에서 끊기고,
+#: 그것이 "이 패로 더 갈 수 없다" 로 읽힌다. 🔴 **기본값은 그대로다**
+#: (:data:`FOLLOWUP_DEFAULT_ACTIONS` = 2) — 올린 것은 **고를 수 있는
+#: 상한**뿐이고, 올린 값은 ``budget.describe_ko()`` 에 그대로 보인다.
+FOLLOWUP_CAP: int = 10
+
+#: 탐색이 **내부로 모아 두는 후보 풀**의 상한 (Phase 6-BB).
+#:
+#: 🔴 :attr:`SearchBudget.max_results` 와 **역할이 다르다** — 그쪽은
+#: **사용자에게 제시할** 결과 수이고, 이쪽은 **평가하기 전에 모아 둘** 후보
+#: 수다. 둘을 한 칸에 담으면 깊이 우선 순서로 **먼저 닿은 3개**가 곧 추천이
+#: 되어, 평가가 고를 것이 없다.
+CANDIDATE_CAP: int = 40
 #: 후속 모드에서 **기준점(최초 도달)** 을 몇 개까지 보관할지의 기본값.
 #: 🔴 후속 후보의 상한(:attr:`SearchBudget.max_results`)과 **역할이 다르다**.
 DEFAULT_MAX_BASELINES: int = 1
@@ -215,6 +230,16 @@ class SearchBudget:
     :attr:`PathResult.duplicates` 로 센다.
     """
     max_rerun_seconds: float = DEFAULT_MAX_RERUN_SECONDS
+    max_candidates: int = 0
+    """
+    평가 전에 **모아 둘 후보**의 수 (Phase 6-BB). ``0`` 이면
+    :attr:`max_results` 와 같다 — 🔴 **그때 동작은 6-AL 과 한 글자도 다르지
+    않다.**
+
+    🔴 **제시할 결과 수가 아니다.** 깊이 우선 탐색은 **먼저 닿은** 결과를
+    모으므로, 상한을 제시 수와 같게 두면 평가가 "얕은 것 세 개" 중에서만
+    고르게 된다. 이 칸을 크게 두면 **모은 다음 평가해서** 제시한다.
+    """
     max_followup_actions: int = DEFAULT_MAX_FOLLOWUP_ACTIONS
     """
     목표에 처음 도달한 뒤 **추가로 탐색할 비흐름 행동 수**의 상한
@@ -280,6 +305,15 @@ class SearchBudget:
                 f"(1 이면 단일 결과 모드): {self.max_results!r}"
             )
         if (
+            isinstance(self.max_candidates, bool)
+            or not isinstance(self.max_candidates, int)
+            or not 0 <= self.max_candidates <= CANDIDATE_CAP
+        ):
+            raise BoundedSearchError(
+                f"max_candidates 는 0 이상 {CANDIDATE_CAP} 이하의 정수입니다 "
+                f"(0 이면 max_results 와 같다): {self.max_candidates!r}"
+            )
+        if (
             isinstance(self.max_followup_actions, bool)
             or not isinstance(self.max_followup_actions, int)
             or not 0 <= self.max_followup_actions <= FOLLOWUP_CAP
@@ -319,6 +353,8 @@ class SearchBudget:
             f"깊이 {self.max_depth} · 노드 {self.max_nodes} · "
             f"{self.max_seconds:g}초 · 선택 분기 {self.max_choice_branches}"
             + (f" · 결과 {self.max_results}개" if self.many else "")
+            + (f" · 후보 풀 {self.max_candidates}개"
+               if self.max_candidates else "")
             + (f" · 재생 {self.max_rerun_seconds:g}초" if self.many else "")
             + (f" · 후속 행동 {self.max_followup_actions}회"
                f" · 기준점 {self.max_baselines}개" if self.continues else "")
@@ -391,6 +427,49 @@ class FieldGoal:
             settled=settled,
             reason=reason,
         )
+
+
+class OpenGoal(FieldGoal):
+    """
+    **목표 카드가 없는 탐색 목표** (Phase 6-BB).
+
+    🔴 **어떤 카드에도 도달을 강제하지 않는다.** "자신 필드에 앞면 카드가
+    하나라도 있고 체인과 필수 처리가 정리되었는가" 만 본다 — 그래서 이
+    목표의 "도달" 은 **결정 지점에 왔다**는 뜻이지 전개가 끝났다는 뜻이
+    아니다.
+
+    🔴 **왜 :class:`FieldGoal` 을 물려받는가.** 탐색 고리 · 재생
+    (:func:`rerun_steps`) · 자원 요약이 모두 ``seat`` 와 ``judge`` 만 쓴다.
+    물려받으면 **탐색기를 한 벌 더 만들지 않고** 같은 :class:`BoundedSearch`
+    가 그대로 돈다 — 복사한 탐색기 두 벌이 조용히 갈라지는 일을 막는다.
+    :attr:`card_id` 는 쓰지 않으므로 0 이다.
+
+    🔴 **쓰는 방식이 다르다.** 첫 도달(=첫 결정 지점)이 **기준점**이 되고,
+    전개의 나머지는 전부 **후속 행동**이다. 그래서 자율 탐색은
+    :attr:`SearchBudget.max_followup_actions` 가 사실상의 행동 예산이다.
+    """
+
+    __slots__ = ()
+
+    def describe_ko(self) -> str:
+        return (
+            f"자신(P{self.seat}) 필드에 앞면 카드가 있고 체인과 필수 처리가"
+            " 정리되었다 — 🔴 **목표 카드를 지정하지 않는 자율 탐색**이다"
+        )
+
+    def judge(self, duel: Duel, legal=None) -> GoalVerdict:
+        present = any(face_up for _zone, _card_id, face_up
+                      in own_field(duel, self.seat))
+        settled, why = _is_settled(duel, self.seat, legal)
+        if present and settled:
+            reason = ("자신 필드에 앞면 카드가 있고 판이 정리되었습니다"
+                      " (목표 카드를 지정하지 않았습니다).")
+        elif present:
+            reason = f"자신 필드에 앞면 카드는 있지만 {why}"
+        else:
+            reason = "자신 필드에 앞면 카드가 없습니다."
+        return GoalVerdict(reached=present and settled, present=present,
+                           settled=settled, reason=reason)
 
 
 def _chooser_of(duel: Duel):
@@ -680,6 +759,14 @@ class RerunState(str, Enum):
     """시간이 남지 않아 **시작조차 하지 않았다.** 🔴 위와 다른 사실이다."""
     DISABLED = "disabled"
     """``rerun=False`` 로 재생을 **명시적으로 끄고** 돌렸다."""
+    NOT_SELECTED = "not_selected"
+    """
+    **평가 순위 밖이라 재생하지 않았다** (Phase 6-BB).
+
+    🔴 **시간이 없어 못 한 것도, 꺼서 안 한 것도 아니다.** 후보 풀을 크게
+    모으고 상위만 재생할 때, 나머지가 "검증 실패" 로 읽히지 않게 가른다 —
+    경로 자체는 그대로 남는다.
+    """
 
     @property
     def ran(self) -> bool:
@@ -849,6 +936,13 @@ class PathResult:
     rerun: "RerunResult | None" = None
     resources_match: bool = False
     """재생된 상태의 자원 요약이 탐색이 적어 둔 것과 **같은가.**"""
+    rerun_skipped: bool = False
+    """
+    **평가 순위 밖이라** 재생하지 않았는가 (Phase 6-BB).
+
+    🔴 ``rerun_disabled`` 와 다른 사실이다 — 그쪽은 사용자가 재생을 껐다는
+    뜻이고, 이쪽은 재생은 켰지만 **이 후보가 상위에 들지 못했다**는 뜻이다.
+    """
     rerun_disabled: bool = False
     """
     재생을 **명시적으로 끄고** 돌렸는가 (``rerun=False``, Phase 6-AJ §C).
@@ -897,10 +991,11 @@ class PathResult:
         어긋날 수 있다.
         """
         if self.rerun is None:
-            return (
-                RerunState.DISABLED if self.rerun_disabled
-                else RerunState.NOT_STARTED
-            )
+            if self.rerun_disabled:
+                return RerunState.DISABLED
+            if self.rerun_skipped:
+                return RerunState.NOT_SELECTED
+            return RerunState.NOT_STARTED
         if self.rerun.timed_out:
             return RerunState.TIMED_OUT
         if self.rerun.error_type:
@@ -950,11 +1045,14 @@ class ResultTally:
     timed_out: int = 0
     not_started: int = 0
     disabled: int = 0
+    not_selected: int = 0
+    """🔴 **평가 순위 밖이라** 재생하지 않은 결과 수 (Phase 6-BB)."""
 
     @property
     def total(self) -> int:
         return (self.verified + self.mismatched + self.errored
-                + self.timed_out + self.not_started + self.disabled)
+                + self.timed_out + self.not_started + self.disabled
+                + self.not_selected)
 
     @property
     def ran(self) -> int:
@@ -964,7 +1062,8 @@ class ResultTally:
     @property
     def incomplete(self) -> int:
         """재생을 **마치지 못한** 결과 수 (시간 초과 · 미시작 · 끔)."""
-        return self.timed_out + self.not_started + self.disabled
+        return (self.timed_out + self.not_started + self.disabled
+                + self.not_selected)
 
     def describe_ko(self) -> str:
         return (
@@ -1081,6 +1180,11 @@ class MultiSearchOutcome:
         return self.results_in(RerunState.NOT_STARTED)
 
     @property
+    def not_selected_results(self) -> "tuple[PathResult, ...]":
+        """**평가 순위 밖이라** 재생하지 않은 결과들 (Phase 6-BB)."""
+        return self.results_in(RerunState.NOT_SELECTED)
+
+    @property
     def disabled_results(self) -> "tuple[PathResult, ...]":
         """``rerun=False`` 로 **끄고** 돌린 것."""
         return self.results_in(RerunState.DISABLED)
@@ -1133,6 +1237,7 @@ class MultiSearchOutcome:
             timed_out=counts[RerunState.TIMED_OUT],
             not_started=counts[RerunState.NOT_STARTED],
             disabled=counts[RerunState.DISABLED],
+            not_selected=counts[RerunState.NOT_SELECTED],
         )
 
     @property
@@ -1293,6 +1398,23 @@ class ResourceSummary:
     uses: "tuple[UseRecord, ...]"
     normal_summon_used: bool
     """그 자리의 **일반 소환권**을 이 턴에 썼는가 (세트와 함께 쓰는 권리다)."""
+    limits: "tuple[tuple[int, str, int], ...]" = ()
+    """
+    지금 걸려 있는 **특수 소환 제한** ``(좌석, 속성, 출처 카드)``
+    (Phase 6-BB).
+
+    🔴 **판정하지 않는다.** 엔진의 ``summon_limits`` 표를 그대로 읽는다.
+    표가 없으면 빈 tuple 이고, 그것은 "제한 없음" 이 아니라 **이 실행이 그
+    표를 들고 있지 않다**는 뜻이다. 🔴 ``deck.opening._limit_snapshot`` 과
+    **같은 표**를 읽는다 — 두 벌로 두면 조용히 갈라진다.
+    """
+
+    @property
+    def own_limits(self) -> "tuple[tuple[str, int], ...]":
+        """**내 자리에 걸린** 특수 소환 제한 ``(속성, 출처 카드)``."""
+        return tuple((attribute, source)
+                     for seat, attribute, source in self.limits
+                     if seat == self.seat)
 
     def zone(self, seat: int, zone) -> "ZoneSummary | None":
         wanted = zone.value if hasattr(zone, "value") else str(zone)
@@ -1469,7 +1591,25 @@ def summarize_resources(duel: Duel, seat: int) -> ResourceSummary:
         normal_summon_used=state.rule_uses.used(
             turn_number, seat, RuleActionKind.NORMAL_SUMMON
         ),
+        limits=_summon_limits(state),
     )
+
+
+def _summon_limits(state) -> "tuple[tuple[int, str, int], ...]":
+    """
+    지금 걸려 있는 특수 소환 제한을 값으로 (Phase 6-BB).
+
+    🔴 ``deck.opening._limit_snapshot`` 과 **같은 표**를 같은 방식으로 읽는다
+    — 전개 기록과 자원 요약이 다른 말을 하지 않게.
+    """
+    limits = getattr(state, "summon_limits", None)
+    if limits is None:
+        return ()
+    rows: list[tuple[int, str, int]] = []
+    for seat in range(len(state.players)):
+        for limit in limits.active(state.turn.turn_number, seat):
+            rows.append((seat, limit.attribute, limit.source_card_id))
+    return tuple(rows)
 
 
 # ======================================================================
@@ -2070,6 +2210,7 @@ class BoundedSearch:
         *,
         rerun_from: "Duel | None" = None,
         rerun: bool = True,
+        rerun_select=None,
         deadline: "RerunDeadline | None" = None,
     ) -> MultiSearchOutcome:
         """
@@ -2172,9 +2313,21 @@ class BoundedSearch:
                 for slot, (path, summary, reason) in enumerate(ledger.results)
             )
         else:
+            #: 🔴 **상위만 재생할 수 있다** (Phase 6-BB). ``rerun_select`` 는
+            #: 모아 둔 후보(경로 · 자원 요약)를 받아 **재생할 자리 번호**를
+            #: 돌려주는 함수다 — 주지 않으면 전부 재생한다 (기존 그대로).
+            chosen = None
+            if rerun_select is not None:
+                chosen = frozenset(rerun_select(tuple(ledger.results)))
+                ledger.note(
+                    ledger.rerun_notes,
+                    f"모은 후보 {len(ledger.results)}개 가운데 평가 상위"
+                    f" {len(chosen)}개만 재생했습니다 — 🔴 나머지는"
+                    " **순위 밖**이고, 재생 실패가 아닙니다.",
+                )
             results = self.rerun_results(
                 duel if rerun_from is None else rerun_from, ledger,
-                deadline=deadline,
+                select=chosen, deadline=deadline,
             )
         rerun_seconds = time.monotonic() - rerun_started
         #: 🔴 **탐색 소요와 재생 소요를 따로 적는다** — 합치면 어디에 시간이
@@ -2186,6 +2339,7 @@ class BoundedSearch:
     # ------------------------------------------------------------------
     def rerun_results(
         self, duel: Duel, ledger: _Ledger, *,
+        select: "frozenset[int] | None" = None,
         deadline: "RerunDeadline | None" = None,
     ) -> "tuple[PathResult, ...]":
         """
@@ -2232,6 +2386,15 @@ class BoundedSearch:
             index = slot + 1
             dups = ledger.result_dups.get(slot, 0)
             meta = ledger.result_meta.get(slot, FoundMeta())
+            if select is not None and slot not in select:
+                #: 🔴 **순위 밖이라 재생하지 않았다** (Phase 6-BB) — 시간이
+                #: 없어 못 한 것과 가른다. 경로는 그대로 남는다.
+                out.append(PathResult(
+                    index=index, path=path, resources=summary,
+                    goal_reason=reason, duplicates=dups, meta=meta,
+                    rerun_skipped=True,
+                ))
+                continue
             if deadline.expired():
                 #: 🔴 **시작조차 하지 않았다** — 재생 도중 넘긴 것과 다른
                 #: 사실이므로 ``rerun=None`` 으로 남긴다 (§C).
@@ -2585,6 +2748,16 @@ class BoundedSearch:
             return Termination.BUDGET_EXCEEDED
         return termination
 
+    @property
+    def candidate_cap(self) -> int:
+        """
+        **모아 둘 후보**의 상한 (Phase 6-BB).
+
+        🔴 ``max_candidates`` 를 주지 않으면 :attr:`SearchBudget.max_results`
+        그대로다 — 기존 동작이 바뀌지 않는다.
+        """
+        return self.budget.max_candidates or self.budget.max_results
+
     def _results_full(self, ledger: _Ledger) -> bool:
         """
         **제시할 결과**가 상한에 닿았는가 (Phase 6-AL §3).
@@ -2596,9 +2769,15 @@ class BoundedSearch:
         탐색하지 않는" 구조가 된다.
         """
         if not self.budget.continues:
-            return len(ledger.results) >= self.budget.max_results
+            return len(ledger.results) >= self.candidate_cap
         return (ledger.count_of(ResultRole.CONTINUED)
-                >= self.budget.max_results)
+                >= self.candidate_cap)
+
+    def _candidate_cap_note(self) -> str:
+        """**어느 칸이 끊었는지** 그대로 적는다 (Phase 6-BB)."""
+        if self.budget.max_candidates:
+            return f"max_candidates={self.budget.max_candidates}"
+        return f"max_results={self.budget.max_results}"
 
     def _followups_left(self, node: _Node) -> int:
         """그 노드에서 더 할 수 있는 **비흐름 후속 행동** 수."""
@@ -2777,8 +2956,7 @@ class BoundedSearch:
                                                 goal_kept=verdict.present))
                         if self._results_full(ledger):
                             ledger.note(
-                                ledger.budget_hit,
-                                f"max_results={self.budget.max_results}",
+                                ledger.budget_hit, self._candidate_cap_note(),
                             )
                             return None
                         continue
@@ -2852,8 +3030,7 @@ class BoundedSearch:
                         )
                         if self._results_full(ledger):
                             ledger.note(
-                                ledger.budget_hit,
-                                f"max_results={self.budget.max_results}",
+                                ledger.budget_hit, self._candidate_cap_note(),
                             )
                             return None
                     elif not settled:
@@ -3564,6 +3741,7 @@ __all__ = [
     "ResultRole",
     "ResultTally",
     "SETTLE_GUARD",
+    "OpenGoal",
     "SearchBudget",
     "SearchOutcome",
     "Termination",

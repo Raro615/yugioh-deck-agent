@@ -871,6 +871,31 @@ SEARCH_GOALS: dict = {
 }
 
 
+#: ``search:`` 에 적으면 **목표 카드를 지정하지 않는 자율 탐색**이 된다
+#: (Phase 6-BB).
+#:
+#: 🔴 **이것은 목표 이름이 아니다.** :data:`SEARCH_GOALS` 의 이름들은 "그
+#: 카드가 필드에 오면 도달" 이지만, 이 값은 **도달 조건을 지정하지 않는다**
+#: — 엔진이 허가한 행동을 펼치며 정리된 결정 지점을 모으고, 그중에서
+#: 평가가 고른다.
+AUTONOMOUS_SEARCH_NAME: str = "auto"
+
+#: 자율 탐색의 기본 예산. 🔴 **실측으로 정한다** — 선택 분기를 8 로 두면
+#: 노드 하나가 비싸져서 (실측 47노드 132초) 디스코드 요청이 끝나지 않는다.
+AUTONOMOUS_DEFAULT_ACTIONS: int = 6
+AUTONOMOUS_DEFAULT_RESULTS: int = 3
+AUTONOMOUS_DEFAULT_CANDIDATES: int = 20
+AUTONOMOUS_DEFAULT_NODES: int = 400
+AUTONOMOUS_DEFAULT_SECONDS: float = 240.0
+AUTONOMOUS_DEFAULT_CHOICE_BRANCHES: int = 4
+AUTONOMOUS_DEFAULT_BASELINES: int = 3
+
+
+def is_autonomous_search(name: str) -> bool:
+    """``search:`` 가 **자율 탐색**을 고른 것인가 (Phase 6-BB)."""
+    return bool(name) and name.strip().lower() == AUTONOMOUS_SEARCH_NAME
+
+
 def search_goal_card_id(name: str) -> "int | None":
     """``search:`` 로 받은 이름의 목표 카드 ID. 모르는 이름이면 ``None``."""
     if not name or not name.strip():
@@ -1084,6 +1109,206 @@ def bounded_search_many_opening(
             fresh_duel = fresh.duel
     outcome = search.run_many(setup.duel, rerun_from=fresh_duel, rerun=rerun)
     return setup, outcome
+
+
+def autonomous_search_opening(
+    repository, draft, hand, *, max_results: int = AUTONOMOUS_DEFAULT_RESULTS,
+    actions: int = AUTONOMOUS_DEFAULT_ACTIONS, candidates: int = 0,
+    budget=None, rerun: bool = True,
+) -> tuple:
+    """
+    **목표 카드 없이** 선공 전개를 탐색한다 (Phase 6-BB).
+
+    돌려주는 것은 ``(setup, outcome)`` 이고 ``outcome`` 은
+    ``MultiSearchOutcome`` 이다 — 기존 복수 결과 모드와 **같은 자료형**이다.
+
+    🔴 **탐색기를 새로 만들지 않았다.** 같은 ``BoundedSearch`` · 같은
+    ``opening_wiring`` · 같은 ``build_opening`` 을 쓰고, 다른 것은 둘뿐이다 —
+    목표가 ``OpenGoal`` (도달 조건에 카드가 없다) 이고, 후보를 **평가 전에
+    크게 모아 두었다가** 상위만 재생한다는 것.
+
+    🔴 **고정 경로 정책을 부르지 않는다.** ``opening_wiring(repository,
+    None)`` 이므로 ``ComboLine`` 의 해결 선택 선호도 꽂히지 않는다 — 해결
+    중 선택은 탐색기의 분기(``max_choice_branches``)가 만든다.
+
+    🔴 **자율 탐색의 기준점은 "첫 소환이 정리된 자리" 다.** 그래서 전개의
+    거의 전부가 후속 행동이고, ``actions`` 가 사실상의 행동 예산이다.
+    """
+    from agent.bounded_search import (
+        BoundedSearch, CANDIDATE_CAP, FOLLOWUP_CAP, OpenGoal, RESULTS_CAP,
+        SearchBudget,
+    )
+    from agent.open_evaluation import select_top
+    from deck.opening import build_opening
+
+    wanted = max(2, min(int(max_results), RESULTS_CAP))
+    steps = max(1, min(int(actions), FOLLOWUP_CAP))
+    pool = int(candidates) or AUTONOMOUS_DEFAULT_CANDIDATES
+    pool = max(wanted, min(pool, CANDIDATE_CAP))
+
+    chooser, triggers = opening_wiring(repository, None)
+    setup = build_opening(
+        repository, draft, list(hand), chooser=chooser, triggers=triggers
+    )
+    if not setup.can_run:
+        return setup, None
+
+    if budget is None:
+        budget = SearchBudget(
+            #: 🔴 **깊이는 행동 예산보다 넉넉히** — 패스도 걸음을 쓴다.
+            max_depth=steps + 6,
+            max_nodes=AUTONOMOUS_DEFAULT_NODES,
+            max_seconds=AUTONOMOUS_DEFAULT_SECONDS,
+            max_choice_branches=AUTONOMOUS_DEFAULT_CHOICE_BRANCHES,
+            max_results=wanted,
+            max_candidates=pool,
+            max_followup_actions=steps,
+            max_baselines=AUTONOMOUS_DEFAULT_BASELINES,
+        )
+    else:
+        budget = dataclasses.replace(
+            budget, max_results=wanted, max_candidates=pool,
+            max_followup_actions=steps,
+        )
+    search = BoundedSearch(goal=OpenGoal(card_id=0, seat=0), budget=budget)
+
+    fresh_duel = None
+    if rerun:
+        fresh_chooser, fresh_triggers = opening_wiring(repository, None)
+        fresh = build_opening(
+            repository, draft, list(hand),
+            chooser=fresh_chooser, triggers=fresh_triggers,
+        )
+        if fresh.can_run:
+            fresh_duel = fresh.duel
+    outcome = search.run_many(
+        setup.duel, rerun_from=fresh_duel, rerun=rerun,
+        #: 🔴 **모은 다음 평가해서 상위만 재생한다** — 깊이 우선으로 먼저
+        #: 닿은 것이 곧 추천이 되지 않게.
+        rerun_select=(None if not rerun
+                      else lambda rows: select_top(rows, wanted)),
+    )
+    return setup, outcome
+
+
+class ScriptedActionPolicy:
+    """
+    탐색이 **찾아낸** 행동들을 순서대로 다시 고르는 선택 방식 (Phase 6-BB).
+
+    🔴 **사람이 적어 둔 경로가 아니다.** ``ComboLine`` 도 ``PlannedAction``
+    도 쓰지 않고, 탐색이 기록한 ``PathStep.action_key`` 를 그대로 받는다.
+
+    🔴 **후보 밖을 고르지 않는다.** 기록된 다음 행동이 그 자리의 허용
+    후보에 없으면 ``None`` 을 돌려주고, 그러면 ``execute_opening`` 이
+    필수 흐름(패스)만 지나가거나 **멈춘다** — 비슷한 행동으로 메꾸지
+    않는다.
+    """
+
+    __slots__ = ("_want", "taken", "name")
+
+    def __init__(self, keys, name: str = "autonomous-rerun"):
+        self._want = list(keys)
+        self.taken: list[tuple] = []
+        self.name = name
+
+    @property
+    def done(self) -> bool:
+        return not self._want
+
+    @property
+    def left(self) -> int:
+        return len(self._want)
+
+    def __call__(self, duel, legal):
+        if not self._want:
+            return None
+        want = self._want[0]
+        for action in legal.allowed:
+            if action.canonical_state() == want:
+                self._want.pop(0)
+                self.taken.append(want)
+                return action
+        return None
+
+
+def autonomous_rerun_record(repository, draft, hand, result, *,
+                             flow_kinds=None) -> tuple:
+    """
+    자율 탐색이 고른 결과를 **처음부터 다시 실행해** 전개 기록을 만든다
+    (Phase 6-BB §5).
+
+    돌려주는 것은 ``(record, reason)`` 이다 — 기록을 만들지 못하면
+    ``(None, 이유)`` 다.
+
+    🔴 **탐색 중 여러 분기의 사건을 한 경로처럼 합치지 않는다.** 새 초기
+    상태를 만들어 **그 경로만** 다시 밟고, 그 한 번의 실행 기록을
+    내보낸다.
+
+    🔴 **재실행이 어긋나면 기록을 내보내지 않는다.** 기록된 행동이 그 자리의
+    허용 후보에 없거나, 끝난 판의 상태 해시가 탐색이 적어 둔 것과 다르면
+    실패로 적는다.
+
+    🔴 **고정 경로 기능을 건드리지 않는다** — ``line`` 을 꽂지 않으므로
+    ``ComboLine`` 의 해결 선호도 들어오지 않는다.
+    """
+    from agent.bounded_search import FLOW_ACTION_KINDS
+    from agent.choice import FirstPermittedChoice, ScriptedChoice
+    from deck.opening import build_opening, execute_opening
+    from deck.replay_export import export_opening_replay
+    from integration.autonomy import PolicyChooser, TriggerSource
+
+    flow = FLOW_ACTION_KINDS if flow_kinds is None else frozenset(flow_kinds)
+    steps = [step for step in result.path if step.kind not in flow]
+    if not steps:
+        return None, "다시 실행할 비흐름 행동이 없습니다."
+    plan = tuple(ask.chosen for step in steps for ask in step.choices)
+    #: 🔴 **흐름 걸음의 선택도 빠뜨리지 않는다** — 흐름 걸음에서 물은 것이
+    #: 있으면 각본 순서가 어긋나므로, 그때는 다시 실행하지 않는다.
+    if any(step.choices for step in result.path if step.kind in flow):
+        return None, ("흐름 걸음에서도 해결 중 선택을 물었습니다 — 각본"
+                      " 순서를 보장할 수 없어 다시 실행하지 않았습니다.")
+
+    selector = ScriptedChoice(plan, FirstPermittedChoice(),
+                              name="autonomous-rerun")
+    setup = build_opening(
+        repository, draft, list(hand),
+        chooser=PolicyChooser(selector), triggers=TriggerSource(repository),
+    )
+    if not setup.can_run:
+        return None, "다시 실행할 초기 상태를 만들지 못했습니다."
+    policy = ScriptedActionPolicy(step.action_key for step in steps)
+    run = execute_opening(setup, repository, choose=policy)
+    if not policy.done:
+        return None, (f"기록된 행동 {len(steps)}개 가운데 {policy.left}개를"
+                      " 그 자리의 허용 후보에서 찾지 못했습니다 — 🔴 비슷한"
+                      " 행동으로 메꾸지 않았습니다.")
+    wanted = getattr(result.resources, "state_hash", "")
+    got = setup.duel.state.state_hash()
+    if wanted and got != wanted:
+        return None, (f"다시 실행한 끝 상태가 탐색이 적어 둔 것과 다릅니다"
+                      f" (해시 {got[:12]}… ≠ {wanted[:12]}…).")
+    return export_opening_replay(setup, run, repository), ""
+
+
+def rank_autonomous_results(outcome):
+    """
+    자율 탐색 결과의 **비교와 추천** (Phase 6-BB).
+
+    🔴 **왜 이 자리인가.** :func:`rank_search_results` 와 같은 규율이다 —
+    평가는 ``agent`` 의 일이고 표시는 ``deck`` 의 일이며, 어댑터는 둘을
+    이어 주기만 한다 (ADR-007).
+
+    🔴 **6-AK 의 기준을 그대로 쓰지 않는다.** 그쪽 두 축(남은 패 · 일반
+    소환권)만으로 자율 탐색을 견주면 **아무것도 하지 않은 쪽이 언제나
+    이긴다** — 목표가 없으므로 "패를 가장 많이 남긴 결과" 가 곧 "일반
+    소환만 하고 멈춘 결과" 다. 그래서 필드에 남은 것을 축으로 더한
+    ``agent.open_evaluation`` 을 쓴다.
+    """
+    if outcome is None:
+        return None
+    from agent.open_evaluation import rank_open
+
+    return rank_open(outcome)
 
 
 def opening_wiring(repository, line=None) -> tuple:

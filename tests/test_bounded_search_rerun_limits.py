@@ -873,6 +873,10 @@ def _stub_result(index, resources, *, state):
     if state is RerunState.DISABLED:
         return PathResult(index=index, path=(), resources=resources,
                           goal_reason="[스텁]", rerun_disabled=True)
+    if state is RerunState.NOT_SELECTED:
+        #: Phase 6-BB — **평가 순위 밖이라 재생하지 않은** 결과.
+        return PathResult(index=index, path=(), resources=resources,
+                          goal_reason="[스텁]", rerun_skipped=True)
     if state is RerunState.NOT_STARTED:
         return PathResult(index=index, path=(), resources=resources,
                           goal_reason="[스텁]")
@@ -894,13 +898,14 @@ def _stub_result(index, resources, *, state):
 
 def test_c01_every_state_is_counted_exactly_once(collected):
     """
-    🔴 **여섯 상태가 구분되고 집계가 맞아떨어진다** (§C).
+    🔴 **일곱 상태가 구분되고 집계가 맞아떨어진다** (§C · Phase 6-BB).
 
     하나라도 어느 칸에도 들어가지 않으면 결과가 조용히 사라진 것이다.
+    6-BB 이 ``NOT_SELECTED`` (평가 순위 밖이라 재생하지 않음) 를 더했다.
     """
     resources = collected.results[0].resources
     states = list(RerunState)
-    assert len(states) == 6
+    assert len(states) == 7
     results = tuple(
         _stub_result(number + 1, resources, state=state)
         for number, state in enumerate(states)
@@ -909,13 +914,14 @@ def test_c01_every_state_is_counted_exactly_once(collected):
 
     outcome = dataclasses.replace(collected, results=results)
     tally = outcome.tally
-    assert tally.total == outcome.found == 6
+    assert tally.total == outcome.found == 7
     assert (tally.verified, tally.mismatched, tally.errored,
-            tally.timed_out, tally.not_started, tally.disabled) == (
-        1, 1, 1, 1, 1, 1
+            tally.timed_out, tally.not_started, tally.disabled,
+            tally.not_selected) == (
+        1, 1, 1, 1, 1, 1, 1
     )
     assert tally.ran == 4
-    assert tally.incomplete == 3
+    assert tally.incomplete == 4
     #: 🔴 **검증된 비교에는 검증 성공만 들어간다.**
     assert len(outcome.verified_results) == 1
     assert len(outcome.timed_out_results) == 1
@@ -923,6 +929,7 @@ def test_c01_every_state_is_counted_exactly_once(collected):
     assert len(outcome.not_started_results) == 1
     assert len(outcome.disabled_results) == 1
     assert len(outcome.mismatched_results) == 1
+    assert len(outcome.not_selected_results) == 1
     #: 🔴 **경로를 찾았다는 사실은 재생 결과에 따라 줄지 않는다.**
     assert outcome.reached is True
 
