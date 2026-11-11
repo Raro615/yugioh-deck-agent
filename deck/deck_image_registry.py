@@ -53,7 +53,8 @@ __all__ = [
     "REGISTRY_FORMAT", "REGISTRY_DIRNAME", "DeckRegistration", "SlotEntry",
     "normalize_recipe", "new_registration_id", "register_deck_image",
     "load_registration", "list_registrations", "find_by_recipe",
-    "assign_slots", "SlotAssignment",
+    "assign_slots", "SlotAssignment", "registration_image_problem",
+    "SIDE_UNSUPPORTED",
 ]
 
 REGISTRY_FORMAT = "deck-image-registration/1"
@@ -275,6 +276,38 @@ def load_registration(owner: str, registration_id: str,
         return None
 
 
+SIDE_UNSUPPORTED = (
+    "사이드 덱은 아직 사이트 조작에 쓰지 않습니다 — 등록한 이미지에 "
+    "사이드 자리가 있으면 그대로 두고, 메인·엑스트라만 사용합니다."
+)
+
+
+def registration_image_problem(registration: DeckRegistration,
+                               root: "Path | None" = None) -> "str | None":
+    """
+    등록된 이미지 **파일이 등록 당시 그대로인가**.
+
+    🔴 **쓰기 전에 해시를 다시 센다.** 보관한 파일이 지워졌거나 다른 그림으로
+    바뀌었는데도 "등록된 실제 덱 이미지" 라고 적으면 거짓이 된다.
+    """
+    path = ((Path(root) / registration.image_path) if root is not None
+            else registration.image_file)
+    if not path.exists():
+        return (f"등록 `{registration.registration_id}` 의 이미지 파일이 "
+                f"없습니다: {registration.image_path}")
+    data = path.read_bytes()
+    if len(data) != int(registration.image_bytes or 0):
+        return (f"등록 `{registration.registration_id}` 의 이미지 크기가 "
+                f"등록 당시와 다릅니다 "
+                f"({len(data)} ≠ {registration.image_bytes} 바이트)")
+    got = _sha256(data)
+    if got != registration.image_sha256:
+        return (f"등록 `{registration.registration_id}` 의 이미지 해시가 "
+                f"등록 당시와 다릅니다 (sha256 {got[:12]}… ≠ "
+                f"{registration.image_sha256[:12]}…)")
+    return None
+
+
 def list_registrations(owner: str,
                        root: "Path | None" = None) -> tuple[DeckRegistration, ...]:
     base = ((Path(root) if root is not None else _ROOT) / REGISTRY_DIRNAME
@@ -307,10 +340,16 @@ class SlotAssignment:
 
     by_instance: dict = field(default_factory=dict)
     problems: tuple[str, ...] = ()
+    #: 막지는 않지만 **그대로 적어 두는** 사실 (예: 사이드 미지원).
+    notes: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
         return not self.problems
+
+
+def _part_label(part: str) -> str:
+    return "메인" if part == "main" else "엑스트라"
 
 
 def assign_slots(record, registration: DeckRegistration) -> SlotAssignment:
@@ -321,6 +360,12 @@ def assign_slots(record, registration: DeckRegistration) -> SlotAssignment:
     안에서** 고른다 (패와 덱은 ``main-*``, 엑스트라는 ``extra-*``). 같은
     이름의 카드가 여러 장이면 자리를 하나씩 나눠 가지므로 섞이지 않는다.
 
+    🔴 **모자란 쪽만 보지 않는다 (Phase 6-BA).** 기록이 쓰는 카드가 등록에
+    다 있어도, **등록 이미지 쪽에 남는 카드가 있으면 불일치**다. 시작 패 +
+    남은 덱 + 엑스트라를 합친 것이 등록된 구성과 **정확히 같아야** 한다 —
+    누락·추가·매수 차이를 모두 적는다. 이 관문은 레시피를 거치지 않고
+    **실행 기록을 직접 넣는 입구**(CLI ``--record``)에도 그대로 걸린다.
+
     🔴 **이전 세션의 임시 DOM ID 를 쓰지 않는다** — 자리 이름(``main-7``)
     은 이미지 안의 위치이지 브라우저가 만든 값이 아니다.
     """
@@ -329,28 +374,52 @@ def assign_slots(record, registration: DeckRegistration) -> SlotAssignment:
     by_slot = registration.by_slot()
 
     pools: dict[str, dict[int, list[str]]] = {"main": {}, "extra": {}}
+    problems: list[str] = []
+    notes: list[str] = []
+    unconfirmed: list[str] = []
+    side_slots: list[str] = []
     for slot, entry in sorted(by_slot.items(), key=_slot_order):
         part = slot.split("-")[0]
-        if part not in pools or entry.passcode is None:
+        if part == "side":
+            side_slots.append(slot)
+            continue
+        if part not in pools:
+            continue
+        if entry.passcode is None or not entry.confirmed:
+            unconfirmed.append(slot)
             continue
         pools[part].setdefault(int(entry.passcode), []).append(slot)
 
+    #: 🔴 **사이드는 조용히 버리지 않는다** — 쓰지 않는다고 적는다.
+    if side_slots:
+        notes.append(SIDE_UNSUPPORTED + f" (사이드 자리 {len(side_slots)}개)")
+    if unconfirmed:
+        problems.append(
+            "등록 이미지에서 아직 확인되지 않은 자리가 있습니다: "
+            + ", ".join(unconfirmed[:8])
+            + ("…" if len(unconfirmed) > 8 else ""))
+
     taken: dict[str, set[str]] = {"main": set(), "extra": set()}
     by_instance: dict[int, str] = {}
-    problems: list[str] = []
+    #: 기록 쪽 구성 — 등록과 **양쪽으로** 견주려고 센다.
+    wanted: dict[str, dict[int, int]] = {"main": {}, "extra": {}}
+
+    def _name_of(passcode) -> str:
+        for entry in registration.slots:
+            if entry.passcode is not None and int(entry.passcode) == int(
+                    passcode or 0) and entry.site_name:
+                return entry.site_name
+        return ""
 
     def _take(instance: int, part: str) -> None:
         card = cards.get(str(instance)) or {}
         passcode = card.get("passcode")
         name = card.get("name") or f"[{passcode}]"
-        free = [slot for slot in pools[part].get(int(passcode or 0), ())
+        code = int(passcode or 0)
+        wanted[part][code] = wanted[part].get(code, 0) + 1
+        free = [slot for slot in pools[part].get(code, ())
                 if slot not in taken[part]]
         if not free:
-            problems.append(
-                f"{name} ({passcode}) 를 놓을 자리가 등록된 "
-                f"{'메인' if part == 'main' else '엑스트라'} 덱에 "
-                f"모자랍니다 — 등록한 이미지와 이번 레시피가 다릅니다."
-            )
             return
         taken[part].add(free[0])
         by_instance[int(instance)] = free[0]
@@ -362,7 +431,32 @@ def assign_slots(record, registration: DeckRegistration) -> SlotAssignment:
         _take(instance, "main")
     for instance in zones.get("EXTRA") or ():
         _take(instance, "extra")
-    return SlotAssignment(by_instance=by_instance, problems=tuple(problems))
+
+    #: ------------------------------------------------------------------
+    #: 🔴 **양쪽 다중집합을 맞춰 본다** — 모자란 것과 남는 것을 함께 적는다.
+    for part in ("main", "extra"):
+        have = {code: len(slots) for code, slots in pools[part].items()}
+        for code in sorted(set(have) | set(wanted[part])):
+            mine = wanted[part].get(code, 0)
+            theirs = have.get(code, 0)
+            if mine == theirs:
+                continue
+            label = _name_of(code) or f"카드 {code}"
+            if theirs == 0:
+                problems.append(
+                    f"{_part_label(part)}: {label} ({code}) 가 등록한 "
+                    f"이미지에 없습니다 (이번 기록 {mine}장)")
+            elif mine == 0:
+                problems.append(
+                    f"{_part_label(part)}: {label} ({code}) 가 등록한 "
+                    f"이미지에 {theirs}장 남습니다 (이번 기록에는 없습니다)")
+            else:
+                problems.append(
+                    f"{_part_label(part)}: {label} ({code}) 의 매수가 다릅니다 "
+                    f"— 이번 기록 {mine}장 · 등록 이미지 {theirs}장")
+
+    return SlotAssignment(by_instance=by_instance, problems=tuple(problems),
+                          notes=tuple(notes))
 
 
 def _slot_order(item) -> tuple:
@@ -431,7 +525,17 @@ def compare_identification(identified, norm: dict, repository=None) -> dict:
             "ok": not unknown and not mismatches}
 
 
+#: 🔴 **따옴표 모양이 달라도 같은 카드다** (Phase 6-BA). 사이트는
+#: `“罪宝狩りの悪魔”` 처럼 둥근 따옴표로 보여 주는데 저장소의 이름은 곧은
+#: 따옴표였다 — NFKC 는 이 둘을 같게 만들지 않아 **멀쩡한 카드가 미식별로
+#: 떨어졌다.**
+_QUOTES = {"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'"}
+
+
 def _tidy(name: str) -> str:
     import unicodedata
 
-    return unicodedata.normalize("NFKC", str(name)).replace(" ", "").strip()
+    text = unicodedata.normalize("NFKC", str(name))
+    for found, want in _QUOTES.items():
+        text = text.replace(found, want)
+    return text.replace(" ", "").strip()

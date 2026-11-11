@@ -73,6 +73,12 @@ def main(argv: "list[str] | None" = None) -> int:
                         metavar="자리=패스코드",
                         help="사이트가 못 읽은 자리를 직접 확정한다 "
                              "(예: main-7=57835716). 여러 번 줄 수 있다")
+    parser.add_argument("--timeout", type=float, default=300.0,
+                        help="사이트 읽기 제한 시간(초) — 자리가 많으면 "
+                             "늘립니다 (기본 300)")
+    parser.add_argument("--note", action="append", default=[],
+                        help="등록에 남길 메모 (예: 이미지 출처 URL). "
+                             "여러 번 줄 수 있습니다")
     parser.add_argument("--out", default="docs/viewer/local/deck-register",
                         help="작업 디렉터리")
     args = parser.parse_args(argv)
@@ -116,9 +122,10 @@ def main(argv: "list[str] | None" = None) -> int:
 
     print("사이트에서 자리별 카드를 읽는 중… (실측 30~60초)")
     outcome = run_registration(
+        notes=tuple(args.note),
         owner=args.owner, image=image, image_name=image.name,
         recipe_text=recipe_text, repository=repository,
-        confirms=args.confirm, base_dir=args.out)
+        confirms=args.confirm, base_dir=args.out, timeout=args.timeout)
 
     if not outcome.ok:
         print(f"🔴 {outcome.reason}", file=sys.stderr)
@@ -129,10 +136,14 @@ def main(argv: "list[str] | None" = None) -> int:
     if outcome.verified:
         print(f"✅ 등록 완료 — 등록 ID **{outcome.registration_id}** "
               f"(확인 방법: {outcome.registration.verify_method})")
-        print("   다음 실행:")
-        print(f"   python3 -m scripts.duel_simulator_share --line <경로> "
-              f"--registration {outcome.registration_id} "
-              f"--owner {args.owner}")
+        #: 🔴 **실제로 되는 명령을 적는다** (Phase 6-BA) — 레시피는 등록에
+        #: 저장돼 있으므로 다시 주지 않아도 된다.
+        print("   다음 실행 (레시피는 등록에 저장돼 있습니다):")
+        print(f"   python3 -m scripts.duel_simulator_share \\")
+        print(f"       --registration {outcome.registration_id} "
+              f"--owner {args.owner} \\")
+        print(f"       --hand \"<시작 패 5장을 쉼표로>\" "
+              f"[--line-name <검증용 경로>] [--share]")
     else:
         print(f"⚠ **확인되지 않은 등록** — 등록 ID {outcome.registration_id}")
         print("   이 등록으로는 외부 공유를 시작하지 않습니다. 무엇이 다른지:")

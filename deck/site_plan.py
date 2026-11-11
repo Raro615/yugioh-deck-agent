@@ -139,7 +139,7 @@ def _deck_slots(record, registration=None):
         extra = [_entry(i, "extra", f"extra-{n}")
                  for n, i in enumerate(zones.get("EXTRA") or ())]
         at = {entry["instance"]: entry["slot"] for entry in main + extra}
-        return main, extra, at, ()
+        return main, extra, at, (), ()
 
     from deck.deck_image_registry import assign_slots
 
@@ -153,7 +153,7 @@ def _deck_slots(record, registration=None):
                 continue
             (extra if slot.startswith("extra-") else main).append(
                 _entry(instance, where, slot))
-    return main, extra, at, assignment.problems
+    return main, extra, at, assignment.problems, assignment.notes
 
 
 # ======================================================================
@@ -168,7 +168,8 @@ def build_site_plan(record, registration=None) -> dict:
     ``activate_effect`` 일 때만, 대상 표시는 걸음에 ``targets`` 가 있을 때만
     나온다. 사이트에 대응이 없는 사건은 ``unsupported`` 에 남는다.
     """
-    main, extra, slot_of, slot_problems = _deck_slots(record, registration)
+    main, extra, slot_of, slot_problems, slot_notes = _deck_slots(
+        record, registration)
     cards = record.get("cards") or {}
     events = {int(event["seq"]): event for event in (record.get("events") or ())}
     unsupported: list[str] = list(slot_problems)
@@ -295,6 +296,8 @@ def build_site_plan(record, registration=None) -> dict:
         "format": PLAN_FORMAT,
         "deck_image": deck_image,
         "slots_ok": not slot_problems,
+        #: 막지는 않지만 **적어 두는** 사실 (예: 사이드 덱 미지원).
+        "notes": list(slot_notes),
         "source": dict(record.get("source") or {}),
         "result": dict(record.get("result") or {}),
         "deck": {"main": main, "extra": extra},

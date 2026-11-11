@@ -24,6 +24,11 @@
     # 계획만 보고 브라우저는 열지 않는다
     python3 -m scripts.duel_simulator_share --line <경로> --plan-only
 
+    # 등록한 덱 이미지 + 지정 패 — 🔴 레시피는 **등록에서 가져온다**
+    python3 -m scripts.duel_simulator_share \
+        --registration dk0123456789 --owner local \
+        --hand "宵星の騎士ギルス, 灰流うらら, 増殖するＧ, 墓穴の指名者, 無限泡影"
+
 필요한 것
 ---------
 * 이 컨테이너에 설치된 Chromium 과 Playwright (Node). 추가 설치는 없다.
@@ -87,6 +92,83 @@ def _run_line(name: str) -> dict:
                                  line=line, progress=progress)
 
 
+class _RepositoryOnly:
+    """``_run_opening`` 이 쓰는 것은 ``.repository`` 하나뿐이다."""
+
+    def __init__(self, repository):
+        self.repository = repository
+
+
+def _recipe_text_for(args, registration) -> "str | None":
+    """
+    **어느 레시피로 도는가**를 한 곳에서 정한다 (Phase 6-BA).
+
+    🔴 등록과 레시피를 **둘 다** 줬으면 같은 덱인지 먼저 센다 — 다르면
+    돌리지 않는다. 레시피만 빼면 **등록에 저장된 레시피**를 쓴다.
+    """
+    from core.card_repository import CardRepository
+    from deck.deck_image_registry import normalize_recipe
+
+    text = args.recipe or ""
+    if text:
+        maybe = Path(text)
+        try:
+            if maybe.exists() and maybe.is_file():
+                text = maybe.read_text(encoding="utf-8")
+        except OSError:
+            pass
+    if registration is None:
+        if not text.strip():
+            print("🔴 --hand 로 돌리려면 --recipe 또는 --registration 이 "
+                  "있어야 합니다", file=sys.stderr)
+            return None
+        return text
+    if not text.strip():
+        print(f"레시피: 등록 {registration.registration_id} 에 저장된 것을 "
+              f"씁니다 (메인 {registration.counts.get('main', 0)} · "
+              f"엑스트라 {registration.counts.get('extra', 0)})")
+        return registration.recipe_text
+    repository = CardRepository.build(db_path=ROOT / "data" / "cards.cdb",
+                                      script_dir=ROOT)
+    try:
+        _norm, digest = normalize_recipe(text, repository)
+    except ValueError as error:
+        print(f"🔴 레시피를 읽지 못했습니다: {error}", file=sys.stderr)
+        return None
+    if not registration.matches_recipe(digest):
+        print("🔴 적어 주신 레시피가 등록과 다릅니다 — 같은 덱일 때만 "
+              "등록한 이미지를 씁니다. --recipe 를 빼면 등록에 저장된 "
+              "레시피로 돕니다.", file=sys.stderr)
+        return None
+    print("레시피: 적어 주신 것과 등록이 같은 덱입니다.")
+    return text
+
+
+def _run_from_hand(args, registration) -> "dict | None":
+    """지정한 시작 패로 **디스코드와 같은 생산 경로**를 돌린다."""
+    from app.discord_bot import _run_opening
+    from app.main import _parse_card_ids
+    from core.card_repository import CardRepository
+
+    text = _recipe_text_for(args, registration)
+    if text is None:
+        return None
+    repository = CardRepository.build(db_path=ROOT / "data" / "cards.cdb",
+                                      script_dir=ROOT)
+    agent = _RepositoryOnly(repository)
+    hand_ids, unresolved = _parse_card_ids(args.hand, agent)
+    if unresolved:
+        print("🔴 패를 읽지 못했습니다: " + ", ".join(unresolved),
+              file=sys.stderr)
+        return None
+    report = _run_opening(agent, text, list(hand_ids), args.line_name)
+    if not report.ran or not report.replay:
+        for line in report.brief:
+            print(line, file=sys.stderr)
+        return None
+    return report.replay
+
+
 def main(argv: "list[str] | None" = None) -> int:
     from deck.site_plan import build_site_plan, plan_json, render_deck_sheet_html
 
@@ -95,6 +177,15 @@ def main(argv: "list[str] | None" = None) -> int:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--line", help="고정 경로 이름")
     group.add_argument("--json", help="이미 있는 전개 기록 JSON")
+    group.add_argument("--hand",
+                       help="시작 패 — 카드 이름이나 ID 를 쉼표로. "
+                            "레시피는 --recipe 로 주거나, "
+                            "--registration 의 저장된 레시피를 씁니다")
+    parser.add_argument("--recipe",
+                        help="덱 레시피 글 (또는 파일 경로). "
+                             "--registration 을 주면 빼도 됩니다")
+    parser.add_argument("--line-name", default="",
+                        help="(선택) --hand 와 함께 쓸 검증용 전개 경로 이름")
     parser.add_argument("--out", default="docs/viewer/local/duel-simulator",
                         help="작업 디렉터리 (기본: docs/viewer/local/duel-simulator)")
     parser.add_argument("--plan-only", action="store_true",
@@ -110,21 +201,34 @@ def main(argv: "list[str] | None" = None) -> int:
                         help="공유 리플레이의 제목")
     args = parser.parse_args(argv)
 
-    record = (json.loads(Path(args.json).read_text(encoding="utf-8"))
-              if args.json else _run_line(args.line))
-
+    #: 🔴 **등록을 먼저 읽는다** — 레시피를 등록에서 가져올 수 있으므로
+    #: 순서를 바꾸면 "레시피가 없다" 고 먼저 거절해 버린다 (Phase 6-BA).
     registration = None
     if args.registration:
-        from deck.deck_image_registry import load_registration
+        from deck.deck_image_registry import (load_registration,
+                                              registration_image_problem)
 
         registration = load_registration(args.owner, args.registration)
         if registration is None:
             print(f"🔴 등록을 찾지 못했습니다: {args.registration} "
                   f"(소유자 {args.owner})", file=sys.stderr)
             return 2
+        spoiled = registration_image_problem(registration)
+        if spoiled:
+            print("🔴 " + spoiled, file=sys.stderr)
+            return 2
         mark = "확인됨" if registration.verified else "🔴 미확인"
         print(f"덱 이미지 등록 {registration.registration_id} — {mark} · "
               f"{registration.image_path}")
+
+    if args.hand:
+        record = _run_from_hand(args, registration)
+        if record is None:
+            return 2
+    elif args.json:
+        record = json.loads(Path(args.json).read_text(encoding="utf-8"))
+    else:
+        record = _run_line(args.line)
 
     from deck.site_session import (
         new_run_id,

@@ -1527,7 +1527,7 @@ def register_deck_response(agent, owner: str, image_bytes, image_name: str,
             f"✅ **등록 완료 — `{outcome.registration_id}`** "
             f"(자리 {outcome.read_slots}개 확인)")
         lines.append(
-            f"다음부터는 `/share-replay registration:"
+            f"다음부터는 `/share-replay hand:<시작 패> registration:"
             f"{outcome.registration_id}` 으로 같은 덱의 **다른 패**도 바로"
             f" 돌릴 수 있습니다.")
         return lines
@@ -1578,20 +1578,21 @@ def share_replay_response(agent, hand_text: str, recipe_text: str = "",
     if not hand_ids:
         lines.append("🔴 **패가 비어 있습니다.**")
         return lines
-    if not recipe_text:
-        lines.append("🔴 **레시피(recipe)가 없어 엔진을 돌릴 수 없습니다** —"
-                     " 외부 공유는 실행 기록 하나를 그대로 옮기는 기능입니다.")
-        return lines
-    report = _run_opening(agent, recipe_text, list(hand_ids), line_text)
-    if not report.ran or not report.replay:
-        lines.append(ShareState.NO_RECORD.notice)
-        return lines
+
+    #: ------------------------------------------------------------------
+    #: 🔴 **등록을 먼저 읽고 입력을 확정한 뒤** 엔진을 돌린다 (Phase 6-BA).
+    #: 레시피를 등록에서 가져올 수도 있으므로, 순서를 바꾸면 "레시피가
+    #: 없다" 고 먼저 거절해 버린다.
     registration = None
     if registration_id:
-        from deck.deck_image_registry import load_registration
+        from deck.deck_image_registry import (load_registration,
+                                              normalize_recipe,
+                                              registration_image_problem)
 
         registration = load_registration(owner, registration_id)
         if registration is None:
+            #: 🔴 다른 사용자의 등록은 꺼내 주지 않는다 — 찾지 못한 것과
+            #: 같게 답한다.
             lines.append(f"🔴 **등록을 찾지 못했습니다**: `{registration_id}`")
             return lines
         if not registration.verified:
@@ -1600,8 +1601,45 @@ def share_replay_response(agent, hand_text: str, recipe_text: str = "",
                          f"`{registration_id}` — 먼저 `/register-deck` 로 "
                          f"확인을 끝내 주십시오.")
             return lines
+        spoiled = registration_image_problem(registration)
+        if spoiled:
+            lines.append("🔴 **등록된 이미지를 쓸 수 없습니다**: " + spoiled)
+            return lines
+        if recipe_text and recipe_text.strip():
+            #: 🔴 **둘 다 줬으면 같은 덱인지 먼저 센다** — 다르면 돌리지
+            #: 않는다 (어느 쪽을 따랐는지 모르게 섞이면 안 된다).
+            try:
+                _norm, digest = normalize_recipe(recipe_text, agent.repository)
+            except ValueError as error:
+                lines.append(f"🔴 **레시피를 읽지 못했습니다**: {error}")
+                return lines
+            if not registration.matches_recipe(digest):
+                lines.append(
+                    f"🔴 **적어 주신 레시피가 등록 `{registration_id}` 과 "
+                    f"다릅니다** — 같은 덱일 때만 등록한 이미지를 씁니다. "
+                    f"레시피를 빼면 **등록에 저장된 레시피**로 돕니다.")
+                return lines
+            lines.append(f"🗂 등록 `{registration_id}` 과 적어 주신 레시피가 "
+                         f"같은 덱입니다.")
+        else:
+            #: 🔴 **등록에 저장해 둔 레시피를 쓴다** — 사용자가 같은 글을
+            #: 다시 붙여 넣지 않아도 된다.
+            recipe_text = registration.recipe_text
+            lines.append(f"🗂 등록 `{registration_id}` 에 저장된 레시피로 "
+                         f"돕니다 (메인 {registration.counts.get('main', 0)} · "
+                         f"엑스트라 {registration.counts.get('extra', 0)}).")
         lines.append(f"🗂 등록된 덱 이미지 `{registration_id}` 로 돕니다 "
                      f"(실제 카드 그림).")
+
+    if not recipe_text or not recipe_text.strip():
+        lines.append("🔴 **레시피(recipe)가 없어 엔진을 돌릴 수 없습니다** —"
+                     " 외부 공유는 실행 기록 하나를 그대로 옮기는 기능입니다."
+                     " 등록해 둔 덱이면 `registration` 만 줘도 됩니다.")
+        return lines
+    report = _run_opening(agent, recipe_text, list(hand_ids), line_text)
+    if not report.ran or not report.replay:
+        lines.append(ShareState.NO_RECORD.notice)
+        return lines
     outcome = use.share(report.replay, title=title or "galatea opening line",
                         registration=registration)
     lines.extend(site_share_lines(outcome))
@@ -2376,14 +2414,15 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
     @tree.command(name="share-replay", description=SHARE_DESCRIPTION)
     @app_commands.describe(
         hand="초기 패 — 카드 이름이나 ID 를 쉼표로",
-        recipe="실제 덱 레시피 (필수) — 이 레시피로 엔진을 돌린 기록을"
-               " 사이트에 옮깁니다",
+        recipe="덱 레시피 — registration 을 주면 **빼도 됩니다** (등록에"
+               " 저장된 레시피를 씁니다). 둘 다 주면 같은 덱인지 먼저"
+               " 맞춰 봅니다",
         line="(선택) 검증용 전개 경로 이름",
         title="(선택) 공유 리플레이의 제목",
         registration="(선택) 등록해 둔 덱 이미지의 등록 ID — 주면 실제 카드"
                      " 그림으로 돕니다 (/register-deck 로 만듭니다)")
     async def share_replay_command(interaction: "discord.Interaction",
-                                   hand: str, recipe: str,
+                                   hand: str, recipe: str = "",
                                    line: str = "", title: str = "",
                                    registration: str = "") -> None:
         #: 🔴 **브라우저 조작은 1~2분이다.** ``/combo`` 와 같은 구조로

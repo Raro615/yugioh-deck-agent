@@ -399,6 +399,15 @@ def run_site_session(record, *, workdir=None, base_dir=None, title: str,
                 share_requested=share,
                 stopped_reason=RunStatus.NOT_VERIFIED.detail
                 + f" (등록 {registration.registration_id})")
+        #: 🔴 **등록된 이미지 파일이 그대로인지 먼저 센다** (Phase 6-BA) —
+        #: 파일이 바뀌었는데 "등록된 실제 덱 이미지" 라고 적지 않는다.
+        from deck.deck_image_registry import registration_image_problem
+
+        spoiled = registration_image_problem(registration)
+        if spoiled:
+            return SiteRunResult(
+                run_id=rid, status=RunStatus.NOT_VERIFIED, workdir=path,
+                share_requested=share, stopped_reason=spoiled)
         if not plan.get("slots_ok", True):
             return SiteRunResult(
                 run_id=rid, status=RunStatus.NOT_VERIFIED, workdir=path,

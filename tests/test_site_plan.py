@@ -356,3 +356,162 @@ def test_d06_the_modules_do_not_hardcode_this_line(name):
     for needle in ("69811710", "21441617", "57835716", "30741503",
                    "76145142", "기르수", "스켈레촌", "orcust", "longirsu"):
         assert needle not in source, needle
+
+
+# ======================================================================
+# G. 등록된 레시피 재사용 — 패만 주면 된다 (Phase 6-BA)
+# ======================================================================
+def _registered(tmp_path, monkeypatch, repository, *, owner="u",
+                recipe_text="11091375 x3, 55144522 x37"):
+    """시험용 등록 하나를 **실제 보관 절차 그대로** 만든다."""
+    import deck.deck_image_registry as registry
+
+    monkeypatch.setattr(registry, "_ROOT", tmp_path)
+    registration = registry.register_deck_image(
+        owner=owner, image=b"\x89PNG deck sheet", image_name="deck.png",
+        recipe_text=recipe_text, repository=repository,
+        slots=(registry.SlotEntry("main-0", 11091375, "", "site", True),),
+        verified=True, verify_method="시험", root=tmp_path)
+    return registration
+
+
+class _ShareAgent:
+    def __init__(self, repository=None):
+        self.repository = repository
+
+
+def _stub_opening(monkeypatch, seen):
+    """엔진을 돌리지 않고 **어떤 레시피로 불렸는지**만 받아 둔다."""
+    import app.discord_bot as bot
+
+    class _Report:
+        ran = True
+        replay = {"format": "engine-replay/5"}
+        brief = ()
+
+    def _fake(agent, recipe_text, hand_ids, line_text=""):
+        seen.append(recipe_text)
+        return _Report()
+
+    monkeypatch.setattr(bot, "_run_opening", _fake)
+
+
+class _OkRunner:
+    """공유가 실제로 생긴 것처럼 답한다 — 등록이 넘어왔는지 본다."""
+
+    def __init__(self):
+        self.registrations = []
+
+    def share(self, record, *, title, registration=None):
+        from app.site_share import ShareState, SiteShareOutcome
+
+        self.registrations.append(registration)
+        return SiteShareOutcome(ShareState.SHARED, url="https://example/x",
+                                run_id="r", operations_ok=1,
+                                operations_total=1)
+
+
+@pytest.mark.real_card
+def test_g01_a_registration_alone_supplies_the_recipe(tmp_path, monkeypatch,
+                                                      repository):
+    """
+    🔴 **등록 ID 와 패만으로 돈다** (Phase 6-BA). 지난 안내는 등록만으로
+    된다고 적었지만 실제로는 레시피가 여전히 필수였다 — 그 어긋남을 고친다.
+    """
+    import app.discord_bot as bot
+
+    registration = _registered(tmp_path, monkeypatch, repository)
+    seen, runner = [], _OkRunner()
+    _stub_opening(monkeypatch, seen)
+    lines = bot.share_replay_response(
+        _ShareAgent(repository), "11091375", recipe_text="",
+        registration_id=registration.registration_id, owner="u",
+        runner=runner)
+    assert seen == [registration.recipe_text]
+    assert runner.registrations == [registration]
+    assert any("저장된 레시피" in line for line in lines)
+
+
+@pytest.mark.real_card
+def test_g02_both_given_must_be_the_same_deck(tmp_path, monkeypatch,
+                                              repository):
+    """레시피와 등록을 **둘 다** 주면 같은 덱인지 먼저 센다."""
+    import app.discord_bot as bot
+
+    registration = _registered(tmp_path, monkeypatch, repository)
+    seen, runner = [], _OkRunner()
+    _stub_opening(monkeypatch, seen)
+    lines = bot.share_replay_response(
+        _ShareAgent(repository), "11091375",
+        recipe_text="11091375 x2, 55144522 x38",
+        registration_id=registration.registration_id, owner="u",
+        runner=runner)
+    assert not seen, "불일치인데 엔진을 돌렸습니다"
+    assert not runner.registrations
+    assert any("다릅니다" in line for line in lines)
+
+
+@pytest.mark.real_card
+def test_g03_the_same_deck_written_differently_still_matches(
+        tmp_path, monkeypatch, repository):
+    """같은 덱을 **다르게 적어도** 통과한다 — 글자가 아니라 구성으로 센다."""
+    import app.discord_bot as bot
+
+    registration = _registered(tmp_path, monkeypatch, repository)
+    seen, runner = [], _OkRunner()
+    _stub_opening(monkeypatch, seen)
+    bot.share_replay_response(
+        _ShareAgent(repository), "11091375",
+        recipe_text="55144522 x37\n11091375 x3",
+        registration_id=registration.registration_id, owner="u",
+        runner=runner)
+    assert seen and runner.registrations == [registration]
+
+
+@pytest.mark.real_card
+def test_g04_another_users_registration_is_not_reachable(
+        tmp_path, monkeypatch, repository):
+    """🔴 **다른 사용자의 등록은 꺼내 주지 않는다.**"""
+    import app.discord_bot as bot
+
+    registration = _registered(tmp_path, monkeypatch, repository, owner="u")
+    seen, runner = [], _OkRunner()
+    _stub_opening(monkeypatch, seen)
+    lines = bot.share_replay_response(
+        _ShareAgent(repository), "11091375", recipe_text="",
+        registration_id=registration.registration_id, owner="다른사람",
+        runner=runner)
+    assert not seen and not runner.registrations
+    assert any("찾지 못했습니다" in line for line in lines)
+
+
+@pytest.mark.real_card
+def test_g05_without_a_registration_the_recipe_is_still_required(
+        monkeypatch, repository):
+    """등록이 없으면 **예전 그대로** 레시피가 필요하다."""
+    import app.discord_bot as bot
+
+    seen, runner = [], _OkRunner()
+    _stub_opening(monkeypatch, seen)
+    lines = bot.share_replay_response(_ShareAgent(repository), "11091375",
+                                      recipe_text="", runner=runner)
+    assert not seen and not runner.registrations
+    assert any("레시피" in line for line in lines[1:])
+
+
+@pytest.mark.real_card
+def test_g06_a_spoiled_registration_image_never_runs(tmp_path, monkeypatch,
+                                                     repository):
+    """보관한 이미지가 바뀌었으면 **엔진도 돌리지 않는다.**"""
+    import app.discord_bot as bot
+
+    registration = _registered(tmp_path, monkeypatch, repository)
+    (tmp_path / registration.image_path).write_bytes(b"\x89PNG other image!!")
+    seen, runner = [], _OkRunner()
+    _stub_opening(monkeypatch, seen)
+    lines = bot.share_replay_response(
+        _ShareAgent(repository), "11091375", recipe_text="",
+        registration_id=registration.registration_id, owner="u",
+        runner=runner)
+    assert not seen and not runner.registrations
+    assert any("등록된 이미지를 쓸 수 없습니다" in line for line in lines)

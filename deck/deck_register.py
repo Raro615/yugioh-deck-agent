@@ -70,6 +70,7 @@ def _identify(image: Path, *, main: int, extra: int, workdir: Path,
 
 def run_registration(*, owner: str, image: "Path | bytes", image_name: str,
                      recipe_text: str, repository=None, confirms=(),
+                     notes=(),
                      base_dir="docs/viewer/local/deck-register",
                      timeout: float = DEFAULT_TIMEOUT,
                      runner=None, root: "Path | None" = None
@@ -185,7 +186,11 @@ def run_registration(*, owner: str, image: "Path | bytes", image_name: str,
         owner=owner, image=source.read_bytes(), image_name=image_name,
         recipe_text=recipe_text, repository=repository, slots=ordered,
         verified=verified, verify_method=method if verified else "",
-        notes=tuple(problems), registration_id=rid, root=root)
+        #: 🔴 **출처를 등록에 남긴다** (Phase 6-BA) — 이 이미지가 어디서
+        #: 왔는지가 기록에 없으면 나중에 되짚을 길이 없다. 남은 문제도
+        #: 함께 적는다.
+        notes=tuple(notes) + tuple(problems),
+        registration_id=rid, root=root)
     return RegistrationOutcome(
         ok=True, verified=verified, registration=registration,
         reason="" if verified else "확인되지 않았습니다",

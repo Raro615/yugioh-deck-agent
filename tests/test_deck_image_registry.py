@@ -115,7 +115,8 @@ def test_a04_a_card_the_image_does_not_have_is_a_mismatch():
     record = _record(hand=[99], deck=[], extra=[])
     plan = build_site_plan(record, _registration([11, 22], []))
     assert not plan["slots_ok"]
-    assert any("모자랍니다" in line for line in plan["unsupported"])
+    assert any("99" in line and "없습니다" in line
+               for line in plan["unsupported"])
 
 
 def test_a05_assignment_is_rebuilt_for_every_record():
@@ -398,3 +399,125 @@ def test_d06_an_unconfirmed_cleanup_is_said_out_loud(monkeypatch, tmp_path):
     assert run.status is RunStatus.TIMEOUT
     assert "정리 미확인" in run.reason
     assert not run.shared
+
+
+# ======================================================================
+# E. 레시피 완전 일치 — 남는 카드도 불일치다 (Phase 6-BA)
+# ======================================================================
+def test_e01_a_card_left_over_in_the_registered_image_is_a_mismatch():
+    """
+    🔴 **필요한 카드가 다 있다고 통과시키지 않는다.** 등록한 이미지 쪽에
+    쓰이지 않고 **남는 카드**가 있으면 그것도 다른 덱이다 — 이것이 6-AZ 의
+    구멍이었다 (있는지만 보고 남는지를 보지 않았다).
+    """
+    record = _record(hand=[11], deck=[22], extra=[])
+    plan = build_site_plan(record, _registration([11, 22, 33], []))
+    assert not plan["slots_ok"]
+    assert any("33" in line and "남습니다" in line
+               for line in plan["unsupported"])
+
+
+def test_e02_a_count_difference_is_named_on_both_sides():
+    """매수가 다르면 **몇 장 대 몇 장인지** 적는다."""
+    record = _record(hand=[11, 11, 11], deck=[], extra=[])
+    assignment = assign_slots(record, _registration([11, 11], []))
+    assert not assignment.ok
+    assert any("이번 기록 3장" in line and "등록 이미지 2장" in line
+               for line in assignment.problems)
+
+
+def test_e03_the_extra_deck_is_compared_too():
+    """엑스트라도 같은 잣대로 센다 — 메인만 보고 넘기지 않는다."""
+    record = _record(hand=[11], deck=[], extra=[55])
+    assignment = assign_slots(record, _registration([11], [55, 66]))
+    assert not assignment.ok
+    assert any("엑스트라" in line and "66" in line
+               for line in assignment.problems)
+
+
+def test_e04_an_unconfirmed_slot_blocks_the_run():
+    """🔴 확인되지 않은 자리가 남아 있으면 **시작하지 않는다.**"""
+    from deck.deck_image_registry import DeckRegistration, SlotEntry
+
+    registration = DeckRegistration(
+        registration_id="dk0123456789", owner="u", image_path="x.png",
+        image_sha256="h", image_bytes=1, recipe_text="", recipe_norm={},
+        recipe_sha256="r", counts={"main": 2, "extra": 0, "side": 0},
+        slots=(SlotEntry("main-0", 11, "", "site", True),
+               SlotEntry("main-1", None, "", "site", False)),
+        verified=True, verify_method="시험")
+    assignment = assign_slots(_record([11], [22], []), registration)
+    assert not assignment.ok
+    assert any("확인되지 않은 자리" in line for line in assignment.problems)
+
+
+def test_e05_a_side_deck_is_said_out_loud_not_dropped_silently():
+    """사이드는 아직 쓰지 않는다 — **조용히 버리지 않고** 적는다."""
+    from deck.deck_image_registry import DeckRegistration, SIDE_UNSUPPORTED
+    from deck.deck_image_registry import SlotEntry
+
+    registration = DeckRegistration(
+        registration_id="dk0123456789", owner="u", image_path="x.png",
+        image_sha256="h", image_bytes=1, recipe_text="", recipe_norm={},
+        recipe_sha256="r", counts={"main": 1, "extra": 0, "side": 1},
+        slots=(SlotEntry("main-0", 11, "", "site", True),
+               SlotEntry("side-0", 77, "", "site", True)),
+        verified=True, verify_method="시험")
+    assignment = assign_slots(_record([11], [], []), registration)
+    assert assignment.ok, assignment.problems
+    assert any(SIDE_UNSUPPORTED in note for note in assignment.notes)
+
+
+def test_e06_the_record_entry_cannot_bypass_the_comparison(tmp_path):
+    """
+    🔴 **실행 기록을 직접 넣는 입구도 같은 관문을 지난다** — 레시피를
+    거치지 않는다고 검사가 비켜 가지 않는다.
+    """
+    from deck.site_session import RunStatus, run_site_session
+
+    called = []
+    run = run_site_session(
+        _record([11], [], []), base_dir=tmp_path, title="t", share=True,
+        registration=_registration([11, 22], []),
+        runner=lambda command, path: called.append(command))
+    assert run.status is RunStatus.NOT_VERIFIED
+    assert not called, "불일치인데 브라우저를 띄웠습니다"
+
+
+# ======================================================================
+# F. 등록 이미지 파일 자체 확인 (Phase 6-BA)
+# ======================================================================
+def test_f01_the_stored_image_hash_is_checked_before_use(tmp_path, repository):
+    """🔴 보관한 파일이 바뀌었으면 **등록된 실제 덱 이미지라고 적지 않는다.**"""
+    from deck.deck_image_registry import (register_deck_image,
+                                          registration_image_problem)
+
+    registration = register_deck_image(
+        owner="u", image=b"\x89PNG-one", image_name="d.png",
+        recipe_text="11091375 x1", repository=repository, root=tmp_path)
+    assert registration_image_problem(registration, tmp_path) is None
+    (tmp_path / registration.image_path).write_bytes(b"\x89PNG-two!")
+    said = registration_image_problem(registration, tmp_path)
+    assert said and ("해시" in said or "크기" in said)
+
+
+def test_f02_a_spoiled_image_stops_the_site_run(tmp_path):
+    """해시가 다르면 브라우저를 **띄우지 않는다.**"""
+    from deck.deck_image_registry import DeckRegistration, SlotEntry
+    from deck.site_session import RunStatus, run_site_session
+
+    registration = DeckRegistration(
+        registration_id="dk0123456789", owner="u",
+        image_path="no/such/image.png", image_sha256="h", image_bytes=1,
+        recipe_text="", recipe_norm={}, recipe_sha256="r",
+        counts={"main": 1, "extra": 0, "side": 0},
+        slots=(SlotEntry("main-0", 11, "", "site", True),),
+        verified=True, verify_method="시험")
+    called = []
+    run = run_site_session(
+        _record([11], [], []), base_dir=tmp_path, title="t", share=True,
+        registration=registration,
+        runner=lambda command, path: called.append(command))
+    assert run.status is RunStatus.NOT_VERIFIED
+    assert "이미지 파일이" in run.reason
+    assert not called
