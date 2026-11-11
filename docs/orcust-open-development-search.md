@@ -302,6 +302,29 @@
 분기 간 상태가 섞이지 않는 것은 기존 시험이 이미 고정한다 (사본마다
 새 `Simulator`, `_assert_untouched` 가 원본 불변을 확인).
 
+### 어디까지 돌렸는가 (실측)
+
+변경한 모듈(`agent/bounded_search.py` · `agent/open_evaluation.py` ·
+`app/main.py` · `app/discord_bot.py` · `deck/report.py`)을 import 하거나
+쓰는 **시험 파일 41개 · 1,268개**를 돌렸다 — **1,253 통과 · 4 skip ·
+11 실패 (59분)**.
+
+🔴 **그 11건은 모두 이번 변경 이전(`b913b4a`)에도 똑같이 실패한다.**
+같은 커밋의 git worktree 를 만들어 하나씩 다시 돌려 확인했다.
+
+| 선행 실패 | 왜 이번 변경과 무관한가 |
+| --- | --- |
+| `test_actor_declaration_scope_audit::test_21` | 효과 라이브러리 **항목 수 고정값**(20)이 실제(22)와 다르다 — 이번에 카드 효과를 더하지 않았다 |
+| `test_post_goal_continuation_boundaries::test_a09b` | 기준점 상한에서 후속 후보가 비는 실제 엔진 시험 — `b913b4a` 에서도 같은 메시지로 실패 |
+| `test_lua_verified_provenance_audit::test_39` · `test_provenance_consumer_audit::test_39` · `test_update_coverage_contract_audit::test_41` | 새로 추가된 시험 파일의 `pytest.skip` 을 막는 감사인데, 걸린 것은 6-AJ 가 더한 `test_bounded_search_rerun_limits.py` 의 skip 이다 (🔴 **이번 새 파일에는 `pytest.skip` 을 넣지 않았다** — 넣었던 것을 단언으로 바꿨다) |
+| `test_effect_block_alignment_audit::test_32` · `test_effect_type_quick_audit::test_29` · `test_event_free_chain_semantic_audit::test_27`·`test_28` · `test_resolution_outcome_four_cases::test_n05`·`test_n06` | 엔진 쪽 감사 — 이번에 엔진을 건드리지 않았다 |
+| `test_opening_duel_integration::test_f02` | 6-AE 때부터의 선행 실패 (6-BA 보고서에도 적혀 있다) |
+
+🔴 **전체 스위트(7,467개)는 이 컨테이너에서 완주하지 못했다** — 단독
+실행으로 100분을 넘겨도 끝나지 않아 멈췄고, 그 느림은 이번 변경 이전부터
+있던 것이다 (6-BA 때도 28분에 끊겼다). 엔진 시험(`tests/engine/` 3,882개)은
+이번 변경이 건드리지 않은 영역이라 위 41개 파일 집합에 넣지 않았다.
+
 🔴 **디스코드 실사용은 확인하지 않았다** (이 환경에 봇 토큰이 없다).
 🔴 **외부 사이트 공유도 이번에 하지 않았다.**
 

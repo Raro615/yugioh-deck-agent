@@ -78,8 +78,10 @@ def test_a03_an_empty_field_is_not_reached(repository):
     chooser, triggers = opening_wiring(repository, None)
     setup = build_opening(repository, draft, [11091375] * 5,
                           chooser=chooser, triggers=triggers)
-    if not setup.can_run:
-        pytest.skip(f"초기 상태를 만들지 못했습니다: {setup.blockers}")
+    #: 🔴 **건너뛰지 않는다** — 초기 상태를 만들지 못하면 그것이 고쳐야 할
+    #: 사실이지, 조용히 넘어갈 일이 아니다 (``no_test_was_deleted_and_
+    #: no_skip_was_added`` 감사가 지키는 규율).
+    assert setup.can_run, setup.blockers
     verdict = OpenGoal(card_id=0, seat=0).judge(setup.duel)
     assert not verdict.reached and not verdict.present
     assert "앞면 카드가 없습니다" in verdict.reason
