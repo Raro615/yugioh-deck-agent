@@ -1227,12 +1227,19 @@ def test_e11_discord_option_is_trailing_and_optional():
     #: ``results_text`` 는 이제 **마지막에서 두 번째**다. 이 시험이 재는
     #: 사실은 바뀌지 않았다: **선택 인자이고 기본값이 빈 문자열이며 뒤쪽에
     #: 붙어 있어 기존 호출이 그대로 돈다.**
+    #: 🔴 **Phase 6-BC 가 ``progress`` 를 키워드 전용으로 더했다** (진행
+    #: 상태를 받는 쪽). 위치 인자가 아니므로 기존 호출은 그대로 돈다 —
+    #: 그래서 **위치 인자만** 골라서 센다.
     for func in (combo_response, SearchService.combo_response):
-        params = list(inspect.signature(func).parameters)
+        sig = inspect.signature(func)
+        params = [name for name, param in sig.parameters.items()
+                  if param.kind is param.POSITIONAL_OR_KEYWORD]
         assert params[-2] == "results_text"
         assert params[-1] == "followups_text"
         for name in ("results_text", "followups_text"):
-            assert inspect.signature(func).parameters[name].default == ""
+            assert sig.parameters[name].default == ""
+        assert sig.parameters["progress"].kind is \
+            inspect.Parameter.KEYWORD_ONLY
 
 
 def test_e12_search_without_results_does_not_change_behaviour():

@@ -25,7 +25,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from analysis.effect_analyzer import EffectAnalyzer
 from engine.game_state_view import GameStateView
@@ -149,8 +149,70 @@ def compiled_triggers(
     )
 
 
+@dataclass
+class TriggerPreparation:
+    """
+    한 **요청** 동안 다시 쓰는 카드별 준비물 (Phase 6-BC).
+
+    왜 생겼는가 — 실측이다. 자율 탐색 한 번(노드 41)에
+    :meth:`EffectAnalyzer.analyze` 가 **78,120번** 불렸고, 그때마다
+    :class:`EffectAnalyzer` 가 **새로** 만들어져 그 안의 카드 분석 캐시가
+    **한 번도 적중하지 않았다**. 그래서 같은 카드의 Lua 파일을 매번 다시
+    읽고 다시 파싱했다 — 224초 가운데 **189초(84%)** 가 그 일이었다
+    (``_collect_handlers`` 자체 시간만 121초).
+
+    🔴 **무엇을 담는가가 안전의 근거다.** 여기 담기는 둘은 모두 **카드
+    정의와 그 Lua 스크립트만의 함수**다:
+
+    * :class:`~analysis.effect_analyzer.CardAnalysis` — 스크립트를 읽어
+      구조화한 것. 판 · 자리 · 타이밍 · 사용 횟수를 보지 않는다.
+    * :class:`~integration.trigger_compiler.TriggerCompilation` — 그 분석과
+      카드 텍스트에서 만든 **선언**. 발동할 수 있는지의 판정이 아니다.
+
+    🔴 **판정은 캐시하지 않는다.** 누가 · 언제 · 몇 번 썼는지를 보는 일은
+    ``TriggerCollector`` · ``TriggerEligibilityJudge`` 가 **매번** 한다 —
+    이 캐시는 그 앞단의 "이 카드가 무엇을 선언했는가" 까지다.
+
+    🔴 **저장소에 묶인다.** 다른 ``repository`` 로 만든 준비물을 쓰지
+    않는다 (:meth:`for_repository` 가 동일성을 확인한다) — 카드 데이터가
+    바뀌면 새 저장소이고, 그러면 새 준비물이다.
+
+    🔴 **전역 캐시가 아니다.** 소유자는 :class:`~integration.autonomy.
+    TriggerSource` 하나이고, 그 수명은 한 번의 ``build_opening`` 이다.
+    """
+
+    repository: object
+    analyzer: "EffectAnalyzer | None" = None
+    _compiled: dict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.analyzer is None:
+            self.analyzer = EffectAnalyzer(self.repository)
+
+    def for_repository(self, repository) -> "TriggerPreparation":
+        """🔴 **다른 저장소의 준비물을 쓰지 않는다.**"""
+        if repository is self.repository:
+            return self
+        return TriggerPreparation(repository)
+
+    def triggers_of(self, card_id: int) -> CardTriggers:
+        """그 카드의 **선언**. 두 번째부터는 다시 만들지 않는다."""
+        found = self._compiled.get(card_id)
+        if found is None:
+            found = compiled_triggers(self.repository, card_id,
+                                      analyzer=self.analyzer)
+            self._compiled[card_id] = found
+        return found
+
+    def describe_ko(self) -> str:  # pragma: no cover - 표시용
+        return (f"카드 분석 {len(getattr(self.analyzer, '_cache', ()))}장 ·"
+                f" 선언 {len(self._compiled)}장")
+
+
 def registry_for_view(
-    view: GameStateView, repository, *, analyzer: EffectAnalyzer | None = None
+    view: GameStateView, repository, *,
+    analyzer: EffectAnalyzer | None = None,
+    preparation: "TriggerPreparation | None" = None,
 ) -> RegistryBuild:
     """
     **이 관측에 보이는 카드들**의 트리거 등록소.
@@ -169,7 +231,11 @@ def registry_for_view(
     등록소를 써야 한다. 예: "이 카드를 드로우했을 때" 는 뽑힌 뒤에야 패에서
     보인다.
     """
-    analyzer = analyzer or EffectAnalyzer(repository)
+    #: 🔴 **준비물을 주면 그것을 쓴다** (Phase 6-BC). 주지 않으면 예전과
+    #: 한 글자도 다르지 않다 — 그때는 이 호출 한 번만 사는 캐시다.
+    prep = (preparation.for_repository(repository)
+            if preparation is not None
+            else TriggerPreparation(repository, analyzer))
     registry = TriggerRegistry()
     card_ids: list[int] = []
     concealed = no_script = registered = not_a_trigger = unsupported = 0
@@ -194,7 +260,7 @@ def registry_for_view(
             no_script += 1
             continue
         card_ids.append(card.card_id)
-        found = compiled_triggers(repository, card.card_id, analyzer=analyzer)
+        found = prep.triggers_of(card.card_id)
         not_a_trigger += found.not_a_trigger
         unplaceable += found.unplaceable
         for compilation in found.compilations:

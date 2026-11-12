@@ -740,6 +740,16 @@ class OpeningReport:
     전에는 이 칸이 없어서 **생성 자체가 실패하면 아무 말도 남지 않았다** —
     ``combo_response`` 가 ``replay`` 가 있을 때만 안내를 적었기 때문이다.
     """
+    spent: "dict | None" = None
+    """
+    🔴 **이 절이 실제로 쓴 시간** (Phase 6-BC §5) — ``search`` ·
+    ``rerun`` · ``record`` · ``section`` (이 절 전체) 의 초.
+
+    🔴 **요청 전체는 여기에 없다.** 첨부(전개 기록 JSON · 뷰어 HTML) 를
+    만드는 시간은 이 절이 끝난 **뒤에** 드므로, 요청 전체는 그것까지 잰
+    ``combo_response`` 가 적는다 — 한 수치로 합치면 어느 칸이 비쌌는지
+    알 수 없다.
+    """
 
 
 def _run_opening(agent, recipe_text: str,
@@ -899,10 +909,94 @@ def _run_opening(agent, recipe_text: str,
                          replay_state=replay_state)
 
 
+def _autonomous_record(agent, draft, hand_ids, found, ranking) -> tuple:
+    """
+    자율 탐색이 고른 **대표 결과**의 재실행 기록 (Phase 6-BC §2).
+
+    돌려주는 것은 ``(기록 | None, 설명 한 줄, 대표 결과 번호 | None)``.
+
+    🔴 **대표는 "표시 순서가 가장 앞선 추천" 이고 단독 최우수가 아니다.**
+    추천이 여럿이면 그 사실을 설명에 적는다 — 뷰어와 JSON 이 결과 하나만
+    담을 수 있다는 제약 때문에 고른 것이지, 평가가 하나로 줄인 것이
+    아니다.
+
+    🔴 **기록은 그 경로를 새 초기 상태에서 다시 실행해 만든다.** 탐색
+    중 여러 분기의 사건을 한 경로처럼 합치지 않는다. 어긋나면 기록을
+    만들지 않고 그 사실을 적는다.
+    """
+    from app.main import autonomous_rerun_record
+
+    best = tuple(ranking.recommended) if ranking is not None else ()
+    if not best:
+        return None, ("🖥 **전개 보기를 만들지 않았습니다** — 검증된 추천"
+                      " 후보가 없습니다."), None
+    chosen = next((one for one in found.results if one.index == best[0].index),
+                  None)
+    if chosen is None:  # pragma: no cover - 방어용
+        return None, "🖥 **전개 보기를 만들지 않았습니다** — 대표 결과를 찾지 못했습니다.", None
+    record, why = autonomous_rerun_record(
+        agent.repository, draft, list(hand_ids), chosen
+    )
+    tie = (f" (🔴 **공동 추천 {len(best)}개** 가운데 표시 순서가 가장 앞선"
+           f" 것이고, 단독 최우수라는 뜻이 아닙니다)" if len(best) > 1 else "")
+    if record is None:
+        return None, (f"🖥 **전개 보기를 만들지 못했습니다** — 결과"
+                      f" {chosen.index} 를 다시 실행하다 어긋났습니다:"
+                      f" {why}"), chosen.index
+    return record, (f"🖥 전개 보기·전개 기록은 **결과 {chosen.index}**"
+                    f" 의 재실행 기록입니다{tie}."), chosen.index
+
+
+def _autonomous_spent_line(spent: dict,
+                           whole_sec: "float | None" = None) -> str:
+    """
+    **시간을 칸마다 갈라 적는다** (Phase 6-BC §5).
+
+    🔴 **탐색 제한과 요청 전체 소요는 다른 수치다.** ``max_seconds`` 는
+    탐색만의 상한이고, 사용자가 기다린 시간에는 재생 검증 · 기록 만들기 ·
+    첨부 만들기가 더해져 있다. 한 수치로 적으면 "예산 240초" 를 보고도 왜
+    더 기다렸는지 알 수 없다.
+
+    🔴 **총시간과 중첩 측정을 섞지 않는다.** ``whole_sec`` 은 요청 전체이고
+    나머지는 그 안의 구간이다. 셋의 합이 전체와 꼭 같지 않으므로 (입력
+    해석 · 보고 문장 · **첨부 만들기**가 남는다) **남은 시간을 따로 적고**
+    억지로 맞추지 않는다.
+
+    ``whole_sec`` 을 주지 않으면 **이 절까지의 시간만** 적는다 — 🔴 아직
+    재지 않은 것을 요청 전체라고 부르지 않는다.
+
+    🔴 **카드 자료 만들기는 여기에 없다.** 봇은 그것을 ``on_ready`` 에서
+    한 번만 하고 (``search_service.prepare``) 요청마다 다시 하지 않으므로,
+    이 줄에 넣으면 요청 비용을 과장하게 된다.
+    """
+    search_sec = float(spent.get("search", 0.0) or 0.0)
+    rerun_sec = float(spent.get("rerun", 0.0) or 0.0)
+    record_sec = float(spent.get("record", 0.0) or 0.0)
+    section_sec = float(spent.get("section", 0.0) or 0.0)
+    parts = [f"탐색 {search_sec:.2f}초",
+             f"추천 후보 재생 검증 {rerun_sec:.2f}초",
+             f"전개 기록 만들기 {record_sec:.2f}초"]
+    if whole_sec is None:
+        rest = section_sec - search_sec - rerun_sec - record_sec
+        head = f"⏱ 탐색 절 **{section_sec:.2f}초**"
+        tail = (f" · 그 밖(입력 해석·초기 상태·보고 문장)"
+                f" {max(rest, 0.0):.2f}초. 🔴 **첨부(전개 기록 JSON · 뷰어"
+                " HTML) 만드는 시간은 이 수치에 없습니다** — 기본 응답이"
+                " 요청 전체를 적습니다.")
+    else:
+        rest = whole_sec - search_sec - rerun_sec - record_sec
+        head = f"⏱ 요청 전체 **{whole_sec:.2f}초**"
+        tail = (f" · 그 밖(입력 해석·초기 상태·보고 문장·첨부 만들기)"
+                f" {max(rest, 0.0):.2f}초. 🔴 탐색 예산 (`max_seconds`) 은"
+                " **탐색 한 칸만**의 상한입니다.")
+    return head + " — " + " · ".join(parts) + tail
+
+
 def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
                         search_text: str,
                         results_text: str = "",
-                        followups_text: str = "") -> "OpeningReport | None":
+                        followups_text: str = "", *,
+                        progress=None) -> "OpeningReport | None":
     """
     ``/combo search:…`` — **제한 전개 탐색** (Phase 6-AH).
 
@@ -923,6 +1017,8 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
     🔴 **주지 않으면 6-AH 의 단일 결과 모드 그대로다.** 사용자가 고르지
     않은 모드로 조용히 바꾸지 않는다.
     """
+    import time
+
     from app.main import (
         AUTONOMOUS_SEARCH_NAME, autonomous_search_opening,
         bounded_search_many_opening, bounded_search_opening,
@@ -1001,9 +1097,15 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
             ])
             return OpeningReport(brief=said, detail=said, refused=False,
                                  ran=False)
+        #: 🔴 **탐색 제한과 요청 전체 소요를 가른다** (Phase 6-BC §5).
+        #: ``max_seconds`` 는 **탐색만**의 상한이고, 사용자가 기다리는 시간은
+        #: 여기에 재생 검증과 기록 만들기가 더해진 값이다 — 그 둘을 한
+        #: 수치로 적으면 "예산 240초" 를 보고도 왜 더 기다렸는지 알 수 없다.
+        asked_at = time.monotonic()
         setup, found = autonomous_search_opening(
             agent.repository, parsed.draft, hand_ids,
             max_results=max(2, wanted),
+            progress=progress,
             **({"actions": actions} if actions else {}),
         )
         if found is None:
@@ -1024,8 +1126,30 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
             render_open_search(found, agent.repository, setup,
                                ranking).splitlines()
         )
-        return OpeningReport(brief=tuple(brief), detail=tuple(detail),
-                             refused=False, ran=True)
+        #: 🔴 **첨부가 이 결과를 가리키게 한다** (Phase 6-BC §2). 뷰어와
+        #: JSON 은 결과 **하나**만 담을 수 있으므로 **대표**를 고르고,
+        #: 🔴 **어떤 기준으로 어느 결과를 골랐는지 적는다** — 대표 표시를
+        #: "단독 최우수" 로 바꾸어 부르지 않는다.
+        record_at = time.monotonic()
+        record, why, picked = _autonomous_record(
+            agent, parsed.draft, hand_ids, found, ranking
+        )
+        spent = {
+            "search": float(getattr(found, "search_seconds", 0.0) or 0.0),
+            "rerun": float(getattr(found, "rerun_seconds", 0.0) or 0.0),
+            "record": time.monotonic() - record_at,
+            "section": time.monotonic() - asked_at,
+        }
+        brief.append(why)
+        detail.append("")
+        detail.append(why)
+        detail.append(_autonomous_spent_line(spent))
+        return OpeningReport(
+            brief=tuple(brief), detail=tuple(detail), refused=False,
+            ran=True, replay=record, spent=spent,
+            replay_state=(None if record is not None
+                          else ReplayState.BUILD_FAILED),
+        )
 
     if extra and wanted <= 1:
         #: 🔴 **조용히 켜 주지 않는다** — 후속 모드는 복수 결과 탐색의
@@ -1779,7 +1903,8 @@ def combo_response(agent, hand_text: str, board_text: str = "",
                    deck_text: str = "", recipe_text: str = "",
                    line_text: str = "", search_text: str = "",
                    results_text: str = "",
-                   followups_text: str = "") -> ComboResponse:
+                   followups_text: str = "", *,
+                   progress=None) -> ComboResponse:
     """
     ``/combo`` 의 응답. **discord 를 모른다.** 메시지들과 첨부들을 돌려준다.
 
@@ -1812,9 +1937,22 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     * 전체 기록은 언제나 첨부로 간다 (실행 기록 + 정적 계획을 **분리된
       절**로).
     """
-    from app.main import _parse_card_ids
+    import time
+
+    from app.main import _parse_card_ids, is_autonomous_search
     from deck.hand import FixedHand
     from deck.planner import ComboPlanner
+
+    #: 🔴 **요청 전체를 여기서 잰다** (Phase 6-BC §5) — 첨부(전개 기록
+    #: JSON · 뷰어 HTML) 만드는 시간이 탐색 절 **뒤에** 들기 때문이다.
+    #: 실측으로 그것이 몇 초였다 (보고서 §10).
+    asked_at = time.monotonic()
+
+    #: 🔴 **자율 탐색은 주 실행이다** (Phase 6-BC). ``search:auto`` 면
+    #: ``first_meaningful`` 기준점 실행도 정적 전개 추천도 돌리지 않는다 —
+    #: 실측으로 그 둘이 자율 탐색 결과 앞뒤에 붙어 **서로 다른 결과가 한
+    #: 응답에 섞였다** (사용자 실행 ①~③).
+    autonomous = is_autonomous_search(search_text)
 
     hand_ids, hand_unresolved = _parse_card_ids(hand_text or "", agent)
     board_ids, board_unresolved = _parse_card_ids(board_text or "", agent)
@@ -1854,6 +1992,21 @@ def combo_response(agent, hand_text: str, board_text: str = "",
         return ComboResponse(messages=tuple(paginate(
             lines, max_messages=COMBO_MESSAGE_LIMIT)))
 
+    #: 🔴 **충돌을 몰래 한쪽으로 바꾸지 않는다** (Phase 6-BC §1).
+    #: ``line:`` 은 적어 둔 경로를 따라가라는 뜻이고 ``search:auto`` 는
+    #: 그것을 쓰지 말라는 뜻이다 — 둘을 함께 받으면 어느 쪽을 돌렸는지
+    #: 출력만 보고는 알 수 없게 된다.
+    if autonomous and (line_text or "").strip():
+        lines.append("")
+        lines.append("🔴 **돌리지 않았습니다** — `search:auto` (자율 탐색)"
+                     f" 와 `line:{line_text}` (적어 둔 고정 경로) 를 함께"
+                     " 주셨습니다. 서로 반대되는 요청이라 한쪽을 골라"
+                     " 드리지 않습니다.")
+        lines.append("· 자율 탐색만: `line:` 을 비우고 `search:auto`")
+        lines.append(f"· 고정 경로만: `search:` 를 비우고 `line:{line_text}`")
+        return ComboResponse(messages=tuple(paginate(
+            lines, max_messages=COMBO_MESSAGE_LIMIT)))
+
     draft = None
     if deck_text and deck_text.strip():
         from deck.builder import DeckBuilder
@@ -1871,22 +2024,33 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     #: 🔴 **실제 레시피를 주면 엔진으로 돌린다** (Phase 6-T). 자연어
     #: ``deck:`` 초안과 **가르는 것이 요점**이다 — 초안은 이 저장소가 추천한
     #: 구성이고 사용자가 확정한 덱이 아니다 (§5).
-    executed = _run_opening(agent, recipe_text, hand_ids, line_text)
+    #: 🔴 **``search:auto`` 면 기준점 실행을 돌리지 않는다** (6-BC §1) —
+    #: 그래도 **입력 검증은 생략하지 않는다**: 자율 탐색 절이 같은 초기
+    #: 상태 구성 절차를 거치고 (``app.main.autonomous_search_opening``),
+    #: 통과하지 못하면 그 사실을 ``refused`` 로 돌려준다. 🔴 이 함수는
+    #: 초기 상태를 **직접 만들지 않는다** (아래 ``test_03`` 이 감사한다).
+    executed = (None if autonomous
+                else _run_opening(agent, recipe_text, hand_ids, line_text))
     #: 🔴 **주지 않으면 돌리지 않는다** (Phase 6-AH). ``search:`` 가 없는
     #: 요청의 동작은 6-AG 와 한 글자도 다르지 않다.
     searched = _run_bounded_search(agent, recipe_text, hand_ids, search_text,
-                                   results_text, followups_text)
+                                   results_text, followups_text,
+                                   progress=progress)
+    #: 입력 거절을 말하는 보고 — 자율 탐색이면 그쪽이 말한다.
+    gate = searched if autonomous else executed
 
     #: 🔴 **입력이 거절되면 정적 전개 추천을 내지 않는다** (Phase 6-AA —
     #: 사용자 실험 ③). 실측으로, 「기르수: 패 4장 > 덱 3장」으로 거절한
     #: 요청에 대해 아래 정적 계획이 기르수 소환과 효과를 나열하고 "확정" ·
     #: "엔진이 허가함" 으로 적었다. 그 두 문장이 한 응답 안에 같이 있으면
     #: 사용자는 입력이 통과한 줄로 읽는다.
-    if executed.refused:
+    if gate is not None and gate.refused:
         lines.append("")
-        lines.extend(executed.brief)
+        if executed is not None:
+            lines.extend(executed.brief)
         if searched is not None:
-            lines.append("")
+            if executed is not None:
+                lines.append("")
             lines.extend(searched.brief)
         lines.append("")
         lines.append("🔴 **정적 전개 추천은 내지 않았습니다** — 이번 요청의"
@@ -1898,6 +2062,7 @@ def combo_response(agent, hand_text: str, board_text: str = "",
             _combo_detail_text(agent, executed, plan=None, verdict=None,
                                searched=searched)
         )
+        _ = autonomous
         lines.append("")
         #: 🔴 **이 첨부에는 정적 계획이 없다** — 거절한 입력에 전개를
         #: 추천하지 않는다는 계약이 그렇다 (위 설명). 가리키는 줄도 그
@@ -1913,10 +2078,13 @@ def combo_response(agent, hand_text: str, board_text: str = "",
             detail_omitted=detail.omitted_lines,
         )
 
-    plan = ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
-                                               board=board_ids, draft=draft)
-
-    verdict = combo_verdict(plan)
+    #: 🔴 **자율 탐색 요청에는 정적 계획을 붙이지 않는다** (6-BC §2).
+    #: 실측으로, 정적 계획이 자율 탐색 결과 뒤에 붙어 **서로 다른 결과가
+    #: 한 응답에 섞였다**. 만들지도 않으므로 비용도 들지 않는다.
+    plan = (None if autonomous else
+            ComboPlanner(agent.repository).plan(FixedHand(tuple(hand_ids)),
+                                                board=board_ids, draft=draft))
+    verdict = None if plan is None else combo_verdict(plan)
 
     #: 🔴 **같은 검사를 두 번 다르게 말하지 않는다** (Phase 6-AB 보완8).
     #:
@@ -1930,23 +2098,32 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     #: 첨부 쪽에만 거르지 않은 목록이 들어갔고 시험이 그것을 잡았다.
     answered_by_recipe = bool(recipe_text and recipe_text.strip())
     shown_checks = [
-        item for item in plan.manual_checks
+        item for item in (() if plan is None else plan.manual_checks)
         if not (answered_by_recipe and draft is None
                 and "패가 덱에서 나올 수" in item)
     ]
-    hidden_checks = len(plan.manual_checks) - len(shown_checks)
+    hidden_checks = (0 if plan is None
+                     else len(plan.manual_checks) - len(shown_checks))
 
     #: 🔴 **실제 실행을 정적 계획보다 앞에 둔다.** 둘을 같은 목록에 섞지
     #: 않고, 먼저 "실제로 돌린 것" 을 보여 준 다음 "돌리지 않은 계획" 을
     #: 보여 준다 (§13 "사용자에게 혼동시키지 않는다").
     lines.append("")
-    lines.extend(executed.brief)
+    if executed is not None:
+        lines.extend(executed.brief)
     if searched is not None:
-        lines.append("")
+        if executed is not None:
+            lines.append("")
         lines.extend(searched.brief)
 
     lines.append("")
-    if executed.ran:
+    if plan is None:
+        #: 🔴 **자율 탐색 요청** — 붙일 정적 계획도 기준점 실행도 없다.
+        #: 그 사실을 한 줄로 적는다 (없는 절을 찾게 하지 않는다).
+        lines.append("🔴 이 응답에는 **자율 탐색 결과만** 있습니다 —"
+                     " `first_meaningful` 기준점 실행도, 정적 전개 추천도"
+                     " 돌리지 않았습니다 (`search:auto` 이므로).")
+    elif executed.ran:
         #: 🔴 **실제 실행이 있으면 정적 계획을 길게 붙이지 않는다** (6-AE
         #: §3). 실행 기록 바로 아래에 일곱 걸음짜리 계획이 붙으면 "실행
         #: 이후의 추가 행동" 으로 읽힌다 — 실측으로 그 절이 응답의 절반을
@@ -2013,12 +2190,19 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     #: 직렬화 · 첨부 준비의 어느 자리에서 멈췄든 **한 줄로** 말한다.
     attachments = list(detail.attachments)
     replay_item: "ComboAttachment | None" = None
-    if not executed.ran:
+    #: 🔴 **첨부는 이 응답이 말한 결과의 기록이어야 한다** (6-BC §2).
+    #: 자율 탐색 요청이면 자율 탐색이 고른 **대표 결과**의 재실행 기록을
+    #: 쓴다 — 다른 정책(``first_meaningful``)으로 돌린 기록을 대신 붙이면
+    #: 화면과 첨부가 **서로 다른 전개**를 가리킨다.
+    source = searched if autonomous else executed
+    if source is None or not source.ran:
         replay_state = ReplayState.NOT_RUN
-    elif executed.replay_state is ReplayState.BUILD_FAILED:
+    elif source.replay_state is ReplayState.BUILD_FAILED:
+        replay_state = ReplayState.BUILD_FAILED
+    elif source.replay is None:
         replay_state = ReplayState.BUILD_FAILED
     else:
-        replay_item, replay_state = replay_attachment(executed.replay)
+        replay_item, replay_state = replay_attachment(source.replay)
     if replay_item is not None:
         room = len(attachments) < COMBO_ATTACHMENT_COUNT_LIMIT
         if detail.complete and room:
@@ -2032,7 +2216,7 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     #: 뷰어만 붙이지 않는다 — 기계가 읽는 값이 먼저다.
     viewer_item: "ComboAttachment | None" = None
     if replay_item is not None:
-        viewer_item, viewer_state = viewer_attachment(executed.replay)
+        viewer_item, viewer_state = viewer_attachment(source.replay)
         if viewer_item is not None:
             if len(attachments) < COMBO_ATTACHMENT_COUNT_LIMIT:
                 attachments.append(viewer_item)
@@ -2045,10 +2229,15 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     if viewer_item is not None:
         #: 🔴 **볼 수 있는 것이 생겼을 때만** 전개 보기를 적는다 (6-AU).
         lines.append(COMBO_VIEWER_NOTICE.format(name=viewer_item.filename))
-    elif executed.ran:
+    elif source is not None and source.ran:
         #: 🔴 **외부 재생 지원 여부만** 말한다 — 실행의 성공 · 중단 · 실패는
         #: 위 실행 요약이 말한다 (상수의 설명).
         lines.append(COMBO_REPLAY_VIEW_UNAVAILABLE)
+    #: 🔴 **요청 전체 소요는 첨부까지 만든 뒤에 적는다** (Phase 6-BC §5) —
+    #: 탐색 절만 재고 "요청 전체" 라 부르면 사용자가 기다린 시간과 어긋난다.
+    if autonomous and searched is not None and searched.spent:
+        lines.append(_autonomous_spent_line(
+            searched.spent, whole_sec=time.monotonic() - asked_at))
     lines.extend(_detail_pointer_lines(detail))
     if replay_item is not None:
         lines.append(
@@ -2096,7 +2285,13 @@ def _combo_detail_text(agent, executed: OpeningReport,
         "🔴 이 파일은 Discord 기본 응답의 요약이 가리키는 **전체 기록**"
         "입니다.",
     ]
-    if plan is not None:
+    if executed is None:
+        #: 🔴 **자율 탐색 전용 파일이다** (Phase 6-BC) — 기준점 실행도
+        #: 정적 계획도 들어 있지 않다.
+        lines.append("🔴 이 파일에는 **자율 전개 탐색 결과만** 있습니다 —"
+                     " `first_meaningful` 기준점 실행도, 정적 전개 추천도"
+                     " 돌리지 않았습니다.")
+    elif plan is not None:
         lines.append("🔴 아래 두 절은 서로 다른 것입니다 — 앞은 **실제로"
                      " 돌린 것**, 뒤는 **돌리지 않은 정적 계획**입니다.")
     else:
@@ -2106,16 +2301,22 @@ def _combo_detail_text(agent, executed: OpeningReport,
         lines.append("🔴 이 파일에는 **실제로 돌린 것**만 있습니다 — 정적"
                      " 전개 추천은 내지 않았습니다.")
     lines.append("")
-    lines.extend(executed.detail)
+    #: 🔴 **자율 탐색 요청에는 기준점 실행 절이 없다** (Phase 6-BC).
+    #: ``search:auto`` 는 자율 탐색이 **주 실행**이므로
+    #: ``first_meaningful`` 실행을 따로 돌리지 않는다 — 돌리지 않은 것을
+    #: 첨부가 있는 척 적지 않는다.
+    if executed is not None:
+        lines.extend(executed.detail)
     #: 🔴 **탐색 기록은 고정 경로 실행과 다른 절이다** (Phase 6-AH). 같은
     #: 목록에 섞으면 "적어 둔 경로를 따라간 것" 과 "엔진이 허가한 분기를
     #: 펼친 것" 을 구별할 수 없다.
     if searched is not None:
-        lines.append("")
-        lines.append("=" * 68)
-        lines.append("[아래는 제한 전개 탐색입니다 — 적어 둔 경로를 따라간"
-                     " 것이 아닙니다]")
-        lines.append("=" * 68)
+        if executed is not None:
+            lines.append("")
+            lines.append("=" * 68)
+            lines.append("[아래는 제한 전개 탐색입니다 — 적어 둔 경로를"
+                         " 따라간 것이 아닙니다]")
+            lines.append("=" * 68)
         lines.extend(searched.detail)
     if plan is not None:
         lines.append("")
@@ -2262,7 +2463,8 @@ class SearchService:
                        deck_text: str = "", recipe_text: str = "",
                        line_text: str = "", search_text: str = "",
                        results_text: str = "",
-                       followups_text: str = "") -> ComboResponse:
+                       followups_text: str = "", *,
+                       progress=None) -> ComboResponse:
         """
         전개 계획을 세워 **메시지들과 첨부들**을 돌려준다 (Phase 6-AE).
 
@@ -2279,7 +2481,8 @@ class SearchService:
         try:
             return combo_response(self._agent, hand_text, board_text,
                                   deck_text, recipe_text, line_text,
-                                  search_text, results_text, followups_text)
+                                  search_text, results_text, followups_text,
+                                  progress=progress)
         except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
             logger.exception("전개 계획 생성에 실패했습니다. 패=%r 필드=%r"
                              " 덱=%r 레시피=%r 경로=%r 탐색=%r 결과수=%r"
@@ -2524,10 +2727,24 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         #: 그래서 ``defer()`` 로 먼저 응답을 열고 (3초 제한), 실제 탐색은
         #: ``asyncio.to_thread`` 로 보내 이벤트 루프를 막지 않는다 —
         #: 기존 ``/combo`` 와 **같은 구조**이고 새로 만든 것이 없다.
+        #: 🔴 **자율 탐색에만 진행 상태를 붙인다** (Phase 6-BC §5). 다른
+        #: 경로는 수 초 안에 끝나므로 진행 알림이 소음이다.
+        from app.main import is_autonomous_search
+
         await interaction.response.defer()
+        relay = None
+        if is_autonomous_search(search):
+            async def _edit(text: str) -> None:
+                #: 🔴 **같은 메시지를 고친다** — ``defer()`` 가 열어 둔 원래
+                #: 응답이고, 새 메시지를 보내지 않는다.
+                await interaction.edit_original_response(content=text)
+
+            relay = ProgressRelay(asyncio.get_running_loop(), _edit)
         response = await asyncio.to_thread(
             combo_service.combo_response, hand, board, deck, recipe, line,
-            search, results, followups)
+            search, results, followups, progress=relay)
+        if relay is not None:
+            await relay.finish()
         await send_combo_response(interaction.followup, response)
 
     @tree.command(name="share-replay", description=SHARE_DESCRIPTION)
@@ -2604,6 +2821,103 @@ COMBO_ATTACHMENT_FAILED_NOTICE = (
     " 위 요약 말고는 전달된 것이 없습니다 — 전체 기록은 CLI 의"
     " `python3 -m app.main combo … --recipe …` 로 볼 수 있습니다."
 )
+
+
+#: 자율 탐색의 **진행 상태 한 줄** (Phase 6-BC §5).
+#:
+#: 🔴 **단계 이름은 ``app.main`` 의 것이다** — 여기서 새로 만들지 않는다.
+#: 실측 20~240초가 걸리는 요청에서 사용자가 보는 것이 "응답 대기" 하나뿐이면
+#: 멈춘 것과 구별되지 않는다.
+#:
+#: 🔴 **진행 상태는 진행만 말한다.** 중간 결과 · 찾은 후보 수 · "거의 다
+#: 됐습니다" 를 적지 않는다 — 아직 검증되지 않은 것을 결과처럼 읽게 된다.
+PROGRESS_TEXTS: dict = {
+    "searching": "🔎 **자율 탐색 중**입니다 — 엔진이 허가한 행동을 펼치고"
+                 " 있습니다. (실측 6~240초 · 탐색 예산까지)",
+    "verifying": "🧪 **추천 후보를 새 판에서 재생 검증 중**입니다 — 탐색은"
+                 " 끝났고, 고른 후보를 처음부터 다시 밟고 있습니다.",
+    "reporting": "📝 **보고 문장과 전개 기록을 만들고 있습니다** — 검증은"
+                 " 끝났습니다.",
+}
+
+#: 🔴 **끝났다는 사실도 같은 메시지를 고쳐서 알린다.** 마지막 단계 문구를
+#: 그대로 남기면 끝난 요청이 "만들고 있습니다" 로 읽힌다.
+PROGRESS_DONE_TEXT = (
+    "✅ **자율 탐색이 끝났습니다** — 결과는 이 아래에 있습니다."
+)
+
+
+def progress_text(stage: str) -> "str | None":
+    """단계 이름 → 사용자가 읽는 한 줄. 모르는 이름이면 ``None``.
+
+    🔴 **모르는 단계를 지어내지 않는다** — ``None`` 이면 아무것도 보내지
+    않는다 (``app.main`` 이 단계를 늘려도 봇이 엉뚱한 말을 하지 않는다).
+    """
+    return PROGRESS_TEXTS.get(str(stage))
+
+
+class ProgressRelay:
+    """
+    스레드에서 받은 진행 단계를 **메시지 하나를 고쳐서만** 보여 준다
+    (Phase 6-BC §5).
+
+    🔴 **반복 전송하지 않는다.** 같은 단계를 두 번 받아도 한 번만 고치고,
+    새 메시지를 만들지 않는다 — 채널에 진행 알림이 쌓이면 결과가 밀려
+    올라간다.
+
+    🔴 **탐색 스레드에서 불린다.** 그래서 코루틴을 직접 ``await`` 할 수 없고
+    :func:`asyncio.run_coroutine_threadsafe` 로 이벤트 루프에 넘긴다. 결과를
+    기다리지 않으므로 **진행 표시가 탐색을 늦추지 않는다**.
+
+    🔴 **실패를 삼키지 않는다** — 넘긴 일이 실패하면 로그에 남긴다
+    (``app.main.notify_progress`` 는 이쪽 예외도 잡아 탐색을 보호한다).
+    """
+
+    def __init__(self, loop, edit) -> None:
+        self._loop = loop
+        self._edit = edit
+        self._seen: set = set()
+        self._shown = False
+
+    @property
+    def shown(self) -> bool:
+        """진행 상태를 한 번이라도 보여 주었는가."""
+        return self._shown
+
+    def __call__(self, stage: str) -> None:
+        text = progress_text(stage)
+        if text is None or stage in self._seen:
+            return
+        self._seen.add(stage)
+        self._shown = True
+        self._submit(text)
+
+    def _submit(self, text: str) -> None:
+        import asyncio
+
+        task = asyncio.run_coroutine_threadsafe(self._edit(text), self._loop)
+        task.add_done_callback(self._complain)
+
+    @staticmethod
+    def _complain(task) -> None:
+        try:
+            task.result()
+        except Exception:  # noqa: BLE001 - 진행 표시 실패로 응답을 잃지 않는다
+            logger.warning("진행 상태를 고치지 못했습니다.", exc_info=True)
+
+    async def finish(self) -> None:
+        """끝났다는 사실로 **같은 메시지를 한 번 더 고친다**.
+
+        🔴 한 번도 보여 주지 않았으면 아무것도 하지 않는다 — 없던 메시지를
+        끝에서 만들지 않는다.
+        """
+        if not self._shown:
+            return
+        try:
+            await self._edit(PROGRESS_DONE_TEXT)
+        except Exception:  # noqa: BLE001
+            logger.warning("진행 상태 마무리를 고치지 못했습니다.",
+                           exc_info=True)
 
 
 async def send_combo_response(sender, response: ComboResponse,

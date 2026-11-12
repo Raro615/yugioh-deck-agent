@@ -890,6 +890,44 @@ AUTONOMOUS_DEFAULT_SECONDS: float = 240.0
 AUTONOMOUS_DEFAULT_CHOICE_BRANCHES: int = 4
 AUTONOMOUS_DEFAULT_BASELINES: int = 3
 
+#: 자율 탐색의 **진행 단계 이름** (Phase 6-BC §5).
+#:
+#: 🔴 **왜 문자열인가.** 진행 상태를 받는 쪽은 Discord 어댑터이고
+#: (``app.discord_bot``), 보내는 쪽은 이 조립 계층이다. 둘 사이에 새 자료형을
+#: 두면 ``deck`` · ``agent`` 가 쓰지도 않는 형을 import 하게 되므로
+#: (ADR-007), **값 문자열 세 개**로 끝낸다.
+#:
+#: 🔴 **단계가 늘었다고 일을 더 하지 않는다.** 이 이름들은 **이미 있던
+#: 경계**에 붙은 이름이다 — ``run_many`` 전 · ``rerun_select`` 가 불릴 때
+#: (= 탐색이 끝나고 재생 검증이 시작될 때) · 돌려주기 직전.
+PROGRESS_SEARCHING: str = "searching"
+PROGRESS_VERIFYING: str = "verifying"
+PROGRESS_REPORTING: str = "reporting"
+
+
+def notify_progress(progress, stage: str) -> None:
+    """
+    진행 단계를 **알리기만** 한다 (Phase 6-BC §5).
+
+    ``progress`` 가 ``None`` 이면 아무것도 하지 않는다 — 🔴 **진행 표시는
+    선택이고, 주지 않은 호출의 동작은 6-BB 와 같다.**
+
+    🔴 **진행 표시가 탐색을 깨뜨리지 못하게 한다.** 받는 쪽은 Discord 전송
+    (끊긴 연결 · 상한 거절 · 권한)이고, 그 예외가 올라오면 **이미 끝난
+    탐색을 잃는다**. 그래서 여기서 잡아 로그에만 남긴다 — 🔴 다만 **성공한
+    것처럼 조용히 넘기지 않는다** (로그에 단계와 예외가 남는다).
+    """
+    if progress is None:
+        return
+    try:
+        progress(stage)
+    except Exception:  # noqa: BLE001 — 진행 표시 실패로 탐색을 잃지 않는다.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "진행 표시를 보내지 못했습니다 (stage=%s)", stage, exc_info=True
+        )
+
 
 def is_autonomous_search(name: str) -> bool:
     """``search:`` 가 **자율 탐색**을 고른 것인가 (Phase 6-BB)."""
@@ -1114,7 +1152,7 @@ def bounded_search_many_opening(
 def autonomous_search_opening(
     repository, draft, hand, *, max_results: int = AUTONOMOUS_DEFAULT_RESULTS,
     actions: int = AUTONOMOUS_DEFAULT_ACTIONS, candidates: int = 0,
-    budget=None, rerun: bool = True,
+    budget=None, rerun: bool = True, progress=None,
 ) -> tuple:
     """
     **목표 카드 없이** 선공 전개를 탐색한다 (Phase 6-BB).
@@ -1133,6 +1171,11 @@ def autonomous_search_opening(
 
     🔴 **자율 탐색의 기준점은 "첫 소환이 정리된 자리" 다.** 그래서 전개의
     거의 전부가 후속 행동이고, ``actions`` 가 사실상의 행동 예산이다.
+
+    ``progress`` 를 주면 **단계 이름만** 받아 간다 (Phase 6-BC §5,
+    :func:`notify_progress`) — 🔴 **탐색을 나누거나 중간 결과를 내보내지
+    않는다.** 알리는 자리는 ``run_many`` 전과 ``rerun_select`` 가 불리는
+    순간뿐이고, 그 순간은 **탐색이 끝나고 재생 검증이 시작되는 경계**다.
     """
     from agent.bounded_search import (
         BoundedSearch, CANDIDATE_CAP, FOLLOWUP_CAP, OpenGoal, RESULTS_CAP,
@@ -1181,13 +1224,22 @@ def autonomous_search_opening(
         )
         if fresh.can_run:
             fresh_duel = fresh.duel
+
+    def _pick(rows):
+        #: 🔴 **이 자리가 "탐색 끝 · 검증 시작" 이다** (Phase 6-BC §5).
+        #: ``run_many`` 는 모으기를 마친 뒤에만 선택 함수를 부르므로, 여기서
+        #: 알리면 단계 이름이 **실제 경계와 어긋나지 않는다**.
+        notify_progress(progress, PROGRESS_VERIFYING)
+        return select_top(rows, wanted)
+
+    notify_progress(progress, PROGRESS_SEARCHING)
     outcome = search.run_many(
         setup.duel, rerun_from=fresh_duel, rerun=rerun,
         #: 🔴 **모은 다음 평가해서 상위만 재생한다** — 깊이 우선으로 먼저
         #: 닿은 것이 곧 추천이 되지 않게.
-        rerun_select=(None if not rerun
-                      else lambda rows: select_top(rows, wanted)),
+        rerun_select=(None if not rerun else _pick),
     )
+    notify_progress(progress, PROGRESS_REPORTING)
     return setup, outcome
 
 

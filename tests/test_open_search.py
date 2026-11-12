@@ -457,3 +457,556 @@ def test_f06_share_replay_still_uses_the_fixed_line(monkeypatch):
                               line_text="orcust-skeleton-longirsu",
                               runner=object())
     assert called == {"fixed": 1, "auto": 0}
+
+
+# ======================================================================
+# G. 실사용 보완 — 자율 탐색이 **주 실행**이다 (Phase 6-BC)
+# ======================================================================
+class _ComboAgent:
+    """``combo_response`` 가 읽는 것만 흉내 낸다."""
+
+    class _Repo:
+        def get(self, card_id):
+            return None
+
+    repository = _Repo()
+
+
+def _combo_stubs(monkeypatch, *, searched=None, record=None, sinks=None):
+    """``/combo`` 의 무거운 절들을 스텁으로 바꾸고 **호출을 센다**.
+
+    ``sinks`` 를 주면 탐색 절이 받은 **진행 표시 받는 쪽**을 거기에 적어
+    둔다 (Phase 6-BC §5) — 🔴 호출 수 세는 표는 건드리지 않는다.
+    """
+    import app.discord_bot as bot
+
+    seen = {"opening": 0, "search": 0, "plan": 0}
+
+    def _fake_opening(agent, recipe_text, hand_ids, line_text=""):
+        seen["opening"] += 1
+        return bot.OpeningReport(brief=("[스텁] 기준점이 고른 전개",),
+                                 detail=("[스텁] 기준점 상세",),
+                                 ran=True, replay={"from": "first_meaningful"})
+
+    def _fake_search(agent, recipe_text, hand_ids, search_text,
+                     results_text="", followups_text="", progress=None):
+        seen["search"] += 1
+        if sinks is not None:
+            sinks.append(progress)
+        return searched
+
+    class _Plan:
+        steps = ()
+        manual_checks = ()
+        unsupported = ()
+        stopped_reason = ""
+
+    class _Planner:
+        def __init__(self, repository):
+            pass
+
+        def plan(self, *args, **kwargs):
+            seen["plan"] += 1
+            return _Plan()
+
+    monkeypatch.setattr(bot, "_run_opening", _fake_opening)
+    monkeypatch.setattr(bot, "_run_bounded_search", _fake_search)
+    monkeypatch.setattr("deck.planner.ComboPlanner", _Planner)
+    monkeypatch.setattr(bot, "combo_verdict", lambda plan: _Verdict())
+    monkeypatch.setattr("app.main._parse_card_ids",
+                        lambda text, agent: ([69811710], []))
+    return seen
+
+
+class _Verdict:
+    def describe_ko(self):
+        return "[스텁] 판정"
+
+    def detail_ko(self):
+        return "[스텁] 자세히"
+
+
+def _autonomous_report(record=None):
+    import app.discord_bot as bot
+
+    return bot.OpeningReport(
+        brief=("**[자율 전개 탐색]**", "자율 요약"),
+        detail=("**[자율 전개 탐색]**", "자율 상세"),
+        ran=True, replay=record,
+    )
+
+
+def test_g01_auto_does_not_run_the_first_meaningful_baseline(monkeypatch):
+    """
+    🔴 **`search:auto` 는 기준점 실행을 따로 돌리지 않는다** (6-BC §1).
+
+    실측으로, 자율 탐색 요청에 ``first_meaningful`` 실행이 **함께** 돌아
+    그 결과가 응답 맨 위에 붙었다.
+    """
+    import app.discord_bot as bot
+
+    seen = _combo_stubs(monkeypatch, searched=_autonomous_report())
+    response = bot.combo_response(_ComboAgent(), "69811710",
+                                  recipe_text="11091375 x40",
+                                  search_text="auto")
+    assert seen["opening"] == 0, "기준점 실행을 돌렸습니다"
+    assert seen["search"] == 1
+    assert seen["plan"] == 0, "정적 계획을 만들었습니다"
+    text = "\n".join(response.messages)
+    assert "자율 요약" in text
+    assert "[스텁] 기준점이 고른 전개" not in text
+
+
+def test_g02_a_goal_search_still_runs_the_baseline(monkeypatch):
+    """🔴 **기존 목표 탐색은 그대로다** — 기준점 실행도 정적 계획도 있다."""
+    import app.discord_bot as bot
+
+    seen = _combo_stubs(monkeypatch, searched=_autonomous_report())
+    bot.combo_response(_ComboAgent(), "69811710", recipe_text="11091375 x40",
+                       search_text="galatea")
+    assert seen == {"opening": 1, "search": 1, "plan": 1}
+
+
+def test_g03_no_search_at_all_is_unchanged(monkeypatch):
+    """`search:` 가 없으면 6-AG 와 한 글자도 다르지 않다."""
+    import app.discord_bot as bot
+
+    seen = _combo_stubs(monkeypatch, searched=None)
+    bot.combo_response(_ComboAgent(), "69811710", recipe_text="11091375 x40")
+    assert seen == {"opening": 1, "search": 1, "plan": 1}
+
+
+def test_g04_auto_and_a_fixed_line_together_are_refused(monkeypatch):
+    """
+    🔴 **몰래 한쪽으로 바꾸지 않는다** (6-BC §1) — 서로 반대되는 요청이다.
+    """
+    import app.discord_bot as bot
+
+    seen = _combo_stubs(monkeypatch, searched=_autonomous_report())
+    response = bot.combo_response(
+        _ComboAgent(), "69811710", recipe_text="11091375 x40",
+        search_text="auto", line_text="orcust-skeleton-longirsu")
+    assert seen == {"opening": 0, "search": 0, "plan": 0}
+    text = "\n".join(response.messages)
+    assert "돌리지 않았습니다" in text and "orcust-skeleton-longirsu" in text
+
+
+def test_g05_the_attachment_is_the_autonomous_record(monkeypatch):
+    """
+    🔴 **화면과 첨부가 같은 전개를 가리킨다** (6-BC §2). 다른 정책으로
+    돌린 기록을 대신 붙이지 않는다.
+    """
+    import app.discord_bot as bot
+
+    _combo_stubs(monkeypatch,
+                 searched=_autonomous_report({"from": "autonomous"}))
+    seen = {}
+
+    def _fake_replay(record):
+        seen["record"] = record
+        return bot.ComboAttachment("r.json", "{}"), bot.ReplayState.EXPORTED
+
+    def _fake_viewer(record):
+        seen["viewer"] = record
+        return (bot.ComboAttachment("v.html", "<html>"),
+                bot.ReplayState.EXPORTED)
+
+    monkeypatch.setattr(bot, "replay_attachment", _fake_replay)
+    monkeypatch.setattr(bot, "viewer_attachment", _fake_viewer)
+    bot.combo_response(_ComboAgent(), "69811710",
+                       recipe_text="11091375 x40", search_text="auto")
+    assert seen["record"] == {"from": "autonomous"}
+    assert seen["viewer"] == {"from": "autonomous"}
+
+
+def test_g06_without_a_record_no_viewer_is_claimed(monkeypatch):
+    """기록을 만들지 못했으면 **전개 보기가 있다고 적지 않는다.**"""
+    import app.discord_bot as bot
+
+    _combo_stubs(monkeypatch, searched=_autonomous_report(None))
+    response = bot.combo_response(_ComboAgent(), "69811710",
+                                  recipe_text="11091375 x40",
+                                  search_text="auto")
+    assert not response.attachments or all(
+        not item.filename.endswith(".html") for item in response.attachments)
+
+
+def test_g07_the_representative_is_not_called_the_single_best():
+    """
+    🔴 **대표 표시를 단독 최우수 추천으로 바꾸어 부르지 않는다** (6-BC §2).
+    """
+    import app.discord_bot as bot
+
+    class _Cand:
+        def __init__(self, index):
+            self.index = index
+
+    class _Ranking:
+        recommended = (_Cand(2), _Cand(5))
+
+    class _Found:
+        results = ()
+
+    record, why, picked = bot._autonomous_record(
+        _ComboAgent(), None, [1], _Found(), _Ranking())
+    #: 대표 결과를 결과 목록에서 찾지 못한 자리 — 그래도 **지어내지 않는다**
+    assert record is None and picked is None
+    assert "만들지 않았습니다" in why or "찾지 못했습니다" in why
+
+
+def test_g08_not_selected_is_not_an_unknown_rerun_state():
+    """
+    🔴 **재실행하지 않기로 고른 것**이지 "상태를 알 수 없음" 이 아니다
+    (6-BC 정정).
+    """
+    from deck.report import _rerun_state_ko
+
+    class _Result:
+        class _State:
+            value = "not_selected"
+
+        rerun_state = _State()
+
+    said = _rerun_state_ko(_Result())
+    assert "상위 선택에서 제외" in said
+    assert "알 수 없" not in said
+
+
+def test_g09_the_disclaimers_do_not_deny_having_a_heuristic():
+    """
+    🔴 **휴리스틱 평가가 있으면서 "평가 함수가 없다" 고 쓰지 않는다**
+    (6-BC 정정).
+    """
+    import deck.report as report
+
+    for text in (report._SEARCH_DISCLAIMER, report._MULTI_DISCLAIMER):
+        assert "평가 함수가 없" not in text
+        assert "실전 강도" in text or "승률" in text
+
+
+def test_g10_first_meaningful_is_not_called_a_written_line():
+    """
+    🔴 **`first_meaningful` 을 사람이 작성한 고정 경로라고 부르지 않는다**
+    (6-BC 정정).
+    """
+    import inspect
+
+    import deck.report as report
+
+    source = inspect.getsource(report.render_opening_brief)
+    #: 경로를 주지 않은 가지에서는 **그 낱말이 나오지 않는다.**
+    assert "검증용 기준점 `first_meaningful` 이 고른 것이고" in source
+    assert 'if line is not None' in source
+
+
+# ======================================================================
+# H. 캐시가 판정을 바꾸지 않는다 (Phase 6-BC §4 · §7)
+# ======================================================================
+#: 실측에 쓴 **그 패** (사용자 실행과 같은 입력).
+_ORCUST_HAND = [69811710, 14558127, 23434538, 10045474, 24224830]
+
+
+def _orcust_input(repository):
+    """``docs/orcust-azamina-note.ydk`` 초안 — 시험들이 함께 쓴다."""
+    from deck.recipe import parse_recipe
+
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parent.parent
+            / "docs" / "orcust-azamina-note.ydk").read_text(encoding="utf-8")
+    return parse_recipe(text, repository).draft
+
+
+def _orcust_setup(repository, *, preparation=None):
+    """같은 입력으로 초기 상태를 만든다 — 준비물만 바꿔 끼운다."""
+    from deck.opening import build_opening
+    from integration.autonomy import PolicyChooser, TriggerSource
+    from agent.choice import FirstPermittedChoice
+
+    draft = _orcust_input(repository)
+    triggers = TriggerSource(repository=repository, preparation=preparation)
+    setup = build_opening(
+        repository, draft, list(_ORCUST_HAND),
+        chooser=PolicyChooser(FirstPermittedChoice()), triggers=triggers,
+    )
+    return setup, triggers
+
+
+def _legal_fingerprint(duel):
+    """그 자리의 **허용 후보**를 값으로 — 순서까지 그대로 센다."""
+    legal = duel.legal_actions(duel.to_act)
+    return (tuple(action.canonical_state() for action in legal.allowed),
+            tuple(sorted(repr(held) for held in legal.unsupported())))
+
+
+@pytest.mark.real_card
+def test_h01_the_cache_does_not_change_the_allowed_actions(repository):
+    """
+    🔴 **캐시 적용 전후의 허용 후보가 같다** (6-BC §7).
+
+    준비물을 주지 않은 쪽(호출마다 새 분석)과 준비물을 공유한 쪽을 **같은
+    입력**으로 세워 비교한다.
+    """
+    from integration.trigger_registry import TriggerPreparation
+
+    cold, _ = _orcust_setup(repository)
+    warm, source = _orcust_setup(
+        repository, preparation=TriggerPreparation(repository))
+    assert cold.can_run and warm.can_run
+    assert _legal_fingerprint(cold.duel) == _legal_fingerprint(warm.duel)
+    #: 같은 준비물을 두 번째로 물어도 **같은 답**이다 (캐시 적중 뒤).
+    assert _legal_fingerprint(warm.duel) == _legal_fingerprint(warm.duel)
+    assert source.preparation is not None
+
+
+@pytest.mark.real_card
+def test_h02_the_cache_is_actually_used(repository):
+    """🔴 **쓰이지 않는 캐시는 고친 것이 아니다** — 적중을 센다."""
+    from integration.trigger_registry import TriggerPreparation
+
+    prep = TriggerPreparation(repository)
+    setup, _ = _orcust_setup(repository, preparation=prep)
+    assert setup.can_run
+    setup.duel.legal_actions(setup.duel.to_act)
+    first = len(prep._compiled)
+    assert first > 0, "선언을 하나도 담지 않았습니다"
+    analysed = len(prep.analyzer._cache)
+    setup.duel.legal_actions(setup.duel.to_act)
+    #: 두 번째 물음은 **새 카드를 분석하지 않는다.**
+    assert len(prep.analyzer._cache) == analysed
+    assert len(prep._compiled) == first
+
+
+def test_h03_another_repository_never_reuses_the_cache():
+    """🔴 **카드 데이터가 바뀌면 새 준비물이다.**"""
+    from integration.trigger_registry import TriggerPreparation
+
+    one, two = object(), object()
+    prep = TriggerPreparation(one)
+    assert prep.for_repository(one) is prep
+    other = prep.for_repository(two)
+    assert other is not prep and other.repository is two
+
+
+def test_h04_the_preparation_holds_no_judgement():
+    """
+    🔴 **판정을 담지 않는다** — 누가·언제·몇 번 썼는지는 매번 다시 본다.
+    """
+    import inspect
+
+    from integration.trigger_registry import TriggerPreparation
+
+    source = inspect.getsource(TriggerPreparation)
+    body = source.split('"""')[2]
+    for needle in ("eligib", "Eligibility", "consumed", "use_limit",
+                   "turn_number", "seat"):
+        assert needle not in body, needle
+
+
+@pytest.mark.real_card
+def test_h05_forks_share_the_preparation_without_sharing_state(repository):
+    """
+    🔴 **사본이 준비물을 함께 쓰되 가변 상태를 나누지 않는다** — 담긴 것은
+    읽기 전용 값이고, 판은 사본마다 따로다.
+    """
+    from agent.simulation import Simulator
+    from integration.trigger_registry import TriggerPreparation
+
+    prep = TriggerPreparation(repository)
+    setup, _ = _orcust_setup(repository, preparation=prep)
+    assert setup.can_run
+    before = setup.duel.state.state_hash()
+    fork = Simulator(setup.duel).fork()
+    assert fork.triggers is setup.duel.triggers
+    assert fork.state is not setup.duel.state
+    assert setup.duel.state.state_hash() == before
+
+
+# ======================================================================
+# I. 시간 예산 · 진행 상태 (Phase 6-BC §5)
+# ======================================================================
+def test_i01_progress_is_optional_and_never_breaks_the_search():
+    """
+    🔴 **진행 표시를 주지 않은 호출의 동작은 6-BB 와 같다**, 그리고
+    🔴 **표시가 실패해도 탐색을 잃지 않는다** — 받는 쪽은 Discord 전송이고
+    끊긴 연결 · 상한 거절 · 권한으로 예외가 난다.
+    """
+    from app.main import notify_progress
+
+    notify_progress(None, "searching")  # 아무 일도 없다
+
+    def _boom(stage):
+        raise RuntimeError("전송 실패")
+
+    notify_progress(_boom, "searching")  # 예외가 올라오지 않는다
+
+    seen = []
+    notify_progress(seen.append, "searching")
+    assert seen == ["searching"]
+
+
+@pytest.mark.real_card
+def test_i02_the_stages_arrive_in_order_at_the_real_boundaries(repository):
+    """
+    🔴 **단계 이름이 실제 경계와 어긋나지 않는다** — ``verifying`` 은
+    ``rerun_select`` 가 불리는 순간, 곧 **탐색이 끝나고 재생 검증이
+    시작되는** 자리에서만 온다.
+    """
+    from app.main import (
+        PROGRESS_REPORTING, PROGRESS_SEARCHING, PROGRESS_VERIFYING,
+        autonomous_search_opening,
+    )
+    from agent.bounded_search import SearchBudget
+
+    seen = []
+    #: 🔴 **예산을 작게 둔 것은 시험을 빨리 끝내려는 것뿐이다** — 단계
+    #: 순서는 예산과 무관하다.
+    tight = SearchBudget(max_depth=6, max_nodes=12, max_seconds=30.0,
+                         max_choice_branches=1, max_results=2,
+                         max_candidates=2, max_followup_actions=2,
+                         max_baselines=1)
+    found = autonomous_search_opening(
+        repository, _orcust_input(repository), list(_ORCUST_HAND),
+        budget=tight, progress=seen.append,
+    )[1]
+    assert found is not None
+    assert seen[0] == PROGRESS_SEARCHING
+    assert seen[-1] == PROGRESS_REPORTING
+    if PROGRESS_VERIFYING in seen:
+        assert seen.index(PROGRESS_VERIFYING) == 1
+
+
+def test_i03_the_relay_edits_one_message_and_never_repeats():
+    """
+    🔴 **진행 알림을 쌓지 않는다** — 같은 메시지를 고치고, 같은 단계를 두
+    번 받아도 한 번만 고친다.
+    """
+    import asyncio
+
+    import app.discord_bot as bot
+
+    async def _run():
+        edits = []
+
+        async def _edit(text):
+            edits.append(text)
+
+        relay = bot.ProgressRelay(asyncio.get_running_loop(), _edit)
+        assert not relay.shown
+        for stage in ("searching", "searching", "verifying", "눈없는단계"):
+            relay(stage)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert relay.shown
+        await relay.finish()
+        return edits
+
+    edits = asyncio.run(_run())
+    assert len(edits) == 3, edits
+    assert edits[0] == bot.PROGRESS_TEXTS["searching"]
+    assert edits[1] == bot.PROGRESS_TEXTS["verifying"]
+    assert edits[2] == bot.PROGRESS_DONE_TEXT
+
+
+def test_i04_a_relay_that_showed_nothing_makes_no_message():
+    """🔴 없던 메시지를 끝에서 만들지 않는다."""
+    import asyncio
+
+    import app.discord_bot as bot
+
+    async def _run():
+        edits = []
+
+        async def _edit(text):
+            edits.append(text)
+
+        relay = bot.ProgressRelay(asyncio.get_running_loop(), _edit)
+        await relay.finish()
+        return edits
+
+    assert asyncio.run(_run()) == []
+
+
+def test_i05_progress_text_invents_no_stage():
+    import app.discord_bot as bot
+
+    assert bot.progress_text("모르는단계") is None
+    assert bot.progress_text("searching")
+
+
+def test_i06_the_progress_line_says_only_progress():
+    """
+    🔴 **진행 상태에 중간 결과를 적지 않는다** — 아직 검증되지 않은 것이
+    결과처럼 읽힌다.
+    """
+    import app.discord_bot as bot
+
+    joined = " ".join(bot.PROGRESS_TEXTS.values())
+    for forbidden in ("추천합니다", "최선", "거의 다", "성공"):
+        assert forbidden not in joined, forbidden
+
+
+def test_i07_the_spent_line_separates_the_search_budget(monkeypatch):
+    """
+    🔴 **탐색 제한과 요청 전체 소요를 한 수치로 적지 않는다** (6-BC §5),
+    그리고 🔴 **구간의 합을 전체와 억지로 맞추지 않는다**.
+    """
+    import app.discord_bot as bot
+
+    spent = {"search": 5.89, "rerun": 2.10, "record": 1.50,
+             "section": 9.00}
+
+    said = bot._autonomous_spent_line(spent, whole_sec=10.00)
+    assert "요청 전체 **10.00초**" in said
+    assert "탐색 5.89초" in said
+    assert "재생 검증 2.10초" in said
+    assert "기록 만들기 1.50초" in said
+    #: 남은 0.51초를 숨기지 않는다.
+    assert "0.51초" in said
+    assert "max_seconds" in said
+    assert "첨부 만들기" in said
+
+    #: 🔴 **아직 재지 않은 것을 요청 전체라고 부르지 않는다** — 첨부 만드는
+    #: 시간은 탐색 절이 끝난 뒤에 든다.
+    section = bot._autonomous_spent_line(spent)
+    assert "탐색 절 **9.00초**" in section
+    #: 🔴 이 수치를 **요청 전체라고 부르지 않는다** (가리키기만 한다).
+    assert "요청 전체 **" not in section
+    assert "첨부" in section and "이 수치에 없습니다" in section
+
+
+def test_i08_the_combo_entry_hands_the_progress_sink_to_the_search(
+        monkeypatch):
+    """🔴 진행 표시를 **자율 탐색 절까지** 실제로 내려 보낸다."""
+    import app.discord_bot as bot
+
+    sinks = []
+    seen = _combo_stubs(monkeypatch, searched=_autonomous_report(),
+                        sinks=sinks)
+    sink = []
+    bot.combo_response(_ComboAgent(), "오르페골 디베르", search_text="auto",
+                       progress=sink.append)
+    assert seen["search"] == 1
+    assert sinks == [sink.append]
+
+
+def test_i09_the_evaluation_criteria_are_unchanged_and_the_limits_are_said():
+    """
+    🔴 **평가 기준은 이번에 바꾸지 않았다** (6-BC §6) — 축과 우열 판정은
+    v1 그대로이고, 늘어난 것은 **한계 문장**뿐이다.
+    """
+    from agent.open_evaluation import (
+        CRITERIA_OPEN, POLICY_NAME, POLICY_VERSION, UNJUDGED_OPEN,
+    )
+
+    assert POLICY_NAME == "open-development" and POLICY_VERSION == "v1"
+    assert tuple(one.key for one in CRITERIA_OPEN) == (
+        "field_monsters", "hand_left", "normal_summon_right",
+        "spend_actions", "set_cards", "grave_banish", "summon_limits",
+    )
+    joined = " ".join(UNJUDGED_OPEN)
+    #: 사용자가 다음 과제로 적어 둔 셋이 **한계로** 적혀 있다.
+    assert "토큰" in joined
+    assert "세트" in joined and "패에 남긴" in joined
+    assert "묘지" in joined and "방해 수단" in joined
+    assert joined.count("다음 과제") == 3

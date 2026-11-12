@@ -356,8 +356,13 @@ class SearchBudget:
             + (f" · 후보 풀 {self.max_candidates}개"
                if self.max_candidates else "")
             + (f" · 재생 {self.max_rerun_seconds:g}초" if self.many else "")
+            #: 🔴 **"기준점" 이라 적지 않는다** (Phase 6-BC §2). 보고에는
+            #: 검증용 행동 정책 ``first_meaningful`` 도 "기준점" 으로
+            #: 적히므로, 같은 출력에 두 뜻의 같은 말이 섞였다 — 이 칸은
+            #: **탐색이 후속 행동을 펼치기 시작하는 자리**의 수다.
             + (f" · 후속 행동 {self.max_followup_actions}회"
-               f" · 기준점 {self.max_baselines}개" if self.continues else "")
+               f" · 탐색 시작점 {self.max_baselines}개"
+               if self.continues else "")
             + (" · 중복 제거 켜짐" if self.dedup else " · 중복 제거 꺼짐")
         )
 

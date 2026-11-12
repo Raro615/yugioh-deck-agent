@@ -294,7 +294,8 @@ class TriggerRun:
 # ======================================================================
 # 배선
 # ======================================================================
-def trigger_offers(duel, repository, seat: int) -> tuple[TriggerOffer, ...]:
+def trigger_offers(duel, repository, seat: int, *,
+                   preparation=None) -> tuple[TriggerOffer, ...]:
     """
     이 듀얼의 **기록된 사건들**에서 나온, 지금 발동할 수 있는 유발 전부.
 
@@ -322,7 +323,9 @@ def trigger_offers(duel, repository, seat: int) -> tuple[TriggerOffer, ...]:
     if duel.journal is None:
         return ()
     view = duel.view(seat)
-    build = registry_for_view(view, repository)
+    #: 🔴 **준비물을 주면 카드 분석을 다시 하지 않는다** (Phase 6-BC).
+    #: 주지 않으면 예전과 한 글자도 다르지 않다.
+    build = registry_for_view(view, repository, preparation=preparation)
     #: 🔴 **그 판의 등록부로 판정한다** (보완5 — :func:`_duel_registries`).
     definitions, implementations = _duel_registries(duel)
     integrator = _integrator(
@@ -563,7 +566,7 @@ class PolicyChooser:
         return f"<PolicyChooser {name} asked={len(self._records)}>"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class TriggerSource:
     """
     ``Duel.triggers`` 가 기대하는 모양 — ``offers(duel, seat)`` (Phase 6-Z).
@@ -579,9 +582,36 @@ class TriggerSource:
     """
 
     repository: object
+    preparation: object = None
+    """
+    카드별 **선언 준비물** (:class:`~integration.trigger_registry.
+    TriggerPreparation`, Phase 6-BC).
+
+    🔴 **판정을 담지 않는다** — 담는 것은 "이 카드의 스크립트가 무엇을
+    선언했는가" 까지이고, 누가·언제·몇 번 썼는지는 매번 다시 본다.
+
+    🔴 **사본들이 함께 쓴다.** ``Simulator._fork`` 는 이 칸을 그대로
+    물려주므로(판만 복제한다) 한 번의 탐색에서 카드 분석이 **한 번만**
+    일어난다. 담긴 것이 **읽기 전용 값**이라 분기 간에 섞일 상태가 없다.
+
+    주지 않으면 처음 물을 때 만든다 — 그때는 이 ``TriggerSource`` 한
+    벌에 묶인다.
+    """
+
+    def _prep(self):
+        from integration.trigger_registry import TriggerPreparation
+
+        prep = self.preparation
+        if prep is None:
+            prep = TriggerPreparation(self.repository)
+            #: frozen 이지만 **캐시 칸 하나**만 채운다 — 값이 아니라
+            #: 같은 입력에 같은 답을 주는 준비물이다.
+            object.__setattr__(self, "preparation", prep)
+        return prep
 
     def offers(self, duel, seat: int) -> tuple[TriggerOffer, ...]:
-        return trigger_offers(duel, self.repository, seat)
+        return trigger_offers(duel, self.repository, seat,
+                              preparation=self._prep())
 
 
 def run_trigger(

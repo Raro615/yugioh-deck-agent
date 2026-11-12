@@ -154,8 +154,17 @@ def test_03_the_runner_reports_whether_the_input_was_refused():
     assert signature.return_annotation == "OpeningReport"
     assert "refused" in bot.OpeningReport.__dataclass_fields__
     source = inspect.getsource(bot.combo_response)
-    assert "executed = _run_opening(" in source
-    assert "if executed.refused:" in source
+    #: 🔴 **Phase 6-BC 가 호출을 한 겹 감쌌다** — ``search:auto`` 면 기준점
+    #: 실행을 **돌리지 않는다** (자율 탐색이 주 실행이다). 재는 계약은
+    #: 그대로다: 실행 절이 거절 여부를 직접 말하고, 부르는 쪽은 다시
+    #: 판정하지 않는다.
+    assert "executed = (None if autonomous" in source
+    assert "else _run_opening(" in source
+    #: 🔴 거절 여부는 **보고에서 읽는다** — 다시 계산하지 않는다.
+    #: ``gate`` 는 "거절을 말하는 보고" 이고, 자율 탐색이면 탐색 절의
+    #: 보고가 그 자리에 온다 (기준점 실행이 없으므로).
+    assert "gate.refused" in source
+    assert "gate = searched if autonomous else executed" in source
     #: 🔴 부르는 쪽이 ``setup`` 을 다시 만들어 판정하지 않는다.
     assert "build_opening" not in source
     #: 🔴 **엔진을 한 번만 돌린다** — 요약과 첨부가 같은 기록에서 나온다.

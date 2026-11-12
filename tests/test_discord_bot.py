@@ -1898,9 +1898,14 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
         #: 뒤 더 탐색할 비흐름 행동 수). 같은 이유로 가짜 구현도 받아야
         #: 한다 — 안 맞추면 이 시험은 "defer 가 먼저" 가 아니라
         #: ``TypeError`` 를 본다.
+        #: 🔴 Phase 6-BC — ``progress`` 가 **키워드 전용**으로 붙었다
+        #: (자율 탐색 중 진행 상태를 받는 쪽). 핸들러가 언제나 넘기므로
+        #: 가짜 구현도 받아야 한다 — 안 받으면 이 시험은 "defer 가 먼저"
+        #: 가 아니라 ``TypeError`` 를 본다.
         def combo_response(self, hand_text, board_text="", deck_text="",
                            recipe_text="", line_text="", search_text="",
-                           results_text="", followups_text=""):
+                           results_text="", followups_text="", *,
+                           progress=None):
             order.append("combo")
             worker.append(threading.get_ident())
             received.append((hand_text, board_text, deck_text, recipe_text,

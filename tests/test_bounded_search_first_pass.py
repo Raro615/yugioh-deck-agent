@@ -1017,9 +1017,20 @@ def test_e06_the_search_mode_is_opt_in(repository):
     #: 기본값이 빈 문자열이므로, 주지 않으면 앞 단계와 한 글자도 다르지
     #: 않다. 이 시험이 틀린 가정을 갖고 있었던 것이 아니다 — 6-AH 에서는
     #: ``search_text`` 가 마지막이었고 6-AI 에서는 ``results_text`` 였다.
-    assert list(inspect.signature(SearchService.combo_response).parameters)[-3:] == [
+    #: 🔴 **Phase 6-BC 가 ``progress`` 를 더했다 — 키워드 전용으로.**
+    #: 진행 상태를 받는 쪽(자율 탐색 중 "탐색 중 / 후보 검증 중")이고
+    #: 문자열 옵션이 아니다. 키워드 전용이므로 **기존 위치 인자 호출은 한
+    #: 글자도 달라지지 않는다** — 이 시험이 재는 사실이 그것이다. 그래서
+    #: 위치 인자만 골라서 센다.
+    _sig = inspect.signature(SearchService.combo_response)
+    _positional = [name for name, param in _sig.parameters.items()
+                   if param.kind is param.POSITIONAL_OR_KEYWORD]
+    assert _positional[-3:] == [
         "search_text", "results_text", "followups_text",
     ]
+    assert [name for name, param in _sig.parameters.items()
+            if param.kind is param.KEYWORD_ONLY] == ["progress"]
+    assert _sig.parameters["progress"].default is None
     for name in ("search_text", "results_text", "followups_text"):
         assert inspect.signature(
             SearchService.combo_response).parameters[name].default == ""
