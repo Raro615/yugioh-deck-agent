@@ -2171,8 +2171,15 @@ def _open_ranking_lines(ranking, repository=None) -> "list[str]":
                      " 없거나 평가에 필요한 값을 읽지 못했습니다.")
     for one in best:
         lines.append(f"    ★ 결과 {one.index} — {ranking.reason_ko(one.index)}")
+        #: 🔴 **중간 상태를 '완성' 으로 적지 않는다** (Phase 6-BD §4).
+        #: 멈춘 이유를 아는 평가(v2)만 이 줄을 돌려준다 — v1 은 빈
+        #: 문자열이고, 그때 출력은 6-BC 와 한 글자도 다르지 않다.
+        stop = getattr(ranking, "stop_note_ko", None)
+        said = stop(one.index) if callable(stop) else ""
+        if said:
+            lines.append(f"      {said}")
     if len(best) >= 2:
-        lines.append("    🔴 **공동 추천입니다** — 세 축이 서로 주고받아"
+        lines.append("    🔴 **공동 추천입니다** — 축이 서로 주고받아"
                      " 하나로 줄이지 않았습니다.")
     others = [one for one in ranking.candidates
               if one.eligible and not one.recommended]
@@ -2182,6 +2189,16 @@ def _open_ranking_lines(ranking, repository=None) -> "list[str]":
     if skipped:
         lines.append(f"    비교에서 빠진 결과 {len(skipped)}개 — 🔴 **경로는"
                      " 그대로 남아 있습니다** (상세 기록에 사유가 있습니다).")
+    #: 🔴 **근거의 종류를 밝힌다** (Phase 6-BD §3). 어느 값이 확인된
+    #: 것이고 어느 값이 카드 정의로만 아는 잠재인지 적지 않으면, 읽는
+    #: 사람이 "세트 1" 을 "확정 방해 1회" 로 읽는다.
+    roles = {getattr(one, "role_ko", "") for one in (ranking.criteria or ())}
+    if any(role.startswith("B") for role in roles):
+        lines.append("    🔴 **우열은 [A] 확인된 것으로만 가렸습니다.**"
+                     " [B] 는 카드 정의로만 아는 **잠재 가치**이고 순서에"
+                     " 쓰지 않았으며, **확정 방해 수로 합산하지"
+                     " 않았습니다**. [C] 는 엔진이 판단하지 못한 것이고"
+                     " **가치 0 으로 단정하지 않았습니다**.")
     lines.append("    이 평가가 판정하지 않는 것:")
     for note in ranking.unjudged:
         lines.append(f"      · {note}")

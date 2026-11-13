@@ -1079,6 +1079,22 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
         return OpeningReport(brief=said, detail=said, refused=False, ran=False)
 
     parsed = parse_recipe(recipe_text, agent.repository)
+    #: 🔴 **못 읽은 토큰을 조용히 버리지 않는다** (Phase 6-BD §2).
+    #:
+    #: 이 절은 전에 ``parsed.unresolved`` 를 전혀 적지 않았다. 6-BC 전에는
+    #: 같은 요청에서 기준점 실행 절(``_run_opening``)이 그 경고를 적어
+    #: 주었지만, 6-BC 가 ``search:auto`` 에서 그 절을 없애면서 **경고도
+    #: 함께 사라졌다.** 그러면 덱에서 카드가 빠진 채 탐색이 돌고, 사용자는
+    #: 엑스트라 덱 장수가 왜 줄었는지 알 수 없다 (실사용에서 15장이 아니라
+    #: 14장으로 표시된 일이 있었고, 입력 원문이 없어 원인을 확정하지는
+    #: 못했다 — 보고서 §12.2).
+    if parsed.unresolved:
+        names = ", ".join(f"`{token}`" for token in parsed.unresolved[:10])
+        more = ("" if len(parsed.unresolved) <= 10
+                else f" 외 {len(parsed.unresolved) - 10}개")
+        head.append(f"⚠️ 레시피에서 카드를 찾지 못했습니다: {names}{more}"
+                    " — 🔴 **덱에 넣지 않았습니다.** 아래 장수는 그것을"
+                    " 뺀 수입니다.")
     if parsed.draft is None:
         said = tuple(head + [
             "🔴 레시피에서 카드를 하나도 읽지 못해 **탐색하지"
@@ -1135,7 +1151,9 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
                 #: 🔴 **거절한 요청에는 전개 기록을 만들지 않는다.**
                 replay=None, replay_state=ReplayState.NOT_RUN,
             )
-        ranking = rank_autonomous_results(found)
+        #: 🔴 **카드 정의 사실을 함께 넘긴다** (6-BD) — 주지
+        #: 않으면 v2 가 토큰 여부도 세트 종류도 모른다.
+        ranking = rank_autonomous_results(found, agent.repository)
         brief = list(head)
         brief.extend(
             render_open_search_brief(found, agent.repository,
@@ -1797,7 +1815,7 @@ def _run_autonomous_share(agent, recipe_text: str,
                              " 통과하지 못했습니다."])
         return OpeningReport(brief=said, detail=said,
                              refused=not setup.can_run, ran=False)
-    ranking = rank_autonomous_results(found)
+    ranking = rank_autonomous_results(found, agent.repository)
     lines = list(head)
     lines.extend(render_open_search_brief(found, agent.repository,
                                           ranking).splitlines())
@@ -2280,7 +2298,10 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     if autonomous and searched is not None and searched.spent:
         lines.append(_autonomous_spent_line(
             searched.spent, whole_sec=time.monotonic() - asked_at))
-    lines.extend(_detail_pointer_lines(detail))
+    #: 🔴 **첨부에 없는 것을 가리키지 않는다** (6-BD). ``search:auto`` 는
+    #: 정적 전개 추천을 아예 만들지 않으므로 (6-BC §1), 그 낱말을 적으면
+    #: 첨부에 없는 절을 약속하게 된다.
+    lines.extend(_detail_pointer_lines(detail, with_plan=not autonomous))
     if replay_item is not None:
         lines.append(
             f"🧾 **전개 기록은 첨부 `{replay_item.filename}`** 에 있습니다 —"

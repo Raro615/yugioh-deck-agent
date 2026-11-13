@@ -890,6 +890,81 @@ AUTONOMOUS_DEFAULT_SECONDS: float = 240.0
 AUTONOMOUS_DEFAULT_CHOICE_BRANCHES: int = 4
 AUTONOMOUS_DEFAULT_BASELINES: int = 3
 
+#: 자율 탐색이 쓰는 **평가 정책** (Phase 6-BD).
+#:
+#: 🔴 **v1 을 지우지 않는다.** ``"v1"`` 을 주면 6-BB 의 세 축 그대로 돌고,
+#: 같은 입력에서 두 정책을 견줄 수 있다 (보고서 §12).
+AUTONOMOUS_DEFAULT_EVALUATION: str = "v2"
+
+#: 기준점 상한을 **서로 다른 첫 행동**으로 셀 것인가 (Phase 6-BD §5).
+#:
+#: 🔴 **실측으로 켰다** (보고서 §12.4): 같은 노드 수(41) · 같은 최대 깊이(8)
+#: · 같은 소요에서 후보가 23 → 28 로 늘고, ``max_baselines=3`` 이 더는
+#: 탐색을 끊지 않았다. 같은 첫 행동의 **다른 덤핑 선택**들이 기준점으로
+#: 보관된다.
+AUTONOMOUS_DEFAULT_BASELINE_PER_OPENING: bool = True
+
+#: 기준점 사이에 **펼칠 차례를 돌릴** 것인가 (Phase 6-BD §5).
+#:
+#: 🔴 **실측으로 껐다** (보고서 §12.4): 같은 예산에서 최대 깊이가 8 → 3 으로
+#: 줄어 깊은 전개가 통째로 사라졌다. 너비를 얻고 깊이를 잃는 맞바꿈이고,
+#: 이번 입력에서는 손해였다. 🔴 **기능은 남겨 두고 기본만 끈다** — 다른
+#: 예산에서는 달라질 수 있고, 끈 이유를 수치로 적어 둔다.
+AUTONOMOUS_DEFAULT_ROTATE_BASELINES: bool = False
+
+
+def card_knowledge(repository):
+    """
+    카드 저장소에서 **정의 사실만** 떠서 평가에 넘길 그릇을 만든다
+    (Phase 6-BD).
+
+    🔴 **판정을 넘기지 않는다.** 넘기는 것은 "토큰인가 · 세트해 두면 상대
+    턴에 쓸 수 있는 종류인가 · 인쇄된 효과가 몇 개인가" 뿐이고, 지금
+    발동할 수 있는지는 ``legal_actions`` 의 일이다.
+
+    🔴 **왜 어댑터인가** (ADR-007). ``agent`` 는 카드 저장소를 모른다 —
+    알면 평가가 카드 데이터에 묶이고, 시험이 저장소 없이는 돌지 않는다.
+    """
+    from agent.open_evaluation_v2 import CardFacts, CardKnowledge
+
+    class _FromRepository(CardKnowledge):
+        """물어본 카드만 읽어 두는 그릇 — 🔴 **덱 전체를 훑지 않는다.**"""
+
+        def __init__(self, source) -> None:
+            super().__init__()
+            self._source = source
+            self._seen: dict = {}
+
+        def get(self, card_id):
+            if card_id in self._seen:
+                return self._seen[card_id]
+            facts = None
+            card = None
+            try:
+                if isinstance(card_id, int):
+                    card = self._source.get(card_id)
+            except Exception:  # noqa: BLE001 - 모르면 None 이다
+                card = None
+            if card is not None:
+                kinds = set(getattr(card, "type_names", ()) or ())
+                facts = CardFacts(
+                    is_token=bool(getattr(card, "is_token", False)),
+                    #: 🔴 **세트해 두면 상대 턴에 쓸 수 있는 종류**인가 —
+                    #: 함정 전부와 속공마법. 발동 조건은 보지 않는다.
+                    reactive_backrow=bool(
+                        getattr(card, "is_trap", False)
+                        or (getattr(card, "is_spell", False)
+                            and "QUICKPLAY" in kinds)
+                    ),
+                    effect_count=len(getattr(card, "effects", ()) or ()),
+                    is_monster=bool(getattr(card, "is_monster", False)),
+                    is_extra_deck=bool(getattr(card, "is_extra_deck", False)),
+                )
+            self._seen[card_id] = facts
+            return facts
+
+    return _FromRepository(repository)
+
 #: 자율 탐색의 **진행 단계 이름** (Phase 6-BC §5).
 #:
 #: 🔴 **왜 문자열인가.** 진행 상태를 받는 쪽은 Discord 어댑터이고
@@ -1149,10 +1224,23 @@ def bounded_search_many_opening(
     return setup, outcome
 
 
+def _share_options(per_opening, rotate) -> dict:
+    """🔴 **주지 않은 칸은 건드리지 않는다** — 기본 동작이 그대로다."""
+    out: dict = {}
+    if per_opening is not None:
+        out["baseline_per_opening"] = bool(per_opening)
+    if rotate is not None:
+        out["rotate_baselines"] = bool(rotate)
+    return out
+
+
 def autonomous_search_opening(
     repository, draft, hand, *, max_results: int = AUTONOMOUS_DEFAULT_RESULTS,
     actions: int = AUTONOMOUS_DEFAULT_ACTIONS, candidates: int = 0,
     budget=None, rerun: bool = True, progress=None,
+    evaluation: str = AUTONOMOUS_DEFAULT_EVALUATION,
+    baseline_per_opening: "bool | None" = None,
+    rotate_baselines: "bool | None" = None,
 ) -> tuple:
     """
     **목표 카드 없이** 선공 전개를 탐색한다 (Phase 6-BB).
@@ -1182,7 +1270,13 @@ def autonomous_search_opening(
         SearchBudget,
     )
     from agent.open_evaluation import select_top
+    from agent.open_evaluation_v2 import select_top_v2
     from deck.opening import build_opening
+
+    #: 🔴 **평가 정책과 탐색 배분은 따로 고른다** (Phase 6-BD §5) — 둘을 한
+    #: 칸으로 묶으면 어느 변경이 어떤 효과를 냈는지 가를 수 없다.
+    knowledge = (None if str(evaluation) == "v1"
+                 else card_knowledge(repository))
 
     wanted = max(2, min(int(max_results), RESULTS_CAP))
     steps = max(1, min(int(actions), FOLLOWUP_CAP))
@@ -1207,11 +1301,18 @@ def autonomous_search_opening(
             max_candidates=pool,
             max_followup_actions=steps,
             max_baselines=AUTONOMOUS_DEFAULT_BASELINES,
+            **_share_options(
+                (AUTONOMOUS_DEFAULT_BASELINE_PER_OPENING
+                 if baseline_per_opening is None else baseline_per_opening),
+                (AUTONOMOUS_DEFAULT_ROTATE_BASELINES
+                 if rotate_baselines is None else rotate_baselines),
+            ),
         )
     else:
         budget = dataclasses.replace(
             budget, max_results=wanted, max_candidates=pool,
             max_followup_actions=steps,
+            **_share_options(baseline_per_opening, rotate_baselines),
         )
     search = BoundedSearch(goal=OpenGoal(card_id=0, seat=0), budget=budget)
 
@@ -1230,7 +1331,9 @@ def autonomous_search_opening(
         #: ``run_many`` 는 모으기를 마친 뒤에만 선택 함수를 부르므로, 여기서
         #: 알리면 단계 이름이 **실제 경계와 어긋나지 않는다**.
         notify_progress(progress, PROGRESS_VERIFYING)
-        return select_top(rows, wanted)
+        if str(evaluation) == "v1":
+            return select_top(rows, wanted)
+        return select_top_v2(rows, wanted, knowledge=knowledge)
 
     notify_progress(progress, PROGRESS_SEARCHING)
     outcome = search.run_many(
@@ -1342,9 +1445,14 @@ def autonomous_rerun_record(repository, draft, hand, result, *,
     return export_opening_replay(setup, run, repository), ""
 
 
-def rank_autonomous_results(outcome):
+def rank_autonomous_results(outcome, repository=None, *,
+                            evaluation: str = AUTONOMOUS_DEFAULT_EVALUATION):
     """
-    자율 탐색 결과의 **비교와 추천** (Phase 6-BB).
+    자율 탐색 결과의 **비교와 추천** (Phase 6-BB · v2 는 Phase 6-BD).
+
+    ``repository`` 를 주면 **카드 정의 사실**을 v2 평가에 넘긴다 — 주지
+    않으면 v2 는 토큰 여부도 세트 종류도 모르므로 그 값들이 전부
+    "판단 불가(C)" 로 남는다 (🔴 0 으로 메우지 않는다).
 
     🔴 **왜 이 자리인가.** :func:`rank_search_results` 와 같은 규율이다 —
     평가는 ``agent`` 의 일이고 표시는 ``deck`` 의 일이며, 어댑터는 둘을
@@ -1358,9 +1466,16 @@ def rank_autonomous_results(outcome):
     """
     if outcome is None:
         return None
-    from agent.open_evaluation import rank_open
+    if str(evaluation) == "v1":
+        from agent.open_evaluation import rank_open
 
-    return rank_open(outcome)
+        return rank_open(outcome)
+    from agent.open_evaluation_v2 import rank_open_v2
+
+    return rank_open_v2(
+        outcome,
+        knowledge=(None if repository is None else card_knowledge(repository)),
+    )
 
 
 def opening_wiring(repository, line=None) -> tuple:

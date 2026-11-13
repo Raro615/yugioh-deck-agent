@@ -268,6 +268,38 @@ class SearchBudget:
     🔴 첫 도달 모드(``max_followup_actions == 0``)에서는 쓰지 않는다 — 그때
     기준점이 곧 결과다.
     """
+    baseline_per_opening: bool = False
+    """
+    기준점 상한을 **서로 다른 첫 행동의 수**로 셀 것인가 (Phase 6-BD §5).
+
+    🔴 **기본은 거짓이고, 그때 동작은 6-BC 와 한 글자도 다르지 않다**
+    (최초 도달의 수를 센다).
+
+    참이면 같은 첫 행동에서 **해결 중 선택만 다른** 각본들이 서로 기준점
+    자리를 빼앗지 않는다. 실측(보고서 §12.3): 기르수 일반 소환의 다섯 가지
+    덤핑 선택 가운데 **첫 하나만** 기준점이 되고 나머지 넷은 먼저 정리된
+    다른 소환 둘에게 자리를 빼앗겨 전부 버려졌다.
+
+    🔴 **카드 ID 를 보지 않는다** — 첫 걸음의 ``action_key`` 로만 가른다.
+    """
+    rotate_baselines: bool = False
+    """
+    펼칠 노드를 **기준점별로 돌아가며** 꺼낼 것인가 (Phase 6-BD §5).
+
+    🔴 **기본은 거짓이고, 그때 고리는 6-BC 와 한 글자도 다르지 않다**
+    (깊이 우선 — 스택 맨 위).
+
+    참이면 한 기준점이 후보 풀을 독차지하지 못한다. 🔴 **같은 예산에서
+    깊이와 너비를 맞바꾼다** — 실측으로 최대 깊이가 8 에서 3 으로 줄었다
+    (보고서 §12.4). 그래서 기본을 꺼 두고, 켜고 끈 값을 함께 적는다.
+    """
+    #: 🔴 **위 두 칸의 공통 규율** (Phase 6-BD §5). 둘 다 기본이 거짓이고,
+    #: 그때 동작은 6-BC 와 한 글자도 다르지 않다. 평가 변경과 탐색 배분
+    #: 변경을 **따로 견주려고** 칸을 둘로 나눴다 — 하나씩 켜서 효과를
+    #: 가를 수 있어야 "무엇이 무엇을 바꿨는지" 를 말할 수 있다.
+    #:
+    #: 🔴 **예산을 늘리지 않는다.** 깊이 · 노드 · 시간 · 후보 수 상한은
+    #: 그대로이고, 바뀌는 것은 **같은 예산을 누가 쓰는가**뿐이다.
     """
     재생 **전부**에 쓸 수 있는 시간. 🔴 탐색 예산과 **따로** 둔다 — 그래야
     보고가 탐색 소요와 재생 소요를 가를 수 있고, 결과 수를 늘렸을 때
@@ -2047,6 +2079,51 @@ class _Node:
     """목표에 **처음** 도달한 걸음(1부터). 0 이면 아직 닿지 않았다 (6-AL)."""
     followups: int = 0
     """기준점 뒤에 수행한 **비흐름 행동** 수 (6-AL)."""
+    baseline: int = 0
+    """
+    이 노드가 **어느 기준점에서 나왔는가** (Phase 6-BD §5). 0 이면 아직
+    기준점 전이다. 🔴 ``share_baselines`` 가 거짓이면 쓰이지 않는다.
+    """
+
+
+class _BaselineTurns:
+    """
+    대기 중인 노드를 **기준점별로 돌아가며** 꺼낸다 (Phase 6-BD §5).
+
+    🔴 **왜 필요한가 — 실측이다.** 깊이 우선 고리는 스택 맨 위만 보므로,
+    먼저 쌓인 기준점 하나가 후보 풀(``max_candidates``)을 **전부** 채우고
+    탐색이 끝났다. 나머지 기준점은 스택 아래에 그대로 남아 **한 번도
+    펼쳐지지 않았다** (보고서 §12.3).
+
+    🔴 **예산을 늘리지 않는다.** 꺼내는 **순서만** 바꾼다 — 노드 수 · 깊이 ·
+    시간 · 후보 수 상한은 그대로다. 그래서 같은 예산에서 **깊이와 너비가
+    맞바꿔진다**; 그 대가를 보고서가 수치로 적는다.
+
+    🔴 **기준점 안에서는 깊이 우선 그대로다** — 각 기준점의 대기열은
+    스택이고, 바뀌는 것은 **어느 기준점의 스택을 볼 차례인가**뿐이다.
+    """
+
+    def __init__(self) -> None:
+        self._cursor = 0
+
+    def take(self, stack: "list[_Node]") -> "_Node":
+        """다음 차례의 기준점에서 **가장 최근 노드**를 꺼낸다."""
+        marks: list[int] = []
+        for node in stack:
+            if node.baseline not in marks:
+                marks.append(node.baseline)
+        #: 🔴 **기준점 전 노드(0)가 있으면 먼저 본다** — 기준점을 더 찾는
+        #: 일이 기준점을 펼치는 일보다 앞선다 (그래야 첫 행동들이 전부
+        #: 기준점이 될 기회를 받는다).
+        if 0 in marks:
+            pick = 0
+        else:
+            self._cursor += 1
+            pick = marks[self._cursor % len(marks)]
+        for place in range(len(stack) - 1, -1, -1):
+            if stack[place].baseline == pick:
+                return stack.pop(place)
+        return stack.pop()  # pragma: no cover - 방어용
 
 
 @dataclass(slots=True)
@@ -2066,6 +2143,10 @@ class _Ledger:
     """같은 상태에 **더 얕게** 다시 닿아 다시 펼친 횟수 (보완 A)."""
     stale: int = 0
     """대기 중에 **더 얕은 길이 생겨** 펼치지 않은 노드 수 (보완 A)."""
+    baseline_openings: set = field(default_factory=set)
+    """보관한 기준점들의 **서로 다른 첫 행동** (Phase 6-BD §5)."""
+    baselines_seen: int = 0
+    """보관한 기준점의 수 — 노드에 붙일 번호를 만든다 (Phase 6-BD §5)."""
     budget_hit: list = field(default_factory=list)
     unsupported: list = field(default_factory=list)
     out_of_scope: list = field(default_factory=list)
@@ -2692,6 +2773,9 @@ class BoundedSearch:
         admit(ledger.seen, self._key_of(root), 0)
         termination = Termination.EXHAUSTED
         found = None
+        #: 🔴 **기준점별로 돌아가며 꺼낸다** (Phase 6-BD §5). 기본(꺼짐)은
+        #: 이 자리가 비어 있고 고리는 6-BC 와 한 글자도 다르지 않다.
+        turns = _BaselineTurns() if self.budget.rotate_baselines else None
 
         while stack:
             if self.budget.many and self._results_full(ledger):
@@ -2709,7 +2793,7 @@ class BoundedSearch:
                 )
                 termination = Termination.BUDGET_EXCEEDED
                 break
-            node = stack.pop()
+            node = stack.pop() if turns is None else turns.take(stack)
             #: 🔴 **꺼낼 때 한 번 더 본다** — 이 노드가 대기하는 동안 같은
             #: 상태에 더 얕게 닿았으면 이 노드는 할 일이 없다
             #: (:func:`superseded`).
@@ -2966,8 +3050,24 @@ class BoundedSearch:
                             return None
                         continue
                     #: 🔴 **후속 모드 — 기준점으로 모으고 계속 펼친다** (6-AL).
-                    if ledger.count_of(ResultRole.FIRST_ARRIVAL) >= \
-                            self.budget.max_baselines:
+                    #:
+                    #: 🔴 **무엇을 세는가가 Phase 6-BD §5 의 수정이다.**
+                    #: 기본(``share_baselines`` 거짓)은 6-AL 그대로 **최초
+                    #: 도달의 수**를 센다. 참이면 **서로 다른 첫 행동의
+                    #: 수**를 센다 — 같은 첫 행동에서 해결 중 선택만 다른
+                    #: 각본들이 서로 자리를 빼앗지 않게 한다. 어느 쪽이든
+                    #: 카드 ID 를 보지 않는다 (첫 걸음의 ``action_key`` 다).
+                    opening = path[0].action_key if path else ()
+                    if self.budget.baseline_per_opening:
+                        taken = (
+                            len(ledger.baseline_openings)
+                            + (0 if opening in ledger.baseline_openings else 1)
+                        )
+                        over = taken > self.budget.max_baselines
+                    else:
+                        over = (ledger.count_of(ResultRole.FIRST_ARRIVAL)
+                                >= self.budget.max_baselines)
+                    if over:
                         ledger.note(
                             ledger.budget_hit,
                             f"max_baselines={self.budget.max_baselines}",
@@ -2988,6 +3088,9 @@ class BoundedSearch:
                                   stop=self._stop_of(child_legal, 0,
                                                      child_depth)),
                     )
+                    ledger.baseline_openings.add(opening)
+                    ledger.baselines_seen += 1
+                    mark = ledger.baselines_seen
                     if self.budget.dedup:
                         admitted = admit(
                             ledger.seen,
@@ -3003,7 +3106,7 @@ class BoundedSearch:
                             ledger.revisited += 1
                     children.append(_Node(
                         Simulator(child_duel), path, child_depth, child_legal,
-                        reached_at=child_depth, followups=0,
+                        reached_at=child_depth, followups=0, baseline=mark,
                     ))
                     continue
 
@@ -3076,7 +3179,7 @@ class BoundedSearch:
                     children.append(_Node(
                         Simulator(child_duel), path, child_depth, child_legal,
                         reached_at=node.reached_at,
-                        followups=child_followups,
+                        followups=child_followups, baseline=node.baseline,
                     ))
                     continue
 

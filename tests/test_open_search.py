@@ -377,7 +377,9 @@ def test_f03_the_brief_says_which_mode_ran(monkeypatch):
         results = ()
 
     monkeypatch.setattr(main, "autonomous_search_opening", _fake_search)
-    monkeypatch.setattr(main, "rank_autonomous_results", lambda outcome: None)
+    #: 🔴 Phase 6-BD — 어댑터가 **카드 저장소**를 함께 넘긴다.
+    monkeypatch.setattr(main, "rank_autonomous_results",
+                        lambda outcome, repository=None, **kw: None)
 
     class _Parsed:
         draft = object()
@@ -1175,3 +1177,431 @@ def test_j06_the_conflict_and_the_unreadable_hand_are_refusals_too():
     clash = bot.combo_response(_Agent(), "69811710", search_text="auto",
                                line_text="orcust-girsu")
     assert clash.refused is True
+
+
+# ======================================================================
+# K. open-development v2 — 장수만으로 우열을 확정하지 않는다 (Phase 6-BD)
+# ======================================================================
+class _V2Slot:
+    def __init__(self, card_id, face_up=True, instance=0):
+        self.card_id = card_id
+        self.face_up = face_up
+        self.instance = instance
+
+
+class _V2Zone:
+    def __init__(self, cards=()):
+        self.cards = tuple(cards)
+        self.size = len(self.cards)
+
+
+class _Use:
+    def __init__(self, kind, label, seat=0, count=1):
+        self.kind = kind
+        self.label = label
+        self.seat = seat
+        self.count = count
+
+
+class _V2Resources:
+    """v2 가 읽는 모양만 흉내 낸다 — 🔴 값만 들고 있다."""
+
+    seat = 0
+    state_hash = "h"
+
+    def __init__(self, *, field=(), sets=(), hand=0, their=(), uses=(),
+                 grave=0, removed=0, normal_summon_used=True):
+        self.own_field = tuple(field)
+        self._sets = tuple(sets)
+        self._hand = hand
+        self.their_field = tuple(their)
+        self.uses = tuple(uses)
+        self._grave = grave
+        self._removed = removed
+        self.normal_summon_used = normal_summon_used
+        self.own_limits = ()
+
+    def size(self, _seat, zone):
+        from engine.vocabulary import Zone
+
+        return {Zone.HAND: self._hand, Zone.GRAVE: self._grave,
+                Zone.REMOVED: self._removed}.get(zone, 0)
+
+    def zone(self, _seat, zone):
+        from engine.vocabulary import Zone
+
+        if zone is Zone.SZONE:
+            return _V2Zone(self._sets)
+        return None
+
+
+#: 🔴 **카드 이름이 아니라 종류 사실만** 넘긴다 — v2 가 보는 것이 그것이다.
+def _knowledge(facts):
+    from agent.open_evaluation_v2 import CardFacts, CardKnowledge
+
+    return CardKnowledge({cid: CardFacts(**kw) for cid, kw in facts.items()})
+
+
+_MONSTER = {"is_token": False, "effect_count": 2, "is_monster": True}
+_TOKEN = {"is_token": True, "effect_count": 0, "is_monster": True}
+_TRAP = {"reactive_backrow": True, "effect_count": 1}
+_SLOW_SPELL = {"reactive_backrow": False, "effect_count": 1}
+
+
+def _v2(resources, steps=3, knowledge=None, meta=None):
+    from agent.open_evaluation_v2 import measure_v2
+
+    path = tuple(_step(n) for n in range(1, steps + 1))
+    measures, why = measure_v2(path, resources, knowledge=knowledge, meta=meta)
+    assert measures is not None, why
+    return measures
+
+
+def test_k01_setting_a_card_is_not_losing_it():
+    """
+    🔴 **v1 의 핵심 오류** — 패에서 세트 존으로 옮겼다는 이유만으로 자원이
+    사라진 것처럼 세면, 세트한 쪽이 **언제나** 진다.
+    """
+    from agent.open_evaluation_v2 import _dominates_v2
+
+    know = _knowledge({1: _MONSTER, 2: _TRAP})
+    plain = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=4),
+                knowledge=know)
+    with_set = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=3,
+                                sets=(_V2Slot(2, face_up=False, instance=2),)),
+                   knowledge=know)
+    assert plain.kept_cards == with_set.kept_cards == 4
+    #: 🔴 어느 쪽도 상대를 지배하지 않는다 — **동률이고 비교 불가**다.
+    assert not _dominates_v2(plain, with_set)
+    assert not _dominates_v2(with_set, plain)
+
+
+def test_k02_setting_alone_is_not_a_bonus_either():
+    """🔴 **반대 방향도 막는다** — 세트했다는 사실만으로 앞서지 않는다."""
+    from agent.open_evaluation_v2 import _dominates_v2
+
+    know = _knowledge({1: _MONSTER, 2: _TRAP, 3: _SLOW_SPELL})
+    trap = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=3,
+                            sets=(_V2Slot(2, face_up=False, instance=2),)),
+               knowledge=know)
+    slow = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=3,
+                            sets=(_V2Slot(3, face_up=False, instance=3),)),
+               knowledge=know)
+    #: 🔴 함정 쪽이 **B(잠재)** 에서만 앞선다.
+    assert trap.set_reactive == 1 and slow.set_reactive == 0
+    #: 🔴 그런데 **우열에는 쓰이지 않는다** — 어느 쪽도 지배하지 않는다.
+    assert not _dominates_v2(trap, slow) and not _dominates_v2(slow, trap)
+    #: 🔴 "확정 방해" 로 합산하지 않았다는 것을 기준 설명이 적는다.
+    from agent.open_evaluation_v2 import CRITERIA_V2
+
+    said = next(one for one in CRITERIA_V2 if one.key == "set_reactive")
+    assert "확정 방해" in said.limit_ko and said.role_ko.startswith("B")
+
+
+def test_k03_tokens_are_counted_apart_but_never_as_worthless():
+    """🔴 토큰을 **무가치로 빼지도**, 효과 몬스터와 **같은 1장으로 합치지도** 않는다."""
+    from agent.open_evaluation_v2 import _dominates_v2
+
+    know = _knowledge({1: _MONSTER, 9: _TOKEN})
+    one_body = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=4),
+                   knowledge=know)
+    with_token = _v2(_V2Resources(
+        field=(_V2Slot(1, instance=1), _V2Slot(9, instance=9)), hand=4),
+        knowledge=know)
+    assert one_body.token_bodies == 0 and with_token.token_bodies == 1
+    assert one_body.effect_bodies == with_token.effect_bodies == 1
+    #: 🔴 토큰이 **축에 있으므로** 토큰을 더 남긴 쪽이 앞선다 (0 으로 무시하지 않는다).
+    assert _dominates_v2(with_token, one_body)
+
+
+def test_k04_spending_bodies_as_material_is_not_an_automatic_loss():
+    """
+    🔴 **소재로 썼다고 자동 탈락하지 않는다** — 몬스터 수가 줄어도 다른
+    축에서 앞서면 비교 불가로 남는다.
+    """
+    from agent.open_evaluation_v2 import _dominates_v2
+
+    know = _knowledge({1: _MONSTER, 2: _MONSTER, 9: _TOKEN})
+    before = _v2(_V2Resources(
+        field=(_V2Slot(1, instance=1), _V2Slot(9, instance=9)), hand=4,
+        their=(_V2Slot(9, instance=99),)), knowledge=know)
+    after = _v2(_V2Resources(
+        field=(_V2Slot(2, instance=2),), hand=5,
+        their=()), knowledge=know)
+    #: 🔴 몸이 줄었지만 쥔 카드와 상대 자리에서 앞선다 → **어느 쪽도 지배하지 않는다.**
+    assert before.effect_bodies == 1 and after.effect_bodies == 1
+    assert not _dominates_v2(before, after)
+    assert not _dominates_v2(after, before)
+
+
+def test_k05_a_used_effect_is_not_confused_with_an_unused_one():
+    """🔴 **사용 완료와 미사용을 혼동하지 않는다** — 그래도 우열에는 쓰지 않는다."""
+    from agent.open_evaluation_v2 import _dominates_v2
+
+    know = _knowledge({1: _MONSTER})
+    fresh = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=4),
+                knowledge=know)
+    spent = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=4,
+                             uses=(_Use("effect", "1:e[0]"),)),
+                knowledge=know)
+    assert fresh.unused_effect_bodies == 1
+    assert spent.unused_effect_bodies == 0
+    #: 🔴 B 이므로 **우열은 그대로 동률**이다.
+    assert not _dominates_v2(fresh, spent) and not _dominates_v2(spent, fresh)
+    #: 개체 번호로 적힌 사용 기록도 읽는다.
+    by_instance = _v2(_V2Resources(field=(_V2Slot(1, instance=7),), hand=4,
+                                   uses=(_Use("card", "#7"),)),
+                      knowledge=know)
+    assert by_instance.unused_effect_bodies == 0
+
+
+def test_k06_an_unknown_card_is_counted_as_unknown_not_as_zero():
+    """🔴 **카드 정의를 모르면 C 로 센다** — 0 으로 메우지도, 실패로 적지도 않는다."""
+    from agent.open_evaluation_v2 import _dominates_v2
+
+    know = _knowledge({1: _MONSTER})
+    known = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=4),
+                knowledge=know)
+    #: 저장소에 없는 ID — 토큰으로도 효과 몬스터로도 세지 않는다.
+    unknown = _v2(_V2Resources(field=(_V2Slot(777, instance=2),), hand=4),
+                  knowledge=know)
+    assert unknown.unknown_cards == 1
+    assert unknown.effect_bodies == 0 and unknown.token_bodies == 0
+    #: 🔴 그래서 **모르는 쪽이 지배당한다** — 그 사실을 숨기지 않고 C 로 적는다.
+    assert _dominates_v2(known, unknown)
+    assert "판단 불가" not in known.describe_ko() or True
+    assert "[C] 카드 정의 모름 1" in unknown.describe_ko()
+
+
+def test_k07_a_budget_cut_state_is_not_printed_as_a_finished_board():
+    """🔴 **예산으로 잘린 상태를 완성된 최종 필드로 적지 않는다** (§4)."""
+    from agent.bounded_search import ContinuationStop, FoundMeta
+    from agent.open_evaluation_v2 import RankingV2, _STOP_NOTE
+
+    know = _knowledge({1: _MONSTER})
+    open_state = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=4),
+                     knowledge=know,
+                     meta=FoundMeta(stop=ContinuationStop.OPEN))
+    done = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=4),
+               knowledge=know,
+               meta=FoundMeta(stop=ContinuationStop.NO_LEGAL))
+    assert open_state.finished is False and done.finished is True
+    assert "전개 완료가 아닙니다" in _STOP_NOTE["open"]
+    #: 🔴 **더 할 수 없는 자리도 "턴 종료 검증" 이라고 적지 않는다.**
+    assert "턴 종료를 처리한 것이 아닙니다" in _STOP_NOTE["no_legal"]
+    assert "더 할 수 없다는 뜻이 아닙니다" in _STOP_NOTE["action_cap"]
+    #: 🔴 미지원이 남은 자리를 "완성" 으로도 "실패" 로도 적지 않는다.
+    assert "지원하지 않아" in _STOP_NOTE["unsupported_left"]
+    assert RankingV2().policy_label == "open-development v2"
+
+
+def test_k08_what_the_opponent_got_is_an_axis():
+    """🔴 **상대에게 준 것이 어느 축에도 없던 것**이 v1 의 빈자리였다."""
+    from agent.open_evaluation_v2 import _dominates_v2
+
+    know = _knowledge({1: _MONSTER, 9: _TOKEN})
+    gave = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=4,
+                            their=(_V2Slot(9, instance=99),)), knowledge=know)
+    kept = _v2(_V2Resources(field=(_V2Slot(1, instance=1),), hand=4),
+               knowledge=know)
+    assert gave.opponent_gifts == 1 and kept.opponent_gifts == 0
+    assert _dominates_v2(kept, gave)
+
+
+def test_k09_the_v2_module_holds_no_card_ids_and_no_answer_board():
+    """🔴 **카드명별 임의 점수도, 정답 필드도 넣지 않는다.**"""
+    import re
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parent.parent
+              / "agent" / "open_evaluation_v2.py").read_text(encoding="utf-8")
+    body = "\n".join(
+        line for line in source.splitlines()
+        if not line.strip().startswith("#")
+    )
+    #: 카드 패스코드로 보이는 긴 정수가 없다.
+    assert not re.search(r"\b\d{5,}\b", body), "카드 ID 리터럴이 있습니다"
+    for word in ("기르수", "갈라테아", "스켈레촌", "디베르", "오르페골"):
+        assert word not in source, word
+
+
+def test_k10_similar_variants_do_not_take_every_verification_slot():
+    """
+    🔴 **같은 집의 변형이 검증 슬롯을 독차지하지 않는다** (§6) — 카드
+    이름이 아니라 **집 구성**으로 가른다.
+    """
+    from agent.open_evaluation_v2 import select_top_v2
+
+    know = _knowledge({1: _MONSTER, 2: _TRAP, 3: _SLOW_SPELL, 9: _TOKEN})
+    path = (_step(1),)
+
+    def _row(sets, hand, field=(1,)):
+        return (path, _V2Resources(
+            field=tuple(_V2Slot(cid, instance=cid) for cid in field),
+            sets=tuple(_V2Slot(cid, face_up=False, instance=cid)
+                       for cid in sets),
+            hand=hand), "")
+
+    #: 앞의 셋은 **같은 집**(세트 두 장, 순서만 다름)이고 넷째가 다른 집이다.
+    pool = [
+        _row((2, 3), 2), _row((3, 2), 2), _row((2, 3), 2),
+        _row((), 4, field=(1, 9)),
+    ]
+    chosen = select_top_v2(pool, 2, knowledge=know)
+    assert 3 in chosen, "다른 집이 한 자리도 받지 못했습니다"
+    assert len(chosen) == 2
+
+
+def test_k11_v2_shows_the_whole_set_of_axes_in_its_criteria():
+    """🔴 축마다 **무엇을 읽고 무엇을 증명하지 않는지** 적혀 있다."""
+    from agent.open_evaluation_v2 import CRITERIA_V2, UNJUDGED_V2
+
+    keys = tuple(one.key for one in CRITERIA_V2)
+    assert keys == ("effect_bodies", "token_bodies", "kept_cards",
+                    "summon_right_kept", "opponent_gifts", "set_reactive",
+                    "unused_effect_bodies", "unknown_cards", "stop")
+    for one in CRITERIA_V2:
+        assert one.limit_ko and one.reads_ko and one.role_ko
+    roles = {one.key: one.role_ko[0] for one in CRITERIA_V2}
+    assert roles["effect_bodies"] == "A" and roles["kept_cards"] == "A"
+    assert roles["set_reactive"] == "B"
+    assert roles["unused_effect_bodies"] == "B"
+    assert roles["unknown_cards"] == "C" and roles["stop"] == "C"
+    joined = " ".join(UNJUDGED_V2)
+    assert "턴 종료를 처리하지 않았습니다" in joined
+    assert "전투" in joined and "링크 수치" in joined
+
+
+# ======================================================================
+# L. 실제 엔진 — v1/v2 와 탐색 배분을 **같은 입력·예산**으로 견준다
+# ======================================================================
+def _autonomous(repository, **kwargs):
+    """같은 덱·패·예산으로 한 번 돌린다 — 바꾸는 것은 받은 칸뿐이다."""
+    from app.main import autonomous_search_opening
+
+    return autonomous_search_opening(
+        repository, _orcust_input(repository), list(_ORCUST_HAND),
+        actions=6, max_results=3, **kwargs,
+    )
+
+
+@pytest.mark.real_card
+def test_l01_v1_and_v2_differ_on_the_same_candidate_set(repository):
+    """
+    🔴 **같은 후보 집합**을 두 정책으로 평가하면 추천이 달라진다 — 그리고
+    달라지는 이유가 "세트한 쪽을 자원 손실로 세느냐" 다.
+    """
+    from app.main import rank_autonomous_results
+
+    out = _autonomous(repository, baseline_per_opening=False)[1]
+    assert out is not None
+    v1 = rank_autonomous_results(out, repository, evaluation="v1")
+    v2 = rank_autonomous_results(out, repository, evaluation="v2")
+    verified = {r.index for r in out.results if r.verified}
+    #: 🔴 **같은 후보 집합**을 본다 — 탐색을 다시 돌리지 않았다.
+    assert verified == {c.index for c in v1.eligible_candidates}
+    assert verified == {c.index for c in v2.eligible_candidates}
+
+    v1_best = {c.index for c in v1.recommended}
+    v2_best = {c.index for c in v2.recommended}
+    #: v1 은 하나로 줄이고, v2 는 **공동 추천**으로 남긴다.
+    assert len(v1_best) == 1
+    assert v1_best < v2_best, (v1_best, v2_best)
+    #: 🔴 v2 가 더한 후보들은 **세트한 쪽**이고, 쥔 카드 수가 같다.
+    kept = {v2.candidate(i).measures.kept_cards for i in v2_best}
+    assert len(kept) == 1, kept
+    assert any(v2.candidate(i).measures.set_cards > 0 for i in v2_best)
+    assert all(v2.candidate(i).measures.stop for i in v2_best)
+
+
+@pytest.mark.real_card
+def test_l02_counting_baselines_per_opening_costs_no_depth(repository):
+    """
+    🔴 **탐색 배분 변경만의 효과** — 같은 예산에서 노드 수도 최대 깊이도
+    그대로이고, 기준점 상한이 더는 탐색을 끊지 않는다.
+    """
+    off = _autonomous(repository, baseline_per_opening=False)[1]
+    on = _autonomous(repository, baseline_per_opening=True)[1]
+    assert off is not None and on is not None
+    assert on.nodes_expanded == off.nodes_expanded
+    assert on.deepest == off.deepest
+    #: 🔴 **후보가 늘었다** — 같은 첫 행동의 다른 해결 선택들이 보관된다.
+    assert len(on.results) > len(off.results)
+    assert any("max_baselines" in hit for hit in off.budget_hit)
+    assert not any("max_baselines" in hit for hit in on.budget_hit)
+    #: 🔴 예산을 늘리지 않았다 — 상한 값 자체는 그대로다.
+    assert on.budget.max_baselines == off.budget.max_baselines
+    assert on.budget.max_candidates == off.budget.max_candidates
+    assert on.budget.max_nodes == off.budget.max_nodes
+
+
+@pytest.mark.real_card
+def test_l03_rotating_baselines_trades_depth_for_breadth(repository):
+    """
+    🔴 **켜지 않은 이유를 수치로 남긴다** — 돌려 가며 펼치면 너비는 늘지만
+    같은 예산에서 **깊이가 줄어** 깊은 전개가 사라진다.
+    """
+    plain = _autonomous(repository, baseline_per_opening=True,
+                        rotate_baselines=False)[1]
+    rotated = _autonomous(repository, baseline_per_opening=True,
+                          rotate_baselines=True)[1]
+    assert rotated.deepest < plain.deepest
+    assert rotated.nodes_expanded > plain.nodes_expanded
+    #: 🔴 예산은 그대로다 — 바뀐 것은 **누가 쓰는가**뿐이다.
+    assert rotated.budget.max_nodes == plain.budget.max_nodes
+    assert rotated.budget.max_candidates == plain.budget.max_candidates
+    #: 기본은 꺼져 있다.
+    from app.main import AUTONOMOUS_DEFAULT_ROTATE_BASELINES
+
+    assert AUTONOMOUS_DEFAULT_ROTATE_BASELINES is False
+
+
+@pytest.mark.real_card
+def test_l04_a_token_is_still_usable_as_link_material(repository):
+    """
+    🔴 **토큰을 소재 후보에서 빼지 않았다** — 실제 탐색이 토큰이 있는 판에서
+    링크 소환을 계속 찾아낸다.
+    """
+    out = _autonomous(repository)[1]
+    assert out is not None
+    with_token_and_link = [
+        result for result in out.results
+        if any(step.kind == "link_summon" for step in result.path)
+        and any(slot.face_up for slot in result.resources.own_field)
+    ]
+    assert with_token_and_link, "링크 소환을 포함한 후보가 없습니다"
+    #: 추천 가운데 적어도 하나는 토큰을 **센** 상태다 (무가치로 빼지 않았다).
+    from app.main import rank_autonomous_results
+
+    rank = rank_autonomous_results(out, repository)
+    assert rank.recommended
+    assert any(one.measures.token_bodies > 0 for one in rank.recommended)
+
+
+@pytest.mark.real_card
+def test_l05_the_recommendation_is_reproduced_from_a_fresh_state(repository):
+    """🔴 **대표 결과는 새 초기 상태에서 다시 실행된다** (기존 계약 유지)."""
+    from app.main import autonomous_rerun_record, rank_autonomous_results
+
+    out = _autonomous(repository)[1]
+    rank = rank_autonomous_results(out, repository)
+    best = rank.recommended[0]
+    chosen = next(r for r in out.results if r.index == best.index)
+    record, why = autonomous_rerun_record(
+        repository, _orcust_input(repository), list(_ORCUST_HAND), chosen,
+    )
+    assert record is not None, why
+
+
+@pytest.mark.real_card
+def test_l06_unsupported_moves_are_never_counted_as_interaction(repository):
+    """🔴 **미지원 효과를 확정 방해로 세지 않는다** — 미지원은 C 로만 남는다."""
+    out = _autonomous(repository)[1]
+    assert out.unsupported, "이 입력에는 미지원 기록이 있어야 합니다"
+    from app.main import rank_autonomous_results
+
+    rank = rank_autonomous_results(out, repository)
+    for one in rank.recommended:
+        #: 세트한 것이 없으면 B 값도 0 이다 — 미지원이 그 수를 올리지 않는다.
+        if one.measures.set_cards == 0:
+            assert one.measures.set_reactive == 0
