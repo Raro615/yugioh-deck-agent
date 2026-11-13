@@ -1010,3 +1010,168 @@ def test_i09_the_evaluation_criteria_are_unchanged_and_the_limits_are_said():
     assert "세트" in joined and "패에 남긴" in joined
     assert "묘지" in joined and "방해 수단" in joined
     assert joined.count("다음 과제") == 3
+
+
+# ======================================================================
+# J. 입력 거절 이유를 **응답이 직접 말한다** (Phase 6-BC 후속)
+# ======================================================================
+#: 🔴 기르수를 **4장** 적은 패 — 레시피에는 3장뿐이므로 규칙 위반이다.
+_TOO_MANY_HAND = [69811710, 69811710, 69811710, 69811710, 14558127]
+
+
+class _RealAgent:
+    """``repository`` 하나만 보는 어댑터 입력."""
+
+    def __init__(self, repository):
+        self.repository = repository
+
+
+@pytest.mark.real_card
+def test_j01_the_refusal_says_the_actual_reason(repository):
+    """
+    🔴 **없는 출력 절로 사용자를 보내지 않는다** (6-BC 후속).
+
+    6-BC 가 ``search:auto`` 에서 기준점 실행을 없앴는데 거절 안내는
+    "위 `[실제 엔진 실행]` 절에 이유가 있습니다" 로 남아 있었다 — 그 절이
+    없는 응답이었다.
+    """
+    import app.discord_bot as bot
+    from pathlib import Path
+
+    recipe = (Path(__file__).resolve().parent.parent
+              / "docs" / "orcust-azamina-note.ydk").read_text(encoding="utf-8")
+    said = bot._run_bounded_search(_RealAgent(repository), recipe,
+                                   list(_TOO_MANY_HAND), "auto",
+                                   "3", "6")
+    assert said is not None
+    assert said.refused is True and said.ran is False
+    brief = "\n".join(said.brief)
+    detail = "\n".join(said.detail)
+
+    #: 🔴 **실제 이유**가 요약에 있다 — 어떤 카드가 몇 장 넘었는지.
+    assert "패 4장 > 덱 3장" in brief
+    assert "69811710" in brief
+    #: 🔴 **없는 절을 가리키지 않는다.**
+    assert "[실제 엔진 실행]" not in brief
+    assert "[실제 엔진 실행]" not in detail
+    #: 🔴 상세에는 검증표 전체가 있다 (공용 렌더러).
+    assert "선공 상태 구성" in detail
+    assert "실행하지 않은 이유" in detail
+    #: 🔴 **거절한 요청에 전개 기록을 만들지 않는다.**
+    assert said.replay is None
+    assert said.replay_state is bot.ReplayState.NOT_RUN
+
+
+@pytest.mark.real_card
+def test_j02_a_refused_request_gets_no_replay_attachment(repository):
+    """🔴 거절한 요청에는 **전개 기록 · 뷰어 첨부가 없다**, 그리고 응답이 그 사실을 들고 있다."""
+    import app.discord_bot as bot
+    from pathlib import Path
+
+    recipe = (Path(__file__).resolve().parent.parent
+              / "docs" / "orcust-azamina-note.ydk").read_text(encoding="utf-8")
+    response = bot.combo_response(
+        _RealAgent(repository),
+        ",".join(str(card_id) for card_id in _TOO_MANY_HAND),
+        recipe_text=recipe, search_text="auto", results_text="3",
+        followups_text="6",
+    )
+    text = "\n".join(response.messages)
+    assert response.refused is True and response.failed is False
+    assert "패 4장 > 덱 3장" in text
+    assert "[실제 엔진 실행]" not in text
+    names = [item.filename for item in response.attachments]
+    assert names == ["combo-detail.txt"], names
+
+
+@pytest.mark.real_card
+def test_j03_a_normal_autonomous_request_is_not_marked_refused(repository):
+    """🔴 **정상 입력의 동작은 그대로다** — 거절 표시도 실패 표시도 없다."""
+    import app.discord_bot as bot
+    from pathlib import Path
+
+    recipe = (Path(__file__).resolve().parent.parent
+              / "docs" / "orcust-azamina-note.ydk").read_text(encoding="utf-8")
+    response = bot.combo_response(
+        _RealAgent(repository),
+        ",".join(str(card_id) for card_id in _ORCUST_HAND),
+        recipe_text=recipe, search_text="auto", results_text="3",
+        followups_text="6",
+    )
+    assert response.refused is False and response.failed is False
+    names = [item.filename for item in response.attachments]
+    #: 🔴 대표 결과의 기록과 뷰어가 **그대로** 붙는다 (6-BC 그대로).
+    assert names == ["combo-detail.txt", "combo-replay.json",
+                     "combo-replay.html"], names
+    text = "\n".join(response.messages)
+    assert "전개 보기·전개 기록은 **결과" in text
+
+
+def test_j04_the_final_progress_text_reads_the_response_not_the_words():
+    """
+    🔴 **한국어 출력 문자열을 뒤져 성공 · 실패를 판정하지 않는다** — 읽는
+    것은 응답의 칸과 "실제로 보냈는가" 다.
+    """
+    import app.discord_bot as bot
+
+    ok = bot.ComboResponse(messages=("결과",))
+    assert bot.progress_final_text(ok, True) == bot.PROGRESS_DONE_TEXT
+    assert bot.progress_final_text(ok, False) == bot.PROGRESS_UNDELIVERED_TEXT
+    assert bot.progress_final_text(None, False) == bot.PROGRESS_FAILED_TEXT
+    assert bot.progress_final_text(
+        bot.ComboResponse(messages=("x",), refused=True), True
+    ) == bot.PROGRESS_REFUSED_TEXT
+    assert bot.progress_final_text(
+        bot.ComboResponse(messages=("x",), failed=True), True
+    ) == bot.PROGRESS_FAILED_TEXT
+    #: 🔴 내용이 사라진 응답도 성공이 아니다.
+    assert bot.progress_final_text(
+        bot.ComboResponse(messages=()), True) == bot.PROGRESS_FAILED_TEXT
+    #: 🔴 **거절은 성공 문구를 쓰지 않는다.**
+    assert "끝났습니다" not in bot.PROGRESS_REFUSED_TEXT
+
+
+def test_j05_both_entries_use_one_refusal_renderer():
+    """🔴 **같은 규칙을 두 벌로 두지 않는다** — 기준점 실행과 자율 탐색이 같은 문장."""
+    from deck.report import render_opening_headline, render_setup_refusal
+
+    class _Finding:
+        rule = "패의 매수가 덱 보유 매수 이내인가"
+        detail = "[스텁] 패 4장 > 덱 3장"
+
+    class _Setup:
+        can_run = False
+        blockers = ["[스텁] 막은 이유"]
+        violations = [_Finding()]
+
+    setup = _Setup()
+    #: ``run`` 은 거절 절에서 읽히지 않는다 — 실행이 없었기 때문이다.
+    assert render_opening_headline(setup, None) == render_setup_refusal(setup)
+    said = render_setup_refusal(setup)
+    assert "[스텁] 막은 이유" in said
+    assert "[스텁] 패 4장 > 덱 3장" in said
+
+
+def test_j06_the_conflict_and_the_unreadable_hand_are_refusals_too():
+    """🔴 **아무것도 돌리지 않은 응답**은 전부 거절로 표시한다."""
+    import app.discord_bot as bot
+
+    class _Repo:
+        def get(self, card_id):
+            return None
+
+        def find_by_exact_name(self, name):
+            return None
+
+        def search(self, *args, **kwargs):
+            return []
+
+    class _Agent:
+        repository = _Repo()
+
+    nothing = bot.combo_response(_Agent(), "읽을 수 없는 이름")
+    assert nothing.refused is True and nothing.failed is False
+
+    clash = bot.combo_response(_Agent(), "69811710", search_text="auto",
+                               line_text="orcust-girsu")
+    assert clash.refused is True

@@ -841,6 +841,36 @@ def _headline_field(setup, repository=None) -> "list[str]":
     return lines
 
 
+def render_setup_refusal(setup) -> str:
+    """
+    **입력 검증을 통과하지 못한 이유** (Phase 6-BC 후속).
+
+    🔴 **판정하지 않는다 — 이미 난 판정을 옮긴다.** 읽는 것은
+    :attr:`~deck.opening.OpeningSetup.blockers` (상태를 만들지 못한 이유)
+    와 :attr:`~deck.opening.OpeningSetup.violations` (규칙 위반)뿐이고,
+    같은 규칙을 여기서 다시 구현하지 않는다.
+
+    🔴 **왜 따로 떼어 냈는가.** 전에는 이 문장들이
+    :func:`render_opening_headline` 안에만 있었고, 그래서 **기준점 실행을
+    돌리지 않는 자율 탐색**(``search:auto``)은 이유를 적을 길이 없어
+    "위 `[실제 엔진 실행]` 절에 이유가 있습니다" 라고만 적었다 — 그 절이
+    없는 응답에서 **없는 자리로 사용자를 보냈다.** 지금은 두 입구가 같은
+    문장을 쓴다.
+    """
+    lines = ["❌ **실행하지 않았습니다** — 입력 검증을 통과하지 못했습니다."]
+    for blocker in setup.blockers:
+        lines.append(f"  - {blocker}")
+    for finding in setup.violations:
+        lines.append(f"  - 🔴 {finding.rule}: {finding.detail}")
+    #: 🔴 **검증 불가는 여기 섞지 않는다** — 거절 이유가 아니다. 그 목록은
+    #: 상세 기록의 :func:`render_opening_setup` 이 **따로** 적는다 (검증한
+    #: 것과 못한 것을 같은 표에 섞지 않는다는 기존 규율). 이 함수는 기존
+    #: :func:`render_opening_headline` 의 거절 절을 **그대로** 떼어 낸
+    #: 것이고, 문장을 늘리지 않았다.
+    lines.append("  🔴 실행하지 않았으므로 걸음 수도 성공 표시도 없습니다.")
+    return "\n".join(lines)
+
+
 def render_opening_headline(setup, run, repository=None, *,
                             line=None, progress=None) -> str:
     """
@@ -865,13 +895,7 @@ def render_opening_headline(setup, run, repository=None, *,
     약속하게 된다.
     """
     if not setup.can_run:
-        lines = ["❌ **실행하지 않았습니다** — 입력 검증을 통과하지 못했습니다."]
-        for blocker in setup.blockers:
-            lines.append(f"  - {blocker}")
-        for finding in setup.violations:
-            lines.append(f"  - 🔴 {finding.rule}: {finding.detail}")
-        lines.append("  🔴 실행하지 않았으므로 걸음 수도 성공 표시도 없습니다.")
-        return "\n".join(lines)
+        return render_setup_refusal(setup)
 
     if line is not None:
         total = len(line.steps)

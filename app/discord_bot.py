@@ -1031,6 +1031,7 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
         render_bounded_search, render_bounded_search_brief,
         render_multi_search, render_multi_search_brief,
         render_open_search, render_open_search_brief,
+        render_opening_setup, render_setup_refusal,
     )
 
     if not search_text or not search_text.strip():
@@ -1109,12 +1110,31 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
             **({"actions": actions} if actions else {}),
         )
         if found is None:
-            said = tuple(head + [
-                "🔴 **탐색하지 않았습니다** — 입력 검증을 통과하지"
-                " 못했습니다 (위 `[실제 엔진 실행]` 절에 이유가 있습니다).",
-            ])
-            return OpeningReport(brief=said, detail=said,
-                                 refused=not setup.can_run, ran=False)
+            #: 🔴 **거절 이유를 여기서 직접 적는다** (6-BC 후속).
+            #:
+            #: 전에는 "위 `[실제 엔진 실행]` 절에 이유가 있습니다" 라고
+            #: 적었는데, ``search:auto`` 는 6-BC 부터 그 기준점 실행을
+            #: **돌리지 않는다** — 그래서 **없는 자리로 사용자를 보냈다.**
+            #:
+            #: 🔴 **같은 규칙을 다시 구현하지 않는다.** 판정은 이미
+            #: ``build_opening`` 이 했고 (``setup.blockers`` ·
+            #: ``setup.violations``), 여기서는 공용 렌더러가 그것을 옮겨
+            #: 적을 뿐이다 — 기준점 실행 경로와 **같은 문장**이다.
+            #: 🔴 **같은 말을 두 번 적지 않는다** — 공용 렌더러의 첫 줄이
+            #: 이미 "실행하지 않았습니다 — 입력 검증을 통과하지
+            #: 못했습니다" 이고, 머리말이 **어느 모드인지**를 말한다.
+            brief = list(head)
+            brief.extend(render_setup_refusal(setup).splitlines())
+            detail = list(brief)
+            #: 상세에는 검증표 전체를 붙인다 (통과 건수 · 위반 · 검증 불가 ·
+            #: 알 수 없는 것) — CLI 가 보는 것과 같은 함수다.
+            detail.extend(render_opening_setup(setup).splitlines())
+            return OpeningReport(
+                brief=tuple(brief), detail=tuple(detail),
+                refused=not setup.can_run, ran=False,
+                #: 🔴 **거절한 요청에는 전개 기록을 만들지 않는다.**
+                replay=None, replay_state=ReplayState.NOT_RUN,
+            )
         ranking = rank_autonomous_results(found)
         brief = list(head)
         brief.extend(
@@ -1272,6 +1292,25 @@ class ComboResponse:
 
     detail_omitted: int = 0
     """담지 못한 줄 수 (:attr:`ComboDetail.omitted_lines`)."""
+
+    refused: bool = False
+    """
+    🔴 **이번 요청을 거절했는가** (Phase 6-BC 후속).
+
+    입력이 규칙 검증을 통과하지 못했거나 (``search:auto`` + ``line:`` 처럼)
+    서로 반대되는 요청이어서 **아무것도 돌리지 않은** 응답이다. 거절은
+    오류가 아니다 — 응답은 제대로 만들어졌고, 그 내용이 "하지 않았다" 다.
+
+    🔴 **왜 칸으로 두는가.** 보내는 쪽이 이 사실을 알아야 진행 상태의 끝
+    문구를 "끝났습니다" 가 아니라 "하지 않았습니다" 로 적는다. 출력
+    문자열을 뒤져서 알아내면 문구를 고칠 때마다 조용히 틀린다.
+    """
+
+    failed: bool = False
+    """
+    🔴 **만들다가 실패했는가** (Phase 6-BC 후속) — 예외 · 카드 데이터 없음.
+    거절(:attr:`refused`)과 **다른 사실**이고, 성공으로 적으면 안 된다.
+    """
 
     @property
     def complete_detail(self) -> bool:
@@ -1990,7 +2029,7 @@ def combo_response(agent, hand_text: str, board_text: str = "",
         lines.append("🔴 무작위 패 생성은 구현되어 있지 않습니다 — 패는"
                      " 직접 지정해야 합니다.")
         return ComboResponse(messages=tuple(paginate(
-            lines, max_messages=COMBO_MESSAGE_LIMIT)))
+            lines, max_messages=COMBO_MESSAGE_LIMIT)), refused=True)
 
     #: 🔴 **충돌을 몰래 한쪽으로 바꾸지 않는다** (Phase 6-BC §1).
     #: ``line:`` 은 적어 둔 경로를 따라가라는 뜻이고 ``search:auto`` 는
@@ -2005,7 +2044,7 @@ def combo_response(agent, hand_text: str, board_text: str = "",
         lines.append("· 자율 탐색만: `line:` 을 비우고 `search:auto`")
         lines.append(f"· 고정 경로만: `search:` 를 비우고 `line:{line_text}`")
         return ComboResponse(messages=tuple(paginate(
-            lines, max_messages=COMBO_MESSAGE_LIMIT)))
+            lines, max_messages=COMBO_MESSAGE_LIMIT)), refused=True)
 
     draft = None
     if deck_text and deck_text.strip():
@@ -2076,6 +2115,9 @@ def combo_response(agent, hand_text: str, board_text: str = "",
             attachments=detail.attachments,
             detail_notice=detail.notice,
             detail_omitted=detail.omitted_lines,
+            #: 🔴 **입력 거절이다** — 아무것도 돌리지 않았고, 전개 기록도
+            #: 뷰어도 만들지 않았다 (위 계약).
+            refused=True,
         )
 
     #: 🔴 **자율 탐색 요청에는 정적 계획을 붙이지 않는다** (6-BC §2).
@@ -2477,7 +2519,8 @@ class SearchService:
         않는다.
         """
         if self._agent is None:
-            return ComboResponse(messages=(COMBO_UNAVAILABLE_MESSAGE,))
+            return ComboResponse(messages=(COMBO_UNAVAILABLE_MESSAGE,),
+                                 failed=True)
         try:
             return combo_response(self._agent, hand_text, board_text,
                                   deck_text, recipe_text, line_text,
@@ -2490,7 +2533,10 @@ class SearchService:
                              hand_text, board_text,
                              deck_text, recipe_text, line_text, search_text,
                              results_text, followups_text)
-            return ComboResponse(messages=(COMBO_ERROR_MESSAGE,))
+            #: 🔴 **성공으로 적지 않는다** — 진행 상태의 끝 문구가 이 칸을
+            #: 읽어 "끝내지 못했습니다" 로 적는다 (6-BC 후속).
+            return ComboResponse(messages=(COMBO_ERROR_MESSAGE,),
+                                 failed=True)
 
     def register_deck_texts(self, owner: str, image_bytes, image_name: str,
                             recipe_text: str,
@@ -2740,12 +2786,22 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
                 await interaction.edit_original_response(content=text)
 
             relay = ProgressRelay(asyncio.get_running_loop(), _edit)
-        response = await asyncio.to_thread(
-            combo_service.combo_response, hand, board, deck, recipe, line,
-            search, results, followups, progress=relay)
-        if relay is not None:
-            await relay.finish()
-        await send_combo_response(interaction.followup, response)
+        #: 🔴 **결과를 먼저 보내고 끝 문구를 적는다** (6-BC 후속).
+        #: 그래야 (1) 진행 표시가 느려도 결과가 늦지 않고, (2) "결과는 이
+        #: 아래에 있습니다" 를 **보낸 뒤에만** 적게 된다.
+        #: 🔴 ``finally`` 에서 적으므로 예외가 나도 진행 메시지가 "탐색 중"
+        #: 으로 남지 않는다.
+        response = None
+        delivered = False
+        try:
+            response = await asyncio.to_thread(
+                combo_service.combo_response, hand, board, deck, recipe, line,
+                search, results, followups, progress=relay)
+            await send_combo_response(interaction.followup, response)
+            delivered = True
+        finally:
+            if relay is not None:
+                await relay.finish(progress_final_text(response, delivered))
 
     @tree.command(name="share-replay", description=SHARE_DESCRIPTION)
     @app_commands.describe(
@@ -2842,8 +2898,25 @@ PROGRESS_TEXTS: dict = {
 
 #: 🔴 **끝났다는 사실도 같은 메시지를 고쳐서 알린다.** 마지막 단계 문구를
 #: 그대로 남기면 끝난 요청이 "만들고 있습니다" 로 읽힌다.
+#:
+#: 🔴 **끝 문구는 실제로 일어난 일을 적는다** (6-BC 후속). 전에는 무엇이
+#: 일어났든 "자율 탐색이 끝났습니다 — 결과는 이 아래에 있습니다" 였다 —
+#: 입력을 거절했을 때도, 내부 오류로 결과를 만들지 못했을 때도, 결과를
+#: 보내지 못했을 때도 **성공으로 읽혔다.**
 PROGRESS_DONE_TEXT = (
     "✅ **자율 탐색이 끝났습니다** — 결과는 이 아래에 있습니다."
+)
+PROGRESS_REFUSED_TEXT = (
+    "❌ **탐색하지 않았습니다** — 입력 검증을 통과하지 못했습니다."
+    " 이유는 이 아래에 있습니다."
+)
+PROGRESS_FAILED_TEXT = (
+    "🔴 **끝내지 못했습니다** — 결과를 만들지 못했습니다 (원인은 봇 로그에"
+    " 있습니다)."
+)
+PROGRESS_UNDELIVERED_TEXT = (
+    "🔴 **결과를 보내지 못했습니다** — 탐색은 끝났지만 전달에 실패했습니다"
+    " (원인은 봇 로그에 있습니다). 🔴 아래에 결과가 없을 수 있습니다."
 )
 
 
@@ -2856,65 +2929,163 @@ def progress_text(stage: str) -> "str | None":
     return PROGRESS_TEXTS.get(str(stage))
 
 
+def progress_final_text(response: "ComboResponse | None",
+                        delivered: bool) -> str:
+    """
+    **끝 문구를 응답의 상태에서 고른다** (Phase 6-BC 후속).
+
+    🔴 **한국어 출력 문자열을 뒤져서 성공 · 실패를 판정하지 않는다.**
+    읽는 것은 :class:`ComboResponse` 의 칸(``failed`` · ``refused`` ·
+    ``missing``)과 "실제로 보냈는가" 하나뿐이다. 문구를 고치면 판정이 따라
+    바뀌는 코드는 다음에 문구를 고칠 때 조용히 틀린다.
+
+    ``response`` 가 ``None`` 이면 응답 자체를 만들지 못한 것이다 (예외).
+    ``delivered`` 는 **보내기까지 끝났는가** 이고, 이 함수를 부르는 쪽이
+    보내기 뒤에 참으로 바꾼다.
+    """
+    if response is None or response.failed or response.missing:
+        return PROGRESS_FAILED_TEXT
+    if not delivered:
+        return PROGRESS_UNDELIVERED_TEXT
+    if response.refused:
+        return PROGRESS_REFUSED_TEXT
+    return PROGRESS_DONE_TEXT
+
+
 class ProgressRelay:
     """
     스레드에서 받은 진행 단계를 **메시지 하나를 고쳐서만** 보여 준다
-    (Phase 6-BC §5).
+    (Phase 6-BC §5 · 6-BC 후속에서 순서와 종료를 보장하게 고쳤다).
 
     🔴 **반복 전송하지 않는다.** 같은 단계를 두 번 받아도 한 번만 고치고,
     새 메시지를 만들지 않는다 — 채널에 진행 알림이 쌓이면 결과가 밀려
     올라간다.
 
-    🔴 **탐색 스레드에서 불린다.** 그래서 코루틴을 직접 ``await`` 할 수 없고
-    :func:`asyncio.run_coroutine_threadsafe` 로 이벤트 루프에 넘긴다. 결과를
-    기다리지 않으므로 **진행 표시가 탐색을 늦추지 않는다**.
+    🔴 **고치는 순서가 보장된다.** 전에는 단계마다
+    :func:`asyncio.run_coroutine_threadsafe` 로 **각각** 예약하고 완료를
+    기다리지 않았다 — 느린 앞 단계의 수정이 뒤늦게 끝나면 **끝 문구를
+    "탐색 중" 으로 덮을 수 있었다.** 지금은 큐 하나와 소비자 하나가 있고,
+    한 번에 한 수정만 돈다.
 
-    🔴 **실패를 삼키지 않는다** — 넘긴 일이 실패하면 로그에 남긴다
+    🔴 **끝난 뒤에는 아무것도 덮지 못한다.** :meth:`finish` 는 (1) 더 받지
+    않도록 닫고, (2) 큐에 남은 수정이 끝나기를 **시간 제한을 두고** 기다린
+    뒤, (3) 소비자를 정리하고, (4) 마지막으로 끝 문구를 적는다. 닫은 뒤에
+    들어온 단계 알림은 **버린다.**
+
+    🔴 **탐색 스레드를 기다리게 하지 않는다.** 스레드 쪽
+    :meth:`__call__` 은 :meth:`asyncio.loop.call_soon_threadsafe` 로
+    넘기고 곧바로 돌아온다 — Discord 응답을 기다리는 자리가 아니다.
+
+    🔴 **진행 표시 때문에 결과가 늦거나 사라지지 않는다.** 부르는 쪽이
+    결과를 **먼저 보내고** :meth:`finish` 를 부른다. 그리고 여기의 모든
+    기다림에는 시간 제한이 있다 (``drain_timeout`` · ``edit_timeout``).
+
+    🔴 **실패를 삼키지 않는다** — 수정이 실패하면 로그에 남긴다
     (``app.main.notify_progress`` 는 이쪽 예외도 잡아 탐색을 보호한다).
     """
 
-    def __init__(self, loop, edit) -> None:
+    def __init__(self, loop, edit, *, drain_timeout: float = 5.0,
+                 edit_timeout: float = 10.0) -> None:
+        import threading
+
         self._loop = loop
         self._edit = edit
+        self._drain_timeout = float(drain_timeout)
+        self._edit_timeout = float(edit_timeout)
         self._seen: set = set()
         self._shown = False
+        self._closed = False
+        #: 🔴 **스레드와 이벤트 루프가 함께 보는 칸**이라 자물쇠를 쓴다 —
+        #: 닫혔는지와 이미 본 단계인지를 두 쪽에서 읽는다.
+        self._lock = threading.Lock()
+        self._queue = None
+        self._pump = None
 
     @property
     def shown(self) -> bool:
         """진행 상태를 한 번이라도 보여 주었는가."""
         return self._shown
 
-    def __call__(self, stage: str) -> None:
-        text = progress_text(stage)
-        if text is None or stage in self._seen:
-            return
-        self._seen.add(stage)
-        self._shown = True
-        self._submit(text)
+    @property
+    def closed(self) -> bool:
+        """🔴 **끝 문구까지 적었는가.** 참이면 더는 아무것도 고치지 않는다."""
+        return self._closed
 
-    def _submit(self, text: str) -> None:
+    def __call__(self, stage: str) -> None:
+        """🔴 **탐색 스레드에서 불린다** — 여기서 기다리지 않는다."""
+        text = progress_text(stage)
+        if text is None:
+            return
+        with self._lock:
+            #: 🔴 끝난 뒤에 들어온 알림은 **버린다** — 끝 문구를 덮지 않는다.
+            if self._closed or stage in self._seen:
+                return
+            self._seen.add(stage)
+            self._shown = True
+        self._loop.call_soon_threadsafe(self._offer, text)
+
+    def _offer(self, text: str) -> None:
+        """이벤트 루프 쪽 — 큐에 넣기만 한다 (소비자가 순서대로 처리한다)."""
         import asyncio
 
-        task = asyncio.run_coroutine_threadsafe(self._edit(text), self._loop)
-        task.add_done_callback(self._complain)
+        with self._lock:
+            if self._closed:
+                return
+        if self._queue is None:
+            self._queue = asyncio.Queue()
+            self._pump = asyncio.ensure_future(self._run(), loop=self._loop)
+        self._queue.put_nowait(text)
 
-    @staticmethod
-    def _complain(task) -> None:
-        try:
-            task.result()
-        except Exception:  # noqa: BLE001 - 진행 표시 실패로 응답을 잃지 않는다
-            logger.warning("진행 상태를 고치지 못했습니다.", exc_info=True)
+    async def _run(self) -> None:
+        """🔴 **한 번에 하나씩** 고친다 — 순서가 뒤집히지 않는다."""
+        import asyncio
 
-    async def finish(self) -> None:
-        """끝났다는 사실로 **같은 메시지를 한 번 더 고친다**.
+        while True:
+            text = await self._queue.get()
+            try:
+                await asyncio.wait_for(self._edit(text), self._edit_timeout)
+            except asyncio.CancelledError:
+                self._queue.task_done()
+                raise
+            except Exception:  # noqa: BLE001 - 진행 표시 실패로 응답을 잃지 않는다
+                logger.warning("진행 상태를 고치지 못했습니다.", exc_info=True)
+                self._queue.task_done()
+            else:
+                self._queue.task_done()
 
-        🔴 한 번도 보여 주지 않았으면 아무것도 하지 않는다 — 없던 메시지를
-        끝에서 만들지 않는다.
+    async def finish(self, text: str = PROGRESS_DONE_TEXT) -> None:
         """
-        if not self._shown:
+        **끝 문구로 같은 메시지를 마지막으로 한 번 고친다.**
+
+        🔴 한 번도 보여 주지 않았으면 끝 문구도 적지 않는다 — 없던 메시지를
+        끝에서 만들지 않는다. 그때도 큐와 소비자는 정리한다.
+
+        🔴 **두 번 불러도 한 번만 적는다** (``finally`` 에서 불릴 수 있다).
+        """
+        import asyncio
+        import contextlib
+
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            shown = self._shown
+        pump, queue = self._pump, self._queue
+        if pump is not None:
+            #: 🔴 **앞 단계의 수정이 끝 문구보다 먼저 끝나게** 기다린다 —
+            #: 다만 **무기한은 아니다** (결과는 이미 보냈지만, 핸들러가
+            #: 영원히 매달려 있지 않게 한다).
+            if queue is not None:
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(queue.join(), self._drain_timeout)
+            pump.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await pump
+            self._pump = None
+        if not shown:
             return
         try:
-            await self._edit(PROGRESS_DONE_TEXT)
+            await asyncio.wait_for(self._edit(text), self._edit_timeout)
         except Exception:  # noqa: BLE001
             logger.warning("진행 상태 마무리를 고치지 못했습니다.",
                            exc_info=True)

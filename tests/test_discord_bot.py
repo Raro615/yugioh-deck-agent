@@ -1976,3 +1976,233 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
     assert files[0] is None and files[1] is None
     assert files[2] is not None and len(files[2]) == 1
     assert files[2][0].filename == "combo-detail.txt"
+
+
+# ======================================================================
+# §7 진행 표시 — 순서 · 종료 상태 (Phase 6-BC 후속)
+#
+# 🔴 **실제 Discord 를 쓰지 않는다.** 지연과 실패를 **제어할 수 있는**
+# 가짜 전송 함수로 확인한다 — 느린 수정이 끝 문구를 덮는지, 종료 뒤에 들어온
+# 알림이 덮는지는 타이밍 문제여서 코드를 읽는 것으로는 확인되지 않는다.
+# ======================================================================
+def _progress_handler(service, *, edit, followup_send=None):
+    """``/combo`` 핸들러를 **가짜 상호작용**으로 한 번 돌린다.
+
+    돌려주는 것은 ``(일어난 일 목록, 진행 메시지 수정 내용 목록)``.
+    """
+    import asyncio
+
+    pytest.importorskip("discord", reason="봇 전용 의존성 (requirements-bot.txt)")
+
+    order: list[str] = []
+
+    class _Response:
+        async def defer(self, **kwargs):
+            order.append("defer")
+
+    class _Followup:
+        async def send(self, content, **kwargs):
+            order.append("send")
+            if followup_send is not None:
+                await followup_send(content)
+
+    class _Interaction:
+        def __init__(self):
+            self.response = _Response()
+            self.followup = _Followup()
+
+        async def edit_original_response(self, *, content):
+            order.append(f"edit:{content[:2]}")
+            await edit(content)
+
+    _client, tree = bot.build_client(dev_guild_id=None, service=service)
+    combo = {c.name: c for c in tree.get_commands()}["combo"]
+
+    async def run():
+        await combo.callback(_Interaction(), "오르페골 디베르",
+                             search="auto", recipe="11091375 x40")
+
+    return order, run
+
+
+class _StageService:
+    """진행 단계를 **스레드에서** 올려 보내는 가짜 서비스."""
+
+    def __init__(self, stages=("searching", "verifying", "reporting"),
+                 response=None, raises=False):
+        self.stages = stages
+        self.response = response or bot.ComboResponse(messages=("결과",))
+        self.raises = raises
+
+    def combo_response(self, hand_text, board_text="", deck_text="",
+                       recipe_text="", line_text="", search_text="",
+                       results_text="", followups_text="", *, progress=None):
+        from app.main import notify_progress
+
+        for stage in self.stages:
+            notify_progress(progress, stage)
+        if self.raises:
+            raise RuntimeError("[스텁] 탐색 중 예외")
+        return self.response
+
+    def prepare(self):  # pragma: no cover - on_ready 전용
+        return True
+
+
+def test_59_a_slow_early_edit_cannot_overwrite_the_final_progress_text():
+    """
+    🔴 **느린 앞 단계가 끝 문구를 덮지 못한다** (6-BC 후속).
+
+    전에는 단계마다 따로 예약하고 완료를 기다리지 않아서, 첫 수정이 늦게
+    끝나면 **"탐색 중" 이 마지막에 남을 수 있었다.**
+    """
+    import asyncio
+
+    applied: list[str] = []
+
+    async def _edit(content):
+        #: 🔴 첫 수정만 아주 느리게 — 뒤 단계와 끝 문구보다 늦게 끝나게.
+        if content.startswith("🔎"):
+            await asyncio.sleep(0.20)
+        applied.append(content)
+
+    order, run = _progress_handler(_StageService(), edit=_edit)
+    asyncio.run(run())
+
+    #: 🔴 적용된 순서가 보낸 순서와 같다 (한 번에 하나씩 돈다).
+    assert applied == [
+        bot.PROGRESS_TEXTS["searching"],
+        bot.PROGRESS_TEXTS["verifying"],
+        bot.PROGRESS_TEXTS["reporting"],
+        bot.PROGRESS_DONE_TEXT,
+    ]
+    #: 🔴 **결과를 먼저 보내고 끝 문구를 적었다.**
+    assert order.index("send") < order.index(
+        f"edit:{bot.PROGRESS_DONE_TEXT[:2]}")
+
+
+def test_60_a_stage_that_arrives_after_the_end_is_dropped():
+    """🔴 **종료 뒤에 들어온 알림은 끝 문구를 덮지 않는다.**"""
+    import asyncio
+
+    applied: list[str] = []
+    late: list = []
+
+    async def _edit(content):
+        applied.append(content)
+
+    class _LateService(_StageService):
+        def combo_response(self, *args, **kwargs):
+            progress = kwargs.get("progress")
+            from app.main import notify_progress
+
+            notify_progress(progress, "searching")
+            #: 🔴 핸들러가 끝낸 **뒤에** 부를 수 있게 들고만 있는다.
+            late.append(progress)
+            return bot.ComboResponse(messages=("결과",))
+
+    order, run = _progress_handler(_LateService(), edit=_edit)
+    asyncio.run(run())
+
+    assert applied[-1] == bot.PROGRESS_DONE_TEXT
+    relay = late[0]
+    assert relay is not None and relay.closed
+
+    #: 🔴 끝난 뒤에 들어온 단계 알림은 **버려진다** — 큐에도 들어가지
+    #: 않으므로 다시 돌려도 적용 목록이 그대로다.
+    async def _after():
+        relay("verifying")
+        relay("reporting")
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    asyncio.run(_after())
+    assert applied[-1] == bot.PROGRESS_DONE_TEXT
+    assert bot.PROGRESS_TEXTS["verifying"] not in applied
+
+
+def test_61_an_input_refusal_is_not_reported_as_a_finished_search():
+    """🔴 **거절을 "끝났습니다" 로 적지 않는다** — 응답의 칸을 읽는다."""
+    import asyncio
+
+    applied: list[str] = []
+
+    async def _edit(content):
+        applied.append(content)
+
+    refused = bot.ComboResponse(messages=("거절 사유",), refused=True)
+    order, run = _progress_handler(_StageService(response=refused),
+                                   edit=_edit)
+    asyncio.run(run())
+
+    assert applied[-1] == bot.PROGRESS_REFUSED_TEXT
+    assert bot.PROGRESS_DONE_TEXT not in applied
+
+
+def test_62_a_failure_inside_the_search_is_not_reported_as_finished():
+    """🔴 **내부 오류도 성공으로 적지 않는다** — 예외가 올라와도 끝 문구는 남는다."""
+    import asyncio
+
+    applied: list[str] = []
+
+    async def _edit(content):
+        applied.append(content)
+
+    order, run = _progress_handler(_StageService(raises=True), edit=_edit)
+    with pytest.raises(RuntimeError):
+        asyncio.run(run())
+
+    assert applied[-1] == bot.PROGRESS_FAILED_TEXT
+    #: 🔴 보내지 못했으므로 "결과는 아래에 있습니다" 를 적지 않았다.
+    assert "send" not in order
+
+
+def test_63_a_failed_delivery_is_not_reported_as_delivered():
+    """🔴 **결과 전송 실패를 전달 완료처럼 남기지 않는다.**"""
+    import asyncio
+
+    applied: list[str] = []
+
+    async def _edit(content):
+        applied.append(content)
+
+    async def _boom(content):
+        raise RuntimeError("[스텁] 전송 실패")
+
+    order, run = _progress_handler(_StageService(), edit=_edit,
+                                   followup_send=_boom)
+    with pytest.raises(RuntimeError):
+        asyncio.run(run())
+
+    assert applied[-1] == bot.PROGRESS_UNDELIVERED_TEXT
+
+
+def test_64_a_broken_or_hanging_progress_edit_does_not_lose_the_result():
+    """
+    🔴 **진행 표시가 깨지거나 멈춰도 결과는 간다** — 하나는 예외를 던지고
+    하나는 영원히 멈추는 수정으로 확인한다.
+    """
+    import asyncio
+
+    sent: list[str] = []
+
+    async def _edit(content):
+        if content.startswith("🔎"):
+            raise RuntimeError("[스텁] 수정 실패")
+        if content.startswith("🧪"):
+            await asyncio.Event().wait()  # 영원히 끝나지 않는다
+
+    async def _record(content):
+        sent.append(content)
+
+    order, run = _progress_handler(_StageService(), edit=_edit,
+                                   followup_send=_record)
+
+    async def _timed():
+        #: 🔴 멈춘 수정이 있어도 **핸들러가 끝난다** — 기다림에 시간 제한이
+        #: 있기 때문이다. 제한(5초+10초)보다 넉넉히 준다.
+        await asyncio.wait_for(run(), 30)
+
+    asyncio.run(_timed())
+    assert sent == ["결과"]
+    assert order.count("send") == 1
