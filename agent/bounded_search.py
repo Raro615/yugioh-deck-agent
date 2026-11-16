@@ -282,6 +282,26 @@ class SearchBudget:
 
     🔴 **카드 ID 를 보지 않는다** — 첫 걸음의 ``action_key`` 로만 가른다.
     """
+    max_candidates_per_baseline: int = 0
+    """
+    **기준점 하나가 모아 둘 수 있는 후속 후보의 상한** (Phase 6-BE §4).
+
+    0 이면 제한 없음 — 그때 동작은 6-BD 와 한 글자도 다르지 않다.
+
+    🔴 **왜 필요한가 — 실측이다.** 후보 보관 상한(:attr:`max_candidates`)
+    하나뿐이면, 깊이 우선 고리가 **첫 기준점에서** 그 상한을 다 채우고
+    탐색이 끝난다. 노드 예산 400 가운데 **41 개**만 쓰고 끝났고, 다른
+    기준점(같은 첫 행동의 다른 해결 선택들)은 후속 행동을 **한 번도**
+    탐색받지 못했다 (보고서 §12.4 의 "남은 한계").
+
+    🔴 **세 가지를 가른다** — 노드 확장 예산(:attr:`max_nodes`) · 후보
+    보관 상한(:attr:`max_candidates`) · 제시 결과 수
+    (:attr:`max_results`). 이 칸은 **보관 상한을 기준점별로 나누는** 것이고,
+    전체 상한은 그대로 지킨다.
+
+    상한에 닿은 기준점은 **그 뒤를 더 펼치지 않는다** (더 모을 수 없으므로
+    노드를 쓰는 의미가 없다) — 남은 노드 예산은 다른 기준점이 쓴다.
+    """
     rotate_baselines: bool = False
     """
     펼칠 노드를 **기준점별로 돌아가며** 꺼낼 것인가 (Phase 6-BD §5).
@@ -1409,6 +1429,19 @@ class UseRecord:
     label: str
     count: int
     seat: "int | None" = None
+    card_id: "int | None" = None
+    """
+    이 기록이 가리키는 **카드 ID** (Phase 6-BE).
+
+    🔴 **글자를 다시 파싱하지 않게 두는 칸이다.** :attr:`label` 은 사람이
+    읽는 것이고, 읽는 쪽이 ``"[21441617]"`` 같은 꼴을 되파싱하면 꼴이
+    바뀌는 날 조용히 틀린다. ``kind`` 가 ``card`` 인 기록에는 없다
+    (그쪽 열쇠는 개체 번호다).
+    """
+    instance: "int | None" = None
+    """``kind`` 가 ``card`` 인 기록의 **개체 번호** (Phase 6-BE)."""
+    ordinal: "int | None" = None
+    """``kind`` 가 ``effect`` 인 기록의 **효과 서수** (Phase 6-BE)."""
 
     def describe_ko(self) -> str:  # pragma: no cover - 표시용
         return f"{self.kind} {self.label} ×{self.count}"
@@ -1546,23 +1579,28 @@ def _use_records(state, turn_number: int) -> "tuple[UseRecord, ...]":
 
     records: list[UseRecord] = []
     uses = state.uses
+    #: 🔴 **세 표의 열쇠가 다르다** (``engine.use_limit``) — 개체 ·
+    #: 카드명 · 효과. 합치면 "이 카드 1장" 과 "이 카드명 전체" 가 같은
+    #: 제약이 된다. 그래서 값으로도 **따로** 싣는다 (Phase 6-BE).
     for (player, card_id, ordinal), count in sorted(uses.per_effect.items()):
         records.append(UseRecord(
             kind="effect", label=f"{card_id}:e[{ordinal}]", count=count,
-            seat=player,
+            seat=player, card_id=card_id, ordinal=ordinal,
         ))
     for (player, instance), count in sorted(uses.per_card.items()):
         records.append(UseRecord(
             kind="card", label=f"#{instance}", count=count, seat=player,
+            instance=instance,
         ))
     for (player, card_id), count in sorted(uses.per_card_name.items()):
         records.append(UseRecord(
             kind="card_name", label=f"[{card_id}]", count=count, seat=player,
+            card_id=card_id,
         ))
     for player, card_id, summon, count in state.summon_uses.entries(turn_number):
         records.append(UseRecord(
             kind="summon", label=f"[{card_id}] {summon}", count=count,
-            seat=player,
+            seat=player, card_id=card_id,
         ))
     for player in (0, 1):
         for action in RuleActionKind:
@@ -2147,6 +2185,10 @@ class _Ledger:
     """보관한 기준점들의 **서로 다른 첫 행동** (Phase 6-BD §5)."""
     baselines_seen: int = 0
     """보관한 기준점의 수 — 노드에 붙일 번호를 만든다 (Phase 6-BD §5)."""
+    per_baseline: dict = field(default_factory=dict)
+    """기준점 번호별로 **모아 둔 후속 후보 수** (Phase 6-BE §4)."""
+    baselines_capped: set = field(default_factory=set)
+    """보관 상한에 닿아 **더 펼치지 않은** 기준점 번호들 (Phase 6-BE §4)."""
     budget_hit: list = field(default_factory=list)
     unsupported: list = field(default_factory=list)
     out_of_scope: list = field(default_factory=list)
@@ -2404,7 +2446,16 @@ class BoundedSearch:
             #: 돌려주는 함수다 — 주지 않으면 전부 재생한다 (기존 그대로).
             chosen = None
             if rerun_select is not None:
-                chosen = frozenset(rerun_select(tuple(ledger.results)))
+                #: 🔴 **멈춤 이력(``FoundMeta``)도 함께 넘긴다** (6-BE §4·§5)
+                #: — 고르는 쪽이 "기준점뿐이라 후속을 못 본 자리" 와 "더
+                #: 할 수 없어 멈춘 자리" 를 가를 수 있어야 한다. 네 번째
+                #: 칸을 더했을 뿐이고 앞의 셋은 그대로다.
+                chosen = frozenset(rerun_select(tuple(
+                    (path, summary, reason,
+                     ledger.result_meta.get(slot, FoundMeta()))
+                    for slot, (path, summary, reason)
+                    in enumerate(ledger.results)
+                )))
                 ledger.note(
                     ledger.rerun_notes,
                     f"모은 후보 {len(ledger.results)}개 가운데 평가 상위"
@@ -3116,6 +3167,31 @@ class BoundedSearch:
                     settled, why = _is_settled(
                         child_duel, self.goal.seat, child_legal
                     )
+                    #: 🔴 **기준점별 보관 상한** (Phase 6-BE §4). 닿으면 이
+                    #: 기준점에서는 더 모으지 않고 **더 펼치지도 않는다** —
+                    #: 남은 노드 예산을 다른 기준점이 쓰게 한다. 🔴 전체
+                    #: 보관 상한(``max_candidates``)은 그대로 지킨다.
+                    quota = self.budget.max_candidates_per_baseline
+                    if quota and node.baseline:
+                        taken = ledger.per_baseline.get(node.baseline, 0)
+                        if taken >= quota:
+                            if node.baseline not in ledger.baselines_capped:
+                                ledger.baselines_capped.add(node.baseline)
+                                ledger.note(
+                                    ledger.budget_hit,
+                                    "max_candidates_per_baseline="
+                                    f"{quota}",
+                                )
+                                ledger.note(
+                                    ledger.followup_notes,
+                                    f"기준점(걸음 {node.reached_at}) 이 후속"
+                                    f" 후보 {quota}개로 **기준점별 보관"
+                                    f" 상한**에 닿아 이 기준점은 더 펼치지"
+                                    " 않았습니다 — 🔴 더 할 수 없다는 뜻이"
+                                    " 아니고, 남은 탐색 예산을 다른"
+                                    " 기준점이 쓰게 한 것입니다.",
+                                )
+                            continue
                     if settled and child_followups >= 1:
                         #: 🔴 **정리된 결정 지점에서만 수집한다** (§4) — 중간
                         #: 상태를 결과로 내놓지 않는다. 흐름 행동만 한 자리는
@@ -3136,6 +3212,10 @@ class BoundedSearch:
                                 ),
                             ),
                         )
+                        if node.baseline:
+                            ledger.per_baseline[node.baseline] = (
+                                ledger.per_baseline.get(node.baseline, 0) + 1
+                            )
                         if self._results_full(ledger):
                             ledger.note(
                                 ledger.budget_hit, self._candidate_cap_note(),

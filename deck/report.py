@@ -2179,8 +2179,12 @@ def _open_ranking_lines(ranking, repository=None) -> "list[str]":
         if said:
             lines.append(f"      {said}")
     if len(best) >= 2:
-        lines.append("    🔴 **공동 추천입니다** — 축이 서로 주고받아"
-                     " 하나로 줄이지 않았습니다.")
+        #: 🔴 **왜 공동인지 단정하지 않는다** (Phase 6-BE) — 축이 서로
+        #: 주고받은 경우도 있고, **비교할 근거가 없어** 우열을 판정하지
+        #: 못한 경우도 있다. 어느 쪽인지는 위의 후보별 사유가 적는다.
+        lines.append("    🔴 **공동 추천입니다** — 억지로 하나로 줄이지"
+                     " 않았습니다 (동률이거나 **비교 불가**입니다 — 어느"
+                     " 쪽인지는 위 후보별 사유에 적혀 있습니다).")
     others = [one for one in ranking.candidates
               if one.eligible and not one.recommended]
     for one in sorted(others, key=lambda c: (c.order, c.index))[:4]:
@@ -2246,6 +2250,68 @@ def render_open_search_brief(outcome, repository=None, ranking=None) -> str:
     return "\n".join(lines)
 
 
+def _path_fingerprint(path) -> tuple:
+    """경로를 값으로 — 🔴 **해결 중 선택까지** 넣는다 (Phase 6-BE §7).
+
+    행동 종류만 보면 같은 행동에서 다른 카드를 고른 변형이 같은 경로로
+    읽히고, 그러면 "이 시작점의 후속" 을 셀 수 없다.
+    """
+    return tuple((step.action_key, tuple(ask.chosen for ask in step.choices))
+                 for step in path)
+
+
+def _baseline_lines(outcome, repository=None) -> "list[str]":
+    """
+    **시작점(기준점)마다 후속을 몇 개 탐색받았는가** (Phase 6-BE §4 · §7).
+
+    🔴 **"기회가 없었다" 와 "더 할 수 없었다" 를 가른다.** 후속이 0 개인
+    자리에 그 이유를 그대로 적는다 — 멈춤 사유가 ``open`` 이면 할 행동이
+    남아 있었다는 뜻이고, 그때 0 개는 **탐색 기회를 받지 못한** 것이다.
+
+    🔴 **판정하지 않는다** — 이미 적힌 값만 읽는다 (``agent`` 를 import
+    하지 않는다).
+    """
+    results = tuple(getattr(outcome, "results", ()) or ())
+    if not results:
+        return []
+    marks = [(result, _path_fingerprint(result.path)) for result in results]
+    bases = [(result, mine) for result, mine in marks
+             if getattr(getattr(result.meta, "role", None), "value", "")
+             == "first_arrival"]
+    if not bases:
+        return []
+    lines = ["", "  시작점마다 받은 후속 탐색"]
+    for result, mine in bases:
+        kids = [other for other, theirs in marks
+                if theirs[:len(mine)] == mine and len(theirs) > len(mine)]
+        deepest = max((len(other.path) for other in kids),
+                      default=len(result.path))
+        picked = " · ".join(
+            _card_ko(card_id, repository)
+            for step in result.path for ask in step.choices
+            for card_id in ask.chosen_card_ids
+        )
+        stop = getattr(getattr(result.meta, "stop", None), "value", "")
+        head = (f"    [결과 {result.index}] 후속 {len(kids)}개 · 그 아래 최대"
+                f" 걸음 {deepest}")
+        if picked:
+            head += f" · 해결 중 선택 {picked}"
+        lines.append(head)
+        if kids:
+            continue
+        #: 🔴 후속이 없는 이유를 **추측하지 않고** 멈춤 사유로 적는다.
+        if stop == "open":
+            lines.append("      🔴 **후속 탐색 기회를 받지 못했습니다** —"
+                         " 이 자리에서 엔진이 허가한 행동이 남아 있었는데"
+                         " 보관 상한이 먼저 찼습니다 (합법 행동이 없었다는"
+                         " 뜻이 **아닙니다**).")
+        elif stop in ("no_legal", "unsupported_left"):
+            lines.append("      " + _STOP_KO.get(stop, stop))
+        elif stop:
+            lines.append(f"      ⏹ 멈춤 사유: {_STOP_KO.get(stop, stop)}")
+    return lines
+
+
 def render_open_search(outcome, repository=None, setup=None,
                        ranking=None) -> str:
     """
@@ -2261,6 +2327,7 @@ def render_open_search(outcome, repository=None, setup=None,
         for note in setup.unknowns:
             lines.append(f"    🔴 {note}")
     lines.append(f"  예산: {outcome.budget.describe_ko()}")
+    lines.extend(_baseline_lines(outcome, repository))
     lines.append(f"  해결 중 선택 — 만든 분기 {outcome.choice_branches}개 ·"
                  f" 실제로 돌린 각본 {outcome.choice_plans}개 · 확인하지 못한"
                  f" 대안이 남은 물음 {outcome.choice_offers_truncated}곳")

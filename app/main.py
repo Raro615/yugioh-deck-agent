@@ -912,6 +912,17 @@ AUTONOMOUS_DEFAULT_BASELINE_PER_OPENING: bool = True
 #: 예산에서는 달라질 수 있고, 끈 이유를 수치로 적어 둔다.
 AUTONOMOUS_DEFAULT_ROTATE_BASELINES: bool = False
 
+#: 기준점 하나가 모아 둘 **후속 후보 상한** (Phase 6-BE §4).
+#:
+#: 🔴 **후보 보관 상한을 기준점별로 나눈다** — 전체 상한
+#: (:data:`AUTONOMOUS_DEFAULT_CANDIDATES`) · 노드 예산 · 제시 결과 수는
+#: 그대로다. 값은 실측으로 정한다 (보고서 §13).
+AUTONOMOUS_DEFAULT_CANDIDATES_PER_BASELINE: int = 12
+#: 🔴 **값을 실측으로 골랐다** (보고서 §13.4). 전체 보관 상한 20 · 노드
+#: 400 · 240초 · 깊이 8 을 그대로 두고 상한만 나눴다. 12 에서 스켈레촌
+#: 기준점이 후속 12개(깊이 6)를 쓰고 **디베르 기준점이 8개(깊이 4)** 를
+#: 받는다 — 0(제한 없음)에서는 디베르가 **0개**였다.
+
 
 def card_knowledge(repository):
     """
@@ -958,6 +969,10 @@ def card_knowledge(repository):
                     ),
                     effect_count=len(getattr(card, "effects", ()) or ()),
                     is_monster=bool(getattr(card, "is_monster", False)),
+                    #: 🔴 **종류를 그대로 읽는다** (Phase 6-BE §1) — 6-BD 는
+                    #: "토큰이 아닌 몬스터" 를 전부 효과 몬스터로 불렀다.
+                    is_effect_monster=("EFFECT" in kinds
+                                       and "MONSTER" in kinds),
                     is_extra_deck=bool(getattr(card, "is_extra_deck", False)),
                 )
             self._seen[card_id] = facts
@@ -1224,13 +1239,15 @@ def bounded_search_many_opening(
     return setup, outcome
 
 
-def _share_options(per_opening, rotate) -> dict:
+def _share_options(per_opening, rotate, per_baseline=None) -> dict:
     """🔴 **주지 않은 칸은 건드리지 않는다** — 기본 동작이 그대로다."""
     out: dict = {}
     if per_opening is not None:
         out["baseline_per_opening"] = bool(per_opening)
     if rotate is not None:
         out["rotate_baselines"] = bool(rotate)
+    if per_baseline is not None:
+        out["max_candidates_per_baseline"] = max(0, int(per_baseline))
     return out
 
 
@@ -1241,6 +1258,7 @@ def autonomous_search_opening(
     evaluation: str = AUTONOMOUS_DEFAULT_EVALUATION,
     baseline_per_opening: "bool | None" = None,
     rotate_baselines: "bool | None" = None,
+    candidates_per_baseline: "int | None" = None,
 ) -> tuple:
     """
     **목표 카드 없이** 선공 전개를 탐색한다 (Phase 6-BB).
@@ -1306,13 +1324,17 @@ def autonomous_search_opening(
                  if baseline_per_opening is None else baseline_per_opening),
                 (AUTONOMOUS_DEFAULT_ROTATE_BASELINES
                  if rotate_baselines is None else rotate_baselines),
+                (AUTONOMOUS_DEFAULT_CANDIDATES_PER_BASELINE
+                 if candidates_per_baseline is None
+                 else candidates_per_baseline),
             ),
         )
     else:
         budget = dataclasses.replace(
             budget, max_results=wanted, max_candidates=pool,
             max_followup_actions=steps,
-            **_share_options(baseline_per_opening, rotate_baselines),
+            **_share_options(baseline_per_opening, rotate_baselines,
+                             candidates_per_baseline),
         )
     search = BoundedSearch(goal=OpenGoal(card_id=0, seat=0), budget=budget)
 
