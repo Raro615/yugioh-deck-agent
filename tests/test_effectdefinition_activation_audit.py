@@ -742,7 +742,9 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: 밖이다 (ADR-006).
     #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 22
+    #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 23
     #: 🔴 8 → **9** (Phase 6-V, 기르수 ①).
     #: 🔴 9 → **10** (Phase 6-AC, 성유물－『성장』 ②). 그 조건도 상태
     #: 조건이다 (``ZoneHasFreeSlot`` — 자신 몬스터 존에 빈 자리가 있다).

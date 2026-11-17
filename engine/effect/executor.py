@@ -130,6 +130,7 @@ from engine.effect.semantics import (
     MISSING_EXTRA_DECK_DESTINATION,
     MISSING_GATE,
     MISSING_SAME_ZONE_MOVEMENT,
+    MISSING_SET_DESTINATION,
     QUESTION_VERBS,
     DestructionRuling,
     MovementRuling,
@@ -2796,6 +2797,161 @@ class EffectExecutor:
             changes.append(placement.to_delta(procedure.summon))
         return step.record(), tuple(changes)
 
+    def _plan_set_spell_trap(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        operation,
+        values: ExecutionValues,
+    ) -> "_Step | EffectResult":
+        """
+        고른 마법 · 함정을 **어디에 세트할지 정한다** (Phase 6-BF).
+
+        🔴 **플레이어가 선언하는 세트와 같은 배치 코드를 쓴다** — 출발
+        자리만 덱이다 (:func:`~engine.set_card.effect_set_procedure`).
+        빈 칸 찾기 · 컨트롤러 확인 · 착지 확인을 여기서 다시 하지 않는다.
+
+        순서가 규칙이다. ① 고른 것이 적법한 대상인가 → ② 그것이 실제로
+        마법 · 함정인가 → ③ 어느 존인가 → ④ 그 존에 빈 칸이 있는가.
+        **판에 손대기 전에** 전부 끝낸다 (ADR-008).
+
+        🔴 **세트는 발동이 아니다.** 이 계획은 그 카드를 발동할 수 있는지
+        전혀 보지 않는다 — 세트한 턴 제약은 세트한 **뒤** 기록으로 남고,
+        발동 타이밍 계층은 이 저장소에 아직 없다.
+        """
+        #: 🔴 **함수 안에서 import 하는 이유는 순환이다** (정리하지 마라).
+        #: ``engine.set_card`` 는 ``engine.state.game_state`` 를 거쳐 이
+        #: 모듈에 닿는다 — 실측: ``engine.set_card`` 를 먼저 적재하면
+        #: ``engine.effect.executor`` 가 이미 ``sys.modules`` 에 있고,
+        #: 반대 방향은 아니다.
+        from engine.set_card import SetError, effect_set_procedure
+
+        selected = self._resolve_selection(
+            state, definition, context, operation, values
+        )
+        if isinstance(selected, EffectResult):
+            return selected
+        ref, selection = selected
+
+        legal = self._check_target(
+            state, definition.target_spec(ref), selection, context, ref
+        )
+        if legal is not None:
+            return legal
+
+        placements: "list" = []
+        blind: tuple = ()
+        for instance in selection.chosen:
+            #: 🔴 **관문을 엔진이 묻는다** (``gated=True`` 의
+            #: ``Card.IsSSetable``). 조립 층의 후보 판정
+            #: (``integration.autonomy._judged_candidates``) 과 **같은
+            #: 질문**이고, 여기서도 묻는 이유는 선택이 밖에서 들어올 수
+            #: 있기 때문이다 — 그때도 ``UNKNOWN`` 은 허가가 아니다.
+            gate, unseen = self._check_rule_gate(state, operation, instance)
+            if gate is not None:
+                return gate
+            blind = blind + tuple(unseen)
+            card = state.find_instance(instance)
+            if card is None:  # pragma: no cover - 방어용
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.CANDIDATE_NOT_FOUND,
+                    f"{instance} 를 이 판에서 찾을 수 없습니다.",
+                )
+            try:
+                card_definition = card.definition
+            except (RuntimeError, KeyError):
+                card_definition = None
+            if card_definition is None:
+                #: 🔴 **모름이다** (ADR-006). 종류를 모르면 어느 존에
+                #: 놓이는지도 모른다 — 지어내지 않는다.
+                return _fail(
+                    ResolutionStatus.UNSUPPORTED_OPERATION,
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    f"{instance} 의 카드 정의를 읽지 못해 어느 존에 "
+                    "세트되는지 알 수 없습니다.",
+                    missing=MISSING_SET_DESTINATION,
+                )
+            kinds = tuple(getattr(card_definition, "type_names", ()) or ())
+            if not (getattr(card_definition, "is_spell", False)
+                    or getattr(card_definition, "is_trap", False)):
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                    f"{instance} 는 마법 · 함정이 아니어서 이 조작으로 "
+                    "세트할 수 없습니다 (몬스터 세트는 다른 절차입니다).",
+                )
+            procedure = effect_set_procedure(field_spell=("FIELD" in kinds))
+            try:
+                placements.append(
+                    procedure.plan_for(state, instance, context.controller)
+                )
+            except SetError as error:
+                #: 🔴 **"안 된다" 가 아니라 "그 자리에 놓을 수 없다" 다** —
+                #: 빈 칸이 없거나 출발 자리가 어긋났다는 뜻이고, 판은
+                #: 그대로다 (특수 소환 조작과 같은 처리).
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                    f"{instance} 를 세트할 수 없습니다: {error}",
+                )
+        if not placements:
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.TOO_FEW_SELECTED,
+                f"{ref} 에 고른 카드가 없습니다.",
+            )
+        return _Step(
+            operation,
+            instances=tuple(one.card for one in placements),
+            owners=tuple(one.owner for one in placements),
+            placements=tuple(placements),
+            blind=blind,
+        )
+
+    def _apply_set_spell_trap(
+        self, state: GameState, step: "_Step"
+    ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
+        """
+        계획한 자리에 **뒷면으로 놓고 세트한 턴을 적는다** (Phase 6-BF).
+
+        🔴 **놓은 뒤에 적는다** — 반대로 하면 배치가 실패했을 때 기록만
+        남은 판이 된다 (``SetExecutor.apply`` 와 같은 순서다).
+
+        🔴 **같은 이름으로 적는다** (``RuleActionKind.SET_SPELL_TRAP``).
+        플레이어가 패에서 세트한 것과 효과로 덱에서 세트한 것이 **같은
+        제약**을 받아야 한다 (RULE-SPELLTRAP-007 · 009).
+        """
+        from engine.set_card import CardSet, effect_set_procedure
+        from engine.state.rule_usage import RuleActionKind
+
+        changes: list = []
+        for placement in step.placements:
+            procedure = effect_set_procedure(
+                field_spell=(placement.to_zone is Zone.FZONE)
+            )
+            procedure.place(state, placement)
+            state.rule_uses.record_card(
+                state.turn.turn_number,
+                placement.player,
+                placement.card,
+                RuleActionKind.SET_SPELL_TRAP,
+            )
+            changes.append(
+                CardSet(
+                    card=placement.card,
+                    player=placement.player,
+                    owner=placement.owner,
+                    source_player=placement.from_player,
+                    source_zone=placement.from_zone,
+                    destination_zone=placement.to_zone,
+                    destination_index=placement.slot,
+                    position=placement.position,
+                )
+            )
+        return step.record(), tuple(changes)
+
     def _plan_create_token(
         self,
         state: GameState,
@@ -3107,6 +3263,11 @@ OPERATION_HANDLERS: dict[OperationKind, OperationHandler] = {
         EffectExecutor._plan_create_token,
         EffectExecutor._apply_create_token,
         "engine.token (Phase 6-AF)",
+    ),
+    OperationKind.SET_SPELL_TRAP: OperationHandler(
+        EffectExecutor._plan_set_spell_trap,
+        EffectExecutor._apply_set_spell_trap,
+        "engine.set_card.effect_set_procedure (Phase 6-BF)",
     ),
     OperationKind.SHUFFLE: OperationHandler(
         EffectExecutor._plan_shuffle,

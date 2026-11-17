@@ -918,7 +918,9 @@ def test_21_exactly_one_registered_effect_has_a_cost():
     #: 밖이다 (ADR-006).
     #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 22
+    #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 23
     #: 🔴 **정확히 하나**다 — 디베르 ①. 이전 측정이 틀렸던 것이 아니라
     #: 그때는 하나도 없었다.
     #: 🔴 **둘이 되었다** (Phase 6-AQ) — 스켈레촌 ① 도 ``Cost.SelfBanish`` 다.

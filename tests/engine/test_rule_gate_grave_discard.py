@@ -251,15 +251,25 @@ def test_b_every_question_is_its_own_value():
         "may_be_banished",  # F — Phase 2-AK
         "may_be_returned_to_deck",  # G — Phase 2-AK
         "may_be_special_summoned",  # H — Phase 6-AC
+        #: 🔴 I — Phase 6-BF (``Card.IsSSetable``). 효과로 **세트**하는
+        #: 일의 질문이다. 이 시험이 지키는 것은 개수가 아니라 **합치지
+        #: 않는다**는 것이고, 그 사실은 그대로다 — 세트는 묘지행도 덱
+        #: 반환도 아니다.
+        "may_be_set",  # I — Phase 6-BF
     }
     assert RuleQuestion.MAY_BE_SENT_TO_GRAVE is not RuleQuestion.MAY_BE_DISCARDED
-    # 여덟이 **여덟 개의 다른 값**이다. 하나라도 겹치면 질문이 뭉개진다.
+    # 아홉이 **아홉 개의 다른 값**이다. 하나라도 겹치면 질문이 뭉개진다.
     #
     # 🔴 **H 는 A~G 와 한 가지가 다르다** (Phase 6-AC). A~G 는 **카드가
     # 선언할 때만** 물어지지만 (``DECLARED_GATE_RULINGS``) H 는 종류만 보고
     # 언제나 물어진다 (``RULE_GATED`` — 파괴와 같은 쪽). 그래서 아래 두 표의
     # 범위가 갈린다.
-    assert len({q.value for q in RuleQuestion}) == len(list(RuleQuestion)) == 8
+    #
+    # 🔴 **I 는 A~G 쪽이다** (Phase 6-BF) — 카드가 ``gated=True`` 로
+    # 선언할 때만 물어진다. 8 → 9 는 **그때 8 이었다**는 사실을 고치는 것이
+    # 아니라 읽은 술어가 하나 늘었다는 뜻이고, 이 시험이 지키는 "합치지
+    # 않는다" 는 한 글자도 약해지지 않았다.
+    assert len({q.value for q in RuleQuestion}) == len(list(RuleQuestion)) == 9
     from engine.effect.semantics import DECLARED_GATE_RULINGS, RULE_GATED_PREDICATES
 
     assert RuleQuestion.MAY_BE_SPECIAL_SUMMONED not in (
@@ -408,6 +418,11 @@ def test_c_a_gate_is_declarable_only_where_the_corpus_is_split():
             OperationKind.RETURN_TO_HAND,
             OperationKind.BANISH,
             OperationKind.RETURN_TO_DECK,
+            #: 🔴 **Phase 6-BF 가 하나 더했고, 근거는 같은 실측이다** —
+            #: ``Duel.SSet`` 를 쓰는 파일 296개 중 294개가 ``IsSSetable``
+            #: 을 적는다 (99%). 100% 도 0% 도 아니므로 위 다섯과 같은
+            #: 쪽이다: 종류에 박지 않고 **카드가 선언한다.**
+            OperationKind.SET_SPELL_TRAP,
         }
     )
     # 종류로 언제나 막는 것과 아예 관문이 없는 것은 선언할 수 없다.

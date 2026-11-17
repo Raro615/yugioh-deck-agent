@@ -73,7 +73,11 @@ from typing import Protocol, runtime_checkable
 
 from engine.condition import ConditionContext, ConditionResult
 from engine.effect.ruling import BoardRuling, RuleQuestion
-from engine.effect.semantics import declared_gate_question, rule_gate_question
+from engine.effect.semantics import (
+    declared_gate_question,
+    operation_gate_question,
+    rule_gate_question,
+)
 from engine.effect.targeting import TargetResolver
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
@@ -406,7 +410,9 @@ def choice_offer_for(
         target_ref=binding.ref,
         view=granted,
         candidates=_judged_candidates(
-            granted, found.eligible, _movement_question(definition)
+            granted, found.eligible,
+            #: 🔴 **이 이름을 쓰는 조작의 관문만 묻는다** (Phase 6-BF).
+            _movement_question(definition, binding.ref),
         ),
         minimum=spec.choice.minimum,
         maximum=spec.choice.maximum,
@@ -437,7 +443,10 @@ def choice_offer_from_request(request, definitions=None) -> ChoiceOffer:
         target_ref=request.target_ref,
         view=request.view,
         candidates=_judged_candidates(
-            request.view, request.candidates, _movement_question(definition)
+            request.view, request.candidates,
+            #: 🔴 **엔진이 지금 묻고 있는 그 이름**으로 관문을 고른다
+            #: (Phase 6-BF — 위 :func:`_movement_question` 의 실측).
+            _movement_question(definition, request.target_ref),
         ),
         minimum=request.minimum,
         maximum=request.maximum,
@@ -785,7 +794,7 @@ def _judged_candidates(
     return tuple(judged)
 
 
-def _movement_question(definition) -> "RuleQuestion | None":
+def _movement_question(definition, ref=None) -> "RuleQuestion | None":
     """
     그 효과의 **관문이 걸린** 조작에 대응하는 규칙 질문. 없으면 ``None``.
 
@@ -798,7 +807,25 @@ def _movement_question(definition) -> "RuleQuestion | None":
 
     🔴 **두 표를 합치지 않는다.** 어느 쪽에서 왔는지가 뜻이고, 판정은
     엔진의 표가 한다 — 이 함수는 묻기만 한다.
+
+    🔴 **어느 이름의 후보를 묻는지 받는다** (Phase 6-BF). ``ref`` 를 주면
+    :func:`~engine.effect.semantics.operation_gate_question` 이 **그 이름을
+    쓰는 조작만** 보고 질문을 고른다. 주지 않으면 6-BF 이전과 똑같이 첫
+    관문을 쓴다 — 이름이 하나뿐인 효과는 두 길의 답이 같다.
+
+    왜 필요했는가 — 실측
+    --------------------
+    오르페골 갈라테아 ② 는 이름이 **둘**이다: ``@primary`` (제외된 기계족을
+    덱으로 되돌린다, ``gated=True``) 와 ``@set`` (덱의 「오르페골」 마법 ·
+    함정을 세트한다). ``ref`` 없이 묻던 6-BF 이전의 이 함수는 첫 관문인
+    ``MAY_BE_RETURNED_TO_DECK`` 하나를 돌려주었고, 그 질문이 **세트 후보**
+    에게도 걸렸다. 덱에 있는 카드는 「덱으로 되돌릴 수 있는가」 에 참이
+    아니므로 바벨 · 클리막스가 둘 다 ``permitted`` 에서 빠지고, 해결은
+    "후보 0장" 으로 끝났다 — 규칙이 막은 것이 아니라 **다른 이름의 질문을
+    물은 것**이 원인이다.
     """
+    if ref is not None:
+        return operation_gate_question(definition, ref)
     for operation in definition.operations:
         question = declared_gate_question(operation)
         if question is None:

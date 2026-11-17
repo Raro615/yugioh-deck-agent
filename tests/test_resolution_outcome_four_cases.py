@@ -335,8 +335,20 @@ def test_n05_only_the_declared_effect_can_resolve_without_an_operation():
 
     girsu_ref = EffectRef(GIRSU, 2)
     harp_ref = EffectRef(HARP_HORROR, 0)
+    #: 🔴 **셋 → 다섯.** 둘이 늘었고 **늘린 Phase 가 서로 다르다** —
+    #: 이 시험은 6-BF 전에도 이미 실패하고 있었다.
+    #:
+    #: * ``21441617:e[0]`` (오르페골 스켈레촌 ①) — **Phase 6-AQ** 가
+    #:   등재했다. 그 Phase 가 이 줄을 고치지 않아 그때부터 어긋나 있었고,
+    #:   기준 HEAD ``73696f74`` 에서도 어긋난다.
+    #: * ``30741503:e[1]`` (오르페골 갈라테아 ②) — **Phase 6-BF** 다.
+    #:
+    #: 재는 것은 "**일괄 완화가 아니라 카드마다 그 카드의 해결 함수에서
+    #: 읽은 선언**" 이고, 그 사실은 하나도 약해지지 않았다 — 다섯 다
+    #: ``basis`` 를 들고 있고 아래 고리가 그것을 확인한다.
     assert sorted(str(d.effect_ref) for d in declared) == sorted(
-        [str(girsu_ref), str(WAND_REF), str(harp_ref)]
+        [str(girsu_ref), str(WAND_REF), str(harp_ref),
+         "21441617:e[0]", "30741503:e[1]"]
     ), [str(d.effect_ref) for d in declared]
     by_ref = {d.effect_ref: d for d in declared}
     girsu_skip = by_ref[girsu_ref].resolution_skip
@@ -377,7 +389,13 @@ def test_n06_a_declaration_without_a_basis_is_rejected():
     #: 넣는 이유는 범위만 다른 두 선언이 **다른 선언**이기 때문이다 —
     #: 빼면 같은 것으로 읽힌다. **이전 기대값이 틀렸던 것이 아니라** 그때는
     #: 칸이 둘이었다.
-    assert made.canonical_state() == (False, True, "whole_effect")
+    #: 🔴 **칸이 넷이 되었다** — ``when_target_unusable`` 이 **Phase 6-AQ**
+    #: (커밋 ``29da14e4``) 에서 더해졌고 그 Phase 가 이 줄을 고치지 않아
+    #: 그때부터 어긋나 있었다. 🔴 **6-BF 와 무관하다**:
+    #: ``engine/effect/definition.py`` 는 이번에 한 글자도 바뀌지 않았다.
+    #: 적지 않은 선언의 뜻은 여기서도 한 글자도 달라지지 않는다 (기본값이
+    #: 거짓이다).
+    assert made.canonical_state() == (False, True, "whole_effect", False)
     assert "고를 후보가 없음" in made.describe_ko()
     #: 범위를 좁힌 선언은 **다른 정규 표현**이고, 설명도 다르다.
     from engine.effect.definition import NoCandidateScope
@@ -387,7 +405,10 @@ def test_n06_a_declaration_without_a_basis_is_rejected():
         no_candidate_scope=NoCandidateScope.TARGET_OPERATIONS,
         basis="시험용 근거",
     )
-    assert narrowed.canonical_state() == (False, True, "target_operations")
+    #: 🔴 넷째 칸도 같은 이유다 (위 설명 — Phase 6-AQ).
+    assert narrowed.canonical_state() == (
+        False, True, "target_operations", False
+    )
     assert "그 대상을 쓰는 일만 생략" in narrowed.describe_ko()
     #: 🔴 **범위만 적고 조건을 적지 않을 수 없다.**
     with pytest.raises(ValueError):

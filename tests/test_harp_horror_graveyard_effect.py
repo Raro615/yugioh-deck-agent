@@ -1695,11 +1695,23 @@ def test_h08_the_scope_is_declared_not_assumed():
         and entry.definition.resolution_skip.no_candidate_scope
         is NoCandidateScope.TARGET_OPERATIONS
     }
-    assert list(narrowed) == [str(DIBER_EFFECT)], narrowed
+    #: 🔴 **둘이 되었다** (Phase 6-BF — 오르페골 갈라테아 ②). 이 시험이
+    #: 지키는 사실은 "범위를 **선언한 효과만** 좁은 생략을 받는다" 이고,
+    #: 그 사실은 그대로다 — 아래가 두 선언의 **근거를 각각** 확인한다.
+    assert sorted(narrowed) == sorted(
+        [str(DIBER_EFFECT), "30741503:e[1]"]
+    ), narrowed
     #: 그리고 그 선언의 근거가 ``if #g>0`` 밖의 ``RegisterEffect`` 를 가리킨다.
     basis = narrowed[str(DIBER_EFFECT)].basis
     assert "RegisterEffect" in basis
     assert "if #g>0" in basis
+    #: 🔴 **갈라테아 ② 의 근거는 다른 자리를 가리킨다** — ``if #g>0`` 이
+    #: ``SendtoDeck`` **뒤**에 있다는 사실이다. 같은 범위를 선언했지만
+    #: 근거가 같지 않고, 그래서 근거를 따로 확인한다.
+    galatea_basis = narrowed["30741503:e[1]"].basis
+    assert "if #g>0" in galatea_basis
+    assert "SendtoDeck" in galatea_basis
+    assert "SelectYesNo" in galatea_basis
 
     #: 🔴 **다른 선언들은 전부 전체 생략이다** — 성유물－『성장』 ② ·
     #: 기르수 ③ 의 뜻이 한 글자도 달라지지 않았다.
@@ -1715,14 +1727,19 @@ def test_h08_the_scope_is_declared_not_assumed():
         if entry.definition.resolution_skip is not None
         and str(entry.definition.effect_ref) != str(DIBER_EFFECT)
     }
+    #: 🔴 **Phase 6-BF 에서 하나 더 늘었다** (갈라테아 ② ·
+    #: ``30741503:e[1]``). 그쪽은 디베르와 **같은 범위**를 선언하므로 아래
+    #: "나머지는 전부 전체 생략" 에서 빠진다 — 두 효과를 함께 뺀다.
     assert others == {
         "69811710:e[2]",
         "93920420:e[1]",
         "21441617:e[0]",
+        "30741503:e[1]",
     }, others
+    narrow = {str(DIBER_EFFECT), "30741503:e[1]"}
     for entry in EFFECT_LIBRARY:
         skip = entry.definition.resolution_skip
-        if skip is None or str(entry.definition.effect_ref) == str(DIBER_EFFECT):
+        if skip is None or str(entry.definition.effect_ref) in narrow:
             continue
         assert skip.no_candidate_scope is NoCandidateScope.WHOLE_EFFECT
 
@@ -1744,6 +1761,13 @@ def test_h08_the_scope_is_declared_not_assumed():
         #: 🔴 스켈레촌 ① 은 **대상 생략 하나만** 적는다 — 그 ``s.spop`` 에
         #: 조건 재검사도 (``GetLocationCount`` 가 없다) 고르기도 없다.
         "21441617:e[0]": (False, False, "whole_effect", True),
+        #: 🔴 갈라테아 ② (Phase 6-BF) — 디베르와 **범위는 같고 적은 칸은
+        #: 다르다.** ``when_condition_false`` 를 적지 않은 이유는 그
+        #: ``s.tdop`` 에 조건 재검사가 **없기** 때문이다 (디베르의
+        #: ``GetLocationCount`` 에 해당하는 줄이 없다), 그리고
+        #: ``when_target_unusable`` 도 적지 않았으므로 해결 시점에 대상을
+        #: 쓸 수 없게 되면 **기존 그대로 거절된다.**
+        "30741503:e[1]": (False, True, "target_operations", False),
     }, declared
 
 

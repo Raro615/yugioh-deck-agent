@@ -717,7 +717,15 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
     #: 센다 — "등록소에 있다" 와 "그 질문에 답이 있다" 는 다른 사실이다.
     pool = _orcust_pool(repository)
     covered = [cid for cid in pool if _facts_for(repository, cid) is not None]
-    assert covered == [21441617, 57835716, SELF_GRAVE_TRIGGER, 94046012], covered
+    #: 🔴 **여섯이 되었다** (Phase 6-BF) — 오르페골 바벨(90351981) ·
+    #: 클리막스(703897) 가 등록소에 들어왔고 둘 다 기르수 후보 안에 있다
+    #: (「오르페골」 카드군이다). 🔴 그 둘이 가진 답은 ``MAY_BE_SET``
+    #: 하나이고 **「묘지로 보낼 수 있는가」 는 아니므로**, 아래 `answered`
+    #: 는 한 글자도 움직이지 않는다 — 이 시험이 가르는 두 사실이 바로
+    #: 그것이다.
+    assert covered == [
+        703897, 21441617, 57835716, 90351981, SELF_GRAVE_TRIGGER, 94046012,
+    ], covered
     answered = [
         cid
         for cid in covered
@@ -747,7 +755,12 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
     #: 디베르 ① 이 덱에서 특수 소환할 **후보**이므로 그 질문 하나만 적었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 ``UNKNOWN``
     #: 이다 (ADR-006).
-    assert len(OPERATION_RULINGS) == 26
+    #: 🔴 26 → **28** (Phase 6-BF) — 오르페골 바벨 · 클리막스를 읽어
+    #: 등재했다 (둘 다 ``MAY_BE_SET`` 한 질문). 갈라테아 ② 가 덱에서
+    #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
+    #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
+    #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
+    assert len(OPERATION_RULINGS) == 28
     assert set(OPERATION_RULINGS.card_ids) & set(pool) == set(covered)
 
 
@@ -1135,7 +1148,12 @@ def test_i02_the_production_registry_is_untouched():
     #: 디베르 ① 이 덱에서 특수 소환할 **후보**이므로 그 질문 하나만 적었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 ``UNKNOWN``
     #: 이다 (ADR-006).
-    assert len(OPERATION_RULINGS) == 26
+    #: 🔴 26 → **28** (Phase 6-BF) — 오르페골 바벨 · 클리막스를 읽어
+    #: 등재했다 (둘 다 ``MAY_BE_SET`` 한 질문). 갈라테아 ② 가 덱에서
+    #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
+    #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
+    #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
+    assert len(OPERATION_RULINGS) == 28
     #: 🔴 **이 카드는 이제 원본에 있다** (Phase 6-AC). 그래서 "새지 않았다"
     #: 를 유무로는 더 이상 셀 수 없고, **사유로** 센다: 원본이 들고 있는
     #: 문장은 6-AC 가 적은 등재 사유이고, ``test_i01`` 이 사본에 적은

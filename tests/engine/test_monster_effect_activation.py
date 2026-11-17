@@ -410,6 +410,10 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
         #: 효과의 첫 등재다. 분류는 디베르와 같은 기동이고, 발동 자리도
         #: 묘지다.
         EffectRef(21441617, 0): ActivationKind.IGNITION,
+        #: 🔴 Phase 6-BF — 오르페골 갈라테아 ② 다. 분류는 같은 기동
+        #: 이고 발동 자리는 **필드**다 (``{MZONE, EMZONE}``) —
+        #: 묘지에서 발동하는 위 둘과 그 점이 다르다.
+        EffectRef(30741503, 1): ActivationKind.IGNITION,
     }
     entry = next(e for e in EFFECT_LIBRARY if e.definition.effect_ref == HONEST_REF)
     #: 🔴 **Phase 6-L 에서 실행된다.** 6-K 시점에는 ``executable=False`` ·

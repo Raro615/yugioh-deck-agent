@@ -177,9 +177,15 @@ def test_a01_the_registry_holds_twenty_one_hand_written_cards():
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
     #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네를
     #: 읽어 등재했다 (디베르는 두 질문, 나머지 둘은 한 질문).
-    assert len(OPERATION_RULINGS) == 26
+    #: 🔴 26 → **28** (Phase 6-BF) — 오르페골 바벨 · 클리막스를 읽어
+    #: 등재했다 (둘 다 ``MAY_BE_SET`` 한 질문). 갈라테아 ② 가 덱에서
+    #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
+    #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
+    #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
+    assert len(OPERATION_RULINGS) == 28
     #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네.
-    assert len(OPERATION_RULINGS.card_ids) == 26
+    #: 🔴 26 → **28** (Phase 6-BF) — 오르페골 바벨 · 클리막스.
+    assert len(OPERATION_RULINGS.card_ids) == 28
     assert PACHYCEPHALO in OPERATION_RULINGS.card_ids
     assert FEATHERMAN in OPERATION_RULINGS.card_ids
     assert HONEST in OPERATION_RULINGS.card_ids
@@ -818,13 +824,16 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 범위
     #: 밖이다 (ADR-006).
     #: 🔴 21 → **22** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이 등재되었다.
-    assert len(EFFECT_LIBRARY) == 22
+    #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 23
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
     #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
     #: 🔴 17 → **18** (Phase 6-AO) — 디베르 ① 이 실행 가능으로 더해졌다.
     #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이 실행 가능으로 더해졌다.
-    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 19
+    #: 🔴 19 → **20** (Phase 6-BF) — 갈라테아 ② 다.
+    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 20
 
     definition = definition_registry().definition_for(
         EffectRef(POT_OF_GREED, 0)
@@ -869,7 +878,10 @@ def test_g01_no_new_rule_engine_and_no_new_result_type():
     #: 체계 안에서** 늘어나는 것이므로 늘어난 사실을 적는다 —
     #: ``MAY_BE_SPECIAL_SUMMONED`` 가 그것이고, 같은 ``RuleFact`` ·
     #: 같은 ``RuleBasis`` · 같은 세 값을 쓴다.
-    assert len(list(RuleQuestion)) == 8
+    #: 🔴 **8 → 9** (Phase 6-BF) — ``MAY_BE_SET`` 이다. 위와 같은
+    #: 이유로 수만 움직인다: 같은 ``RuleFact`` · 같은 ``RuleBasis`` ·
+    #: 같은 세 값을 쓰고, 새 판정 체계를 만들지 않았다.
+    assert len(list(RuleQuestion)) == 9
     assert RuleQuestion.MAY_BE_SPECIAL_SUMMONED.value == "may_be_special_summoned"
 
 
@@ -894,7 +906,12 @@ def test_g02_the_registry_data_was_not_expanded():
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
     #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네를
     #: 읽어 등재했다 (디베르는 두 질문, 나머지 둘은 한 질문).
-    assert len(OPERATION_RULINGS) == 26
+    #: 🔴 26 → **28** (Phase 6-BF) — 오르페골 바벨 · 클리막스를 읽어
+    #: 등재했다 (둘 다 ``MAY_BE_SET`` 한 질문). 갈라테아 ② 가 덱에서
+    #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
+    #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
+    #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
+    assert len(OPERATION_RULINGS) == 28
     #: 라이브러리 쪽은 6-O 가 건드리지 않았다 — 유도는 ruling.py 에 있다.
     assert "rulebook_facts" not in library
 

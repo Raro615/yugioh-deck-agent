@@ -1297,6 +1297,15 @@ def test_k01_no_new_operation_kind_and_no_new_destination():
         #: 그대로 들고 있다 (``MOVABLE_DESTINATIONS`` 가 한 글자도 늘지
         #: 않았다).
         "restrict_special_summon",
+        #: 🔴 **Phase 6-BF 가 종류를 하나 더했다** — ``set_spell_trap``,
+        #: 「덱에서 고른 마법 · 함정을 뒷면으로 놓는다」 다. 이것도
+        #: **이동 시스템이 아니다**: 목적지가 ``SZONE`` · ``FZONE``, 즉
+        #: **칸이 있는 존**이라 :data:`MOVABLE_DESTINATIONS` 가 받을 수
+        #: 없는 자리이고 (그 표의 설명 — "전부 칸이 없는 순서 존이다"),
+        #: 그래서 그 표에 한 글자도 더하지 않았다. 놓는 일은 소환과 같은
+        #: 배치 코드(``engine.set_card.effect_set_procedure``)가 하고,
+        #: 아래 두 번째 단언이 그 사실을 그대로 들고 있다.
+        "set_spell_trap",
         "unknown",
     ]
     assert MOVABLE_DESTINATIONS == frozenset(
@@ -1318,14 +1327,18 @@ def test_k02_the_library_grew_no_executable_entry():
     #: 🔴 Phase 6-AO 가 오르페골 디베르 ① 을 더했다 (20 → 21).
     #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 22
+    #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 같은 이유다 —
+    #: 읽은 카드가 하나 늘었고, 6-M 이 범위를 넓히지 않았다는 §12 의
+    #: 사실은 그대로다.
+    assert len(EFFECT_LIBRARY) == 23
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: Phase 6-AF — 기르수 ③ 이 실행 가능으로 더해졌다 (16 → 17).
     #: 🔴 Phase 6-AO — 디베르 ① 이 실행 가능으로 더해졌다 (17 → 18).
     #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이다. 이 시험이 지키는
     #: 사실은 "이 Phase 가 실행 가능 항목을 늘리지 않았다" 이고, 그 수가
     #: 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 19
+    #: 🔴 19 → **20** (Phase 6-BF) — 갈라테아 ② 다.
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 20
 
 
 def test_k03_only_one_registered_operation_declares_its_origin():

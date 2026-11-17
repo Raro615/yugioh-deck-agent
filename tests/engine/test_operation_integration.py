@@ -319,6 +319,12 @@ def test_a_the_taxonomy_is_exactly_what_is_executable():
         #: 만들어 놓는 일이다 — 이동이 아니다. ``engine.token`` 이
         #: 덱 · 패 · 엑스트라 덱의 장수가 변하지 않았음을 실제로 확인한다.
         "create_token",
+        #: 🔴 **세트 (Phase 6-BF).** 덱에서 고른 마법 · 함정을 뒷면으로
+        #: 놓는 일이다. 🔴 **이동 표에는 들어가지 않는다** — 목적지가
+        #: 칸이 있는 존(``SZONE`` · ``FZONE``)이므로 놓는 일은 소환과
+        #: 같은 배치 코드가 하고, ``MOVABLE_DESTINATIONS`` 는 한
+        #: 글자도 늘지 않았다.
+        "set_spell_trap",
     }
 
 
@@ -924,6 +930,10 @@ def test_h_no_real_card_uses_move_yet():
         #: 🔴 Phase 6-AO — 디베르 ① 이 거는 「어둠 속성밖에 특수 소환할 수
         #: 없다」. **이동이 아니다** (카드를 움직이지 않는다).
         OperationKind.RESTRICT_SPECIAL_SUMMON,
+        #: 🔴 Phase 6-BF — 갈라테아 ② 가 덱에서 세트한다.
+        #: **``MOVE`` 가 아니다**: 전용 종류를 쓰고 전용 델타
+        #: (``engine.set_card.CardSet``)를 남긴다.
+        OperationKind.SET_SPELL_TRAP,
     }
     assert OperationKind.MOVE not in kinds
 

@@ -138,7 +138,11 @@ def test_01_exactly_one_registered_effect_gives_the_opponent_cards():
     #: 밖이다 (ADR-006).
     #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 22
+    #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 같은 이유다. 이
+    #: 시험이 지키는 사실("상대에게 카드를 주는 등재 효과는 하나다")은
+    #: 아래 단언이 그대로 들고 있고, 갈라테아 ② 는 ``DrawOperation`` 을
+    #: 쓰지 않으므로 그 목록에 더해지지 않았다.
+    assert len(EFFECT_LIBRARY) == 23
     assert giving == [GIFT_OF_GREED]
 
 

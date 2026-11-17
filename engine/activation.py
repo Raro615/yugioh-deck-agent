@@ -1145,6 +1145,14 @@ class EffectActivator:
                 #: 조건에 관문 술어를 함께 적으므로 (``s.spfilter1`` 의
                 #: ``IsCanBeSpecialSummoned``), 조건 필터만 세면 발동 자격을
                 #: 아직 확인하지 못한 채 허가하게 된다.
+                if not binding.spec.checked_at_activation:
+                    #: 🔴 **공식 발동 조건이 이 후보를 묻지 않는다**
+                    #: (Phase 6-BF — ``TargetSpec.checked_at_activation``).
+                    #: 그 사실을 적은 효과만 이 길로 간다. 그때 0장인
+                    #: 갈래는 **해결 시점**이 맡고
+                    #: (``ResolutionSkip.when_no_candidate``), 여기서
+                    #: 발동을 막으면 공식에 없는 조건을 만든 셈이 된다.
+                    continue
                 enough = self._candidate_existence(
                     definition, binding, resolver, context
                 )

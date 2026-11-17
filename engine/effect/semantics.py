@@ -88,6 +88,15 @@ MISSING_EXTRA_DECK_DESTINATION = (
     "보내질 때의 실제 도착 자리 규칙)"
 )
 
+#: 효과로 세트할 때 **어느 존에 놓이는지 모를 때**의 이름 (Phase 6-BF).
+#:
+#: 카드 정의를 읽지 못하면 필드 마법인지 알 수 없고, 그러면 놓을 자리도
+#: 알 수 없다. 🔴 마법 · 함정 존으로 밀어 넣지 않는다.
+MISSING_SET_DESTINATION = (
+    "effect-set-destination (효과로 세트하는 카드가 어느 존에 놓이는가 — "
+    "카드 정의를 읽지 못했다)"
+)
+
 #: 카드가 **이미 그 자리에 있을 때** 없는 규칙의 이름 (Phase 6-M).
 MISSING_SAME_ZONE_MOVEMENT = (
     "same-zone-movement (이미 목적지에 있는 카드를 그 목적지로 보내는 "
@@ -243,6 +252,10 @@ GATING_RULES: dict[OperationKind, tuple[str, ...]] = {
         "이 카드를 덱으로 되돌릴 수 있는가 (Card.IsAbleToDeck)",
         "덱 이외의 곳으로 가는가 (토큰 · 엑스트라 덱 · 대체 효과)",
     ),
+    # Phase 6-BF. **카드가 선언할 때만** 물어진다.
+    OperationKind.SET_SPELL_TRAP: (
+        "이 카드를 세트할 수 있는가 (Card.IsSSetable 의 카드 쪽 절반)",
+    ),
 }
 
 #: 관문을 여는 계층의 이름. 결과의 ``missing`` 에 그대로 실린다.
@@ -261,6 +274,9 @@ MISSING_GATE: dict[OperationKind, str] = {
     OperationKind.BANISH: "banish-legality (Card.IsAbleToRemove 판정)",
     OperationKind.RETURN_TO_DECK: (
         "return-to-deck-legality (Card.IsAbleToDeck 판정)"
+    ),
+    OperationKind.SET_SPELL_TRAP: (
+        "set-legality (Card.IsSSetable 의 카드 쪽 절반 판정)"
     ),
 }
 
@@ -463,6 +479,27 @@ class RuleQuestion(str, Enum):
     이다. 이 칸이 말하는 것은 **카드 자신의 텍스트가 특수 소환을 막지
     않는다**는 사실 하나다.
     """
+    MAY_BE_SET = "may_be_set"
+    """
+    I — "이 카드를 세트할 수 있는가" (``Card.IsSSetable``, Phase 6-BF).
+
+    실측: ``Duel.SSet`` 를 쓰는 파일 296개 중 **294개**가 ``IsSSetable`` 을
+    함께 적는다 (99%). ``IsSSetable`` 을 적는 파일은 302개이고, 즉 거의
+    모든 카드가 적지만 **적지 않는 카드도 있다** — 그래서 A · B 와 같은
+    결론이다: 종류가 아니라 **카드가 선언한다**
+    (:data:`DECLARED_GATE_RULINGS`).
+
+    🔴 **이 질문은 「세트」 하나다.** 「지금 발동할 수 있는가」 가 아니다 —
+    세트는 뒷면으로 놓는 일이고 발동이 아니다
+    (:class:`~engine.effect.operation.SetSpellTrapOperation`). 발동
+    타이밍 계층은 이 저장소에 아직 없다.
+
+    🔴 **빈 칸은 이 질문이 아니다.** 공식 ``IsSSetable`` 은 「그 자리에
+    놓을 수 있는가」 와 「카드가 세트를 금지하지 않는가」 를 **함께**
+    묻는다. 앞의 절반은 배치 계획이 지키고
+    (``engine.set_card.effect_set_procedure(...).plan_for`` 가 빈 칸이
+    없으면 거절한다), 이 칸이 말하는 것은 **뒤의 절반**이다.
+    """
 
 
 #: 질문 → 그 질문을 던지는 공식 Lua 술어 이름. **근거다.**
@@ -479,6 +516,10 @@ LUA_GATE_PREDICATES: dict[RuleQuestion, str] = {
     RuleQuestion.MAY_BE_RETURNED_TO_HAND: "Card.IsAbleToHand",
     RuleQuestion.MAY_BE_BANISHED: "Card.IsAbleToRemove",
     RuleQuestion.MAY_BE_RETURNED_TO_DECK: "Card.IsAbleToDeck",
+    # Phase 6-BF. 효과로 **세트하는** 일의 술어다 (Duel.SSet 쪽).
+    # 플레이어가 패에서 선언하는 세트는 이 표를 지나가지 않는다 —
+    # 그쪽은 효과가 아니고 engine.set_card 의 절차가 판정한다.
+    RuleQuestion.MAY_BE_SET: "Card.IsSSetable",
 }
 
 #: 카드가 **선언할 때만** 물어지는 관문 → 그 질문.
@@ -495,6 +536,9 @@ DECLARED_GATE_RULINGS: dict[OperationKind, RuleQuestion] = {
     OperationKind.RETURN_TO_HAND: RuleQuestion.MAY_BE_RETURNED_TO_HAND,
     OperationKind.BANISH: RuleQuestion.MAY_BE_BANISHED,
     OperationKind.RETURN_TO_DECK: RuleQuestion.MAY_BE_RETURNED_TO_DECK,
+    # Phase 6-BF — 296개 중 294개가 적는다 (99%). 거의 모두 적지만
+    # **전부는 아니므로** 종류 관문(RULE_GATED)이 아니라 선언이다.
+    OperationKind.SET_SPELL_TRAP: RuleQuestion.MAY_BE_SET,
 }
 
 #: 질문 → 그 질문을 던지는 공식 Lua 술어 이름 중 **종류 관문** 쪽.
@@ -535,6 +579,7 @@ QUESTION_VERBS: dict[RuleQuestion, str] = {
     RuleQuestion.MAY_BE_BANISHED: "제외할",
     RuleQuestion.MAY_BE_RETURNED_TO_DECK: "덱으로 되돌릴",
     RuleQuestion.MAY_BE_SPECIAL_SUMMONED: "특수 소환할",
+    RuleQuestion.MAY_BE_SET: "세트할",
 }
 
 #: **아직 아무도 묻지 않는** 질문들.

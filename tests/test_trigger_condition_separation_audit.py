@@ -343,7 +343,9 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 밖이다 (ADR-006).
     #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 22
+    #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 23
     #: 🔴 Phase 6-K — 열일곱 번째(어니스트 ①)는 ``code`` 가 **없다.** 기동
     #: 효과는 사건이 아니라 선언으로 발동하므로 ``SetCode`` 를 적지 않는다.
     #:

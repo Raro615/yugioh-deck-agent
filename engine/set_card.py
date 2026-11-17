@@ -188,9 +188,16 @@ class CardSet(CardMovement):
         )
 
     def to_dict(self) -> dict:
+        #: 🔴 **``instance`` 다** (Phase 6-BF 가 ``card`` 에서 고쳤다).
+        #: :class:`~engine.effect.delta.ZoneMoved` ·
+        #: :class:`~engine.effect.delta.MonsterSummoned` 를 비롯한 다른
+        #: 모든 델타가 이 이름을 쓰고, 재생 · 변환 계층은 그 이름으로
+        #: "어느 카드인가" 를 읽는다 (``deck.replay_export`` ·
+        #: ``deck.site_plan``). ``card`` 로 적혀 있는 동안 세트 사건은 그
+        #: 자리에서 **카드가 없는 변화**로 보였다.
         return {
             "kind": "card_set",
-            "card": self.card.value,
+            "instance": self.card.value,
             "player": self.player,
             "owner": self.owner,
             "from_player": self.source_player,
@@ -229,6 +236,53 @@ SET_SPELL_TRAP_PROCEDURE = SummonProcedure(
     position=SET_SPELL_TRAP_POSITION,
     error=SetError,
 )
+
+#: 🔴 **효과로 덱에서 세트하는 절차** (Phase 6-BF).
+#:
+#: 플레이어가 선언하는 세트(``SET_SPELL_TRAP_PROCEDURE``)와 **출발 자리만**
+#: 다르다. 가는 자리 · 표시 형식 · 빈 칸 찾기 · 착지 확인은 **같은 코드**다
+#: — 그래서 절차를 새로 만들지 않고 표 한 줄을 더한다.
+#:
+#: 🔴 **``kind`` 는 그대로 ``SET_SPELL_TRAP`` 이다.** 이 값은
+#: :class:`~engine.summon.SummonProcedure` 가 오류 문구와 착지 확인에
+#: 쓰는 이름이고, 세트한 턴 기록(``RuleActionKind.SET_SPELL_TRAP``)이
+#: 양쪽에 **같은 이름으로** 적혀야 한다 — 이름을 나누면 "효과로 세트한
+#: 카드는 세트한 턴 제약을 받지 않는다" 가 된다.
+EFFECT_SET_FROM_DECK_PROCEDURE = SummonProcedure(
+    kind=PlayerActionKind.SET_SPELL_TRAP,
+    summon=None,
+    from_zones=frozenset({Zone.DECK}),
+    to_zone=Zone.SZONE,
+    position=SET_SPELL_TRAP_POSITION,
+    error=SetError,
+)
+
+#: 🔴 **필드 마법은 필드 존으로 간다** (Phase 6-BF).
+#:
+#: ``Duel.SSet`` 이 필드 마법을 마법 · 함정 존에 놓지 않는다 — 필드 마법이
+#: 놓이는 자리는 필드 존 하나다. 그 갈래를 조작이 아니라 **카드 정의**가
+#: 정하므로 (:func:`effect_set_procedure`), 표를 둘로 둔다.
+EFFECT_SET_FIELD_FROM_DECK_PROCEDURE = SummonProcedure(
+    kind=PlayerActionKind.SET_SPELL_TRAP,
+    summon=None,
+    from_zones=frozenset({Zone.DECK}),
+    to_zone=Zone.FZONE,
+    position=SET_SPELL_TRAP_POSITION,
+    error=SetError,
+)
+
+
+def effect_set_procedure(*, field_spell: bool) -> SummonProcedure:
+    """
+    효과로 세트할 때 **어느 표를 쓰는가** (Phase 6-BF).
+
+    🔴 **카드가 정한다.** 필드 마법이면 필드 존, 아니면 마법 · 함정 존이고,
+    그 판단은 카드 정의(``type_names`` 의 ``FIELD``)를 읽는 실행기가
+    한다 — 이 함수는 표를 고르는 일만 한다.
+    """
+    return (EFFECT_SET_FIELD_FROM_DECK_PROCEDURE if field_spell
+            else EFFECT_SET_FROM_DECK_PROCEDURE)
+
 
 #: 종류별 절차. **소환권을 쓰는 것은 몬스터 세트뿐이다** (RULE-SUMMON-009:
 #: "You can only Normal Summon OR Normal Set once per turn" — 마법 · 함정
@@ -379,9 +433,12 @@ __all__ = [
     "SetExecutor",
     "SetMonsterHandler",
     "SetSpellTrapHandler",
+    "EFFECT_SET_FIELD_FROM_DECK_PROCEDURE",
+    "EFFECT_SET_FROM_DECK_PROCEDURE",
     "SET_FROM_ZONE",
     "SET_MONSTER_POSITION",
     "SET_SPELL_TRAP_POSITION",
+    "effect_set_procedure",
     "SET_MONSTER_PROCEDURE",
     "SET_SPELL_TRAP_PROCEDURE",
 ]

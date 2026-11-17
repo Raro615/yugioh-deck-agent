@@ -160,6 +160,26 @@ class OperationKind(str, Enum):
     답한다 — 적는 자리와 읽는 자리를 가르는 것이 세 사용 기록 표와 같은
     규율이다.
     """
+    SET_SPELL_TRAP = "set_spell_trap"
+    """
+    **효과로 마법 · 함정을 세트한다** (Phase 6-BF).
+
+    ``Duel.SSet`` 이다. 가르는 이유가 셋이다.
+
+    1. **플레이어가 선언하는 세트와 다르다.**
+       :attr:`~engine.action.PlayerActionKind.SET_SPELL_TRAP` 은 고르는
+       주체가 **패에서** 하는 행위이고 (ADR-001), 이쪽은 효과 해결 중에
+       수행되는 일이며 출발 자리가 패가 아니다.
+    2. **카드 발동이 아니다.** 세트는 뒷면으로 놓는 것뿐이고 발동이
+       아니다 — 세트한 턴에 발동할 수 없는 카드가 있다는 규칙이 그
+       구분에 걸려 있다 (RULE-SPELLTRAP-007 · 009).
+    3. **``MOVE`` 로 적을 수 없다.** 칸 번호 · 표시 형식이 필요하고,
+       남기는 변화가 :class:`~engine.set_card.CardSet` 이다 —
+       ``SPECIAL_SUMMON`` 을 ``MOVE`` 로 적지 않는 것과 같은 이유다.
+
+    🔴 **어느 존에 놓이는지는 카드가 정한다** — 필드 마법은 필드 존,
+    나머지는 마법 · 함정 존이다. 실행기가 그 갈래를 읽는다.
+    """
     UNKNOWN = "unknown"
     """무엇을 하는지 구조화하지 못했다."""
 
@@ -195,6 +215,10 @@ REASON_NAMES: dict[OperationKind, tuple[str, ...]] = {
     # 움직이지 않으므로 어떤 ``REASON_*`` 도 주장할 수 없다 — ``SHUFFLE`` 과
     # 같은 자리다.
     OperationKind.RESTRICT_SPECIAL_SUMMON: (),
+    # 효과로 세트된 것은 맞으므로 ``REASON_EFFECT`` 를 적는다 (Phase 6-BF).
+    # 🔴 ``REASON_SPSUMMON`` 은 아니다 — 세트는 소환이 아니다
+    # (RULE-SUMMON-010 과 같은 결).
+    OperationKind.SET_SPELL_TRAP: ("EFFECT",),
     OperationKind.UNKNOWN: (),
 }
 
@@ -244,6 +268,11 @@ DECLARABLE_GATE_KINDS: frozenset[OperationKind] = frozenset(
         OperationKind.RETURN_TO_HAND,
         OperationKind.BANISH,
         OperationKind.RETURN_TO_DECK,
+        #: 🔴 **Phase 6-BF.** ``Duel.SSet`` 를 쓰는 파일 296개 중 294개가
+        #: ``IsSSetable`` 을 함께 적는다 (99%) — 그 술어를 적는 파일은
+        #: 302개다. 거의 모두 적지만 **전부는 아니므로** 위 셋과 같은
+        #: 결론이다: 종류에 박지 않고 카드가 선언한다.
+        OperationKind.SET_SPELL_TRAP,
     }
 )
 
@@ -864,6 +893,71 @@ class SpecialSummonOperation(Operation):
 
 
 @dataclass(frozen=True, slots=True)
+class SetSpellTrapOperation(Operation):
+    """
+    대상으로 고른 마법 · 함정을 **세트한다** (Phase 6-BF).
+
+    ``Duel.SSet(tp, sg)`` 이다. ``SpecialSummonOperation`` 과 같은 모양인
+    이유도 같다 — 칸 번호와 표시 형식이 필요하고, 남기는 변화가
+    ``ZoneMoved`` 가 아니다 (:class:`~engine.set_card.CardSet`).
+
+    🔴 **세트는 발동이 아니다.** 이 조작은 카드를 뒷면으로 놓을 뿐이고,
+    그 카드를 발동할 수 있는지는 **아무것도 말하지 않는다** — 세트한 턴에
+    발동할 수 없는 카드가 있고 (RULE-SPELLTRAP-007 · 009), 이 저장소에는
+    ``activate_card`` 의 발동 타이밍 계층이 아직 없다.
+
+    🔴 **어느 존인지는 카드가 정한다** — 필드 마법은 필드 존, 나머지는
+    마법 · 함정 존이다. 실행기가 카드 정의를 읽어 가른다. 조작이 존을
+    적어 두면 같은 조작이 두 벌이 되고, 한쪽만 고쳐지는 날이 온다.
+
+    고르는 일은 여기서 하지 않는다 — ``target_ref`` 는 **이름**이고 어느
+    카드가 골라졌는지는 :class:`~engine.effect.resolution.ResolutionContext`
+    에 있다 (``SpecialSummonOperation`` 과 같은 규율).
+    """
+
+    target_ref: TargetRef
+    gated: bool = False
+    """
+    원본이 ``Card.IsSSetable`` 을 적었는가 (Phase 6-BF).
+
+    :attr:`CardOperation.gated` 와 **같은 뜻 · 같은 자리**다 — 선언한
+    효과만 관문을 받고, 선언은 공식 스크립트에서 온다
+    (:data:`~engine.effect.semantics.DECLARED_GATE_RULINGS`). 기본값이
+    거짓인 것은 ADR-006 이다: 적지 않은 카드는 묻지 않는다.
+    """
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target_ref, TargetRef):
+            raise TypeError(
+                "SetSpellTrapOperation 에는 TargetRef 가 필요합니다. 어느 "
+                f"카드인지 말하지 않는 세트는 일이 아닙니다: "
+                f"{self.target_ref!r}"
+            )
+
+    @property
+    def kind(self) -> OperationKind:
+        return OperationKind.SET_SPELL_TRAP
+
+    @property
+    def target_refs(self) -> tuple[TargetRef, ...]:
+        return (self.target_ref,)
+
+    def canonical_state(self) -> tuple:
+        return ("set_spell_trap", self.target_ref.name, self.gated)
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "set_spell_trap",
+            "target_ref": self.target_ref.name,
+            "gated": self.gated,
+            "reasons": list(self.reason_names),
+        }
+
+    def describe_ko(self) -> str:
+        return f"{self.target_ref} 를 세트 (🔴 발동이 아니다)"
+
+
+@dataclass(frozen=True, slots=True)
 class RestrictSpecialSummonOperation(Operation):
     """
     **이 턴 남은 동안 한 속성밖에 특수 소환할 수 없게 한다** (Phase 6-AO).
@@ -1076,6 +1170,7 @@ __all__ = [
     "LifeChangeOperation",
     "MoveOperation",
     "SpecialSummonOperation",
+    "SetSpellTrapOperation",
     "RestrictSpecialSummonOperation",
     "UnimplementedOperation",
 ]

@@ -1027,6 +1027,7 @@ def test_e04_the_search_does_not_know_this_line():
     🔴 **탐색기에 정답 수순을 하드코딩하지 않았다.** 고정 경로의 이름도,
     이 Phase 의 카드 ID 도, ``COMBO_LINES`` 도 탐색기 안에 없다.
     """
+    import ast
     import inspect
 
     import agent.bounded_search as bs
@@ -1038,14 +1039,38 @@ def test_e04_the_search_does_not_know_this_line():
     )
     assert "검증용" in ORCUST_SKELETON_LONGIRSU_LINE.note
     assert ORCUST_SKELETON_LONGIRSU_LINE.reproduction_ready is True
-    source = inspect.getsource(bs)
+    #: 🔴 **설명문이 아니라 코드를 본다** (Phase 6-BF 가 고친 자리).
+    #:
+    #: 원래는 ``inspect.getsource`` 의 **원문 전체**를 찾았다. 그러면
+    #: 설명문에 카드 ID 를 **예시로** 적은 것까지 걸린다 — 실제로 걸렸다:
+    #: 6-BE 가 ``agent/bounded_search.py`` 의 ``UseRecord`` 설명에
+    #: ``"[21441617]"`` 를 "이 꼴을 되파싱하지 마라" 의 예시로 적었고, 그
+    #: 순간부터 이 시험이 실패했다 (기준 HEAD ``73696f74`` 에서도 실패한다).
+    #:
+    #: 🔴 **단언을 약하게 만든 것이 아니다.** 지키려는 사실은 "탐색기에
+    #: 정답 수순을 **하드코딩하지 않았다**" 이고, 설명문은 코드가 아니다.
+    #: 설명문 · 주석만 걷어내고 **나머지 전부**(문자열 리터럴 포함)를
+    #: 본다 — 고정 경로 이름을 코드에 적으면 여전히 걸린다.
+    #: 🔴 **"그 자체로 한 문장인 문자열" 전부를 뺀다.** 이 저장소는 머리말
+    #: 설명문뿐 아니라 **칸 설명문**(대입 바로 뒤에 오는 문자열)도 쓰므로
+    #: 첫 줄만 빼면 그쪽이 남는다 — 실측으로 ``UseRecord.card_id`` 의 칸
+    #: 설명문이 남았다. 🔴 **값으로 쓰이는 문자열은 그대로 남는다**
+    #: (``Expr`` 이 아니다), 그래서 고정 경로 이름을 코드에 적으면 걸린다.
+    class _Strip(ast.NodeTransformer):
+        def visit_Expr(self, node):
+            if (isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)):
+                return ast.Expr(value=ast.Constant(value=Ellipsis))
+            return node
+
+    code = ast.unparse(_Strip().visit(ast.parse(inspect.getsource(bs))))
     for needle in (
         "orcust-skeleton-longirsu",
         str(SKELETON),
         str(LONGIRSU),
         "COMBO_LINES",
     ):
-        assert needle not in source, needle
+        assert needle not in code, needle
 
 
 def test_e05_no_other_effect_was_loosened():
@@ -1059,8 +1084,17 @@ def test_e05_no_other_effect_was_loosened():
         and entry.definition.resolution_skip.when_target_unusable
     ]
     assert declared == [str(SKELETON_EFFECT)], declared
-    #: 그리고 대상 지정으로 선언된 **몬스터** 효과도 이것 하나다.
-    targeting = [
+    #: 🔴 **그 선언(``when_target_unusable``)은 여전히 하나뿐이다** — 위
+    #: 단언이 그것을 잰다.
+    #:
+    #: 🔴 **아래는 둘이 되었다** (Phase 6-BF). 대상 지정으로 선언된
+    #: 몬스터 효과에 오르페골 갈라테아 ② 가 더해졌다 —
+    #: ``EFFECT_FLAG_CARD_TARGET`` + ``Duel.SelectTarget`` 을 읽은 결과다.
+    #: 🔴 **그것이 "완화" 는 아니다**: 갈라테아 ② 는
+    #: ``when_target_unusable`` 을 **적지 않았고**, 해결 시점에 대상을 쓸 수
+    #: 없게 되면 기존 그대로 거절된다. 이 시험이 지키는 "일괄 완화가
+    #: 아니다" 는 위 단언이 그대로 들고 있다.
+    targeting = sorted(
         str(entry.definition.effect_ref)
         for entry in EFFECT_LIBRARY
         if any(
@@ -1068,8 +1102,10 @@ def test_e05_no_other_effect_was_loosened():
             for binding in entry.definition.targets
         )
         and entry.definition.activation_zones is not None
-    ]
-    assert targeting == [str(SKELETON_EFFECT)], targeting
+    )
+    assert targeting == sorted(
+        [str(SKELETON_EFFECT), "30741503:e[1]"]
+    ), targeting
 
 
 # ======================================================================

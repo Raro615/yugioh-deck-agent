@@ -639,7 +639,43 @@ class TargetSpec:
     질문이고, 두 벌로 적으면 세 자리의 답이 갈릴 수 있다.
     """
 
+    checked_at_activation: bool = True
+    """
+    🔴 **공식 스크립트의 발동 조건이 이 후보의 존재를 묻는가**
+    (Phase 6-BF).
+
+    기본값이 참인 이유는 **읽은 카드들이 실제로 그랬기** 때문이다 —
+    성유물－『성장』 ② 와 오르페골 디베르 ① 은 ``s.sptg`` ·
+    ``s.sptg1`` 에서 ``Duel.IsExistingMatchingCard`` 로 후보의 존재를
+    **발동 조건으로** 확인한다. 그 효과들은 이 칸을 적지 않고 한 글자도
+    달라지지 않는다.
+
+    거짓인 자리가 생긴 이유 — 오르페골 갈라테아 ② ::
+
+        c30741503.lua
+            s.tdtg  — 제외된 기계족의 존재만 확인한다 (IsExistingTarget).
+                      덱의 「오르페골」 마법 · 함정은 **묻지 않는다.**
+            s.tdop  — Duel.SendtoDeck 를 **먼저** 하고, 그 뒤
+                      local g=Duel.GetMatchingGroup(s.filter,…)
+                      if #g>0 and Duel.SelectYesNo(…) then … Duel.SSet end
+
+    즉 세트할 것이 하나도 없어도 **발동할 수 있고** 되돌리기는 일어난다.
+    이 칸을 거짓으로 적지 않으면 그 갈래가 발동 자체에서 막히고, 그것은
+    공식보다 **덜 허가하는** 쪽이지만 **틀린** 쪽이기도 하다.
+
+    🔴 **해결 시점의 처리와 다른 축이다.** "0장이어도 정상 해결한다" 는
+    :class:`~engine.effect.definition.ResolutionSkip` 이 말하고, 두 카드
+    모두 그것을 선언한다. 한 칸으로 묶으면 디베르 ① 의 발동 조건이
+    사라진다 — 그 카드는 후보가 없을 때 **발동할 수 없다.**
+    """
+
     def __post_init__(self) -> None:
+        if not self.checked_at_activation and not self.chosen_at_resolution:
+            raise ValueError(
+                "발동 조건이 보지 않는 선택은 **해결 중에 고르는** 선택뿐"
+                "입니다. 발동 시점에 고르는 것을 발동 조건에서 빼면 그 "
+                "선택이 아무 자리에서도 확인되지 않습니다."
+            )
         if self.existence_requires_gate and self.choice is None:
             raise ValueError(
                 "고를 것이 없는 규칙에 후보 존재 관문을 적을 수 없습니다 — "
@@ -703,6 +739,7 @@ class TargetSpec:
         *,
         chosen_at_resolution: bool = False,
         existence_requires_gate: bool = False,
+        checked_at_activation: bool = True,
     ) -> "TargetSpec":
         """
         고르지만 대상 지정은 아닌 효과.
@@ -717,6 +754,7 @@ class TargetSpec:
             choice=choice,
             chosen_at_resolution=chosen_at_resolution,
             existence_requires_gate=existence_requires_gate,
+            checked_at_activation=checked_at_activation,
         )
 
     @classmethod
@@ -793,6 +831,7 @@ class TargetSpec:
             self.choice.canonical_state() if self.choice is not None else None,
             self.chosen_at_resolution,
             self.existence_requires_gate,
+            self.checked_at_activation,
         )
 
     def to_dict(self) -> dict:
@@ -803,6 +842,9 @@ class TargetSpec:
             data["chosen_at_resolution"] = True
         if self.existence_requires_gate:
             data["existence_requires_gate"] = True
+        #: 🔴 **기본값이 아닐 때만 적는다** — 다른 두 칸과 같은 규율이다.
+        if not self.checked_at_activation:
+            data["checked_at_activation"] = False
         return data
 
     def describe_ko(self) -> str:

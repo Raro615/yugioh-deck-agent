@@ -948,7 +948,12 @@ def test_f_the_registry_covers_every_registered_real_card():
     #: ``engine.summon_restriction`` 의 표가 들고 있다 — 다른 질문이다.
     #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네를
     #: 읽어 등재했다 (디베르는 두 질문, 나머지 둘은 한 질문).
-    assert len(OPERATION_RULINGS) == 26
+    #: 🔴 26 → **28** (Phase 6-BF) — 오르페골 바벨 · 클리막스를 읽어
+    #: 등재했다 (둘 다 ``MAY_BE_SET`` 한 질문). 갈라테아 ② 가 덱에서
+    #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
+    #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
+    #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
+    assert len(OPERATION_RULINGS) == 28
 
 
 def test_f_no_spell_or_trap_claims_to_be_returnable(repository):

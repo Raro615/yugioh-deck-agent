@@ -114,9 +114,16 @@ EVENT_COST = "cost_payment"
 
 #: 판의 **구성원**이 바뀌는 delta 종류. 나머지(제한 · 라이프 · 페이즈 ·
 #: 섞기)는 자리를 옮기지 않으므로 :func:`replay_membership` 이 건너뛴다.
+#: 🔴 **``card_set`` 이 Phase 6-BF 에서 들어왔다.** 뒷면으로 놓는 것도
+#: 자리를 옮기는 일이고 (``engine.set_card.CardSet``), 빠져 있으면
+#: :func:`verify_replay` 가 세트한 카드를 **출발 자리에 그대로 둔 채**
+#: 최종 판과 대조해 어긋남을 보고한다. 그 공백은 6-BF 이전에도 있었다 —
+#: 플레이어가 선언하는 세트(패에서)도 같은 델타를 쓰고, 세트를 지나는
+#: 재생 검증이 그때까지 없었을 뿐이다. 6-BF 가 덱에서 세트하는 효과를
+#: 등재하면서 그 길을 처음 지나게 되었다.
 _MOVE_KINDS = frozenset(
     {"zone_moved", "card_drawn", "monster_summoned", "token_created",
-     "token_vanished"}
+     "token_vanished", "card_set"}
 )
 
 __all__ = [
@@ -515,6 +522,13 @@ def replay_membership(record) -> dict:
             if kind == "monster_summoned":
                 seat = str(change["player"])
                 where[instance] = (seat, change["to"]["zone"])
+                continue
+            if kind == "card_set":
+                #: 🔴 **``CardSet`` 은 목적지를 평평하게 적는다** —
+                #: ``to_zone`` · ``to_index`` 이고 ``to`` 묶음이 없다
+                #: (``engine.set_card.CardSet.to_dict``). ``player`` 가
+                #: **놓는 사람**이고 그것이 놓인 카드의 컨트롤러다.
+                where[instance] = (str(change["player"]), change["to_zone"])
                 continue
             to = change["to"]
             where[instance] = (str(to.get("player", 0)), to["zone"])

@@ -380,7 +380,9 @@ def test_10_the_registered_definitions_have_no_trigger_specs_today():
     #: 밖이다 (ADR-006).
     #: 🔴 21 → **22** (Phase 6-AQ, 오르페골 스켈레촌 ①). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 22
+    #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 23
     assert registry is not None
 
     #: production 에서 ``TriggerSpec`` 을 만드는 자리는 컴파일러 하나다.

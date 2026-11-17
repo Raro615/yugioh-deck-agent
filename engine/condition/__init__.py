@@ -40,6 +40,7 @@ from engine.condition.model import (
     NotMonster,
     Or,
     PhaseIs,
+    RaceIs,
     SimultaneousSpecialSummonPermitted,
     SpecialSummonPermitted,
     UnimplementedRule,
@@ -79,6 +80,7 @@ __all__ = [
     "LevelAtLeast",
     "AttackAtLeast",
     "AttributeIs",
+    "RaceIs",
     "ConditionEvaluator",
     "ConditionVerdict",
 ]

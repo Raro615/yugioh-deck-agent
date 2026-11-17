@@ -370,6 +370,16 @@ function buildFrames(rec) {
         place(ch.instance, ch.player, ch.to.zone, ch.to.index, ch.to.position);
         /* 링크 몬스터 자신은 소재가 아니라 **등장**이다. */
         roles[ch.instance] = 'move'; basis['move'] = 1;
+      } else if (ch.kind === 'card_set') {
+        /* 🔴 **세트는 소환이 아니다** (Phase 6-BF). 목적지를 평평하게
+           적으므로 (to_zone · to_index) 위 묶음 모양을 쓰지 않는다. */
+        place(ch.instance, ch.player, ch.to_zone, ch.to_index, ch.position);
+        roles[ch.instance] = 'move'; basis['move'] = 1;
+        notes.push(cardName(rec, ch.instance)
+                   + ' 를 ' + (ZONE_KO[ch.to_zone] || ch.to_zone)
+                   + ' 에 뒷면으로 세트했습니다 — 🔴 소환도 발동도'
+                   + ' 아닙니다. 지금 발동할 수 있는지는 이 기록이'
+                   + ' 말하지 않습니다.');
       } else if (ch.kind === 'token_created') {
         notes.push('토큰이 생겼습니다 — ' + cardName(rec, ch.instance)
                    + ' (일반 카드의 이동이 아닙니다)');
@@ -448,6 +458,12 @@ function frameText(rec, ev, st) {
       bits.push(cardName(rec, ch.instance) + ' 를 '
                 + (ZONE_KO[ch.to.zone] || ch.to.zone) + ' 에 놓았습니다 ('
                 + (POS_KO[ch.to.position] || ch.to.position) + ').');
+    } else if (ch.kind === 'card_set') {
+      bits.push(cardName(rec, ch.instance) + ' 를 '
+                + (ZONE_KO[ch.from_zone] || ch.from_zone) + ' 에서 '
+                + (ZONE_KO[ch.to_zone] || ch.to_zone) + ' 에 '
+                + (POS_KO[ch.position] || ch.position)
+                + ' 로 세트했습니다 (소환이 아닙니다).');
     }
   });
   if (!bits.length) { bits.push('판의 자리는 바뀌지 않았습니다.'); }

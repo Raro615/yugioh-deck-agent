@@ -23,6 +23,7 @@
 ================================  ==========================================
 ``monster_summoned``               끌어 놓기 (칸 번호가 있으므로 그 칸으로)
 ``zone_moved`` · ``card_drawn``    끌어 놓기 (칸 번호가 없으므로 존으로)
+``card_set`` (Phase 6-BF)          끌어 놓기 + **뒷면은 표현하지 못한다**
 걸음 ``activate_effect``           우클릭 → Activate Effect
 걸음의 ``targets``                 우클릭 → Target
 ``special_summon_limited`` 등      조작 없음 — 사이트에 그 개념이 없다
@@ -72,7 +73,26 @@ SITE_ZONE = {
 #: 자신(좌석 0) 을 1번 칸에 묶는다 — 같은 자리를 양쪽에 만들지 않는다.
 EMZONE_SLOT_FOR_SEAT = {0: 1, 1: 2}
 
-_MOVE_KINDS = ("zone_moved", "card_drawn", "monster_summoned")
+#: 🔴 **``card_set`` 이 Phase 6-BF 에서 들어왔다.** 들어오기 전에는 세트
+#: 사건이 ``unsupported`` 로 빠졌고 — **조용히 빠진 것이 아니라** 그 목록에
+#: 적혔다 — 사이트 조작이 하나도 만들어지지 않았다. 지금은 **자리 이동만**
+#: 만든다: 사이트에 끌어 놓는 조작은 같고, **뒷면이라는 사실은 이 계획이
+#: 표현하지 못한다** (아래 :data:`_SET_POSITION_NOTE`). 표시 형식은 이
+#: 계획의 어느 조작에도 실리지 않으므로 (몬스터 세트도 같다) 없는 칸을
+#: 지어내지 않고 사실을 적는다.
+_MOVE_KINDS = ("zone_moved", "card_drawn", "monster_summoned", "card_set")
+
+#: 세트 사건마다 ``unsupported`` 에 적는 한 줄 (Phase 6-BF).
+#:
+#: 🔴 **"변환했다" 와 "그대로 재현된다" 는 다른 말이다.** 이 줄이 없으면
+#: 계획을 읽는 쪽이 끌어 놓기 하나로 세트까지 재현된다고 읽는다.
+_SET_POSITION_NOTE = (
+    "뒷면 세트 — 이 계획은 **자리 이동만** 만듭니다. 표시 형식을 싣는 칸이 "
+    "없어 사이트에서는 앞면으로 놓일 수 있고, 뒷면으로 만드는 조작은 "
+    "사람이 해야 합니다. 🔴 그리고 세트는 발동이 아니므로 이 조작이 그 "
+    "카드를 발동한다는 뜻도 아닙니다."
+)
+
 #: 판을 바꾸지만 사이트에 대응 조작이 **없는** 사건들. 조용히 빠뜨리지 않고
 #: 계획의 ``unsupported`` 에 적는다.
 _NO_SITE_OPERATION = {
@@ -251,6 +271,20 @@ def build_site_plan(record, registration=None) -> dict:
                     continue
                 source = change.get("from") or {}
                 target = change.get("to") or {}
+                if kind == "card_set":
+                    #: 🔴 **``CardSet`` 은 목적지를 평평하게 적는다** —
+                    #: ``to_zone`` · ``to_index`` 이고 묶음이 없다
+                    #: (``engine.set_card.CardSet.to_dict``). 위의 묶음
+                    #: 모양으로 읽으면 존이 ``None`` 이 된다.
+                    source = {"zone": change.get("from_zone"),
+                              "player": change.get("from_player", 0)}
+                    target = {"zone": change.get("to_zone"),
+                              "index": change.get("to_index"),
+                              "player": change.get("player", 0)}
+                    unsupported.append(
+                        f"사건 #{event.get('seq')} 의 card_set: "
+                        + _SET_POSITION_NOTE
+                    )
                 seat = target.get("player", change.get("player", 0))
                 #: 🔴 **확인은 도착지로만 한다.** 출발지의 칸 번호는 기록에
                 #: 없을 때가 있어서(``zone_moved``), 그것으로 맞추려 들면

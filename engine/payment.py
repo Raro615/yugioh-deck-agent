@@ -74,7 +74,7 @@ from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
 from engine.state.game_state import GameState
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
-from engine.vocabulary import Zone
+from engine.vocabulary import Position, Zone
 
 #: 비용 의미 → 그 지불이 판에 남기는 **일**.
 #:
@@ -94,6 +94,33 @@ COST_OPERATION: dict[CostSemantics, OperationKind] = {
     #: 주지 않는다) 치를 수 없고, 치를 수 있는 것은 **고를 것이 없는**
     #: :class:`~engine.cost.SelfCardCost` 쪽이다.
     CostSemantics.BANISH: OperationKind.BANISH,
+}
+
+#: 비용으로 옮겨진 카드가 **어떤 표시 형식으로 놓이는가** (Phase 6-BF).
+#:
+#: 🔴 **없는 값을 짐작하지 않는다.** 표에 없는 의미는 ``None`` 이고, 그때
+#: ``GameState.move`` 는 표시 형식을 **건드리지 않는다** — 6-BF 이전의 모든
+#: 동작이 그 길이다. 이 표가 생긴 이유는 ``REMOVED`` 하나다.
+#:
+#: 왜 제외만 적었는가
+#: ------------------
+#: 「묘지의 이 카드를 **제외하고** 발동할 수 있다」 를 치르면, 공식 처리는
+#: 그 카드를 **앞면으로** 제외한다. 이 저장소의 카드 스크립트 모음에서 직접
+#: 읽은 것이다 — ``SetRange(LOCATION_GRAVE)`` 인 효과가 자신을 비용으로
+#: 제외하는 자리는 ``Duel.Remove(c,POS_FACEUP,REASON_COST)`` 로 적혀 있고
+#: (c16938770 · c17080584 · c19403423 · c29111045 · c60023855 등), 모음
+#: 전체에서 ``POS_FACEUP,REASON_COST`` 가 650개 파일, 뒷면인
+#: ``POS_FACEDOWN,REASON_COST`` 가 19개 파일이다. 뒷면 제외는 **그렇게
+#: 적힌 카드**의 일이고, 이 저장소가 치를 수 있는 제외 비용
+#: (:class:`~engine.cost.SelfCardCost` 하나) 에는 그런 카드가 없다.
+#:
+#: 🔴 **이것은 표시 형식 모델을 만든 것이 아니다.** 묘지 · 패 · 덱으로
+#: 가는 이동은 한 글자도 달라지지 않았고 (표에 없다), 그 자리의 표시 형식은
+#: 여전히 **앞 존에서 들고 온 값**이다 — 즉 뜻을 갖지 않는다. 6-BF 가
+#: 고친 것은 ``REMOVED`` 하나이고, 그 이유는 공식 필터가 그 자리에서
+#: ``c:IsFaceup()`` 을 묻기 때문이다 (오르페골 갈라테아 ② 의 대상 조건).
+COST_LANDING_POSITION: dict[CostSemantics, Position] = {
+    CostSemantics.BANISH: Position.FACEUP,
 }
 
 #: 이번 단계가 실제로 치를 수 있는 비용.
@@ -665,13 +692,15 @@ class CostPayer:
 
         operation = COST_OPERATION[step.semantics]
         destination: Zone = DESTINATION[operation]
+        landing = COST_LANDING_POSITION.get(step.semantics)
         changes: list[StateDelta] = []
         for instance, to_player in zip(step.instances, step.owners):
             card = state.find_instance(instance)
             assert card is not None  # preflight 가 확인했다
             from_player, from_zone = card.controller, card.zone
             # 계획 단계가 정한 **주인**에게 명시적으로 보낸다.
-            state.move(card, destination, to_player=to_player)
+            state.move(card, destination, to_player=to_player,
+                       position=landing)
             if card.zone is not destination or card.controller != to_player:
                 raise PaymentError(
                     f"{instance} 를 P{to_player} 의 {destination.value} 로 "
@@ -698,6 +727,7 @@ class CostPayer:
 
 
 __all__ = [
+    "COST_LANDING_POSITION",
     "CostPayer",
     "CostPaymentResult",
     "PaymentContext",

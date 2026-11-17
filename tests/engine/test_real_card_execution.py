@@ -332,7 +332,9 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
     #: 🔴 21 → **22** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이 등재되었다.
     #: 같은 성질의 고침이고, 다른 점은 이것이 목록의 **첫 대상 지정 몬스터
     #: 효과**라는 것이다 (``TargetRequirement.TARGETING``).
-    assert len(EFFECT_LIBRARY) == 22
+    #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
+    assert len(EFFECT_LIBRARY) == 23
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -357,6 +359,12 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
         #: 등재**이고 (``EFFECT_FLAG_CARD_TARGET``), **묘지에서 묘지를
         #: 대상으로 특수 소환하는 첫 등재**다.
         21441617,
+        #: 🔴 Phase 6-BF — 오르페골 갈라테아. **덱에서 마법 · 함정을
+        #: 세트하는 첫 등재**이고 (``SetSpellTrapOperation``), **한 효과
+        #: 안에 대상 지정과 해결 중 선택을 함께 쓰는 첫 등재**이며,
+        #: **발동 조건이 보지 않는 선택을 선언한 첫 등재**다
+        #: (``checked_at_activation=False``).
+        30741503,
     }
 
 
@@ -417,12 +425,15 @@ def test_a_fifteen_real_effect_refs_are_executable():
         #: 위의 ``EffectRef(cid, 0)`` 식이 덮지 못하므로 손으로 적는다 —
         #: "①만 등재한다" 는 가정이 깨진 **첫** 자리다.
         EffectRef(WORLD_WAND, 1),
+        #: 🔴 Phase 6-BF — 오르페골 갈라테아도 ``ordinal`` 이 **1**
+        #: 이다 (공식 ①②③ 중 ②). 같은 이유로 손으로 적는다.
+        EffectRef(30741503, 1),
     }
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 Phase 6-AF — 기르수 ③(토큰 생성)이 더해졌다 (16 → **17**).
     #: 🔴 Phase 6-AO — 디베르 ① 이 더해졌다 (17 → **18**).
     #: 🔴 Phase 6-AQ — 스켈레촌 ① 이 더해졌다 (18 → **19**).
-    assert len(executable) == 19
+    assert len(executable) == 20
 
 
 def test_a_every_declined_card_says_what_is_missing():
@@ -522,6 +533,12 @@ def test_a_operation_coverage_by_real_cards():
         #: 건다 (``c57835716.lua`` 의 ``s.spop`` 끝에서
         #: ``EFFECT_CANNOT_SPECIAL_SUMMON`` 을 등록한다).
         OperationKind.RESTRICT_SPECIAL_SUMMON,
+        #: 🔴 Phase 6-BF — ``SET_SPELL_TRAP`` 도 **처음부터 A** 다.
+        #: 이 종류를 더한 까닭이 실제 카드 하나이기 때문이다:
+        #: 갈라테아 ② 가 덱의 「오르페골」 마법 · 함정을 세트한다
+        #: (``c30741503.lua`` 의 ``s.tdop`` 이 ``Duel.SSet`` 를 쓴다).
+        #: 🔴 **발동이 아니다** — 뒷면으로 놓을 뿐이다.
+        OperationKind.SET_SPELL_TRAP,
     }
     # B. synthetic 으로만 검증된 종류 (STRUCTURAL-66)
     #

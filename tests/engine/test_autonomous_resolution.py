@@ -743,7 +743,12 @@ def test_d04_the_engine_gate_is_not_bypassed(repository):
     #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네를
     #: 읽어 등재했다. 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는
     #: 여전히 ``UNKNOWN`` 이다 (ADR-006).
-    assert len(OPERATION_RULINGS) == 26
+    #: 🔴 26 → **28** (Phase 6-BF) — 오르페골 바벨 · 클리막스를 읽어
+    #: 등재했다 (둘 다 ``MAY_BE_SET`` 한 질문). 갈라테아 ② 가 덱에서
+    #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
+    #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
+    #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
+    assert len(OPERATION_RULINGS) == 28
     _, _, _, runs = _drive(repository, FirstPermittedChoice())
     choice = runs[0].choice
     #: 제안이 들고 온 판정이 ``BoardRuling`` 의 것과 같은 질문이다.

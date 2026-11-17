@@ -1078,6 +1078,59 @@ class AttributeIs(Condition):
 
 
 @dataclass(frozen=True, slots=True)
+class RaceIs(Condition):
+    """
+    종족이 이것인가. 이름은 ``MACHINE`` · ``WARRIOR`` 처럼 EDOPro 상수
+    이름을 쓴다 (Phase 6-BF).
+
+    :class:`AttributeIs` 와 **같은 모양으로** 적었다 — 종족과 속성은
+    카드 정의에서 나란히 읽히는 값이고, 한쪽만 다른 방식으로 묻으면
+    같은 질문이 두 벌이 된다.
+
+    몬스터가 아니면 종족이 없으므로 ``FALSE`` 다. 🔴 **읽을 수 없으면
+    ``UNKNOWN`` 이고 ``FALSE`` 가 아니다** — 모르는 것을 거짓으로 접으면
+    "기계족이 아니다" 라는 **사실을 주장**하게 된다 (ADR-006).
+    """
+
+    race: str
+    instance: InstanceId | None = None
+
+    def __post_init__(self) -> None:
+        if not self.race:
+            raise ValueError("종족 이름이 비어 있습니다.")
+        object.__setattr__(self, "race", self.race.upper())
+
+    def evaluate(self, view, context) -> ConditionResult:
+        definition, _ = _resolve_definition(view, context, self.instance)
+        if definition is None:
+            return ConditionResult.UNKNOWN
+        if definition.race_name is None:
+            return ConditionResult.FALSE
+        return ConditionResult.from_bool(definition.race_name == self.race)
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        _, reason = _resolve_definition(view, context, self.instance)
+        return (reason,) if reason else ()
+
+    def canonical_state(self) -> tuple:
+        return (
+            "race_is",
+            self.race,
+            self.instance.value if self.instance else None,
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "race_is", "race": self.race}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        return f"{which} 종족이 {self.race}"
+
+
+@dataclass(frozen=True, slots=True)
 class IsSetCard(Condition):
     """
     그 카드가 이 **카드군(아키타입)** 중 하나에 속하는가 (STRUCTURAL-77).

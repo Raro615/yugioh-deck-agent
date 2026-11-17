@@ -947,9 +947,15 @@ def test_b12_activation_time_targeting_is_untouched(repository):
     #: 보고 (가려진 존) 공식 스크립트가 ``s.spop`` 에서 고르므로 (선언)
     #: **두 이유가 모두** 미루는 쪽을 가리킨다 — 아래 고리가 그 둘을 함께
     #: 센다. 미루는 다른 셋은 하나도 움직이지 않았다.
-    assert sorted(deferred) == sorted([GIRSU, BURIAL, GROWTH, HARP_HORROR]), (
-        deferred
-    )
+    #: 🔴 **넷 → 다섯** (Phase 6-BF). 더해진 오르페골 갈라테아 ② 는
+    #: **덱**을 보고 (가려진 존) 공식 스크립트가 ``s.tdop`` 안에서
+    #: 고르므로 (선언) 디베르 ① 과 **같은 두 이유**로 미루는 쪽이다.
+    #: 🔴 미루는 것은 그 효과의 ``@set`` 이름이고, ``@primary`` 는
+    #: **발동 시점의 대상 지정**이다 — 한 효과에 둘이 있어도 이 고리는
+    #: "미루는 이름이 **하나라도** 있는가" 를 센다.
+    assert sorted(deferred) == sorted(
+        [GIRSU, BURIAL, GROWTH, HARP_HORROR, 30741503]
+    ), deferred
     #: 🔴 13 → 14 (Phase 6-AC) → **13** (Phase 6-AD). 6-AC 는 성유물－
     #: 『성장』 ② 를 "패를 보므로 그대로 두는 쪽" 에 넣었고, 6-AD 가 그
     #: 판단을 정정해 **미루는 쪽**으로 옮겼다. 열셋은 6-AC 전과 같은
@@ -989,10 +995,11 @@ def test_b12_activation_time_targeting_is_untouched(repository):
             #: 패만 본다 — 가려진 존이 아니다. 그래도 미뤄진다.
             assert not (looked & CONCEALED_ZONES), (card_id, looked)
             assert declared is True
-        elif card_id == HARP_HORROR:
-            #: 🔴 **둘 다다** (Phase 6-AO) — 덱을 보고(짐작), 공식
+        elif card_id in (HARP_HORROR, 30741503):
+            #: 🔴 **둘 다다** (Phase 6-AO · 6-BF) — 덱을 보고(짐작), 공식
             #: 스크립트가 해결 중에 고른다(읽은 것). 선언이 있으므로 짐작에
-            #: 기대지 않는다.
+            #: 기대지 않는다. 갈라테아 ②(30741503)도 같은 모양이다 —
+            #: ``@set`` 이 덱을 보고 ``s.tdop`` 안에서 고른다.
             assert looked & CONCEALED_ZONES, (card_id, looked)
             assert declared is True
         else:
@@ -1256,7 +1263,12 @@ def test_c07_the_ruling_registry_was_not_widened():
     #: 디베르 ① 이 덱에서 특수 소환할 **후보**이므로 그 질문 하나만 적었다.
     #: 늘어난 것은 **읽은 카드**이고, 등재되지 않은 카드는 여전히 ``UNKNOWN``
     #: 이다 (ADR-006).
-    assert len(OPERATION_RULINGS) == 26
+    #: 🔴 26 → **28** (Phase 6-BF) — 오르페골 바벨 · 클리막스를 읽어
+    #: 등재했다 (둘 다 ``MAY_BE_SET`` 한 질문). 갈라테아 ② 가 덱에서
+    #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
+    #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
+    #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
+    assert len(OPERATION_RULINGS) == 28
 
 
 def test_c08_the_defaults_are_the_old_behaviour():

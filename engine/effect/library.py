@@ -43,6 +43,7 @@ from engine.archetype_compiler import compile_archetype_condition
 from engine.condition import (
     And,
     CardIdIs,
+    CardIsFaceUp,
     Condition,
     ConditionResult,
     FaceUpCardPresent,
@@ -50,6 +51,7 @@ from engine.condition import (
     IsSpellTrap,
     Not,
     PlayerRef,
+    RaceIs,
     SimultaneousSpecialSummonPermitted,
     SpecialSummonPermitted,
     ZoneCountAtLeast,
@@ -76,6 +78,7 @@ from engine.effect.operation import (
     LifeChangeOperation,
     OperationKind,
     RestrictSpecialSummonOperation,
+    SetSpellTrapOperation,
     ShuffleOperation,
     SpecialSummonOperation,
     TokenSpec,
@@ -245,6 +248,9 @@ GALATEA_I = 48835607
 #: 오르페골 디베르 (Phase 6-AO) — 묘지에서 발동하는 **첫 효과**이고 비용을
 #: 치르는 **첫 등재 효과**다.
 HARP_HORROR = 57835716
+
+#: 오르페골 클리막스 (Phase 6-BF) — 이 덱의 「오르페골」 함정이다.
+ORCUST_CLIMAX = 703897
 #: 오르페골 바벨 — 디베르의 ``s.spcon1`` 이 이름을 대는 필드 마법
 #: (``CARD_ORCUSTRATED_BABEL``). 이 카드 자신의 효과는 등재하지 않았다.
 ORCUSTRATED_BABEL = 90351981
@@ -2234,6 +2240,347 @@ _CYMBAL_SKELETON_GRAVE_ENTRY = LibraryEntry(
 
 
 
+
+#: 🔴 **오르페골 갈라테아 ② — 제외된 자신의 기계족을 덱으로 되돌리고, 그
+#: 후 덱의 「오르페골」 마법 · 함정을 세트** (Phase 6-BF).
+#:
+#: 공식 한국어 텍스트 (``data/ko/ko-KR.json`` 30741503)::
+#:
+#:     「오르페골」 몬스터를 포함하는 효과 몬스터 2장
+#:     이 카드명의 ②의 효과는 1턴에 1번밖에 사용할 수 없다.
+#:     ①: 링크 상태의 이 카드는 전투로는 파괴되지 않는다.
+#:     ②: 자신의 제외 상태인 기계족 몬스터 1장을 대상으로 하고 발동할 수
+#:     있다. 그 몬스터를 덱으로 되돌린다. 그 후, 덱에서 "오르페골" 마법 /
+#:     함정 카드 1장을 자신 필드에 세트할 수 있다.
+#:
+#: 🔴 **②에 「링크 상태」 조건은 없다.** 링크 상태는 ①(전투 내성)에만
+#: 붙어 있고, ``c30741503.lua`` 의 ``e2`` 에는 ``s.tdcon1`` (바벨이 적용되고
+#: 있지 **않다**) 하나뿐이다. 실측으로 확인했다 — ``e2:SetCondition``
+#: 이 가리키는 함수 전문이 ``return not Duel.IsPlayerAffectedByEffect(
+#: tp,CARD_ORCUSTRATED_BABEL)`` 다. 텍스트의 ① 을 ② 의 조건으로 끌어오면
+#: **엔진이 규칙을 지어내는 것**이고, 그쪽이 더 엄격하더라도 거짓이다.
+#:
+#: 무엇을 옮겼는가 — ``c30741503.lua`` 의 ``e2``
+#: --------------------------------------------
+#: =========================================  =============================
+#: ``e2:SetType(EFFECT_TYPE_IGNITION)``        ``activation_kind=IGNITION``
+#: ``e2:SetRange(LOCATION_MZONE)``             ``activation_zones=``
+#:                                             ``{MZONE, EMZONE}`` (★ 아래)
+#: ``e2:SetProperty(EFFECT_FLAG_``             ``TargetRequirement.``
+#: ``CARD_TARGET)``                            ``TARGETING``
+#: ``s.tdcon1`` — ``not IsPlayerAffected``     ``Not(FaceUpCardPresent(…,``
+#: ``ByEffect(tp,CARD_ORCUSTRATED_BABEL))``    ``ORCUSTRATED_BABEL))``
+#: ``s.tdtg`` — ``chkc:IsControler(tp) and``   ``owner=CONTROLLER`` ·
+#: ``chkc:IsLocation(LOCATION_REMOVED)``       ``zones={REMOVED}``
+#: ``s.tdfilter`` — ``c:IsFaceup()``           ``CardIsFaceUp()``
+#: ``s.tdfilter`` — ``IsRace(RACE_MACHINE)``   ``RaceIs("MACHINE")``
+#: ``s.tdfilter`` — ``c:IsAbleToDeck()``       ``return_to_deck(gated=True)``
+#:                                              관문
+#:                                             (``MAY_BE_RETURNED_TO_DECK``)
+#: ``s.tdtg`` — ``SelectTarget(…,1,1,…)``      ``minimum=1, maximum=1``
+#: ``Duel.SendtoDeck(tg,nil,SEQ_DECKTOP,``     ``CardOperation.``
+#: ``REASON_EFFECT)``                          ``return_to_deck(PRIMARY)``
+#: ``if og:IsExists(…,LOCATION_DECK) then``    ``ShuffleOperation(DECK,``
+#: ``Duel.ShuffleDeck(tp) end``                ``CONTROLLER)``
+#: ``s.filter`` — ``IsSetCard(SET_ORCUST)``    ``require`` 의 카드군 조건
+#: ``s.filter`` — ``c:IsSpellTrap()``          ``IsSpellTrap()``
+#: ``s.filter`` — ``c:IsSSetable()`` 의 절반   ``SetSpellTrapOperation(``
+#:                                             ``gated=True)`` 의 관문
+#:                                             (``MAY_BE_SET``)
+#: ``s.tdtg`` 가 ``s.filter`` 를 **묻지 않는다**  ``checked_at_activation=``
+#:                                             ``False``
+#: ``g:Select(tp,1,1,nil)`` (해결 중)          ``chosen_at_resolution=True``
+#: ``Duel.SSet(tp,sg)``                        ``SetSpellTrapOperation``
+#: ``if #g>0`` (``SendtoDeck`` **뒤**)         ``ResolutionSkip(``
+#:                                             ``when_no_candidate=True,``
+#:                                             ``TARGET_OPERATIONS)``
+#: ``e2:SetCountLimit(1,id)``                  ``use_limit=PER_CARD_NAME``
+#: =========================================  =============================
+#:
+#: ★ **``EMZONE`` 을 함께 적은 이유.** EDOPro 의 ``LOCATION_MZONE`` 은
+#: 엑스트라 몬스터 존까지 포함하고, 이 저장소는 그 자리를 ``Zone.EMZONE``
+#: 으로 따로 들고 있다. 링크 소환된 갈라테아는 **언제나** ``EMZONE`` 에
+#: 놓이므로 (``LINK_MATERIAL_ZONES``) ``MZONE`` 만 적으면 이 효과는 **한
+#: 번도 발동되지 않는다.** 범위를 넓힌 것이 아니라 같은 자리를 이 저장소의
+#: 두 이름으로 적은 것이다.
+#:
+#: 🔴 **대상 지정과 해결 중 선택이 한 효과 안에 **둘 다** 있다.** 되돌릴
+#: 기계족은 ``Duel.SelectTarget`` 으로 **발동 시점**에 고정되고
+#: (``EFFECT_FLAG_CARD_TARGET`` · ``SetOperationInfo``), 세트할 마법 · 함정은
+#: ``s.tdop`` 안의 ``g:Select`` 로 **해결 중**에 고른다 (그쪽은
+#: ``SetOperationInfo`` 에 들어가지 않는다 — 대상이 아니다). 그래서 이름이
+#: 둘이고 요구도 다르다: ``PRIMARY_TARGET`` 은 ``TARGETING``,
+#: :data:`_GALATEA_SET_TARGET` 은 ``CHOOSING`` +
+#: ``chosen_at_resolution=True`` 다. 하나로 뭉개면 "발동할 때 세트할 카드도
+#: 공개했다" 는 **없는 사실**이 생긴다.
+#:
+#: 🔴 **세트는 발동이 아니다.** ``Duel.SSet`` 은 뒷면으로 놓는 것이고
+#: ``Duel.Activate`` 가 아니다. 이 저장소도 그렇게 옮겼다 —
+#: :class:`~engine.effect.operation.SetSpellTrapOperation` 은
+#: ``engine.set_card.effect_set_procedure`` 로 **놓기만** 하고, 그 카드를
+#: 지금 발동할 수 있는지는 묻지도 답하지도 않는다. 세트한 턴은
+#: ``RuleActionKind.SET_SPELL_TRAP`` 으로 적히므로 **패에서 세트한 것과 같은
+#: 제약**을 받는다 (RULE-SPELLTRAP-007 · 009).
+#:
+#: 🔴 **필드 마법은 필드 존으로 간다.** 이 덱의 「오르페골」 마법 · 함정은
+#: 두 장이고 **가는 자리가 다르다**: 오르페골 바벨 (90351981, FIELD SPELL)
+#: 은 ``FZONE``, 오르페골 클리막스 (703897, COUNTER TRAP) 은 ``SZONE`` 이다.
+#: 어느 쪽인지는 카드 정의의 ``type_names`` 에 ``FIELD`` 가 있는가로 갈리고
+#: (``engine.set_card.effect_set_procedure``), **갈래가 둘 다 남는다** — 이
+#: 정의는 어느 쪽도 정답으로 고르지 않는다.
+#:
+#: 🔴 **엑스트라 덱 몬스터를 대상으로 하면 덱으로 돌아가지 않는다.**
+#: ``s.tdfilter`` 는 ``IsAbleToDeck`` 만 보고 메인 · 엑스트라를 가리지
+#: 않는데, 실제 처리에서 엑스트라 덱 몬스터는 **엑스트라 덱으로** 돌아간다.
+#: 이 저장소는 그 자리를 아직 갖고 있지 않으므로 ``RETURN_TO_DECK`` 이
+#: :data:`~engine.effect.executor.MISSING_EXTRA_DECK_DESTINATION` 으로
+#: **거절한다** (Phase 6-M). 그래서 제외된 갈라테아 · 갈라테아i 를 대상으로
+#: 고르면 효과가 거절되고 판은 그대로다 — 이 Phase 가 **열지 않은** 공백
+#: 이고, 지어내 통과시키지 않았다.
+#:
+#: 무엇을 옮기지 **못했는가**
+#: --------------------------
+#: - ``Duel.SelectYesNo`` 의 **「아니오」 갈래.** 공식 처리는 후보가 있어도
+#:   세트를 거절할 수 있다. 이 저장소에는 "고를 수 있는데 고르지 않는다" 를
+#:   표현하는 자리가 없어 (``minimum=0`` 을 쓰는 등재 효과가 하나도 없다)
+#:   **후보가 있으면 반드시 한 장을 고른다.** 즉 표현할 수 있는 결과가
+#:   공식보다 **적다** — 없는 허가를 만든 것이 아니라 갈래 하나를 못 그린
+#:   것이고, 후보가 0장인 갈래는 ``when_no_candidate`` 로 정확히 옮겼다.
+#: - ``Duel.BreakEffect()`` (세트 앞에서 체인을 끊는 처리). 체인 블록의
+#:   경계를 다루는 계층이 없다.
+#: - ``Duel.IsPlayerAffectedByEffect`` 자체. 디베르 · 스켈레촌과 **같은
+#:   이유로** 「바벨이 앞면으로 필드에 있는가」로 옮겼고, **무효화된 바벨을
+#:   구별하지 못한다**.
+#: - ``e3`` (``EFFECT_TYPE_QUICK_O``, ``s.tdcon2`` = 바벨이 적용될 때).
+#:   유발즉시의 발동 시점을 룰북에서 읽지 못했으므로 등재하지 않았다
+#:   (``ACTIVATION_KINDS_IN_SCOPE`` · ADR-006). 즉 **바벨이 앞면으로 깔린
+#:   판에서는 이 효과를 쓸 수 없다** — ②는 ``s.tdcon1`` 이 거짓이고 ③은
+#:   미지원이다. 디베르와 똑같은 모양의 정직한 범위다.
+#: - ``e1`` (``EFFECT_INDESTRUCTABLE_BATTLE``). 지속 효과이고 발동하는 일이
+#:   아니다.
+#: - ``s.filter`` 의 ``c:IsSSetable()`` 은 **두 절반을 함께** 묻는다 —
+#:   「그 자리에 놓을 수 있는가」 와 「카드가 세트를 금지하지 않는가」.
+#:   🔴 **둘 다 옮겼지만 자리가 다르다.** 앞은 계획 단계가 지키고
+#:   (``effect_set_procedure(...).plan_for`` 가 빈 칸이 없으면 거절한다),
+#:   뒤는 관문이 묻는다 (``gated=True`` → ``MAY_BE_SET``). 🔴 **옮기지
+#:   못한 것은 그 금지를 **가진 카드**다** — 질문할 자리는 생겼지만, 세트를
+#:   금지하는 카드를 읽어 등재한 것은 아직 없다. 등재되지 않은 카드는
+#:   그 질문에 ``UNKNOWN`` 이고, 그것은 허가가 아니라 **거절**이다.
+#:
+#: 🔴 **고르는 시점과 판을 바꾸는 시점이 어긋난다** (계획 먼저 · ADR-008).
+#: 공식 처리는 되돌리기를 **먼저** 하고 그 다음 덱에서 고르는데, 이 실행기는
+#: 모든 조작을 계획한 뒤에 적용하므로 세트 후보를 **되돌리기 전의 덱**에서
+#: 본다. 여기서는 결과가 달라지지 않는다 — ``s.filter`` 가 마법 · 함정만
+#: 받으므로 방금 되돌아온 **몬스터**는 어느 쪽 덱에서도 후보가 아니다.
+_GALATEA_SET_TARGET = TargetRef("set")
+
+_GALATEA_SHUFFLE_SET_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(GALATEA, 1),
+        source_card_id=GALATEA,
+        targets=(
+            TargetBinding(
+                PRIMARY_TARGET,
+                #: 🔴 **대상 지정이다** — ``EFFECT_FLAG_CARD_TARGET`` +
+                #: ``Duel.SelectTarget``. 발동 시점에 한 장이 고정된다.
+                TargetSpec.targeting(
+                    ChoiceSpec(
+                        source=CandidateSource(
+                            # ``LOCATION_REMOVED, 0`` — 자신의 제외 상태다.
+                            zones=frozenset({Zone.REMOVED}),
+                            owner=PlayerRef.CONTROLLER,
+                            require=And(
+                                (
+                                    #: ``c:IsFaceup()`` — 뒷면 제외는
+                                    #: 후보가 아니다.
+                                    CardIsFaceUp(),
+                                    #: ``c:IsRace(RACE_MACHINE)``. 🔴 종족을
+                                    #: 읽지 못하면 ``UNKNOWN`` 이고, 그것은
+                                    #: 허가가 아니다.
+                                    RaceIs("MACHINE"),
+                                    #: ``IsAbleToDeck`` 은 관문이 들고
+                                    #: 간다 (``gated=True``). 몬스터 여부는
+                                    #: 종족이 함의하지만 ``s.tdfilter`` 가
+                                    #: 적지 않은 것을 적지 않는다 —
+                                    #: ``RaceIs`` 가 몬스터가 아닌 카드에
+                                    #: ``FALSE`` 를 준다.
+                                )
+                            ),
+                        ),
+                        minimum=1,
+                        maximum=1,
+                    )
+                ),
+            ),
+            TargetBinding(
+                _GALATEA_SET_TARGET,
+                #: 🔴 **대상 지정이 아니다** — ``s.tdop`` 안의
+                #: ``g:Select`` 이고 ``SetOperationInfo`` 에 들어가지
+                #: 않는다. 해결 중에 고른다.
+                TargetSpec.choosing(
+                    ChoiceSpec(
+                        source=CandidateSource(
+                            # ``LOCATION_DECK, 0`` — 자신 덱만이다.
+                            zones=frozenset({Zone.DECK}),
+                            owner=PlayerRef.CONTROLLER,
+                            require=And(
+                                (
+                                    compile_archetype_condition(
+                                        ("SET_ORCUST",)
+                                    ).condition,
+                                    #: ``c:IsSpellTrap()``. 🔴
+                                    #: ``NotMonster`` 로 바꾸지 않았다 —
+                                    #: 원문이 이 술어다.
+                                    IsSpellTrap(),
+                                )
+                            ),
+                        ),
+                        minimum=1,
+                        maximum=1,
+                    ),
+                    chosen_at_resolution=True,
+                    #: 🔴 **``s.tdtg`` 는 이 후보를 묻지 않는다.** 발동
+                    #: 조건이 보는 것은 제외된 기계족 하나뿐이고, 덱의
+                    #: 「오르페골」 마법 · 함정은 ``s.tdop`` 안의
+                    #: ``GetMatchingGroup`` 이 **되돌린 뒤**에 본다. 그래서
+                    #: 세트할 것이 없어도 **발동할 수 있고** 되돌리기는
+                    #: 일어난다 (디베르 ① · 『성장』 ② 와 다른 자리다 —
+                    #: 그 둘은 발동 조건이 후보의 존재를 묻는다).
+                    checked_at_activation=False,
+                ),
+            ),
+        ),
+        operations=(
+            #: 🔴 **``gated=True`` 가 ``IsAbleToDeck`` 이다.** 되돌릴 수
+            #: 없는 카드는 관문이 막고, 판정할 수 없으면 ``UNKNOWN`` 으로
+            #: 거절된다 — 엑스트라 덱 몬스터가 그 길로 걸린다.
+            CardOperation.return_to_deck(PRIMARY_TARGET, gated=True),
+            #: ``if og:IsExists(Card.IsLocation,1,nil,LOCATION_DECK) then
+            #: Duel.ShuffleDeck(tp) end``. 🔴 "덱에 들어갔으면" 이라는
+            #: 조건을 옮기지 못했다 — 되돌리기가 거절되면 효과 전체가
+            #: 거절되므로 (계획 먼저) 이 조작에 닿는 길에서는 언제나
+            #: 참이다. 엑스트라 덱으로 가는 갈래는 위에서 거절된다.
+            ShuffleOperation(Zone.DECK, PlayerRef.CONTROLLER),
+            #: ``Duel.SSet(tp,sg)``. 🔴 **발동이 아니다.**
+            #: 🔴 ``gated=True`` 가 ``s.filter`` 의 ``IsSSetable``
+            #: 이다 — 그 술어의 **카드 쪽 절반**을 묻는다 (빈 칸
+            #: 절반은 계획이 지킨다, 위 설명).
+            SetSpellTrapOperation(_GALATEA_SET_TARGET, gated=True),
+        ),
+        #: 🔴 ``s.tdcon1`` **하나뿐이다.** 링크 상태도 빈 칸도 여기 없다 —
+        #: 세트할 자리는 계획 단계가 보고, 링크 상태는 ① 의 조건이다.
+        activation=Not(
+            FaceUpCardPresent(
+                PlayerRef.CONTROLLER,
+                frozenset({Zone.FZONE}),
+                ORCUSTRATED_BABEL,
+            )
+        ),
+        activation_kind=ActivationKind.IGNITION,
+        #: ``e2:SetRange(LOCATION_MZONE)``. 🔴 **``EMZONE`` 을 함께
+        #: 적었다.** EDOPro 의 ``LOCATION_MZONE`` 은 엑스트라 몬스터
+        #: 존까지 포함하고, 이 저장소는 그 자리를 ``Zone.EMZONE`` 으로
+        #: 따로 들고 있다 (``engine.vocabulary``). 링크 소환된 갈라테아는
+        #: **언제나** ``EMZONE`` 에 놓이므로 (``LINK_MATERIAL_ZONES`` ·
+        #: ``SummonPlacement``) ``MZONE`` 만 적으면 이 효과는 **한 번도
+        #: 발동되지 않는다**. 범위를 넓힌 것이 아니라 같은 자리를 이
+        #: 저장소의 두 이름으로 적은 것이다.
+        activation_zones=frozenset({Zone.MZONE, Zone.EMZONE}),
+        resolution_skip=ResolutionSkip(
+            when_no_candidate=True,
+            #: 🔴 **세트할 후보가 없으면 세트만 생략한다** — 되돌리기와
+            #: 섞기는 그대로 한다. 공식 처리의 ``if #g>0 and SelectYesNo``
+            #: 가 ``SendtoDeck`` **뒤**에 있다.
+            no_candidate_scope=NoCandidateScope.TARGET_OPERATIONS,
+            basis=(
+                "c30741503.lua 의 s.tdop — Duel.SendtoDeck(tg,nil,"
+                "SEQ_DECKTOP,REASON_EFFECT) 를 먼저 하고, 그 뒤 "
+                "local g=Duel.GetMatchingGroup(s.filter,tp,LOCATION_DECK,"
+                "0,nil); if #g>0 and Duel.SelectYesNo(...) then "
+                "Duel.BreakEffect(); local sg=g:Select(tp,1,1,nil); "
+                "Duel.SSet(tp,sg) end. 즉 세트할 후보가 0장이면 **세트만** "
+                "하지 않고 되돌리기와 섞기는 이미 끝나 있으므로 생략 "
+                "범위가 TARGET_OPERATIONS 다."
+            ),
+        ),
+        #: ``e2:SetCountLimit(1,id)`` — ``id`` 가 카드명이다.
+        use_limit=UseLimit(LimitScope.PER_CARD_NAME),
+        provenance=EffectProvenance.official_lua(
+            "c30741503.lua 의 e2 (EFFECT_TYPE_IGNITION, "
+            "SetRange(LOCATION_MZONE), SetCategory(CATEGORY_TODECK), "
+            "SetProperty(EFFECT_FLAG_CARD_TARGET)) 에서 발동 분류 · 발동 "
+            "자리 · 대상 지정 여부를, s.tdcon1 의 "
+            "not Duel.IsPlayerAffectedByEffect(tp,CARD_ORCUSTRATED_BABEL) "
+            "에서 발동 조건을, s.tdtg 의 "
+            "Duel.IsExistingTarget(s.tdfilter,tp,LOCATION_REMOVED,0,1,1,nil) "
+            "와 chkc:IsControler(tp)·IsLocation(LOCATION_REMOVED) 에서 "
+            "대상의 주인과 자리를, s.tdfilter 의 c:IsFaceup() · "
+            "c:IsRace(RACE_MACHINE) · c:IsAbleToDeck() 에서 대상 조건을 "
+            "(앞의 둘은 조건으로, IsAbleToDeck 은 gated=True 관문으로), "
+            "Duel.SelectTarget(...,1,1,nil) 에서 대상 장수를, "
+            "Duel.SendtoDeck(tg,nil,SEQ_DECKTOP,REASON_EFFECT) 와 "
+            "Duel.ShuffleDeck(tp) 에서 하는 일을, s.filter 의 "
+            "c:IsSetCard(SET_ORCUST) · c:IsSpellTrap() 에서 세트 후보 "
+            "조건을, 같은 필터의 c:IsSSetable() 에서 세트 관문을 "
+            "(gated=True → MAY_BE_SET — 그 술어의 「카드가 세트를 금지하지 "
+            "않는가」 절반이고, 「그 자리에 놓을 수 있는가」 절반은 "
+            "effect_set_procedure 의 계획이 지킨다), "
+            "s.tdop 의 g:Select(tp,1,1,nil) 에서 고르는 시점을 "
+            "(대상 지정이 아니다 — SetOperationInfo 에 없다), "
+            "s.tdtg 가 s.filter 를 **묻지 않는다**는 사실에서 "
+            "checked_at_activation=False 를 (세트할 것이 없어도 발동할 수 "
+            "있다 — 디베르 ① · 『성장』 ② 와 다른 자리다), "
+            "Duel.SSet(tp,sg) 에서 세트를, SetCountLimit(1,id) 에서 사용 "
+            "제한을 옮겼다. "
+            "🔴 ②에 「링크 상태」 조건은 **없다** — 그것은 e1 "
+            "(EFFECT_INDESTRUCTABLE_BATTLE) 의 조건이고, e2:SetCondition "
+            "은 s.tdcon1 하나다. "
+            "🔴 SetRange(LOCATION_MZONE) 는 {MZONE, EMZONE} 으로 적었다 — "
+            "EDOPro 의 그 상수가 엑스트라 몬스터 존을 포함하고, 이 "
+            "저장소는 그 자리를 Zone.EMZONE 으로 따로 들고 있다. "
+            "옮기지 못한 것: Duel.SelectYesNo 의 「아니오」 갈래 (후보가 "
+            "있으면 반드시 한 장을 고른다 — 표현할 수 있는 결과가 공식보다 "
+            "적다), Duel.BreakEffect (체인 경계 계층이 없다), "
+            "IsPlayerAffectedByEffect 자체 (FaceUpCardPresent 로 옮겨 "
+            "무효화된 바벨을 구별하지 못한다), **세트를 금지하는 카드** "
+            "(MAY_BE_SET 을 물을 자리는 생겼지만 그런 카드를 읽어 등재한 "
+            "것은 아직 없다 — 등재되지 않은 카드는 UNKNOWN 이고 그것은 "
+            "허가가 아니라 거절이다), e3 "
+            "(EFFECT_TYPE_QUICK_O, s.tdcon2 = 바벨이 적용될 때), e1 "
+            "(지속 효과), aux.Stringid 의 표시 문구. "
+            "엑스트라 덱 몬스터를 대상으로 고르는 갈래는 "
+            "RETURN_TO_DECK 이 MISSING_EXTRA_DECK_DESTINATION 으로 "
+            "거절한다 (Phase 6-M) — 엑스트라 덱으로 되돌리는 자리가 "
+            "이 저장소에 없다."
+        ),
+    ),
+    lua_file="c30741503.lua",
+    lua_excerpt=(
+        "e2:SetCategory(CATEGORY_TODECK); "
+        "e2:SetType(EFFECT_TYPE_IGNITION); "
+        "e2:SetProperty(EFFECT_FLAG_CARD_TARGET); "
+        "e2:SetRange(LOCATION_MZONE); e2:SetCountLimit(1,id); "
+        "s.tdcon1 = not Duel.IsPlayerAffectedByEffect(tp,"
+        "CARD_ORCUSTRATED_BABEL); "
+        "s.tdfilter = c:IsFaceup() and c:IsRace(RACE_MACHINE) and "
+        "c:IsAbleToDeck(); "
+        "s.tdtg = Duel.IsExistingTarget(s.tdfilter,tp,LOCATION_REMOVED,"
+        "0,1,1,nil); Duel.SelectTarget(tp,s.tdfilter,tp,LOCATION_REMOVED,"
+        "0,1,1,nil); Duel.SetOperationInfo(0,CATEGORY_TODECK,g,#g,0,0); "
+        "s.filter = c:IsSetCard(SET_ORCUST) and c:IsSpellTrap() and "
+        "c:IsSSetable(); "
+        "s.tdop: Duel.SendtoDeck(tg,nil,SEQ_DECKTOP,REASON_EFFECT); "
+        "if og:IsExists(Card.IsLocation,1,nil,LOCATION_DECK) then "
+        "Duel.ShuffleDeck(tp) end; "
+        "local g=Duel.GetMatchingGroup(s.filter,tp,LOCATION_DECK,0,nil); "
+        "if #g>0 and Duel.SelectYesNo(tp,aux.Stringid(id,1)) then "
+        "Duel.BreakEffect(); local sg=g:Select(tp,1,1,nil); "
+        "Duel.SSet(tp,sg) end"
+    ),
+    executable=True,
+)
+
+
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
     _POT_OF_GREED_ENTRY,
@@ -2267,6 +2614,7 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 6-AO — **묘지에서 발동하는 첫 효과**, **비용을 치르는 첫 효과**,
     # 그리고 **특수 소환 제한을 거는 첫 효과**.
     _HARP_HORROR_GRAVE_ENTRY,
+    _GALATEA_SHUFFLE_SET_ENTRY,
     # Phase 6-AQ — **대상 지정 몬스터 효과의 첫 등재**, 그리고 묘지에서
     # 묘지를 대상으로 하는 첫 소생.
     _CYMBAL_SKELETON_GRAVE_ENTRY,
@@ -2510,6 +2858,21 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                     "카드가 **남에게 거는** 제한이고 (① 의 해결이 등록한다) "
                     "자기 자신의 소환 조건이 아니다 — 두 축을 섞지 않는다.",
                 ),
+                #: 🔴 **Phase 6-BF.** 갈라테아 ② 가 **제외된 이 카드**에
+                #: 묻는다 (``gated=True`` 의 ``Card.IsAbleToDeck``). ① 의
+                #: 비용이 자기 자신을 제외하므로 이 카드가 그 자리에 가는
+                #: 길이 **실제로 있고**, 등재하지 않으면 갈라테아 ② 는
+                #: 모름으로 거절된다 (실측으로 그랬다).
+                RuleQuestion.MAY_BE_RETURNED_TO_DECK: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "오르페골 디베르: 공식 텍스트 전문을 읽었고, 자기가 "
+                    "덱으로 되돌아가는 것을 막는 문장이 없다. **메인 덱의 "
+                    "효과 몬스터**이므로 되돌아갈 자리가 메인 덱이고 "
+                    "(토큰도 엑스트라 덱 카드도 아니다 — 그 둘이 "
+                    "`Card.IsAbleToDeck` 가 거짓이 되는 대표적인 경우다), "
+                    "덱 이외의 곳으로 보내는 대체 효과도 적혀 있지 않다.",
+                ),
             },
             restricts_others=False,
             restriction_basis=RuleBasis.CARD_TEXT,
@@ -2574,6 +2937,18 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                     "카드를 제외하고」 를 **비용으로** 적으므로 카드 자신이 "
                     "그 처리를 전제한다 (c21441617.lua 의 "
                     "e1:SetCost(Cost.SelfBanish)).",
+                ),
+                #: 🔴 **Phase 6-BF — 디베르와 같은 이유다.** ① 의 비용이
+                #: 자기 자신을 제외하므로 **제외된 기계족**이 되고, 갈라테아
+                #: ② 가 그 자리에 묻는다 (``Card.IsAbleToDeck``).
+                RuleQuestion.MAY_BE_RETURNED_TO_DECK: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "오르페골 스켈레촌: 공식 텍스트 전문을 읽었고, 자기가 "
+                    "덱으로 되돌아가는 것을 막는 문장이 없다. **메인 덱의 "
+                    "효과 몬스터**이므로 되돌아갈 자리가 메인 덱이고 "
+                    "(토큰도 엑스트라 덱 카드도 아니다), 덱 이외의 곳으로 "
+                    "보내는 대체 효과도 적혀 있지 않다.",
                 ),
             },
             restricts_others=False,
@@ -2642,6 +3017,73 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                 "이 카드는 전투로 파괴되지 않는다」 는 **자기 자신**이고, "
                 "나머지는 제외된 자신의 기계족을 덱으로 되돌리고 「오르페골」 "
                 "마법 · 함정을 세트하는 효과다. 남의 조작을 막는 문장이 없다."
+            ),
+        ),
+        #: 🔴 **오르페골 바벨 · 클리막스 — 「세트할 수 있는가」** (6-BF).
+        #:
+        #: 갈라테아 ② 가 덱에서 세트하는 두 장이고, 그 조작은
+        #: ``gated=True`` 로 ``Card.IsSSetable`` 을 묻는다. 등재하지
+        #: 않으면 답이 ``UNKNOWN`` 이고 — **그것은 허가가 아니므로** 세트는
+        #: 일어나지 않는다. 즉 이 두 줄이 없으면 갈라테아 ② 는 되돌리기만
+        #: 하고 끝난다 (실측으로 그랬다).
+        #:
+        #: 🔴 **「세트할 수 있는가」 하나만 적는다.** 「지금 발동할 수
+        #: 있는가」 도, 「다른 카드의 조작을 막는가」 도 아니다 — 아래
+        #: ``restricts_others`` 는 그 **다른** 질문이고, 두 카드 모두 공식
+        #: 텍스트 전문을 읽은 결과다.
+        CardRuleFacts(
+            card_id=ORCUSTRATED_BABEL,
+            answers={
+                RuleQuestion.MAY_BE_SET: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "오르페골 바벨: 공식 텍스트 전문을 읽었다. 「이 카드는 "
+                    "세트할 수 없다」 도, 세트를 제한하는 문장도 **없다** — "
+                    "①은 필드 존에 있는 동안의 지속 효과이고 ②는 묘지에서 "
+                    "발동하는 효과다. 필드 마법이므로 놓이는 자리는 필드 "
+                    "존이고 (type_names 에 FIELD), 그 자리에 빈 칸이 "
+                    "있는지는 이 답이 아니라 배치 계획이 본다.",
+                ),
+            },
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "오르페골 바벨: 공식 텍스트 전문을 읽었다. ① 은 자신의 "
+                "「오르페골」 링크 · 묘지 몬스터의 효과를 **상대 턴에도 "
+                "발동할 수 있게** 만드는 것이고 (허가를 늘린다), ② 는 자기 "
+                "자신을 패에 넣는다. 남의 조작을 막는 문장이 없다. "
+                "🔴 그러므로 이 'False' 는 '이 카드를 구현했다' 는 뜻이 "
+                "**아니다** — 바벨의 ① · ② 는 EFFECT_LIBRARY 에 등재되지 "
+                "않았고, 이 저장소에서 바벨이 앞면으로 깔린 판은 디베르 · "
+                "스켈레촌 · 갈라테아의 ① 쪽 조건을 **거짓**으로 만들 뿐 "
+                "②(유발즉시) 를 열지 못한다."
+            ),
+        ),
+        CardRuleFacts(
+            card_id=ORCUST_CLIMAX,
+            answers={
+                RuleQuestion.MAY_BE_SET: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "오르페골 클리막스: 공식 텍스트 전문을 읽었다. 「이 "
+                    "카드는 세트할 수 없다」 도, 세트를 제한하는 문장도 "
+                    "**없다** — 카운터 함정이고, ①은 필드에서 ②는 묘지에서 "
+                    "발동한다. 🔴 **세트한 턴에 발동할 수 있는지는 이 답이 "
+                    "아니다** — 함정은 세트한 턴에 발동할 수 없고 "
+                    "(RULE-SPELLTRAP-009), 그 제약은 세트한 뒤 "
+                    "RuleActionKind.SET_SPELL_TRAP 기록이 들고 있다.",
+                ),
+            },
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "오르페골 클리막스: 공식 텍스트 전문을 읽었다. ① 은 **발동 "
+                "했을 때** 그 발동을 무효로 하는 것이고 ② 는 패에 넣는 "
+                "것이다 — 둘 다 **발동해야** 일어나므로, 필드에 "
+                "존재한다는 것만으로 남의 조작을 막지 않는다. "
+                "🔴 그러므로 이 'False' 는 '이 카드를 구현했다' 는 뜻이 "
+                "**아니다** — ① · ② 는 EFFECT_LIBRARY 에 등재되지 않았고, "
+                "세트된 클리막스는 이 저장소에서 발동될 수 없다."
             ),
         ),
         #: 🔴 **오르페골 갈라테아i** (Phase 6-AP). 갈라테아와 **같은 이유**로
