@@ -527,20 +527,33 @@ card_id=90351981, face_up=False, position='FACEDOWN', …)))` 가 들어 있다)
 | --- | --- | --- | --- | --- |
 | 기준 HEAD `73696f74` | **72** | 7443 | 10 | 20분 03초 |
 | 6-BF 첫 커밋 `4e213f80` | **90** | 7446 | 10 | 20분 01초 |
+| 6-BF 후속 `8de37789` | **68** | 7468 | 10 | 19분 50초 |
 
 🔴 **기준 HEAD 가 이미 72건 실패 상태다.** 그러므로 "6-BF 이후 실패 N건"
 은 아무것도 말하지 않는다 — 비교는 **차집합**으로만 뜻이 있다.
 
-* 🔴 **6-BF 가 새로 만든 실패: 22건.** 전부 등재부 내용을 고정한 audit
-  이고, 하나하나 근거를 적어 고쳤다 (아래 표). 고친 뒤 22건을 **개별로
-  다시 돌려 0건 실패**를 확인했다.
+최종 차집합 (`8de37789` 대 `73696f74`):
+
+* 🔴 **6-BF 가 새로 만든 실패: 0건.** (첫 커밋 `4e213f80` 에서는 **22건**
+  이었다 — 전부 등재부 내용을 고정한 audit 이고, 하나하나 근거를 적어
+  고쳤다. 아래 표.)
 * ✅ **6-BF 가 고친 기존 실패: 4건** — `test_archetype_condition::test_c` ·
   `test_resolution_outcome_four_cases::test_n05` · `::test_n06` ·
   `test_skeleton_revival_and_longirsu::test_e04`.
 * 🔴 **남은 68건은 기준 HEAD 에서 그대로 실패하던 것들**이고 6-BF 가
   건드리지 않았다 (`test_effect_type_quick_audit` ·
   `test_korean_overlay_unapplied_audit` · `test_validation_code_*` ·
-  `test_rule_not_implemented_code_audit` 등 — 이 Phase 의 범위 밖이다).
+  `test_rule_not_implemented_code_audit` · `state_hash` 계열 등 — 이
+  Phase 의 범위 밖이다).
+* 🔴 그 68건 중 **둘**(`test_trigger_window_completion::test_d05` ·
+  `::test_f02`) 은 6-BF 가 **고치지 않기로 한** 것이다 (§7.2 의 아래 표
+  마지막 줄의 근거).
+
+실행에서 **오르페골 계열 시험은 하나도 실패하지 않았다** — 신규
+`test_galatea_effect_extension.py` 21건, `test_open_search.py`,
+`test_harp_horror_graveyard_effect.py`,
+`test_skeleton_revival_and_longirsu.py`, `test_orcust_girsu_line.py`,
+`test_token_and_galateai_summon_gates.py` 전부 통과다.
 
 #### 새로 만든 실패 22건 — 무엇이 늘었고 무엇을 고쳤는가
 
