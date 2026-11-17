@@ -525,13 +525,28 @@ def test_b03_no_real_card_pair_can_make_that_choice_matter(repository):
     assert asks[0].options == 1, asks[0].describe_ko()
     assert asks[0].offered[0][1] == GROWTH
 
-    #: 그리고 production 의 등록소에 클리막스가 **없다.**
-    assert OPERATION_RULINGS.facts_for(CLIMAX) is None
+    #: 🔴 **production 의 등록소가 클리막스에 대해 그 질문에 답하지
+    #: 않는다.** Phase 6-BF 가 클리막스를 등록소에 **넣었지만** 적은 답은
+    #: ``MAY_BE_SET`` 하나다 (갈라테아 ② 가 덱에서 세트하므로). 기르수
+    #: ① 의 허용 후보가 되려면 필요한 답은 ``MAY_BE_SENT_TO_GRAVE`` 이고,
+    #: 그 줄은 **없다** — 그래서 위 "허용 후보가 한 장이다" 가 그대로
+    #: 참이다. 🔴 **"등록소에 없다" 와 "그 질문에 답이 없다" 를 가른다**:
+    #: 이 시험이 쓰는 사실은 뒤쪽이다.
+    facts = OPERATION_RULINGS.facts_for(CLIMAX)
+    assert facts is None or facts.answer_for(
+        RuleQuestion.MAY_BE_SENT_TO_GRAVE
+    ) is None, facts
 
 
 def test_b04_production_rulings_came_back(repository):
     """🔴 ``B-2`` 의 합성 재정이 **되돌아왔다** — production 은 그대로다."""
-    assert OPERATION_RULINGS.facts_for(CLIMAX) is None
+    #: 🔴 위 ``test_b03`` 과 같은 이유로 **그 질문의 답**을 본다 — 6-BF 가
+    #: 클리막스에 ``MAY_BE_SET`` 을 적었고, 합성 재정이 꽂았던
+    #: ``MAY_BE_SENT_TO_GRAVE`` 는 되돌아갔다.
+    climax = OPERATION_RULINGS.facts_for(CLIMAX)
+    assert climax is None or climax.answer_for(
+        RuleQuestion.MAY_BE_SENT_TO_GRAVE
+    ) is None, climax
     assert OPERATION_RULINGS.facts_for(GROWTH) is not None
 
 

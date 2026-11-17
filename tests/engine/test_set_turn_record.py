@@ -642,12 +642,24 @@ def test_17_no_new_action_kind_and_no_new_engine():
         for forbidden in ("class SetEngine", "class HistoryEngine", "class TimingEngine"):
             assert forbidden not in source, (module, forbidden)
 
-    # 기록을 **쓰는** 자리는 하나다. ``rule_usage.py`` 는 그릇이므로 센다고
+    # 기록을 **쓰는** 자리를 센다. ``rule_usage.py`` 는 그릇이므로 센다고
     # 해서 쓰는 쪽이 아니다 — ``record_card(`` 를 **부르는** 곳만 센다.
-    callers = [
+    #
+    # 🔴 **둘이 되었다** (Phase 6-BF). 효과로 덱에서 세트하는 조작이
+    # 생겼고 (``SetSpellTrapOperation``), 그 적용이 **같은 이름**으로
+    # 적는다 (``executor.py`` 의 ``_apply_set_spell_trap``).
+    #
+    # 🔴 **"둘이면 같은 세트가 두 번 적힐 수 있다" 는 걱정은 그대로 막혀
+    # 있다** — 두 자리가 **서로 다른 세트**를 적는다: ``set_card.py`` 는
+    # 플레이어가 **패에서** 선언한 세트, ``executor.py`` 는 효과가
+    # **덱에서** 한 세트다. 한 번의 세트가 두 자리를 다 지나가는 길은
+    # 없다 (출발 자리가 다르고 부르는 쪽도 다르다). 그리고 **이름이
+    # 같아야** 패에서 세트한 것과 같은 제약을 받는다 —
+    # RULE-SPELLTRAP-007 · 009.
+    callers = sorted(
         module.name
         for module in pathlib.Path("engine").rglob("*.py")
         if "rule_uses.record_card(" in module.read_text(encoding="utf-8")
         and "SET_SPELL_TRAP" in module.read_text(encoding="utf-8")
-    ]
-    assert callers == ["set_card.py"], callers
+    )
+    assert callers == ["executor.py", "set_card.py"], callers

@@ -699,10 +699,15 @@ def test_11_no_registered_effect_drops_an_existing_set_condition(analyses):
     #: 그대로 같다). 그 조건도 **버려지지 않고** 옮겨져 있으므로 위의
     #: ``dropped == []`` 가 그대로 참이다. **이전 목록이 틀렸던 것이
     #: 아니라** 그때는 셋이었다.
+    #: 🔴 **넷 → 다섯** (Phase 6-BF, 오르페골 갈라테아 ②). 그 카드도
+    #: 공식 ``SetCondition`` 을 갖는다 (``s.tdcon1`` — 바벨이 적용되고
+    #: 있지 않다) 고, 이 저장소가 그것을 **버리지 않고** 옮겼다. 즉
+    #: ``dropped == []`` 가 그대로 참이다.
     assert [ref.card_id for ref in with_lua_condition] == [
         GALLANTRY,
         GIRSU,
         57835716,
+        30741503,
         21441617,
     ]
 
@@ -759,7 +764,10 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: 🔴 12 → **13** (Phase 6-AQ, 스켈레촌 ①). 그 조건도 상태
     #: 조건이고 디베르와 같은 셋이다 — 공식 ``s.spcon1`` 과 ``s.sptg``
     #: 에서 옮겼다.
-    assert len(with_activation) == 13
+    #: 🔴 13 → **14** (Phase 6-BF, 갈라테아 ②). 그 조건도 상태 조건이고
+    #: **하나뿐**이다 — ``Not(FaceUpCardPresent(…, 바벨))`` 이다. 공식
+    #: ``s.tdcon1`` 하나에서 옮겼고, ``s.tdtg`` 에는 빈 칸 조건이 없다.
+    assert len(with_activation) == 14
 
     #: 🔴 **Phase 6-AF — ``card_id → ordinal`` 사전으로는 더 가를 수 없다.**
     #: 기르수가 블록 둘을 등재했으므로 (① 과 ③) 사전은 하나를 덮어쓴다.

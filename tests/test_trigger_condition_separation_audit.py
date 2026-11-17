@@ -365,7 +365,9 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 🔴 20 → **21** (Phase 6-AO, 디베르 ①).
     #: 🔴 21 → **22** (Phase 6-AQ, 스켈레촌 ①). 유발 쪽 둘과 코드 없음
     #: 쪽은 그대로이고, 늘어난 것은 **기동(코드 없음)** 하나다.
-    assert len(codes) == 22
+    #: 🔴 22 → **23** (Phase 6-BF, 갈라테아 ②). 같은 이유다 — 기동이고
+    #: ``SetCode`` 가 없다. 유발 쪽 둘은 그대로다.
+    assert len(codes) == 23
     assert set(codes) == {
         "EVENT_FREE_CHAIN",
         "EVENT_SUMMON_SUCCESS",
@@ -382,7 +384,10 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 🔴 3 → **4** (Phase 6-AQ). 스켈레촌 ① 도 **기동 효과**이므로
     #: ``SetCode`` 가 없다. 자유 체인 16 과 유발 둘은 여전히 하나도
     #: 움직이지 않았다.
-    assert len([c for c in codes if c is None]) == 4
+    #: 🔴 4 → **5** (Phase 6-BF). 갈라테아 ② 도 **기동 효과**다 — 자유
+    #: 체인 16 과 유발 둘은 여전히 하나도 움직이지 않았고, 그것이 이
+    #: 분포가 말하는 사실이다.
+    assert len([c for c in codes if c is None]) == 5
 
 
 @pytest.mark.real_card
@@ -423,7 +428,10 @@ def test_05_the_eight_activation_conditions_are_state_conditions(repository):
     #: 🔴 11 → **12** (Phase 6-AQ, 오르페골 스켈레촌 ①). 그 조건도
     #: **상태 조건**이다 — 디베르와 글자 그대로 같은 셋(빈 칸 · 특수
     #: 소환 허가 · 앞면 바벨이 없다)이다. 사건을 묻는 것이 하나도 없다.
-    assert len(with_condition) == 12
+    #: 🔴 12 → **13** (Phase 6-BF, 오르페골 갈라테아 ②). 그 조건도
+    #: **상태 조건**이다 — ``Not(FaceUpCardPresent(…, 바벨))`` 하나이고
+    #: 사건을 묻지 않는다.
+    assert len(with_condition) == 13
     #: 사례로 쓰는 넷의 종류를 못박는다.
     assert with_condition[POT_OF_GREED]["types"] == ["SPELL"]
     assert with_condition[RELOAD]["types"] == ["QUICKPLAY", "SPELL"]
@@ -740,6 +748,10 @@ def test_14_no_registered_effect_can_special_summon():
         #: 제한**을 건다. 그것은 소환하는 일이 **아니므로** 위 ``users``
         #: 에 들지 않는다 — 두 질문을 섞지 않는다.
         "RESTRICT_SPECIAL_SUMMON",
+        #: 🔴 Phase 6-BF — 갈라테아 ② 가 덱의 마법 · 함정을 **세트**한다.
+        #: 그것도 소환하는 일이 **아니므로** 위 ``users`` 에 들지 않는다 —
+        #: 뒷면으로 놓는 것이고 소환도 발동도 아니다.
+        "SET_SPELL_TRAP",
     }
     #: 🔴 그리고 **그 둘뿐**이다 — 위 ``users`` 가 어느 효과인지 적는다.
     assert "SPECIAL_SUMMON" in present

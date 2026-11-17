@@ -511,7 +511,57 @@ card_id=90351981, face_up=False, position='FACEDOWN', …)))` 가 들어 있다)
 돌린다 (`test_d03` · `test_f03` 만 표를 직접 읽는다 — 그 둘은 표의 내용이
 곧 주장이다).
 
-### 7.2 기존 시험
+### 7.2 전체 스위트를 **기준 HEAD 와 차집합으로** 비교했다
+
+🔴 **먼저 틀린 것을 적는다.** 이 Phase 를 처음 보고할 때 나는 "손댄
+파일들을 돌려 전부 통과한다" 를 근거로 회귀가 없다고 적었다. **그 근거로는
+회귀가 없다고 말할 수 없다** — 짚지 못한 파일의 audit 들이 등재부 내용을
+고정하고 있었고, 실제로 **22건이 새로 실패했다.** 전체 스위트를 양쪽에서
+돌려 차집합을 낸 뒤에야 그것이 보였다.
+
+기준 HEAD 는 **별도 worktree** 로 체크아웃해 같은 명령으로 돌렸다
+(`pytest tests/ -q -p no:randomly -n 4 --dist loadfile`, 데이터 ·
+스크립트는 symlink 로 같은 것을 쓴다).
+
+| | 실패 | 통과 | 스킵 | 소요 |
+| --- | --- | --- | --- | --- |
+| 기준 HEAD `73696f74` | **72** | 7443 | 10 | 20분 03초 |
+| 6-BF 첫 커밋 `4e213f80` | **90** | 7446 | 10 | 20분 01초 |
+
+🔴 **기준 HEAD 가 이미 72건 실패 상태다.** 그러므로 "6-BF 이후 실패 N건"
+은 아무것도 말하지 않는다 — 비교는 **차집합**으로만 뜻이 있다.
+
+* 🔴 **6-BF 가 새로 만든 실패: 22건.** 전부 등재부 내용을 고정한 audit
+  이고, 하나하나 근거를 적어 고쳤다 (아래 표). 고친 뒤 22건을 **개별로
+  다시 돌려 0건 실패**를 확인했다.
+* ✅ **6-BF 가 고친 기존 실패: 4건** — `test_archetype_condition::test_c` ·
+  `test_resolution_outcome_four_cases::test_n05` · `::test_n06` ·
+  `test_skeleton_revival_and_longirsu::test_e04`.
+* 🔴 **남은 68건은 기준 HEAD 에서 그대로 실패하던 것들**이고 6-BF 가
+  건드리지 않았다 (`test_effect_type_quick_audit` ·
+  `test_korean_overlay_unapplied_audit` · `test_validation_code_*` ·
+  `test_rule_not_implemented_code_audit` 등 — 이 Phase 의 범위 밖이다).
+
+#### 새로 만든 실패 22건 — 무엇이 늘었고 무엇을 고쳤는가
+
+| 늘어난 사실 | 고친 자리 |
+| --- | --- |
+| `ordinal == 1` 인 등재가 **둘**이 되었다 (『성장』 ② · 갈라테아 ②) | 7개 파일의 `… ordinal == 1) == 1` → `== 2` |
+| 공식 블록 수 표에 `30741503: 3` 이 없다 | 4개 파일의 블록 수 표 (e1 지속 · e2 기동 · e3 유발즉시 — 실측) |
+| 대상 묶음이 13 → **15** (한 효과에 이름 둘인 첫 등재) | `test_multi_target_selection` (여러 장 선택 · 가변 장수는 **여전히** 하나 · 0건) |
+| **앞면 조건**을 쓰는 등재가 0 → **1** | `test_card_position_visibility::test_f04` — `CandidateSource.require` 로 **모델을 바꾸지 않고** 적혔다는 사실은 그대로 |
+| `rule_uses.record_card(` 호출자가 둘 | `test_set_turn_record::test_17` — 두 자리가 **서로 다른 세트**(패에서 · 덱에서)를 적고, 이름이 같아야 같은 제약을 받는다 |
+| `OperationKind` 분류에 `set_spell_trap` | `test_operation_integration` · `test_trigger_condition_separation_audit` — **이동 표는 한 글자도 늘지 않았다** |
+| 발동 조건 종류에 `Not` | `test_event_context_audit::test_11` — `Not` 도 **판만** 묻는다 |
+| 공식 `SetCondition` 을 가진 등재가 넷 → **다섯** | `test_effectdefinition_activation_audit` — `dropped == []` 는 그대로 |
+| 사용 제한이 **기록된** 효과가 다섯 → **여섯** | `test_orcust_girsu_line::test_d03` |
+| 클리막스가 판정 등록소에 들어왔다 | `test_bounded_search_first_pass` — "등록소에 없다" 를 **"그 질문(`MAY_BE_SENT_TO_GRAVE`)에 답이 없다"** 로 바꿨다. 이 시험이 쓰는 사실은 뒤쪽이다 |
+
+🔴 **어느 단언도 약하게 만들지 않았다.** 늘어난 항목을 근거와 함께 더했고,
+각 시험이 지키던 사실("합치지 않는다" · "이동 시스템이 늘지 않았다" ·
+"일괄 완화가 아니다" · "가변 장수는 없다")은 그대로 두었다.
+
+### 7.3 기존 시험의 수 고정
 
 **수를 고정한 단언을 고쳤다** — 기존 시험 파일 **39개**다. 등재 수
 22 → 23 · 실행 가능 19 → 20 ·
@@ -554,7 +604,7 @@ card_id=90351981, face_up=False, position='FACEDOWN', …)))` 가 들어 있다)
 고정 경로 이름을 코드에 적으면 여전히 걸린다. (첫 줄만 빼는 것으로는
 부족했다: 실측으로 칸 설명문이 남았다.)
 
-### 7.3 남은 미지원과 **다음 장애**
+### 7.4 남은 미지원과 **다음 장애**
 
 * 🔴 **자율 탐색이 최단 경로(5수)를 찾지 못한다.** 7수 경로로 닿는다
   (§4.5). 깊이 4 의 디베르 갈래가 기본 예산에서 다섯째 수를 받지 못하는

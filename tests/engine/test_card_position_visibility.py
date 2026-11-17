@@ -760,11 +760,20 @@ def test_f03_the_face_question_is_unknown_when_the_card_is_not_observed(
 
 def test_f04_no_registered_effect_asks_about_the_face():
     """
-    🔴 **§9 — 후보 생성 축에는 실제 차단 사례가 없다.**
+    🔴 **§9 — 그 축을 쓰는 카드가 Phase 6-BF 에서 처음 생겼다.**
 
-    등재된 효과 17건 중 **앞면 조건을 쓰는 것이 0건**이다. 그리고
-    ``CandidateSource.require`` 가 이미 ``Condition`` 을 받으므로, 쓸 카드가
-    생기면 **모델을 바꾸지 않고** 적을 수 있다 (``test_f05``).
+    6-AD 시점에는 등재된 효과 중 **앞면 조건을 쓰는 것이 0건**이었고, 이
+    시험의 이름과 단언이 그 사실을 적고 있었다. 🔴 **그 수가 틀렸던 것이
+    아니라** 그때 실제로 0건이었다.
+
+    지금은 **하나**다 — 오르페골 갈라테아 ② 의 대상 조건이
+    ``c30741503.lua`` 의 ``s.tdfilter`` 에 ``c:IsFaceup()`` 을 적는다
+    (제외 상태의 **앞면** 기계족만 대상이다).
+
+    🔴 **이 시험이 지키는 사실은 그대로다**: ``CandidateSource.require`` 가
+    이미 ``Condition`` 을 받으므로 **모델을 바꾸지 않고** 적혔다
+    (``test_f05``). 아래 두 단언이 그것을 센다 — 쓰는 효과는 그 하나뿐이고,
+    후보 생성 **밖**의 자리(듀얼 · 행동 검증)는 여전히 그 조건을 모른다.
     """
     from engine.effect.library import EFFECT_LIBRARY
 
@@ -773,11 +782,15 @@ def test_f04_no_registered_effect_asks_about_the_face():
         for entry in EFFECT_LIBRARY
         if "CardIsFaceUp" in repr(entry.definition)
     ]
-    assert with_face == [], with_face
+    assert [(r.card_id, r.ordinal) for r in with_face] == [
+        (30741503, 1)
+    ], with_face
 
-    #: production 에서 그 조건을 **쓰는** 자리도 없다.
-    for module in ("engine/effect/library.py", "engine/duel.py",
-                   "engine/action_validation.py"):
+    #: 🔴 **후보 생성 밖에서는 여전히 쓰지 않는다.** 등재부
+    #: (``library.py``) 는 이제 그 조건을 **적으므로** 목록에서 빼고,
+    #: 남은 둘을 그대로 센다 — 앞면 여부를 행동 검증이나 듀얼 진행이
+    #: 보기 시작하면 그것은 다른 Phase 의 일이다.
+    for module in ("engine/duel.py", "engine/action_validation.py"):
         assert "CardIsFaceUp" not in source_of(module), module
 
 

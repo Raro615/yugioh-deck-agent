@@ -374,7 +374,13 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: 🔴 12 → **13** (Phase 6-AQ) — 스켈레촌 ① 이 대상 묶음 하나를
     #: 더했다 (묘지에서 1장을 **발동 시점에 지정**한다). 여러 장 선택도
     #: 가변 장수도 아니다.
-    assert bindings == 13
+    #: 🔴 13 → **15** (Phase 6-BF) — 갈라테아 ② 가 **둘**을 더했다:
+    #: ``@primary`` (제외된 기계족 1장을 발동 시점에 지정) 와 ``@set``
+    #: (덱의 「오르페골」 마법 · 함정 1장을 해결 중에 고른다). 🔴 **한
+    #: 효과에 이름이 둘인 첫 등재**이지만 여러 장 선택도 가변 장수도
+    #: 아니다 — 둘 다 ``minimum=1, maximum=1`` 이고, 아래 단언들이 그
+    #: 사실을 그대로 들고 있다.
+    assert bindings == 15
     assert multi == [FINE], multi
     #: 🔴 7 → **8** (Phase 6-AO) — 디베르 ① 도 **정확히 1장**을 고른다
     #: (``SelectMatchingCard(...,1,1,...)``). 이 시험이 지키는 사실은
@@ -383,7 +389,9 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: 🔴 8 → **9** (Phase 6-AQ) — 스켈레촌 ① 도 **정확히 1장**을
     #: 지정한다 (``SelectTarget(...,1,1,...)``). 여러 장 선택은 하나뿐이고
     #: 가변 장수는 없다 — 그 둘은 위 단언들이 들고 있다.
-    assert len(exact_one) == 9, exact_one
+    #: 🔴 9 → **11** (Phase 6-BF) — 갈라테아 ② 의 **두 이름 다** 정확히
+    #: 1장이다 (``SelectTarget(...,1,1,nil)`` · ``g:Select(tp,1,1,nil)``).
+    assert len(exact_one) == 11, exact_one
     assert variable == [], "가변 장수 효과가 생겼다 — §6 을 다시 읽어야 한다"
     assert optional == [], optional
     assert duplicates == [], duplicates

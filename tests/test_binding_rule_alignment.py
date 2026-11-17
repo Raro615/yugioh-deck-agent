@@ -1087,7 +1087,12 @@ def test_35_engine_v1_definitions_are_untouched():
     #: 🔴 **Phase 6-AF 가 2 를 더했다** — 기르수 ③(토큰 생성)은 공식 Lua
     #: 의 세 번째 블록이다. 1 인 것이 정확히 하나라는 사실은 그대로다.
     assert {ordinal for _c, ordinal in refs} == {0, 1, 2}
-    assert sum(1 for _c, ordinal in refs if ordinal == 1) == 1
+    #: 🔴 **1 인 것이 둘이 되었다** (Phase 6-BF) — 오르페골 갈라테아
+    #: ② 도 공식 ①②③ 중 **②**를 등재했다 (``e2``). 억지로 하나로
+    #: 맞추지 않고 실제 사실을 적는다. 🔴 이 시험이 지키는 사실은
+    #: "ordinal 을 추론하지 않고 **블록 번호를 그대로 적는다**" 이고,
+    #: 그 사실은 한 글자도 약해지지 않았다.
+    assert sum(1 for _c, ordinal in refs if ordinal == 1) == 2
     assert {c for c, _o in refs} & set(PHASE32_CARDS) == set()
 
 

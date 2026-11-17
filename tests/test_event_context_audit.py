@@ -511,8 +511,12 @@ def test_11_event_free_chain_is_not_an_event_dependent_condition():
     #: 🔴 Phase 6-AC 가 ``ZoneHasFreeSlot`` 를 더했다 (성유물－『성장』 ②
     #: 의 발동 조건 — 자신 몬스터 존에 빈 자리가 있다). 그것도 **판만**
     #: 묻는 조건이고, 그것이 이 시험이 지키는 사실이다.
+    #: 🔴 Phase 6-BF 가 ``Not`` 을 더했다 — 갈라테아 ② 의 발동 조건이
+    #: ``Not(FaceUpCardPresent(…, 바벨))`` **하나**다 (``And`` 로 감싸지
+    #: 않았다, 조건이 하나뿐이므로). 🔴 ``Not`` 도 **판만** 묻는 조건이고
+    #: 사건을 보지 않는다 — 그것이 이 시험이 지키는 사실이다.
     assert kinds <= {
-        "None", "ZoneCountAtLeast", "ZoneHasFreeSlot", "And"
+        "None", "ZoneCountAtLeast", "ZoneHasFreeSlot", "And", "Not"
     }, kinds
 
     #: 그리고 그 조건들은 문맥에서 사건을 읽지 않는다 (test_01 이 어휘를 고정).

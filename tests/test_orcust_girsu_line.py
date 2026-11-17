@@ -1014,12 +1014,17 @@ def test_d03_an_effect_without_a_recorded_limit_is_untouched():
     #: ``c21441617.lua`` ``e1:SetCountLimit(1,21441617)`` 이고 범위도
     #: ``PER_CARD_NAME`` 이다. **이전 수가 틀렸던 것이 아니라** 그때는 그
     #: 효과가 등재되지 않았다.
+    #: 🔴 **다섯 → 여섯** (Phase 6-BF, 오르페골 갈라테아 ②). 그 효과도
+    #: 공식 ``SetCountLimit(1,id)`` 를 적으므로 제한이 **기록된** 쪽이다.
+    #: 이 시험이 지키는 사실은 "제한이 적히지 않은 효과는 건드리지
+    #: 않았다" 이고, 그 사실은 그대로다 — 늘어난 것은 **적힌** 쪽이다.
     assert limited == {
         f"{GIRSU}:e[0]",
         f"{GIRSU}:e[2]",
         f"{WAND}:e[1]",
         "57835716:e[0]",
         "21441617:e[0]",
+        "30741503:e[1]",
     }, limited
 
 

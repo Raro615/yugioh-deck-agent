@@ -1087,6 +1087,10 @@ def test_27_all_sixteen_effect_definitions_are_untouched(repository):
                     #: 🔴 **Phase 6-AQ** — 오르페골 스켈레촌 ① 이고
                     #: 블록 수가 디베르와 같다 (실측).
                     21441617: 3,  # 스켈레촌 — ①기동 · ②유발즉시 · 내부
+                    #: 🔴 **Phase 6-BF** — 오르페골 갈라테아 ② 이고 블록 수가
+                    #: **셋**이다 (실측: e1 지속 · e2 기동 · e3 유발즉시 클론).
+                    #: 디베르 · 스켈레촌과 수는 같지만 내용이 다르다.
+                    30741503: 3,  # 갈라테아 — ①지속 · ②기동 · ③유발즉시
                 }[ref.card_id], ref
                 assert ref.resolve(card).code is None, ref
             else:

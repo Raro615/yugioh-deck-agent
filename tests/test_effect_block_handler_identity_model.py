@@ -1068,7 +1068,12 @@ def test_51_engine_v1_library_is_untouched():
         1,
         2,
     }
-    assert sum(1 for e in EFFECT_LIBRARY if e.effect_ref.ordinal == 1) == 1
+    #: 🔴 **1 인 것이 둘이 되었다** (Phase 6-BF) — 오르페골 갈라테아
+    #: ② 도 공식 ①②③ 중 **②**를 등재했다 (``e2``). 억지로 하나로
+    #: 맞추지 않고 실제 사실을 적는다. 🔴 이 시험이 지키는 사실은
+    #: "ordinal 을 추론하지 않고 **블록 번호를 그대로 적는다**" 이고,
+    #: 그 사실은 한 글자도 약해지지 않았다.
+    assert sum(1 for e in EFFECT_LIBRARY if e.effect_ref.ordinal == 1) == 2
 
 
 # ===========================================================================
