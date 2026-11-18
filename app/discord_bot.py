@@ -80,6 +80,7 @@ TOKEN_ENV = "DISCORD_BOT_TOKEN"
 GUILD_ENV = "DISCORD_DEV_GUILD_ID"
 
 LOGGER_NAME = "galatea"
+from app.candidate_store import CandidateStore, PickProblem
 from app.site_share import (
     SITE_SHARE_WARNING,
     ShareState,
@@ -955,6 +956,25 @@ def _autonomous_record(agent, draft, hand_ids, found, ranking) -> tuple:
                     f" 의 재실행 기록입니다{tie}."), chosen.index
 
 
+def _pick_invite(kept, picked) -> str:
+    """
+    **다른 추천을 고르는 방법** 한 줄 (Phase 6-BH).
+
+    🔴 **후보 번호를 코드에 적지 않는다** — 그때 그 탐색이 낸 번호를 그대로
+    옮긴다. 🔴 추천이 하나뿐이면 고를 것이 없으므로 **권하지 않는다**.
+    """
+    others = [index for index in kept.recommended if index != picked]
+    if not others:
+        return (f"🎞 이 탐색의 요청 ID 는 `{kept.request_id}` 입니다 —"
+                f" `/combo-pick` 으로 후보를 다시 꺼낼 수 있습니다"
+                f" (보관한 후보 {len(kept.results)}개).")
+    said = " · ".join(f"`{index}`" for index in others)
+    return (f"🎞 **다른 추천을 재생하려면** `/combo-pick"
+            f" request:{kept.request_id} result:<번호>` — 고를 수 있는"
+            f" 번호: {said}. 🔴 탐색을 다시 돌리지 않고 **그때 그 후보**를"
+            f" 새 초기 상태에서 다시 실행해 기록을 만듭니다.")
+
+
 def _autonomous_spent_line(spent: dict,
                            whole_sec: "float | None" = None) -> str:
     """
@@ -1004,7 +1024,8 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
                         search_text: str,
                         results_text: str = "",
                         followups_text: str = "", *,
-                        progress=None) -> "OpeningReport | None":
+                        progress=None, owner: str = "local",
+                        store=None) -> "OpeningReport | None":
     """
     ``/combo search:…`` — **제한 전개 탐색** (Phase 6-AH).
 
@@ -1187,8 +1208,21 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
             "section": time.monotonic() - asked_at,
         }
         brief.append(why)
+        #: 🔴 **고를 수 있게 만든다** (Phase 6-BH). 이 탐색 결과를 요청
+        #: ID 로 보관하고, 사용자가 **다른 추천**을 고를 길을 적는다 —
+        #: 고르는 것이 탐색을 다시 돌리는 일이 되지 않게 한다.
+        keeper = store if store is not None else CANDIDATE_STORE
+        kept = keeper.remember(
+            owner=owner, hand_ids=hand_ids, draft=parsed.draft,
+            results=getattr(found, "results", ()) or (),
+            recommended=[one.index for one in (
+                ranking.recommended if ranking is not None else ())],
+            picked=(picked if picked is not None else -1),
+        )
+        brief.append(_pick_invite(kept, picked))
         detail.append("")
         detail.append(why)
+        detail.append(_pick_invite(kept, picked))
         detail.append(_autonomous_spent_line(spent))
         return OpeningReport(
             brief=tuple(brief), detail=tuple(detail), refused=False,
@@ -1715,6 +1749,11 @@ def viewer_attachment(record) -> "tuple[ComboAttachment | None, ReplayState]":
 #: 두고, 돌고 있으면 기다리지 않고 "바쁘다" 로 답한다.
 SITE_SHARE_RUNNER = SiteShareRunner()
 
+#: 🔴 **공동 추천 후보를 요청 단위로 들고 있는 자리** (Phase 6-BH).
+#: 고르는 것이 **탐색을 다시 돌리는 일이 되지 않게** 한다 — 다시 돌리면
+#: 예산에 걸리는 자리가 달라져 후보 번호와 경로가 바뀔 수 있다.
+CANDIDATE_STORE = CandidateStore()
+
 SHARE_DESCRIPTION = (
     "전개를 외부 Duel Simulator 에 공개 리플레이로 올립니다 (1~2분 걸립니다)"
 )
@@ -1850,6 +1889,99 @@ def _run_autonomous_share(agent, recipe_text: str,
                          replay=record)
 
 
+PICK_DESCRIPTION = (
+    "공동 추천 가운데 **고른 후보**의 전개 기록을 받습니다 (탐색을 다시"
+    " 돌리지 않습니다)"
+)
+
+
+def pick_response(agent, request_text: str, result_text: str, *,
+                  owner: str = "local", store=None, share: bool = False,
+                  runner=None) -> ComboResponse:
+    """
+    ``/combo-pick`` — **사용자가 고른 후보 하나**를 기록으로 만든다
+    (Phase 6-BH).
+
+    🔴 **탐색을 다시 돌리지 않는다.** 보관해 둔 그 탐색의 후보를 꺼내
+    (:class:`~app.candidate_store.CandidateStore`) **그 경로만** 새 초기
+    상태에서 다시 실행한다. 다시 돌리면 예산에 걸리는 자리가 달라져 **번호와
+    경로가 바뀔 수 있고**, 그러면 사용자가 본 번호가 다른 전개를 가리킨다.
+
+    🔴 **요청과 후보를 묶어 본다.** 요청 ID 와 그것을 만든 사람이 함께 맞아야
+    한다 — 다른 요청의 번호가 섞이지 않는다.
+
+    🔴 **재실행이 어긋나면 다른 후보로 바꾸지 않는다.** 그 사실을 적고 기록을
+    만들지 않는다.
+
+    🔴 **요약 · 첨부 · 사이트 입력이 한 후보를 가리킨다.** 이 함수가 만든
+    기록 하나가 JSON · 뷰어 · (``share`` 면) 사이트 조작 계획에 **그대로**
+    들어간다.
+    """
+    from deck.report import render_open_candidate
+
+    keeper = store if store is not None else CANDIDATE_STORE
+    wanted = (result_text or "").strip()
+    if not wanted.lstrip("-").isdigit():
+        return ComboResponse(messages=(
+            "🔴 **후보 번호를 읽지 못했습니다** — `/combo` 응답의 `[결과 N]`"
+            f" 의 숫자 N 을 넣어 주십시오 (받은 값: `{wanted}`).",),
+            failed=True)
+    kept, chosen, problem = keeper.take(
+        request_text, owner=owner, index=int(wanted))
+    if problem is not None:
+        said = [f"🔴 **그 후보를 꺼내지 못했습니다** — {problem.detail}"]
+        if problem is PickProblem.NO_SUCH_RESULT and kept is not None:
+            said.append("보관한 번호: " + " · ".join(
+                f"`{index}`" for index in kept.indexes))
+            said.append("그중 추천: " + (" · ".join(
+                f"`{index}`" for index in kept.recommended) or "없음"))
+        return ComboResponse(messages=tuple(said), failed=True)
+
+    head = [f"**[고른 후보]** {kept.describe_ko()}"]
+    mark = ("추천 후보입니다" if chosen.index in kept.recommended
+            else "🔴 **추천 후보가 아닙니다** — 비교에서 빠졌거나 지배당한"
+                 " 후보이고, 고른 그대로 기록을 만듭니다")
+    head.append(f"🎯 **결과 {chosen.index}** 를 골랐습니다 ({mark}).")
+    head.append(render_open_candidate(chosen, agent.repository))
+
+    from app.main import autonomous_rerun_record
+
+    record, why = autonomous_rerun_record(
+        agent.repository, kept.draft, list(kept.hand_ids), chosen)
+    if record is None:
+        #: 🔴 **다른 후보로 조용히 바꾸지 않는다.**
+        head.append(f"🔴 **다시 실행한 기록을 만들지 못했습니다** — {why}")
+        head.append("🔴 그래서 **첨부도 사이트 재생도 하지 않습니다** —"
+                    " 어긋난 재실행을 성공한 전개로 내보내지 않습니다.")
+        return ComboResponse(messages=tuple(head), failed=False)
+    head.append(f"✔ **결과 {chosen.index}** 를 새 초기 상태에서 다시 실행해"
+                " 기록을 만들었습니다 — 아래 첨부와 (요청하면) 사이트 재생이"
+                " **이 기록 하나**를 씁니다.")
+
+    attachments: "list[ComboAttachment]" = []
+    item, state = replay_attachment(record)
+    if item is not None:
+        attachments.append(item)
+        head.append(f"🧾 전개 기록: 첨부 `{item.filename}`")
+    elif state.notice:
+        head.append("🧾 " + state.notice)
+    viewer, viewer_state = viewer_attachment(record)
+    if viewer is not None:
+        attachments.append(viewer)
+        head.append(f"🖥 전개 보기: 첨부 `{viewer.filename}`")
+    elif viewer_state.notice:
+        head.append("🖥 " + viewer_state.notice)
+
+    if share:
+        #: 🔴 **외부 공개임을 먼저 알린다.**
+        head.append(SITE_SHARE_WARNING)
+        use = runner if runner is not None else SITE_SHARE_RUNNER
+        outcome = use.share(record, title=f"galatea result {chosen.index}")
+        head.extend(site_share_lines(outcome))
+    return ComboResponse(messages=tuple(head),
+                         attachments=tuple(attachments))
+
+
 def share_replay_response(agent, hand_text: str, recipe_text: str = "",
                           line_text: str = "", title: str = "",
                           registration_id: str = "", owner: str = "local",
@@ -1969,7 +2101,8 @@ def combo_response(agent, hand_text: str, board_text: str = "",
                    line_text: str = "", search_text: str = "",
                    results_text: str = "",
                    followups_text: str = "", *,
-                   progress=None) -> ComboResponse:
+                   progress=None, owner: str = "local",
+                   store=None) -> ComboResponse:
     """
     ``/combo`` 의 응답. **discord 를 모른다.** 메시지들과 첨부들을 돌려준다.
 
@@ -2100,7 +2233,8 @@ def combo_response(agent, hand_text: str, board_text: str = "",
     #: 요청의 동작은 6-AG 와 한 글자도 다르지 않다.
     searched = _run_bounded_search(agent, recipe_text, hand_ids, search_text,
                                    results_text, followups_text,
-                                   progress=progress)
+                                   progress=progress, owner=owner,
+                                   store=store)
     #: 입력 거절을 말하는 보고 — 자율 탐색이면 그쪽이 말한다.
     gate = searched if autonomous else executed
 
@@ -2535,7 +2669,8 @@ class SearchService:
                        line_text: str = "", search_text: str = "",
                        results_text: str = "",
                        followups_text: str = "", *,
-                       progress=None) -> ComboResponse:
+                       progress=None, owner: str = "local",
+                       store=None) -> ComboResponse:
         """
         전개 계획을 세워 **메시지들과 첨부들**을 돌려준다 (Phase 6-AE).
 
@@ -2554,7 +2689,8 @@ class SearchService:
             return combo_response(self._agent, hand_text, board_text,
                                   deck_text, recipe_text, line_text,
                                   search_text, results_text, followups_text,
-                                  progress=progress)
+                                  progress=progress, owner=owner,
+                                  store=store)
         except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
             logger.exception("전개 계획 생성에 실패했습니다. 패=%r 필드=%r"
                              " 덱=%r 레시피=%r 경로=%r 탐색=%r 결과수=%r"
@@ -2582,6 +2718,27 @@ class SearchService:
                              image_name)
             return [REGISTER_INTRO, "🔴 **등록 중 오류가 났습니다** "
                                     "(원인은 봇 로그에 있습니다)."]
+
+    def pick_response(self, request_text: str, result_text: str, *,
+                      owner: str = "local",
+                      share: bool = False) -> ComboResponse:
+        """
+        고른 후보 하나의 기록 (Phase 6-BH).
+
+        🔴 **예외를 밖으로 내보내지 않는다** — 봇을 죽이지 않는다.
+        🔴 입력값을 로그에 싣지 않는다 (요청 ID 는 짧은 토큰이다).
+        """
+        if self._agent is None:
+            return ComboResponse(messages=(COMBO_UNAVAILABLE_MESSAGE,),
+                                 failed=True)
+        try:
+            return pick_response(self._agent, request_text, result_text,
+                                 owner=owner, share=share)
+        except Exception:  # noqa: BLE001 - 봇을 죽이지 않는다
+            logger.exception("고른 후보의 기록을 만들지 못했습니다.")
+            return ComboResponse(messages=(
+                "🔴 **고른 후보를 처리하다 오류가 났습니다** — 다시"
+                " 시도해 주십시오.",), failed=True)
 
     def share_replay_texts(self, hand_text: str, recipe_text: str = "",
                            line_text: str = "", title: str = "",
@@ -2825,12 +2982,35 @@ def build_client(dev_guild_id: "int | None" = None, service=None):
         try:
             response = await asyncio.to_thread(
                 combo_service.combo_response, hand, board, deck, recipe, line,
-                search, results, followups, progress=relay)
+                search, results, followups, progress=relay,
+                #: 🔴 **요청을 만든 사람과 묶는다** (Phase 6-BH) — 다른
+                #: 사람의 요청 ID 로 후보를 꺼낼 수 없게.
+                owner=str(interaction.user.id))
             await send_combo_response(interaction.followup, response)
             delivered = True
         finally:
             if relay is not None:
                 await relay.finish(progress_final_text(response, delivered))
+
+    @tree.command(name="combo-pick", description=PICK_DESCRIPTION)
+    @app_commands.describe(
+        request="`/combo` 응답에 적힌 요청 ID (예: 1a2b3c4d)",
+        result="고를 후보 번호 — `/combo` 응답의 `[결과 N]` 의 N",
+        share="(선택) 외부 Duel Simulator 에 공개 리플레이로 올립니다"
+              " (1~2분 · 되돌릴 수 없는 공개입니다)")
+    async def combo_pick_command(interaction: "discord.Interaction",
+                                 request: str, result: str,
+                                 share: bool = False) -> None:
+        #: 🔴 ``/combo`` 와 같은 구조다 — ``defer()`` 로 응답을 먼저 열고
+        #: 실제 작업은 스레드로 보낸다 (재실행은 1~2초, 공유는 1~2분).
+        await interaction.response.defer()
+        if share:
+            await interaction.followup.send(
+                SITE_SHARE_WARNING + " 조작 중입니다…")
+        response = await asyncio.to_thread(
+            combo_service.pick_response, request, result,
+            owner=str(interaction.user.id), share=share)
+        await send_combo_response(interaction.followup, response)
 
     @tree.command(name="share-replay", description=SHARE_DESCRIPTION)
     @app_commands.describe(

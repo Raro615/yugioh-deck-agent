@@ -87,13 +87,12 @@ _MOVE_KINDS = ("zone_moved", "card_drawn", "monster_summoned", "card_set")
 #: 🔴 **"변환했다" 와 "그대로 재현된다" 는 다른 말이다.** 이 줄이 없으면
 #: 계획을 읽는 쪽이 끌어 놓기 하나로 세트까지 재현된다고 읽는다.
 _SET_POSITION_NOTE = (
-    "뒷면 세트 — 이 계획은 **자리 이동만** 만듭니다. 표시 형식을 싣는 칸이 "
-    "없어 사이트에서는 앞면으로 놓일 수 있고, 뒷면으로 만드는 조작은 "
-    "사람이 해야 합니다: 그 카드를 **우클릭(모바일은 길게 누르기) → "
-    "「표시 형식의 변경」** 입니다 (사이트 설명서 5절). 🔴 그 메뉴의 "
-    "**하위 항목 이름은 설명서에 없어** 이 계획이 자동으로 누르지 "
-    "않습니다 — 확인하지 못한 이름을 지어내지 않습니다. 🔴 그리고 세트는 "
-    "발동이 아니므로 이 조작이 그 카드를 발동한다는 뜻도 아닙니다."
+    "뒷면 세트 — 조작기가 **뒷면으로 만들고 사이트에서 확인합니다** "
+    "(Phase 6-BH): 끌어 놓기 전에 조작 바의 `Face-down` 을 켜고, 놓은 뒤 "
+    "그 카드의 메뉴를 읽어 `Set Face-up` 이 보이면 뒷면 · `Set Face-down` "
+    "이 보이면 앞면으로 판정하고, 앞면이면 그 항목을 눌러 뒤집습니다. "
+    "🔴 **이미 뒷면이면 다시 뒤집지 않습니다.** 🔴 그리고 세트는 발동이 "
+    "아니므로 이 조작이 그 카드를 발동한다는 뜻도 아닙니다."
 )
 
 #: 사이트가 「세트」 를 **조작 종류로 들고 있다**는 근거 (Phase 6-BG).
@@ -115,6 +114,10 @@ SITE_SET_OPERATION_EVIDENCE: str = (
     "있다. 그 종류를 만드는 UI 조작은 설명서에 적혀 있지 않다."
 )
 
+#: 🔴 **앞뒷면이 뜻을 갖는 사이트 칸** (Phase 6-BH). 이름에 번호가 붙는
+#: 칸들은 접두사로 따로 본다 (아래 :func:`build_site_plan`).
+_FACE_SENSITIVE_SITE_ZONES: frozenset = frozenset({"Field Zone"})
+
 #: 대조가 표시 형식을 보지 않는다는 사실 한 줄 (Phase 6-BG).
 _POSITION_NOT_COMPARED = (
     "표시 형식(앞면 · 뒷면)은 **대조하지 않았습니다.** 사이트 대조는 존마다 "
@@ -129,9 +132,36 @@ _NO_SITE_OPERATION = {
     "zone_shuffled": "덱 섞기 — 사이트의 덱은 순서를 따로 다루지 않습니다",
     "life_changed": "라이프 변화 — 이 계획은 라이프를 건드리지 않습니다",
     "phase_changed": "페이즈 변화 — 이 계획은 페이즈를 건드리지 않습니다",
-    "token_created": "토큰 생성 — 덱 이미지에 없는 카드라 자리를 묶을 수 없습니다",
-    "token_vanished": "토큰 소멸 — 위와 같습니다",
 }
+
+#: 🔴 **사이트가 **지원하는** 토큰 조작** (Phase 6-BH 실측).
+#:
+#: 6-BG 까지 ``token_created`` · ``token_vanished`` 는
+#: :data:`_NO_SITE_OPERATION` 에 있었다 — "덱 이미지에 없는 카드라 자리를
+#: 묶을 수 없습니다". 🔴 **그 문장은 틀렸다**: 사이트의 조작 바 ``More``
+#: 메뉴에 **``Generate Token``** 이 있고, 그것이 만든 카드의 메뉴에는
+#: **``Delete Token``** 이 생긴다 (실측 — 생성된 카드는 ``main-N`` ·
+#: ``extra-N`` 이 아닌 **제 id** 를 받고 ``Free`` 존에 놓인다. 조작 이력에
+#: ``#9 · You Summon · Free`` 가 남는다).
+TOKEN_OPERATIONS: dict[str, str] = {
+    "token_created": "generate_token",
+    "token_vanished": "delete_token",
+}
+
+#: 🔴 **상대 자리는 이 계획의 범위가 아니다** (Phase 6-BH 가 **적어 둔다**).
+#:
+#: :func:`_expect_final` 은 처음부터 ``zones["0"]`` 만 읽고
+#: :data:`SITE_ZONES_ALL` 에 상대 칸이 없다. 사이트에는 ``Opponent field``
+#: 토글이 있고 누르면 드롭 가능한 칸이 20 → 36 개로 늘어난다 (실측) —
+#: 즉 **사이트는 지원하고 이 계획이 아직 다루지 않는다.**
+#:
+#: 🔴 **그래서 조용히 빠뜨리지 않고 「필수 미지원」 으로 올린다.** 상대
+#: 자리에 남은 카드가 있는 기록은 **재현이 끝난 것이 아니고**, 공유도
+#: 하지 않는다 (``required_unsupported``).
+OPPONENT_SCOPE_RULE: str = (
+    "opponent-field-scope (상대 자리의 카드를 이 계획이 놓지 않는다 — "
+    "사이트의 Opponent field 토글은 있으나 아직 배선하지 않았다)"
+)
 
 
 def _zone_name(zone: str, index=None, seat: int = 0) -> str:
@@ -254,6 +284,17 @@ def build_site_plan(record, registration=None) -> dict:
     #: 계획이 그 표시 형식을 만들지는 못하므로, 이 표의 쓸모는 **대조에서
     #: 「보지 않았다」 를 적는 것** 하나다 (``expect_positions``).
     face_down_at: dict[str, str] = {}
+    #: 🔴 **표시 형식을 선언한 자리 전부** (Phase 6-BH) — ``덱 자리 →
+    #: (사이트 존, 'face_down' | 'face_up')``. 뒷면만 적으면 "뒷면 기대가
+    #: 없으니 표시 형식은 다 맞았다" 가 되어 버린다.
+    position_at: dict[str, tuple] = {}
+    #: 🔴 **토큰의 자리 이름** — 개체 번호로 짓는다 (덱 이미지에 없다).
+    token_at: dict[int, str] = {}
+    #: 🔴 **이 기록을 재현하려면 반드시 해야 하는데 못 하는 일들.**
+    #: ``unsupported`` 와 **다른 목록**이다: 저쪽은 "사이트에 그 개념이
+    #: 없다"(덱 섞기 · 페이즈) 까지 담고, 이쪽은 **재현을 깨뜨리는 것**만
+    #: 담아 공유 판정에 쓴다.
+    blocking: list[str] = []
 
     def _emit(**fields) -> None:
         fields["n"] = len(operations) + 1
@@ -291,6 +332,36 @@ def build_site_plan(record, registration=None) -> dict:
         for event in step_events:
             for change in event.get("changes") or ():
                 kind = change.get("kind")
+                if kind in TOKEN_OPERATIONS:
+                    #: 🔴 **사이트가 지원하는 조작이다** (Phase 6-BH).
+                    #: 토큰은 덱 이미지에 없으므로 **자리를 주지 않고**
+                    #: 조작기가 만든 개체를 그때 묶는다 — 계획이 들고 가는
+                    #: 것은 "몇 번째 토큰인가" 와 **어느 자리의 누구인가**다.
+                    instance = int(change.get("instance"))
+                    owner = int(change.get("owner", change.get("controller", 0)))
+                    token_slot = f"token-{instance}"
+                    if owner != 0:
+                        #: 🔴 **자리를 주지 않는다.** 주면 뒤의 이동 조작이
+                        #: 그 이름을 찾아 **상대 자리의 토큰을 자기 쪽에**
+                        #: 놓으려 든다 (실측으로 그랬다).
+                        #: 🔴 **상대 자리는 이 계획의 범위가 아니다.**
+                        #: 조용히 빠뜨리지 않고 **필수 미지원**으로 올린다.
+                        blocking.append(
+                            f"사건 #{event.get('seq')} 의 {kind}: 상대 자리의 "
+                            f"토큰 #{instance} 은 이 계획이 놓지 않습니다 — "
+                            f"{OPPONENT_SCOPE_RULE}"
+                        )
+                        continue
+                    token_at[instance] = token_slot
+                    _emit(op=TOKEN_OPERATIONS[kind], card=token_slot,
+                          step=order, event=event.get("seq"),
+                          why=f"토큰 {'생성' if kind == 'token_created' else '삭제'}"
+                              f" — #{instance}",
+                          expect=("Generate Token"
+                                  if kind == "token_created"
+                                  else "Delete Token"),
+                          basis=f"engine:event#{event.get('seq')}.{kind}")
+                    continue
                 if kind not in _MOVE_KINDS:
                     note = _NO_SITE_OPERATION.get(kind)
                     unsupported.append(
@@ -299,7 +370,10 @@ def build_site_plan(record, registration=None) -> dict:
                     )
                     continue
                 instance = change.get("instance")
-                slot = _slot(instance)
+                #: 🔴 **토큰은 덱 자리가 없다** (Phase 6-BH) — 생성 조작이
+                #: 지어 준 이름을 쓴다. 그 이름이 없으면 (상대 자리 토큰)
+                #: 이 이동도 계획에 넣지 않는다.
+                slot = token_at.get(int(instance)) or _slot(instance)
                 if not slot:
                     continue
                 source = change.get("from") or {}
@@ -335,6 +409,17 @@ def build_site_plan(record, registration=None) -> dict:
                 #: 않은 것**을 적는다.
                 position = target.get("position")
                 face_down = isinstance(position, str) and "FACEDOWN" in position
+                #: 🔴 **앞뒤가 뜻을 갖는 자리만 적는다** (Phase 6-BH).
+                #: 묘지 · 제외 · 덱에서는 앞뒷면이 뜻을 갖지 않고, 사이트도
+                #: 그 자리에서 표시 형식을 묻지 않는다.
+                if to_zone in _FACE_SENSITIVE_SITE_ZONES or (
+                        to_zone.startswith("Spell & Trap Zone")
+                        or to_zone.startswith("Monster Zone")
+                        or to_zone.startswith("Extra Monster Zone")):
+                    position_at[slot] = (
+                        to_zone, "face_down" if face_down else "face_up")
+                else:
+                    position_at.pop(slot, None)
                 if face_down:
                     face_down_at[slot] = to_zone
                 _emit(op="move", card=slot, step=order,
@@ -360,8 +445,28 @@ def build_site_plan(record, registration=None) -> dict:
     }
 
     expect_final, slots_known, unplaced = _expect_final(
-        record, slot_of, _label)
+        record, {**slot_of, **{int(i): n for i, n in token_at.items()}}, _label)
     unsupported.extend(unplaced)
+    #: 🔴 **칸 번호를 몰라 맞춰 보지 못하는 개체는 재현을 깨뜨린다**
+    #: (Phase 6-BH) — 전에는 ``unsupported`` 에만 적혀 공유 판정에 닿지
+    #: 않았다.
+    blocking.extend(unplaced)
+    #: 🔴 **상대 자리에 남은 카드** (Phase 6-BH). ``_expect_final`` 이
+    #: 처음부터 ``zones["0"]`` 만 읽으므로, 상대 자리의 카드는 **기대값에도
+    #: 관측에도 없다** — 그 사실을 적지 않으면 "전부 맞았다" 가 된다.
+    their = ((record.get("final") or {}).get("zones") or {}).get("1") or {}
+    their_left = sorted(
+        (zone, int(instance))
+        for zone, instances in their.items()
+        for instance in instances
+        if zone not in ("DECK", "EXTRA", "HAND")
+    )
+    for zone, instance in their_left:
+        blocking.append(
+            f"최종 판의 상대 {zone} 에 #{instance} ({_label(instance)}) 가 "
+            f"남아 있는데 이 계획은 상대 자리를 놓지 않습니다 — "
+            f"{OPPONENT_SCOPE_RULE}"
+        )
 
     #: 🔴 **어느 이미지로 도는가**를 계획이 들고 있다. 자리표시 시트와
     #: 등록된 실제 덱 이미지를 섞어 말하지 않는다.
@@ -400,11 +505,23 @@ def build_site_plan(record, registration=None) -> dict:
         "expect_positions": {
             "face_down": [{"slot": slot, "zone": zone}
                           for slot, zone in sorted(face_down_at.items())],
-            "compared": False,
+            #: 🔴 **표시 형식을 선언한 자리 전부** (Phase 6-BH) — 뒷면만
+            #: 적으면 "뒷면 기대가 없으니 다 맞았다" 가 되어 버린다. 이
+            #: 목록이 **대조해야 하는 자리**이고, 조작기가 이 자리들의
+            #: 표시 형식을 사이트에서 **읽어** 돌려준다.
+            "declared": [{"slot": slot, "zone": zone, "position": position}
+                         for slot, (zone, position)
+                         in sorted(position_at.items())],
             "why": _POSITION_NOT_COMPARED,
+            #: 🔴 **몬스터의 표시 형식(공격 · 수비)은 보지 않는다.** 이
+            #: 계획이 다루는 것은 앞면 · 뒷면 하나다.
+            "scope": "face_up_or_down",
         },
         "final_slots_known": slots_known,
         "unsupported": unsupported,
+        #: 🔴 **재현을 깨뜨리는 미지원만** 담는다 (Phase 6-BH) — 공유
+        #: 판정이 읽는 목록이고, ``unsupported`` 와 섞지 않는다.
+        "required_unsupported": blocking,
     }
 
 

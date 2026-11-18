@@ -139,6 +139,76 @@ function movedBetween(before, after) {
 }
 
 /**
+ * 카드 메뉴의 항목 이름으로 **표시 형식을 읽는다** (Phase 6-BH).
+ *
+ * 🔴 **사이트가 스스로 말하는 것만 읽는다.** 실측한 두 모양이 근거다:
+ *
+ *   앞면 마법·함정 (Spell & Trap Zone)
+ *     Activate Effect | Negate | Target | Highlight | **Set Face-down**
+ *     | Add Counter | Card details
+ *   뒷면 카드
+ *     Target | Highlight | **Set Face-up** | Add Counter | Card details
+ *
+ * 즉 `Set Face-up` 이 보이면 **지금 뒷면**이고, `Set Face-down` 이 보이면
+ * **지금 앞면**이다. 🔴 **둘 다 없으면 `unknown`** — 그 자리에서 사이트가
+ * 표시 형식을 말하지 않는다는 뜻이고, 추측하지 않는다.
+ *
+ * 🔴 **그림(카드 뒷면 이미지)으로 판정하지 않는다.** 같은 뒷면 그림이
+ * 여러 자리에 쓰이고, 덱 이미지에서 잘라낸 그림은 카드마다 다르다 —
+ * 사이트의 **메뉴**가 그 상태를 직접 말하는 유일한 자리다.
+ */
+function decidePosition(menuItems) {
+  const names = (menuItems || []).map(t => String(t).trim());
+  const up = names.includes('Set Face-up');
+  const down = names.includes('Set Face-down');
+  if (up && down) { return 'unknown'; }
+  if (up) { return 'face_down'; }
+  if (down) { return 'face_up'; }
+  return 'unknown';
+}
+
+/**
+ * 선언한 자리의 **표시 형식을 견준다** (Phase 6-BH).
+ *
+ * `declared` 는 계획이 넘긴 `[{slot, zone, position}]` 이고 `observed` 는
+ * 조작기가 사이트에서 읽은 `{slot: 'face_down'|'face_up'|'unknown'}` 다.
+ *
+ * 🔴 **셋을 가른다.** 어긋남(`mismatched`) 과 못 읽음(`not_observed`) 과
+ * 맞음(`matched`) 이 다른 사실이다.
+ *
+ * 🔴 **「필수」 는 뒷면 기대뿐이다.** 뒷면은 이 조작기가 **직접 만드는**
+ * 상태이므로 읽지 못하면 재현을 주장할 수 없다. 앞면 자리를 못 읽은 것은
+ * 재현을 깨뜨리지 않지만 **`compared` 를 거짓으로** 만든다 — "뒷면 기대가
+ * 없으니 표시 형식은 다 맞았다" 고 말하지 않기 위해서다.
+ */
+function comparePositions(declared, observed) {
+  const rows = declared || [];
+  const seen = observed || {};
+  const matched = [], mismatched = [], notObserved = [];
+  for (const row of rows) {
+    const want = row.position;
+    const got = seen[row.slot];
+    if (got === undefined || got === null || got === 'unknown') {
+      notObserved.push({ slot: row.slot, zone: row.zone, want });
+      continue;
+    }
+    if (got === want) { matched.push({ slot: row.slot, zone: row.zone, want }); }
+    else { mismatched.push({ slot: row.slot, zone: row.zone, want, got }); }
+  }
+  const requiredMissing = notObserved.filter(r => r.want === 'face_down');
+  return {
+    declared: rows.length,
+    matched, mismatched,
+    not_observed: notObserved,
+    required_not_observed: requiredMissing,
+    //: 🔴 **전부 읽었는가** — 하나라도 못 읽었으면 거짓이다.
+    compared: rows.length > 0 && notObserved.length === 0,
+    //: 🔴 **표시 형식이 맞았는가** — 어긋남이 없고 **뒷면은 전부 읽었다**.
+    ok: mismatched.length === 0 && requiredMissing.length === 0,
+  };
+}
+
+/**
  * 최종 판 대조.
  *
  * 🔴 **장수만 세지 않는다.** 존마다 **카드 자리의 집합**을 맞춘다 —
@@ -150,16 +220,21 @@ function movedBetween(before, after) {
  *    있지 않으면 전체가 실패다.
  * 🔴 **좌표만 믿지 않는다.** 화면의 장수 표시(`counts`) 와 좌표로 읽은
  *    수를 교차 확인한다.
- * 🔴 **표시 형식은 보지 않는다 — 그 사실을 결과에 적는다** (6-BG). 이
- *    대조는 존마다 **카드 자리의 집합**만 맞추고 앞면/뒷면은 읽지 않는다.
- *    계획이 뒷면으로 끝나야 하는 자리를 알려 주면 (`expectPositions`)
- *    `positions` 칸에 **「대조하지 않았다」** 를 자리와 함께 적는다.
- *    🔴 `allOk` 를 그 때문에 거짓으로 만들지 **않는다** — 자리는 실제로
- *    맞았고, 거짓으로 만들면 "자리도 틀렸다" 로 읽힌다. 대신
- *    `fullyReproduced` 가 거짓이 되어 **그 참을 "그대로 재현됐다" 로
- *    읽지 못하게** 한다.
+ * 🔴 **표시 형식은 조작기가 읽어서 넘긴다** (6-BH). `expectPositions` 는
+ *    계획이 선언한 자리들이고 `observedPositions` 는 그 자리에서 **사이트의
+ *    카드 메뉴로 읽은** 값이다 (:func:`decidePosition`). 둘을
+ *    :func:`comparePositions` 가 견주고, 결과가 `positions` 에 들어간다.
+ *    🔴 `allOk` 는 **자리 대조 하나**다 — 표시 형식 때문에 거짓으로 만들지
+ *    않는다 (그러면 "자리도 틀렸다" 로 읽힌다).
+ *
+ * 🔴 **다섯 상태를 따로 돌려준다** (6-BH). ① 조작 실행은 부르는 쪽이
+ *    세고, ② 자리 일치는 `allOk`, ③ 표시 형식 일치는 `positions.ok`,
+ *    ④ **이 전개를 재현했는가**는 `fullyReproduced` (②·③ 과 **필수 미지원
+ *    없음**을 함께 본다), ⑤ 공유 가능 여부는 부르는 쪽이 ④ 와 실행 상태로
+ *    정한다. 🔴 하나로 뭉치면 "자리가 맞았으니 공유해도 된다" 가 된다.
  */
-function compareFinal(expectFinal, observed, counts, expectPositions) {
+function compareFinal(expectFinal, observed, counts, expectPositions,
+                      observedPositions, requiredUnsupported) {
   const byZone = (observed && observed.byZone) || {};
   const problems = (observed && observed.problems) || [];
   const checks = [];
@@ -186,22 +261,29 @@ function compareFinal(expectFinal, observed, counts, expectPositions) {
              ok: counts[zone] === geometry };
   });
   const faceDown = (expectPositions && expectPositions.face_down) || [];
-  const positions = {
-    compared: false,
-    face_down: faceDown,
-    why: (expectPositions && expectPositions.why)
-      || '표시 형식(앞면 · 뒷면)은 대조하지 않았습니다.',
-  };
+  const declared = (expectPositions && expectPositions.declared) || [];
+  const positions = Object.assign(
+    comparePositions(declared, observedPositions),
+    {
+      face_down: faceDown,
+      scope: (expectPositions && expectPositions.scope) || 'face_up_or_down',
+      why: (expectPositions && expectPositions.why) || '',
+    });
+  //: 🔴 **재현을 깨뜨리는 미지원** (6-BH) — 계획이 "이 기록을 재현하려면
+  //: 반드시 해야 하는데 못 한다" 고 적어 둔 것들이다. 비어 있지 않으면
+  //: 자리와 표시 형식이 다 맞아도 **재현이 끝난 것이 아니다.**
+  const missingSupport = (requiredUnsupported || []).slice();
   const allOk = checks.every(c => c.ok) && crossCheck.every(c => c.ok)
                 && problems.length === 0;
   return {
     checks, crossCheck, problems, positions,
+    missing_support: missingSupport,
     allOk,
-    //: 🔴 **자리가 맞았다 ≠ 그대로 재현됐다.** 뒷면으로 끝나야 하는 자리가
-    //: 하나라도 있으면 이 칸이 거짓이고, 부르는 쪽은 성공을 그렇게 읽는다.
-    fullyReproduced: allOk && faceDown.length === 0,
+    //: 🔴 **자리가 맞았다 ≠ 그대로 재현됐다.**
+    fullyReproduced: allOk && positions.ok && missingSupport.length === 0,
   };
 }
 
 module.exports = { normalizeZone, sameZone, identityOf, compareFinal,
-                   decideMove, decideMenu, movedBetween };
+                   decideMove, decideMenu, movedBetween,
+                   decidePosition, comparePositions };

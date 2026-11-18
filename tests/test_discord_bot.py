@@ -322,7 +322,9 @@ def test_18_future_commands_are_marked_unimplemented_not_claimed():
     #: **정확히** 고정한다.
     #: 🔴 Phase 6-AZ 가 ``register-deck`` 을 더했다 (사용자의 Neuron
     #: 덱 이미지 한 장을 등록한다). 집합은 여전히 정확히 고정한다.
-    assert registered == {"ping", "search", "deck", "combo",
+    #: 🔴 Phase 6-BH 가 ``combo-pick`` 을 더했다. 집합은 여전히 **정확히**
+    #: 고정한다.
+    assert registered == {"ping", "search", "deck", "combo", "combo-pick",
                           "share-replay", "register-deck"}, registered
 
 def test_19_the_real_command_tree_registers_ping_and_sends_the_text():
@@ -347,8 +349,10 @@ def test_19_the_real_command_tree_registers_ping_and_sends_the_text():
     #: **정확히** 고정한다.
     #: 🔴 Phase 6-AZ 가 ``register-deck`` 을 더했다 (사용자의 Neuron
     #: 덱 이미지 한 장을 등록한다). 집합은 여전히 정확히 고정한다.
+    #: 🔴 Phase 6-BH 가 ``combo-pick`` 을 더했다 (공동 추천 가운데 고른
+    #: 후보의 기록). 집합은 여전히 **정확히** 고정한다.
     assert set(commands) == {"ping", "search", "deck", "combo",
-                             "share-replay", "register-deck"}
+                             "combo-pick", "share-replay", "register-deck"}
     ping = commands["ping"]
     assert ping.description == bot.PING_DESCRIPTION
 
@@ -366,6 +370,12 @@ def test_19_the_real_command_tree_registers_ping_and_sends_the_text():
 
     asyncio.run(ping.callback(_Interaction()))
     assert sent == [bot.ping_message()] == ["Pong! 갈라테아 온라인."]
+
+
+class _User:
+    """``discord.Interaction.user`` 대역 — 번호 하나만 있으면 된다."""
+
+    id = 4242
 
 
 # ===========================================================================
@@ -666,6 +676,10 @@ def test_29_the_search_handler_defers_first_and_runs_off_the_event_loop():
         def __init__(self):
             self.response = _Response()
             self.followup = _Followup()
+            #: 🔴 **진짜 ``discord.Interaction`` 은 언제나 사람을 들고 있다.**
+            #: 대역이 그것을 빼면 요청과 사람을 묶는 자리를 재지 못한다
+            #: (Phase 6-BH — ``/combo`` 가 요청 ID 의 소유자로 쓴다).
+            self.user = _User()
 
     _client, tree = bot.build_client(dev_guild_id=None, service=_SlowService())
     commands = {command.name: command for command in tree.get_commands()}
@@ -849,8 +863,10 @@ def test_32_the_deck_command_is_registered_with_one_request_argument():
     #: **정확히** 고정한다.
     #: 🔴 Phase 6-AZ 가 ``register-deck`` 을 더했다 (사용자의 Neuron
     #: 덱 이미지 한 장을 등록한다). 집합은 여전히 정확히 고정한다.
+    #: 🔴 Phase 6-BH 가 ``combo-pick`` 을 더했다 (공동 추천 가운데 고른
+    #: 후보의 기록). 집합은 여전히 **정확히** 고정한다.
     assert set(commands) == {"ping", "search", "deck", "combo",
-                             "share-replay", "register-deck"}
+                             "combo-pick", "share-replay", "register-deck"}
 
     deck = commands["deck"]
     assert deck.description == bot.DECK_DESCRIPTION
@@ -1150,6 +1166,10 @@ def test_41_the_deck_handler_defers_first_and_sends_every_message():
         def __init__(self):
             self.response = _Response()
             self.followup = _Followup()
+            #: 🔴 **진짜 ``discord.Interaction`` 은 언제나 사람을 들고 있다.**
+            #: 대역이 그것을 빼면 요청과 사람을 묶는 자리를 재지 못한다
+            #: (Phase 6-BH — ``/combo`` 가 요청 ID 의 소유자로 쓴다).
+            self.user = _User()
 
     _client, tree = bot.build_client(dev_guild_id=None, service=_Service())
     deck = {c.name: c for c in tree.get_commands()}["deck"]
@@ -1373,8 +1393,17 @@ def test_44_the_combo_command_is_registered_with_its_four_arguments():
     #: **정확히** 고정한다.
     #: 🔴 Phase 6-AZ 가 ``register-deck`` 을 더했다 (사용자의 Neuron
     #: 덱 이미지 한 장을 등록한다). 집합은 여전히 정확히 고정한다.
+    #: 🔴 Phase 6-BH 가 ``combo-pick`` 을 더했다 (공동 추천 가운데 고른
+    #: 후보의 기록). 집합은 여전히 **정확히** 고정한다.
     assert set(commands) == {"ping", "search", "deck", "combo",
-                             "share-replay", "register-deck"}
+                             "combo-pick", "share-replay", "register-deck"}
+
+    pick = commands["combo-pick"]
+    assert pick.description == bot.PICK_DESCRIPTION
+    #: 🔴 **고르는 데 필요한 것만 받는다** — 패도 레시피도 다시 받지 않는다
+    #: (다시 받으면 탐색을 다시 돌리는 길이 생긴다).
+    assert [parameter.name for parameter in pick.parameters] == [
+        "request", "result", "share"]
 
     combo = commands["combo"]
     assert combo.description == bot.COMBO_DESCRIPTION
@@ -1905,7 +1934,7 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
         def combo_response(self, hand_text, board_text="", deck_text="",
                            recipe_text="", line_text="", search_text="",
                            results_text="", followups_text="", *,
-                           progress=None):
+                           progress=None, owner="local", store=None):
             order.append("combo")
             worker.append(threading.get_ident())
             received.append((hand_text, board_text, deck_text, recipe_text,
@@ -1939,6 +1968,10 @@ def test_58_the_combo_handler_defers_first_and_sends_every_message():
         def __init__(self):
             self.response = _Response()
             self.followup = _Followup()
+            #: 🔴 **진짜 ``discord.Interaction`` 은 언제나 사람을 들고 있다.**
+            #: 대역이 그것을 빼면 요청과 사람을 묶는 자리를 재지 못한다
+            #: (Phase 6-BH — ``/combo`` 가 요청 ID 의 소유자로 쓴다).
+            self.user = _User()
 
     _client, tree = bot.build_client(dev_guild_id=None, service=_Service())
     combo = {c.name: c for c in tree.get_commands()}["combo"]
@@ -2010,6 +2043,10 @@ def _progress_handler(service, *, edit, followup_send=None):
         def __init__(self):
             self.response = _Response()
             self.followup = _Followup()
+            #: 🔴 **진짜 ``discord.Interaction`` 은 언제나 사람을 들고 있다.**
+            #: 대역이 그것을 빼면 요청과 사람을 묶는 자리를 재지 못한다
+            #: (Phase 6-BH — ``/combo`` 가 요청 ID 의 소유자로 쓴다).
+            self.user = _User()
 
         async def edit_original_response(self, *, content):
             order.append(f"edit:{content[:2]}")
@@ -2036,7 +2073,8 @@ class _StageService:
 
     def combo_response(self, hand_text, board_text="", deck_text="",
                        recipe_text="", line_text="", search_text="",
-                       results_text="", followups_text="", *, progress=None):
+                       results_text="", followups_text="", *, progress=None,
+                       owner="local", store=None):
         from app.main import notify_progress
 
         for stage in self.stages:

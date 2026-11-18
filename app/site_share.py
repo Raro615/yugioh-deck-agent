@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "ShareState", "SiteShareOutcome", "SiteShareRunner",
-    "SITE_SHARE_WARNING", "site_share_lines",
+    "SITE_SHARE_WARNING", "site_share_lines", "reproduction_line",
 ]
 
 #: 🔴 입구에서 **먼저** 보여 주는 경고. 누르면 바깥에 공개된다.
@@ -87,6 +87,20 @@ class SiteShareOutcome:
     run_id: str = ""
     operations_ok: int = 0
     operations_total: int = 0
+    #: 🔴 **다섯 상태를 따로 들고 간다** (Phase 6-BH). 하나로 뭉치면
+    #: "자리가 맞았으니 재현됐다" 가 되고, 사용자에게 그렇게 보고된다.
+    board_ok: bool = False
+    """② 카드 **위치**가 기록과 같은가."""
+    positions_ok: bool = False
+    """③ **표시 형식**(앞면 · 뒷면)이 기록과 같은가."""
+    positions_compared: bool = False
+    """🔴 선언한 자리를 **전부 읽었는가.** 거짓이면 일부가 미확인이다."""
+    fully_reproduced: bool = False
+    """④ 이 전개를 재현했는가 (② + ③ + 필수 미지원 없음)."""
+    missing_support: tuple = ()
+    """재현에 **반드시 필요한데 못 한** 조작들."""
+    unknown_positions: tuple = ()
+    """표시 형식을 읽지 못한 자리들."""
 
 
 class SiteShareRunner:
@@ -136,18 +150,28 @@ class SiteShareRunner:
         finally:
             self._lock.release()
 
+        #: 🔴 **판정 값을 그대로 옮긴다** — 여기서 다시 판정하지 않는다
+        #: (``SiteRunResult`` 와 두 답이 생기지 않게).
+        verdict = dict(
+            board_ok=run.final_ok,
+            positions_ok=run.positions_ok,
+            positions_compared=run.positions_compared,
+            fully_reproduced=run.fully_reproduced,
+            missing_support=tuple(run.missing_support),
+            unknown_positions=tuple(run.positions_unknown),
+        )
         if run.shared:
             return SiteShareOutcome(
                 ShareState.SHARED, url=run.share_url,
                 run_id=run.run_id,
                 operations_ok=run.operations_ok,
-                operations_total=run.operations_total)
+                operations_total=run.operations_total, **verdict)
         #: 🔴 **URL 이 있어도** 검증을 통과하지 못했으면 성공이 아니다.
         return SiteShareOutcome(
             ShareState.FAILED, reason=run.reason or "확인하지 못했습니다",
             run_id=run.run_id,
             operations_ok=run.operations_ok,
-            operations_total=run.operations_total)
+            operations_total=run.operations_total, **verdict)
 
     def _run(self, record, *, title: str, registration=None):
         if self._session is not None:
@@ -160,6 +184,31 @@ class SiteShareRunner:
                                 share=True, registration=registration)
 
 
+def reproduction_line(outcome: SiteShareOutcome) -> str:
+    """
+    **무엇을 확인했고 무엇을 못 했는가** 한 줄 (Phase 6-BH).
+
+    🔴 **"재현했다" 는 엔진 기록과 사이트 상태가 같다는 뜻이다** — 사이트가
+    유희왕 규칙을 검증했다는 뜻이 **아니다.**
+    """
+    marks = [
+        f"위치 {'✔' if outcome.board_ok else '✘'}",
+        f"표시 형식 {'✔' if outcome.positions_ok else '✘'}"
+        + ("" if outcome.positions_compared else " (일부 미확인)"),
+    ]
+    said = ("🧪 재현 판정: " + " · ".join(marks)
+            + f" → {'재현 확인' if outcome.fully_reproduced else '미완료'}"
+            " (엔진 기록과 사이트 상태의 일치 여부이고, 규칙 적법성 판정이"
+            " 아닙니다)")
+    if outcome.missing_support:
+        said += "\n🔴 재현에 필요한데 하지 못한 조작: " + " · ".join(
+            outcome.missing_support)
+    if outcome.unknown_positions:
+        said += "\n🔴 표시 형식을 읽지 못한 자리: " + " · ".join(
+            outcome.unknown_positions)
+    return said
+
+
 def site_share_lines(outcome: SiteShareOutcome) -> list[str]:
     """사용자에게 보일 줄들. 🔴 **없는 링크를 적지 않는다.**"""
     head = outcome.state.notice
@@ -167,10 +216,15 @@ def site_share_lines(outcome: SiteShareOutcome) -> list[str]:
         progress = (f" (사이트 조작 {outcome.operations_ok}/"
                     f"{outcome.operations_total}건 확인)"
                     if outcome.operations_total else "")
-        return [f"{head}{progress}", str(outcome.url)]
+        return [f"{head}{progress}", reproduction_line(outcome),
+                str(outcome.url)]
     lines = [head]
     if outcome.reason:
         lines[0] = f"{head} — {outcome.reason}"
+    #: 🔴 **왜 공유하지 않았는지를 판정으로 적는다** — 경고 문장 하나로
+    #: 뭉치지 않는다 (Phase 6-BH).
+    if outcome.state is ShareState.FAILED and outcome.operations_total:
+        lines.append(reproduction_line(outcome))
     if outcome.state in (ShareState.FAILED, ShareState.BUSY):
         lines.append(SITE_SHARE_FALLBACK)
     return lines

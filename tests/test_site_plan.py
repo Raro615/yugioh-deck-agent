@@ -224,7 +224,13 @@ def test_c01_a_session_reports_what_the_site_actually_did(tmp_path):
         runner=_fake_runner({"stopped_at": None, "share_requested": True,
                              "share_url": "https://example.test/replay/abc",
                              "operations": [{"ok": True}, {"ok": True}],
-                             "stages": {"final": {"all_ok": True}}, "notes": []}))
+                             #: 🔴 **재현했다고 말해야 공유 성공이다**
+                             #: (Phase 6-BH).
+                             "stages": {"final": {
+                                 "all_ok": True, "fully_reproduced": True,
+                                 "positions": {"ok": True, "compared": True},
+                                 "missing_support": []}},
+                             "notes": []}))
     assert run.ok and run.shared
     assert run.share_url == "https://example.test/replay/abc"
     assert (run.operations_ok, run.operations_total) == (2, 2)
@@ -301,6 +307,14 @@ def test_d03_two_requests_do_not_share_one_browser(tmp_path):
             operations_ok = operations_total = 1
             stopped_reason = None
             final_ok = True
+            #: 🔴 **판정 칸을 대역도 말한다** (Phase 6-BH)
+            #: — 말하지 않는 결과는 재현을 주장할 수 없다.
+            positions_ok = True
+            positions_compared = True
+            positions_unknown = ()
+            positions_mismatched = ()
+            missing_support = ()
+            fully_reproduced = True
             reason = ""
             run_id = "one"
         return _Run()
@@ -567,20 +581,28 @@ def test_bg02_the_plan_says_which_slots_should_end_face_down():
     """
     🔴 **표시 형식을 적되 「했다」 고 말하지 않는다** (Phase 6-BG §5).
 
-    이 계획은 끌어 놓기만 만들고 뒷면으로 만드는 조작은 싣지 못한다. 그
-    사실이 두 자리에 남는다 — 조작의 ``face_down`` 과 계획의
-    ``expect_positions`` (``compared`` 가 **거짓**이다). 그래서 대조가
-    통과해도 "세트까지 재현됐다" 가 되지 않는다.
+    계획은 **무엇이 뒷면이어야 하는가**를 적고, 그것이 실제로 그렇게
+    됐는지는 **조작기가 사이트에서 읽어** 판정한다 (Phase 6-BH 가 그 읽기를
+    더했다). 그래서 이 시험이 재는 것은 ① 조작에 표시 형식이 실려 있고
+    ② 계획이 **대조해야 하는 자리**를 전부 선언한다는 것이다.
+
+    🔴 **6-BG 는 여기서 ``compared is False`` 를 고정했다** — 그때는 대조가
+    아예 없었기 때문이다. 지금은 계획이 "대조하지 않았다" 고 선언하는 것이
+    아니라 **대조할 자리를 넘겨 주고**, 판정은 관측으로 한다.
     """
     plan = build_site_plan(_toy_set("SZONE", 0))
     move = next(op for op in plan["operations"] if op["op"] == "move")
     assert move["position"] == "FACEDOWN"
     assert move["face_down"] is True
     positions = plan["expect_positions"]
-    assert positions["compared"] is False
     assert positions["face_down"] == [
         {"slot": "main-1", "zone": "Spell & Trap Zone1"},
     ]
+    #: 🔴 **뒷면만 적지 않는다** — 앞면이어야 하는 자리도 선언한다.
+    #: 그러지 않으면 "뒷면 기대가 없으니 표시 형식은 다 맞았다" 가 된다.
+    assert {"slot": "main-1", "zone": "Spell & Trap Zone1",
+            "position": "face_down"} in positions["declared"]
+    assert positions["scope"] == "face_up_or_down"
     assert "대조하지 않았습니다" in positions["why"]
     #: 🔴 **사건마다의 한계도 그대로 적힌다** (6-BF 가 만든 줄).
     assert any("뒷면 세트" in line for line in plan["unsupported"])
@@ -597,3 +619,81 @@ def test_bg03_a_face_up_move_is_not_marked_face_down():
     assert moves
     assert all(not op.get("face_down") for op in moves), moves
     assert plan["expect_positions"]["face_down"] == []
+
+
+# ======================================================================
+# Phase 6-BH — 공유 판정이 **아래 칸을 실제로 읽는다**
+# ======================================================================
+def test_bh01_a_position_blind_run_is_not_shared(tmp_path):
+    """
+    🔴 **자리만 맞은 실행을 공유 성공으로 치지 않는다** (Phase 6-BH).
+
+    6-BG 는 ``compareFinal`` 에 ``fullyReproduced`` 를 더했지만 **공유
+    분기와 세션 결과는 ``all_ok`` 만 읽었다** — 아래에 값을 두고 위에서
+    읽지 않는 상태였다. 이 시험이 그 자리를 고정한다: 옛 드라이버처럼
+    ``all_ok`` 만 적어 보낸 결과는 **재현을 주장하지 않았으므로** 공유
+    성공이 아니다.
+    """
+    from deck.site_session import run_site_session
+
+    run = run_site_session(
+        _toy(), workdir=tmp_path, title="t",
+        runner=_fake_runner({"stopped_at": None, "share_requested": True,
+                             "share_url": "https://example.test/replay/abc",
+                             "operations": [{"ok": True}, {"ok": True}],
+                             "stages": {"final": {"all_ok": True}},
+                             "notes": []}))
+    #: 조작은 다 했고 자리도 맞았다 —
+    assert run.ok and run.completed and run.final_ok
+    #: 🔴 그러나 표시 형식을 말하지 않았으므로 재현도 공유도 아니다.
+    assert run.fully_reproduced is False
+    assert run.positions_ok is False
+    assert run.positions_compared is False
+    assert run.shared is False
+    assert "확인하지 못해" in run.reason
+
+
+def test_bh02_a_mismatched_position_names_itself(tmp_path):
+    """🔴 **표시 형식이 어긋났으면 그 자리를 이름으로 적는다.**"""
+    from deck.site_session import run_site_session
+
+    run = run_site_session(
+        _toy(), workdir=tmp_path, title="t",
+        runner=_fake_runner({"stopped_at": None, "share_requested": True,
+                             "share_url": "https://example.test/replay/abc",
+                             "operations": [{"ok": True}, {"ok": True}],
+                             "stages": {"final": {
+                                 "all_ok": True, "fully_reproduced": False,
+                                 "positions": {
+                                     "ok": False, "compared": True,
+                                     "mismatched": [{"slot": "main-5",
+                                                     "want": "face_down",
+                                                     "got": "face_up"}],
+                                     "not_observed": []},
+                                 "missing_support": []}},
+                             "notes": []}))
+    assert run.shared is False
+    assert run.positions_mismatched == ("main-5: face_down→face_up",)
+    assert "표시 형식이 기록과 달라" in run.reason
+
+
+def test_bh03_a_required_unsupported_operation_blocks_sharing(tmp_path):
+    """🔴 **필수 조작을 못 했으면 공유하지 않는다** (토큰 · 상대 자리)."""
+    from deck.site_session import run_site_session
+
+    run = run_site_session(
+        _toy(), workdir=tmp_path, title="t",
+        runner=_fake_runner({"stopped_at": None, "share_requested": True,
+                             "share_url": "https://example.test/replay/abc",
+                             "operations": [{"ok": True}, {"ok": True}],
+                             "stages": {"final": {
+                                 "all_ok": True, "fully_reproduced": False,
+                                 "positions": {"ok": True, "compared": True,
+                                               "mismatched": [],
+                                               "not_observed": []},
+                                 "missing_support": [
+                                     "상대 자리의 토큰 #96 을 놓지 않습니다"]}},
+                             "notes": []}))
+    assert run.shared is False
+    assert run.missing_support == ("상대 자리의 토큰 #96 을 놓지 않습니다",)
+    assert "필요한 조작을 하지 못해" in run.reason

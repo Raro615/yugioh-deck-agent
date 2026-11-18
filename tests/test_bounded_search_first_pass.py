@@ -1043,9 +1043,16 @@ def test_e06_the_search_mode_is_opt_in(repository):
     assert _positional[-3:] == [
         "search_text", "results_text", "followups_text",
     ]
+    #: 🔴 **Phase 6-BH 가 ``owner`` · ``store`` 를 더했다 — 키워드
+    #: 전용으로.** 공동 추천 후보를 **요청 단위로 보관**하는 데 쓰는 둘이고
+    #: (누가 물었는가 · 어디에 보관하는가), 둘 다 기본값이 있으므로 기존
+    #: 위치 인자 호출은 여전히 한 글자도 달라지지 않는다.
     assert [name for name, param in _sig.parameters.items()
-            if param.kind is param.KEYWORD_ONLY] == ["progress"]
+            if param.kind is param.KEYWORD_ONLY] == [
+        "progress", "owner", "store"]
     assert _sig.parameters["progress"].default is None
+    assert _sig.parameters["owner"].default == "local"
+    assert _sig.parameters["store"].default is None
     for name in ("search_text", "results_text", "followups_text"):
         assert inspect.signature(
             SearchService.combo_response).parameters[name].default == ""

@@ -491,7 +491,10 @@ def _combo_stubs(monkeypatch, *, searched=None, record=None, sinks=None):
                                  ran=True, replay={"from": "first_meaningful"})
 
     def _fake_search(agent, recipe_text, hand_ids, search_text,
-                     results_text="", followups_text="", progress=None):
+                     results_text="", followups_text="", progress=None,
+                     #: 🔴 Phase 6-BH — ``/combo`` 가 요청을 보관하려고
+                     #: **누가 물었는지**와 **보관소**를 함께 넘긴다.
+                     owner="local", store=None):
         seen["search"] += 1
         if sinks is not None:
             sinks.append(progress)

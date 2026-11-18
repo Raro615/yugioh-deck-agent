@@ -37,6 +37,10 @@ const { chromium } = require('playwright');
 const { identityOf, compareFinal, decideMove, decideMenu,
         movedBetween } =
   require(path.join(__dirname, 'duel_simulator_verify.js'));
+//: 🔴 **손가락은 따로 산다** (Phase 6-BH) — 실제 사이트에서 조작 하나를
+//: 확인하는 스크립트가 **이 함수들을 그대로** 쓴다.
+const { drag, cardMenu, armFaceDown, readPosition } =
+  require(path.join(__dirname, 'duel_simulator_ops.js'));
 
 const SITE = 'https://duel-simulator.miyauchidp.dev/';
 const STEP_PAUSE = 700;
@@ -240,27 +244,26 @@ async function panelZone(page) {
   });
 }
 
-async function drag(page, from, to) {
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  for (let i = 1; i <= 16; i++) {
-    await page.mouse.move(from.x + (to.x - from.x) * i / 16,
-                          from.y + (to.y - from.y) * i / 16);
-    await sleep(20);
-  }
-  await sleep(140);
-  await page.mouse.up();
-  await sleep(STEP_PAUSE);
-}
 
-async function cardMenu(page, box, item) {
-  await page.mouse.click(box.x, box.y, { button: 'right' });
-  await sleep(600);
-  const entry = page.getByRole('menuitem', { name: item, exact: true });
-  if (await entry.count() === 0) { return false; }
-  await entry.first().click();
-  await sleep(STEP_PAUSE);
-  return true;
+
+
+
+
+
+/** 관측한 자리 이름을 **계획의 이름**으로 되돌린다 (토큰, Phase 6-BH). */
+function relabelBoard(board, reverse) {
+  const name = slot => reverse[slot] || slot;
+  const bySlot = {}, byZone = {}, srcOf = {};
+  Object.entries(board.bySlot || {}).forEach(([slot, zone]) => {
+    bySlot[name(slot)] = zone;
+  });
+  Object.entries(board.byZone || {}).forEach(([zone, slots]) => {
+    byZone[zone] = slots.map(name);
+  });
+  Object.entries(board.srcOf || {}).forEach(([slot, src]) => {
+    srcOf[name(slot)] = src;
+  });
+  return { bySlot, byZone, srcOf, problems: (board.problems || []).slice() };
 }
 
 async function expandPileIfNeeded(page, slot) {
@@ -376,11 +379,58 @@ async function expandPileIfNeeded(page, slot) {
       await page.evaluate(() => /Recording/.test(document.body.innerText));
 
     let rows = await historyRows(page);
-    let board = await observeBoard(page, zones);
+    //: 🔴 **토큰은 계획의 이름과 사이트의 이름이 다르다** (Phase 6-BH).
+    //: 계획은 ``token-<개체번호>`` 를 쓰고 사이트는 ``Generate Token`` 이
+    //: 만든 **제 id** 를 쓴다. 둘을 이 두 표로 잇고, 관측은 **계획의
+    //: 이름으로 되돌려** 본다 — 그래야 ``expect_final`` 과 맞춰진다.
+    const alias = {};      // 계획 이름 → 사이트 이름
+    const reverse = {};    // 사이트 이름 → 계획 이름
+    const siteName = slot => alias[slot] || slot;
+    const look = async () => relabelBoard(await observeBoard(page, zones), reverse);
+    let board = await look();
     for (const op of plan.operations) {
       const entry = { n: op.n, op: op.op, card: op.card, expect: op.expect,
                       why: op.why, basis: op.basis };
-      const box = await expandPileIfNeeded(page, op.card);
+      if (op.op === 'generate_token') {
+        //: 🔴 **집을 카드가 아직 없다** — 만드는 조작이다.
+        const before = await look();
+        await page.getByRole('button', { name: /^More$/i }).first().click();
+        await sleep(800);
+        const item = page.getByRole('menuitem', { name: 'Generate Token', exact: true });
+        const offered = await item.count();
+        if (offered) { await item.first().click(); } else { await page.keyboard.press('Escape'); }
+        await sleep(1600);
+        const after = await look();
+        const fresh = Object.keys(after.bySlot)
+          .filter(slot => !(slot in before.bySlot));
+        entry.saw = `Generate Token (메뉴 ${offered}건) → 새 개체 `
+                    + JSON.stringify(fresh);
+        if (!offered) {
+          entry.ok = false;
+          entry.reasons = ['조작 바 More 메뉴에 Generate Token 이 없습니다'];
+        } else if (fresh.length !== 1) {
+          entry.ok = false;
+          entry.reasons = [`토큰 하나가 생겨야 하는데 ${fresh.length}개가 `
+                           + '늘었습니다'];
+        } else {
+          alias[op.card] = fresh[0];
+          reverse[fresh[0]] = op.card;
+          entry.ok = true;
+          entry.reasons = [];
+          entry.where = after.bySlot[fresh[0]] || null;
+          board = await look();
+          rows = await historyRows(page);
+        }
+        result.operations.push(entry);
+        if (!entry.ok) {
+          stop(`operation#${op.n}`,
+               `${op.op} ${op.card} — ${(entry.reasons || []).join(' / ')}`);
+          await page.screenshot({ path: shot(`op-${op.n}-fail`) });
+          break;
+        }
+        continue;
+      }
+      const box = await expandPileIfNeeded(page, siteName(op.card));
       if (!box || !box.w) {
         entry.ok = false;
         entry.saw = '카드를 찾지 못했거나 읽을 수 없습니다';
@@ -394,9 +444,15 @@ async function expandPileIfNeeded(page, slot) {
             entry.ok = false; entry.saw = `존 ${op.to} 을 찾지 못했습니다`;
             entry.reasons = [entry.saw];
           } else {
+            //: 🔴 **뒷면 세트는 끌어 놓기 전에 선언한다** (Phase 6-BH).
+            //: 조작 바의 `Face-down` 을 켜면 그 드롭이 뒷면으로 놓인다
+            //: (실측). 🔴 **끈적하므로 놓은 뒤 반드시 끈다.**
+            const wantFaceDown = op.face_down === true;
+            entry.armed = await armFaceDown(page, wantFaceDown);
             await drag(page, box, target);
+            if (wantFaceDown) { entry.disarmed = await armFaceDown(page, false); }
             const after = await historyRows(page);
-            const seen = await observeBoard(page, zones);
+            const seen = await look();
             const row = after[after.length - 1];
             const evidence = {
               clickHit,
@@ -416,12 +472,38 @@ async function expandPileIfNeeded(page, slot) {
             entry.ok = verdict.ok;
             entry.reasons = verdict.why;
             rows = after; board = seen;
+            //: 🔴 **놓았다는 사실로 끝내지 않는다** (Phase 6-BH). 뒷면이어야
+            //: 하는 자리면 **사이트에게 물어** 확인하고, 앞면이면 그 카드의
+            //: 메뉴로 뒤집은 뒤 **다시 물어** 확인한다. 🔴 이미 뒷면이면
+            //: 다시 뒤집지 않는다.
+            if (entry.ok && wantFaceDown) {
+              const at = await cardBox(page, siteName(op.card));
+              let told = at ? await readPosition(page, at) : null;
+              entry.position_menu = told ? told.items : null;
+              entry.position_seen = told ? told.position : 'unknown';
+              if (told && told.position === 'face_up') {
+                entry.flipped = await cardMenu(page, at, 'Set Face-down');
+                told = await readPosition(page, at);
+                entry.position_menu = told.items;
+                entry.position_seen = told.position;
+              } else if (told && told.position === 'face_down') {
+                entry.flipped = 'not-needed';
+              }
+              if (entry.position_seen !== 'face_down') {
+                entry.ok = false;
+                entry.reasons = (entry.reasons || []).concat([
+                  `뒷면으로 만들지 못했습니다 (사이트가 말한 상태: `
+                  + `${entry.position_seen})`]);
+              }
+              rows = await historyRows(page);
+              board = await look();
+            }
           }
         } else if (op.op === 'activate' || op.op === 'target') {
           const item = op.op === 'activate' ? 'Activate Effect' : 'Target';
           const picked = await cardMenu(page, box, item);
           const after = await historyRows(page);
-          const seen = await observeBoard(page, zones);
+          const seen = await look();
           const row = after[after.length - 1];
           const evidence = {
             clickHit, picked,
@@ -441,6 +523,21 @@ async function expandPileIfNeeded(page, slot) {
           entry.ok = verdict.ok;
           entry.reasons = verdict.why;
           rows = after; board = seen;
+        } else if (op.op === 'delete_token') {
+          //: 🔴 **토큰만 지울 수 있다** (실측) — 그 메뉴 항목은 토큰에만
+          //: 생기므로, 눌리지 않았다는 사실이 곧 "이것은 토큰이 아니다" 다.
+          const picked = await cardMenu(page, box, 'Delete Token');
+          await sleep(400);
+          const seen = await look();
+          entry.saw = `Delete Token (${picked ? '눌렀다' : '항목이 없다'})`;
+          entry.where = seen.bySlot[op.card] || null;
+          entry.click_hit = clickHit;
+          //: 🔴 **사라졌는지 판으로 확인한다** — 누른 것으로 끝내지 않는다.
+          entry.ok = Boolean(picked) && !(op.card in seen.bySlot);
+          entry.reasons = entry.ok ? [] : [
+            picked ? '토큰이 판에서 사라지지 않았습니다'
+                   : '카드 메뉴에 Delete Token 이 없습니다 (토큰이 아닙니다)'];
+          rows = await historyRows(page); board = seen;
         } else {
           entry.ok = false; entry.saw = `모르는 조작 ${op.op}`;
           entry.reasons = [entry.saw];
@@ -466,9 +563,26 @@ async function expandPileIfNeeded(page, slot) {
 
     // ------------------------------------------------- 최종 판 대조
     counts = await zoneCounts(page);
-    const seen = await observeBoard(page, zones);
+    const seen = await look();
+    //: 🔴 **선언한 자리의 표시 형식을 사이트에게 묻는다** (Phase 6-BH).
+    //: 6-BG 는 기대만 적고 묻지 않았다 — 그래서 "자리가 맞았다" 를
+    //: "재현됐다" 로 읽을 길이 남아 있었다.
+    //:
+    //: 🔴 **읽지 못한 자리를 맞은 것으로 만들지 않는다.** 집을 수 없거나
+    //: 메뉴가 표시 형식을 말하지 않으면 ``unknown`` 이고,
+    //: ``comparePositions`` 가 그것을 **미확인**으로 남긴다.
+    const observedPositions = {};
+    const positionMenus = {};
+    for (const row of (plan.expect_positions || {}).declared || []) {
+      const at = await cardBox(page, siteName(row.slot));
+      if (!at || !at.w) { observedPositions[row.slot] = 'unknown'; continue; }
+      const told = await readPosition(page, at);
+      observedPositions[row.slot] = told.position;
+      positionMenus[row.slot] = told.items;
+    }
     const verdict = compareFinal(plan.expect_final, seen, counts,
-                                 plan.expect_positions);
+                                 plan.expect_positions, observedPositions,
+                                 plan.required_unsupported);
     result.stages.final = {
       counts,
       checks: verdict.checks,
@@ -479,14 +593,35 @@ async function expandPileIfNeeded(page, slot) {
       //: 🔴 **자리가 맞았다 ≠ 그대로 재현됐다** (6-BG). 뒷면으로 끝나야
       //: 하는 자리가 있으면 이 칸이 거짓이고, 어느 자리인지도 함께 남는다.
       positions: verdict.positions,
+      position_menus: positionMenus,
+      missing_support: verdict.missing_support,
       fully_reproduced: verdict.fullyReproduced,
     };
     if (!verdict.fullyReproduced && verdict.allOk) {
-      const where = (verdict.positions.face_down || [])
-        .map(one => `${one.slot}→${one.zone}`).join(' · ');
+      //: 🔴 **왜 "재현됐다" 가 아닌지를 갈라 적는다** (Phase 6-BH) — 표시
+      //: 형식이 어긋났는가 · 못 읽었는가 · 필수 조작을 못 했는가.
+      const said = [];
+      const pos = verdict.positions || {};
+      for (const row of pos.mismatched || []) {
+        said.push(`${row.slot}→${row.zone}: ${row.want} 이어야 하는데 `
+                  + `${row.got} 입니다`);
+      }
+      for (const row of pos.required_not_observed || []) {
+        said.push(`${row.slot}→${row.zone}: 뒷면이어야 하는데 표시 형식을 `
+                  + '읽지 못했습니다');
+      }
+      for (const line of verdict.missing_support || []) {
+        said.push('필수 미지원: ' + line);
+      }
       result.notes.push('🔴 자리는 맞았지만 **그대로 재현된 것은 아닙니다** — '
-                        + verdict.positions.why
-                        + (where ? ` 뒷면이어야 하는 자리: ${where}.` : ''));
+                        + (said.join(' / ') || '사유를 적지 못했습니다'));
+    }
+    if ((verdict.positions || {}).not_observed &&
+        verdict.positions.not_observed.length) {
+      //: 🔴 **미확인은 「맞았다」 도 「틀렸다」 도 아니다.** 그 사실만 적는다.
+      result.notes.push('표시 형식을 읽지 못한 자리: '
+        + verdict.positions.not_observed
+            .map(r => `${r.slot}(${r.want})`).join(' · '));
     }
     //: 🔴 **계획이 못 한다고 적어 둔 것을 결과에도 적는다** (6-BG). 전에는
     //: ``plan.unsupported`` 가 계획 파일에만 있었고, 자동 조작의 결과만
@@ -504,11 +639,25 @@ async function expandPileIfNeeded(page, slot) {
     if (!WANT_SHARE) {
       result.notes.push('공유하지 않았습니다 (--share 를 주지 않았습니다). '
                         + '기록은 이 브라우저 세션에만 있습니다.');
-    } else if (!result.stages.final.all_ok) {
-      //: 🔴 **검증에 실패하면 공유하지 않는다.**
+    } else if (!result.stages.final.fully_reproduced) {
+      //: 🔴 **재현되지 않았으면 공유하지 않는다** (Phase 6-BH).
+      //:
+      //: 6-BG 는 이 분기에서 `all_ok` **하나만** 보았다 — 자리만 맞으면
+      //: 표시 형식이 어긋나도, 필수 조작을 못 했어도 공유했다. 지금은
+      //: ② 자리 · ③ 표시 형식 · 필수 미지원을 **함께** 본 판정을 읽는다.
       const bad = result.stages.final.checks.filter(c => !c.ok);
-      stop('verify', '최종 판이 기록과 다릅니다: ' + JSON.stringify(bad).slice(0, 400));
-      result.notes.push('🔴 최종 검증에 실패해서 공유하지 않았습니다.');
+      const pos = result.stages.final.positions || {};
+      const why = !result.stages.final.all_ok
+        ? '최종 판이 기록과 다릅니다: ' + JSON.stringify(bad).slice(0, 300)
+        : (pos.mismatched || []).length
+          ? '표시 형식이 기록과 다릅니다: ' + JSON.stringify(pos.mismatched).slice(0, 300)
+          : (pos.required_not_observed || []).length
+            ? '뒷면이어야 하는 자리의 표시 형식을 확인하지 못했습니다: '
+              + JSON.stringify(pos.required_not_observed).slice(0, 300)
+            : '이 기록을 재현하는 데 필요한 조작을 하지 못했습니다: '
+              + JSON.stringify(result.stages.final.missing_support).slice(0, 300);
+      stop('verify', why);
+      result.notes.push('🔴 재현을 확인하지 못해서 공유하지 않았습니다.');
     } else {
       await page.getByRole('button', { name: /^Share$/i }).first().click();
       await sleep(1800);

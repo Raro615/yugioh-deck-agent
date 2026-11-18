@@ -162,6 +162,35 @@ class SiteRunResult:
     operations_ok: int = 0
     operations_total: int = 0
     final_ok: bool = False
+    """
+    🔴 **자리 대조 하나**다 (② 카드 위치 일치). 앞뒷면도, 못 한 필수
+    조작도 보지 않는다 — 그 둘은 아래 두 칸이 들고 있다.
+    """
+    positions_ok: bool = False
+    """③ **표시 형식이 기록과 같은가** (Phase 6-BH). 어긋남이 없고 **뒷면
+    기대는 전부 읽었다**는 뜻이다."""
+    positions_compared: bool = False
+    """🔴 **선언한 자리를 전부 읽었는가.** 거짓이면 일부가 **미확인**이다 —
+    "뒷면 기대가 없으니 표시 형식은 다 맞았다" 고 말하지 않기 위한 칸이다."""
+    positions_unknown: tuple[str, ...] = ()
+    """표시 형식을 읽지 못한 자리들 (사람이 읽는 한 줄씩)."""
+    positions_mismatched: tuple[str, ...] = ()
+    """기대와 관측이 **다른** 자리들."""
+    missing_support: tuple[str, ...] = ()
+    """
+    🔴 **이 기록을 재현하려면 반드시 해야 하는데 못 한 일들**
+    (``plan["required_unsupported"]``). 토큰 · 상대 자리처럼 **누락이 곧
+    재현 실패**인 것만 담는다 — 덱 섞기나 페이즈처럼 사이트에 개념이 없는
+    것은 ``notes`` 쪽이다.
+    """
+    fully_reproduced: bool = False
+    """
+    ④ **이 전개를 재현했는가** (Phase 6-BH) = ② 자리 일치 + ③ 표시 형식
+    일치 + 필수 미지원 없음.
+
+    🔴 **유희왕 규칙의 적법성이 아니다.** "엔진 기록과 사이트 상태가
+    같다" 하나이고, 사이트가 규칙을 검증한다는 뜻이 아니다.
+    """
     exit_code: "int | None" = None
     operations_planned: int = 0
     cleanup: "Cleanup | None" = None
@@ -203,6 +232,11 @@ class SiteRunResult:
             and self.status is RunStatus.OK
             and self.exit_code == 0
             and self.final_ok
+            #: 🔴 **자리만 맞은 것을 공유 성공으로 치지 않는다**
+            #: (Phase 6-BH). 6-BG 까지 이 자리는 ``final_ok`` 하나였고,
+            #: 그래서 세트가 앞면으로 놓여도 · 토큰을 못 만들어도 공유가
+            #: 성공이었다.
+            and self.fully_reproduced
             and self.completed
         )
 
@@ -218,6 +252,16 @@ class SiteRunResult:
             return self.status.detail
         if not self.final_ok:
             return "최종 판이 기록과 달라 공유하지 않았습니다"
+        #: 🔴 **왜 재현이 아닌지 갈라 적는다** (Phase 6-BH).
+        if self.positions_mismatched:
+            return ("표시 형식이 기록과 달라 공유하지 않았습니다: "
+                    + " · ".join(self.positions_mismatched))
+        if self.missing_support:
+            return ("이 기록을 재현하는 데 필요한 조작을 하지 못해 공유하지 "
+                    "않았습니다: " + " · ".join(self.missing_support))
+        if not self.fully_reproduced:
+            return ("표시 형식을 확인하지 못해 공유하지 않았습니다: "
+                    + (" · ".join(self.positions_unknown) or "사유 미기록"))
         if self.share_requested and not self.share_url:
             return "공유 URL 을 받지 못했습니다"
         return ""
@@ -462,6 +506,9 @@ def run_site_session(record, *, workdir=None, base_dir=None, title: str,
 
     operations = raw.get("operations") or []
     final = (raw.get("stages") or {}).get("final") or {}
+    #: 🔴 **없으면 비어 있다** — 옛 드라이버의 결과를 읽어도 "표시 형식을
+    #: 확인했다" 가 되지 않는다 (``positions_ok`` 가 거짓으로 남는다).
+    positions = final.get("positions") or {}
     stopped_at = raw.get("stopped_at")
     planned = int(raw.get("operations_planned") or 0)
     done_ok = sum(1 for op in operations if op.get("ok"))
@@ -486,6 +533,20 @@ def run_site_session(record, *, workdir=None, base_dir=None, title: str,
         operations_total=len(operations),
         operations_planned=planned,
         final_ok=bool(final.get("all_ok")),
+        #: 🔴 **드라이버가 센 것을 그대로 옮긴다** — 여기서 다시 판정하지
+        #: 않는다 (두 자리가 다른 답을 내지 않게).
+        positions_ok=bool(positions.get("ok")),
+        positions_compared=bool(positions.get("compared")),
+        positions_unknown=tuple(
+            f"{row.get('slot')}({row.get('want')})"
+            for row in positions.get("not_observed") or ()
+        ),
+        positions_mismatched=tuple(
+            f"{row.get('slot')}: {row.get('want')}→{row.get('got')}"
+            for row in positions.get("mismatched") or ()
+        ),
+        missing_support=tuple(final.get("missing_support") or ()),
+        fully_reproduced=bool(final.get("fully_reproduced")),
         exit_code=code,
         cleanup=cleanup,
         workdir=path,

@@ -1315,3 +1315,441 @@ tests/test_site_verify.py
 | 자율 탐색 → 대표 선정 → 첨부 생성 | `test_g01` · `test_g02` (6-BF) · §11.2 의 실측 여섯 칸 |
 | 카드 위치 · 뒷면 표시의 사이트 변환 | **`test_site_plan::test_bg02` · `test_bg03`** · **`test_site_verify::test_bg01`~`03`** · §15.1 의 실제 기록 |
 | 요약 · JSON · 재실행 결과 일치 | §11.3 (실제 출력) · §14 |
+
+---
+---
+
+# Phase 6-BH 후속 — **고른 후보**를 실제 사이트 재생까지
+
+기준 HEAD: `6a42a6f3` (6-BG 의 커밋). 6-BG 의 본문은 지우지 않았고, 지금
+틀린 문장은 §25 의 표에 적는다.
+
+🔴 **6-BG 가 남긴 두 공백을 메웠다.** ① 공동 추천이 둘인데 첨부는 하나였고
+사용자가 고를 길이 없었다. ② 표시 형식은 **기대만** 적고 사이트에서 읽지
+않았으며, 공유 분기는 여전히 `all_ok` 하나만 보았다 (아래에 값을 두고 위에서
+읽지 않는 상태).
+
+---
+
+## 19. 한눈에
+
+| # | 무엇 | 근거 · 자리 |
+| --- | --- | --- |
+| H1 | **후보 선택** — `/combo` 가 요청 ID 를 내고 `/combo-pick request:<ID> result:<번호>` 가 **그 후보만** 다시 실행한다 | `app/candidate_store.py` (새 파일) · `app/discord_bot.py` `pick_response` · 새 명령 `combo-pick` |
+| H2 | 🔴 **고르기가 탐색을 다시 돌리지 않는다** — 그때 그 결과를 보관해 두고 꺼낸다 | `CandidateStore` · `tests/test_candidate_pick.py::test_b04` 가 탐색 함수를 터지게 두고 고정한다 |
+| H3 | **실제 사이트의 뒷면 세트를 수행한다** — 조작 바 `Face-down` 토글 + 카드 메뉴 `Set Face-down` | `scripts/duel_simulator_ops.js` (새 파일) · `scripts/duel_simulator_driver.js` |
+| H4 | **표시 형식을 사이트에게 물어 확인한다** — 카드 메뉴가 그 상태를 말한다 | `duel_simulator_verify.js` `decidePosition` · `comparePositions` |
+| H5 | **토큰을 만든다 · 지운다** — `More → Generate Token` · 카드 메뉴 `Delete Token` | `site_plan` `TOKEN_OPERATIONS` · 드라이버의 두 조작 |
+| H6 | **다섯 상태를 가르고 공유를 막는다** — 조작 실행 · 위치 · 표시 형식 · 재현 · 공유 | `compareFinal` → `SiteRunResult` → `SiteShareOutcome` → Discord 한 줄 |
+| H7 | **재현에 필수인 미지원**을 따로 센다 (상대 자리 · 자리를 못 준 개체) | `plan["required_unsupported"]` |
+
+---
+
+## 20. §1 — 사용자가 후보를 고르는 방법
+
+### 20.1 두 걸음
+
+```
+/combo  hand:… recipe:… search:auto
+    → 추천 둘이 요약에 나오고, 마지막에 ↓
+    🎞 **다른 추천을 재생하려면** `/combo-pick request:5742c17c result:<번호>`
+       — 고를 수 있는 번호: `24`.
+/combo-pick  request:5742c17c  result:24
+    → 그 후보만 새 초기 상태에서 다시 실행 → JSON · 뷰어 첨부
+/combo-pick  request:5742c17c  result:24  share:true
+    → 같은 기록 하나로 **실제 사이트 조작**까지
+```
+
+🔴 **새 명령 하나와 옵션 셋이 전부다** (`request` · `result` · `share`).
+패도 레시피도 다시 받지 않는다 — 다시 받으면 **탐색을 다시 돌리는 길**이
+생긴다.
+
+### 20.2 지키는 것 — 실측
+
+| 요청 | 어떻게 | 실측 |
+| --- | --- | --- |
+| 탐색을 다시 돌리지 않는다 | 보관한 ``SearchResult`` 를 꺼내 **그 경로만** 재실행 | `test_b04` 가 `autonomous_search_opening` 을 터지게 두고 고른다 — 통과 |
+| 번호 · 경로가 바뀌지 않는다 | 보관한 객체 그대로 | 결과 17 → 5걸음 · `card_set` 0건 / 결과 24 → **7걸음 · `card_set` 1건** |
+| 요청과 후보를 묶는다 | 요청 ID + **만든 사람** | 남의 ID 로 꺼내면 "다른 사람의 것입니다" |
+| 없는 후보 · 만료를 가른다 | 버린 ID 를 **기억해** 판정 | 없는 번호 / 만료 / 낸 적 없는 ID / 숫자가 아닌 입력 — **네 문장이 다르다** |
+| 재실행 실패를 바꿔치지 않는다 | 기록이 없으면 첨부도 사이트도 없다 | `test_b03` — 다른 후보 번호가 응답에 나타나지 않는다 |
+| 같은 후보가 끝까지 간다 | 기록 **하나**가 JSON · 뷰어 · 사이트 계획에 들어간다 | 결과 24 의 계획: 조작 19개 · 뒷면 기대 `main-5 → Spell & Trap Zone1` |
+| 기본 동작은 그대로 | `/combo` 는 여전히 표시 순서가 앞선 추천을 첨부하고 **그 사실을 적는다** | 6-BG 의 그 줄 그대로 |
+
+🔴 **후보 번호도 카드도 수순도 코드에 적지 않았다.** 고를 수 있는 번호는 그
+탐색의 `ranking.recommended` 를 **읽어** 적고, 시험도 번호를 읽어 쓴다.
+
+🔴 **자체 뷰어를 확장해 대신하지 않았다.** `/combo-pick share:true` 가 **실제
+사이트 조작기**를 그 기록으로 부른다.
+
+---
+
+## 21. §2 — 실제 사이트의 세트 조작 (**실측**)
+
+### 21.1 무엇을 열어 보았는가 — 업로드 없이
+
+🔴 **새 이미지를 올리지 않았다.** 사이트 설명서가 말한 샘플 덱은 지금
+첫 화면에 없었고 (실측: 파일 입력 하나뿐), 대신 **이미 만들어 둔 공유
+리플레이**(6-AZ 가 만든 `/replay/6ZdmBQec`)를 열어 `Manual` 로 바꿨다 —
+그러면 그 판(카드 55장)에서 그대로 조작할 수 있다. 기록도 공유도 하지
+않았다.
+
+### 21.2 읽은 사실 — 전부 관측값이다
+
+| 사실 | 관측 |
+| --- | --- |
+| 조작 바에 **`Defense` · `Face-down` · `Stack on top`** 토글이 있다 | `button[aria-pressed]` — 처음 `false` |
+| `Face-down` 을 누르면 **`aria-pressed="true"`** 가 된다 | 읽어서 확인 |
+| 🔴 그 토글은 **끈적하다** — 드롭 뒤에도 켜져 있다 | 두 번째 드롭에서도 `true` |
+| 그 상태로 **덱 → 마법·함정 존**에 끌어 놓으면 뒷면으로 놓인다 | 아래 메뉴로 확인 |
+| **덱 → 필드 존**도 같다 | 조작 이력 `#10 · You Deck → Field Zone` |
+| **카드 메뉴가 표시 형식을 말한다** — 뒷면이면 `Set Face-up`, 앞면이면 `Set Face-down` | 앞면 마법·함정: `Activate Effect, Negate, Target, Highlight, **Set Face-down**, Add Counter, Card details` / 뒷면: `Target, Highlight, **Set Face-up**, Add Counter, Card details` |
+| `Set Face-down` 을 누르면 **뒤집힌다** | 메뉴가 `Set Face-up` 으로 바뀐다 |
+| 🔴 **설명서에는 그 하위 항목 이름이 없다** | 6-BG 가 멈춘 자리이고, UI 를 열어 **읽어서** 넘었다 |
+| 토큰: `More → **Generate Token**` 이 `Free` 존에 토큰을 만든다 | 새 개체 id 하나(`main-`/`extra-` 가 아닌 **제 id**) · 이력 `#9 · You Summon · Free` |
+| 그 토큰의 메뉴에 **`Delete Token`** 이 있다 | `Activate Effect, Negate, Target, Highlight, **Delete Token**` |
+| 상대 자리: `Opponent field` 토글을 누르면 드롭 가능한 칸이 **20 → 36** 개가 된다 | 실측 — 🔴 **배선하지 않았다** (§24) |
+
+### 21.3 조작기에 연결한 것
+
+```
+덱 → 마법·함정 존 뒷면 세트 : armFaceDown(true) → drag → armFaceDown(false)
+                              → readPosition → (앞면이면) cardMenu('Set Face-down')
+                              → readPosition 으로 다시 확인
+덱 → 필드 존 뒷면 세트       : 같은 순서 (칸 이름만 다르다)
+이미 목표 표시일 때          : 🔴 **다시 뒤집지 않는다** — 먼저 읽고, 맞으면 끝
+같은 카드 여러 장            : 개체는 `data-card-id` 의 **자리 이름**으로 구분한다
+                              (기존 방식 그대로). 토큰은 사이트가 준 제 id 를
+                              계획의 이름(`token-<개체번호>`)에 **묶어** 둔다
+토큰                         : More → Generate Token / 카드 메뉴 Delete Token
+```
+
+🔴 **클릭했다는 사실로 성공 처리하지 않는다.** 드롭 뒤 · 뒤집은 뒤 **매번**
+그 카드의 메뉴를 다시 읽어 판정하고, 토큰은 **판에서 사라졌는지**까지 본다.
+
+🔴 **좌표도 이름도 추측하지 않았다.** 칸은 기존 `zoneMap` 이 화면에서 읽고,
+메뉴 이름은 위 실측에서 읽은 글자 그대로다.
+
+### 21.4 실제 사이트 확인 — **조작기가 쓰는 그 함수로**
+
+손가락(끌어 놓기 · 카드 메뉴 · 토글 · 표시 형식 읽기)을
+`scripts/duel_simulator_ops.js` 로 떼어 내고, 조작기와 확인 스크립트가 **같은
+함수**를 쓰게 했다. 그래서 "확인한 것" 과 "도는 것" 이 같은 코드다.
+
+```
+$ node scripts/check_site_set_ops.js
+  manual-mode ✔ · zones-found ✔ · face-down-armed ✔ (aria-pressed=true)
+  face-down-disarmed ✔ · set-landed-in-spell-zone ✔ (main-11)
+  set-is-face-down ✔ · face-down-is-idempotent ✔
+  control-drop-is-face-up ✔ · menu-flips-to-face-down ✔
+  field-zone-set-is-face-down ✔ · generate-token ✔ (새 개체 1개)
+  token-menu-has-delete ✔ · delete-token ✔
+  → all_ok: true   (업로드 0회 · 기록 0회 · 공유 0회)
+```
+
+🔴 **이것은 실제 사이트 확인이다.** 🔴 **다음은 하지 않았다** — 덱 시트를
+올려 조작기를 **처음부터 끝까지** 돌리는 일(새 이미지 업로드가 생긴다)과
+새 공유 링크 만들기. 요청이 그 둘을 필수 검증으로 삼지 말라고 했고, 올린
+이미지는 이용자가 스스로 지울 수 없다.
+
+---
+
+## 22. §3 — 다섯 상태와 공유 차단
+
+### 22.1 6-BG 가 남긴 자리
+
+6-BG 는 `compareFinal` 에 `fullyReproduced` 를 더하고 조작기가 그것을
+`fully_reproduced` 로 적게 했다. 🔴 **그런데 위에서 읽지 않았다.**
+
+| 자리 | 6-BG | 지금 |
+| --- | --- | --- |
+| 조작기의 공유 분기 | `final.all_ok` 하나 | **`final.fully_reproduced`** |
+| `deck/site_session.py` 의 `final_ok` | `all_ok` 하나 | 그대로 (② 위치) + **`positions_ok` · `positions_compared` · `positions_mismatched` · `positions_unknown` · `missing_support` · `fully_reproduced`** 를 함께 읽는다 |
+| `SiteRunResult.shared` | `final_ok` 까지 | **`fully_reproduced`** 까지 |
+| `app/site_share.py` | 상태 넷(없음 · 바쁨 · 실패 · 공유) | 같은 넷 + **판정 여섯 칸**을 그대로 옮긴다 |
+| Discord 응답 | 링크 또는 실패 한 줄 | **`🧪 재현 판정: 위치 ✔ · 표시 형식 ✔ → 재현 확인`** 한 줄을 함께 적는다 |
+
+### 22.2 다섯 상태를 가른다
+
+| # | 무엇 | 어디서 |
+| --- | --- | --- |
+| ① 계획한 조작을 **실행**했는가 | `SiteRunResult.completed` (계획 수와 맞춰 본다) |
+| ② 카드 **위치**가 같은가 | `compareFinal` 의 `allOk` → `final_ok` |
+| ③ **표시 형식**이 같은가 | `comparePositions` 의 `ok` → `positions_ok` |
+| ④ 이 전개를 **재현**했는가 | `fullyReproduced` = ② + ③ + **필수 미지원 없음** |
+| ⑤ **공유**해도 되는가 | `shared` = ④ + ① + 실행 ID · 종료 코드 · URL |
+
+### 22.3 「미확인」 을 「맞았다」 로 만들지 않는다
+
+| 판 | ③ | ④ | 공유 | 적는 말 |
+| --- | --- | --- | --- | --- |
+| 뒷면 기대를 읽었고 뒷면이었다 | ✔ | ✔ | 한다 | 재현 확인 |
+| 읽었는데 앞면이었다 | ✘ | ✘ | **막는다** | "표시 형식이 기록과 달라…" + 그 자리 이름 |
+| 뒷면 기대를 **읽지 못했다** | ✘ | ✘ | **막는다** | "표시 형식을 확인하지 못해…" |
+| 앞면 자리를 읽지 못했다 | ✔ | ✔ | 한다 | 🔴 `compared` 가 **거짓**이고 "일부 미확인" 이라고 적는다 |
+| 선언한 자리가 **아예 없다** | ✔ | ✔ | 한다 | 🔴 `compared` **거짓** — 볼 것이 없었다는 사실을 "다 봤다" 로 적지 않는다 |
+| 필수 미지원이 있다 | ✔ | ✘ | **막는다** | "재현하는 데 필요한 조작을 하지 못해…" + 그 줄 |
+
+🔴 **뒷면 기대가 없다는 이유만으로 "표시 형식을 다 확인했다" 고 하지
+않는다** — 그것이 위 네 번째 · 다섯 번째 줄이다 (`positions.compared`).
+
+🔴 **경고 문자열에 기대지 않는다.** 판정은 전부 구조화된 값이고
+(`positions.mismatched` · `required_not_observed` · `missing_support`),
+문장은 그 값에서 만든다.
+
+🔴 **「재현 성공」 은 엔진 기록과 사이트 상태가 같다는 뜻이다.** 사이트가
+유희왕 규칙을 검증했다는 뜻이 아니고, 응답의 그 줄이 그렇게 적는다.
+
+---
+
+## 23. §4 — 이 전개에서 실제로 막히는 조작: 토큰
+
+### 23.1 먼저 확인한 것
+
+기본 입력의 갈라테아 후보(결과 24)의 기록에는 토큰 **둘**이 있다 (실측):
+
+```json
+{"kind":"token_created","instance":95,"card_id":46647145,"owner":0, …}
+{"kind":"token_created","instance":96,"card_id":46647145,"owner":1, …}
+```
+
+최종 판에서 95 는 **자신** 몬스터 존, 96 은 **상대** 몬스터 존이다. 즉
+세트 표시만 고쳐도 **토큰 때문에 재현이 막힌다** — 요청이 먼저 확인하라고
+한 그 자리다.
+
+### 23.2 한 것과 못 한 것
+
+| 토큰 | 사이트 지원 | 이번에 | 결과 |
+| --- | --- | --- | --- |
+| #95 (자신) | `More → Generate Token` + 끌어 놓기 | **연결했다** | 계획에 `generate_token` 조작이 생기고, 뒤의 이동이 그 개체를 자신 몬스터 존으로 옮긴다 |
+| #96 (상대) | `Opponent field` 토글로 칸이 열린다 (실측) | **배선하지 않았다** | 🔴 `required_unsupported` 로 올라가 **재현 미완료 · 공유 차단** |
+
+🔴 **6-BG 까지 토큰은 "덱 이미지에 없는 카드라 자리를 묶을 수 없습니다" 로
+`unsupported` 에 있었다 — 그 문장은 틀렸다.** 사이트에 조작이 있다.
+
+🔴 **토큰을 생략하거나 다른 카드로 바꾸지 않았다.** 상대 자리의 토큰은
+계획이 **자리를 주지 않고** (주면 뒤의 이동이 그것을 자기 쪽에 놓으려
+든다 — 실측으로 그랬다) 필수 미지원으로 적는다.
+
+### 23.3 그래서 지금 이 후보는
+
+```
+결과 24 의 사이트 계획: 조작 19개 · 뒷면 기대 1곳 · 필수 미지원 2건
+  🔴 사건 #2 의 token_created: 상대 자리의 토큰 #96 은 이 계획이 놓지 않습니다
+  🔴 최종 판의 상대 MZONE 에 #96 … 이 계획은 상대 자리를 놓지 않습니다
+→ ④ 재현 미완료 → ⑤ **공유하지 않는다**
+```
+
+🔴 **검증을 통과시키려고 더 쉬운 전개로 바꾸지 않았다.** 막히는 자리를
+그대로 두고 **막힌다고 적는다.**
+
+---
+
+## 24. §5 — 검증: **실제 사이트**와 **모의**를 가른다
+
+### 24.1 실제 사이트에서 확인한 것 (업로드 0회 · 공유 0회)
+
+`node scripts/check_site_set_ops.js` — 조작기가 쓰는 그 함수로, 이미 있는
+공유 리플레이를 `Manual` 로 바꿔 돌렸다. **13개 확인 전부 통과**
+(§21.4 의 목록).
+
+| 요청의 핵심 항목 | 어디서 확인 |
+| --- | --- |
+| 마법·함정 존의 실제 뒷면 세트 | `set-landed-in-spell-zone` · `set-is-face-down` |
+| 필드 존의 실제 뒷면 세트 | `field-zone-set-is-face-down` |
+| 조작 후 **관찰값**으로 위치 · 표시 형식 확인 | 모든 확인이 `readPosition`(카드 메뉴) 과 좌표 관측을 쓴다 |
+| 이미 목표 표시면 다시 뒤집지 않는다 | `face-down-is-idempotent` |
+| 토큰 조작 | `generate-token` · `token-menu-has-delete` · `delete-token` |
+
+### 24.2 모의로 확인한 것 (브라우저를 열지 않는다)
+
+| 항목 | 시험 |
+| --- | --- |
+| 공동 추천의 각 후보가 **서로 다른 올바른 기록**을 준다 | `tests/test_candidate_pick.py::test_c01` (실제 엔진 · 실제 덱) |
+| 선택부터 첨부 · 사이트 계획까지 후보가 바뀌지 않는다 | 같은 시험의 뒷부분 (`build_site_plan` 까지) |
+| 고르기가 **탐색을 다시 돌리지 않는다** | `test_b04` (탐색 함수를 터지게 둔다) |
+| 없는 후보 · 만료 · 남의 요청 · 숫자가 아닌 입력 | `test_a01` · `test_a02` · `test_b01` · `test_b02` |
+| 재실행 실패를 다른 후보로 바꾸지 않는다 | `test_b03` |
+| 위치만 일치 / 표시 불일치 / 표시 미확인 / 필수 미지원 → **공유 차단** | `tests/test_site_verify.py::test_bg01` · `test_bg02` · `test_bg04` · `tests/test_site_plan.py::test_bh01`~`test_bh03` |
+| 완전히 확인된 경우에만 공유 | `test_bh01` 의 뒤집음 — 옛 드라이버 결과(``all_ok`` 만)는 **공유되지 않는다** |
+
+공유 차단 문장 (모의, 실제 출력):
+
+```
+🔴 **외부 공유를 만들지 못했습니다.** — 표시 형식이 기록과 달라 공유하지
+   않았습니다: main-5: face_down→face_up
+🧪 재현 판정: 위치 ✔ · 표시 형식 ✘ → 미완료 (엔진 기록과 사이트 상태의
+   일치 여부이고, 규칙 적법성 판정이 아닙니다)
+첨부된 `combo-replay.html` 로는 그대로 재생할 수 있습니다.
+```
+
+### 24.3 최소 회귀 — 전체 스위트를 **다시 돌리지 않았다**
+
+이번 변경이 닿는 17개 파일만 돌렸다 (요청의 지시).
+
+```
+tests/test_bounded_search_first_pass.py  tests/test_bounded_search_multi_results.py
+tests/test_candidate_pick.py             tests/test_combo_brief_and_detail.py
+tests/test_combo_output_consistency.py   tests/test_deck_image_registry.py
+tests/test_discord_bot.py                tests/test_galatea_effect_extension.py
+tests/test_girsu_token_line.py           tests/test_open_search.py
+tests/test_opening_duel_integration.py   tests/test_orcust_girsu_line.py
+tests/test_replay_export.py              tests/test_replay_viewer.py
+tests/test_site_plan.py                  tests/test_site_verify.py
+tests/test_withheld_reason_propagation.py
+→ 609건 중 608 통과 · 실패 1건
+```
+
+🔴 **그 1건은 기준 HEAD 에서도 실패하던 것이다** —
+`test_opening_duel_integration.py::test_f02_the_discord_output_separates_executed_from_planned`
+는 6-BG 가 적어 둔 **68건의 기존 실패** 목록에 그대로 있다 (§16.4). 이번에
+고치지 않았다 (요청: 기존 전체 실패를 일괄 수정하지 않는다).
+
+처음 돌렸을 때는 8건이 실패했고, **7건이 이번 변경이 깨뜨린 것**이어서 전부
+고쳤다.
+
+| 깨진 것 | 원인 | 고친 방법 |
+| --- | --- | --- |
+| `test_open_search.py` 의 `g01`~`g06` · `i08` (6건) | ``/combo`` 가 ``_run_bounded_search`` 에 ``owner`` · ``store`` 를 넘기는데 그 파일의 **대역**이 받지 않았다 | 대역에 두 칸을 더했다 — 🔴 단언은 그대로다 |
+| `test_bounded_search_first_pass.py::test_e06` | ``combo_response`` 의 **키워드 전용 인자 목록**을 고정한 시험 | ``owner`` · ``store`` 를 더하고 **기본값까지** 고정했다 (기존 위치 인자 호출이 그대로라는 사실을 그 기본값이 지킨다) |
+| `tests/test_discord_bot.py` 의 명령 집합 · 대역 (3곳) | 새 명령 `combo-pick` 과 ``interaction.user`` | 집합에 이름을 더하고 **매개변수까지** 고정했다 (`request` · `result` · `share`). 대역에 `user` 를 더했다 — 진짜 ``discord.Interaction`` 은 언제나 그것을 들고 있다 |
+| `tests/test_site_*.py` 의 성공 대역 (4곳) | 6-BG 까지 대역이 ``all_ok`` 만 적었고 그것만으로 공유 성공이었다 | 대역이 **판정을 말하게** 했다 — 🔴 그리고 "옛 모양의 결과는 공유되지 않는다" 를 **새 시험으로** 고정했다 (`test_bh01`) |
+
+🔴 **단언을 지우거나 약하게 한 곳은 없다.** 바꾼 것은 대역이 말하는 **값**과
+고정한 **목록의 길이**이고, 그때마다 새 사실을 함께 고정했다.
+
+🔴 **사용자 대신 Discord 에 보내지 않았다.** 봇을 띄우지도 않았다.
+
+---
+
+## 25. 정정 표 (6-BG → 6-BH)
+
+| 자리 | 당시 문장 | 지금의 사실 |
+| --- | --- | --- |
+| `deck/site_plan.py` `_NO_SITE_OPERATION` | "토큰 생성 — 덱 이미지에 없는 카드라 자리를 묶을 수 없습니다" / "토큰 소멸 — 위와 같습니다" | 🔴 **틀렸다.** 사이트 조작 바의 `More` 메뉴에 **`Generate Token`** 이 있고, 그 카드의 메뉴에 **`Delete Token`** 이 생긴다 (실측). 자신 자리의 토큰은 이번에 **연결했다** |
+| `deck/site_plan.py` `_SET_POSITION_NOTE` | "이 계획은 **자리 이동만** 만듭니다 … 뒷면으로 만드는 조작은 사람이 해야 합니다 … 하위 항목 이름은 설명서에 없어 **자동으로 누르지 않습니다**" | 🔴 **조작기가 뒷면으로 만들고 사이트에서 확인한다.** 하위 항목 이름을 **UI 를 열어 읽었다** (`Set Face-down` · `Set Face-up`) — 설명서에 없다는 것이 "확인할 수 없다" 는 뜻은 아니었다 |
+| 이 보고서 §15.3 | "**구현하지 않았다** — 정확한 항목 이름이 필요하고, 확인하지 못한 이름을 지어내지 않는다" / "남은 일: 실제 UI 를 한 번 열어 그 메뉴의 하위 항목 이름을 읽는 것 … 제3자 서버에 덱 이미지를 올리는 일을 포함한다" | 🔴 **업로드 없이 읽을 수 있었다** — 이미 있는 공유 리플레이를 `Manual` 로 바꾸면 그 판에서 그대로 조작된다. 그 길로 읽고 **구현했다** (§21) |
+| 이 보고서 §15.2 표 | "`fullyReproduced` **거짓** — 뒷면이어야 하는 자리가 하나라도 있으면" | 🔴 **지금은 읽어서 판정한다.** 뒷면 기대가 있어도 **관측이 뒷면이면 재현**이다 (§22.3 의 첫 줄) |
+| 이 보고서 §15.2 표 | "`result.notes` 에 … 를 적는다" (조작기 결과에만) | 그대로 참이고, **그 위 세 자리도 읽는다** — `SiteRunResult` · `SiteShareOutcome` · Discord 응답 (§22.1) |
+| 이 보고서 §11.3 ④ | "요약과 상세는 **둘 다**, JSON · HTML · 사이트 계획은 **결과 17 하나**를 가리킨다" | 그대로 참이고 (`/combo` 의 기본값), 🔴 **사용자가 고르면 그 후보로 바뀐다** (`/combo-pick`, §20) |
+| `tests/test_site_plan.py::test_bg02` | ``expect_positions["compared"] is False`` 를 고정했다 | 🔴 그 칸은 **없어졌다.** 계획은 "대조하지 않았다" 고 선언하는 것이 아니라 **대조할 자리**(`declared`)를 넘기고, 판정은 관측으로 한다 |
+| `tests/test_site_verify.py::test_bg02` | "뒷면이 없는 계획은 한 글자도 달라지지 않는다 … `fullyReproduced` 참" | 🔴 **그 이름의 시험을 바꿨다** — 지금 재는 것은 "앞면 자리를 읽지 못한 것은 재현을 깨뜨리지 않지만 `compared` 는 거짓" 이다 |
+
+🔴 **6-BG 가 "확인했다" 고 적은 것 중 약해진 것은 없다.** 바뀐 것은 ① 표시
+형식을 **읽게** 된 것, ② 토큰을 **할 수 있게** 된 것, ③ 공유 판정이 그 둘을
+**읽게** 된 것이다.
+
+---
+
+## 26. 사용자가 복사할 값 (6-BH 기준 · 옵션별)
+
+### 26.1 1단계 — `/combo`
+
+**`hand`**
+
+```
+69811710, 14558127, 23434538, 10045474, 24224830
+```
+
+**`recipe`** — 🔴 파일 경로가 아니라 아래 내용을 그대로 (메인 40 · 엑스트라
+15 · 사이드 0).
+
+```
+#main
+69811710
+69811710
+69811710
+57835716
+57835716
+57835716
+4055337
+4055337
+21441617
+93920420
+27918365
+72270339
+14558127
+14558127
+14558127
+23434538
+23434538
+42141493
+42141493
+42141493
+94145021
+94145021
+94145021
+90351981
+99674361
+66328392
+66328392
+66328392
+94845588
+80845034
+24224830
+24224830
+65681983
+81439173
+10045474
+10045474
+10045474
+49299410
+703897
+53329234
+#extra
+73391962
+46396218
+93854893
+93854893
+48835607
+30741503
+30741503
+39752820
+13117073
+65741786
+29301450
+76145142
+74820316
+86066372
+4280258
+```
+
+**`search`**
+
+```
+auto
+```
+
+**`results` · `followups` · `line` · `board` · `deck`** — 🔴 **비워 둡니다**
+(`results` 를 비우면 2, `followups` 를 비우면 6. `line` 은 `search:auto` 와
+함께 주면 거절합니다).
+
+### 26.2 2단계 — `/combo-pick` (추가 동작)
+
+`/combo` 응답의 마지막에 이런 줄이 나옵니다 (ID 는 **매번 다릅니다**):
+
+```
+🎞 **다른 추천을 재생하려면** `/combo-pick request:5742c17c result:<번호>`
+   — 고를 수 있는 번호: `24`.
+```
+
+그 값을 **옵션마다** 넣습니다.
+
+| 옵션 | 넣을 값 |
+| --- | --- |
+| `request` | 그 줄의 ID 그대로 (예: `5742c17c`) |
+| `result` | 그 줄이 적어 준 번호 (갈라테아 ② 를 쓰는 전개가 그쪽입니다) |
+| `share` | 기본은 끔. **켜면 외부 사이트에 공개 리플레이를 올립니다** (1~2분, 되돌릴 수 없습니다) |
+
+🔴 **요청 ID 는 30분 동안만** 보관합니다. 지나면 "만료됐습니다" 라고 적고,
+그때는 `/combo` 를 다시 돌리면 됩니다 (번호가 달라질 수 있습니다).
+
+### 26.3 그때 보일 것 (실측)
+
+* `result:24` → `7걸음` · `자신 마법·함정 존: 오르페골 클리막스 [703897]
+  뒷면/FACEDOWN` · 첨부 `combo-replay.json` · `combo-replay.html`
+* `result:17` → `5걸음` · 마법·함정 존 없음 · 같은 두 첨부 (**다른 기록**)
+* `share:true` → 🔴 **지금은 공유되지 않습니다.** 이 전개에는 **상대 자리의
+  토큰**이 있고 그것을 이 계획이 놓지 못하므로 재현이 미완료이고, 응답이
+  그 사유를 적습니다 (§23.3). 자체 뷰어(`combo-replay.html`)로는 그대로
+  재생됩니다.

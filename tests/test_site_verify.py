@@ -28,18 +28,31 @@ ROOT = Path(__file__).resolve().parent.parent
 VERIFY = ROOT / "scripts" / "duel_simulator_verify.js"
 
 
-def _compare(expect, observed, counts, positions=None) -> dict:
+def _compare(expect, observed, counts, positions=None, seen=None,
+             blocking=None) -> dict:
     """조작기가 쓰는 그 함수를 그대로 부른다."""
     script = (
         f"const v=require({str(VERIFY)!r});"
         "const a=JSON.parse(process.argv[1]);"
-        "console.log(JSON.stringify(v.compareFinal(a[0],a[1],a[2],a[3])));"
+        "console.log(JSON.stringify("
+        "v.compareFinal(a[0],a[1],a[2],a[3],a[4],a[5])));"
     )
     done = subprocess.run(
         ["node", "-e", script,
-         json.dumps([expect, observed, counts, positions])],
+         json.dumps([expect, observed, counts, positions, seen, blocking])],
         capture_output=True, text=True, check=True)
     return json.loads(done.stdout)
+
+
+def _position(menu) -> str:
+    """사이트 메뉴 항목 → 표시 형식 (조작기가 쓰는 그 함수)."""
+    script = (
+        f"const v=require({str(VERIFY)!r});"
+        "console.log(v.decidePosition(JSON.parse(process.argv[1])));"
+    )
+    done = subprocess.run(["node", "-e", script, json.dumps(menu)],
+                          capture_output=True, text=True, check=True)
+    return done.stdout.strip()
 
 
 def _identity(row, want_src, src_of) -> dict:
@@ -218,7 +231,16 @@ def _ok_payload(run_id, **over):
         "operations": [{"ok": True}, {"ok": True}],
         #: 🔴 6-AZ — 계획한 조작 수를 결과가 들고 있어야 "다 했는가" 를 센다.
         "operations_planned": 2,
-        "stages": {"final": {"all_ok": True}}, "notes": [],
+        #: 🔴 **재현했다고 말해야 공유 성공이다** (Phase 6-BH). 6-BG 까지
+        #: 이 대역은 ``all_ok`` 하나만 적었고, 그것만으로 ``shared`` 가
+        #: 참이었다 — 표시 형식도 필수 미지원도 보지 않은 성공이었다.
+        "stages": {"final": {"all_ok": True, "fully_reproduced": True,
+                             "positions": {"ok": True, "compared": True,
+                                           "declared": 1, "matched": [{}],
+                                           "mismatched": [],
+                                           "not_observed": []},
+                             "missing_support": []}},
+        "notes": [],
     }
     payload.update(over)
     return payload
@@ -358,6 +380,13 @@ def test_c09_the_discord_runner_gets_a_fresh_folder_each_time(tmp_path):
         share_url = "https://example.test/replay/x"
         operations_ok = operations_total = 1
         final_ok = True
+        #: 🔴 **판정 칸을 대역도 말한다** (Phase 6-BH).
+        positions_ok = True
+        positions_compared = True
+        positions_unknown = ()
+        positions_mismatched = ()
+        missing_support = ()
+        fully_reproduced = True
         reason = ""
         run_id = "rid"
 
@@ -378,45 +407,85 @@ def test_c09_the_discord_runner_gets_a_fresh_folder_each_time(tmp_path):
 # ======================================================================
 def test_bg01_a_matching_board_is_not_a_reproduced_set():
     """
-    🔴 **자리가 맞았다 ≠ 그대로 재현됐다.**
+    🔴 **자리가 맞았다 ≠ 그대로 재현됐다** — 그리고 지금은 **읽어서**
+    판정한다 (Phase 6-BH).
 
-    이 대조는 존마다 **카드 자리의 집합**만 맞추고 앞면/뒷면은 읽지
-    않는다. 세트된 카드가 앞면으로 놓여도 ``allOk`` 는 참이 될 수 있고,
-    그 참을 "세트까지 재현됐다" 로 읽으면 거짓이 된다. 그래서 계획이
-    뒷면이어야 하는 자리를 알려 주면 (``expect_positions``) 결과에
-    **「대조하지 않았다」** 가 자리와 함께 적히고 ``fullyReproduced`` 가
-    거짓이 된다.
+    6-BG 는 표시 형식을 읽을 길이 없어 "뒷면 기대가 있으면 언제나
+    미재현" 으로 두었다. 지금은 조작기가 사이트의 카드 메뉴로 그 상태를
+    읽어 넘기므로 (``decidePosition``), 세 갈래가 **다른 답**이 된다.
     """
     expect = {"Spell & Trap Zone1": {"slots": ["main-5"]}}
     observed = {"byZone": {"Spell & Trap Zone1": ["main-5"]}, "problems": []}
     counts = {"Spell & Trap Zone1": 1}
+    declared = [{"slot": "main-5", "zone": "Spell & Trap Zone1",
+                 "position": "face_down"}]
     positions = {"face_down": [{"slot": "main-5",
                                 "zone": "Spell & Trap Zone1"}],
-                 "compared": False, "why": "표시 형식은 대조하지 않았습니다."}
-    verdict = _compare(expect, observed, counts, positions)
-    #: 🔴 **자리는 맞았다** — 거짓으로 만들지 않는다.
-    assert verdict["allOk"] is True
-    #: 🔴 **그러나 그대로 재현된 것은 아니다.**
-    assert verdict["fullyReproduced"] is False
-    assert verdict["positions"]["compared"] is False
-    assert verdict["positions"]["face_down"] == positions["face_down"]
+                 "declared": declared, "why": "…"}
+    #: ① **읽었고 뒷면이었다** → 재현이다.
+    good = _compare(expect, observed, counts, positions,
+                    {"main-5": "face_down"})
+    assert good["allOk"] is True and good["fullyReproduced"] is True
+    assert good["positions"]["ok"] is True
+    assert good["positions"]["compared"] is True
+    #: ② **읽었는데 앞면이었다** → 자리는 맞지만 재현이 아니다.
+    wrong = _compare(expect, observed, counts, positions,
+                     {"main-5": "face_up"})
+    assert wrong["allOk"] is True and wrong["fullyReproduced"] is False
+    assert wrong["positions"]["mismatched"][0]["got"] == "face_up"
+    #: ③ **읽지 못했다** → 「틀렸다」 가 아니라 **미확인**이고, 뒷면
+    #: 기대였으므로 재현을 주장하지 않는다.
+    blind = _compare(expect, observed, counts, positions, {"main-5": "unknown"})
+    assert blind["allOk"] is True and blind["fullyReproduced"] is False
+    assert blind["positions"]["mismatched"] == []
+    assert blind["positions"]["required_not_observed"][0]["slot"] == "main-5"
+    assert blind["positions"]["compared"] is False
 
 
-def test_bg02_without_a_face_down_expectation_nothing_changes():
+def test_bg02_an_unread_face_up_slot_is_not_called_verified():
     """
-    🔴 **뒷면이 없는 계획은 한 글자도 달라지지 않는다.** 6-BG 전의 호출
-    (네 번째 인자가 없는 호출) 도 같은 답을 받는다 — 그래서 이 보완이
-    기존 성공을 실패로 바꾸지 않는다.
+    🔴 **뒷면 기대가 없다는 이유만으로 "표시 형식을 다 확인했다" 고 하지
+    않는다** (Phase 6-BH 가 세운 구분).
+
+    앞면이어야 하는 자리를 **읽지 못한** 경우: 그것은 재현을 깨뜨리지
+    않지만 (조작기가 만든 상태가 아니다) ``compared`` 는 **거짓**이고 그
+    자리가 ``not_observed`` 에 남는다. 🔴 두 칸이 다른 말을 한다 — "재현은
+    맞다" 와 "표시 형식을 전부 읽지는 못했다".
     """
     expect = {"Monster Zone1": {"slots": ["main-0"]}}
     observed = {"byZone": {"Monster Zone1": ["main-0"]}, "problems": []}
     counts = {"Monster Zone1": 1}
-    with_arg = _compare(expect, observed, counts,
-                        {"face_down": [], "compared": False})
-    without = _compare(expect, observed, counts)
-    assert with_arg["allOk"] is True and without["allOk"] is True
-    assert with_arg["fullyReproduced"] is True
-    assert without["fullyReproduced"] is True
+    declared = [{"slot": "main-0", "zone": "Monster Zone1",
+                 "position": "face_up"}]
+    blind = _compare(expect, observed, counts,
+                     {"face_down": [], "declared": declared},
+                     {"main-0": "unknown"})
+    assert blind["allOk"] is True
+    assert blind["fullyReproduced"] is True
+    assert blind["positions"]["compared"] is False
+    assert blind["positions"]["not_observed"][0]["slot"] == "main-0"
+    assert blind["positions"]["required_not_observed"] == []
+    #: 🔴 **선언한 자리가 아예 없으면 ``compared`` 도 거짓이다** — 볼 것이
+    #: 없었다는 사실을 "다 봤다" 로 적지 않는다.
+    empty = _compare(expect, observed, counts, {"declared": []}, {})
+    assert empty["positions"]["compared"] is False
+    assert empty["fullyReproduced"] is True
+
+
+def test_bg04_a_required_unsupported_operation_blocks_reproduction():
+    """
+    🔴 **필수 미지원이 있으면 자리와 표시 형식이 다 맞아도 재현이 아니다**
+    (Phase 6-BH). 토큰 · 상대 자리가 그 자리다.
+    """
+    expect = {"Monster Zone1": {"slots": ["main-0"]}}
+    observed = {"byZone": {"Monster Zone1": ["main-0"]}, "problems": []}
+    counts = {"Monster Zone1": 1}
+    verdict = _compare(expect, observed, counts, {"declared": []}, {},
+                       ["상대 자리의 토큰 #96 을 놓지 않습니다"])
+    assert verdict["allOk"] is True
+    assert verdict["positions"]["ok"] is True
+    assert verdict["fullyReproduced"] is False
+    assert verdict["missing_support"] == ["상대 자리의 토큰 #96 을 놓지 않습니다"]
 
 
 def test_bg03_a_wrong_slot_is_still_a_failure():

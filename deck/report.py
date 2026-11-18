@@ -2250,6 +2250,43 @@ def render_open_search_brief(outcome, repository=None, ranking=None) -> str:
     return "\n".join(lines)
 
 
+def render_open_candidate(result, repository=None) -> str:
+    """
+    **후보 하나**의 걸음과 최종 자원 (Phase 6-BH).
+
+    왜 필요한가 — 사용자가 공동 추천 가운데 **고른** 후보 하나를 다시
+    보여 주는 자리가 생겼다 (``/combo-pick``). 그 자리가 요약 전체를 다시
+    그리면 "어느 후보를 골랐는지" 가 묻힌다.
+
+    🔴 **같은 줄을 쓴다.** 걸음과 자원 줄은 :func:`render_open_search_brief`
+    가 쓰는 그 함수들이다 (``_result_rows``) — 두 자리가 다른 글자를 내면
+    사용자가 어느 쪽이 맞는지 묻게 된다.
+
+    🔴 **판정하지 않는다.** 이미 적힌 값만 읽는다.
+    """
+    state = getattr(result.rerun_state, "value", str(result.rerun_state))
+    lines = [f"  [결과 {result.index}] 재생 {state}"]
+    for step in result.path:
+        picked = " · ".join(
+            _card_ko(card_id, repository)
+            for ask in step.choices
+            for card_id in ask.chosen_card_ids
+        )
+        tail = f" (해결 중 선택 {picked})" if picked else ""
+        lines.append(f"    {step.order}. {_kind_ko(step.kind)}{tail}")
+    #: 🔴 **자원 요약이 없는 후보가 있다** (Phase 6-BH). 재생하지 않은
+    #: 후보는 ``resources`` 가 비어 있고 (``SearchResult`` 의 기본값), 그때
+    #: 자원 줄을 만들려 들면 터진다 — 사용자가 **추천이 아닌 후보**를 고를
+    #: 수 있으므로 이 자리가 실제로 열린다. 없으면 그 사실을 적는다.
+    if getattr(result, "resources", None) is None:
+        lines.append("    🔴 최종 자원을 적을 수 없습니다 — 이 후보는 재생"
+                     " 검증을 거치지 않아 판의 요약이 없습니다.")
+        return "\n".join(lines)
+    for label, value in _result_rows(result, repository):
+        lines.append(f"    {label}: {value}")
+    return "\n".join(lines)
+
+
 def _path_fingerprint(path) -> tuple:
     """경로를 값으로 — 🔴 **해결 중 선택까지** 넣는다 (Phase 6-BE §7).
 
