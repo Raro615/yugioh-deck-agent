@@ -60,7 +60,11 @@ from enum import Enum
 from typing import Mapping, Protocol, runtime_checkable
 
 from engine.condition import ConditionResult
-from engine.effect.semantics import RuleQuestion
+from engine.effect.semantics import (
+    FIELD_SPELL_REPLACEMENT_RULE,
+    RuleQuestion,
+    set_destination_zone,
+)
 from engine.game_state_view import (
     FACE_SENSITIVE_ZONES,
     CardDefinitionView,
@@ -762,6 +766,13 @@ class BoardRuling:
         """
         if question is RuleQuestion.MAY_BE_SPECIAL_SUMMONED:
             return self.explain_special_summon(instance)
+        if question is RuleQuestion.MAY_BE_SET:
+            #: 🔴 **세트도 등재된 사실 하나로 끝나지 않는다** (Phase 6-BG).
+            #: 공식 ``Card.IsSSetable`` 이 「그 자리에 놓을 수 있는가」 를
+            #: 함께 묻기 때문이고, 그 걸음은 :meth:`explain_set` 에 있다.
+            #: 6-BF 는 그 절반을 배치 계획으로 미뤘고, 그래서 자리가 없는
+            #: 판에서 **효과 전체가 거절됐다** (``MAY_BE_SET`` 의 정정문).
+            return self.explain_set(instance)
         return self._explain_fact(question, instance)
 
     def _explain_fact(
@@ -933,6 +944,100 @@ class BoardRuling:
         )
 
     # ------------------------------------------------------------------
+    def may_be_set(self, instance: InstanceId) -> ConditionResult:
+        """이 카드를 **세트할 수 있는가** (Phase 6-BG). 답만 꺼낸다."""
+        return self.explain_set(instance).answer
+
+    def explain_set(self, instance: InstanceId) -> RulingVerdict:
+        """
+        답과 이유를 함께. 공식 ``Card.IsSSetable`` 과 **같은 두 질문**이다.
+
+        걸음이 둘이고 순서가 규칙이다.
+
+        1. **카드가 세트를 금지하지 않는가** — :meth:`_explain_fact` 가
+           등재된 사실로 답한다 (``MAY_BE_SET``). 적히지 않은 카드는
+           ``UNKNOWN`` 이다 (ADR-006).
+        2. **그 자리에 놓을 수 있는가** — 종류가 목적지를 정하고
+           (:func:`~engine.effect.semantics.set_destination_zone`), 그 존의
+           빈 칸을 본다.
+
+        앞의 것이 ``TRUE`` 가 아니면 거기서 끝낸다 — 자리를 보지 않는다.
+        막는 카드가 있으면 1번이 이미 ``UNKNOWN`` 이고, 그때 빈 칸을 세어
+        ``FALSE`` 로 내리면 **확인된 모름이 확정 거절로 바뀐다.**
+
+        세 자리에서 답이 갈린다. 🔴 **세 답이 다 다른 뜻이다.**
+
+        ==============================  ==================================
+        마법 · 함정 존에 빈 칸이 없다      ``FALSE`` — 공식도 후보로 세지
+                                        않는다 (``IsSSetable`` 이 거짓)
+        필드 존에 이미 카드가 있다         ``UNKNOWN`` — 공식 처리는 앞의
+                                        필드 마법을 묘지로 보내는 것이고
+                                        (:data:`~engine.effect.semantics.
+                                        FIELD_SPELL_REPLACEMENT_RULE`) 이
+                                        엔진에 그 경로가 **없다**
+        종류를 읽지 못했다                 ``UNKNOWN`` — 어느 존에 놓이는지
+                                        모르면 빈 칸도 셀 수 없다
+        ==============================  ==================================
+
+        🔴 **「없다」 와 「모른다」 를 섞지 않는다.** 필드 존이 찬 경우를
+        ``FALSE`` 로 적으면 "공식적으로도 세트할 수 없다" 는 거짓말이 되고,
+        마법 · 함정 존이 찬 경우를 ``UNKNOWN`` 으로 적으면 **구현된 규칙을
+        모름으로 내려** 효과 전체가 거절된다.
+        """
+        card = self._view.find(instance)
+        if card is None or card.card_id is None:
+            return RulingVerdict(
+                ConditionResult.UNKNOWN,
+                f"{instance} 가 보이지 않아 어떤 카드인지 알 수 없습니다.",
+            )
+        decided = self._explain_fact(RuleQuestion.MAY_BE_SET, instance)
+        if decided.answer is not ConditionResult.TRUE:
+            return decided
+
+        definition = card.definition
+        kinds = tuple(getattr(definition, "type_names", ()) or ())
+        if not kinds:
+            return RulingVerdict(
+                ConditionResult.UNKNOWN,
+                f"{card.card_id} 의 카드 종류를 읽지 못해 어느 존에 "
+                "세트되는지 알 수 없습니다.",
+                decided.unchecked,
+            )
+        destination = set_destination_zone(definition)
+        if destination is None:
+            return RulingVerdict(
+                ConditionResult.FALSE,
+                f"{card.card_id} 는 마법 · 함정이 아니어서 이 일로 "
+                "세트할 수 없습니다 (몬스터 세트는 다른 절차입니다).",
+            )
+        try:
+            room = self._view.player(card.controller).zone(destination)
+        except KeyError:  # pragma: no cover - 방어용
+            return RulingVerdict(
+                ConditionResult.UNKNOWN,
+                f"P{card.controller} 에게 {destination.value} 존이 없어 "
+                "빈 칸을 셀 수 없습니다.",
+                decided.unchecked,
+            )
+        if room.free_slots():
+            return decided
+        if destination is Zone.FZONE:
+            return RulingVerdict(
+                ConditionResult.UNKNOWN,
+                f"P{card.controller} 의 {destination.value} 에 이미 카드가 "
+                "있습니다. 공식 처리는 앞의 필드 마법을 묘지로 보내는 "
+                f"것인데 이 엔진에 그 경로가 없습니다: "
+                f"{FIELD_SPELL_REPLACEMENT_RULE}.",
+                decided.unchecked + (FIELD_SPELL_REPLACEMENT_RULE,),
+            )
+        return RulingVerdict(
+            ConditionResult.FALSE,
+            f"P{card.controller} 의 {destination.value} {room.size}칸이 "
+            "모두 차 있어 세트할 자리가 없습니다 (Card.IsSSetable 이 그 "
+            "자리를 함께 봅니다).",
+        )
+
+    # ------------------------------------------------------------------
     def _facts_of(self, card) -> "CardRuleFacts | None":
         """
         이 카드에 대해 **확인된 사실.** 없으면 ``None`` (Phase 6-O).
@@ -1058,5 +1163,6 @@ __all__ = [
     "REVIVAL_LIMIT_FREE_ZONES",
     "REVIVAL_LIMIT_TYPE_NAMES",
     "revival_limit_applies",
+    "FIELD_SPELL_REPLACEMENT_RULE",
     "SUMMON_HISTORY_RULE",
 ]

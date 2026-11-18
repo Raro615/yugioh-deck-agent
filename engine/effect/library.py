@@ -2360,9 +2360,11 @@ _CYMBAL_SKELETON_GRAVE_ENTRY = LibraryEntry(
 #:   아니다.
 #: - ``s.filter`` 의 ``c:IsSSetable()`` 은 **두 절반을 함께** 묻는다 —
 #:   「그 자리에 놓을 수 있는가」 와 「카드가 세트를 금지하지 않는가」.
-#:   🔴 **둘 다 옮겼지만 자리가 다르다.** 앞은 계획 단계가 지키고
-#:   (``effect_set_procedure(...).plan_for`` 가 빈 칸이 없으면 거절한다),
-#:   뒤는 관문이 묻는다 (``gated=True`` → ``MAY_BE_SET``). 🔴 **옮기지
+#:   🔴 **둘 다 관문이 묻는다** (``gated=True`` → ``MAY_BE_SET`` →
+#:   ``BoardRuling.explain_set``, Phase 6-BG). 🔴 **6-BF 는 앞의 절반을
+#:   계획 단계에 두었다 — 틀렸다**: 계획의 거절은 효과 전체의 거절이어서
+#:   (ADR-008) 자리가 없는 판에서 **되돌리기까지 취소됐다**. 공식은
+#:   후보를 걸러 세트만 일어나지 않게 한다. 🔴 **옮기지
 #:   못한 것은 그 금지를 **가진 카드**다** — 질문할 자리는 생겼지만, 세트를
 #:   금지하는 카드를 읽어 등재한 것은 아직 없다. 등재되지 않은 카드는
 #:   그 질문에 ``UNKNOWN`` 이고, 그것은 허가가 아니라 **거절**이다.
@@ -2447,6 +2449,14 @@ _GALATEA_SHUFFLE_SET_ENTRY = LibraryEntry(
                     #: 일어난다 (디베르 ① · 『성장』 ② 와 다른 자리다 —
                     #: 그 둘은 발동 조건이 후보의 존재를 묻는다).
                     checked_at_activation=False,
+                    #: 🔴 ``Duel.SelectYesNo`` 다 (Phase 6-BG). 되돌린 뒤
+                    #: 세트할 후보가 있어도 **하지 않을 수 있고**, 그때
+                    #: 되돌리기와 섞기는 그대로 남는다 —
+                    #: ``if #g>0 and Duel.SelectYesNo(tp,…) then`` 의
+                    #: 「아니오」 갈래다. 장수와 다른 축이므로
+                    #: ``minimum`` 은 1 그대로다 (하기로 했으면
+                    #: ``g:Select(tp,1,1,nil)``).
+                    declinable=True,
                 ),
             ),
         ),
@@ -2463,8 +2473,15 @@ _GALATEA_SHUFFLE_SET_ENTRY = LibraryEntry(
             ShuffleOperation(Zone.DECK, PlayerRef.CONTROLLER),
             #: ``Duel.SSet(tp,sg)``. 🔴 **발동이 아니다.**
             #: 🔴 ``gated=True`` 가 ``s.filter`` 의 ``IsSSetable``
-            #: 이다 — 그 술어의 **카드 쪽 절반**을 묻는다 (빈 칸
-            #: 절반은 계획이 지킨다, 위 설명).
+            #: 이다 — **그 술어 전체**를 묻는다: 카드가 세트를 금지하지
+            #: 않는가와 **그 자리에 빈 칸이 있는가** 둘 다
+            #: (``BoardRuling.explain_set``, Phase 6-BG).
+            #:
+            #: 🔴 **6-BF 는 빈 칸 절반을 계획으로 미뤘다 — 틀렸다.**
+            #: 계획의 거절은 효과 전체의 거절이고, 그래서 마법 · 함정
+            #: 존이 찬 판에서 **되돌리기까지 취소됐다** (실측). 공식은
+            #: ``s.filter`` 안에서 후보를 걸러 세트만 일어나지 않게
+            #: 한다.
             SetSpellTrapOperation(_GALATEA_SET_TARGET, gated=True),
         ),
         #: 🔴 ``s.tdcon1`` **하나뿐이다.** 링크 상태도 빈 칸도 여기 없다 —
@@ -3040,9 +3057,11 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                     "오르페골 바벨: 공식 텍스트 전문을 읽었다. 「이 카드는 "
                     "세트할 수 없다」 도, 세트를 제한하는 문장도 **없다** — "
                     "①은 필드 존에 있는 동안의 지속 효과이고 ②는 묘지에서 "
-                    "발동하는 효과다. 필드 마법이므로 놓이는 자리는 필드 "
-                    "존이고 (type_names 에 FIELD), 그 자리에 빈 칸이 "
-                    "있는지는 이 답이 아니라 배치 계획이 본다.",
+                    "발동하는 효과다. 🔴 이 답은 **카드 쪽 절반**이고, "
+                    "놓이는 자리(필드 마법이므로 필드 존 — type_names 에 "
+                    "FIELD)에 빈 칸이 있는지는 같은 질문의 나머지 절반으로 "
+                    "BoardRuling.explain_set 이 함께 본다 (Phase 6-BG 가 "
+                    "고친 자리 — 6-BF 는 그 절반을 배치 계획에 두었다).",
                 ),
             },
             restricts_others=False,

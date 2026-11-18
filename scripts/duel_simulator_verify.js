@@ -150,8 +150,16 @@ function movedBetween(before, after) {
  *    있지 않으면 전체가 실패다.
  * 🔴 **좌표만 믿지 않는다.** 화면의 장수 표시(`counts`) 와 좌표로 읽은
  *    수를 교차 확인한다.
+ * 🔴 **표시 형식은 보지 않는다 — 그 사실을 결과에 적는다** (6-BG). 이
+ *    대조는 존마다 **카드 자리의 집합**만 맞추고 앞면/뒷면은 읽지 않는다.
+ *    계획이 뒷면으로 끝나야 하는 자리를 알려 주면 (`expectPositions`)
+ *    `positions` 칸에 **「대조하지 않았다」** 를 자리와 함께 적는다.
+ *    🔴 `allOk` 를 그 때문에 거짓으로 만들지 **않는다** — 자리는 실제로
+ *    맞았고, 거짓으로 만들면 "자리도 틀렸다" 로 읽힌다. 대신
+ *    `fullyReproduced` 가 거짓이 되어 **그 참을 "그대로 재현됐다" 로
+ *    읽지 못하게** 한다.
  */
-function compareFinal(expectFinal, observed, counts) {
+function compareFinal(expectFinal, observed, counts, expectPositions) {
   const byZone = (observed && observed.byZone) || {};
   const problems = (observed && observed.problems) || [];
   const checks = [];
@@ -177,10 +185,21 @@ function compareFinal(expectFinal, observed, counts) {
     return { zone, label: counts[zone], geometry,
              ok: counts[zone] === geometry };
   });
+  const faceDown = (expectPositions && expectPositions.face_down) || [];
+  const positions = {
+    compared: false,
+    face_down: faceDown,
+    why: (expectPositions && expectPositions.why)
+      || '표시 형식(앞면 · 뒷면)은 대조하지 않았습니다.',
+  };
+  const allOk = checks.every(c => c.ok) && crossCheck.every(c => c.ok)
+                && problems.length === 0;
   return {
-    checks, crossCheck, problems,
-    allOk: checks.every(c => c.ok) && crossCheck.every(c => c.ok)
-           && problems.length === 0,
+    checks, crossCheck, problems, positions,
+    allOk,
+    //: 🔴 **자리가 맞았다 ≠ 그대로 재현됐다.** 뒷면으로 끝나야 하는 자리가
+    //: 하나라도 있으면 이 칸이 거짓이고, 부르는 쪽은 성공을 그렇게 읽는다.
+    fullyReproduced: allOk && faceDown.length === 0,
   };
 }
 

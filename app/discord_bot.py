@@ -937,8 +937,16 @@ def _autonomous_record(agent, draft, hand_ids, found, ranking) -> tuple:
     record, why = autonomous_rerun_record(
         agent.repository, draft, list(hand_ids), chosen
     )
+    #: 🔴 **첨부에 들어가지 **않은** 추천을 이름으로 적는다** (Phase 6-BG).
+    #: 6-BC 는 공동 추천의 **개수**만 적었다 — 그러면 요약에는 전개가 둘인데
+    #: 첨부에는 하나뿐인 사실이 "2개 가운데 하나" 로만 보이고, **어느 전개가
+    #: 재생되지 않는지**는 읽는 쪽이 번호를 맞춰 봐야 알 수 있었다.
+    rest = ", ".join(f"결과 {one.index}" for one in best[1:])
     tie = (f" (🔴 **공동 추천 {len(best)}개** 가운데 표시 순서가 가장 앞선"
-           f" 것이고, 단독 최우수라는 뜻이 아닙니다)" if len(best) > 1 else "")
+           f" 것이고, 단독 최우수라는 뜻이 아닙니다 — 나머지 추천"
+           f" {rest} 의 전개는 이 기록과 뷰어에 **들어 있지 않습니다**;"
+           f" 그 최종 판은 위 추천 절에 적혀 있습니다)"
+           if len(best) > 1 else "")
     if record is None:
         return None, (f"🖥 **전개 보기를 만들지 못했습니다** — 결과"
                       f" {chosen.index} 를 다시 실행하다 어긋났습니다:"

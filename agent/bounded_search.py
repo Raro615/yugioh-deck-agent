@@ -2015,9 +2015,15 @@ def iter_selections(ask: ChoiceAsk):
     🔴 **빈 선택과 조합 없음을 가른다.** ``minimum == 0`` 이면 빈 짝 ``()``
     을 **허용 조합의 하나로** 낸다 (아무것도 고르지 않는 선택이 적법하다는
     뜻이다). 낼 것이 없으면 아무것도 내지 않는다.
+
+    🔴 **「하지 않는다」 가 적법한 자리도 빈 짝을 낸다** (Phase 6-BG ·
+    :attr:`~agent.choice.ChoiceAsk.declinable`). 장수와 다른 축이므로
+    ``minimum`` 은 1 인 채로 빈 짝이 허용 조합에 들어간다 — 하기로 했다면
+    1장이고, 하지 않는 갈래가 따로 있다. 그 자리를 ``minimum`` 으로만
+    읽으면 **하지 않는 전개가 탐색에서 아예 생기지 않는다.**
     """
     pool = tuple(sorted(instance for instance, _card in ask.offered))
-    lowest = max(0, ask.minimum)
+    lowest = 0 if ask.declinable else max(0, ask.minimum)
     for size in range(lowest, ask.maximum + 1):
         if size == 0:
             yield ()

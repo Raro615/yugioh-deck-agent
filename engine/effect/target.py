@@ -639,6 +639,39 @@ class TargetSpec:
     질문이고, 두 벌로 적으면 세 자리의 답이 갈릴 수 있다.
     """
 
+    declinable: bool = False
+    """
+    🔴 **고르는 사람이 「하지 않는다」 를 고를 수 있는가** (Phase 6-BG).
+
+    공식 스크립트가 그 선택을 ``Duel.SelectYesNo`` 로 감싼 자리다. 장수와
+    **다른 축**이다 — 하기로 했다면 몇 장을 고르는지는 ``minimum`` ·
+    ``maximum`` 이 말하고, 이 칸은 **아예 하지 않는 갈래가 있는가** 를
+    말한다. 오르페골 갈라테아 ② ::
+
+        c30741503.lua s.tdop
+            local g=Duel.GetMatchingGroup(s.filter,tp,LOCATION_DECK,0,nil)
+            if #g>0 and Duel.SelectYesNo(tp,aux.Stringid(id,1)) then
+              Duel.BreakEffect()
+              local sg=g:Select(tp,1,1,nil)      -- 하기로 했으면 정확히 1장
+              Duel.SSet(tp,sg) end
+
+    ``SelectYesNo`` 와 ``Select(tp,1,1,nil)`` 가 **둘 다** 있다. 그래서
+    ``minimum=0`` 으로 뭉개지 않는다 — 그러면 "0장을 고르는 것도 하기로 한
+    것" 이 되어, 장수를 최소로 집는 기준점 정책들이 **언제나** 0장을 집고
+    세트가 아예 일어나지 않는다 (실측한 모양이다:
+    :func:`agent.choice._take` 는 정확히 ``minimum`` 장만 집는다).
+
+    🔴 **빈 선택이 거절이 아니게 되는 자리다.** 이 칸이 참이면 빈 선택은
+    ``TOO_FEW_SELECTED`` 가 아니라 "그 대상을 쓰는 일만 하지 않았다" 가
+    된다 (``EffectExecutor._declined_target`` →
+    ``_VacantTarget``). 적지 않은 효과는 한 글자도 달라지지 않는다 —
+    빈 선택은 그대로 거절이다 (ADR-006).
+
+    🔴 **해결 중에 고르는 선택에만 적는다.** 발동 시점에 고르는 것을
+    「하지 않는다」 로 답하는 것은 **발동하지 않는 것**이고, 그 결정은 이
+    칸이 아니라 발동 여부가 들고 있다 (``__post_init__`` 가 막는다).
+    """
+
     checked_at_activation: bool = True
     """
     🔴 **공식 스크립트의 발동 조건이 이 후보의 존재를 묻는가**
@@ -675,6 +708,13 @@ class TargetSpec:
                 "발동 조건이 보지 않는 선택은 **해결 중에 고르는** 선택뿐"
                 "입니다. 발동 시점에 고르는 것을 발동 조건에서 빼면 그 "
                 "선택이 아무 자리에서도 확인되지 않습니다."
+            )
+        if self.declinable and not self.chosen_at_resolution:
+            raise ValueError(
+                "「하지 않는다」 를 고를 수 있는 선택은 **해결 중에 고르는** "
+                "선택뿐입니다 (공식 Duel.SelectYesNo 가 해결 함수 안에 "
+                "있습니다). 발동 시점에 고르는 것을 하지 않겠다는 결정은 "
+                "발동하지 않는 것이고, 그것은 이 칸이 아닙니다."
             )
         if self.existence_requires_gate and self.choice is None:
             raise ValueError(
@@ -740,6 +780,7 @@ class TargetSpec:
         chosen_at_resolution: bool = False,
         existence_requires_gate: bool = False,
         checked_at_activation: bool = True,
+        declinable: bool = False,
     ) -> "TargetSpec":
         """
         고르지만 대상 지정은 아닌 효과.
@@ -755,6 +796,7 @@ class TargetSpec:
             chosen_at_resolution=chosen_at_resolution,
             existence_requires_gate=existence_requires_gate,
             checked_at_activation=checked_at_activation,
+            declinable=declinable,
         )
 
     @classmethod
@@ -832,6 +874,7 @@ class TargetSpec:
             self.chosen_at_resolution,
             self.existence_requires_gate,
             self.checked_at_activation,
+            self.declinable,
         )
 
     def to_dict(self) -> dict:
@@ -845,6 +888,8 @@ class TargetSpec:
         #: 🔴 **기본값이 아닐 때만 적는다** — 다른 두 칸과 같은 규율이다.
         if not self.checked_at_activation:
             data["checked_at_activation"] = False
+        if self.declinable:
+            data["declinable"] = True
         return data
 
     def describe_ko(self) -> str:
@@ -853,7 +898,8 @@ class TargetSpec:
         assert self.choice is not None
         verb = "대상으로 지정" if self.is_targeting else "선택"
         when = " (해결 시점)" if self.chosen_at_resolution else ""
-        return f"{self.choice.source.describe_ko()} 에서 {verb}{when}"
+        may = " · 하지 않을 수 있다" if self.declinable else ""
+        return f"{self.choice.source.describe_ko()} 에서 {verb}{when}{may}"
 
     def __str__(self) -> str:  # pragma: no cover - 표시용
         return self.describe_ko()

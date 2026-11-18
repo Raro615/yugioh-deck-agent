@@ -671,3 +671,647 @@ card_id=90351981, face_up=False, position='FACEDOWN', …)))` 가 들어 있다)
 **`search`** → `auto` · **`results`** → `3` · **`followups`** → `6`
 
 * `line` 은 **비워 둡니다** (`search:auto` 와 함께 주면 거절합니다).
+
+---
+---
+
+# Phase 6-BG 후속 — 세트의 남은 처리와 **출력 경로 끝까지**
+
+기준 HEAD: `fc47db41` (6-BF 의 마지막 커밋). 아래는 **그 뒤에** 한 일이고,
+6-BF 의 본문은 지우지 않았다 — 지금 틀린 문장은 §17 의 표에 적는다.
+
+🔴 **이번 작업의 질문은 "구현했는가" 가 아니라 "사용자에게 닿는가" 였다.**
+6-BF 는 갈라테아 ② 를 엔진에서 해결했고, 자율 탐색이 그 경로를 찾는 것까지
+보였다. 이번에는 그 뒤를 전부 실제로 돌려 **요약 · 첨부 · 사이트 계획까지
+같은 후보를 가리키는지** 재고, 그 과정에서 6-BF 의 구조적 오류 하나를
+찾아 고쳤다.
+
+---
+
+## 10. 한눈에 — 고친 것 셋, 확인한 것 넷
+
+| # | 무엇 | 왜 (근거) | 어디 |
+| --- | --- | --- | --- |
+| G1 | `MAY_BE_SET` 이 **빈 칸까지** 본다 | 공식 `s.filter` 가 `IsSSetable` 을 **후보 조건 안**에 적는다. 6-BF 는 빈 칸 절반을 배치 계획에 두었고, 그래서 자리가 없는 판에서 **되돌리기까지 취소됐다** (실측) | `engine/effect/ruling.py` `BoardRuling.explain_set`, `engine/effect/semantics.py` `set_destination_zone` |
+| G2 | **세트하지 않는 선택**을 표현한다 | 공식 `s.tdop` 의 `Duel.SelectYesNo`. 6-BF 에서 빈 선택은 `TOO_FEW_SELECTED` 였고 효과 전체가 거절됐다 | `TargetSpec.declinable` → `ResolutionChoice` → `ChoiceOffer` → `ChoiceAsk` → `iter_selections` |
+| G3 | 세트 불가의 **사유를 셋으로** 가른다 | 「카드가 없다」 · 「놓을 자리가 없다」 · 「판정하지 못했다」 가 고칠 자리가 다르다 | `EffectExecutor._candidate_verdicts` · `_candidate_shortfall` · `_declined_target` |
+| G4 | 필드 존 세트가 **다른 전개**로 남는다 | 6-BE 의 `variant_key` 가 마법 · 함정 존만 읽어, 필드 마법 세트가 「세트 안 함」 과 같은 열쇠였다 | `agent/open_evaluation_v2.py` |
+| G5 | 첨부에 **들어가지 않은 추천**을 이름으로 적는다 | 요약에 전개가 둘인데 첨부는 하나다 — 개수만 적으면 어느 쪽이 빠졌는지 읽는 쪽이 번호를 맞춰 봐야 했다 | `app/discord_bot.py` `_autonomous_record` |
+| G6 | 사이트 대조가 **표시 형식을 보지 않았다**고 적는다 | `compareFinal` 은 존별 **자리 집합**만 맞춘다 — 세트 카드가 앞면으로 놓여도 `allOk` 가 참이 될 수 있었다 | `deck/site_plan.py` `expect_positions`, `scripts/duel_simulator_verify.js`, `scripts/duel_simulator_driver.js` |
+| G7 | 계획의 한계가 **자동 조작 결과에도** 실린다 | `plan["unsupported"]` 가 계획 파일에만 있었다 | `scripts/duel_simulator_driver.js` |
+
+---
+
+## 11. §1 — 출력 경로를 **실제로** 돌려서 추적했다
+
+### 11.1 `/combo` 의 **실효** 기본값 (실측)
+
+| 옵션 | 사용자가 비워 둠 | 실제로 쓰이는 값 | 어디서 |
+| --- | --- | --- | --- |
+| `results` | `""` | `search_result_count("")` → `(1, '')` → `max_results = max(2, 1) = ` **2** | `app/discord_bot.py` → `app/main.py` |
+| `followups` | `""` | `search_followup_count("")` → `(0, '')` → falsy → `actions` 인자를 **넘기지 않는다** → `AUTONOMOUS_DEFAULT_ACTIONS = ` **6** | 같은 자리 |
+| `search` | `auto` | 자율 탐색 (목표 카드 없음) | `is_autonomous_search` |
+| `line` | `""` | 꽂지 않는다 — 🔴 고정 경로 정책이 **없다** | `opening_wiring(repository, None)` |
+
+🔴 **정정** — 6-BF 보고서 §4.1 · §9 는 이 경로를 `results:3` 으로 측정하고
+그 값을 복사용으로 적었다. **사용자가 `results` 를 비워 두면 2 다.** 아래
+수치는 전부 `max_results=2` 에서 다시 쟀다 (§18 에 복사용 값도 고쳐 적는다).
+
+### 11.2 여섯 칸을 지난다 — 칸마다 **실측**
+
+입력: `hand = 69811710,14558127,23434538,10045474,24224830`,
+`recipe = docs/orcust-azamina-note.ydk` (메인 **40**장 · 엑스트라 **15**장 ·
+사이드 0장, 패 5장이 전부 메인에 있다 — 기르수 ×3 · 우라라 ×3 · 증G ×2 ·
+무한포영 ×3 · 지명자 ×2), `search = auto`, 나머지 **기본값**.
+
+| 칸 | 실측 |
+| --- | --- |
+| ① 자율 탐색 | 74 노드 · 깊이 **7** · 10.1초 · 후보 **28**건 · 선택 분기 10 · 중복 제거 0 · 종료 `BUDGET_EXCEEDED` |
+| ② 갈라테아 ② 를 쓴 후보 | **결과 24** 하나. depth 7 · `verified=True` · `SZONE=[(703897, 'FACEDOWN')]` · `FZONE=[]` |
+| ③ 비교 · 추천 | `recommended = [결과 17, 결과 24]` — **공동 추천**, 사유는 "필드 구성이 서로 바뀌어 포함 관계가 아니다 (비교 불가)" |
+| ④ 요약 | 두 후보의 **최종 필드가 모두 실린다.** 결과 24 줄: `자신 마법·함정 존: 오르페골 클리막스 [703897] 뒷면/FACEDOWN` · `쥔 카드 5 (패 4 + 세트 1)` |
+| ⑤ 대표 · 첨부 | `결과 17` 의 재실행 기록 하나 (`combo-replay.json` 90 KB · `combo-replay.html` 889 KB · `combo-detail.txt` 49 KB). 그 사실이 요약에 한 줄로 적힌다 |
+| ⑥ 사이트 계획 | `결과 24` 의 기록으로 따로 돌려 확인했다 — §15 |
+
+### 11.3 요청이 물은 네 가지에 **직접** 답한다
+
+1. **기본 설정에서 발견되는가** — 그렇다. 7단계 경로가 기본 예산에서
+   나온다 (결과 24, `verified=True`).
+2. **최종 추천에 포함되는가** — 그렇다. `recommended` 가 둘이고 그 하나다.
+   🔴 **단독 최우수는 아니다** — 결과 17 과 **비교 불가**다.
+3. **제외되는 단계가 있는가** — 비교 · 추천에서는 제외되지 않는다.
+   **첨부에서는 제외된다**: 뷰어와 JSON 은 기록 하나만 담고, 대표는
+   「표시 순서가 가장 앞선 추천」 = 결과 17 이다.
+4. **요약 · 상세 · JSON · 시뮬레이터 입력이 같은 후보를 가리키는가** —
+   요약과 상세는 **둘 다**, JSON · HTML · 사이트 계획은 **결과 17 하나**를
+   가리킨다. 🔴 그 어긋남은 숨겨지지 않는다 (G5 가 나머지 추천 번호까지
+   적게 했다):
+
+   ```
+   🖥 전개 보기·전개 기록은 **결과 17** 의 재실행 기록입니다
+   (🔴 **공동 추천 2개** 가운데 표시 순서가 가장 앞선 것이고, 단독
+   최우수라는 뜻이 아닙니다 — 나머지 추천 결과 24 의 전개는 이 기록과
+   뷰어에 **들어 있지 않습니다**; 그 최종 판은 위 추천 절에 적혀 있습니다).
+   ```
+
+🔴 **"경로가 존재한다" 로 끝내지 않았다.** 결과 24 가 사용자에게 닿는
+자리는 **요약과 상세**이고, 닿지 않는 자리는 **뷰어 · JSON · 사이트 계획**
+이다. 이번 작업은 그 둘을 가려 적었고, 뷰어를 여러 후보로 늘리는 일은
+하지 않았다 (요청 §4 가 "하나만 재생용이면 어느 후보인지 명시" 를 허용한다).
+
+---
+
+## 12. §2 — 세트의 남은 처리
+
+### 12.1 공식 스크립트를 **구조로** 다시 읽었다
+
+```lua
+-- c30741503.lua  (저장소 루트에 있는 그 파일)
+function s.tdop(e,tp,eg,ep,ev,re,r,rp)
+  local tg=Duel.GetTargetCards(e); if #tg==0 then return end
+  Duel.SendtoDeck(tg,nil,SEQ_DECKTOP,REASON_EFFECT)          -- ① 무조건
+  local og=Duel.GetOperatedGroup(); if #og==0 then return end
+  if og:IsExists(Card.IsLocation,1,nil,LOCATION_DECK) then Duel.ShuffleDeck(tp) end
+  local g=Duel.GetMatchingGroup(s.filter,tp,LOCATION_DECK,0,nil)   -- ② 후보
+  if #g>0 and Duel.SelectYesNo(tp,aux.Stringid(id,1)) then          -- ③ 임의
+    Duel.BreakEffect(); local sg=g:Select(tp,1,1,nil); Duel.SSet(tp,sg) end
+end
+function s.filter(c)
+  return c:IsSetCard(SET_ORCUST) and c:IsSpellTrap() and c:IsSSetable()
+end
+```
+
+세 가지가 **구조로** 읽힌다.
+
+* ① **되돌리기는 조건이 없다.** 세트가 어떻게 되든 일어난다.
+* ② **세트가 「실패」 하는 갈래가 없다.** 일어나는지 아닌지는 `s.filter`
+  (`IsSSetable` 포함) 가 후보를 몇 장 내는가로 **전부** 결정된다.
+  `IsSSetable` 은 「그 자리에 놓을 수 있는가」 와 「카드가 세트를 금지하지
+  않는가」 를 **함께** 묻는다.
+* ③ 후보가 있어도 **하지 않을 수 있다** (`SelectYesNo`). 하기로 하면
+  **정확히 1장** (`Select(tp,1,1,nil)`).
+
+### 12.2 6-BF 의 구조적 오류 — 실측으로 잡았다
+
+6-BF 는 `IsSSetable` 을 **반으로 갈라** 카드 쪽 절반만 관문에 두고
+(`MAY_BE_SET`), 빈 칸 절반은 배치 계획(`effect_set_procedure(...).plan_for`)
+에 맡겼다. 계획 단계의 거절은 **효과 전체의 거절**이므로 (ADR-008 의
+전부-아니면-무), 자리가 없는 판에서 이렇게 끝났다:
+
+```
+해결: code=ValidationCode.CANDIDATE_NOT_ELIGIBLE
+  체인1 P0 30741503:e[1] 대상 @primary=[#16] 를 해결하지 못했습니다:
+  #0 를 세트할 수 없습니다: SZONE 에 빈 칸이 없습니다.
+판 후: … REMOVED=57835716/FACEUP     ← 🔴 되돌리기까지 취소됐다
+```
+
+공식에서는 되돌리기가 무조건이므로 **틀린 결과**다. 🔴 그리고 6-BF 는 그
+가름을 `RuleQuestion.MAY_BE_SET` 의 설명에 *"빈 칸은 이 질문이 아니다"* 라고
+**적어 두었다** — 그 문장을 정정 표시와 함께 고쳤다.
+
+### 12.3 고친 것 — 세 자리
+
+**G1. `MAY_BE_SET` 이 판을 본다** (`BoardRuling.explain_set`). 걸음 둘이고
+순서가 규칙이다 — ① 등재된 카드 사실(`_explain_fact`)이 `TRUE` 가 아니면
+거기서 끝낸다, ② 종류가 목적지를 정하고
+(`set_destination_zone`: `type_names` 에 `FIELD` → `FZONE`, 그 밖 → `SZONE`)
+그 존의 빈 칸을 본다. 🔴 순서가 뜻을 가진다: 막는 카드가 있어 ① 이
+`UNKNOWN` 인 판에서 빈 칸을 세어 `FALSE` 로 내리면 **확인된 모름이 확정
+거절로 바뀐다.**
+
+🔴 **목적지를 가르는 자리를 하나로 모았다.** 실행기(`_plan_set_spell_trap`)
+가 `"FIELD" in kinds` 로 절차를 고르고 판정기가 같은 질문을 해야 하므로,
+두 벌로 적으면 **판정한 존과 놓는 존이 갈릴 수 있다.**
+
+**G2. `TargetSpec.declinable`** — 공식 `SelectYesNo` 를 **장수와 다른 축**
+으로 선언한다. 🔴 `minimum=0` 으로 뭉개지 않았다: 기준점 정책들은 정확히
+`minimum` 장만 집으므로 (`agent.choice._take`) 0 으로 바꾸면 **세트가 아예
+일어나지 않는다.** 공식도 둘을 따로 적는다 (`SelectYesNo` + `Select(1,1)`).
+
+빈 선택이 들어오면 `_ask_for_choice` 가 `_short_selection` **앞**에서
+`_VacantTarget` 을 만든다 — 그 순서가 "모자란 선택" 과 "하지 않기로 한
+선택" 을 가른다. 탐색 쪽은 `ChoiceAsk.declinable` 을 읽어 `iter_selections`
+가 **빈 짝도 허용 조합으로** 낸다.
+
+**G3. 사유를 셋으로 가른다.** `_candidate_verdicts` 가 관문 답을
+`permitted` · `unknown` · **`refused`** 로 나눈다 (6-BF 는 `FALSE` 를 세지
+않았다). `_candidate_shortfall` 이 그 수로 문장을 가른다:
+
+| 판 | 문장 |
+| --- | --- |
+| 조건에 맞는 카드가 덱에 없다 | "조건에 맞는 카드가 하나도 없었습니다 (후보 0장을 전부 확인했습니다)" |
+| 카드는 있는데 놓을 자리가 없다 | "조건에 맞는 카드 2장을 전부 확인했지만 그중 쓸 수 있는 것이 없었습니다: #0: P0 의 SZONE 5칸이 모두 차 있어…" |
+| 판정하지 못했다 | 위 문장 뒤에 "판정하지 못한 후보: #28: …" 이 붙고, 결과의 `unchecked_rules` 에 `gated-candidate-eligibility` 가 남는다 |
+
+🔴 **모름을 조용히 넘기지 않는다.** 「하지 않기로 했다」 가 정상 해결이
+되었으므로, 그 자리의 모름이 사라질 수 있었다 — `_VacantTarget.unchecked`
+가 그 이름을 들고 계획의 마지막 걸음(`_Step.blind`)에 실려 결과까지 간다.
+못 한 덱 정리를 싣는 **같은 칸**이다.
+
+### 12.4 여섯 판을 **실측했다**
+
+전개는 전부 같다 (기르수 일반 소환 → 기르수 ① → 디베르 ① → 갈라테아 링크
+소환 → 갈라테아 ②). 판만 손으로 바꿨다.
+
+| 판 | 되돌리기 | 세트 | 결과 코드 | 비고 |
+| --- | --- | --- | --- | --- |
+| A. 평소 (SZONE 빈 칸) | ✔ | 클리막스 → `SZONE[0]` 뒷면 | `OK` | 6-BF 와 같다 |
+| B. SZONE 5/5 | ✔ | **바벨 → `FZONE[0]` 뒷면** | `OK` | 🔴 6-BF 는 **효과 전체 거절**이었다. 공식에서는 클리막스가 후보에서 빠지고 바벨이 남는다 |
+| C. SZONE 5/5 + FZONE 에 바벨 (덱에 후보 없음) | ✔ | 없음 | `OK` | 후보 0장 → 세트만 생략 |
+| D. FZONE 에 바벨 · SZONE 여유 | ✔ | 클리막스 → `SZONE[0]` | `OK` | |
+| E. FZONE 에 **다른** 카드 · SZONE 여유 | ✔ | 클리막스 → `SZONE[0]` | `OK` | 바벨은 `UNKNOWN`, 클리막스가 `TRUE` → 후보가 남는다 |
+| F. FZONE 에 다른 카드 + SZONE 5/5 | ✔ | 없음 | `OK` + `unchecked_rules` | 🔴 6-BF 는 `RULE_NOT_IMPLEMENTED` 로 **되돌리기까지 취소**했다 |
+
+F 판의 실제 결과 문장 (전문):
+
+```
+30741503:e[1] 를 적용했습니다 (3건). @set 를 고르지 않았습니다 — 조건에
+맞는 카드 2장을 전부 확인했지만 그중 쓸 수 있는 것이 없었습니다: #0: P0 의
+SZONE 5칸이 모두 차 있어 세트할 자리가 없습니다 (Card.IsSSetable 이 그
+자리를 함께 봅니다). 그 대상을 쓰는 일은 하지 않고 나머지 일은 그대로
+수행했습니다. 판정하지 못한 후보: #28: P0 의 FZONE 에 이미 카드가
+있습니다. 공식 처리는 앞의 필드 마법을 묘지로 보내는 것인데 이 엔진에 그
+경로가 없습니다: field-spell-replacement (앞의 필드 마법을 묘지로 보내는
+처리 — RULE-SPELLTRAP-006).
+
+unchecked_rules = (… , 'gated-candidate-eligibility (후보를 그 조작으로
+움직일 수 있는지 확인되지 않았다)')
+```
+
+### 12.5 바벨의 필드 존 — **보류의 근거**
+
+룰북 `RULE-SPELLTRAP-006` (`data/rules/documents/sd-rulebook-en-v10.json`,
+인쇄 29쪽) 원문:
+
+> These cards go in your Field Zone and stay there. Each player can have 1
+> Field Spell Card on their own side of the field. **To use another Field
+> Spell, send your previous one to the Graveyard.** … These cards may be
+> placed face-down in the Field Zone, but are not active until flipped
+> face-up.
+
+즉 공식에서는 **놓을 수 있다** — 앞의 필드 마법을 묘지로 보내면서. 이
+저장소에 그 교체 경로가 **없다.** 그래서 ① `FALSE`(「공식적으로도 못
+한다」) 로 적지 않고 ② `UNKNOWN` 으로 보류하며 ③ 규칙 이름
+(`field-spell-replacement`) 을 함께 내보낸다. 🔴 **성공으로 기록하지
+않았고, 지어내서 구현하지도 않았다.**
+
+### 12.6 발동 시점과 해결 시점
+
+6-BF 가 세운 가름을 **그대로 두었다** — 이번에 한 글자도 바꾸지 않았다.
+
+| 시점 | 무엇을 보는가 | 근거 |
+| --- | --- | --- |
+| 발동 | 제외된 앞면 기계족 하나의 **존재**만 (`s.tdtg` 의 `IsExistingTarget`) · 바벨이 앞면으로 깔려 있지 않은가 (`s.tdcon1`) | `TargetSpec.checked_at_activation=False` 가 세트 후보를 발동 조건에서 **뺀다** |
+| 해결 | 그때의 덱에서 세트 후보를 센다 (`s.tdop` 의 `GetMatchingGroup`) · 각 후보의 `IsSSetable` 을 **판과 함께** 묻는다 | `chosen_at_resolution=True` · `gated=True` → `explain_set` |
+
+🔴 **G1 이 이 가름을 더 뚜렷하게 만들었다.** 빈 칸은 판에 달려 있으므로
+**해결 시점의 질문**이고, 발동 조건은 그것을 보지 않는다 — 공식도
+`s.tdtg` 에서 덱을 묻지 않는다.
+
+### 12.7 이번에 하지 않은 것 (범위 밖으로 **남겨 둔** 것)
+
+* 필드 마법 **교체** (앞의 것을 묘지로) — 위 보류의 원인. 구현하지 않았다.
+* `Duel.BreakEffect()` (세트 전에 체인 블록을 끊는 처리) — 이 저장소에
+  그 계층이 없다. 6-BF 의 §2.4 와 같은 상태다.
+* 갈라테아 ③ (유발즉시) — `ACTIVATION_KINDS_IN_SCOPE` 밖. 그대로다.
+* 효과 실행기의 **광범위한 재설계** — 하지 않았다. 바꾼 것은 ① 판정 질문
+  하나(`MAY_BE_SET`), ② 선언 칸 하나(`declinable`)와 그것을 읽는 네 자리,
+  ③ 사유 문장을 가르는 헬퍼 둘이다. 전부-아니면-무(ADR-008)도,
+  `OperationOutcome` 의 세 값도 건드리지 않았다.
+
+---
+
+## 13. §3 — 비교 · 중복 제거 · 대표 선정
+
+### 13.1 고친 것 — 필드 존이 보이지 않았다
+
+6-BE 의 `measure_v2` · `variant_key` 는 `Zone.SZONE` **하나만** 읽었다.
+결과:
+
+* `set_cards` — 필드 마법을 세트한 전개도 **0** 이었다.
+* `variant_key` 의 뒷면 목록 — `(card_id, 칸번호)` 였고 **존 이름이
+  없었다.** 그래서 ① 필드 존 세트가 「세트 안 함」 과 **같은 열쇠**가 되어
+  중복 제거에서 지워질 수 있었고, ② 두 존의 같은 번호 칸이 **같은 자리**로
+  읽혔다.
+
+지금은 두 존을 다 읽고 열쇠에 **존 이름**을 함께 넣는다. 실측 (새 시험
+`test_h06`):
+
+| 판 | `set_cards` | `set_reactive` | `core_key` | `variant_key` |
+| --- | --- | --- | --- | --- |
+| 클리막스 → SZONE | 1 | 1 | 같다 | **다르다** |
+| 몬스터 5장 + 바벨 → FZONE | 6 | **0** | 같다 | **다르다** |
+
+### 13.2 요청이 요구한 여섯 가지에 하나씩
+
+1. **FZONE 을 포함한 최종 필드가 누락되지 않는다** — 위 표. `set_cards`
+   가 필드 존 세트를 센다.
+2. **세트한 결과와 세트하지 않은 결과를 합치지 않는다** — `variant_key`
+   가 다르다. 🔴 `core_key` 는 **그대로 세트를 보지 않는다** (6-BE 의 가름을
+   바꾸지 않았다) — 다양성 배분이 세트 변형에 재생 슬롯을 다 쓰지 않게 하는
+   정책이고, 차이는 `variant_key` 가 들고 있다.
+3. **같은 최종 상태라도 사용 기록 · 제약이 다르면 보존한다** —
+   `variant_key` 가 `bodies_with_use_record` 를 들고 있고, 요약은 기록된
+   제약을 그대로 적는다 (실제 출력: 결과 24 는 `card_name [30741503] ×1` ·
+   `summon [30741503] link ×1` 이 더 있다).
+4. **손패 세트 순서 차이로 밀려나지 않는가** — 실측: 이 입력의 28 후보에서
+   **중복 제거 0건** (`deduped=0`). 즉 이번 판에서는 그 일이 **일어나지
+   않았다.** 🔴 "일어날 수 없다" 가 아니라 "이 입력에서는 없었다" 다.
+5. **세트된 카드는 세트된 자원으로** — `set_cards` 가 센다. `set_reactive`
+   는 **종류만** 본다 (함정 · 속공마법): 클리막스는 1, 바벨(필드 마법) 과
+   몬스터는 0. 🔴 **발동을 검증하지 않은 카드를 확정 방해로 합산하지
+   않는다** — 요약이 그것을 `[B 잠재, 우열에 쓰지 않음]` 으로 적고, 비교
+   축에 넣지 않는다 (실제 출력 그대로).
+6. **최선이라고 부르지 않는다** — 요약이 적는 그대로다: `🔴 **전역 최적
+   전개가 아닙니다**` · `🔴 **공동 추천 2개** — 네 축으로는 우열이 가려지지
+   않았습니다` · `**비교 불가**입니다 — … 같다는 뜻이 아니고 현재 기준으로
+   **우열 불명**입니다`. 🔴 **억지 순위를 만들지 않았고**, 서로 다른 최종
+   상태 둘이 그대로 대표 목록(기본 개수 2)에 들어갔다.
+
+### 13.3 가산점을 주지 않았다 — 값으로 확인
+
+* 카드 ID 를 읽는 자리가 평가에 **없다.** `measure_v2` 가 쓰는 것은
+  `CardFacts` 의 **종류** 값들이고 (토큰인가 · 효과 몬스터인가 · 함정 ·
+  속공마법인가 · 인쇄된 효과 수), 어느 카드가 좋은지는 적혀 있지 않다.
+* 추천 둘은 **상태가 달라서** 둘이다 (필드 구성이 서로 포함 관계가 아니다),
+  갈라테아를 쓴다는 이유로 올라간 것이 아니다.
+* 고정 수순 주입 없음 — `line` 을 비워 두면 `opening_wiring(repository,
+  None)` 이므로 `ComboLine` 의 해결 선택 선호가 **꽂히지 않는다.**
+
+---
+
+## 14. §4 — Discord 요약과 재생 기록
+
+| 요청 | 확인 결과 |
+| --- | --- |
+| 요약의 전개와 첨부의 전개가 같아야 한다 | 요약은 **둘**, 첨부는 **하나**다 (뷰어 · JSON 이 기록 하나만 담는다). 🔴 그 어긋남을 숨기지 않고, **어느 후보가 빠졌는지**까지 적게 했다 (G5) |
+| 하나만 재생용이면 어느 후보인지 명시 | 적는다 — §11.3 의 인용 |
+| 재실행 실패 후보를 성공처럼 내보내지 않는다 | `recommended` 는 `Exclusion.NONE` 인 후보만이고, 재생 검증을 통과하지 못한 후보는 `Exclusion.NOT_VERIFIED` 로 빠진다. 기록을 만들지 못하면 `replay=None` · `ReplayState.BUILD_FAILED` 이고 그 사실이 문장으로 나간다 |
+| 고정 경로 · 정적 계획이 대신하지 않는다 | 실제 출력: `🔴 이 응답에는 **자율 탐색 결과만** 있습니다 — first_meaningful 기준점 실행도, 정적 전개 추천도 돌리지 않았습니다 (search:auto 이므로)` |
+| 정상 응답은 간결 · 세부 한계는 상세로 | 🔴 **이번에 늘리지 않았다.** 추가한 것은 대표 선정 줄에 들어간 **한 구절**이고, 세부 한계(판정 문장 · 못 본 규칙 · 사이트 한계)는 `combo-detail.txt` 와 `plan.json` 으로 간다. 기존 요약이 이미 3개 메시지(약 11 KB)라는 사실은 6-BD · 6-BE 의 설계이고, 이번 범위에서 재편하지 않았다 |
+
+---
+
+## 15. §5 — 실제 Duel Simulator 의 세트 표시
+
+### 15.1 로컬 변환은 **실제 기록으로** 확인했다
+
+결과 24 의 재실행 기록(`autonomous_rerun_record`)을 `build_site_plan` 에
+넣어 그대로 읽었다.
+
+```json
+// 기록의 사건
+{"kind": "card_set", "instance": 0, "player": 0, "owner": 0,
+ "from_player": 0, "from_zone": "DECK", "to_zone": "SZONE", "to_index": 0,
+ "position": "FACEDOWN", "summoned": false}
+
+// 사이트 조작
+{"op": "move", "card": "main-5", "step": 7, "event": 7, "from": "Deck",
+ "to": "Spell & Trap Zone1", "position": "FACEDOWN", "face_down": true,
+ "why": "오르페골 클리막스 이동", "expect": "→ Spell & Trap Zone1",
+ "basis": "engine:event#7.card_set", "n": 17}
+
+// 계획이 들고 가는 "대조하지 않는 것"
+{"face_down": [{"slot": "main-5", "zone": "Spell & Trap Zone1"}],
+ "compared": false,
+ "why": "표시 형식(앞면 · 뒷면)은 **대조하지 않았습니다.** …"}
+```
+
+* **일반 마법 · 함정 존과 필드 존을 가른다** — `Spell & Trap Zone{번호}`
+  대 `Field Zone` (번호 없음: 사이트에 한 칸뿐이다). 합성 기록으로 양쪽을
+  재는 시험을 넣었다 (`test_site_plan.py::test_bg01`).
+* **카드 개체가 섞이지 않는다** — 자리(`main-5`)로 묶으므로 같은 이름이
+  여러 장이어도 갈린다. 기존 `deck_image_registry` 경로를 그대로 쓴다.
+* **토큰 처리도 그대로다** — `token_created` · `token_vanished` 는
+  `unsupported` 에 남고 (덱 이미지에 없는 카드라 자리를 묶을 수 없다),
+  이번에 바꾸지 않았다.
+* 🔴 **새 HTML 뷰어를 만들지 않았다.** 기존 `deck/site_plan.py` ·
+  `deck/site_session.py` · `scripts/duel_simulator_driver.js` 경로만 썼다.
+
+### 15.2 "이동만 성공" 이 "재현됐다" 로 읽히던 자리를 고쳤다 (G6)
+
+`compareFinal` 은 존마다 **카드 자리의 집합**만 맞추고 앞면/뒷면은 읽지
+않는다. 그래서 세트 카드가 앞면으로 놓여도 `allOk` 가 **참**이 될 수 있었고,
+자동 조작의 결과만 읽는 쪽에는 그 사실이 전해지지 않았다
+(`_SET_POSITION_NOTE` 는 `plan.json` 에만 있었다).
+
+| 칸 | 지금 |
+| --- | --- |
+| `allOk` | 그대로 — 자리는 실제로 맞았다. 🔴 거짓으로 만들지 않았다 (그러면 "자리도 틀렸다" 로 읽힌다) |
+| `positions` | `{compared: false, face_down: [{slot, zone}…], why: …}` |
+| `fullyReproduced` | **거짓** — 뒷면이어야 하는 자리가 하나라도 있으면 |
+| `result.notes` | `🔴 자리는 맞았지만 **그대로 재현된 것은 아닙니다** — … 뒷면이어야 하는 자리: main-5→Spell & Trap Zone1.` + `plan.unsupported` 전부 (G7) |
+
+### 15.3 외부 사이트 확인 — **무엇을 했고 무엇이 남았는가**
+
+🔴 **이번에 사이트를 조작하지 않았다.** 아래는 **공개 문서를 읽은 것**과
+**로컬 변환**뿐이고, 둘을 섞어 적지 않는다.
+
+| 확인 | 수단 | 결과 |
+| --- | --- | --- |
+| 사이트가 살아 있는가 | HTTPS GET `/` | **200** |
+| 카드 메뉴에 표시 형식 조작이 있는가 | 공개 설명서 `/manual` 5절 | **있다** — "효과의 발동, 무효화, 대상에 취하기, 하이라이트, **표시 형식의 변경**, 카운터 조작, 카드 상세" (우클릭 · 길게 누르기). "그 자리에서 쓸 수 없는 조작은 표시되지 않습니다" |
+| 사이트에 「세트」 라는 조작 종류가 있는가 | 공개 설명서 `/manual` 8절 | **있다** — 리플레이 후편집에서 묶을 수 있는 범위를 *"移動・ドロー・セット以外の操作を挟む範囲は指定できません"* 로 적는다 |
+| **표시 형식 변경의 하위 항목 이름** | — | 🔴 **설명서에 없다.** 4절은 판 조작이 끌어 놓기라고만 하고, 5절은 메뉴 항목 이름까지만 적는다 |
+| 세트가 끌어 놓기로 만들어지는가, 메뉴로 만들어지는가 | — | 🔴 **확인하지 못했다** |
+
+그래서 **구현하지 않았다** — Playwright 가 메뉴를 누르려면 **정확한 항목
+이름**이 필요하고, 확인하지 못한 이름을 지어내지 않는다 (ADR-006). 대신
+① 사람이 할 조작을 문서의 경로 그대로 적어 두고
+(`_SET_POSITION_NOTE` 에 "우클릭 → 「표시 형식의 변경」"),
+② 사이트가 「세트」 를 조작 종류로 들고 있다는 근거를
+`SITE_SET_OPERATION_EVIDENCE` 에 남겼다.
+
+**남은 일 (사람의 허락이 필요하다)**: 실제 UI 를 한 번 열어 그 메뉴의 하위
+항목 이름을 읽는 것. 🔴 그 한 번이 **제3자 서버에 덱 이미지를 올리는 일**을
+포함하고, 사이트 안내에 *이용자가 올린 이미지를 스스로 지우는 기능이
+없다*고 적혀 있다 (감사 문서 F17). 되돌릴 수 없으므로 혼자 하지 않았다.
+
+🔴 **공유 링크를 만들지 않았고, 이전 링크를 이번 결과로 제시하지 않는다.**
+`--share` 는 여전히 기본값이 꺼짐이고, 이번에 한 번도 켜지 않았다.
+
+### 15.4 이후 장면에서도 유지되는가
+
+사이트에서 실제로 확인하지 못했다. 로컬에서 확인한 것은 **계획이 그 뒤의
+조작으로 그 카드를 다시 움직이지 않는다**는 것뿐이다 (결과 24 의 세트는
+7번째 걸음이고 그 뒤 조작이 없다). 🔴 "유지된다" 고 적지 않는다.
+
+---
+
+## 16. §6 — 검증
+
+### 16.1 새로 넣은 시험 (12건)
+
+`tests/test_galatea_effect_extension.py` **H 절** (6건) — 🔴 재는 것이
+"무엇이 일어났는가" 가 아니라 **"무엇이 일어나지 않았는가"** 다.
+
+| 시험 | 고정하는 사실 |
+| --- | --- |
+| `test_h01_declining_the_set_keeps_the_return` | 세트하지 않기로 골라도 **되돌리기 · 섞기는 남는다** · `card_set` 사건이 **없다** · 그것이 "후보가 없었다" 가 아니라 "고르지 않았다" 로 기록된다 |
+| `test_h02_the_decline_is_only_legal_where_the_rule_says_so` | 되돌릴 대상은 `declinable=False`, 세트할 카드는 `True`. 🔴 장수는 **그대로 1~1장** (「하지 않는다」 는 장수가 아니다) |
+| `test_h03_a_full_spell_zone_sends_the_set_to_the_field_zone` | SZONE 5/5 에서 클리막스가 후보에서 빠지고 **바벨이 FZONE 에 놓인다** · 되돌리기는 일어난다 |
+| `test_h04_no_room_anywhere_skips_only_the_set` | 두 존이 다 막히면 세트만 생략 · **확정 거절 사유**와 **보류 사유**가 따로 적힌다 · 보류가 `unchecked_rules` 에 남는다 |
+| `test_h05_the_gate_asks_the_board_not_just_the_card` | 같은 카드 · 같은 등재 사실이 **판에 따라 `TRUE` / `FALSE`** 로 갈린다 · 필드 마법은 다른 존을 본다 |
+| `test_h06_a_field_zone_set_is_a_different_development` | FZONE 세트가 `set_cards` 에 세어지고 `variant_key` 가 달라진다 · `core_key` 는 그대로 · 🔴 바벨은 `set_reactive` 에 **들어가지 않는다** |
+
+`tests/test_site_plan.py` (3건) · `tests/test_site_verify.py` (3건)
+
+| 시험 | 고정하는 사실 |
+| --- | --- |
+| `test_bg01_a_spell_zone_set_and_a_field_zone_set_are_different_places` | `Spell & Trap Zone1` 대 `Field Zone` · 서로의 칸은 비어 있다 |
+| `test_bg02_the_plan_says_which_slots_should_end_face_down` | 조작의 `position` · `face_down` · 계획의 `expect_positions.compared is False` |
+| `test_bg03_a_face_up_move_is_not_marked_face_down` | 앞면 이동에는 그 표시가 **붙지 않는다** (모든 이동이 "뒷면" 이 되지 않았다) |
+| `test_bg01_a_matching_board_is_not_a_reproduced_set` | `allOk is True` **이면서** `fullyReproduced is False` |
+| `test_bg02_without_a_face_down_expectation_nothing_changes` | 네 번째 인자가 없는 **옛 호출도 같은 답**을 받는다 |
+| `test_bg03_a_wrong_slot_is_still_a_failure` | 표시 형식 보완이 **자리 대조를 약하게 만들지 않았다** |
+
+### 16.2 고친 기존 시험 — **하나**, 그리고 왜 약해진 것이 아닌가
+
+`test_d02_an_unregistered_set_candidate_is_not_waved_through` 가 6-BF 에서
+*"판이 하나도 바뀌지 않았다"* 를 고정하고 있었다. 그 문장은 **공식과
+어긋난다** (§12.1 ①). 지금 이 시험은 **세 가지를 함께** 고정한다.
+
+1. 세트가 **일어나지 않았다** (두 존이 비어 있다) — `UNKNOWN` 은 허가가
+   아니다.
+2. 되돌리기는 **일어났다** — 공식 `SendtoDeck` 는 무조건이다.
+3. 그 모름이 결과의 `unchecked_rules` 에 **이름으로 남았고** 문장에도
+   "판정하지 못한 후보" 로 적혔다.
+
+🔴 **그리고 시험의 판 자체를 고쳤다.** 6-BF 는 조립 층의 `_rulings` 만
+좁혔는데, 그러면 **엔진은 여전히 답을 알고 정책만 모르는** 판이 된다 — 그
+판에서 엔진이 "후보가 있었는데 고르지 않았다" 로 적는 것은 **정확하다.**
+등재 공백을 재려면 엔진과 정책이 같은 표를 못 읽어야 하므로
+`lib.OPERATION_RULINGS` 를 좁혔다 (`duel_activator` · `duel_resolver` ·
+`_rulings` 가 다 그 이름을 읽는다). 🔴 **단언을 지운 것이 아니라 셋으로
+늘렸고, 재는 판을 더 정확하게 만들었다.**
+
+---
+
+## 17. 6-BF 보고서 · 코드 주석 **정정 표**
+
+과거 문장을 지우지 않았다. 아래가 **지금 틀린** 것들이고, 각 자리에 정정
+표시를 함께 남겼다.
+
+| 자리 | 당시 문장 | 지금의 사실 |
+| --- | --- | --- |
+| `engine/effect/semantics.py` `RuleQuestion.MAY_BE_SET` 설명 | "🔴 **빈 칸은 이 질문이 아니다.** … 앞의 절반은 배치 계획이 지키고 …" | 🔴 **틀렸다.** 공식 `s.filter` 가 `IsSSetable` 을 후보 조건 **안**에 적으므로 빈 칸은 「후보가 있는가」 의 일부다. 계획에 두면 그 거절이 **효과 전체의 거절**이 되어 되돌리기까지 취소된다 (실측 · §12.2) |
+| `engine/effect/library.py` 갈라테아 ② 머리말 | "둘 다 옮겼지만 **자리가 다르다** — 앞은 계획 단계가 지키고 뒤는 관문이 묻는다" | 🔴 **둘 다 관문이 묻는다** (`BoardRuling.explain_set`) |
+| `engine/effect/library.py` `SetSpellTrapOperation` 주석 | "`gated=True` 가 `IsSSetable` 이다 — 그 술어의 **카드 쪽 절반**을 묻는다" | **그 술어 전체**를 묻는다 |
+| `engine/effect/library.py` 바벨 `MAY_BE_SET` 사실 노트 | "그 자리에 빈 칸이 있는지는 이 답이 아니라 **배치 계획이 본다**" | 같은 질문의 나머지 절반으로 `BoardRuling.explain_set` 이 **함께 본다** |
+| 이 보고서 §4.1 · §9 | `/combo` 기본 입력을 `results:3` 으로 적었다 | 🔴 **사용자가 `results` 를 비워 두면 2 다** (`max(2, 1)`). §11.1 에 실측을 적었고 §18 에 복사용 값을 고쳐 적었다 |
+| 이 보고서 §4.5 | 갈라테아 경로를 **결과 24** 로 적었다 | 지금 기본값(`results=2`)에서도 `result.index` 는 **24** 다 (열거 위치는 23). 🔴 **같은 수를 두 뜻으로 쓰지 않는다** — 보고가 가리키는 것은 언제나 `result.index` 다 |
+| 이 보고서 §6.2 | 세트 사건의 사이트 변환을 "자리 이동만 만든다 · 표시 형식은 표현하지 못한다" 로 적었다 | 그대로 참이다. 🔴 **덜 적은 것이 있었다** — 그 한계가 `plan.json` 에만 있어서 **자동 조작 결과에는 전해지지 않았다** (G6 · G7 이 고친 자리) |
+| 이 보고서 §7.1 | "새 시험 21건" | 지금 **27건** (H 절 6건을 더했다). 사이트 쪽에 6건을 더 넣었다 (§16.1) |
+
+🔴 **6-BF 가 "확인했다" 고 적은 것 중 약해진 것은 없다.** 바뀐 것은 ①
+자리가 없는 판의 결과(거절 → 세트만 생략), ② 등재 공백 판의 결과(거절 →
+세트만 생략 + 모름 기록) 둘이고, 둘 다 **공식 스크립트의 구조를 근거로**
+바꿨다.
+
+---
+
+## 18. 사용자가 복사할 값 (6-BG 기준 · 옵션별)
+
+🔴 **한 줄짜리 명령 전체를 `hand` 에 붙여 넣지 마십시오.** 디스코드에서
+`/combo` 를 고른 뒤 **옵션마다** 아래 값을 넣습니다.
+
+**`hand`**
+
+```
+69811710, 14558127, 23434538, 10045474, 24224830
+```
+
+**`recipe`** — 🔴 **파일 경로가 아니라 아래 내용을 그대로** 넣습니다
+(메인 40장 · 엑스트라 15장 · 사이드 0장).
+
+```
+#main
+69811710
+69811710
+69811710
+57835716
+57835716
+57835716
+4055337
+4055337
+21441617
+93920420
+27918365
+72270339
+14558127
+14558127
+14558127
+23434538
+23434538
+42141493
+42141493
+42141493
+94145021
+94145021
+94145021
+90351981
+99674361
+66328392
+66328392
+66328392
+94845588
+80845034
+24224830
+24224830
+65681983
+81439173
+10045474
+10045474
+10045474
+49299410
+703897
+53329234
+#extra
+73391962
+46396218
+93854893
+93854893
+48835607
+30741503
+30741503
+39752820
+13117073
+65741786
+29301450
+76145142
+74820316
+86066372
+4280258
+```
+
+**`search`**
+
+```
+auto
+```
+
+**`results`** · **`followups`** · **`line`** · **`board`** · **`deck`** —
+🔴 **비워 둡니다.**
+
+* `results` 를 비우면 **2** 가 쓰이고, 그 2 안에 이번 전개(결과 24)가
+  들어간다 — 이 보고서의 모든 수치가 그 설정의 실측이다.
+* `followups` 를 비우면 행동 예산 **6** 이 쓰인다.
+* 🔴 `line` 은 **반드시 비워 둡니다** — `search:auto` 와 함께 주면
+  거절하고, 고정 수순을 주입하는 자리이기도 하다.
+
+### 18.1 그때 보일 것 (실측)
+
+* 요약에 **추천 2개**가 나오고, 둘 다 "비교 불가 · 공동 추천" 으로 적힌다.
+* `결과 24` 줄에 7걸음과 `자신 마법·함정 존: 오르페골 클리막스 [703897]
+  뒷면/FACEDOWN` 이 적힌다.
+* 🖥 줄이 **첨부는 결과 17 이고 결과 24 는 들어 있지 않다**고 적는다.
+* 첨부 셋: `combo-detail.txt` · `combo-replay.json` · `combo-replay.html`.
+* 요청 전체 약 12초 (실측 12.49초 — 탐색 10.06 · 재생 검증 1.38 · 기록
+  0.72 · 그 밖 0.33).
+
+### 16.3 전체 스위트를 **기준 HEAD 와 차집합으로** 비교했다
+
+절차 — 🔴 **반복 실행을 기본 절차로 삼지 않았다.** 전체 스위트는 **한 번**
+돌리고, 차집합에 나온 파일만 다시 확인했다.
+
+1. 기준 HEAD `fc47db41` 를 별도 worktree 에 꺼내고 `data/cards.cdb` ·
+   `data/constants` · `data/cache` 와 `c*.lua` **12,702개**를 심볼릭
+   링크로 걸었다 (6-BF 와 같은 방법).
+2. 두 트리에서 `python -m pytest tests -q -n 2` 를 **동시에** 돌렸다.
+3. `FAILED` 줄의 집합을 뽑아 차집합을 계산했다.
+
+| | 통과 | 실패 | 건너뜀 | 시간 |
+| --- | --- | --- | --- | --- |
+| 기준 `fc47db41` | 7468 | **68** | 10 | 41분 37초 |
+| 이번 작업 (측정 시점) | 7470 | **78** | 10 | 41분 00초 |
+
+🔴 **"78 > 68" 이 곧 "10건을 깨뜨렸다" 는 뜻이고, 그 10건을 전부 찾아
+고쳤다.** 차집합은 정확히 아래 둘이었다 (기준에서 고쳐진 실패는 **0건**).
+
+| 새 실패 | 원인 | 고친 방법 |
+| --- | --- | --- |
+| `tests/test_open_search.py::test_k09_the_v2_module_holds_no_card_ids_and_no_answer_board` | 🔴 **내가 `agent/open_evaluation_v2.py` 주석에 카드명과 카드군 이름을 적었다** — 그 감사는 평가기가 **덱을 모르는** 계층임을 글자로 지킨다 | 주석을 일반화했다 ("덱에서 필드 마법을 세트하는 효과가 있으면…"). 🔴 감사를 고치지 않았다 |
+| `tests/test_open_search.py::test_k01` ~ `test_k13` (9건) | `measure_v2` 가 이제 `FZONE` 을 읽는데, 그 파일의 **대역**(`_V2Resources`) 이 그 존을 흉내 내지 않아 "읽을 수 없다" 로 답했다 | 대역에 `field_zone` 을 더했다 — 진짜 요약은 `FZONE` 을 **언제나** 적으므로 (`OWN_DETAIL_ZONES`) 대역이 어긋나 있던 것이다. 🔴 **단언을 지우거나 약하게 하지 않았다** |
+| `tests/engine/test_trigger_normal_path_integration.py::test_c01_the_request_carries_no_mutable_board` | `ResolutionChoice` 의 **필드 집합**을 고정한 시험이고, `declinable` 이 늘었다 | 이름을 더하고 **종류까지 고정했다** (`bool`) — 그 시험이 지키는 사실("판을 주지 않는다")을 값의 종류로 **한 줄 더** 확인한다 |
+
+재확인 (현재 HEAD, 해당 파일 전수 + 이번에 건드린 시험 파일 전부):
+
+```
+tests/test_open_search.py
+tests/engine/test_trigger_normal_path_integration.py
+tests/test_galatea_effect_extension.py
+tests/test_site_plan.py
+tests/test_site_verify.py
+→ 193 passed in 134.57s
+```
+
+🔴 **이 "새 실패 0건" 은 두 번째 전체 스위트가 아니라 위 다섯 파일의
+재실행으로 받친 결론이다.** 전체 스위트를 다시 돌리지 않은 이유는 요청의
+지시(반복 실행을 기본 절차로 삼지 말 것)이고, 고친 뒤 건드린 것이
+**주석 한 군데와 시험 파일 둘**뿐이라는 사실이 근거다 —
+`agent/open_evaluation_v2.py` 의 변경은 주석이고, 그 파일의 본문을 읽는
+감사는 `test_k09` 하나다 (전수 확인).
+
+### 16.4 기준 HEAD 에서도 **이미 실패하던** 68건
+
+6-BF 보고서 §7.2 · §7.3 의 목록과 **같다.** 이번에 하나도 고치지 않았고
+하나도 늘리지 않았다. 대표적인 것 셋만 다시 적는다.
+
+| 시험 | 왜 실패하는가 (기준 HEAD 에서도) |
+| --- | --- |
+| `test_rule_not_implemented_code_audit.py::test_02` | 문자열 수를 고정한 감사다. 기준 HEAD 도 `assert 129 == 125` 로 **같은 수**에서 실패한다 — 🔴 이번 변경이 그 수를 **한 건도** 바꾸지 않았다 (양쪽에서 같은 값을 확인했다) |
+| `test_trigger_window_completion.py::test_d05` · `test_f02` | `/combo` 요약 출력 형식 판단이고 6-BF 가 범위 밖으로 둔 자리다. 그대로 남겼다 |
+| `test_archetype_compiler.py::test_a` · `test_e` | 카드 자료 갱신으로 카드군 수가 움직였다. 자료 쪽 사실이다 |
+
+### 16.5 요청의 핵심 확인 항목 — 하나씩
+
+| 항목 | 어디서 확인했는가 |
+| --- | --- |
+| 반환 + 세트 성공 | `test_c*` (6-BF) · §12.4 A · D · E |
+| 반환 + 세트하지 않음 | **`test_h01`** · §12.4 C · F |
+| 세트 후보 없음 | `test_d04` (6-BF) · §12.4 C |
+| 세트 공간 없음 | **`test_h03`** (한 존만 막힘) · **`test_h04`** (두 존 다 막힘) · **`test_h05`** (판정 자체) |
+| SZONE 과 FZONE 결과 구분 | **`test_h06`** (평가) · **`test_site_plan::test_bg01`** (사이트) |
+| 자율 탐색 → 대표 선정 → 첨부 생성 | `test_g01` · `test_g02` (6-BF) · §11.2 의 실측 여섯 칸 |
+| 카드 위치 · 뒷면 표시의 사이트 변환 | **`test_site_plan::test_bg02` · `test_bg03`** · **`test_site_verify::test_bg01`~`03`** · §15.1 의 실제 기록 |
+| 요약 · JSON · 재실행 결과 일치 | §11.3 (실제 출력) · §14 |

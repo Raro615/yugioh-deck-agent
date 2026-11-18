@@ -508,7 +508,21 @@ def measure_v2(path, resources, *, knowledge=None,
     spells = resources.zone(resources.seat, Zone.SZONE)
     if spells is None:
         return None, "자기 마법·함정 존을 읽을 수 없습니다."
+    #: 🔴 **필드 존의 뒷면 카드도 세트된 자원이다** (Phase 6-BG).
+    #:
+    #: 6-BE·6-BD 는 마법·함정 존만 읽었고, 그래서 **필드 마법을 세트한
+    #: 전개와 아무것도 세트하지 않은 전개가 같은 수치**였다 (``set_cards``
+    #: 가 둘 다 0). 덱에서 필드 마법을 세트하는 효과가 있으면 그 두 전개는
+    #: 실제로 다른 판이다.
+    #:
+    #: 🔴 **「확정 방해」 로 세지 않는다.** 아래 ``set_reactive`` 는
+    #: 종류(함정 · 속공마법)만 보므로 필드 마법은 거기 들어가지 않는다 —
+    #: 세트된 자원으로는 세고, 방해로는 세지 않는다.
+    field_zone = resources.zone(resources.seat, Zone.FZONE)
+    if field_zone is None:
+        return None, "자기 필드 존을 읽을 수 없습니다."
     set_slots = [slot for slot in spells.cards if not slot.face_up]
+    set_slots += [slot for slot in field_zone.cards if not slot.face_up]
 
     marks = _use_marks(resources)
     bodies: list[tuple[str, int, bool]] = []
@@ -742,14 +756,25 @@ def variant_key(resources, measures: MeasuresV2) -> tuple:
     🔴 세트한 카드의 **정체와 자리**, 패 장수, 사용 기록 유무를 그대로
     들고 있다 — 중요한 차이를 지우지 않는다. 같은 집에 **순서만 다른**
     변형은 같은 열쇠가 된다 (정렬한 다중집합이므로).
+
+    🔴 **어느 존인지도 함께 적는다** (Phase 6-BG). 6-BE 는 마법 · 함정
+    존만 읽었고 칸 번호만 적었다 — 그래서 ① **필드 존에 세트한 전개가
+    아무것도 세트하지 않은 전개와 같은 열쇠**가 되어 중복으로 지워졌고,
+    ② 두 존의 같은 번호 칸이 **같은 자리로 읽혔다**. 존 이름이 그 둘을
+    가른다.
     """
     try:
-        spells = resources.zone(resources.seat, Zone.SZONE)
-        backs = tuple(sorted(
-            (slot.card_id, slot.sequence if hasattr(slot, "sequence") else 0)
-            for slot in (spells.cards if spells else ())
-            if not slot.face_up
-        ))
+        found: list[tuple] = []
+        for zone in (Zone.SZONE, Zone.FZONE):
+            holder = resources.zone(resources.seat, zone)
+            for slot in (holder.cards if holder is not None else ()):
+                if slot.face_up:
+                    continue
+                found.append((
+                    zone.value, slot.card_id,
+                    slot.sequence if hasattr(slot, "sequence") else 0,
+                ))
+        backs = tuple(sorted(found))
     except Exception:  # pragma: no cover - 방어용
         backs = ("unknown",)
     return (core_key(measures), backs, measures.hand_left,

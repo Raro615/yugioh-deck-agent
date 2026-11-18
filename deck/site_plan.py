@@ -46,8 +46,8 @@
 from __future__ import annotations
 
 __all__ = [
-    "PLAN_FORMAT", "SITE_ZONE", "build_site_plan", "plan_json",
-    "render_deck_sheet_html",
+    "PLAN_FORMAT", "SITE_ZONE", "SITE_SET_OPERATION_EVIDENCE",
+    "build_site_plan", "plan_json", "render_deck_sheet_html",
 ]
 
 import json
@@ -89,8 +89,37 @@ _MOVE_KINDS = ("zone_moved", "card_drawn", "monster_summoned", "card_set")
 _SET_POSITION_NOTE = (
     "뒷면 세트 — 이 계획은 **자리 이동만** 만듭니다. 표시 형식을 싣는 칸이 "
     "없어 사이트에서는 앞면으로 놓일 수 있고, 뒷면으로 만드는 조작은 "
-    "사람이 해야 합니다. 🔴 그리고 세트는 발동이 아니므로 이 조작이 그 "
-    "카드를 발동한다는 뜻도 아닙니다."
+    "사람이 해야 합니다: 그 카드를 **우클릭(모바일은 길게 누르기) → "
+    "「표시 형식의 변경」** 입니다 (사이트 설명서 5절). 🔴 그 메뉴의 "
+    "**하위 항목 이름은 설명서에 없어** 이 계획이 자동으로 누르지 "
+    "않습니다 — 확인하지 못한 이름을 지어내지 않습니다. 🔴 그리고 세트는 "
+    "발동이 아니므로 이 조작이 그 카드를 발동한다는 뜻도 아닙니다."
+)
+
+#: 사이트가 「세트」 를 **조작 종류로 들고 있다**는 근거 (Phase 6-BG).
+#:
+#: 🔴 **읽은 것만 적는다.** 사이트 설명서 8절의 리플레이 후편집 설명이
+#: *"移動・ドロー・セット以外の操作を挟む範囲は指定できません"* 라고
+#: 적는다 — 즉 사이트의 조작 이력에 **「セット」 라는 종류가 있다.** 그
+#: 종류를 **어떤 조작으로 만드는지는 설명서에 없다**: 4절은 판 조작이
+#: 끌어 놓기라고만 하고, 5절의 카드 메뉴 항목은 「표시 형식의 변경」
+#: 까지만 적는다 (하위 항목 이름은 없다).
+#:
+#: 🔴 **그래서 이 계획은 끌어 놓기까지만 만든다.** 실제 UI 를 열어 메뉴
+#: 이름을 읽어 보는 일은 남아 있고, 그것은 제3자 서버에 덱 이미지를
+#: 올리는 일을 포함한다 (사이트 설명서 · 이용 안내: 이용자가 올린 이미지를
+#: 스스로 지우는 기능이 없다). 사람의 허락 없이 하지 않는다.
+SITE_SET_OPERATION_EVIDENCE: str = (
+    "사이트 설명서 8절 — 리플레이 후편집에서 묶을 수 있는 조작으로 "
+    "「移動・ドロー・セット」 를 든다. 즉 사이트에 「세트」 조작 종류가 "
+    "있다. 그 종류를 만드는 UI 조작은 설명서에 적혀 있지 않다."
+)
+
+#: 대조가 표시 형식을 보지 않는다는 사실 한 줄 (Phase 6-BG).
+_POSITION_NOT_COMPARED = (
+    "표시 형식(앞면 · 뒷면)은 **대조하지 않았습니다.** 사이트 대조는 존마다 "
+    "카드 자리의 집합만 맞추므로, 자리가 맞았다는 것이 뒷면으로 놓였다는 "
+    "뜻이 아닙니다."
 )
 
 #: 판을 바꾸지만 사이트에 대응 조작이 **없는** 사건들. 조용히 빠뜨리지 않고
@@ -221,6 +250,10 @@ def build_site_plan(record, registration=None) -> dict:
     ]
 
     operations: list[dict] = []
+    #: 🔴 **뒷면으로 끝나야 하는 자리** (Phase 6-BG) — ``덱 자리 → 사이트 존``.
+    #: 계획이 그 표시 형식을 만들지는 못하므로, 이 표의 쓸모는 **대조에서
+    #: 「보지 않았다」 를 적는 것** 하나다 (``expect_positions``).
+    face_down_at: dict[str, str] = {}
 
     def _emit(**fields) -> None:
         fields["n"] = len(operations) + 1
@@ -280,7 +313,8 @@ def build_site_plan(record, registration=None) -> dict:
                               "player": change.get("from_player", 0)}
                     target = {"zone": change.get("to_zone"),
                               "index": change.get("to_index"),
-                              "player": change.get("player", 0)}
+                              "player": change.get("player", 0),
+                              "position": change.get("position")}
                     unsupported.append(
                         f"사건 #{event.get('seq')} 의 card_set: "
                         + _SET_POSITION_NOTE
@@ -293,13 +327,29 @@ def build_site_plan(record, registration=None) -> dict:
                                      seat=seat)
                 from_zone = _zone_name(source.get("zone"),
                                        seat=source.get("player", 0))
+                #: 🔴 **표시 형식을 조작에 적는다** (Phase 6-BG). 이 계획이
+                #: 그것을 **수행하지는 못하지만** (끌어 놓기에 표시 형식을
+                #: 싣는 칸이 없다), 적어 두지 않으면 뒤의 대조가 "자리가
+                #: 맞았다" 를 "그대로 재현됐다" 로 읽는다 — 그 자리가
+                #: :func:`compareFinal` 이고, 거기서 이 값으로 **대조하지
+                #: 않은 것**을 적는다.
+                position = target.get("position")
+                face_down = isinstance(position, str) and "FACEDOWN" in position
+                if face_down:
+                    face_down_at[slot] = to_zone
                 _emit(op="move", card=slot, step=order,
                       event=event.get("seq"),
                       **{"from": from_zone},
                       to=to_zone,
+                      position=position,
+                      face_down=face_down,
                       why=f"{_label(instance)} 이동",
                       expect=f"→ {to_zone}",
                       basis=f"engine:event#{event.get('seq')}.{kind}")
+                if not face_down:
+                    #: 앞면으로 간 이동은 그 개체의 **뒷면 기대를 지운다**
+                    #: (같은 카드가 세트된 뒤 다시 움직이는 경우).
+                    face_down_at.pop(slot, None)
 
     #: 🔴 **엔진 행동 수와 재생 장면 수를 섞지 않는다** (요청 §3).
     counts = {
@@ -339,6 +389,20 @@ def build_site_plan(record, registration=None) -> dict:
         "operations": operations,
         "counts": counts,
         "expect_final": expect_final,
+        #: 🔴 **대조하지 않는 것을 계획이 이름으로 들고 간다** (Phase 6-BG).
+        #:
+        #: 사이트 대조(``compareFinal``) 는 존마다 **카드 자리의 집합**만
+        #: 맞춘다 — 앞면인지 뒷면인지는 읽지 않는다. 그래서 세트된 카드가
+        #: 앞면으로 놓여도 `allOk` 가 참이 될 수 있고, 그 참을 "세트까지
+        #: 재현됐다" 로 읽으면 거짓이 된다. 이 표가 그 거짓을 막는다 —
+        #: 대조 결과에 **「이 자리들의 표시 형식은 보지 않았다」** 가 자리와
+        #: 함께 적힌다.
+        "expect_positions": {
+            "face_down": [{"slot": slot, "zone": zone}
+                          for slot, zone in sorted(face_down_at.items())],
+            "compared": False,
+            "why": _POSITION_NOT_COMPARED,
+        },
         "final_slots_known": slots_known,
         "unsupported": unsupported,
     }

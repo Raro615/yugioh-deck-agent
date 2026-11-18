@@ -1133,10 +1133,20 @@ def test_c01_the_request_carries_no_mutable_board():
         "candidates",
         "minimum",
         "maximum",
+        #: 🔴 **Phase 6-BG 가 더한 칸.** 규칙이 선언한 「아무것도 고르지
+        #: 않는 답이 적법한가」 를 **값으로** 옮긴 것이고 (``bool``),
+        #: 고르는 쪽이 장수 조건에서 추측하지 않게 한다. 판을 가리키지
+        #: 않으므로 이 시험이 지키는 사실은 그대로다 — 아래 두 단언이
+        #: 그것을 **이름과 종류로** 함께 확인한다.
+        "declinable",
     }, fields
     #: 🔴 판을 가리키는 이름이 하나도 없다.
     for forbidden in ("state", "duel", "board", "chain", "journal", "executor"):
         assert forbidden not in fields, forbidden
+    #: 🔴 **값만 실린다.** 새 칸이 판을 들고 오는 길이 되지 않도록 종류를
+    #: 함께 고정한다 (``bool`` 은 복사해도 같은 값이다).
+    kinds = {f.name: f.type for f in dataclasses.fields(ResolutionChoice)}
+    assert kinds["declinable"] == "bool", kinds["declinable"]
 
 
 def test_c02_the_chooser_protocol_takes_only_the_request():

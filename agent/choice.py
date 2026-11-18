@@ -378,6 +378,15 @@ class ChoiceAsk:
     chosen: "tuple[int, ...]"
     """고른 인스턴스 번호들."""
     chosen_card_ids: "tuple[int, ...]" = ()
+    declinable: bool = False
+    """
+    🔴 **아무것도 고르지 않는 답이 그 자리에서 적법했는가** (Phase 6-BG).
+
+    장수와 **다른 축**이다 — 하기로 했다면 몇 장인지는 :attr:`minimum` ·
+    :attr:`maximum` 이 말하고, 이 칸은 **하지 않는 갈래가 있는가** 하나다.
+    분기를 만드는 쪽이 그 갈래를 알아야 하므로 (``빈 짝`` 도 허용 조합의
+    하나가 된다) 그 자리의 제안에서 읽어 함께 적는다.
+    """
     planned: bool = False
     """적어 둔 선택을 그대로 썼는가. 거짓이면 뒤의 정책이 답했다."""
     plan_missing: bool = False
@@ -398,9 +407,10 @@ class ChoiceAsk:
         picked = " · ".join(str(c) for c in self.chosen_card_ids) or "없음"
         mark = "적어 둔 대로" if self.planned else "기준점이 집었다"
         gap = " 🔴 적어 둔 것이 후보에 없었다" if self.plan_missing else ""
+        may = " · 하지 않을 수 있다" if self.declinable else ""
         return (
             f"[{self.index}] {self.label} 후보 {self.options}장 중 "
-            f"{self.minimum}~{self.maximum}장 → {picked} ({mark}){gap}"
+            f"{self.minimum}~{self.maximum}장{may} → {picked} ({mark}){gap}"
         )
 
 
@@ -487,6 +497,12 @@ class ScriptedChoice:
             for candidate in offer.permitted
         )
         allowed = {instance for instance, _card in permitted}
+        #: 🔴 **그 자리가 「하지 않는다」 를 허용하는가** (Phase 6-BG). 허용
+        #: 하면 빈 짝이 적법한 답이고, 그것을 ``minimum`` 으로 판정하면
+        #: **적어 둔 빈 선택이 언제나 "후보에 없었다" 로 적힌다** — 그러면
+        #: 재생이 실패로 기록되고 그 갈래가 탐색에서 사라진다.
+        declinable = bool(getattr(offer, "declinable", False))
+        lowest = 0 if declinable else offer.minimum
         wanted = self.plan[index] if index < len(self.plan) else None
         planned = False
         missing = False
@@ -495,7 +511,7 @@ class ScriptedChoice:
         elif not set(wanted) <= allowed:
             missing = True
             chosen = tuple(self.then.choose_cards(offer))
-        elif not offer.minimum <= len(wanted) <= offer.maximum:
+        elif not lowest <= len(wanted) <= offer.maximum:
             missing = True
             chosen = tuple(self.then.choose_cards(offer))
         else:
@@ -508,6 +524,7 @@ class ScriptedChoice:
                 label=str(getattr(offer, "effect_ref", "")),
                 minimum=offer.minimum,
                 maximum=offer.maximum,
+                declinable=declinable,
                 offered=permitted,
                 chosen=tuple(instance.value for instance in chosen),
                 chosen_card_ids=tuple(

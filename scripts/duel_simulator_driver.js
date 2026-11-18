@@ -467,7 +467,8 @@ async function expandPileIfNeeded(page, slot) {
     // ------------------------------------------------- 최종 판 대조
     counts = await zoneCounts(page);
     const seen = await observeBoard(page, zones);
-    const verdict = compareFinal(plan.expect_final, seen, counts);
+    const verdict = compareFinal(plan.expect_final, seen, counts,
+                                 plan.expect_positions);
     result.stages.final = {
       counts,
       checks: verdict.checks,
@@ -475,7 +476,24 @@ async function expandPileIfNeeded(page, slot) {
       problems: verdict.problems,
       card_zones: seen.bySlot,
       all_ok: verdict.allOk,
+      //: 🔴 **자리가 맞았다 ≠ 그대로 재현됐다** (6-BG). 뒷면으로 끝나야
+      //: 하는 자리가 있으면 이 칸이 거짓이고, 어느 자리인지도 함께 남는다.
+      positions: verdict.positions,
+      fully_reproduced: verdict.fullyReproduced,
     };
+    if (!verdict.fullyReproduced && verdict.allOk) {
+      const where = (verdict.positions.face_down || [])
+        .map(one => `${one.slot}→${one.zone}`).join(' · ');
+      result.notes.push('🔴 자리는 맞았지만 **그대로 재현된 것은 아닙니다** — '
+                        + verdict.positions.why
+                        + (where ? ` 뒷면이어야 하는 자리: ${where}.` : ''));
+    }
+    //: 🔴 **계획이 못 한다고 적어 둔 것을 결과에도 적는다** (6-BG). 전에는
+    //: ``plan.unsupported`` 가 계획 파일에만 있었고, 자동 조작의 결과만
+    //: 읽는 쪽에는 **그 한계가 전해지지 않았다.**
+    for (const line of (plan.unsupported || []).slice(0, 20)) {
+      result.notes.push('계획이 적어 둔 한계: ' + line);
+    }
 
     await page.getByRole('button', { name: /Stop Recording/i }).click();
     await sleep(2500);

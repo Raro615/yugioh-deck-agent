@@ -494,11 +494,32 @@ class RuleQuestion(str, Enum):
     (:class:`~engine.effect.operation.SetSpellTrapOperation`). 발동
     타이밍 계층은 이 저장소에 아직 없다.
 
-    🔴 **빈 칸은 이 질문이 아니다.** 공식 ``IsSSetable`` 은 「그 자리에
-    놓을 수 있는가」 와 「카드가 세트를 금지하지 않는가」 를 **함께**
-    묻는다. 앞의 절반은 배치 계획이 지키고
-    (``engine.set_card.effect_set_procedure(...).plan_for`` 가 빈 칸이
-    없으면 거절한다), 이 칸이 말하는 것은 **뒤의 절반**이다.
+    🔴 **빈 칸도 이 질문이다** (Phase 6-BG 정정). 공식 ``IsSSetable`` 은
+    「그 자리에 놓을 수 있는가」 와 「카드가 세트를 금지하지 않는가」 를
+    **함께** 묻고, 이 칸도 그렇게 묻는다
+    (:meth:`~engine.effect.ruling.BoardRuling.explain_set`).
+
+    🔴 **6-BF 는 여기서 「빈 칸은 이 질문이 아니다」 라고 적었다 —
+    틀렸다.** 앞의 절반을 배치 계획으로 미루면 (``effect_set_procedure(…)
+    .plan_for`` 가 빈 칸이 없을 때 거절한다) 그 거절이 **효과 전체의
+    거절**이 된다. 실측 — 마법 · 함정 존이 5칸 다 찬 판에서 갈라테아 ② 를
+    해결하면 ``CANDIDATE_NOT_ELIGIBLE: SZONE 에 빈 칸이 없습니다`` 로
+    끝나고, **앞서 일어나야 할 덱 되돌리기까지 취소됐다.** 공식은 그렇지
+    않다::
+
+        c30741503.lua s.tdop
+            Duel.SendtoDeck(tg,nil,SEQ_DECKTOP,REASON_EFFECT)   -- 무조건
+            …
+            local g=Duel.GetMatchingGroup(s.filter,tp,LOCATION_DECK,0,nil)
+            if #g>0 and Duel.SelectYesNo(tp,…) then … Duel.SSet(tp,sg) end
+
+        s.filter = c:IsSetCard(SET_ORCUST) and c:IsSpellTrap()
+                   and c:IsSSetable()
+
+    되돌리기는 무조건이고, 세트는 ``s.filter`` **안의** ``IsSSetable`` 로
+    후보가 걸러진 뒤에야 일어난다. 즉 빈 칸은 「후보가 있는가」 의 일부이고,
+    자리가 없으면 **후보가 0장**이 되어 세트만 일어나지 않는다. 그 갈래를
+    정의가 선언해 두었다 (``ResolutionSkip`` 의 ``TARGET_OPERATIONS``).
     """
 
 
@@ -740,6 +761,47 @@ def operation_gate_question(definition, ref) -> "RuleQuestion | None":
     return None
 
 
+#: 「필드」 카드의 종류 이름. 카드 정의의 ``type_names`` 에 들어 있는
+#: 글자이고 (실측: 오르페골 바벨 = ``('SPELL', 'FIELD')``), 필드 마법만
+#: 가진다.
+FIELD_SPELL_TYPE_NAME = "FIELD"
+
+#: 필드 마법을 **이미 있는 필드 마법 위에** 놓는 일의 규칙 이름
+#: (Phase 6-BG). 룰북이 그 처리를 적어 두었고 이 엔진에는 그 경로가 없다 —
+#: 그래서 묻는 자리가 ``UNKNOWN`` 을 낸다 (ADR-006).
+FIELD_SPELL_REPLACEMENT_RULE: str = (
+    "field-spell-replacement (앞의 필드 마법을 묘지로 보내는 처리 — "
+    "RULE-SPELLTRAP-006)"
+)
+
+
+def set_destination_zone(definition) -> "Zone | None":
+    """
+    그 카드를 세트하면 **어느 존에 놓이는가.** 마법 · 함정이 아니거나
+    종류를 읽지 못하면 ``None`` (Phase 6-BG).
+
+    🔴 **한 자리에서만 가른다.** 같은 가름이 두 군데에 있었다 —
+    ``EffectExecutor._plan_set_spell_trap`` 이 ``"FIELD" in kinds`` 로
+    절차를 고르고 (``engine.set_card.effect_set_procedure``),
+    :meth:`~engine.effect.ruling.BoardRuling.explain_set` 이 같은 질문을
+    해야 한다. 두 벌로 적으면 **판정한 존과 놓는 존이 갈릴 수 있다.**
+
+    🔴 **세 답을 가르지 않는다.** 읽지 못한 것과 마법 · 함정이 아닌 것이
+    둘 다 ``None`` 이다 — 그 둘을 가르는 것은 부르는 쪽의 일이고
+    (``type_names`` 가 비었는가), 여기서 가르면 "무엇을 모르는가" 가 이
+    함수의 반환값 모양에 섞인다.
+    """
+    if definition is None:
+        return None
+    if not (getattr(definition, "is_spell", False)
+            or getattr(definition, "is_trap", False)):
+        return None
+    kinds = tuple(getattr(definition, "type_names", ()) or ())
+    if not kinds:
+        return None
+    return Zone.FZONE if FIELD_SPELL_TYPE_NAME in kinds else Zone.SZONE
+
+
 def rule_gate_question(operation) -> "RuleQuestion | None":
     """
     **종류**로 걸리는 관문의 질문. 그런 관문이 없으면 ``None`` (Phase 6-AD).
@@ -862,6 +924,9 @@ __all__ = [
     "MISSING_SAME_ZONE_MOVEMENT",
     "ORIGIN_RULES",
     "RuleQuestion",
+    "FIELD_SPELL_TYPE_NAME",
+    "FIELD_SPELL_REPLACEMENT_RULE",
+    "set_destination_zone",
     "LUA_GATE_PREDICATES",
     "DECLARED_GATE_RULINGS",
     "QUESTION_VERBS",

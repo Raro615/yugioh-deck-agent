@@ -423,6 +423,19 @@ class _VacantTarget:
 
     ref: "TargetRef"
     note: str
+    unchecked: tuple[str, ...] = ()
+    """
+    🔴 **그 자리에서 판정하지 못한 규칙들** (Phase 6-BG).
+
+    왜 필요한가 — 「하지 않는다」 를 고를 수 있는 선택에서는 빈 선택이
+    정상 해결이 되는데 (``TargetSpec.declinable``), 그 자리의 후보 중에
+    **판정하지 못한 것**이 있었을 수 있다. 설명만 남기면 "모름" 이
+    결과의 ``unchecked_rules`` 에서 사라지고, 그러면 **규칙을 전부 본 해결**
+    처럼 읽힌다.
+
+    계획이 이것을 마지막 걸음의 :attr:`_Step.blind` 에 실어 내보낸다 —
+    못 한 덱 정리를 같은 자리에 싣는 것과 **같은 처리**다.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -621,6 +634,14 @@ class ResolutionChoice:
     candidates: "tuple[InstanceId, ...]"
     minimum: int
     maximum: int
+    declinable: bool = False
+    """
+    🔴 **아무것도 고르지 않는 답이 적법한가** (Phase 6-BG).
+
+    규칙이 선언한 것을 그대로 옮긴다 (``TargetSpec.declinable``) — 고르는
+    쪽이 장수 조건에서 **추측하지 않도록** 함께 싣는다. 거짓이면 빈 답은
+    예전 그대로 거절된다.
+    """
 
     def __len__(self) -> int:
         return len(self.candidates)
@@ -1014,6 +1035,16 @@ class EffectExecutor:
                     ValidationCode.RULE_NOT_IMPLEMENTED,
                     f"들여다본 덱을 섞을 수 없습니다: {error}. 판은 그대로입니다.",
                 )
+        #: 🔴 **비어 있던 대상이 못 본 규칙을 들고 왔으면 함께 내보낸다**
+        #: (Phase 6-BG). 실을 자리를 새로 만들지 않는다 — 아래 못 한 덱
+        #: 정리와 **같은 칸**이고 (``_Step.blind``) 읽는 쪽에 같은 뜻이다.
+        blind_from_vacant = tuple(
+            note for empty in vacant for note in empty.unchecked
+        )
+        if blind_from_vacant and steps:
+            steps[-1] = replace(
+                steps[-1], blind=steps[-1].blind + blind_from_vacant
+            )
         if unshuffled and steps:
             # 못 한 정리는 **마지막 일에 적어** 내보낸다. 실을 자리를 새로
             # 만들지 않는다 — 2-AL 이 만든 ``_Step.blind`` 가 "이 계획이
@@ -1433,6 +1464,7 @@ class EffectExecutor:
                 candidates=tuple(found.eligible),
                 minimum=spec.choice.minimum,
                 maximum=spec.choice.maximum,
+                declinable=spec.declinable,
             )
             # ② 고르는 사람이 고른다.
             try:
@@ -1452,6 +1484,20 @@ class EffectExecutor:
                     f"{ref} 에 후보가 아닌 카드가 들어왔습니다: "
                     + ", ".join(str(i) for i in outside),
                 )
+            if not picked and spec.declinable:
+                #: 🔴 **「하지 않는다」 를 고른 것이다** (Phase 6-BG). 공식
+                #: ``Duel.SelectYesNo`` 에 「아니오」 라고 답한 자리이고,
+                #: 모자란 선택이 **아니다** — 그래서 아래 세 갈래를
+                #: 지나가지 않는다.
+                #:
+                #: 🔴 **왜 먼저인가.** 아래 ``_short_selection`` 은 후보를
+                #: 판정하지 못하면 ``UNCHECKED_RULES`` 로 **효과 전체를**
+                #: 거절한다. 이 효과의 공식 처리는 그렇지 않다 — 되돌리기는
+                #: 무조건이고 세트만 임의다. 순서가 그 차이를 지킨다.
+                vacant.append(
+                    self._declined_target(definition, binding, resolver, found)
+                )
+                continue
             if len(picked) < spec.choice.minimum:
                 #: 🔴 **세 사실을 가른다** (Phase 6-AD 후속2). 모자란 선택의
                 #: 원인이 셋이고, 셋이 **다른 결과**다.
@@ -1484,6 +1530,122 @@ class EffectExecutor:
         return (
             replace(context, selections=context.selections + tuple(added)),
             tuple(vacant),
+        )
+
+    def _candidate_verdicts(
+        self, definition: EffectDefinition, binding, resolver: "TargetResolver", found
+    ) -> "tuple[list, list[str], list[str]]":
+        """
+        그 자리의 후보를 **관문으로 한 번 더 갈라** 센다 (Phase 6-BG).
+
+        돌려주는 것이 셋이고 **셋이 다른 사실**이다.
+
+        =============  =================================================
+        ``permitted``   지금 그 일을 할 수 있다고 **판정된** 후보들
+        ``unknown``     판정하지 못한 후보들 — 이유와 함께
+        ``refused``     할 수 없다고 **판정된** 후보들 — 이유와 함께
+        =============  =================================================
+
+        🔴 **``refused`` 를 세는 이유가 ``unknown`` 과 다르다.** 모름은
+        결과를 바꾸고 (``UNCHECKED_RULES``), 확정 거절은 결과를 바꾸지
+        않는다 — 바꾸는 것은 **설명**이다: "조건에 맞는 카드가 없었다" 와
+        "카드는 있었지만 놓을 자리가 없었다" 가 갈린다 (6-BF 는 둘을 같은
+        문장으로 적었다).
+
+        🔴 **관문을 물을 수 있을 때만 묻는다.** 두 경우에 묻지 않고, 그때
+        모든 후보가 ``permitted`` 다 — 그 구분은 6-AD 후속2 가 세운 것이고
+        (:meth:`_short_selection` 의 설명) 한 글자도 바꾸지 않았다.
+        """
+        question = operation_gate_question(definition, binding.ref)
+        ruling = (
+            BoardRuling(resolver.view, self._rulings)
+            if question is not None and self._rulings is not None
+            else None
+        )
+        permitted: list = []
+        unknown: list[str] = []
+        refused: list[str] = []
+        for instance in found.eligible:
+            if ruling is None:
+                permitted.append(instance)
+                continue
+            told = ruling.explain(question, instance)
+            if told.answer is ConditionResult.TRUE:
+                permitted.append(instance)
+            elif told.answer is ConditionResult.FALSE:
+                refused.append(f"{instance}: {told.reason}")
+            else:
+                unknown.append(f"{instance}: {told.reason}")
+        for instance in found.undecided:
+            unknown.append(f"{instance}: 후보인지 판정하지 못했습니다.")
+        unknown.extend(found.unchecked)
+        return permitted, unknown, refused
+
+    @staticmethod
+    def _candidate_shortfall(found, refused: "list[str]") -> str:
+        """
+        **왜 고를 것이 없었는가**를 한 문장으로 (Phase 6-BG).
+
+        🔴 **「없다」 와 「쓸 수 없다」 를 가른다.** 6-BF 까지 이 자리는
+        장수 하나만 적었고 (``후보 N장을 전부 확인했습니다``), 그래서 덱에
+        해당 카드가 아예 없는 판과 **카드는 있는데 놓을 자리가 없는 판**이
+        같은 문장으로 보고됐다. 세트하는 효과에서는 그 둘이 다른 사실이다.
+        """
+        if refused:
+            return (
+                f"조건에 맞는 카드 {found.possible_count}장을 전부 "
+                f"확인했지만 그중 쓸 수 있는 것이 없었습니다: "
+                #: 문장 끝의 마침표를 떼고 잇는다 — 판정 이유는 그 자체로
+                #: 문장이어서 그대로 이으면 ".." 가 된다.
+                + "; ".join(line.rstrip().rstrip(".") for line in refused)
+            )
+        return (
+            f"조건에 맞는 카드가 하나도 없었습니다 (후보 "
+            f"{found.possible_count}장을 전부 확인했습니다)"
+        )
+
+    def _declined_target(
+        self, definition: EffectDefinition, binding, resolver: "TargetResolver", found
+    ) -> "_VacantTarget":
+        """
+        **고르지 않기를 고른 대상** (Phase 6-BG). 그 사실과 그 자리의 후보
+        사정을 함께 적는다.
+
+        🔴 **"고를 것이 없었다" 와 "고르지 않았다" 를 한 문장으로 적지
+        않는다.** 둘 다 결과는 같지만 (그 일을 하지 않는다) 읽는 쪽에는
+        다른 사실이다 — 앞의 것은 판의 사정이고 뒤의 것은 **결정**이다.
+
+        🔴 **판정하지 못한 후보를 조용히 넘기지 않는다.** 모름이 있었으면
+        그 규칙 이름을 함께 들고 나가고 (:attr:`_VacantTarget.unchecked`),
+        계획이 그것을 결과의 ``unchecked_rules`` 로 보낸다. 그러지 않으면
+        "규칙을 전부 보고 하지 않기로 했다" 가 된다.
+        """
+        permitted, unknown, refused = self._candidate_verdicts(
+            definition, binding, resolver, found
+        )
+        ref = binding.ref
+        if permitted:
+            said = (
+                f"{ref} 에 고를 수 있는 후보 {len(permitted)}장이 있었지만 "
+                "고르지 않기를 골랐습니다 — 그 대상을 쓰는 일은 하지 않고 "
+                "나머지 일은 그대로 수행했습니다."
+            )
+        else:
+            said = (
+                f"{ref} 를 고르지 않았습니다 — "
+                + self._candidate_shortfall(found, refused)
+                + ". 그 대상을 쓰는 일은 하지 않고 나머지 일은 그대로 "
+                "수행했습니다."
+            )
+        if unknown:
+            #: 🔴 **모름을 문장과 목록에 **둘 다** 적는다.** 문장은 사람이
+            #: 읽고, 목록은 "이 해결은 규칙을 전부 보지 못했다" 를 기계가
+            #: 읽는다.
+            said = said + " 판정하지 못한 후보: " + "; ".join(unknown)
+        return _VacantTarget(
+            ref,
+            said,
+            unchecked=(GATED_CANDIDATE_RULE_MISSING,) if unknown else (),
         )
 
     def _short_selection(
@@ -1525,37 +1687,13 @@ class EffectExecutor:
         ref = binding.ref
         spec = binding.spec
         minimum = spec.choice.minimum
-        question = operation_gate_question(definition, ref)
-        #: 🔴 **관문을 물을 수 있을 때만 묻는다.** 묻지 못하는 경우가 둘이고,
-        #: 둘 다 **여기서 새 판정을 만들지 않는다.**
-        #:
-        #: 1. 그 일이 관문을 선언하지 않았다 — 후보 조건이 전부다.
-        #: 2. ``rulings`` 를 받지 않은 호출이다 (옛 호출부 · 시험 대역).
-        #:    이 자리가 "등록부가 없다 → 모름" 으로 답하면, 관문을 선언한
-        #:    모든 일의 **모자란 선택**이 ``too_few_selected`` 에서
-        #:    ``rule_not_implemented`` 로 바뀐다 — 배선 때문에 답이 달라지는
-        #:    것이고, 이번 보완의 범위가 아니다. 관문은 그 호출에서도
-        #:    실행 시점(:meth:`_check_rule_gate`)이 생성자의 판정기로
-        #:    그대로 묻는다 (``_summon_ruling`` 과 같은 되돌림).
-        ruling = (
-            BoardRuling(resolver.view, self._rulings)
-            if question is not None and self._rulings is not None
-            else None
+        #: 🔴 **관문을 묻는 자리는 하나다** (Phase 6-BG). 같은 고리가
+        #: 「하지 않기로 골랐다」 쪽에도 필요해졌으므로
+        #: (:meth:`_declined_target`) 한 자리로 모았다 —
+        #: :meth:`_candidate_verdicts` 가 묻지 못하는 두 경우까지 들고 있다.
+        permitted, unknown, refused = self._candidate_verdicts(
+            definition, binding, resolver, found
         )
-        permitted: list = []
-        unknown: list[str] = []
-        for instance in found.eligible:
-            if ruling is None:
-                permitted.append(instance)
-                continue
-            told = ruling.explain(question, instance)
-            if told.answer is ConditionResult.TRUE:
-                permitted.append(instance)
-            elif told.answer is not ConditionResult.FALSE:
-                unknown.append(f"{instance}: {told.reason}")
-        for instance in found.undecided:
-            unknown.append(f"{instance}: 후보인지 판정하지 못했습니다.")
-        unknown.extend(found.unchecked)
 
         if len(permitted) >= minimum:
             #: 🔴 **합법 후보가 있었는데 고르지 않았다.** 정책 · 호출의
@@ -1577,9 +1715,12 @@ class EffectExecutor:
         if skip is None or not skip.when_no_candidate:
             #: 선언하지 않은 효과는 예전 그대로 거절된다 (ADR-006).
             return None
+        #: 🔴 **왜 없었는가를 가른다** (Phase 6-BG · :meth:
+        #: `_candidate_shortfall`) — 아예 없는 것과 쓸 수 없는 것이 다른
+        #: 사실이다.
         counted = (
-            f"{ref} 에 고를 수 있는 후보가 없습니다 (후보 "
-            f"{found.possible_count}장을 전부 확인했습니다, 필요 {minimum}장)"
+            f"{ref} 에 고를 수 있는 후보가 없습니다 (필요 {minimum}장): "
+            + self._candidate_shortfall(found, refused)
         )
         if skip.no_candidate_scope is NoCandidateScope.TARGET_OPERATIONS:
             #: 🔴 **그 대상을 쓰는 일만 생략한다** (Phase 6-AO 후속). 공식

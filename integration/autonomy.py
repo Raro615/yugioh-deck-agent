@@ -142,6 +142,18 @@ class ChoiceOffer:
     candidates: tuple[ChoiceCandidate, ...]
     minimum: int
     maximum: int
+    declinable: bool = False
+    """
+    🔴 **아무것도 고르지 않는 답이 적법한가** (Phase 6-BG).
+
+    규칙이 선언한 것을 그대로 옮긴다 — 정책이 장수 조건에서 **추측하지
+    않도록** 함께 싣는다. 거짓이면 빈 답은 조립 층과 엔진이 그대로
+    거절한다.
+
+    🔴 **``minimum`` 을 대신하지 않는다.** 하기로 했다면 몇 장인지는
+    여전히 ``minimum`` ~ ``maximum`` 이고, 이 칸은 **하지 않는 갈래가
+    있는가** 하나다 (공식 ``Duel.SelectYesNo``).
+    """
 
     @property
     def permitted(self) -> tuple[ChoiceCandidate, ...]:
@@ -416,6 +428,7 @@ def choice_offer_for(
         ),
         minimum=spec.choice.minimum,
         maximum=spec.choice.maximum,
+        declinable=spec.declinable,
     )
 
 
@@ -450,6 +463,9 @@ def choice_offer_from_request(request, definitions=None) -> ChoiceOffer:
         ),
         minimum=request.minimum,
         maximum=request.maximum,
+        #: 🔴 **엔진이 그 자리에서 말한 것을 옮긴다** (Phase 6-BG) — 여기서
+        #: 규칙을 다시 읽지 않는다.
+        declinable=getattr(request, "declinable", False),
     )
 
 

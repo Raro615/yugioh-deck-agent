@@ -1214,10 +1214,18 @@ class _V2Resources:
     seat = 0
     state_hash = "h"
 
-    def __init__(self, *, field=(), sets=(), hand=0, their=(), uses=(),
-                 grave=0, removed=0, extra=0, normal_summon_used=True):
+    def __init__(self, *, field=(), sets=(), field_zone=(), hand=0, their=(),
+                 uses=(), grave=0, removed=0, extra=0,
+                 normal_summon_used=True):
         self.own_field = tuple(field)
         self._sets = tuple(sets)
+        #: 🔴 **필드 존도 흉내 낸다** (Phase 6-BG). 진짜 요약
+        #: (``agent.bounded_search.summarize_resources``) 은 ``FZONE`` 을
+        #: **언제나** 적는다 (``OWN_DETAIL_ZONES``) — 대역이 그것을 빼면
+        #: v2 가 "읽을 수 없다" 로 답하고, 그 거절은 **대역의 잘못**이지
+        #: 평가의 사실이 아니다. 기본값이 빈 짝인 것은 "필드 존이 비어
+        #: 있다" 이고 "없다" 가 아니다.
+        self._field_zone = tuple(field_zone)
         self._hand = hand
         self.their_field = tuple(their)
         self.uses = tuple(uses)
@@ -1239,6 +1247,8 @@ class _V2Resources:
 
         if zone is Zone.SZONE:
             return _V2Zone(self._sets)
+        if zone is Zone.FZONE:
+            return _V2Zone(self._field_zone)
         return None
 
 

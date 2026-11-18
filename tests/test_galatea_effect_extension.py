@@ -439,14 +439,33 @@ def test_d02_an_unregistered_set_candidate_is_not_waved_through(repository):
     두 후보가 ``UNKNOWN`` 이 되고, ``UNKNOWN`` 은 허가가 아니므로 고를 수
     없다.
 
-    🔴 **그때 효과 전체가 거절되고 판은 그대로다** — 세트만 생략되는 것이
-    아니다. 생략 범위(``NoCandidateScope.TARGET_OPERATIONS``)는 **엔진이
-    후보를 0장으로 센** 갈래의 것이고 (``test_d04``), 이쪽은 엔진이 후보를
-    둘 세었는데 **그것을 움직일 수 있는지 모르는** 갈래다. 두 공백은 고칠
-    자리가 다르므로 (앞은 덱의 내용, 뒤는 등재부) 결과도 섞지 않는다.
+    🔴 **세트는 일어나지 않는다. 되돌리기는 일어난다** (Phase 6-BG 가
+    고친 자리).
+
+    6-BF 는 이 자리에서 **효과 전체를 거절했다** — "판이 하나도 바뀌지
+    않았다" 를 이 시험이 고정하고 있었다. 공식과 어긋난다::
+
+        c30741503.lua s.tdop
+            Duel.SendtoDeck(tg,nil,SEQ_DECKTOP,REASON_EFFECT)   -- 무조건
+            …
+            if #g>0 and Duel.SelectYesNo(tp,…) then … Duel.SSet end
+
+    되돌리기는 ``SelectYesNo`` **앞**에 있고 조건이 없다. 세트할 수 있는지
+    모른다는 것은 **세트를 하지 않을 이유**이지 되돌리기를 취소할 이유가
+    아니다.
+
+    🔴 **그래도 모름이 허가가 되지는 않았다** (ADR-006). 이 시험이 세
+    가지를 함께 고정한다 — 세트가 **일어나지 않았고**, 되돌리기는
+    **일어났고**, 그 모름이 결과의 ``unchecked_rules`` 에 **이름으로
+    남았다**. 마지막 것이 없으면 "규칙을 전부 보고 하지 않기로 했다" 와
+    구별되지 않는다.
+
+    두 공백은 여전히 고칠 자리가 다르다 (앞은 덱의 내용 · ``test_d04``,
+    뒤는 등재부) — 갈라지는 자리는 이제 판이 아니라 **못 본 규칙 목록**이다.
     """
     from engine.condition import ConditionResult
     from engine.effect import library as lib
+    from engine.effect.executor import GATED_CANDIDATE_RULE_MISSING
     from engine.effect.ruling import OperationRulingRegistry
     from engine.effect.semantics import RuleQuestion
 
@@ -462,13 +481,31 @@ def test_d02_an_unregistered_set_candidate_is_not_waved_through(repository):
         trimmed.append(facts)
     narrowed = OperationRulingRegistry(tuple(trimmed))
 
-    import integration.autonomy as autonomy
-    original = autonomy._rulings
-    autonomy._rulings = lambda: narrowed
+    #: 🔴 **등재부 자체를 좁힌다** (Phase 6-BG 가 고친 자리). 6-BF 는
+    #: 조립 층의 ``_rulings`` 만 바꿨고, 그러면 **엔진은 여전히 답을 알고**
+    #: 정책만 모르는 판이 된다 — 그 판에서 엔진이 "후보가 있었는데 고르지
+    #: 않았다" 로 적는 것은 정확하다. 등재 공백을 재려면 엔진과 정책이
+    #: **같은 표**를 못 읽어야 한다 (``_rulings`` 와 ``duel_activator`` ·
+    #: ``duel_resolver`` 가 다 이 이름을 읽는다).
+    original_table = lib.OPERATION_RULINGS
+    lib.OPERATION_RULINGS = narrowed
     try:
         setup, duel = _to_galatea(repository, prefer=(BABEL,))
-        _take(duel, _is("activate_effect", effect=GALATEA_SECOND),
-              "갈라테아 ②")
+        #: 🔴 **링크 하나의 보고를 봐야 한다.** 우선권을 넘기면 체인이
+        #: 끝까지 풀리고 행동 결과에는 마지막 링크의 문장만 남는다 — 그래서
+        #: 발동만 하고 **그 링크를** 해결기에 직접 묻는다 (판정도 해결도
+        #: 대신하지 않는다: ``ChainResolver`` 가 전부 한다).
+        legal = _advance_to_open(duel)
+        check = _is("activate_effect", effect=GALATEA_SECOND)
+        hit = next((a for a in legal.allowed if check(a.canonical_state())),
+                   None)
+        assert hit is not None, (
+            "갈라테아 ② 를 허용 후보에서 찾지 못했습니다: "
+            + "; ".join(str(a.canonical_state()) for a in legal.allowed)
+        )
+        assert duel.apply(hit).accepted
+        said = duel._resolver.resolve_top(duel.state, duel.chain)
+        duel.chain = said.chain
         record = next(r for r in setup.chooser.records
                       if getattr(r.target_ref, "name", "") == "set")
         assert record.offer.permitted == ()
@@ -476,11 +513,21 @@ def test_d02_an_unregistered_set_candidate_is_not_waved_through(repository):
                    for c in record.offer.candidates)
         assert record.chosen == ()
     finally:
-        autonomy._rulings = original
-    #: 🔴 **판이 하나도 바뀌지 않았다** — 계획 단계에서 멈췄다 (ADR-008).
-    assert _zone_ids(duel, "REMOVED") == [16]
+        lib.OPERATION_RULINGS = original_table
+    #: 🔴 **세트는 일어나지 않았다** — ``UNKNOWN`` 은 허가가 아니다.
     assert _zone_ids(duel, "FZONE") == []
     assert _zone_ids(duel, "SZONE") == []
+    #: 🔴 **되돌리기는 일어났다** — 공식의 ``SendtoDeck`` 는 무조건이다.
+    assert _zone_ids(duel, "REMOVED") == []
+    #: 🔴 **그 모름이 이름으로 남았다.** 없으면 "규칙을 전부 보고 하지
+    #: 않기로 했다" 와 구별되지 않는다.
+    assert said.result is not None
+    assert GATED_CANDIDATE_RULE_MISSING in said.result.unchecked_rules, (
+        said.result.unchecked_rules
+    )
+    #: 🔴 **그 이유가 문장으로도 남았다** — 어느 후보를 왜 판정하지
+    #: 못했는지가 적힌다.
+    assert "판정하지 못한 후보" in said.result.reason, said.result.reason
 
 
 def test_d04_an_empty_deck_of_orcust_spelltraps_skips_only_the_set(repository):
@@ -796,3 +843,322 @@ def test_g02_a_found_galatea_path_replays_from_a_fresh_state(repository):
             for change in event["changes"]
             if change["kind"] == "card_set"]
     assert sets, "재생 기록에 세트 사건이 없습니다"
+
+
+# ======================================================================
+# H. Phase 6-BG — 세트의 남은 처리
+#
+# 🔴 **여기서 재는 것은 「무엇이 일어났는가」 가 아니라 「무엇이 일어나지
+# 않았는가」 다.** 되돌리기는 공식에서 무조건이고 세트는 임의이므로, 세트가
+# 일어나지 않은 판에서 **되돌리기가 남아 있는지**가 이 절의 전부다.
+# ======================================================================
+class _DeclineSet:
+    """
+    **세트만 하지 않기로 하는 정책** — 공식 ``Duel.SelectYesNo`` 의 「아니오」.
+
+    🔴 **그 자리에서만 거절한다.** 다른 선택은 뒤의 정책이 그대로 답하므로,
+    이 시험이 재는 것은 "세트를 하지 않기로 했을 때 나머지가 남는가" 하나다.
+
+    🔴 **제안이 그 갈래를 허용한다고 말할 때만 거절한다**
+    (``offer.declinable``) — 허용하지 않는 자리에서 빈 답을 내면 그것은
+    정책의 잘못이고, 엔진이 ``TOO_FEW_SELECTED`` 로 거절하는 것이 맞다.
+    """
+
+    name = "decline-set"
+
+    def __init__(self, then):
+        self.then = then
+
+    def accept_offer(self, offer) -> bool:
+        return self.then.accept_offer(offer)
+
+    def choose_cards(self, offer):
+        if (getattr(offer.target_ref, "name", "") == "set"
+                and getattr(offer, "declinable", False)):
+            return ()
+        return self.then.choose_cards(offer)
+
+    def forked(self) -> "_DeclineSet":
+        return _DeclineSet(self.then.forked())
+
+
+def _declining_setup(repository):
+    """``_setup`` 과 **같은 자리**를 쓰고 정책만 바꾼다."""
+    from agent.choice import FirstPermittedChoice, PreferredCardChoice
+    from deck.opening import build_opening
+    from integration.autonomy import PolicyChooser, TriggerSource
+    from integration.trigger_registry import TriggerPreparation
+
+    policy = _DeclineSet(PreferredCardChoice((HARP_HORROR,),
+                                             FirstPermittedChoice()))
+    triggers = TriggerSource(repository=repository,
+                             preparation=TriggerPreparation(repository))
+    return build_opening(
+        repository, _draft(repository), list(ORCUST_HAND),
+        chooser=PolicyChooser(policy), triggers=triggers,
+    )
+
+
+def _to_galatea_declining(repository):
+    """``_to_galatea`` 와 **같은 네 걸음**이고 정책만 다르다."""
+    setup = _declining_setup(repository)
+    duel = setup.duel
+    assert setup.can_run, setup.refusal
+    _take(duel, _is("normal_summon", source=75), "기르수 일반 소환")
+    _take(duel, _is("activate_effect", effect=(GIRSU, 0)), "기르수 ①")
+    _take(duel, _is("activate_effect", effect=(HARP_HORROR, 0)), "디베르 ①")
+    _take(duel, lambda k: k[0] == "link_summon" and k[2] == 83,
+          "갈라테아 링크 소환")
+    return setup, duel
+
+
+def test_h01_declining_the_set_keeps_the_return(repository):
+    """
+    🔴 **세트하지 않기로 골라도 덱 되돌리기는 남는다** (Phase 6-BG §2).
+
+    공식 처리에서 ``Duel.SendtoDeck`` 는 ``Duel.SelectYesNo`` **앞**에 있고
+    조건이 없다::
+
+        c30741503.lua s.tdop
+            Duel.SendtoDeck(tg,nil,SEQ_DECKTOP,REASON_EFFECT)
+            …
+            if #g>0 and Duel.SelectYesNo(tp,aux.Stringid(id,1)) then
+              Duel.BreakEffect(); local sg=g:Select(tp,1,1,nil)
+              Duel.SSet(tp,sg) end
+
+    6-BF 까지 이 갈래는 **표현할 수 없었다** — 빈 선택은 장수 부족
+    (``TOO_FEW_SELECTED``) 이었고 효과 전체가 거절됐다. 지금은 정의가
+    「하지 않을 수 있다」 를 선언하고 (``TargetSpec.declinable``) 빈 선택이
+    그 대상을 쓰는 일만 건너뛴다.
+    """
+    setup, duel = _to_galatea_declining(repository)
+    before = len(list(setup.journal))
+    _take(duel, _is("activate_effect", effect=GALATEA_SECOND), "갈라테아 ②")
+    #: 🔴 **되돌리기와 섞기는 일어났다.**
+    assert _zone_ids(duel, "REMOVED") == []
+    kinds = [d.to_dict()["kind"] for ev in list(setup.journal)[before:]
+             for d in getattr(ev, "deltas", ())]
+    assert "zone_moved" in kinds, kinds
+    assert "zone_shuffled" in kinds, kinds
+    #: 🔴 **세트는 일어나지 않았다** — 두 존 다 비어 있다.
+    assert "card_set" not in kinds, kinds
+    assert _zone_ids(duel, "SZONE") == []
+    assert _zone_ids(duel, "FZONE") == []
+    #: 🔴 **그것이 "후보가 없었다" 가 아니라 "고르지 않았다" 로 적힌다.**
+    record = next(r for r in setup.chooser.records
+                  if getattr(r.target_ref, "name", "") == "set")
+    assert record.offer.permitted, "고를 수 있는 후보가 있던 자리여야 한다"
+    assert record.offer.declinable is True
+    assert record.chosen == ()
+
+
+def test_h02_the_decline_is_only_legal_where_the_rule_says_so(repository):
+    """
+    🔴 **선언하지 않은 선택에서 빈 답은 여전히 거절이다** (ADR-006).
+
+    같은 정책으로 **대상 지정** 쪽을 거절해 보지 않는다 — 그쪽은 발동
+    시점에 고르므로 해결 중에 묻지 않는다. 대신 선언을 값으로 읽어
+    **이 효과의 두 이름이 다르게 선언됐다**는 사실을 고정한다: 되돌릴
+    대상은 거절할 수 없고, 세트할 카드는 거절할 수 있다.
+    """
+    from engine.effect.library import definition_registry
+
+    definition = definition_registry().definition_for(_ref())
+    assert definition is not None
+    by_name = {binding.ref.name: binding.spec for binding in definition.targets}
+    assert by_name["primary"].declinable is False
+    assert by_name["set"].declinable is True
+    #: 🔴 **장수는 그대로 1장이다** — 「하지 않는다」 는 장수가 아니다
+    #: (공식도 ``g:Select(tp,1,1,nil)`` 이다).
+    assert by_name["set"].choice.minimum == 1
+    assert by_name["set"].choice.maximum == 1
+
+
+def _ref():
+    from engine.effect.semantics import RuleQuestion  # noqa: F401 - 경계 확인용
+    from engine.ids import EffectRef
+
+    return EffectRef(GALATEA, 1)
+
+
+def test_h03_a_full_spell_zone_sends_the_set_to_the_field_zone(repository):
+    """
+    🔴 **마법 · 함정 존이 차 있어도 후보가 남아 있으면 세트된다**
+    (Phase 6-BG §2).
+
+    공식 ``s.filter`` 의 ``IsSSetable`` 은 **카드마다** 자리를 본다 —
+    클리막스(카운터 함정)는 마법 · 함정 존이 필요하고 바벨(필드 마법)은
+    필드 존이 필요하다. 그래서 마법 · 함정 존이 5칸 다 차면 클리막스는
+    후보에서 빠지고 **바벨은 남는다.**
+
+    🔴 **6-BF 는 이 판에서 효과 전체를 거절했다** — 빈 칸 검사가 배치
+    계획에 있어서 고른 카드를 놓지 못하면 거절이었고, 되돌리기까지
+    취소됐다 (실측).
+    """
+    from engine.vocabulary import Position, Zone
+
+    _, duel = _to_galatea(repository)
+    deck = duel.state.zone(0, Zone.DECK)
+    #: 🔴 **뒷면으로 채운다** — 앞면의 모르는 카드를 깔면 판정이 "막는
+    #: 것이 있는지 모른다" 로 바뀌어 다른 사실을 재게 된다.
+    for card in list(deck.cards())[:5]:
+        duel.state.move(card, Zone.SZONE, to_player=0,
+                        position=Position.FACEDOWN)
+    assert len(_zone_ids(duel, "SZONE")) == 5
+    _take(duel, _is("activate_effect", effect=GALATEA_SECOND), "갈라테아 ②")
+    #: 🔴 **되돌리기는 일어났다.**
+    assert _zone_ids(duel, "REMOVED") == []
+    #: 🔴 **세트는 필드 존으로 갔다** — 그 카드가 거기 놓이는 종류다.
+    placed = [c.card_id for c in duel.state.zone(0, Zone.FZONE).cards()]
+    assert placed == [BABEL], placed
+    assert len(_zone_ids(duel, "SZONE")) == 5
+
+
+def test_h04_no_room_anywhere_skips_only_the_set(repository):
+    """
+    🔴 **놓을 자리가 아무 데도 없으면 세트만 일어나지 않는다**
+    (Phase 6-BG §2). 그리고 **사유가 둘로 갈려 적힌다.**
+
+    * 클리막스 — 마법 · 함정 존이 찼다. 공식도 후보로 세지 않는다
+      (``IsSSetable`` 이 거짓) → **확정 거절**.
+    * 바벨 — 필드 존에 이미 카드가 있다. 공식 처리는 앞의 필드 마법을
+      묘지로 보내는 것이고 (``RULE-SPELLTRAP-006``) 이 엔진에 그 경로가
+      **없다** → **보류**.
+
+    🔴 **두 사유를 한 문장으로 적지 않는다.** 앞은 고칠 것이 판이고 뒤는
+    고칠 것이 이 엔진이다.
+    """
+    from engine.effect.semantics import FIELD_SPELL_REPLACEMENT_RULE
+    from engine.vocabulary import Position, Zone
+
+    _, duel = _to_galatea(repository)
+    deck = duel.state.zone(0, Zone.DECK)
+    blocker = next(c for c in deck.cards() if c.card_id not in (BABEL, CLIMAX))
+    duel.state.move(blocker, Zone.FZONE, to_player=0,
+                    position=Position.FACEDOWN)
+    for card in list(duel.state.zone(0, Zone.DECK).cards())[:5]:
+        duel.state.move(card, Zone.SZONE, to_player=0,
+                        position=Position.FACEDOWN)
+    #: 바벨이 **덱에 남아 있어야** 이 판을 재는 뜻이 있다.
+    assert BABEL in [c.card_id for c in duel.state.zone(0, Zone.DECK).cards()]
+
+    legal = _advance_to_open(duel)
+    check = _is("activate_effect", effect=GALATEA_SECOND)
+    hit = next((a for a in legal.allowed if check(a.canonical_state())), None)
+    assert hit is not None, "갈라테아 ② 가 후보에 없습니다"
+    assert duel.apply(hit).accepted
+    said = duel._resolver.resolve_top(duel.state, duel.chain)
+    duel.chain = said.chain
+
+    #: 🔴 **되돌리기는 일어났고 세트는 일어나지 않았다.**
+    assert _zone_ids(duel, "REMOVED") == []
+    assert len(_zone_ids(duel, "SZONE")) == 5
+    assert [c.card_id for c in duel.state.zone(0, Zone.FZONE).cards()] \
+        == [blocker.card_id]
+    #: 🔴 **확정 거절의 사유**가 적혔다 (자리가 없다).
+    assert "모두 차 있어 세트할 자리가 없습니다" in said.result.reason
+    #: 🔴 **보류의 사유**가 따로 적혔다 (구현되지 않은 규칙).
+    assert FIELD_SPELL_REPLACEMENT_RULE in said.result.reason
+    assert "판정하지 못한 후보" in said.result.reason
+    #: 🔴 **그 보류가 못 본 규칙 목록에도 남았다.**
+    from engine.effect.executor import GATED_CANDIDATE_RULE_MISSING
+
+    assert GATED_CANDIDATE_RULE_MISSING in said.result.unchecked_rules
+
+
+def test_h05_the_gate_asks_the_board_not_just_the_card(repository):
+    """
+    🔴 **``MAY_BE_SET`` 이 판을 본다** (Phase 6-BG · ``explain_set``).
+
+    같은 카드가 **같은 등재 사실**로 두 답을 낸다 — 자리가 있으면 ``TRUE``,
+    없으면 ``FALSE``. 6-BF 의 ``MAY_BE_SET`` 은 자리를 보지 않았으므로 두
+    판에서 같은 답이었다.
+    """
+    from engine.condition import ConditionResult
+    from engine.effect.ruling import BoardRuling
+    from engine.effect.semantics import RuleQuestion
+    from engine.game_state_view import GameStateView
+    from engine.vocabulary import Position, Zone
+    from integration.autonomy import _rulings
+
+    _, duel = _to_galatea(repository)
+
+    def ask(card_id):
+        view = GameStateView.from_state(duel.state, viewer=0,
+                                        looked_at=frozenset({Zone.DECK}))
+        ruling = BoardRuling(view, _rulings())
+        card = next(c for c in duel.state.zone(0, Zone.DECK).cards()
+                    if c.card_id == card_id)
+        return ruling.explain(RuleQuestion.MAY_BE_SET, card.instance_id)
+
+    first = ask(CLIMAX)
+    assert first.answer is ConditionResult.TRUE, first.reason
+    for card in list(duel.state.zone(0, Zone.DECK).cards())[:5]:
+        duel.state.move(card, Zone.SZONE, to_player=0,
+                        position=Position.FACEDOWN)
+    second = ask(CLIMAX)
+    assert second.answer is ConditionResult.FALSE, second.reason
+    assert "세트할 자리가 없습니다" in second.reason
+    #: 🔴 **필드 마법은 다른 존을 본다** — 같은 판에서 답이 갈린다.
+    assert ask(BABEL).answer is ConditionResult.TRUE
+
+
+def test_h06_a_field_zone_set_is_a_different_development(repository):
+    """
+    🔴 **필드 존 세트가 「세트 안 함」 과 같은 결과로 합쳐지지 않는다**
+    (Phase 6-BG §3).
+
+    6-BE 의 ``variant_key`` 는 마법 · 함정 존만 읽었다 — 그래서 바벨을
+    필드 존에 세트한 전개와 아무것도 세트하지 않은 전개가 **같은 열쇠**였고
+    중복 제거에서 하나가 지워질 수 있었다. 세트된 장수(``set_cards``) 도
+    둘 다 0 이었다.
+
+    🔴 **가산점이 아니다.** 이 시험이 요구하는 것은 "두 열쇠가 다르다"
+    하나이고, 어느 쪽이 더 좋은지는 재지 않는다.
+    """
+    from agent.open_evaluation_v2 import core_key, measure_v2, variant_key
+    from app.main import card_knowledge
+    from engine.vocabulary import Position, Zone
+
+    know = card_knowledge(repository)
+
+    def measured(fill_spell_zone: bool):
+        _, duel = _to_galatea(repository)
+        deck = duel.state.zone(0, Zone.DECK)
+        if fill_spell_zone:
+            #: 🔴 **채우는 카드를 몬스터로 고른다.** 함정 · 속공마법으로
+            #: 채우면 아래 ``set_reactive`` 가 그 카드들을 세어, 이 시험이
+            #: 재려는 "바벨은 거기 들어가지 않는다" 가 가려진다.
+            fillers = [
+                card for card in deck.cards()
+                if card.card_id not in (BABEL, CLIMAX)
+                and getattr(repository.get(card.card_id), "is_monster", False)
+            ][:5]
+            assert len(fillers) == 5, [c.card_id for c in fillers]
+            for card in fillers:
+                duel.state.move(card, Zone.SZONE, to_player=0,
+                                position=Position.FACEDOWN)
+        _take(duel, _is("activate_effect", effect=GALATEA_SECOND), "갈라테아 ②")
+        from agent.bounded_search import summarize_resources
+
+        resources = summarize_resources(duel, seat=0)
+        measures, why = measure_v2((), resources, knowledge=know)
+        assert measures is not None, why
+        return resources, measures
+
+    plain_res, plain = measured(False)
+    field_res, field = measured(True)
+    #: 🔴 **둘 다 세트된 자원을 센다** — 필드 존 세트가 0 으로 사라지지
+    #: 않는다. 앞은 클리막스 한 장, 뒤는 채운 5장 + 바벨이다.
+    assert plain.set_cards == 1, plain.set_cards
+    assert field.set_cards == 6, field.set_cards
+    #: 🔴 **열쇠가 다르다** — 자리가 다르므로 변형이 다르다.
+    assert variant_key(plain_res, plain) != variant_key(field_res, field)
+    #: 🔴 **핵심 전개 열쇠에는 세트가 들어가지 않는다** (6-BE 의 가름을
+    #: 바꾸지 않았다) — 그래서 두 열쇠의 차이는 **변형** 쪽에만 있다.
+    assert core_key(plain) == core_key(field)
+    #: 🔴 **「상대 턴에 쓸 수 있는 종류」 는 종류만 본다.** 클리막스
+    #: (카운터 함정) 는 세고, 바벨 (필드 마법) 과 몬스터는 세지 않는다 —
+    #: 세트된 자원이라는 사실과 방해라는 주장은 다르다.
+    assert plain.set_reactive == 1, plain.set_reactive
+    assert field.set_reactive == 0, field.set_reactive

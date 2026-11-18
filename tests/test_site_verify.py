@@ -28,15 +28,16 @@ ROOT = Path(__file__).resolve().parent.parent
 VERIFY = ROOT / "scripts" / "duel_simulator_verify.js"
 
 
-def _compare(expect, observed, counts) -> dict:
+def _compare(expect, observed, counts, positions=None) -> dict:
     """조작기가 쓰는 그 함수를 그대로 부른다."""
     script = (
         f"const v=require({str(VERIFY)!r});"
         "const a=JSON.parse(process.argv[1]);"
-        "console.log(JSON.stringify(v.compareFinal(a[0],a[1],a[2])));"
+        "console.log(JSON.stringify(v.compareFinal(a[0],a[1],a[2],a[3])));"
     )
     done = subprocess.run(
-        ["node", "-e", script, json.dumps([expect, observed, counts])],
+        ["node", "-e", script,
+         json.dumps([expect, observed, counts, positions])],
         capture_output=True, text=True, check=True)
     return json.loads(done.stdout)
 
@@ -370,3 +371,62 @@ def test_c09_the_discord_runner_gets_a_fresh_folder_each_time(tmp_path):
     assert bases == [tmp_path, tmp_path]        # 기준 폴더는 같고
     #: 실제 실행 폴더는 ``run_site_session`` 이 그 아래에 새로 만든다.
     assert len(bases) == 2
+
+
+# ======================================================================
+# Phase 6-BG — 표시 형식은 대조하지 않는다 (그 사실을 결과에 적는다)
+# ======================================================================
+def test_bg01_a_matching_board_is_not_a_reproduced_set():
+    """
+    🔴 **자리가 맞았다 ≠ 그대로 재현됐다.**
+
+    이 대조는 존마다 **카드 자리의 집합**만 맞추고 앞면/뒷면은 읽지
+    않는다. 세트된 카드가 앞면으로 놓여도 ``allOk`` 는 참이 될 수 있고,
+    그 참을 "세트까지 재현됐다" 로 읽으면 거짓이 된다. 그래서 계획이
+    뒷면이어야 하는 자리를 알려 주면 (``expect_positions``) 결과에
+    **「대조하지 않았다」** 가 자리와 함께 적히고 ``fullyReproduced`` 가
+    거짓이 된다.
+    """
+    expect = {"Spell & Trap Zone1": {"slots": ["main-5"]}}
+    observed = {"byZone": {"Spell & Trap Zone1": ["main-5"]}, "problems": []}
+    counts = {"Spell & Trap Zone1": 1}
+    positions = {"face_down": [{"slot": "main-5",
+                                "zone": "Spell & Trap Zone1"}],
+                 "compared": False, "why": "표시 형식은 대조하지 않았습니다."}
+    verdict = _compare(expect, observed, counts, positions)
+    #: 🔴 **자리는 맞았다** — 거짓으로 만들지 않는다.
+    assert verdict["allOk"] is True
+    #: 🔴 **그러나 그대로 재현된 것은 아니다.**
+    assert verdict["fullyReproduced"] is False
+    assert verdict["positions"]["compared"] is False
+    assert verdict["positions"]["face_down"] == positions["face_down"]
+
+
+def test_bg02_without_a_face_down_expectation_nothing_changes():
+    """
+    🔴 **뒷면이 없는 계획은 한 글자도 달라지지 않는다.** 6-BG 전의 호출
+    (네 번째 인자가 없는 호출) 도 같은 답을 받는다 — 그래서 이 보완이
+    기존 성공을 실패로 바꾸지 않는다.
+    """
+    expect = {"Monster Zone1": {"slots": ["main-0"]}}
+    observed = {"byZone": {"Monster Zone1": ["main-0"]}, "problems": []}
+    counts = {"Monster Zone1": 1}
+    with_arg = _compare(expect, observed, counts,
+                        {"face_down": [], "compared": False})
+    without = _compare(expect, observed, counts)
+    assert with_arg["allOk"] is True and without["allOk"] is True
+    assert with_arg["fullyReproduced"] is True
+    assert without["fullyReproduced"] is True
+
+
+def test_bg03_a_wrong_slot_is_still_a_failure():
+    """🔴 **표시 형식 보완이 자리 대조를 약하게 만들지 않았다.**"""
+    expect = {"Spell & Trap Zone1": {"slots": ["main-5"]}}
+    observed = {"byZone": {"Spell & Trap Zone2": ["main-5"]}, "problems": []}
+    counts = {"Spell & Trap Zone2": 1}
+    verdict = _compare(expect, observed, counts,
+                       {"face_down": [{"slot": "main-5",
+                                       "zone": "Spell & Trap Zone1"}],
+                        "compared": False})
+    assert verdict["allOk"] is False
+    assert verdict["fullyReproduced"] is False

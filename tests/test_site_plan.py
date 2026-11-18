@@ -515,3 +515,85 @@ def test_g06_a_spoiled_registration_image_never_runs(tmp_path, monkeypatch,
         runner=runner)
     assert not seen and not runner.registrations
     assert any("등록된 이미지를 쓸 수 없습니다" in line for line in lines)
+
+
+# ======================================================================
+# Phase 6-BG — 세트의 존과 표시 형식
+# ======================================================================
+def _toy_set(to_zone: str, to_index=None) -> dict:
+    """``card_set`` 사건 하나가 든 합성 기록 — 🔴 어느 경로도 아니다."""
+    return _toy(
+        steps=[
+            {"order": 1, "actor": 0, "kind": "activate_effect",
+             "accepted": True, "resolved": True, "state_changed": True,
+             "events": [0], "card": {"passcode": 11, "name": "합성 몬스터"}},
+        ],
+        events=[
+            {"seq": 0, "type": "effect", "actor": 0, "source": 1, "changes": [
+                {"kind": "card_set", "instance": 2, "player": 0, "owner": 0,
+                 "from_player": 0, "from_zone": "DECK",
+                 "to_zone": to_zone, "to_index": to_index,
+                 "position": "FACEDOWN", "summoned": False}]},
+        ],
+        final={"zones": {"0": {"HAND": [1], to_zone: [2], "EXTRA": [3]}},
+               "slots": [{"seat": 0, "zone": to_zone, "index": to_index,
+                          "instance": 2}]},
+    )
+
+
+def test_bg01_a_spell_zone_set_and_a_field_zone_set_are_different_places():
+    """
+    🔴 **일반 마법 · 함정 존과 필드 존을 가른다** (Phase 6-BG §5).
+
+    사이트는 그 둘을 다른 칸으로 부른다 (``Spell & Trap Zone1`` ·
+    ``Field Zone``). 한 이름으로 묶으면 **필드 마법을 세트한 전개가
+    마법 · 함정 존에 놓인다** — 사이트에서 그 자리는 애초에 다른 칸이다.
+    """
+    spell = build_site_plan(_toy_set("SZONE", 0))
+    field = build_site_plan(_toy_set("FZONE", 0))
+    spell_move = [op for op in spell["operations"] if op["op"] == "move"]
+    field_move = [op for op in field["operations"] if op["op"] == "move"]
+    assert [op["to"] for op in spell_move] == ["Spell & Trap Zone1"]
+    #: 🔴 **필드 존에는 칸 번호를 붙이지 않는다** — 사이트에 한 칸뿐이다.
+    assert [op["to"] for op in field_move] == ["Field Zone"]
+    assert spell["expect_final"]["Spell & Trap Zone1"]["count"] == 1
+    assert field["expect_final"]["Field Zone"]["count"] == 1
+    #: 🔴 **서로의 칸은 비어 있다.**
+    assert spell["expect_final"]["Field Zone"]["count"] == 0
+    assert field["expect_final"]["Spell & Trap Zone1"]["count"] == 0
+
+
+def test_bg02_the_plan_says_which_slots_should_end_face_down():
+    """
+    🔴 **표시 형식을 적되 「했다」 고 말하지 않는다** (Phase 6-BG §5).
+
+    이 계획은 끌어 놓기만 만들고 뒷면으로 만드는 조작은 싣지 못한다. 그
+    사실이 두 자리에 남는다 — 조작의 ``face_down`` 과 계획의
+    ``expect_positions`` (``compared`` 가 **거짓**이다). 그래서 대조가
+    통과해도 "세트까지 재현됐다" 가 되지 않는다.
+    """
+    plan = build_site_plan(_toy_set("SZONE", 0))
+    move = next(op for op in plan["operations"] if op["op"] == "move")
+    assert move["position"] == "FACEDOWN"
+    assert move["face_down"] is True
+    positions = plan["expect_positions"]
+    assert positions["compared"] is False
+    assert positions["face_down"] == [
+        {"slot": "main-1", "zone": "Spell & Trap Zone1"},
+    ]
+    assert "대조하지 않았습니다" in positions["why"]
+    #: 🔴 **사건마다의 한계도 그대로 적힌다** (6-BF 가 만든 줄).
+    assert any("뒷면 세트" in line for line in plan["unsupported"])
+
+
+def test_bg03_a_face_up_move_is_not_marked_face_down():
+    """
+    🔴 **앞면 이동에는 그 표시가 붙지 않는다.** 6-BG 의 칸이 모든 이동을
+    "뒷면" 으로 만들지 않았다는 사실을 고정한다 — 그러면 대조 결과가
+    언제나 "그대로 재현되지 않았다" 가 되어 뜻을 잃는다.
+    """
+    plan = build_site_plan(_toy())
+    moves = [op for op in plan["operations"] if op["op"] == "move"]
+    assert moves
+    assert all(not op.get("face_down") for op in moves), moves
+    assert plan["expect_positions"]["face_down"] == []
