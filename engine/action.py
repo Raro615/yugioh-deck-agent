@@ -262,6 +262,28 @@ class PlayerAction:
     순서를 유지한다. 소재의 순서가 규칙을 바꾸지는 않지만, 기록이
     재현되어야 하므로 (``canonical_state``) 받은 순서를 그대로 들고 있는다.
     """
+    cost_cards: tuple[InstanceId, ...] = ()
+    """
+    **비용으로 내놓을 카드들** (Phase 6-BI). 효과 발동만 쓴다.
+
+    🔴 **비용은 발동 시점에 치른다.** 그래서 무엇을 내놓을지는 **행위에
+    적힌다** — 해결 중의 선택이 아니다. 공식 스크립트가 그 구분을 그대로
+    적는다: ``SetCost`` 는 발동을 선언할 때 돌고 ``SetOperation`` 은 해결할
+    때 돈다.
+
+    🔴 **``targets`` 도 ``materials`` 도 아니다.** 「대상」 은 규칙 용어이고
+    (``EFFECT_FLAG_CARD_TARGET``) 비용으로 내놓는 카드는 대상으로 지정되지
+    않는다. 소재도 아니다 — 소재는 소환되는 몬스터의 재료이고, 이쪽은
+    발동의 값이다. 한 칸에 섞으면 그 구분이 영영 사라진다 (ADR-002 가
+    파괴와 묘지로 보내기를 가른 것과 같은 이유).
+
+    🔴 **어느 비용 자리의 것인지는 여기 적지 않는다.** 그 번호는 정의가
+    들고 있고 (:func:`~engine.cost_bridge.cost_selections_from` 이 읽는다),
+    행위는 **카드만** 적는다 — 행위가 정의의 내부 번호를 들고 다니면 정의가
+    바뀔 때 기록이 조용히 다른 비용을 가리킨다.
+
+    순서를 유지한다 (``materials`` 와 같은 이유 — 기록이 재현되어야 한다).
+    """
 
     def __post_init__(self) -> None:
         if self.actor not in (0, 1):
@@ -275,6 +297,21 @@ class PlayerAction:
         if not isinstance(self.materials, tuple):
             raise MalformedAction(
                 "materials 는 tuple 이어야 합니다 — Action 은 불변입니다."
+            )
+        if not isinstance(self.cost_cards, tuple):
+            raise MalformedAction(
+                "cost_cards 는 tuple 이어야 합니다 — Action 은 불변입니다."
+            )
+        if self.cost_cards and self.kind is not PlayerActionKind.ACTIVATE_EFFECT:
+            #: 🔴 **비용은 효과 발동의 것이다.** 다른 행위에 적히면 그
+            #: 행위가 비용을 치르는 것처럼 읽힌다.
+            raise MalformedAction(
+                f"{self.kind.value} 에는 비용으로 내놓을 카드를 적을 수 "
+                "없습니다 — 비용은 효과 발동이 치릅니다."
+            )
+        if len(set(self.cost_cards)) != len(self.cost_cards):
+            raise MalformedAction(
+                f"같은 카드를 비용으로 두 번 낼 수 없습니다: {self.cost_cards}"
             )
         if self.materials and self.kind not in _ALLOWS_MATERIALS:
             raise MalformedAction(
@@ -370,6 +407,7 @@ class PlayerAction:
         effect_ref: EffectRef,
         *,
         targets: tuple[ActionTarget, ...] = (),
+        cost_cards: tuple[InstanceId, ...] = (),
     ) -> "PlayerAction":
         """
         카드가 가진 **특정 효과**를 발동한다.
@@ -377,6 +415,10 @@ class PlayerAction:
         효과는 ``EffectRef(card_id, ordinal)`` 로 지목한다.
         ``EffectSpec.index`` 는 한 카드 안에서 중복되므로 쓰지 않는다
         (ADR-005, 실측 4,884장).
+
+        ``cost_cards`` 는 **비용으로 내놓을 카드들**이다 (Phase 6-BI).
+        기본값이 빈 짝이므로 비용을 고르지 않는 효과의 호출은 한 글자도
+        달라지지 않는다.
         """
         return cls(
             kind=PlayerActionKind.ACTIVATE_EFFECT,
@@ -384,6 +426,7 @@ class PlayerAction:
             source=source,
             effect_ref=effect_ref,
             targets=targets,
+            cost_cards=cost_cards,
         )
 
     @classmethod
@@ -463,6 +506,10 @@ class PlayerAction:
             #: 🔴 **순서를 유지한다** — ``targets`` 와 같은 이유이고, 재현에
             #: 쓰이는 값이므로 정렬해 버리면 기록이 입력과 달라진다.
             tuple(m.value for m in self.materials),
+            #: 🔴 **순서를 유지한다** — ``materials`` 와 같은 이유다
+            #: (Phase 6-BI). 비용으로 무엇을 냈는지가 다르면 **다른
+            #: 행위**이고, 그래서 탐색이 두 갈래로 센다.
+            tuple(c.value for c in self.cost_cards),
         )
 
     def to_dict(self) -> dict:
@@ -481,6 +528,8 @@ class PlayerAction:
             data["phase"] = self.phase.value
         if self.materials:
             data["materials"] = [m.value for m in self.materials]
+        if self.cost_cards:
+            data["cost_cards"] = [c.value for c in self.cost_cards]
         return data
 
     @classmethod
@@ -499,6 +548,9 @@ class PlayerAction:
             if ref is not None
             else None,
             phase=Phase(phase) if phase is not None else None,
+            cost_cards=tuple(
+                InstanceId(c) for c in data.get("cost_cards", ())
+            ),
             materials=tuple(
                 InstanceId(m) for m in data.get("materials", ())
             ),
@@ -516,4 +568,6 @@ class PlayerAction:
             bits.append("->" + ",".join(str(t) for t in self.targets))
         if self.materials:
             bits.append("소재=" + ",".join(str(m) for m in self.materials))
+        if self.cost_cards:
+            bits.append("비용=" + ",".join(str(c) for c in self.cost_cards))
         return " ".join(bits)

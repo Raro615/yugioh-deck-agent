@@ -748,7 +748,14 @@ def test_d04_the_engine_gate_is_not_bypassed(repository):
     #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
     #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
     #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
-    assert len(OPERATION_RULINGS) == 28
+    #: 🔴 28 → **33** (Phase 6-BI) — 다섯 장을 읽어 등재했다. ① 성유물－
+    #: 『성관』 은 갈라테아i ② 가 덱에서 **패에 넣을 수 있는** 후보이므로
+    #: ``MAY_BE_RETURNED_TO_HAND`` 가 필요했고 (바벨 · 성장에는 그 질문이
+    #: 늘었다 — 카드 수는 그대로), ② 하루 우라라 · 증식의 G · 무한포영 ·
+    #: 무덤의 지명자는 갈라테아i ② 의 **비용으로 묘지에 놓이는** 패 카드다.
+    #: 그 넷이 등재되지 않으면 자기가 치른 비용 때문에 자기 효과의 해결이
+    #: ``UNKNOWN`` 이 된다 (6-BI §29 의 실측).
+    assert len(OPERATION_RULINGS) == 33
     _, _, _, runs = _drive(repository, FirstPermittedChoice())
     choice = runs[0].choice
     #: 제안이 들고 온 판정이 ``BoardRuling`` 의 것과 같은 질문이다.

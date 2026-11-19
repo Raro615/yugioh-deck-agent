@@ -50,6 +50,7 @@ from engine.condition import (
     IsMonster,
     IsSpellTrap,
     Not,
+    Or,
     PlayerRef,
     RaceIs,
     SimultaneousSpecialSummonPermitted,
@@ -57,7 +58,13 @@ from engine.condition import (
     ZoneCountAtLeast,
     ZoneHasFreeSlot,
 )
-from engine.cost import CandidateSource, ChoiceSpec, CostGroup, SelfCardCost
+from engine.cost import (
+    CandidateSource,
+    CardCost,
+    ChoiceSpec,
+    CostGroup,
+    SelfCardCost,
+)
 from engine.effect.definition import (
     EffectDefinition,
     EffectDefinitionError,
@@ -245,6 +252,21 @@ GALATEA = 30741503
 #: 금지 표의 한 줄뿐이다. Phase 6-AP 가 판정 사실을 더했다 — 그 이유는
 #: 그 줄의 주석에 있다.
 GALATEA_I = 48835607
+#: 성유물－『성관』 (Phase 6-BI). 갈라테아i ② 가 덱 · 묘지에서 패에 넣을 수
+#: 있는 「성유물」 **몬스터**이고, 그래서 그 효과의 후보 판정이 이 카드를
+#: 만난다. 🔴 이 저장소에 **이 카드의 효과는 등재되지 않았다** — 들고 있는
+#: 것은 "패에 넣을 수 있는가" 하나다.
+WORLD_CROWN = 27918365
+
+#: 🔴 **이번 패의 손패 카드들** (Phase 6-BI). 왜 여기 이름이 필요한가 —
+#: 갈라테아i ② 의 비용이 패 1장을 **묘지로 보내므로**, 그 카드가 묘지에
+#: 앞면으로 놓이고 ``BoardRuling._interference`` 가 그것을 읽는다. 등재된
+#: 판정이 없으면 그 판의 모든 조작 판정이 ``UNKNOWN`` 이 되고, 그래서
+#: **자기가 치른 비용 때문에** 자기 효과의 해결이 보류된다 (실측: 6-BI §1).
+ASH_BLOSSOM = 14558127
+MAXX_C = 23434538
+INFINITE_IMPERMANENCE = 10045474
+CALLED_BY_THE_GRAVE = 24224830
 #: 오르페골 디베르 (Phase 6-AO) — 묘지에서 발동하는 **첫 효과**이고 비용을
 #: 치르는 **첫 등재 효과**다.
 HARP_HORROR = 57835716
@@ -2598,6 +2620,179 @@ _GALATEA_SHUFFLE_SET_ENTRY = LibraryEntry(
 )
 
 
+#: 🔴 **오르페골 갈라테아i ② — 패 1장을 묘지로 보내고 패에 넣는다**
+#: (Phase 6-BI).
+#:
+#: 사용자가 디스코드에서 짚은 자리다 — 갈라테아i 가 필드에 나왔는데 효과를
+#: 쓸지 **고려한 흔적 없이** 링크 소재가 됐다. 실측한 원인은 하나였다:
+#: 이 효과가 :data:`EFFECT_LIBRARY` 에 **없었다** (보류 목록에도 48835607 이
+#: 나타나지 않았다 — 없는 효과는 거절될 자리조차 없다).
+#:
+#:     공식 처리 (``c48835607.lua``)
+#:     ----------------------------
+#:     ``e3:SetType(EFFECT_TYPE_IGNITION)``        기동 효과
+#:     ``e3:SetRange(LOCATION_MZONE)``             필드의 몬스터 존에서
+#:     ``e3:SetCountLimit(1,id)``                  카드명 기준 1턴 1번
+#:     ``e3:SetCondition(aux.NOT(s.babelcon))``    바벨이 적용 중이 **아닐 때**
+#:     ``e3:SetCost(s.thcost)``                    패 1장을 **묘지로 보낸다**
+#:     ``e3:SetTarget(s.thtg)``                    덱 · 묘지에 후보가 있는가
+#:     ``e3:SetOperation(s.thop)``                 해결 시 1장 골라 패에 넣는다
+#:
+#: 🔴 **「묘지로 보내는 비용」 과 「버리는 효과」 를 가른다.** ``s.thcost`` 는
+#: ``Card.IsAbleToGraveAsCost`` 로 고르고 ``Duel.SendtoGrave(g,REASON_COST)``
+#: 로 치른다 — **버리는 것이 아니다.** 이 저장소도 그 둘을 다른 의미로 들고
+#: 있고 (``CostSemantics.SEND_TO_GRAVE`` 대 ``CostSemantics.DISCARD``),
+#: 기록에서도 갈린다 (``COST_OPERATION``).
+#:
+#: 🔴 **비용을 치르는 시점과 카드를 고르는 시점이 다르다.** 비용은 **발동
+#: 시점**이고 (``SetCost``) 패에 넣을 카드는 **해결 시점**이다
+#: (``SetOperation`` 안의 ``Duel.SelectMatchingCard``). 그래서 비용은 행위에
+#: 적히고 (``PlayerAction.cost_cards``, Phase 6-BI 가 그 칸을 만들었다) 패에
+#: 넣을 카드는 ``chosen_at_resolution=True`` 다.
+#:
+#: 🔴 **발동 조건이 후보의 존재를 묻는다.** ``s.thtg`` 의 ``chk==0`` 이
+#: ``Duel.IsExistingMatchingCard(s.thfilter, …)`` 이므로 **덱 · 묘지에 넣을
+#: 카드가 없으면 발동할 수 없다** — 갈라테아 ② 와 **다른 쪽**이다 (그쪽은
+#: ``s.tdtg`` 가 세트할 카드를 묻지 않아 ``checked_at_activation=False``).
+#: 그래서 비용만 소모되고 아무것도 못 가져오는 판이 생기지 않는다.
+#:
+#: 🔴 ``s.thfilter`` 의 ``IsAbleToHand()`` 는 **후보 조건 안에** 있다. 그래서
+#: 「후보가 있는가」 는 「**지금 패에 넣을 수 있는** 후보가 있는가」 이고,
+#: 그 사실을 ``existence_requires_gate=True`` 로 선언한다 (6-AD 후속이 만든
+#: 칸). 질문 자체는 조작의 ``gated=True`` 가 고른다
+#: (``MAY_BE_RETURNED_TO_HAND`` = ``Card.IsAbleToHand``).
+#:
+#: 바벨 적용 중의 발동 — **이 엔진이 판정할 수 있는 범위**
+#: ------------------------------------------------------
+#: 공식 ``s.babelcon`` 은 ``Duel.IsPlayerAffectedByEffect(tp,
+#: CARD_ORCUSTRATED_BABEL)`` 다. 이 저장소에는 지속 효과 계층이 없으므로
+#: (STRUCTURAL-76) 그것을 **「바벨이 앞면으로 필드 존에 있는가」** 로만
+#: 읽는다 — 갈라테아 ② 가 ``s.tdcon1`` 을 옮긴 것과 **같은 범위 · 같은
+#: 표현**이다 (6-BF).
+#:
+#: 🔴 그래서 **덜 허가한다**: 바벨이 앞면으로 깔린 판에서 공식은
+#: ``e3a`` (``EFFECT_TYPE_QUICK_O``) 로 상대 턴에도 쓸 수 있는데, 이
+#: 저장소는 유발즉시의 발동 시점을 룰북에서 읽지 못했으므로
+#: (``ACTIVATION_KINDS_IN_SCOPE`` · ADR-006) ``e3a`` 를 등재하지 않았고
+#: ``e3`` 은 조건이 거짓이 되어 **어느 쪽도 열리지 않는다.** 디베르 ·
+#: 갈라테아와 똑같은 모양의 정직한 범위다.
+#:
+#: 옮기지 않은 것
+#: --------------
+#: * ``e4`` · ``e4a`` (묘지에서 자신을 특수 소환) — **다음 작업으로
+#:   남겼다.** 사용자가 그렇게 요청했다.
+#: * ``e1`` (``s.regop`` — 그 턴 「갈라테아i」 의 링크 소환 금지) 과 ``e2``
+#:   (엑시즈 소재 금지) 는 지속 효과이고 발동하는 일이 아니다. 앞의 것은
+#:   이 저장소가 ``engine.link_rules.LINK_SUMMON_ONCE_PER_TURN`` 으로 따로
+#:   들고 있다 (6-AF).
+#: * ``Duel.ConfirmCards(1-tp,g)`` (상대에게 보여 주는 처리) — 공개 정보
+#:   계층이 없다. 패에 넣는 일 **뒤**의 처리이고, 넣는 것을 막지 않는다.
+_GALATEA_I_TO_HAND_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(GALATEA_I, 2),
+        source_card_id=GALATEA_I,
+        #: ``e3:SetCost(s.thcost)`` — 패 1장을 **묘지로 보낸다**.
+        #: 🔴 ``require`` 를 적지 않았다: ``s.thcost`` 의 후보 조건은
+        #: ``Card.IsAbleToGraveAsCost`` 하나이고 그것은 **종류 조건이
+        #: 아니라 그 카드가 묘지로 갈 수 있는가**다. 비용 계층에는 그
+        #: 질문에 답하는 관문이 아직 없으므로 (``*AsCost`` 변종은
+        #: ``LUA_GATE_PREDICATES`` 에 없다 — STRUCTURAL-70) 조건을
+        #: **지어내지 않고** 적지 않는다. 그래서 이 비용은 패의 아무
+        #: 카드로나 치를 수 있고, 그것이 **공식보다 넓은** 유일한 자리다.
+        cost=CostGroup((CardCost.send_to_grave(frozenset({Zone.HAND})),)),
+        targets=TargetBinding.single(
+            TargetSpec.choosing(
+                ChoiceSpec(
+                    source=CandidateSource(
+                        #: ``LOCATION_DECK|LOCATION_GRAVE, 0`` — 자신 것만.
+                        zones=frozenset({Zone.DECK, Zone.GRAVE}),
+                        owner=PlayerRef.CONTROLLER,
+                        #: ``s.thfilter`` 의 앞쪽. ``IsAbleToHand`` 는
+                        #: 관문이 들고 간다 (``gated=True``).
+                        require=Or((
+                            And((
+                                compile_archetype_condition(
+                                    ("SET_WORLD_LEGACY",)
+                                ).condition,
+                                #: ``c:IsMonster()`` — 「성유물」 **몬스터**
+                                #: 만이다. 마법 · 함정은 후보가 아니다.
+                                IsMonster(),
+                            )),
+                            #: ``c:IsCode(CARD_ORCUSTRATED_BABEL)``.
+                            CardIdIs(ORCUSTRATED_BABEL),
+                        )),
+                    ),
+                    minimum=1,
+                    maximum=1,
+                ),
+                #: ``s.thop`` 안의 ``Duel.SelectMatchingCard`` — 해결 시점에
+                #: 고른다. 덱은 가려진 자리이므로 발동 시점에 가리킬 수도
+                #: 없다.
+                chosen_at_resolution=True,
+                #: ``s.thfilter`` 가 ``IsAbleToHand()`` 를 **후보 조건 안에**
+                #: 적었다 — 그래서 발동 시점의 존재 검사가 그 관문까지 본다.
+                existence_requires_gate=True,
+            )
+        ),
+        operations=(
+            #: ``Duel.SendtoHand(g,nil,REASON_EFFECT)``.
+            #: ``gated=True`` 가 ``s.thfilter`` 의 ``IsAbleToHand`` 다.
+            CardOperation.return_to_hand(PRIMARY_TARGET, gated=True),
+        ),
+        #: ``e3:SetCondition(aux.NOT(s.babelcon))`` — 위 설명의 범위대로
+        #: 「바벨이 앞면으로 필드 존에 있는가」 로만 읽는다.
+        activation=Not(
+            FaceUpCardPresent(
+                PlayerRef.CONTROLLER,
+                frozenset({Zone.FZONE}),
+                ORCUSTRATED_BABEL,
+            )
+        ),
+        activation_kind=ActivationKind.IGNITION,
+        #: ``e3:SetRange(LOCATION_MZONE)``. 🔴 **엑스트라 몬스터 존을 함께
+        #: 적는다** — 링크 몬스터는 거기 놓이고, 공식의 ``LOCATION_MZONE``
+        #: 은 그 칸을 포함한다 (갈라테아 ② 와 같은 자리).
+        activation_zones=frozenset({Zone.MZONE, Zone.EMZONE}),
+        #: ``e3:SetCountLimit(1,id)`` — ``,id`` 가 붙으면 카드 **이름**
+        #: 기준이다.
+        use_limit=UseLimit(LimitScope.PER_CARD_NAME),
+        provenance=EffectProvenance.official_lua(
+            "c48835607.lua 의 e3 (EFFECT_TYPE_IGNITION, "
+            "SetRange(LOCATION_MZONE), SetCountLimit(1,id)) 에서 발동 분류 · "
+            "자리 · 횟수를, aux.NOT(s.babelcon) 에서 발동 조건을, "
+            "s.thcost (Card.IsAbleToGraveAsCost → "
+            "Duel.SendtoGrave(g,REASON_COST)) 에서 **묘지로 보내는 비용**을, "
+            "s.thfilter ((IsSetCard(SET_WORLD_LEGACY) and IsMonster()) or "
+            "IsCode(CARD_ORCUSTRATED_BABEL)) 에서 후보 조건을, s.thop 의 "
+            "Duel.SendtoHand(g,nil,REASON_EFFECT) 에서 하는 일을 옮겼다. "
+            "IsAbleToHand 는 관문(gated=True)과 "
+            "existence_requires_gate=True 로 옮겼다 — s.thtg 의 chk==0 이 "
+            "그 필터로 존재를 묻기 때문이다. "
+            "IsAbleToGraveAsCost 는 옮기지 못했다 (비용 계층에 그 관문이 "
+            "없다 — STRUCTURAL-70). babelcon 은 「바벨이 앞면으로 필드 존에 "
+            "있는가」 로만 옮겼다 (지속 효과 계층이 없다 — "
+            "STRUCTURAL-76). e3a(QUICK_O) · e4 · e4a 는 등재하지 않았다."
+        ),
+    ),
+    lua_file="c48835607.lua",
+    lua_excerpt=(
+        "e3:SetType(EFFECT_TYPE_IGNITION); e3:SetRange(LOCATION_MZONE); "
+        "e3:SetCountLimit(1,id); e3:SetCondition(aux.NOT(s.babelcon)); "
+        "e3:SetCost(s.thcost); e3:SetTarget(s.thtg); "
+        "e3:SetOperation(s.thop); "
+        "s.thcost = Duel.SelectMatchingCard(tp,Card.IsAbleToGraveAsCost,tp,"
+        "LOCATION_HAND,0,1,1,nil) → Duel.SendtoGrave(g,REASON_COST); "
+        "s.thfilter = ((c:IsSetCard(SET_WORLD_LEGACY) and c:IsMonster()) or "
+        "c:IsCode(CARD_ORCUSTRATED_BABEL)) and c:IsAbleToHand(); "
+        "s.thtg = Duel.IsExistingMatchingCard(s.thfilter,tp,"
+        "LOCATION_DECK|LOCATION_GRAVE,0,1,nil); "
+        "s.thop = Duel.SelectMatchingCard(…) → Duel.SendtoHand(g,nil,"
+        "REASON_EFFECT)"
+    ),
+    executable=True,
+)
+
+
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
     _POT_OF_GREED_ENTRY,
@@ -2635,6 +2830,9 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 6-AQ — **대상 지정 몬스터 효과의 첫 등재**, 그리고 묘지에서
     # 묘지를 대상으로 하는 첫 소생.
     _CYMBAL_SKELETON_GRAVE_ENTRY,
+    # Phase 6-BI — **고르는 비용을 치르는 첫 효과**. 패 1장을 묘지로 보내고
+    # 덱 · 묘지에서 패에 넣는다.
+    _GALATEA_I_TO_HAND_ENTRY,
 )
 
 
@@ -2791,9 +2989,54 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                 ),
             },
         ),
+        #: 🔴 **성유물－『성관』** (Phase 6-BI). 갈라테아i ② 가 패에 넣을 수
+        #: 있는 두 「성유물」 몬스터 가운데 하나이고, 등재하지 않으면 그
+        #: 후보가 ``UNKNOWN`` 이라 발동이 보류된다 (실측: "27918365 에 대해
+        #: 확인된 것이 없습니다").
+        #:
+        #: 🔴 **「패에 넣을 수 있는가」 하나만 적는다.** 이 카드의 ①②③ 은
+        #: EFFECT_LIBRARY 에 등재되지 않았고, 이 저장소에서 발동될 수 없다.
+        CardRuleFacts(
+            card_id=WORLD_CROWN,
+            answers={
+                RuleQuestion.MAY_BE_RETURNED_TO_HAND: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "성유물－『성관』: 공식 텍스트 전문을 읽었고, 이 카드가 "
+                    "패에 넣어지는 것을 막는 문장이 **없다** — ① 은 패에서 "
+                    "수비 표시로 특수 소환하는 효과, ② 는 자신을 릴리스하는 "
+                    "무효 효과, ③ 은 릴리스되었을 때 덱에서 「성유물」 마법 "
+                    "/ 함정을 패에 넣는 효과다. 메인 덱의 효과 몬스터이므로 "
+                    "토큰도 엑스트라 덱 카드도 아니다.",
+                ),
+            },
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "성유물－『성관』: 공식 텍스트 전문을 읽었다. ② 가 「그 "
+                "발동을 무효로 하고 파괴한다」 인데, 그것은 **이 카드를 "
+                "릴리스하고 발동해야** 일어나는 일이다 — 필드에 존재한다는 "
+                "것만으로 남의 조작을 막지 않는다. 🔴 그러므로 이 'False' 는 "
+                "'이 카드를 구현했다' 는 뜻이 **아니다** — ①②③ 은 "
+                "EFFECT_LIBRARY 에 등재되지 않았다."
+            ),
+        ),
         CardRuleFacts(
             card_id=WORLD_WAND,
             answers={
+                #: 🔴 **패에 넣을 수 있다** (Phase 6-BI). 갈라테아i ② 가
+                #: 덱 · 묘지에서 이 카드를 패에 넣으려 할 때 묻는 질문이고
+                #: (``s.thfilter`` 의 ``IsAbleToHand``), 등재하지 않으면
+                #: ``UNKNOWN`` 이라 그 발동이 보류된다 — 실측으로 그랬다.
+                RuleQuestion.MAY_BE_RETURNED_TO_HAND: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "성유물－『성장』: 공식 텍스트 전문을 읽었고, 이 카드가 "
+                    "패에 넣어지는 것을 막는 문장이 **없다** — ① 은 전투 "
+                    "파괴 내성, ② 는 묘지로 보내졌을 때의 특수 소환, ③ 은 "
+                    "묘지의 자신을 제외하는 효과다. 메인 덱의 효과 "
+                    "몬스터이므로 토큰도 엑스트라 덱 카드도 아니다.",
+                ),
                 RuleQuestion.MAY_BE_SENT_TO_GRAVE: RuleFact(
                     ConditionResult.TRUE,
                     RuleBasis.CARD_TEXT,
@@ -3051,6 +3294,19 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
         CardRuleFacts(
             card_id=ORCUSTRATED_BABEL,
             answers={
+                #: 🔴 **패에 넣을 수 있다** (Phase 6-BI). 갈라테아i ② 가
+                #: 이름으로 가리키는 카드이고 (``IsCode(CARD_ORCUSTRATED_
+                #: BABEL)``), 그 효과의 후보 조건이 ``IsAbleToHand`` 를
+                #: 함께 묻는다.
+                RuleQuestion.MAY_BE_RETURNED_TO_HAND: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "오르페골 바벨: 공식 텍스트 전문을 읽었고, 이 카드가 "
+                    "패에 넣어지는 것을 막는 문장이 **없다** — ② 가 오히려 "
+                    "「이 카드를 패에 넣는다」 라고 적어 **그 일을 스스로 "
+                    "한다.** 필드 마법이고 토큰도 엑스트라 덱 카드도 "
+                    "아니다.",
+                ),
                 RuleQuestion.MAY_BE_SET: RuleFact(
                     ConditionResult.TRUE,
                     RuleBasis.CARD_TEXT,
@@ -3165,8 +3421,143 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
             (RELOAD, "리로드"),
         )
     )
+    #: 🔴 **비용으로 묘지에 놓이는 패 카드들** (Phase 6-BI).
+    #:
+    #: 왜 등재하는가 — 갈라테아i ② 의 비용은 패 1장을 **묘지로 보낸다**.
+    #: 그 카드는 묘지에 앞면으로 놓이고 ``BoardRuling._interference`` 가
+    #: 묘지를 훑으므로, 판정이 없으면 **자기가 치른 비용이 자기 효과의
+    #: 해결을 모름으로 만든다** — 실측으로 패 1장이 묘지로 가고 가져온
+    #: 것은 없었다 (그 길은 ``EffectActivator._after_cost`` 가 닫았고, 이
+    #: 줄들은 그 닫힌 길이 **열려 있게** 한다).
+    #:
+    #: 🔴 **네 장 모두 "막지 않는다" 의 근거가 같지 않다.** 그래서 묶음
+    #: 주석 하나로 뭉치지 않고 카드마다 적는다.
+    + (
+        CardRuleFacts(
+            card_id=ASH_BLOSSOM,
+            answers={
+                RuleQuestion.MAY_BE_SENT_TO_GRAVE: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "하루 우라라: 공식 텍스트 전문을 읽었고, 자기가 묘지로 "
+                    "가는 것을 막는 문장이 없다 — ① 이 「이 카드를 패에서 "
+                    "버리고 발동할 수 있다」 라고 적어 **자기가 묘지로 가는 "
+                    "것을 스스로 전제한다.** 메인 덱의 효과 몬스터이므로 "
+                    "토큰도 엑스트라 덱 카드도 아니다.",
+                ),
+            },
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "하루 우라라: 공식 텍스트 전문을 읽었다. 효과는 ① 하나이고 "
+                "**발동하는 자리가 패다** (「이 카드를 패에서 버리고 발동할 "
+                "수 있다」). 그래서 묘지 · 필드 · 제외 존에 있는 이 카드는 "
+                "다른 카드의 조작을 막지 않는다. 🔴 **패의 이 카드를 봐준 "
+                "것이 아니다** — 가려진 패는 "
+                "``BoardRuling._blind_spots`` 가 따로 적고 "
+                "``_interference`` 는 패를 훑지 않는다 "
+                "(``INTERFERENCE_ZONES``)."
+            ),
+        ),
+        CardRuleFacts(
+            card_id=MAXX_C,
+            answers={
+                RuleQuestion.MAY_BE_SENT_TO_GRAVE: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "증식의 G: 공식 텍스트 전문을 읽었고, 자기가 묘지로 "
+                    "가는 것을 막는 문장이 없다 — ① 이 「이 카드를 패에서 "
+                    "묘지로 보내고 발동할 수 있다」 라고 적어 **그 조작을 "
+                    "스스로 전제한다.** 메인 덱의 효과 몬스터다.",
+                ),
+            },
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "증식의 G: 공식 텍스트 전문을 읽었다. 효과는 ① 하나이고 "
+                "발동하는 자리가 **패**다. 적용되는 내용도 「상대가 몬스터를 "
+                "특수 소환할 때마다 1장 드로우」 로, 다른 카드의 조작을 막는 "
+                "문장이 아니다."
+            ),
+        ),
+        CardRuleFacts(
+            card_id=INFINITE_IMPERMANENCE,
+            answers={
+                RuleQuestion.MAY_BE_SENT_TO_GRAVE: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "무한포영: 공식 텍스트 전문을 읽었고, 자기가 묘지로 "
+                    "가는 것을 막는 문장이 없다. 통상 함정 카드이므로 "
+                    "토큰도 엑스트라 덱 카드도 아니다.",
+                ),
+            },
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "무한포영: 공식 텍스트 전문을 읽었다. ① 이 하는 일은 "
+                "「상대 필드의 앞면 표시 몬스터 1장의 효과를 턴 종료시까지 "
+                "무효로」 하는 것이고, 그것은 **조작을 막는 것이 아니라 효과를 "
+                "무효로 하는 축**이다 (같은 구분을 오르페골 디베르의 줄이 "
+                "소환 제한에 대해 적는다). 🔴 그리고 ① 은 EFFECT_LIBRARY 에 "
+                "등재되지 않았으므로 이 엔진에서 발동될 수 없다 — 이 '막지 "
+                "않는다' 는 그 **등재 범위**에도 근거하고, 등재하는 날 이 "
+                "줄이 거짓이 되는 것을 "
+                "_HAND_TRAP_RESTRICTION_GUARD 가 기계로 지킨다."
+            ),
+        ),
+        CardRuleFacts(
+            card_id=CALLED_BY_THE_GRAVE,
+            answers={
+                RuleQuestion.MAY_BE_SENT_TO_GRAVE: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "무덤의 지명자: 공식 텍스트 전문을 읽었고, 자기가 "
+                    "묘지로 가는 것을 막는 문장이 없다. 속공 마법 카드이므로 "
+                    "토큰도 엑스트라 덱 카드도 아니다.",
+                ),
+            },
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "무덤의 지명자: 공식 텍스트 전문을 읽었다. ① 이 하는 일은 "
+                "「상대 묘지의 몬스터 1장을 제외하고, 그 카드명의 몬스터의 "
+                "효과를 무효화」 하는 것이고, 무효화는 **조작을 막는 축이 "
+                "아니다** (무한포영과 같은 구분). 🔴 ① 은 EFFECT_LIBRARY 에 "
+                "등재되지 않았으므로 이 엔진에서 발동될 수 없고, 등재하는 날 "
+                "이 줄이 거짓이 되는 것을 _HAND_TRAP_RESTRICTION_GUARD 가 "
+                "기계로 지킨다."
+            ),
+        ),
+    )
 )
 
+
+
+#: 🔴 **무한포영 ① · 무덤의 지명자 ① 이 등재되면 위의 "막지 않는다" 가
+#: 거짓이 된다** (Phase 6-BI).
+#:
+#: 성유물－『성장』 ③ 과 **같은 자리이고 같은 규율**이다. 두 카드의
+#: ``restriction_note`` 는 "① 이 등재되지 않았다" 를 근거의 한 축으로 적으므로,
+#: 등재하는 날 그 줄이 조용히 거짓이 된다 — 그래서 import 시점에 기계가 본다.
+#:
+#: 🔴 **하루 우라라와 증식의 G 는 이 단언에 없다.** 그 둘의 근거는 등재 범위가
+#: 아니라 **발동하는 자리가 패라는 카드 텍스트**이고, 패는
+#: ``BoardRuling._interference`` 가 훑지 않는 자리다 (``_blind_spots`` 가 따로
+#: 적는다). 등재해도 그 근거는 바뀌지 않으므로 지킬 것이 없다.
+_HAND_TRAP_RESTRICTION_GUARD = frozenset(
+    {
+        entry.card_id
+        for entry in EFFECT_LIBRARY
+        if entry.card_id in (INFINITE_IMPERMANENCE, CALLED_BY_THE_GRAVE)
+    }
+)
+assert not _HAND_TRAP_RESTRICTION_GUARD, (
+    "무한포영 · 무덤의 지명자가 EFFECT_LIBRARY 에 등재되었습니다: "
+    f"{sorted(_HAND_TRAP_RESTRICTION_GUARD)}. OPERATION_RULINGS 의 "
+    "restricts_others=False 는 그 ① 이 **등재되지 않았다**는 사실을 근거의 한 "
+    "축으로 적습니다. 등재한다면 「효과를 무효로 한다」 를 적는 계층을 먼저 "
+    "만들고 restricts_others 를 다시 판단하세요."
+)
 
 
 #: 🔴 **성유물－『성장』 ③ 이 등재되면 위의 "막지 않는다" 가 거짓이 된다.**

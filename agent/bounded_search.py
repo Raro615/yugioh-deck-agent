@@ -136,7 +136,13 @@ FOLLOWUP_CAP: int = 10
 #: **사용자에게 제시할** 결과 수이고, 이쪽은 **평가하기 전에 모아 둘** 후보
 #: 수다. 둘을 한 칸에 담으면 깊이 우선 순서로 **먼저 닿은 3개**가 곧 추천이
 #: 되어, 평가가 고를 것이 없다.
-CANDIDATE_CAP: int = 40
+#: 🔴 **40 → 96 (Phase 6-BI).** 천장을 올린 이유는 기본값을 올렸기
+#: 때문이고 (``AUTONOMOUS_DEFAULT_CANDIDATES`` 가 64 가 되었다), 기본값이
+#: 천장과 같으면 사용자가 `candidates:` 로 더 넓힐 자리가 없어진다.
+#: 🔴 **세는 단위가 바뀐 것과 함께 읽어야 한다** — 6-BI 부터 이 상한은
+#: 후보 **개수**가 아니라 :func:`choice_family` 로 센 **서로 다른 수순**의
+#: 수다. 그래서 같은 값이 전보다 더 많은 후보를 담는다.
+CANDIDATE_CAP: int = 96
 #: 후속 모드에서 **기준점(최초 도달)** 을 몇 개까지 보관할지의 기본값.
 #: 🔴 후속 후보의 상한(:attr:`SearchBudget.max_results`)과 **역할이 다르다**.
 DEFAULT_MAX_BASELINES: int = 1
@@ -2170,6 +2176,43 @@ class _BaselineTurns:
         return stack.pop()  # pragma: no cover - 방어용
 
 
+def choice_family(path) -> tuple:
+    """
+    그 경로를 **선택만 다른 것끼리 묶는 열쇠** (Phase 6-BI).
+
+    🔴 **왜 필요한가 — 실측이다.** 「오르페골 갈라테아i」 ② 가 등재되자
+    그 한 자리에서 후보가 **12개**로 갈렸다 (비용으로 낼 패 4장 × 해결 중에
+    패에 넣을 카드 3장). 기준점별 보관 상한이 16이므로 **그 한 행동이 한
+    기준점의 상한을 거의 다 썼고**, 탐색은 그 기준점을 더 펼치지 않았다 —
+    실측으로 깊이 5에서 멈췄고, 6-BH 까지 찾아내던 7걸음 전개
+    (갈라테아 링크 → ② 로 덱 복귀 + 세트) 가 **기본 탐색에서 사라졌다.**
+
+    🔴 **고친 것은 세는 단위이고, 버리는 것이 없다.** 12개는 전부 그대로
+    보관되고 결과에 나온다 — 상한에 **한 개로 세어질** 뿐이다. 기준점별
+    상한의 목적은 (6-BE §4) "한 기준점이 보관을 다 채우지 못하게" 하여
+    **다른 곳에 예산을 남기는** 것이고, 한 자리의 선택 조합이 그 몫을
+    가져가는 것은 그 목적과 반대다.
+
+    🔴 **무엇을 같은 것으로 보는가** — 같은 자리에서 **같은 행동**을 했고
+    **고른 것만** 다른 경로들이다. 그래서 행동 열은 그대로 쓰고 마지막
+    걸음에서 ``targets`` 와 ``cost_cards`` 만 뺀다. 해결 중의 선택은
+    행동 열에 들어 있지 않으므로 (``PlayerAction`` 이 가려진 자리의 카드를
+    가리키지 않는다) 이미 같은 열쇠가 된다.
+
+    🔴 **카드도 효과도 보지 않는다.** 어느 카드의 어느 효과인지는 이 함수에
+    들어오지 않는다 — 특정 전개를 살리는 장치가 아니다.
+    """
+    keys = tuple(step.action_key for step in path)
+    if not keys:
+        return ()
+    last = list(keys[-1])
+    if len(last) > 3:
+        last[3] = ()          # 발동 시점에 고른 대상
+    if len(last) > 7:
+        last[7] = ()          # 비용으로 내놓은 카드 (Phase 6-BI)
+    return keys[:-1] + (tuple(last),)
+
+
 @dataclass(slots=True)
 class _Ledger:
     """탐색 한 번이 쌓는 수치와 메모들."""
@@ -2193,6 +2236,16 @@ class _Ledger:
     """보관한 기준점의 수 — 노드에 붙일 번호를 만든다 (Phase 6-BD §5)."""
     per_baseline: dict = field(default_factory=dict)
     """기준점 번호별로 **모아 둔 후속 후보 수** (Phase 6-BE §4)."""
+    per_baseline_families: dict = field(default_factory=dict)
+    """
+    기준점 번호별로 모아 둔 **서로 다른 수순**들 (Phase 6-BI).
+
+    🔴 **보관 상한을 세는 단위가 이것이다.** :attr:`per_baseline` 은 사람이
+    읽는 수(후보 개수)이고, 상한 판정은 이 집합의 크기로 한다 — 왜 갈랐는지는
+    :func:`choice_family` 에 적었다.
+    """
+    families: set = field(default_factory=set)
+    """모아 둔 **서로 다른 수순** 전부 (Phase 6-BI). 전체 보관 상한의 단위."""
     baselines_capped: set = field(default_factory=set)
     """보관 상한에 닿아 **더 펼치지 않은** 기준점 번호들 (Phase 6-BE §4)."""
     budget_hit: list = field(default_factory=list)
@@ -2916,8 +2969,11 @@ class BoundedSearch:
         """
         if not self.budget.continues:
             return len(ledger.results) >= self.candidate_cap
-        return (ledger.count_of(ResultRole.CONTINUED)
-                >= self.candidate_cap)
+        #: 🔴 **여기서도 "서로 다른 수순" 으로 센다** (Phase 6-BI).
+        #: 기준점별 상한만 고치면 전체 상한이 같은 자리에서 끊는다 — 실측으로
+        #: 한 자리의 선택 12개가 전체 상한 20의 절반을 넘게 썼다.
+        #: :func:`choice_family` 에 왜 그렇게 세는지 적었다.
+        return len(ledger.families) >= self.candidate_cap
 
     def _candidate_cap_note(self) -> str:
         """**어느 칸이 끊었는지** 그대로 적는다 (Phase 6-BB)."""
@@ -3179,7 +3235,14 @@ class BoundedSearch:
                     #: 보관 상한(``max_candidates``)은 그대로 지킨다.
                     quota = self.budget.max_candidates_per_baseline
                     if quota and node.baseline:
-                        taken = ledger.per_baseline.get(node.baseline, 0)
+                        #: 🔴 **세는 단위는 "서로 다른 수순" 이다**
+                        #: (Phase 6-BI — :func:`choice_family`). 한 자리의
+                        #: 선택 조합이 한 기준점의 상한을 가져가면, 그 상한이
+                        #: 막으려던 바로 그 일이 일어난다.
+                        taken = len(
+                            ledger.per_baseline_families.get(
+                                node.baseline, ())
+                        )
                         if taken >= quota:
                             if node.baseline not in ledger.baselines_capped:
                                 ledger.baselines_capped.add(node.baseline)
@@ -3218,10 +3281,15 @@ class BoundedSearch:
                                 ),
                             ),
                         )
+                        family = choice_family(path)
+                        ledger.families.add(family)
                         if node.baseline:
                             ledger.per_baseline[node.baseline] = (
                                 ledger.per_baseline.get(node.baseline, 0) + 1
                             )
+                            ledger.per_baseline_families.setdefault(
+                                node.baseline, set()
+                            ).add(family)
                         if self._results_full(ledger):
                             ledger.note(
                                 ledger.budget_hit, self._candidate_cap_note(),
@@ -3906,6 +3974,7 @@ __all__ = [
     "CONCEALED_CARD",
     "CardSlot",
     "ContinuationStop",
+    "choice_family",
     "DEFAULT_MAX_BASELINES",
     "DEFAULT_MAX_CHOICE_BRANCHES",
     "DEFAULT_MAX_DEPTH",

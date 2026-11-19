@@ -67,6 +67,9 @@ class CostValidator:
     # ------------------------------------------------------------------
     def validate(self, cost: Cost, context: ConditionContext) -> ValidationResult:
         """비용 하나. ``VALID`` / ``INVALID`` / ``UNKNOWN``."""
+        unpayable = self._unpayable_semantics(cost)
+        if unpayable is not None:
+            return unpayable
         if isinstance(cost, UnimplementedCost):
             return ValidationResult.unknown(
                 ValidationCode.COST_NOT_IMPLEMENTED,
@@ -114,6 +117,39 @@ class CostValidator:
         return ValidationResult.valid("모든 비용을 치를 수 있습니다.")
 
     # ------------------------------------------------------------------
+    def _unpayable_semantics(self, cost: Cost) -> "ValidationResult | None":
+        """
+        **지불 계층이 그 종류의 비용을 치를 수 있는가** (Phase 6-BI).
+        치를 수 있으면 ``None``.
+
+        🔴 **후보 수만 보면 후보 목록과 실제 실행이 갈린다.** 실측
+        (6-BI §1): ``CostSemantics.SEND_TO_GRAVE`` 는
+        ``CostPayer.COST_OPERATION`` 에 줄이 없어 지불에서
+        ``COST_NOT_IMPLEMENTED`` 로 거절됐는데, 이 판정기는 후보 4장을
+        세고 ``VALID`` 을 돌려줬다 — 후보 목록에 오른 행위가 실행에서
+        멈췄다. 두 벌이 갈리지 않게 하는 방법은 흉내가 아니라 **그 표를
+        그대로 읽는 것**이다.
+
+        🔴 **``UNKNOWN`` 이다. ``INVALID`` 가 아니다.** 판이 모자란 것이
+        아니라 **코드가 없는** 것이므로, 판이 바뀌어도 풀리지 않고 줄을
+        더해야 풀린다 (ADR-006 의 세 값 구분).
+        """
+        #: 🔴 **늦게 들여온다** — ``engine.payment`` 가 ``engine.cost`` 를
+        #: 읽으므로 모듈 머리에서 들여오면 고리가 된다.
+        from engine.payment import SUPPORTED_COSTS, UNSUPPORTED_REASON
+
+        semantics = cost.semantics
+        if semantics in SUPPORTED_COSTS:
+            return None
+        why = UNSUPPORTED_REASON.get(semantics)
+        return ValidationResult.unknown(
+            ValidationCode.COST_NOT_IMPLEMENTED,
+            f"{cost.describe_ko()}: 지불 계층이 {semantics.value} 를 아직 "
+            "치르지 못합니다"
+            + (f" ({why})." if why else "."),
+            missing_rule=f"cost-semantics ({semantics.value})",
+        )
+
     def _validate_life(
         self, cost: LifeCost, context: ConditionContext
     ) -> ValidationResult:

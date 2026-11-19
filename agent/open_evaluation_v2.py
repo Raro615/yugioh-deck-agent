@@ -777,7 +777,31 @@ def variant_key(resources, measures: MeasuresV2) -> tuple:
         backs = tuple(sorted(found))
     except Exception:  # pragma: no cover - 방어용
         backs = ("unknown",)
-    return (core_key(measures), backs, measures.hand_left,
+    #: 🔴 **패를 장수가 아니라 구성으로 적는다** (Phase 6-BI).
+    #:
+    #: 6-BH 까지 이 열쇠의 패 항목은 ``hand_left`` **하나**였다 — 장수다.
+    #: 그래서 「패 1장을 비용으로 묘지에 보내고 덱에서 1장을 패에 넣은
+    #: 전개」 와 「패를 한 장도 쓰지 않은 전개」 가 **같은 열쇠**가 되어
+    #: 뒤의 것이 중복으로 지워질 수 있었다 (둘 다 4장이다). 사용자가 보려는
+    #: 것이 바로 그 둘의 차이이므로, 무엇이 남았는지를 그대로 들고 있는다.
+    #:
+    #: 🔴 **정렬한 다중집합이다** — 패의 순서는 전개의 차이가 아니다.
+    #: 🔴 **자기 패만 읽는다.** 요약에서 자기 패는 내용이 적힌 자리이고
+    #: (``OWN_DETAIL_ZONES``), 상대 패는 장수만 있다 — 없는 것을 지어내지
+    #: 않는다. 읽을 수 없으면 ``hand_left`` 만 들고 가던 **이전 행동**으로
+    #: 돌아간다.
+    #:
+    #: 🔴 **카드마다 가산점이 아니다.** 이것은 열쇠(같은가 다른가)이고
+    #: 우열 비교는 ``compare_v2`` 가 따로 한다 — 어느 카드가 남는 쪽이
+    #: 좋다고 적는 자리는 어디에도 없다.
+    try:
+        hand = tuple(sorted(
+            -1 if card is None else int(card)
+            for card in resources.card_ids(resources.seat, Zone.HAND)
+        ))
+    except Exception:  # pragma: no cover - 방어용
+        hand = ("unknown",)
+    return (core_key(measures), backs, measures.hand_left, hand,
             measures.bodies_with_use_record)
 
 

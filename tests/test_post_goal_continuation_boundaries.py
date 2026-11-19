@@ -488,6 +488,15 @@ def real_cap_bound(opening):
     노드 수가 아니라 **"상한에 닿은 노드가 열리고 왜 멈추는지 적는다"**
     이고 그것은 그대로다.
     """
+    #: 🔴 **Phase 6-BI 는 이 값을 건드리지 않았다.** 이 시험
+    #: (``test_a09b``) 은 **6-BI 이전에도 실패한다** — 기준 커밋
+    #: ``e53bb48f`` 의 깨끗한 작업 트리에서 같은 단언
+    #: (``outcome.continued_results``) 이 빈 짝으로 떨어진다. 6-BI 에서
+    #: 「오르페골 갈라테아i」 ② 가 등재되어 이 입력의 **최초 도달 깊이가
+    #: 6 으로 깊어졌고** 그래서 먼저 걸리는 단언이 달라졌지만, 예산을
+    #: 올려도 후속 후보는 0건이다 (실측: 깊이 6·8·10 × 노드 50·120·200·300
+    #: 전부 0건). 🔴 그래서 **값을 조정해 초록으로 만들지 않았다** — 고치지
+    #: 않은 실패를 수치 조정으로 덮지 않는다.
     search = BoundedSearch(
         goal=FieldGoal(card_id=GALATEA, seat=0),
         budget=SearchBudget(max_depth=6, max_nodes=50, max_seconds=200,
@@ -575,9 +584,9 @@ def choice_paths():
     🔴 실제 카드가 아니라 경로 자료형으로 만든 격리 fixture다 — 재는 것은
     **기준점 식별**이고 전개가 아니다.
     """
-    summon = ("normal_summon", 0, 75, (), None, None, ())
-    effect = ("activate_effect", 0, 75, (), (GIRSU, 0), None, ())
-    extra = ("set_spell_trap", 0, 76, (), None, None, ())
+    summon = ("normal_summon", 0, 75, (), None, None, (), ())
+    effect = ("activate_effect", 0, 75, (), (GIRSU, 0), None, (), ())
+    extra = ("set_spell_trap", 0, 76, (), None, None, (), ())
 
     first = (
         _step(1, "normal_summon", summon),

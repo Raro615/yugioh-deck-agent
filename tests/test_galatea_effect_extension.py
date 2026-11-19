@@ -689,20 +689,26 @@ def test_f01_the_earlier_orcust_steps_are_unchanged(repository):
 
     6-BF 는 등재 효과를 하나 더하고 제외의 표시 형식을 고쳤다. 앞선 걸음의
     **허용 후보**가 달라지면 그것은 이 Phase 의 범위를 넘은 것이다.
+
+    🔴 **Phase 6-BI 가 값의 모양을 한 칸 늘렸다.** ``PlayerAction`` 이
+    **비용으로 내놓을 카드**를 들고 가게 되었으므로
+    (``PlayerAction.cost_cards``) ``canonical_state()`` 의 마지막에 그 칸이
+    붙는다. 🔴 **후보 자체는 그대로다** — 아래 목록은 같은 아홉 가지이고,
+    효과 발동이 아닌 행동은 그 칸이 늘 비어 있다.
     """
     setup = _setup(repository, prefer=(HARP_HORROR,))
     duel = setup.duel
     opening = _advance_to_open(duel)
     assert sorted(a.canonical_state() for a in opening.allowed) == sorted([
-        ("normal_summon", 0, 75, (), None, None, ()),
-        ("set_monster", 0, 75, (), None, None, ()),
-        ("normal_summon", 0, 76, (), None, None, ()),
-        ("set_monster", 0, 76, (), None, None, ()),
-        ("normal_summon", 0, 77, (), None, None, ()),
-        ("set_monster", 0, 77, (), None, None, ()),
-        ("set_spell_trap", 0, 78, (), None, None, ()),
-        ("set_spell_trap", 0, 79, (), None, None, ()),
-        ("end_phase", 0, None, (), None, None, ()),
+        ("normal_summon", 0, 75, (), None, None, (), ()),
+        ("set_monster", 0, 75, (), None, None, (), ()),
+        ("normal_summon", 0, 76, (), None, None, (), ()),
+        ("set_monster", 0, 76, (), None, None, (), ()),
+        ("normal_summon", 0, 77, (), None, None, (), ()),
+        ("set_monster", 0, 77, (), None, None, (), ()),
+        ("set_spell_trap", 0, 78, (), None, None, (), ()),
+        ("set_spell_trap", 0, 79, (), None, None, (), ()),
+        ("end_phase", 0, None, (), None, None, (), ()),
     ])
     _take(duel, _is("normal_summon", source=75), "기르수 일반 소환")
     _take(duel, _is("activate_effect", effect=(GIRSU, 0)), "기르수 ①")
@@ -716,10 +722,10 @@ def test_f01_the_earlier_orcust_steps_are_unchanged(repository):
     links = sorted(a.canonical_state() for a in after.allowed
                    if a.canonical_state()[0] == "link_summon")
     assert links == sorted([
-        ("link_summon", 0, 83, (), None, None, (75, 7)),
-        ("link_summon", 0, 84, (), None, None, (75, 7)),
-        ("link_summon", 0, 87, (), None, None, (75,)),
-        ("link_summon", 0, 87, (), None, None, (7,)),
+        ("link_summon", 0, 83, (), None, None, (75, 7), ()),
+        ("link_summon", 0, 84, (), None, None, (75, 7), ()),
+        ("link_summon", 0, 87, (), None, None, (75,), ()),
+        ("link_summon", 0, 87, (), None, None, (7,), ()),
     ]), links
 
 
@@ -1162,3 +1168,254 @@ def test_h06_a_field_zone_set_is_a_different_development(repository):
     #: 세트된 자원이라는 사실과 방해라는 주장은 다르다.
     assert plain.set_reactive == 1, plain.set_reactive
     assert field.set_reactive == 0, field.set_reactive
+
+
+# ======================================================================
+# H. 갈라테아i ② — 패 1장을 묘지로 보내고 패에 넣는다 (Phase 6-BI)
+# ======================================================================
+GALATEA_I_SECOND = (GALATEA_I, 2)
+BABEL_CODE, WAND_CODE, CROWN_CODE = 90351981, 93920420, 27918365
+
+
+def _to_galatea_i(repository, prefer=()):
+    """기르수 일반 소환 → 기르수 ① → 기르수 ② → 갈라테아i 링크 소환.
+
+    🔴 **수순을 적어 넣은 것이 아니다** — 매 걸음을 그 자리의 **허용
+    후보**에서 찾아 수행한다 (:func:`_take`).
+    """
+    setup = _setup(repository, prefer=(CYMBAL_SKELETON,) + tuple(prefer))
+    duel = setup.duel
+    _take(duel, _is("normal_summon", source=75), "기르수 일반 소환")
+    _take(duel, _is("activate_effect", effect=(GIRSU, 0)), "기르수 ①")
+    _take(duel, lambda k: k[0] == "link_summon" and k[2] == 87,
+          "갈라테아i 링크 소환")
+    return setup, duel
+
+
+def _galatea_i_offers(duel):
+    legal = _advance_to_open(duel)
+    return [a for a in legal.allowed
+            if a.canonical_state()[0] == "activate_effect"
+            and a.canonical_state()[4] == GALATEA_I_SECOND], legal
+
+
+def test_h01_the_effect_is_offered_once_per_hand_card(repository):
+    """
+    🔴 **비용으로 낼 수 있는 패 카드마다 후보가 하나다** (Phase 6-BI §1).
+
+    6-BH 까지 이 자리에 후보가 **0건**이었고 보류 목록에도 48835607 이
+    없었다 — 효과가 ``EFFECT_LIBRARY`` 에 **없었기** 때문이다 (없는 효과는
+    거절될 자리조차 없다). 지금은 패 4장이 각각 다른 행위가 된다.
+
+    🔴 **왜 "다른 행위" 인가** — 비용은 **발동 시점**에 치르고
+    (``c48835607.lua`` 의 ``e3:SetCost``), 무엇을 냈는지가 남는 패를
+    바꾼다. 그래서 ``PlayerAction.cost_cards`` 에 적히고 후보가 갈린다.
+    """
+    _setup_, duel = _to_galatea_i(repository)
+    offers, legal = _galatea_i_offers(duel)
+    paid = sorted(
+        tuple(duel.state.find_instance(c).card_id for c in a.cost_cards)
+        for a in offers
+    )
+    #: 패는 기르수를 쓴 뒤의 네 장이다 (우라라 · 증G · 무한포영 · 지명자).
+    assert paid == sorted([(14558127,), (23434538,), (10045474,), (24224830,)]), paid
+    #: 🔴 **보류에 48835607 이 남아 있지 않다** — 후보가 되었기 때문이다.
+    assert not [w for w in legal.withheld if str(GALATEA_I) in w.reason]
+
+
+def test_h02_the_cost_is_sent_to_grave_and_the_pick_enters_the_hand(repository):
+    """
+    🔴 **비용은 묘지로, 고른 카드는 패로.** 그리고 **1턴에 1번**이다.
+
+    공식 ``s.thcost`` 는 ``Duel.SendtoGrave(g,REASON_COST)`` 이고
+    ``s.thop`` 은 ``Duel.SendtoHand`` 다 — 이 시험은 그 둘이 **각자의
+    자리**에 적히는지 본다 (``CostPaymentEvent`` 대 ``EffectEvent``).
+    """
+    from deck.opening import _settle_chain
+    from engine.effect.journal import CostPaymentEvent
+    from engine.vocabulary import Zone
+
+    _setup_, duel = _to_galatea_i(repository, prefer=(BABEL_CODE,))
+    before_hand = sorted(c.card_id for c in duel.state.zone(0, Zone.HAND).cards())
+    offers, _legal = _galatea_i_offers(duel)
+    chosen = offers[0]
+    cost_id = duel.state.find_instance(chosen.cost_cards[0]).card_id
+    mark = len(duel.journal)
+    step = duel.apply(chosen)
+    assert step.accepted, step
+    if duel.priority.is_open:
+        _settle_chain(duel, lambda legal, seat=None: ())
+
+    hand = sorted(c.card_id for c in duel.state.zone(0, Zone.HAND).cards())
+    grave = [c.card_id for c in duel.state.zone(0, Zone.GRAVE).cards()]
+    #: 🔴 **패 장수가 그대로다** — 1장을 내고 1장을 가져왔다.
+    assert len(hand) == len(before_hand), (before_hand, hand)
+    assert cost_id in grave, (cost_id, grave)
+    #: 🔴 **가져온 것은 필터에 맞는 카드다** (성유물 몬스터 또는 바벨).
+    fetched = [card for card in hand if card not in before_hand]
+    assert fetched and set(fetched) <= {BABEL_CODE, WAND_CODE, CROWN_CODE}, fetched
+    #: 🔴 **비용이 비용으로 적혔다** — 효과가 옮긴 것과 같은 줄이 아니다.
+    paid_events = [e for e in list(duel.journal)[mark:]
+                   if isinstance(e, CostPaymentEvent)]
+    assert len(paid_events) == 1, list(duel.journal)[mark:]
+    #: 🔴 **같은 이름으로 한 번 더 발동할 수 없다** (``SetCountLimit(1,id)``).
+    again, legal = _galatea_i_offers(duel)
+    assert not again
+    assert any("1턴에 1번" in w.reason for w in legal.withheld), [
+        w.reason for w in legal.withheld]
+
+
+def test_h03_no_fetchable_card_means_no_activation_and_no_spent_hand(repository):
+    """
+    🔴 **패에 넣을 카드가 없는 판에서 패가 소모되지 않는다** (사용자 요구).
+
+    공식 ``s.thtg`` 의 ``chk==0`` 이 ``Duel.IsExistingMatchingCard`` 로
+    **존재를 확인**하므로, 후보가 0장이면 발동 자체가 성립하지 않는다.
+    그 사실을 ``checked_at_activation`` 이 그대로 들고 있다.
+
+    🔴 **확정된 부족과 판정 불가를 가른다** — 여기서는 후보를 전부 보고
+    0장이므로 ``NO_CANDIDATES`` 이고, ``UNKNOWN`` 이 아니다.
+    """
+    from engine.validation import ValidationCode
+    from engine.vocabulary import Zone
+
+    _setup_, duel = _to_galatea_i(repository)
+    moved = []
+    for zone in (Zone.DECK, Zone.GRAVE):
+        for card in list(duel.state.zone(0, zone).cards()):
+            if card.card_id in (BABEL_CODE, WAND_CODE, CROWN_CODE):
+                duel.state.move(card.instance_id, Zone.REMOVED)
+                moved.append(card.card_id)
+    assert moved, "치울 후보가 애초에 없으면 이 시험은 아무것도 보지 않는다"
+
+    hand_before = [c.card_id for c in duel.state.zone(0, Zone.HAND).cards()]
+    grave_before = [c.card_id for c in duel.state.zone(0, Zone.GRAVE).cards()]
+    offers, legal = _galatea_i_offers(duel)
+    assert not offers
+    held = [w for w in legal.withheld if str(GALATEA_I) in w.reason]
+    assert held, [w.reason for w in legal.withheld]
+    assert any(w.code is ValidationCode.NO_CANDIDATES for w in held), [
+        (w.code, w.reason) for w in held]
+    #: 🔴 **판이 한 글자도 바뀌지 않았다** — 비용을 치르지 않았다.
+    assert [c.card_id for c in duel.state.zone(0, Zone.HAND).cards()] == hand_before
+    assert [c.card_id for c in duel.state.zone(0, Zone.GRAVE).cards()] == grave_before
+
+
+def test_h04_the_hand_composition_splits_two_variants_of_the_same_size(repository):
+    """
+    🔴 **패 장수가 같아도 구성이 다르면 다른 변형이다** (Phase 6-BI §2).
+
+    6-BH 의 ``variant_key`` 는 패를 **장수**로만 보았다. 그래서 「1장을
+    비용으로 내고 1장을 가져온 전개」 와 「패를 그대로 둔 전개」 가 같은
+    열쇠가 되어 하나가 중복으로 지워질 수 있었다 — 사용자가 보려던 것이
+    바로 그 차이다.
+    """
+    from agent.bounded_search import summarize_resources
+    from agent.open_evaluation_v2 import core_key, measure_v2, variant_key
+    from app.main import card_knowledge
+
+    know = card_knowledge(repository)
+
+    def measured(use_effect):
+        _setup_, duel = _to_galatea_i(repository, prefer=(BABEL_CODE,))
+        if use_effect:
+            from deck.opening import _settle_chain
+            offers, _legal = _galatea_i_offers(duel)
+            assert duel.apply(offers[0]).accepted
+            if duel.priority.is_open:
+                _settle_chain(duel, lambda legal, seat=None: ())
+        resources = summarize_resources(duel, seat=0)
+        measures, why = measure_v2((), resources, knowledge=know)
+        assert measures is not None, why
+        return resources, measures
+
+    plain_res, plain = measured(False)
+    used_res, used = measured(True)
+    #: 🔴 **장수는 같다** — 그래서 장수만으로는 가를 수 없다.
+    assert plain.hand_left == used.hand_left, (plain.hand_left, used.hand_left)
+    #: 🔴 **열쇠는 다르다.**
+    assert variant_key(plain_res, plain) != variant_key(used_res, used)
+    #: 🔴 **핵심 전개는 같지 않다** — 비용 카드가 묘지에 있으므로 묘지 수가
+    #: 다르다. 그 사실도 지우지 않는다.
+    assert core_key(plain) != core_key(used)
+
+
+def test_h05_choice_family_groups_only_the_choices(repository):
+    """
+    🔴 **선택만 다른 경로는 보관 상한에 하나로 세어진다** (Phase 6-BI §2).
+
+    🔴 **버리는 것이 아니다** — 세는 단위만 그렇고, 후보는 전부 보관된다.
+    🔴 **카드도 효과도 보지 않는다** — 앞 걸음이 다르면 다른 열쇠다.
+    """
+    from agent.bounded_search import choice_family
+
+    class _Step:
+        def __init__(self, key):
+            self.action_key = key
+
+    head = _Step(("normal_summon", 0, 75, (), None, None, (), ()))
+    first = _Step(("activate_effect", 0, 87, (), (GALATEA_I, 2), None, (), (76,)))
+    second = _Step(("activate_effect", 0, 87, (), (GALATEA_I, 2), None, (), (77,)))
+    other = _Step(("activate_effect", 0, 87, (), (GALATEA_I, 3), None, (), (76,)))
+    #: 비용만 다르다 → 같은 열쇠.
+    assert choice_family([head, first]) == choice_family([head, second])
+    #: 효과가 다르다 → 다른 열쇠.
+    assert choice_family([head, first]) != choice_family([head, other])
+    #: 앞 걸음이 다르다 → 다른 열쇠.
+    tail = _Step(("set_spell_trap", 0, 78, (), None, None, (), ()))
+    assert choice_family([head, tail, first]) != choice_family([head, first])
+
+
+def test_h06_the_default_search_recommends_both_developments(repository):
+    """
+    🔴 **기본 탐색이 두 전개를 스스로 찾아 **추천까지** 올린다** (§2 · §3).
+
+    🔴 **고정 경로를 주지 않는다** — 수순도, 비용 카드도, 패에 넣을 카드도
+    지정하지 않는다. 기본값으로 돌리고 **결과 안에** 둘이 있는지만 본다.
+
+    🔴 **예산을 이 시험이 키우지 않는다** — 기본값 그대로 쓴다.
+    """
+    from app.main import (
+        AUTONOMOUS_DEFAULT_CANDIDATES,
+        AUTONOMOUS_DEFAULT_CANDIDATES_PER_BASELINE,
+        autonomous_rerun_record,
+        autonomous_search_opening,
+        rank_autonomous_results,
+    )
+
+    _, outcome = autonomous_search_opening(
+        repository, _draft(repository), list(ORCUST_HAND), max_results=2,
+    )
+    assert outcome is not None
+    assert outcome.budget.max_candidates == AUTONOMOUS_DEFAULT_CANDIDATES
+    assert (outcome.budget.max_candidates_per_baseline
+            == AUTONOMOUS_DEFAULT_CANDIDATES_PER_BASELINE)
+
+    def uses(result, ref):
+        return any(step.action_key[0] == "activate_effect"
+                   and step.action_key[4] == ref for step in result.path)
+
+    found = [r for r in outcome.results if uses(r, GALATEA_I_SECOND)]
+    assert found, (
+        "갈라테아i ② 를 지나는 후보가 없습니다. 종료 이유: "
+        f"{outcome.budget_hit} · 노드 {outcome.nodes_expanded} · "
+        f"깊이 {outcome.deepest} · 후보 {len(outcome.results)}")
+
+    ranking = rank_autonomous_results(outcome, repository)
+    best = [one.index for one in (ranking.recommended if ranking else ())]
+    assert best
+    picked = [r for r in outcome.results if r.index in best]
+    #: 🔴 **효과를 쓴 전개가 추천에 있다.**
+    with_effect = [r for r in picked if uses(r, GALATEA_I_SECOND)]
+    assert with_effect, (
+        "추천에 갈라테아i ② 경로가 없습니다: "
+        + "; ".join(f"{r.index}({len(r.path)}걸음)" for r in picked))
+    #: 🔴 **패를 지킨 전개도 추천에 있다** — 둘 중 하나만 남지 않는다.
+    assert [r for r in picked if not uses(r, GALATEA_I_SECOND)]
+    #: 🔴 **고른 것을 새 초기 상태에서 다시 실행할 수 있다.**
+    record, why = autonomous_rerun_record(
+        repository, _draft(repository), list(ORCUST_HAND), with_effect[0])
+    assert record is not None, why
+    kinds = [change["kind"] for event in record["events"]
+             for change in event["changes"]]
+    assert "zone_moved" in kinds, kinds

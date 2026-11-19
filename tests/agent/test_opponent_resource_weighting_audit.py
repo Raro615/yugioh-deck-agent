@@ -142,7 +142,11 @@ def test_01_exactly_one_registered_effect_gives_the_opponent_cards():
     #: 시험이 지키는 사실("상대에게 카드를 주는 등재 효과는 하나다")은
     #: 아래 단언이 그대로 들고 있고, 갈라테아 ② 는 ``DrawOperation`` 을
     #: 쓰지 않으므로 그 목록에 더해지지 않았다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 같은 이유다 —
+    #: 늘어난 것은 **읽은 효과**이고, 그 효과는 패 1장을 묘지로 보내고 덱 ·
+    #: 묘지에서 1장을 **자신의** 패에 넣는다. ``DrawOperation`` 을 쓰지
+    #: 않고 상대에게 아무것도 주지 않으므로 아래 목록에 더해지지 않았다.
+    assert len(EFFECT_LIBRARY) == 24
     assert giving == [GIFT_OF_GREED]
 
 

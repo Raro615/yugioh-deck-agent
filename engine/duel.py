@@ -65,6 +65,11 @@ from engine.activation_timing import (
 from engine.chain import Chain
 from engine.game_state_view import GameStateView
 from engine.ids import EffectRef, InstanceId
+from engine.cost_bridge import (
+    cost_card_combinations,
+    cost_selections_from,
+    unsupported_cost_enumeration,
+)
 from engine.priority import PriorityState
 from engine.response import ResponseLoop, ResponseState
 from engine.state.game_state import DEFAULT_LIFE_POINTS, DuelResult, GameState
@@ -133,6 +138,14 @@ TRIGGER_HISTORY_MISSING = (
 #: ``cost_selections`` 를 넘기지 않으므로, 고를 것이 있는 비용은 지불
 #: 단계에서 "고른 카드가 없습니다" 로 거절된다. 그래서 후보로 내놓지 않고 그
 #: 사실을 보류에 적는다 — **고를 것이 없는 비용은 후보가 된다.**
+#:
+#: 🔴 **Phase 6-BI 부터 이 이름을 쓰는 자리가 없다.** 그 Phase 가
+#: ``_apply_activation`` 에 비용 선택을 넘기게 했으므로
+#: (``engine.cost_bridge``), 더는 "넘기지 못한다" 가 참이 아니다. 지금
+#: 그 자리가 적는 것은 **조합을 만들 수 없는 모양**이고 그 이름은
+#: :class:`~engine.cost_bridge.CostEnumerationLimits` 가 들고 온다.
+#: 🔴 **지우지 않고 남겨 둔 이유** — 6-AO 의 보류 문장을 적어 둔 기록과
+#: 시험 주석이 이 이름을 가리킨다. 지우면 그 설명이 가리킬 자리가 없어진다.
 COST_SELECTION_MISSING = (
     "cost-selection (내놓을 카드를 고르는 비용의 선택을 듀얼 고리가 아직 "
     "넘기지 않는다)"
@@ -1524,35 +1537,38 @@ class Duel:
                 definition = self._activator.definitions.definition_for(effect_ref)
                 if definition is None:  # pragma: no cover - 목록이 보증한다
                     continue
-                if definition.cost.choice_specs():
-                    # 🔴 **고르는 비용이 있는 효과는 아직 후보가 되지 못한다**
-                    # (Phase 6-AO 가 좁힌 자리).
+                blocked_cost = unsupported_cost_enumeration(definition)
+                if blocked_cost is not None:
+                    # 🔴 **비용 조합을 만들 수 없는 모양은 후보가 되지
+                    # 못한다** (Phase 6-AO 가 좁히고 6-BI 가 더 좁힌 자리).
                     #
                     # 6-AN 까지 이 줄은 ``if definition.cost.costs`` 였다 —
                     # **비용이 있으면 전부** 건너뛰었고, 그래서 비용 있는
                     # 효과는 등재해도 후보가 되지 않았다 (STRUCTURAL-120).
-                    # 그 조건이 넓었던 것은 ``Duel`` 이 **비용 선택**을
-                    # 넘기지 않기 때문인데 (:meth:`_apply_activation` 이
-                    # ``cost_selections`` 를 주지 않는다), 그 한계는
-                    # **고를 것이 있는 비용**에만 해당한다.
-                    #
+                    # 6-AO 가 그것을 **고를 것이 있는 비용**으로 좁혔다 —
                     # 고를 것이 없는 비용(라이프 지불 ·
                     # :class:`~engine.cost.SelfCardCost`)은 선택 없이 치를 수
-                    # 있고, **치를 수 있는지는 관문이 판정한다** (6-AO 가
-                    # ``EffectActivator._check_cost`` 를 더했다). 그래서 이제
-                    # 후보 목록과 실제 실행이 같은 답을 본다.
+                    # 있고, 치를 수 있는지는 관문이 판정한다
+                    # (``EffectActivator._check_cost``).
                     #
-                    # 🔴 **조용히 건너뛰지 않는다.** 왜 후보가 되지 못했는지
-                    # 보류에 적는다 — 적지 않으면 "그 효과가 없다" 로 읽힌다.
+                    #: 🔴 **Phase 6-BI 가 이 자리를 좁혔다.** 6-AO 까지는
+                    #: **고를 것이 있는 비용 전부**가 여기서 걸렸다 — 듀얼
+                    #: 고리가 비용 선택을 넘기지 않았기 때문이다. 지금은
+                    #: 넘기므로 (``_apply_activation`` 의 ``cost_selections``),
+                    #: 걸리는 것은 **조합을 만들 수 없는 모양**뿐이다
+                    #: (:func:`~engine.cost_bridge.unsupported_cost_enumeration`
+                    #: — 고르는 자리가 둘 이상이거나 장수가 범위이거나
+                    #: 조합이 상한을 넘는 경우).
+                    #:
+                    #: 🔴 **조용히 건너뛰지 않는다.** 왜 후보가 되지 못했는지
+                    #: 보류에 적는다 — 적지 않으면 "그 효과가 없다" 로 읽힌다.
                     withheld.append(
                         WithheldAction(
                             PlayerActionKind.ACTIVATE_EFFECT,
-                            f"{effect_ref} 의 비용은 내놓을 카드를 **고르는** "
-                            "비용입니다. 이 듀얼 고리는 아직 비용 선택을 "
-                            "넘기지 않으므로 후보를 만들지 않았습니다 "
-                            "(고를 것이 없는 비용은 후보가 됩니다).",
+                            f"{effect_ref} 의 비용 조합을 만들지 "
+                            f"못했습니다: {blocked_cost.detail}.",
                             ValidationCode.RULE_NOT_IMPLEMENTED,
-                            missing=COST_SELECTION_MISSING,
+                            missing=blocked_cost.rule,
                         )
                     )
                     continue
@@ -1608,26 +1624,41 @@ class Duel:
                     #: 줄로 묶인다.
                     self._note_gate_refusal(refusals, effect_ref, independent)
                 offered_before = len(allowed)
-                for targets in target_combinations(
+                #: 🔴 **비용 조합과 대상 조합을 함께 펼친다** (Phase 6-BI).
+                #: 비용은 발동 시점에 치르므로 **무엇을 냈는가가 행위의
+                #: 일부**다 — 다른 카드를 낸 것은 다른 행위이고, 그래서
+                #: 후보가 갈린다 (``PlayerAction.cost_cards``).
+                #:
+                #: 🔴 **고를 비용이 없으면 빈 짝 하나**이므로, 비용 없는
+                #: 효과의 고리는 한 글자도 달라지지 않는다.
+                cost_choices = cost_card_combinations(
                     self.state, seat, definition, card.instance_id
-                ):
-                    candidate = PlayerAction.activate_effect(
-                        actor=seat,
-                        source=card.instance_id,
-                        effect_ref=effect_ref,
-                        targets=targets,
-                    )
-                    try:
-                        selections = selections_for(definition, candidate)
-                    except TargetBridgeError:  # pragma: no cover - 위에서 맞춰 만든다
-                        continue
-                    gate = self._activation_gate(
-                        candidate, validator=validator, selections=selections
-                    )
-                    if gate.validity is not ActionValidity.VALID:
-                        self._note_gate_refusal(refusals, effect_ref, gate)
-                        continue
-                    allowed.append(candidate)
+                )
+                for cost_cards in cost_choices:
+                    for targets in target_combinations(
+                        self.state, seat, definition, card.instance_id
+                    ):
+                        candidate = PlayerAction.activate_effect(
+                            actor=seat,
+                            source=card.instance_id,
+                            effect_ref=effect_ref,
+                            targets=targets,
+                            cost_cards=cost_cards,
+                        )
+                        try:
+                            selections = selections_for(definition, candidate)
+                        except TargetBridgeError:  # pragma: no cover - 위에서 맞춰 만든다
+                            continue
+                        gate = self._activation_gate(
+                            candidate, validator=validator,
+                            selections=selections,
+                            cost_selections=cost_selections_from(
+                                definition, cost_cards),
+                        )
+                        if gate.validity is not ActionValidity.VALID:
+                            self._note_gate_refusal(refusals, effect_ref, gate)
+                            continue
+                        allowed.append(candidate)
 
                 # 🔴 **못 센 대상 범위를 적는다** (보완8 세 항목 ②) — 단,
                 # **발동이 금지되지 않았을 때만.**
@@ -2870,6 +2901,7 @@ class Duel:
         *,
         validator: ActionValidator,
         selections: tuple,
+        cost_selections: tuple = (),
     ) -> ValidationResult:
         """
         발동 하나에 걸리는 **관문 셋을 한 자리에서** 본다 (Phase 3-E-13).
@@ -2916,6 +2948,9 @@ class Duel:
             self.chain,
             action,
             selections=selections,
+            #: 🔴 **고른 비용까지 같은 판정기에 넘긴다** (Phase 6-BI) —
+            #: 후보 목록과 실제 실행이 **같은 답**을 보게 한다.
+            cost_selections=cost_selections,
             authorization=verdict,
         )
 
@@ -3767,6 +3802,10 @@ class Duel:
             return DuelStep(
                 action, False, ValidationCode.TARGET_COUNT_MISMATCH, str(error)
             )
+        #: 🔴 **비용으로 적힌 카드를 그 비용 자리의 선택으로 바꾼다**
+        #: (Phase 6-BI). 환전만 한다 — 치를 수 있는지는 아래 관문이,
+        #: 치르는 것은 ``EffectActivator.activate`` 가 한다.
+        cost_selections = cost_selections_from(definition, action.cost_cards)
 
         # 🔴 **사건은 여기서 다시 읽는다** (Phase 6-Z). ``legal_actions``
         # 가 만든 목록을 믿지 않는 것과 같은 이유다 — 목록을 만든 뒤 판과
@@ -3792,6 +3831,7 @@ class Duel:
             action,
             validator=self.activation_validator(action.actor, offers),
             selections=selections,
+            cost_selections=cost_selections,
         )
         if gate.validity is not ActionValidity.VALID:
             return DuelStep(action, False, gate.code, gate.reason)
@@ -3803,6 +3843,10 @@ class Duel:
             self.chain,
             action,
             selections=selections,
+            #: 🔴 **고른 비용을 넘긴다** (Phase 6-BI). 6-AO 부터 이 인자는
+            #: 있었고 ``CostPayer`` 도 치를 수 있었는데, 이 고리가 주지
+            #: 않아 **고르는 비용이 있는 효과는 후보조차 되지 못했다.**
+            cost_selections=cost_selections,
             authorization=gate,
         )
         if not activated.activated:

@@ -935,7 +935,7 @@ def test_e03_a_tampered_action_fails_the_replay(repository, growth_run):
     broken[0] = PathStep(
         order=1,
         kind=broken[0].kind,
-        action_key=("normal_summon", 0, 999_999, (), None, None, ()),
+        action_key=("normal_summon", 0, 999_999, (), None, None, (), ()),
     )
     tampered = dataclasses.replace(outcome, path=tuple(broken))
 

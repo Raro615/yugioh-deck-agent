@@ -431,6 +431,20 @@ BRIEF_STEP_LIMIT = 12
 #: 요약에 적는 미지원 사유의 상한. 같은 이유다.
 BRIEF_UNSUPPORTED_LIMIT = 6
 
+#: **요약에 적는 후보 블록의 상한** (Phase 6-BI). ``BRIEF_STEP_LIMIT`` 과
+#: 같은 규율이다 — 뒤를 버리지 않고, 몇 개를 요약에서 뺐는지와 **그 번호**를
+#: 적고 전부는 상세 기록에 있다고 가리킨다.
+#:
+#: 🔴 **왜 필요한가 — 실측이다.** 6-BI 가 재생 검증 자리를 2 → 7 로 늘리자
+#: 공동 추천이 7개가 되었고, 추천 블록 7개 + 결과 블록 7개가 디스코드 메시지
+#: 상한을 넘겨 **요약의 꼬리가 잘렸다.** 잘린 줄에 「이 첨부가 어느 결과인가」
+#: 와 **요청 ID** 가 있었다 — 그러면 사용자가 `/combo-pick` 을 쓸 수 없다
+#: (두 시험이 그것을 잡았다).
+#:
+#: 🔴 **평가를 바꾸지 않는다.** 추천 집합도 순서도 그대로이고 **표시**만
+#: 줄인다. 번호를 적으므로 담지 못한 후보도 고를 수 있다.
+BRIEF_CANDIDATE_LIMIT = 3
+
 #: 한 구역에 이름을 몇 장까지 적는가. 넘으면 수를 적고 이름은 상세로 보낸다.
 BRIEF_ZONE_NAME_LIMIT = 8
 
@@ -2169,7 +2183,7 @@ def _open_ranking_lines(ranking, repository=None) -> "list[str]":
     if not best:
         lines.append("    🔴 **추천할 후보가 없습니다** — 검증된 결과가"
                      " 없거나 평가에 필요한 값을 읽지 못했습니다.")
-    for one in best:
+    for one in best[:BRIEF_CANDIDATE_LIMIT]:
         lines.append(f"    ★ 결과 {one.index} — {ranking.reason_ko(one.index)}")
         #: 🔴 **중간 상태를 '완성' 으로 적지 않는다** (Phase 6-BD §4).
         #: 멈춘 이유를 아는 평가(v2)만 이 줄을 돌려준다 — v1 은 빈
@@ -2178,6 +2192,16 @@ def _open_ranking_lines(ranking, repository=None) -> "list[str]":
         said = stop(one.index) if callable(stop) else ""
         if said:
             lines.append(f"      {said}")
+    if len(best) > BRIEF_CANDIDATE_LIMIT:
+        #: 🔴 **담지 못한 추천을 번호로 적는다** (Phase 6-BI) — 사유는 상세
+        #: 기록에 있고, 번호가 있으면 `/combo-pick` 으로 고를 수 있다.
+        rest = " · ".join(f"결과 {one.index}"
+                          for one in best[BRIEF_CANDIDATE_LIMIT:])
+        lines.append(
+            f"    ★ 그리고 공동 추천 {len(best) - BRIEF_CANDIDATE_LIMIT}개 —"
+            f" {rest}. 🔴 **사유는 이 요약이 아니라 상세 기록에 있습니다**"
+            " (요약 길이 상한 때문이고, 추천에서 빠진 것이 아닙니다)."
+        )
     if len(best) >= 2:
         #: 🔴 **왜 공동인지 단정하지 않는다** (Phase 6-BE) — 축이 서로
         #: 주고받은 경우도 있고, **비교할 근거가 없어** 우열을 판정하지
@@ -2229,7 +2253,18 @@ def render_open_search_brief(outcome, repository=None, ranking=None) -> str:
     if not outcome.verified_results:
         lines.append("  🔴 **검증된 결과가 없습니다** — 아래는 재생으로"
                      " 뒷받침되지 않은 결과입니다.")
-    for result in shown:
+    if len(shown) > BRIEF_CANDIDATE_LIMIT:
+        #: 🔴 **담지 못한 결과를 번호로 적는다** (Phase 6-BI). 경로가 사라진
+        #: 것이 아니라 **이 요약에 담지 못한** 것이고, 상세 기록 첨부에
+        #: 전부 있다.
+        left = " · ".join(f"결과 {one.index}"
+                          for one in shown[BRIEF_CANDIDATE_LIMIT:])
+        lines.append(f"  🔴 **검증된 결과 {len(shown)}개 가운데 앞의"
+                     f" {BRIEF_CANDIDATE_LIMIT}개만 이 요약에 담았습니다** —"
+                     f" 나머지: {left}. 그 걸음과 최종 판은 **상세 기록"
+                     " 첨부**에 있고, `/combo-pick` 으로 그 번호를 고르면"
+                     " 그 후보의 기록이 따로 만들어집니다.")
+    for result in shown[:BRIEF_CANDIDATE_LIMIT]:
         lines.append("")
         lines.append(f"  [결과 {result.index}]"
                      + (f" (같은 결과에 닿은 다른 경로"

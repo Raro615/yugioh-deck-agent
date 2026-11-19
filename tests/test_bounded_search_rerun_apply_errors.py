@@ -62,9 +62,9 @@ P0 = 0
 #: 선공 판에서 엔진이 내놓은 허용 후보의 열쇠들. 🔴 **지어낸 값이 아니다** —
 #: 아래 ``paths`` 픅스처가 production ``rerun_steps`` 로 **실제로 밟아 보고**
 #: 목표에 닿는지 확인한다(안 맞으면 픅스처가 깨진다).
-SUMMON_KEY = ("normal_summon", P0, 75, (), None, None, ())
-PASS_KEY = ("pass", P0, None, (), None, None, ())
-SET_KEY = ("set_spell_trap", P0, 76, (), None, None, ())
+SUMMON_KEY = ("normal_summon", P0, 75, (), None, None, (), ())
+PASS_KEY = ("pass", P0, None, (), None, None, (), ())
+SET_KEY = ("set_spell_trap", P0, 76, (), None, None, (), ())
 
 
 # ======================================================================

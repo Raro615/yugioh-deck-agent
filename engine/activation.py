@@ -96,6 +96,13 @@ from engine.state.game_state import GameState
 from engine.target_bridge import decided_at_resolution
 from engine.validation import ActionValidity, ValidationCode, ValidationResult
 
+#: **기록을 남기지 않는 지불기** — 비용을 치른 뒤의 판을 복제본 위에서
+#: 미리 보는 데만 쓴다 (:meth:`EffectActivator._after_cost`).
+#:
+#: 🔴 **상태를 들고 있지 않으므로 하나로 공유한다** — ``CostPayer`` 의
+#: ``__slots__`` 는 기록 하나뿐이고 그것이 ``None`` 이다.
+_SHADOW_PAYER: CostPayer = CostPayer()
+
 
 class ActivationStatus(str, Enum):
     """
@@ -450,7 +457,9 @@ class EffectActivator:
         🔴 **그래도 "치를 수 있다" 가 "치렀다" 는 아니다.** 지불은
         :meth:`activate` 의 일이고, 관측 뒤에 판이 바뀌면 그때 멈출 수 있다.
         """
-        blocked = self._check(state, chain, action, selections, authorization)
+        blocked = self._check(
+            state, chain, action, selections, authorization, cost_selections
+        )
         if blocked is None:
             return ValidationResult.valid(
                 f"{action.effect_ref} 를 발동할 수 있습니다 "
@@ -498,7 +507,9 @@ class EffectActivator:
         if not isinstance(chain, Chain):
             raise TypeError(f"Chain 이 필요합니다: {type(chain).__name__}")
 
-        blocked = self._check(state, chain, action, selections, authorization)
+        blocked = self._check(
+            state, chain, action, selections, authorization, cost_selections
+        )
         if blocked is not None:
             return blocked
 
@@ -650,6 +661,7 @@ class EffectActivator:
         action: PlayerAction,
         selections: tuple[TargetSelection, ...],
         authorization: ValidationResult | None,
+        cost_selections: tuple[CostSelection, ...] = (),
     ) -> ActivationResult | None:
         """
         막는 것이 있으면 그 결과, 없으면 ``None``.
@@ -666,7 +678,8 @@ class EffectActivator:
         assert definition is not None  # _check_before_targets 가 보증한다
         verdict = self._verdict(state, action, authorization)
         return self._check_targets(
-            state, definition, action, chain, selections, verdict
+            state, definition, action, chain, selections, verdict,
+            cost_selections,
         )
 
     def _check_before_targets(
@@ -1045,6 +1058,7 @@ class EffectActivator:
         chain: Chain,
         selections: tuple[TargetSelection, ...],
         verdict: ValidationResult,
+        cost_selections: tuple[CostSelection, ...] = (),
     ) -> ActivationResult | None:
         """
         고른 대상이 규칙에 맞는가. 판정은 Phase 2-N 의
@@ -1071,6 +1085,10 @@ class EffectActivator:
         context = self._condition_context(
             action, tuple(i for s in selections for i in s.selection.chosen)
         )
+        #: 🔴 **비용을 치른 뒤의 판으로 대상을 본다** (Phase 6-BI).
+        #: 비용이 없는 효과에서는 ``state`` 그대로이므로 한 글자도 달라지지
+        #: 않는다. 왜 필요한지는 :meth:`_after_cost` 에 적었다.
+        judged = self._after_cost(state, definition, action, cost_selections)
         for binding in definition.targets:
             if binding.spec.is_random or binding.spec.is_bulk:
                 # **발동 시점에 정하지 않는다** (Phase 2-AB · 2-AI). 무작위
@@ -1135,7 +1153,7 @@ class EffectActivator:
                 # 미확정이 있는 것이므로 ``UNCHECKED_TARGET`` 이다.
                 resolver = TargetResolver(
                     GameStateView.from_state(
-                        state,
+                        judged,
                         viewer=action.actor,
                         looked_at=binding.spec.looked_at_zones(),
                     )
@@ -1176,7 +1194,7 @@ class EffectActivator:
             # 효과가 같은 판의 다른 규칙에까지 덱을 열어 준다.
             resolver = TargetResolver(
                 GameStateView.from_state(
-                    state,
+                    judged,
                     viewer=action.actor,
                     looked_at=binding.spec.looked_at_zones(),
                 )
@@ -1202,6 +1220,76 @@ class EffectActivator:
                 authorization=verdict,
             )
         return None
+
+    # ------------------------------------------------------------------
+    def _after_cost(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        action: PlayerAction,
+        cost_selections: tuple[CostSelection, ...],
+    ) -> GameState:
+        """
+        **비용을 치른 뒤의 판** (Phase 6-BI). 비용이 없으면 받은 판 그대로다.
+
+        왜 이것이 필요한가
+        ------------------
+        🔴 **비용 때문에 판정이 흐려지면 패만 소모된다.** 실측 (6-BI §1):
+        「오르페골 갈라테아i」 ② 의 비용으로 「하루 우라라」 를 묘지로 보내면,
+        그 카드가 묘지에 **앞면으로 놓이고** 등재된 판정이 없어
+        :class:`~engine.effect.ruling.BoardRuling._interference` 가
+        ``UNKNOWN`` 이 됐다. 발동은 **비용 전 판**으로 보아 수락됐고,
+        해결은 **비용 후 판**으로 보아 ``UNCHECKED_RULES`` 로 멈췄다 —
+        패 1장이 묘지로 가고 가져온 것은 없었다.
+
+        🔴 **되돌릴 수 없으므로 들어가기 전에 본다.** ADR-008 이 rollback
+        을 미뤄 두었으니, 치른 뒤에 멈출 수 있는 길을 두면 그것이 곧
+        "패만 소모되는" 길이다. 공식 처리의 ``chk==0`` 이 비용 **전**에
+        도는 것과 어긋나지만, 여기서 갈리는 것은 **규칙이 아니라 이 엔진이
+        아직 읽지 못한 것**이다 (``UNKNOWN``). 모르는 것을 허가로 바꾸지
+        않는 쪽이 ADR-006 이다.
+
+        🔴 **복제본에만 치른다.** 받은 ``state`` 는 한 글자도 바뀌지 않고,
+        돌려주는 판은 읽기에만 쓴다 (``GameStateView.from_state``).
+
+        🔴 **흉내 내지 않는다.** 어디로 가는지는
+        :class:`~engine.payment.CostPayer` 가 정하고, 여기서는 그것을
+        **복제본 위에서 그대로 부른다** — 두 벌이 되면 "비용 뒤의 판" 이
+        실제 지불과 달라진다.
+
+        치를 수 없으면 받은 판을 그대로 돌려준다 — 그 사실은
+        :meth:`_check_cost` 가 이미 말했고, 여기서 두 번 말하지 않는다.
+        """
+        if definition.cost.is_free:
+            return state
+        try:
+            clone = state.clone()
+        except Exception:  # pragma: no cover - 복제는 저장소의 계약이다
+            return state
+        #: 🔴 **기록을 남기지 않는 지불기로 치른다** (실측으로 고친 자리).
+        #:
+        #: ``self._payer`` 는 **살아 있는 기록**(``EventJournal``)을 들고
+        #: 있고 ``CostPayer.pay`` 는 치를 때마다 거기에 적는다. 그 지불기로
+        #: 복제본에 치르면 판은 그대로여도 **기록에는 일어나지 않은 지불이
+        #: 남는다** — 실측으로 재생 검증이 그 자리에서 깨졌다 (기록으로
+        #: 계산한 제외 존에 스켈레촌이 있고 실제 판에는 없었다).
+        #:
+        #: 🔴 **다른 규칙을 쓰는 것이 아니다.** 같은 ``CostPayer`` 이고
+        #: 기록만 없다 (``CostPayer.__slots__`` 는 기록 하나뿐이므로 다른
+        #: 상태를 들고 있지 않다).
+        payment = _SHADOW_PAYER.pay(
+            clone,
+            definition.cost,
+            PaymentContext(
+                payer=action.actor,
+                selections=tuple(cost_selections),
+                effect_ref=action.effect_ref,
+                source=action.source,
+            ),
+        )
+        if not payment.paid:
+            return state
+        return clone
 
     # ------------------------------------------------------------------
     def _candidate_existence(

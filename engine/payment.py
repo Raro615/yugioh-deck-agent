@@ -94,6 +94,19 @@ COST_OPERATION: dict[CostSemantics, OperationKind] = {
     #: 주지 않는다) 치를 수 없고, 치를 수 있는 것은 **고를 것이 없는**
     #: :class:`~engine.cost.SelfCardCost` 쪽이다.
     CostSemantics.BANISH: OperationKind.BANISH,
+    #: 🔴 **묘지送り가 들어왔다** (Phase 6-BI). 「패를 1장 묘지로 보내고
+    #: 발동할 수 있다」 를 치르는 자리이고, 옮기는 계층은 이미 있었다 —
+    #: ``DESTINATION[SEND_TO_GRAVE]`` 가 ``Zone.GRAVE`` 이고 ``_apply`` 의
+    #: 고리가 그것을 그대로 쓴다 (``BANISH`` 가 6-AO 에 들어온 것과 **같은
+    #: 모양**이다). 없던 것은 **표의 한 줄**이다.
+    #:
+    #: 🔴 **버리는 것과 다른 의미로 남는다.** ``DISCARD`` 와 이 줄이
+    #: 각자의 ``OperationKind`` 를 갖기 때문에, 기록에서 「비용으로 버린
+    #: 카드」 와 「비용으로 묘지로 보낸 카드」 가 갈린다 (ADR-002 의 태도).
+    #: 공식 스크립트도 그 둘을 다르게 적는다 —
+    #: ``Card.IsDiscardable`` / ``Duel.DiscardHand`` 대
+    #: ``Card.IsAbleToGraveAsCost`` / ``Duel.SendtoGrave(…,REASON_COST)``.
+    CostSemantics.SEND_TO_GRAVE: OperationKind.SEND_TO_GRAVE,
 }
 
 #: 비용으로 옮겨진 카드가 **어떤 표시 형식으로 놓이는가** (Phase 6-BF).
@@ -134,7 +147,9 @@ SUPPORTED_COSTS: frozenset[CostSemantics] = frozenset(COST_OPERATION) | {
 UNSUPPORTED_REASON: dict[CostSemantics, str] = {
     #: ``BANISH`` 는 Phase 6-AO 가 ``COST_OPERATION`` 에 더했으므로 여기
     #: 없다 — 두 표에 함께 있으면 어느 쪽이 참인지 말할 수 없다.
-    CostSemantics.SEND_TO_GRAVE: "비용으로서의 묘지送り — 덱에서 보내는 경우 포함",
+    #: 🔴 ``SEND_TO_GRAVE`` 는 Phase 6-BI 가 ``COST_OPERATION`` 에
+    #: 더했으므로 여기 없다 — 두 표에 함께 있으면 어느 쪽이 참인지 말할 수
+    #: 없다 (``BANISH`` 와 같은 규율).
     CostSemantics.DETACH: "엑시즈 소재 모델 (Phase 3~)",
     CostSemantics.UNKNOWN: "표현되지 않은 비용",
 }
