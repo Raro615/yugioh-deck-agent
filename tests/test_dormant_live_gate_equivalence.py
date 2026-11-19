@@ -920,20 +920,30 @@ def test_21_exactly_one_registered_effect_has_a_cost():
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     #: 🔴 **정확히 하나**다 — 디베르 ①. 이전 측정이 틀렸던 것이 아니라
     #: 그때는 하나도 없었다.
     #: 🔴 **둘이 되었다** (Phase 6-AQ) — 스켈레촌 ① 도 ``Cost.SelfBanish`` 다.
+    #: 🔴 **셋이 되었다** (Phase 6-BI) — 갈라테아i ② 이고, 이쪽은
+    #: ``SelfCardCost`` 가 아니라 **고르는** ``CardCost`` 다.
     assert [str(ref) for ref in costed_entries] == [
         "57835716:e[0]",
         "21441617:e[0]",
+        "48835607:e[2]",
     ], costed_entries
-    #: 🔴 **거름이 좁혀졌다** — 6-AN 까지는 ``if definition.cost.costs:`` 로
-    #: 비용 있는 효과를 **전부** 뺐고, 6-AO 는 **내놓을 카드를 고르는 비용**
-    #: 만 뺀다 (그 자리를 고르는 계층이 아직 없다). 비용이 있어도 고르지
-    #: 않는 비용은 후보가 되고, 치를 수 있는지는 ``can_activate`` 가 본다.
+    #: 🔴 **거름이 두 번 좁혀졌다.** 6-AN 까지는
+    #: ``if definition.cost.costs:`` 로 비용 있는 효과를 **전부** 뺐고,
+    #: 6-AO 는 **내놓을 카드를 고르는 비용**만 뺐다 (그 자리를 고르는
+    #: 계층이 없었다). 🔴 **Phase 6-BI 가 그 계층을 만들었으므로**
+    #: (``engine.cost_bridge`` — 조합을 만들어 행위에 싣는다) 지금 빠지는
+    #: 것은 **조합을 만들 수 없는 모양**뿐이다: 고르는 자리가 둘 이상 ·
+    #: 장수가 범위 · 조합이 상한을 넘는 경우.
     source = source_of("engine/duel.py")
-    assert "if definition.cost.choice_specs():" in source
+    assert "unsupported_cost_enumeration(definition)" in source
+    assert "if definition.cost.choice_specs():" not in source
     assert "if definition.cost.costs:" not in source
 
 
@@ -1441,7 +1451,12 @@ def test_33_this_phase_changed_no_production_file():
         #: 지문이 지키는 것은 "그 자리에 비용 거름이 있다" 이므로 좁혀진
         #: 뒤의 모양을 집는다 — 3-E-44 의 측정이 틀렸던 것이 아니라 그때는
         #: 그 줄이 그 모양이었다.
-        ("engine/duel.py", "if definition.cost.choice_specs():"),
+        #: 🔴 **Phase 6-BI 가 이 줄을 바꿨다.** 6-AO 의 지문은 "고를
+        #: 것이 있는 비용이면 후보를 만들지 않는다" 였고, 그 Phase 가
+        #: 비용 선택을 넘기게 했으므로 (``engine.cost_bridge``) 지금
+        #: 걸리는 것은 **조합을 만들 수 없는 모양**뿐이다. 관문이
+        #: 사라진 것이 아니라 **좁아졌다** — 그 자리를 그대로 집는다.
+        ("engine/duel.py", "unsupported_cost_enumeration(definition)"),
         ("engine/activation.py", "_AVAILABILITY_REFUSAL[availability]"),
         # 🔴 Phase 6-K 가 이 호출에 두 번째 인자를 더했다 (발동 분류). 이
         # 지문이 지키는 것은 "관문이 그대로 있다" 이므로 호출 이름까지만

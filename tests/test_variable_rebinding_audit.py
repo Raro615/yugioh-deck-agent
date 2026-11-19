@@ -1037,7 +1037,10 @@ def test_27_all_sixteen_effect_definitions_are_untouched(repository):
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     for entry in EFFECT_LIBRARY:
         ref = entry.definition.effect_ref
         card = repository.get(ref.card_id)
@@ -1091,6 +1094,13 @@ def test_27_all_sixteen_effect_definitions_are_untouched(repository):
                     #: **셋**이다 (실측: e1 지속 · e2 기동 · e3 유발즉시 클론).
                     #: 디베르 · 스켈레촌과 수는 같지만 내용이 다르다.
                     30741503: 3,  # 갈라테아 — ①지속 · ②기동 · ③유발즉시
+                    #: 🔴 **Phase 6-BI 에서 기동 효과가 여섯이 됐다** —
+                    #: 오르페골 갈라테아i ② 이고 블록 수가 **일곱**이다
+                    #: (실측: e1 지속 · e2 단일 · e3 기동 · e3a 유발즉시
+                    #: 클론 · e4 기동(묘지) · e4a 그 클론 · 필드 블록).
+                    #: 억지로 셋에 맞추지 않고 **실측한 수**를 적는다 —
+                    #: 등재한 것은 e3 하나다.
+                    48835607: 7,  # 갈라테아i — 블록 일곱 · 등재는 e3
                 }[ref.card_id], ref
                 assert ref.resolve(card).code is None, ref
             else:

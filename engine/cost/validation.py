@@ -67,15 +67,20 @@ class CostValidator:
     # ------------------------------------------------------------------
     def validate(self, cost: Cost, context: ConditionContext) -> ValidationResult:
         """비용 하나. ``VALID`` / ``INVALID`` / ``UNKNOWN``."""
-        unpayable = self._unpayable_semantics(cost)
-        if unpayable is not None:
-            return unpayable
+        #: 🔴 **표현되지 않은 비용이 먼저다** (6-BI 가 고친 자리). 그쪽은
+        #: **그 비용이 적어 온 이름**을 들고 있고 (``cost.rule``), 아래의
+        #: 종류 판정은 표에서 읽은 일반 문장을 쓴다. 순서가 뒤바뀌면
+        #: 「xyz detach (Phase 2-D)」 가 「cost-semantics (unknown)」 로
+        #: 덮여 **고칠 자리를 가리키던 이름이 사라진다** (실측으로 그랬다).
         if isinstance(cost, UnimplementedCost):
             return ValidationResult.unknown(
                 ValidationCode.COST_NOT_IMPLEMENTED,
                 f"이 비용을 표현할 수 없습니다: {cost.rule}",
                 missing_rule=cost.rule,
             )
+        unpayable = self._unpayable_semantics(cost)
+        if unpayable is not None:
+            return unpayable
         if isinstance(cost, LifeCost):
             return self._validate_life(cost, context)
         if isinstance(cost, SelfCardCost):

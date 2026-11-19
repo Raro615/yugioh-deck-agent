@@ -253,6 +253,8 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
     #: 🔴 **일곱째가 들어왔다** (Phase 6-BF) — 오르페골 갈라테아 ② 다.
     #: 같은 이유다: ``EFFECT_TYPE_IGNITION`` 이고
     #: ``EFFECT_TYPE_ACTIVATE`` 가 아니다 (몬스터 효과다).
+    #: 🔴 **여덟째가 들어왔다** (Phase 6-BI) — 오르페골 갈라테아i ② 다.
+    #: 같은 이유다 (``EFFECT_TYPE_IGNITION`` 인 몬스터 효과).
     assert not_activate == [
         HONEST,
         GIRSU,
@@ -261,6 +263,7 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
         57835716,
         30741503,
         21441617,
+        48835607,
     ], (
         not_activate
     )
@@ -334,6 +337,7 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
     #: 🔴 **다섯째가 들어왔다** (Phase 6-AO) — 오르페골 디베르 ① 이다.
     #: 🔴 **여섯째가 들어왔다** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이다.
     #: 🔴 **일곱째가 들어왔다** (Phase 6-BF) — 오르페골 갈라테아 ② 다.
+    #: 🔴 **여덟째가 들어왔다** (Phase 6-BI) — 오르페골 갈라테아i ② 다.
     assert skipped == [
         HONEST,
         GIRSU,
@@ -342,6 +346,7 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
         57835716,
         30741503,
         21441617,
+        48835607,
     ], skipped
     assert corpus[HONEST]["blocks"] == 3
     assert corpus[GIRSU]["blocks"] >= 3
@@ -381,7 +386,8 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     #: 🔴 18 → **19** (Phase 6-BF) — 갈라테아 ② 다. 🔴 **등재 효과 수
     #: (20) 와 다르다**: 기르수가 한 장에 둘을 갖고 있어 카드 단위 집합은
     #: 하나 적다 — 그것이 이 줄이 ``card_id`` 집합인 이유다.
-    assert len(executable) == 19
+    #: 🔴 19 → **20** (Phase 6-BI) — 갈라테아i ② 가 들어왔다.
+    assert len(executable) == 20
     # 실행되는 카드는 **하나도 빠짐없이** 막는 것이 없어야 한다.
     #
     # 🔴 어니스트는 예외 집합에 있다 (Phase 6-L). ``clean`` 은
@@ -411,6 +417,12 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     #: 🔴 **갈라테아도 같은 이유로 예외다** (Phase 6-BF) — 여섯 장
     #: 다 "막는 것이 있다" 가 아니라 **세는 범위가 다르다** 다.
     assert 30741503 not in set(activate_only)
+    #: 🔴 **갈라테아i 도 같은 이유로 예외다** (Phase 6-BI) — 일곱 장
+    #: 다 **세는 범위가 다르다**.
+    assert 48835607 not in set(activate_only)
+    #: 🔴 **갈라테아i 가 들어왔다** (Phase 6-BI) — 위의 여섯 장과 같은
+    #: 이유로 ``activate_only`` 슬라이스 밖이므로 ``clean`` 에 들어올 수
+    #: 없고, 그래서 이 예외 목록에 이름을 적는다.
     assert executable <= set(clean) | {
         53129443,
         83764718,
@@ -420,6 +432,7 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
         57835716,
         21441617,
         30741503,
+        48835607,
     }
 
 

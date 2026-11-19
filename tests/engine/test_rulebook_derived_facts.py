@@ -182,10 +182,19 @@ def test_a01_the_registry_holds_twenty_one_hand_written_cards():
     #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
     #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
     #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
-    assert len(OPERATION_RULINGS) == 28
+    #: 🔴 28 → **33** (Phase 6-BI) — 다섯 장을 읽어 등재했다: 성유물－
+    #: 『성관』 (갈라테아i ② 가 덱에서 **패에 넣을** 후보) 과 이번 패의
+    #: 네 장 (하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자 — 그
+    #: 효과의 **비용으로 묘지에 놓이는** 카드들). 등재하지 않으면 자기가
+    #: 치른 비용 때문에 자기 효과의 해결이 ``UNKNOWN`` 이 된다.
+    assert len(OPERATION_RULINGS) == 33
     #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네.
     #: 🔴 26 → **28** (Phase 6-BF) — 오르페골 바벨 · 클리막스.
-    assert len(OPERATION_RULINGS.card_ids) == 28
+    #: 🔴 28 → **33** (Phase 6-BI) — 성유물－『성관』 과 이번 패의 네
+    #: 장(하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자)을 읽어
+    #: 등재했다. 뒤의 넷은 갈라테아i ② 의 **비용으로 묘지에 놓이는**
+    #: 카드들이고, 등재하지 않으면 그 판의 조작 판정이 모름이 된다.
+    assert len(OPERATION_RULINGS.card_ids) == 33
     assert PACHYCEPHALO in OPERATION_RULINGS.card_ids
     assert FEATHERMAN in OPERATION_RULINGS.card_ids
     assert HONEST in OPERATION_RULINGS.card_ids
@@ -826,14 +835,19 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
     #: 🔴 21 → **22** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이 등재되었다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
     #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
     #: 🔴 17 → **18** (Phase 6-AO) — 디베르 ① 이 실행 가능으로 더해졌다.
     #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이 실행 가능으로 더해졌다.
     #: 🔴 19 → **20** (Phase 6-BF) — 갈라테아 ② 다.
-    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 20
+    #: 🔴 20 → **21** (Phase 6-BI) — 갈라테아i ② 가 실행 가능한 효과로
+    #: 들어왔다 (공식 ``c48835607.lua`` 의 ``e3`` 을 읽어 등재했다).
+    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 21
 
     definition = definition_registry().definition_for(
         EffectRef(POT_OF_GREED, 0)
@@ -911,7 +925,12 @@ def test_g02_the_registry_data_was_not_expanded():
     #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
     #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
     #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
-    assert len(OPERATION_RULINGS) == 28
+    #: 🔴 28 → **33** (Phase 6-BI) — 다섯 장을 읽어 등재했다: 성유물－
+    #: 『성관』 (갈라테아i ② 가 덱에서 **패에 넣을** 후보) 과 이번 패의
+    #: 네 장 (하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자 — 그
+    #: 효과의 **비용으로 묘지에 놓이는** 카드들). 등재하지 않으면 자기가
+    #: 치른 비용 때문에 자기 효과의 해결이 ``UNKNOWN`` 이 된다.
+    assert len(OPERATION_RULINGS) == 33
     #: 라이브러리 쪽은 6-O 가 건드리지 않았다 — 유도는 ruling.py 에 있다.
     assert "rulebook_facts" not in library
 

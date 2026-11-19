@@ -756,10 +756,19 @@ def test_a_tribute_is_not_representable_and_pays_nothing(state):
 #:
 #: 🔴 **제외를 재는 자리를 버리지 않았다** —
 #: ``test_banish_is_now_a_supported_cost_kind`` 가 아래에 있다.
+#:
+#: 🔴 **묘지送り도 목록에서 빠졌다** (Phase 6-BI) — 같은 자리 · 같은 이유다.
+#: 「패를 1장 묘지로 보내고 발동할 수 있다」 (오르페골 갈라테아i ②) 를
+#: 등재하면서 ``COST_OPERATION`` 에 그 줄을 더했고, 옮기는 계층은 이미
+#: 있었다 (``DESTINATION[SEND_TO_GRAVE]`` → ``Zone.GRAVE``). 그래서 아래
+#: 묶음에서 그 종류를 빼고 **엑시즈 소재 떼기**만 남긴다 — 이 시험이 재는
+#: 사실("치를 수 없는 종류는 이름으로 적고 판을 바꾸지 않는다") 은 그대로다.
+#: 🔴 **묘지送り를 재는 자리도 버리지 않았다** — 갈라테아i ② 를 실제로
+#: 치르는 길은 ``tests/test_galatea_effect_extension.py`` 의 H 묶음이
+#: 밟는다 (비용은 묘지로 · 고른 카드는 패로 · 패 장수는 그대로).
 @pytest.mark.parametrize(
     "cost",
     [
-        CardCost.send_to_grave(frozenset({Zone.DECK}), 1),
         CardCost(kind=CostSemantics.DETACH, zones=frozenset({Zone.MZONE})),
     ],
 )
@@ -780,14 +789,19 @@ def test_unsupported_cost_kinds_are_named_not_guessed(state, cost):
 
 def test_the_supported_set_is_exactly_what_the_step_promised():
     #: 🔴 **``BANISH`` 가 Phase 6-AO 에서 들어왔다** (위 주석의 근거).
+    #: 🔴 **``SEND_TO_GRAVE`` 가 Phase 6-BI 에서 들어왔다** — 「패를 1장
+    #: 묘지로 보내고 발동할 수 있다」 (오르페골 갈라테아i ②) 를 치르는
+    #: 자리다. 옮기는 계층은 이미 있었고 없던 것은 ``COST_OPERATION`` 의
+    #: 한 줄이다.
     assert SUPPORTED_COSTS == {
         CostSemantics.DISCARD,
         CostSemantics.RELEASE,
         CostSemantics.PAY_LIFE,
         CostSemantics.BANISH,
+        CostSemantics.SEND_TO_GRAVE,
     }
     #: 들어오지 **않은** 것도 함께 센다 — 넓어진 범위가 의도한 만큼인지.
-    assert CostSemantics.SEND_TO_GRAVE not in SUPPORTED_COSTS
+    assert CostSemantics.DETACH not in SUPPORTED_COSTS
     assert CostSemantics.DETACH not in SUPPORTED_COSTS
     assert CostSemantics.UNKNOWN not in SUPPORTED_COSTS
 

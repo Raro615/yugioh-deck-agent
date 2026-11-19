@@ -334,7 +334,10 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
     #: 효과**라는 것이다 (``TargetRequirement.TARGETING``).
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -365,6 +368,11 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
         #: **발동 조건이 보지 않는 선택을 선언한 첫 등재**다
         #: (``checked_at_activation=False``).
         30741503,
+        #: 🔴 Phase 6-BI — 오르페골 갈라테아i. **고르는 비용을 치르는 첫
+        #: 등재**다 (패 1장을 묘지로 보낸다 — ``CardCost.send_to_grave``).
+        #: 그 비용은 **행위**가 들고 가고 (``PlayerAction.cost_cards``),
+        #: 패에 넣을 카드는 해결 중에 고른다.
+        48835607,
     }
 
 
@@ -428,12 +436,16 @@ def test_a_fifteen_real_effect_refs_are_executable():
         #: 🔴 Phase 6-BF — 오르페골 갈라테아도 ``ordinal`` 이 **1**
         #: 이다 (공식 ①②③ 중 ②). 같은 이유로 손으로 적는다.
         EffectRef(30741503, 1),
+        #: 🔴 Phase 6-BI — 오르페골 갈라테아i 는 ``ordinal`` 이 **2** 다
+        #: (공식 블록 일곱 중 ``e3``). 같은 이유로 손으로 적는다.
+        EffectRef(48835607, 2),
     }
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 Phase 6-AF — 기르수 ③(토큰 생성)이 더해졌다 (16 → **17**).
     #: 🔴 Phase 6-AO — 디베르 ① 이 더해졌다 (17 → **18**).
     #: 🔴 Phase 6-AQ — 스켈레촌 ① 이 더해졌다 (18 → **19**).
-    assert len(executable) == 20
+    #: 🔴 Phase 6-BI — 갈라테아i ② 가 더해졌다 (20 → **21**).
+    assert len(executable) == 21
 
 
 def test_a_every_declined_card_says_what_is_missing():
@@ -1284,13 +1296,19 @@ def test_k_exactly_one_real_card_has_a_cost():
     #: 🔴 **둘이 되었다** (Phase 6-AQ) — 오르페골 스켈레촌 ① 도
     #: ``Cost.SelfBanish`` 다 (``c21441617.lua`` 의 ``e1:SetCost``).
     #: 🔴 이전 수가 틀렸던 것이 아니라 6-AO 시점에 하나였다.
-    assert with_cost == [57835716, 21441617], with_cost
+    #: 🔴 **셋이 되었다** (Phase 6-BI) — 오르페골 갈라테아i ② 이고, 이쪽은
+    #: ``SelfCardCost`` 가 아니라 **고르는** ``CardCost`` 다 (패 1장을 묘지로
+    #: 보낸다). 고르는 비용이 등재된 **첫 효과**다.
+    assert with_cost == [57835716, 21441617, 48835607], with_cost
     for entry in EFFECT_LIBRARY:
         for cost in entry.definition.cost.costs:
-            assert isinstance(cost, SelfCardCost), (entry.card_id, cost)
-            assert cost.choice_spec() is None
-        #: 🔴 **비용이 없는 효과는 그대로 비어 있다** — 둘만 늘었다.
-        if entry.card_id not in (57835716, 21441617):
+            if isinstance(cost, SelfCardCost):
+                assert cost.choice_spec() is None
+            else:
+                #: 고르는 비용은 **무엇을 고르는지**가 적혀 있어야 한다.
+                assert cost.choice_spec() is not None, (entry.card_id, cost)
+        #: 🔴 **비용이 없는 효과는 그대로 비어 있다** — 셋만 늘었다.
+        if entry.card_id not in (57835716, 21441617, 48835607):
             assert entry.definition.cost.is_free is True, entry.card_id
 
 

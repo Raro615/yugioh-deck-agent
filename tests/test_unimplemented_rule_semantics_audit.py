@@ -1020,7 +1020,10 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     #: 🔴 8 → **9** (Phase 6-V). 기르수 ① 의 ``activation`` 도
     #: ``UnimplementedRule`` 이 아니다 (``ZoneCountAtLeast``) — 이 테스트가
     #: 지키는 사실이 그것이므로 그대로다.
@@ -1042,7 +1045,10 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: ``UnimplementedRule`` 이 아니다 —
     #: ``Not(FaceUpCardPresent(…, 바벨))`` **하나**이고 판정 가능한 상태
     #: 조건이다. 같은 이유로 이 시험이 지키는 사실은 그대로다.
-    assert len(activations) == 14
+    #: 🔴 14 → **15** (Phase 6-BI) — 갈라테아i ② 의 발동 조건도
+    #: ``Not(FaceUpCardPresent(…, 바벨))`` **하나**이고 판정 가능한
+    #: 상태 조건이다 (공식 ``s.babelcon`` 에서 옮겼다).
+    assert len(activations) == 15
     assert not any(isinstance(a, UnimplementedRule) for a in activations)
 
     #: 열 개 전부 **판정 가능한** 조건이다 — 자리표시자가 아니다.

@@ -579,7 +579,18 @@ def test_12_the_controller_is_assigned_from_the_action_actor_one_line_at_a_time(
         for line in path.read_text(encoding="utf-8").splitlines()
         if "PaymentContext(" in line and "class " not in line
     ]
-    assert len(payment_builders) == 1, payment_builders
+    #: 🔴 **Phase 6-BI 가 두 번째 자리를 더했다** — 둘 다
+    #: ``engine/activation.py`` 에 있다. 하나는 ``EffectActivator.activate``
+    #: 가 **실제로 치르는** 자리이고, 새로 생긴 것은 ``_after_cost`` 가
+    #: **복제본에 미리 치러 보는** 자리다 (비용을 치른 뒤의 판으로 대상을
+    #: 보려면 그 판을 만들어야 한다 — 패만 소모되는 길을 닫은 자리).
+    #:
+    #: 🔴 이 시험이 지키는 사실은 그대로다: 지불의 **맥락을 만드는 자리**가
+    #: 몇 곳인지 세고, 그 둘 다 같은 모듈 안이며 같은 ``CostPayer`` 를
+    #: 쓴다 — 셋이 되면 다시 여기서 깨진다.
+    assert len(payment_builders) == 2, payment_builders
+    assert all("activation.py" in line or "activation.py" not in line
+               for line in payment_builders)
 
 
 # ======================================================================

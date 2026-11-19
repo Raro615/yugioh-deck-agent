@@ -414,6 +414,10 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
         #: 이고 발동 자리는 **필드**다 (``{MZONE, EMZONE}``) —
         #: 묘지에서 발동하는 위 둘과 그 점이 다르다.
         EffectRef(30741503, 1): ActivationKind.IGNITION,
+        #: 🔴 Phase 6-BI — 오르페골 갈라테아i ② 다. 분류는 같은 기동이고
+        #: 발동 자리도 **필드**다 (``{MZONE, EMZONE}``). 다른 점은 **비용**
+        #: 이다 — 고르는 비용을 치르는 첫 등재다.
+        EffectRef(48835607, 2): ActivationKind.IGNITION,
     }
     entry = next(e for e in EFFECT_LIBRARY if e.definition.effect_ref == HONEST_REF)
     #: 🔴 **Phase 6-L 에서 실행된다.** 6-K 시점에는 ``executable=False`` ·

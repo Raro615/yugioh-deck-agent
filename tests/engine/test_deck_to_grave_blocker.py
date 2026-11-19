@@ -723,8 +723,14 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
     #: 하나이고 **「묘지로 보낼 수 있는가」 는 아니므로**, 아래 `answered`
     #: 는 한 글자도 움직이지 않는다 — 이 시험이 가르는 두 사실이 바로
     #: 그것이다.
+    #: 🔴 **일곱이 되었다** (Phase 6-BI) — 성유물－『성관』(27918365) 이
+    #: 등록소에 들어왔고 (갈라테아i ② 가 덱에서 **패에 넣을** 후보다) 그
+    #: 카드가 기르수 후보 안에도 있다. 🔴 그 카드가 가진 답은
+    #: ``MAY_BE_RETURNED_TO_HAND`` 하나이고 **「묘지로 보낼 수 있는가」 는
+    #: 아니므로**, 아래 `answered` 는 한 글자도 움직이지 않는다.
     assert covered == [
-        703897, 21441617, 57835716, 90351981, SELF_GRAVE_TRIGGER, 94046012,
+        703897, 21441617, 27918365, 57835716, 90351981, SELF_GRAVE_TRIGGER,
+        94046012,
     ], covered
     answered = [
         cid
@@ -760,7 +766,12 @@ def test_f02_the_registry_and_the_rulebook_derivation_are_the_only_sources(repos
     #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
     #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
     #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
-    assert len(OPERATION_RULINGS) == 28
+    #: 🔴 28 → **33** (Phase 6-BI) — 다섯 장을 읽어 등재했다: 성유물－
+    #: 『성관』 (갈라테아i ② 가 덱에서 **패에 넣을** 후보) 과 이번 패의
+    #: 네 장 (하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자 — 그
+    #: 효과의 **비용으로 묘지에 놓이는** 카드들). 등재하지 않으면 자기가
+    #: 치른 비용 때문에 자기 효과의 해결이 ``UNKNOWN`` 이 된다.
+    assert len(OPERATION_RULINGS) == 33
     assert set(OPERATION_RULINGS.card_ids) & set(pool) == set(covered)
 
 
@@ -1153,7 +1164,12 @@ def test_i02_the_production_registry_is_untouched():
     #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
     #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
     #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
-    assert len(OPERATION_RULINGS) == 28
+    #: 🔴 28 → **33** (Phase 6-BI) — 다섯 장을 읽어 등재했다: 성유물－
+    #: 『성관』 (갈라테아i ② 가 덱에서 **패에 넣을** 후보) 과 이번 패의
+    #: 네 장 (하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자 — 그
+    #: 효과의 **비용으로 묘지에 놓이는** 카드들). 등재하지 않으면 자기가
+    #: 치른 비용 때문에 자기 효과의 해결이 ``UNKNOWN`` 이 된다.
+    assert len(OPERATION_RULINGS) == 33
     #: 🔴 **이 카드는 이제 원본에 있다** (Phase 6-AC). 그래서 "새지 않았다"
     #: 를 유무로는 더 이상 셀 수 없고, **사유로** 센다: 원본이 들고 있는
     #: 문장은 6-AC 가 적은 등재 사유이고, ``test_i01`` 이 사본에 적은
@@ -1179,6 +1195,11 @@ def test_i02_the_production_registry_is_untouched():
     #: 🔴 **넷이 되었다** (Phase 6-AQ) — 오르페골 스켈레촌이 늘었다 (그
     #: ① 을 등재하면서 그 카드의 묘지 질문도 함께 읽었다). 🔴 이전 수가
     #: 틀렸던 것이 아니라 6-AO 시점에 셋이었다.
+    #: 🔴 **여덟이 되었다** (Phase 6-BI) — 갈라테아i ② 의 **비용으로
+    #: 묘지에 놓이는** 패 네 장(하루 우라라 · 증식의 G · 무한포영 · 무덤의
+    #: 지명자)의 「묘지로 보낼 수 있는가」 를 읽어 등재했다. 🔴 이전 수가
+    #: 틀렸던 것이 아니라 6-AQ 시점에 넷이었다.
     assert sorted(answering) == sorted(
-        [FEATHERMAN, SELF_GRAVE_TRIGGER, 57835716, 21441617]
+        [FEATHERMAN, SELF_GRAVE_TRIGGER, 57835716, 21441617,
+         14558127, 23434538, 10045474, 24224830]
     ), answering

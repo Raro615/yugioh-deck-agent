@@ -953,8 +953,12 @@ def test_b12_activation_time_targeting_is_untouched(repository):
     #: 🔴 미루는 것은 그 효과의 ``@set`` 이름이고, ``@primary`` 는
     #: **발동 시점의 대상 지정**이다 — 한 효과에 둘이 있어도 이 고리는
     #: "미루는 이름이 **하나라도** 있는가" 를 센다.
+    #: 🔴 **다섯 → 여섯** (Phase 6-BI). 더해진 오르페골 갈라테아i ② 는
+    #: **덱 · 묘지**를 보고 (가려진 존이 섞여 있다) 공식 스크립트가
+    #: ``s.thop`` 안에서 고르므로 (선언) 디베르 ① · 갈라테아 ② 와 **같은
+    #: 두 이유**로 미루는 쪽이다.
     assert sorted(deferred) == sorted(
-        [GIRSU, BURIAL, GROWTH, HARP_HORROR, 30741503]
+        [GIRSU, BURIAL, GROWTH, HARP_HORROR, 30741503, 48835607]
     ), deferred
     #: 🔴 13 → 14 (Phase 6-AC) → **13** (Phase 6-AD). 6-AC 는 성유물－
     #: 『성장』 ② 를 "패를 보므로 그대로 두는 쪽" 에 넣었고, 6-AD 가 그
@@ -995,11 +999,13 @@ def test_b12_activation_time_targeting_is_untouched(repository):
             #: 패만 본다 — 가려진 존이 아니다. 그래도 미뤄진다.
             assert not (looked & CONCEALED_ZONES), (card_id, looked)
             assert declared is True
-        elif card_id in (HARP_HORROR, 30741503):
-            #: 🔴 **둘 다다** (Phase 6-AO · 6-BF) — 덱을 보고(짐작), 공식
-            #: 스크립트가 해결 중에 고른다(읽은 것). 선언이 있으므로 짐작에
-            #: 기대지 않는다. 갈라테아 ②(30741503)도 같은 모양이다 —
-            #: ``@set`` 이 덱을 보고 ``s.tdop`` 안에서 고른다.
+        elif card_id in (HARP_HORROR, 30741503, 48835607):
+            #: 🔴 **둘 다다** (Phase 6-AO · 6-BF · 6-BI) — 덱을 보고(짐작),
+            #: 공식 스크립트가 해결 중에 고른다(읽은 것). 선언이 있으므로
+            #: 짐작에 기대지 않는다. 갈라테아 ②(30741503)도 같은 모양이고
+            #: (``@set`` 이 덱을 보고 ``s.tdop`` 안에서 고른다), 갈라테아i
+            #: ②(48835607)도 같다 — 덱 · 묘지를 보고 ``s.thop`` 안에서
+            #: 고른다.
             assert looked & CONCEALED_ZONES, (card_id, looked)
             assert declared is True
         else:
@@ -1278,7 +1284,12 @@ def test_c07_the_ruling_registry_was_not_widened():
     #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
     #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
     #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
-    assert len(OPERATION_RULINGS) == 28
+    #: 🔴 28 → **33** (Phase 6-BI) — 다섯 장을 읽어 등재했다: 성유물－
+    #: 『성관』 (갈라테아i ② 가 덱에서 **패에 넣을** 후보) 과 이번 패의
+    #: 네 장 (하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자 — 그
+    #: 효과의 **비용으로 묘지에 놓이는** 카드들). 등재하지 않으면 자기가
+    #: 치른 비용 때문에 자기 효과의 해결이 ``UNKNOWN`` 이 된다.
+    assert len(OPERATION_RULINGS) == 33
 
 
 def test_c08_the_defaults_are_the_old_behaviour():

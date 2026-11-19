@@ -1032,15 +1032,22 @@ def test_h01_the_cost_layer_moves_cards_for_three_reasons_only():
     메인 덱 전용 자리가 아니다 — 아래 고리가 **그것을 센다** (묘지로
     고정하지 않는다).
     """
+    #: 🔴 **묘지送り가 Phase 6-BI 에서 들어왔다** (「패를 1장 묘지로 보내고
+    #: 발동할 수 있다」 — 오르페골 갈라테아i ②). 그때까지 셋이었던 것은
+    #: 사실이다 — 표에 그 줄이 없었다. 🔴 **재는 사실은 그대로다**: 목적지가
+    #: 묘지이고 메인 덱 전용 자리가 아니므로 아래 고리가 그것을 센다.
     assert set(COST_OPERATION.values()) == {
         OperationKind.DISCARD,
         OperationKind.RELEASE,
         OperationKind.BANISH,
+        OperationKind.SEND_TO_GRAVE,
     }
     for kind in COST_OPERATION.values():
         assert DESTINATION[kind] in (Zone.GRAVE, Zone.REMOVED)
         assert DESTINATION[kind] not in MAIN_DECK_ONLY_ZONES
-    assert len(SUPPORTED_COSTS) == 4  # 셋 + 라이프 지불
+    #: 🔴 4 → **5** (Phase 6-BI) — 넷(버리기 · 릴리스 · 제외 ·
+    #: **묘지送り**) + 라이프 지불이다.
+    assert len(SUPPORTED_COSTS) == 5
 
 
 def test_h02_exactly_one_registered_effect_has_a_cost():
@@ -1066,17 +1073,31 @@ def test_h02_exactly_one_registered_effect_has_a_cost():
     #: 🔴 **둘이 되었다** (Phase 6-AQ) — 오르페골 스켈레촌 ① 도
     #: ``Cost.SelfBanish`` 다. 이전 수가 틀렸던 것이 아니라 6-AO 시점에
     #: 하나였다.
+    #: 🔴 **셋이 되었다** (Phase 6-BI) — 오르페골 갈라테아i ② 이고, 이쪽은
+    #: ``SelfCardCost`` 가 아니라 **고르는** ``CardCost`` 다 (패 1장을 묘지로
+    #: 보낸다). 이전 수가 틀렸던 것이 아니라 6-AQ 시점에 둘이었다.
     assert [str(ref) for ref in with_cost] == [
         "57835716:e[0]",
         "21441617:e[0]",
+        "48835607:e[2]",
     ], with_cost
+    #: 🔴 **고르는 비용이 Phase 6-BI 에서 들어왔다.** 6-AQ 까지는 "고를 것이
+    #: 없는 비용뿐" 이었고 그 이유는 듀얼 고리가 선택을 넘기지 않는다는
+    #: 것이었다 — 6-BI 가 그것을 넘기게 했으므로 (``engine.cost_bridge``)
+    #: 그 문장은 더 참이 아니다. 🔴 **재는 사실은 그대로 둔다**: 비용이
+    #: 보내는 자리는 여전히 제외 존 **또는 묘지**이고, 둘 다 메인 덱 전용
+    #: 자리가 아니므로 6-M 의 도착 자리 거절이 비용 경로를 바꾸지 않는다.
     for entry in EFFECT_LIBRARY:
         for cost in entry.definition.cost.costs:
-            #: 🔴 **고를 것이 없는 비용뿐이다** — 고르는 비용은 아직 듀얼
-            #: 고리가 선택을 넘기지 않으므로 등재하지 않았다.
-            assert isinstance(cost, SelfCardCost), cost
-            assert cost.choice_spec() is None
-            assert DESTINATION[COST_OPERATION[cost.semantics]] is Zone.REMOVED
+            if isinstance(cost, SelfCardCost):
+                assert cost.choice_spec() is None
+            else:
+                #: 고르는 비용은 **무엇을 고르는지**가 적혀 있어야 한다 —
+                #: 비어 있으면 어느 카드를 내놓는지 아무도 말하지 않는다.
+                assert cost.choice_spec() is not None, cost
+            assert DESTINATION[COST_OPERATION[cost.semantics]] in (
+                Zone.REMOVED, Zone.GRAVE
+            )
 
 
 def test_h03_the_executor_never_pays_a_cost():
@@ -1330,7 +1351,10 @@ def test_k02_the_library_grew_no_executable_entry():
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 같은 이유다 —
     #: 읽은 카드가 하나 늘었고, 6-M 이 범위를 넓히지 않았다는 §12 의
     #: 사실은 그대로다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: Phase 6-AF — 기르수 ③ 이 실행 가능으로 더해졌다 (16 → 17).
     #: 🔴 Phase 6-AO — 디베르 ① 이 실행 가능으로 더해졌다 (17 → 18).
@@ -1338,7 +1362,8 @@ def test_k02_the_library_grew_no_executable_entry():
     #: 사실은 "이 Phase 가 실행 가능 항목을 늘리지 않았다" 이고, 그 수가
     #: 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
     #: 🔴 19 → **20** (Phase 6-BF) — 갈라테아 ② 다.
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 20
+    #: 🔴 20 → **21** (Phase 6-BI) — 갈라테아i ② 다.
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 21
 
 
 def test_k03_only_one_registered_operation_declares_its_origin():

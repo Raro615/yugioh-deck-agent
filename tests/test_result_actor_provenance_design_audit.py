@@ -371,8 +371,16 @@ def test_02_the_cost_payment_result_has_exactly_one_production_producer():
     #: 하나" 라는 이 테스트의 결론은 **그대로다** — 늘어난 것은 지불기를
     #: *만드는* 자리이고 결과를 *만드는* 자리가 아니다. 셋이 되면 다시
     #: 여기서 깨진다.
+    #: 🔴 **Phase 6-BI 가 ``engine/activation.py`` 의 자리를 둘로 만들었다.**
+    #: 새로 생긴 것은 모듈 수준의 ``_SHADOW_PAYER = CostPayer()`` 이고,
+    #: **기록을 남기지 않는 지불기**다 — ``_after_cost`` 가 복제본에 비용을
+    #: 미리 치러 볼 때 쓴다 (살아 있는 기록에 적으면 일어나지 않은 지불이
+    #: 남고, 실측으로 재생 검증이 거기서 깨졌다).
+    #:
+    #: 🔴 이 테스트의 결론은 **그대로다** — 늘어난 것은 지불기를 *만드는*
+    #: 자리이고 ``CostPaymentResult`` 를 *만드는* 자리가 아니다.
     assert payers == {
-        "engine/activation.py": 1,
+        "engine/activation.py": 2,
         "engine/spell_activation.py": 1,
     }, payers
 

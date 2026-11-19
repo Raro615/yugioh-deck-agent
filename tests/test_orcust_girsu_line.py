@@ -1018,6 +1018,9 @@ def test_d03_an_effect_without_a_recorded_limit_is_untouched():
     #: 공식 ``SetCountLimit(1,id)`` 를 적으므로 제한이 **기록된** 쪽이다.
     #: 이 시험이 지키는 사실은 "제한이 적히지 않은 효과는 건드리지
     #: 않았다" 이고, 그 사실은 그대로다 — 늘어난 것은 **적힌** 쪽이다.
+    #: 🔴 **여섯 → 일곱** (Phase 6-BI, 오르페골 갈라테아i ②). 그 효과도
+    #: 공식 ``SetCountLimit(1,id)`` 를 적으므로 제한이 **기록된** 쪽이다 —
+    #: 적히지 않은 효과는 여기서도 건드리지 않았다.
     assert limited == {
         f"{GIRSU}:e[0]",
         f"{GIRSU}:e[2]",
@@ -1025,6 +1028,7 @@ def test_d03_an_effect_without_a_recorded_limit_is_untouched():
         "57835716:e[0]",
         "21441617:e[0]",
         "30741503:e[1]",
+        "48835607:e[2]",
     }, limited
 
 

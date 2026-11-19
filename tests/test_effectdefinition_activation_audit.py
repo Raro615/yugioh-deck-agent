@@ -703,12 +703,19 @@ def test_11_no_registered_effect_drops_an_existing_set_condition(analyses):
     #: 공식 ``SetCondition`` 을 갖는다 (``s.tdcon1`` — 바벨이 적용되고
     #: 있지 않다) 고, 이 저장소가 그것을 **버리지 않고** 옮겼다. 즉
     #: ``dropped == []`` 가 그대로 참이다.
+    #: 🔴 **다섯 → 여섯** (Phase 6-BI, 오르페골 갈라테아i ②). 그 카드도
+    #: 공식 ``SetCondition`` 을 갖는다 (``aux.NOT(s.babelcon)`` — 바벨이
+    #: 적용되고 있지 않다) 고, 이 저장소가 그것을 **버리지 않고** 옮겼다
+    #: (범위는 「바벨이 앞면으로 필드 존에 있지 않다」 하나다 — 지속 효과
+    #: 계층이 없으므로 그만큼만 읽는다). 즉 ``dropped == []`` 가 그대로
+    #: 참이다.
     assert [ref.card_id for ref in with_lua_condition] == [
         GALLANTRY,
         GIRSU,
         57835716,
         30741503,
         21441617,
+        48835607,
     ]
 
 
@@ -749,7 +756,10 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     #: 🔴 8 → **9** (Phase 6-V, 기르수 ①).
     #: 🔴 9 → **10** (Phase 6-AC, 성유물－『성장』 ②). 그 조건도 상태
     #: 조건이다 (``ZoneHasFreeSlot`` — 자신 몬스터 존에 빈 자리가 있다).
@@ -767,7 +777,10 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: 🔴 13 → **14** (Phase 6-BF, 갈라테아 ②). 그 조건도 상태 조건이고
     #: **하나뿐**이다 — ``Not(FaceUpCardPresent(…, 바벨))`` 이다. 공식
     #: ``s.tdcon1`` 하나에서 옮겼고, ``s.tdtg`` 에는 빈 칸 조건이 없다.
-    assert len(with_activation) == 14
+    #: 🔴 14 → **15** (Phase 6-BI) — 갈라테아i ② 의 발동 조건도
+    #: ``Not(FaceUpCardPresent(…, 바벨))`` **하나**이고 판정 가능한
+    #: 상태 조건이다 (공식 ``s.babelcon`` 에서 옮겼다).
+    assert len(with_activation) == 15
 
     #: 🔴 **Phase 6-AF — ``card_id → ordinal`` 사전으로는 더 가를 수 없다.**
     #: 기르수가 블록 둘을 등재했으므로 (① 과 ③) 사전은 하나를 덮어쓴다.

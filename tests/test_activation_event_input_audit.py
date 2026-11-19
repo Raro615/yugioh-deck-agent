@@ -221,7 +221,14 @@ def test_02_the_enumerator_reads_no_event(repository):
     assert leaked == set(), f"열거가 사건을 읽는다: {sorted(leaked)}"
 
     #: 실제로 읽는 것 — 판과 등록소와 정의의 비용뿐이다.
-    assert {"state", "card_id", "instance_id", "cost"} <= used
+    #: 🔴 **Phase 6-BI 가 비용을 읽는 이름을 바꿨다.** 6-AO 는
+    #: ``definition.cost`` 를 직접 보았고, 지금은 그 판정을 다리로 뺐으므로
+    #: (``engine.cost_bridge``) 이 함수가 부르는 이름이
+    #: ``unsupported_cost_enumeration`` · ``cost_card_combinations`` 다.
+    #: 🔴 **재는 사실은 그대로다** — 이 열거는 사건을 하나도 읽지 않고,
+    #: 읽는 것은 판 · 등록소 · **비용**뿐이다.
+    assert {"state", "card_id", "instance_id"} <= used
+    assert {"unsupported_cost_enumeration", "cost_card_combinations"} <= used
     assert "activatable_effects" in used
     assert "target_combinations" in used
 

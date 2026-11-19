@@ -537,7 +537,10 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     #: 🔴 Phase 6-AF 에서 **등재 수와 카드 수가 갈라졌다** — 카드 수는 19
     #: 로 그대로이고 등재 수만 20 이 되었다. 기르수 ③(토큰 생성)이 이미
     #: 등재된 기르수 ①(유발) 과 **같은 카드**에 붙기 때문이다. 6-AC 까지는
@@ -548,7 +551,9 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 수도 하나 늘었다 (등재 22 · 카드 21 · 차이는 기르수 한 장에 둘).
     #: 🔴 21 → **22** (Phase 6-BF) — 갈라테아도 **새 카드**다 (등재 23 ·
     #: 카드 22 · 차이는 여전히 기르수 한 장에 둘).
-    assert len(card_ids) == 22
+    #: 🔴 22 → **23** (Phase 6-BI) — 갈라테아i 도 **새 카드**다
+    #: (등재 24 · 카드 23 · 차이는 여전히 기르수 한 장에 둘).
+    assert len(card_ids) == 23
 
     kinds = collections.Counter()
     executable_kinds = collections.Counter()
@@ -582,7 +587,11 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 세트**하지만, 세트되는 카드는 **등재된 효과가 아니다.** 등재된
     #: 것은 세트하는 **몬스터 효과** 하나이고, 그 구분이 이 두 줄의
     #: 전부다 (`kinds` 는 **효과를 가진 카드**의 종류를 센다).
-    assert kinds["monster"] == 6, dict(kinds)
+    #: 🔴 6 → **7** (Phase 6-BI, 오르페골 갈라테아i ②). 마법 11 ·
+    #: 함정 5 는 여기서도 **그대로**다 — 그 효과가 덱 · 묘지에서 패에
+    #: 넣는 카드(바벨 · 성유물)는 **등재된 효과가 아니다.** 등재된
+    #: 것은 패에 넣는 **몬스터 효과** 하나다.
+    assert kinds["monster"] == 7, dict(kinds)
     assert kinds["spell"] + kinds["trap"] == 16, dict(kinds)
     #: 🔴 **실행되는 몬스터가 하나 있다** (Phase 6-L · 어니스트 ①). 6-K
     #: 시점에는 0이었고 그것이 그때의 사실이었다. 단언을 지우지 않는다 —
@@ -594,14 +603,19 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 🔴 3 → **4** (Phase 6-AO, 디베르 ① · ``executable=True``).
     #: 🔴 4 → **5** (Phase 6-AQ, 스켈레촌 ① 은 ``executable=True`` 다).
     #: 🔴 5 → **6** (Phase 6-BF, 갈라테아 ② 도 ``executable=True`` 다).
-    assert executable_kinds["monster"] == 6, dict(executable_kinds)
+    #: 🔴 6 → **7** (Phase 6-BI, 갈라테아i ② 도 ``executable=True`` 다).
+    #: 마법 · 함정 쪽 13 은 **그대로**이고, 그것이 "늘어난 쪽이
+    #: 몬스터이고 거기뿐" 을 센다.
+    assert executable_kinds["monster"] == 7, dict(executable_kinds)
     assert executable_kinds["spell"] + executable_kinds["trap"] == 13, dict(
         executable_kinds
     )
     #: 🔴 17 → **18** (Phase 6-AQ) — 늘어난 쪽은 몬스터뿐이다
     #: (마법 9 · 함정 4 는 그대로).
     #: 🔴 18 → **19** (Phase 6-BF) — 같은 이유다.
-    assert sum(executable_kinds.values()) == 19, dict(executable_kinds)
+    #: 🔴 19 → **20** (Phase 6-BI) — 같은 이유다 (마법 9 · 함정 4 는
+    #: 그대로이고 늘어난 쪽은 몬스터뿐이다).
+    assert sum(executable_kinds.values()) == 20, dict(executable_kinds)
 
 
 def test_13_the_engine_splits_on_effect_ref_not_on_card_versus_effect(repository):

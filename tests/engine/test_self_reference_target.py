@@ -1088,13 +1088,17 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     executable = [e for e in EFFECT_LIBRARY if e.executable]
     #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
     #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
     #: 🔴 17 → **18** (Phase 6-AO) — 디베르 ① 이다.
     #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이다.
-    assert len(executable) == 20
+    #: 🔴 20 → **21** (Phase 6-BI) — 갈라테아i ② 다.
+    assert len(executable) == 21
     monsters = [
         e.definition.source_card_id
         for e in executable
@@ -1109,6 +1113,7 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     #: 🔴 **여섯째가 들어왔다** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이다.
     #: 목록은 **등재 단위**로 세므로 기르수가 두 번 나오는 것이 정상이다.
     #: 🔴 **일곱째가 들어왔다** (Phase 6-BF) — 오르페골 갈라테아 ② 다.
+    #: 🔴 **여덟째가 들어왔다** (Phase 6-BI) — 오르페골 갈라테아i ② 다.
     assert monsters == [
         HONEST,
         GIRSU,
@@ -1117,6 +1122,7 @@ def test_j02_the_library_grew_by_exactly_one_executable():
         57835716,
         30741503,
         21441617,
+        48835607,
     ], monsters
 
 
@@ -1203,8 +1209,14 @@ def test_k03_the_public_action_contract_is_unchanged():
     #: 바뀌지 않았다" 를 지키던 것이고, 바뀐 이유를 함께 적어 둔다 — 링크
     #: 소재는 **대상이 아니므로** ``targets`` 에 넣을 수 없었다
     #: (``PlayerAction.materials`` 의 설명).
+    #: 🔴 **Phase 6-BI 가 ``cost_cards`` 를 더했다.** 같은 규율로 이유를
+    #: 적는다 — 비용으로 내놓는 카드는 **대상도 소재도 아니다**
+    #: (``PlayerAction.cost_cards`` 의 설명). 비용은 발동 시점에 치르므로
+    #: 무엇을 냈는지가 행위에 적혀야 하고, 그래야 다른 카드를 낸 전개가
+    #: **다른 행위**로 갈린다.
     assert [f.name for f in dataclasses.fields(PlayerAction)] == [
-        "kind", "actor", "source", "targets", "effect_ref", "phase", "materials"
+        "kind", "actor", "source", "targets", "effect_ref", "phase",
+        "materials", "cost_cards",
     ]
     assert [f.name for f in dataclasses.fields(EffectRef)] == ["card_id", "ordinal"]
     assert [f.name for f in dataclasses.fields(ResolutionContext)] == [

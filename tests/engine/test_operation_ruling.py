@@ -953,7 +953,12 @@ def test_f_the_registry_covers_every_registered_real_card():
     #: 세트하는 두 장이고, 등재하지 않으면 그 세트가 ``UNKNOWN`` 으로
     #: 거절된다. 디베르 · 스켈레촌에는 질문이 하나씩 늘었다
     #: (``MAY_BE_RETURNED_TO_DECK``) — **카드 수는 그대로**다.
-    assert len(OPERATION_RULINGS) == 28
+    #: 🔴 28 → **33** (Phase 6-BI) — 다섯 장을 읽어 등재했다: 성유물－
+    #: 『성관』 (갈라테아i ② 가 덱에서 **패에 넣을** 후보) 과 이번 패의
+    #: 네 장 (하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자 — 그
+    #: 효과의 **비용으로 묘지에 놓이는** 카드들). 등재하지 않으면 자기가
+    #: 치른 비용 때문에 자기 효과의 해결이 ``UNKNOWN`` 이 된다.
+    assert len(OPERATION_RULINGS) == 33
 
 
 def test_f_no_spell_or_trap_claims_to_be_returnable(repository):

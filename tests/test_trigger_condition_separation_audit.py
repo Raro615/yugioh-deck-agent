@@ -345,7 +345,10 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     #: 🔴 Phase 6-K — 열일곱 번째(어니스트 ①)는 ``code`` 가 **없다.** 기동
     #: 효과는 사건이 아니라 선언으로 발동하므로 ``SetCode`` 를 적지 않는다.
     #:
@@ -367,7 +370,9 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 쪽은 그대로이고, 늘어난 것은 **기동(코드 없음)** 하나다.
     #: 🔴 22 → **23** (Phase 6-BF, 갈라테아 ②). 같은 이유다 — 기동이고
     #: ``SetCode`` 가 없다. 유발 쪽 둘은 그대로다.
-    assert len(codes) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 갈라테아i ②). 같은 이유다 — 기동이고
+    #: ``SetCode`` 가 없다 (공식 ``e3`` 은 ``EFFECT_TYPE_IGNITION`` 이다).
+    assert len(codes) == 24
     assert set(codes) == {
         "EVENT_FREE_CHAIN",
         "EVENT_SUMMON_SUCCESS",
@@ -387,7 +392,9 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 🔴 4 → **5** (Phase 6-BF). 갈라테아 ② 도 **기동 효과**다 — 자유
     #: 체인 16 과 유발 둘은 여전히 하나도 움직이지 않았고, 그것이 이
     #: 분포가 말하는 사실이다.
-    assert len([c for c in codes if c is None]) == 5
+    #: 🔴 5 → **6** (Phase 6-BI). 갈라테아i ② 도 **기동 효과**다 — 자유
+    #: 체인 16 과 유발 둘은 여기서도 하나도 움직이지 않았다.
+    assert len([c for c in codes if c is None]) == 6
 
 
 @pytest.mark.real_card
@@ -431,7 +438,9 @@ def test_05_the_eight_activation_conditions_are_state_conditions(repository):
     #: 🔴 12 → **13** (Phase 6-BF, 오르페골 갈라테아 ②). 그 조건도
     #: **상태 조건**이다 — ``Not(FaceUpCardPresent(…, 바벨))`` 하나이고
     #: 사건을 묻지 않는다.
-    assert len(with_condition) == 13
+    #: 🔴 13 → **14** (Phase 6-BI) — 갈라테아i ② 의 발동 조건
+    #: (「바벨이 앞면으로 필드 존에 있지 않다」) 이 하나 늘었다.
+    assert len(with_condition) == 14
     #: 사례로 쓰는 넷의 종류를 못박는다.
     assert with_condition[POT_OF_GREED]["types"] == ["SPELL"]
     assert with_condition[RELOAD]["types"] == ["QUICKPLAY", "SPELL"]

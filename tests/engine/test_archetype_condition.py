@@ -375,7 +375,10 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     using_archetype = [
         entry.card_id for entry in EFFECT_LIBRARY
         if entry.definition.targets
@@ -393,12 +396,17 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     #: 후보 조건이다. 앞의 넷과 자리가 다르다: 되돌릴 대상이 아니라 덱의
     #: 「오르페골」 마법 · 함정을 고르는 ``@set`` 쪽이고, 숫자 대신 같은
     #: 컴파일러를 쓴다 — 컴파일러는 여전히 한 글자도 바뀌지 않았다.
+    #: 🔴 **여섯이 되었다** (Phase 6-BI) — 오르페골 갈라테아i ② 의 **패에
+    #: 넣을 카드** 후보 조건이다. 공식 ``s.thfilter`` 가 「성유물」 시리즈를
+    #: 묻고 (``IsSetCard(SET_WORLD_LEGACY)``) 그것도 숫자 대신 같은
+    #: 컴파일러로 적었다 — 컴파일러는 여전히 한 글자도 바뀌지 않았다.
     assert using_archetype == [
         GIRSU,
         WORLD_WAND,
         57835716,
         30741503,
         21441617,
+        48835607,
     ], using_archetype
     #: 🔴 조건을 만드는 자리는 **여전히 한 곳**이다 — 기르수의 정의도
     #: ``IsSetCard`` 를 직접 부르지 않고 ``compile_archetype_condition`` 을
@@ -965,13 +973,17 @@ def test_j_the_archetype_condition_is_used_by_exactly_the_two_orcust_effects():
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 24
     #: 🔴 실행 수 16 → **17** (Phase 6-AF). 기르수 ③ 은 실제로 실행되는
     #: 효과다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 수행한다.
     #: 🔴 17 → **18** (Phase 6-AO).
     #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이다.
     #: 🔴 19 → **20** (Phase 6-BF) — 갈라테아 ② 다.
-    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 20
+    #: 🔴 20 → **21** (Phase 6-BI) — 갈라테아i ② 다.
+    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 21
     #: 🔴 실행되는 효과 중 카드군 조건을 쓰는 것이 **정확히 둘**이다.
     using = [
         entry.card_id
@@ -985,4 +997,8 @@ def test_j_the_archetype_condition_is_used_by_exactly_the_two_orcust_effects():
     #: 🔴 **다섯이 되었다** (Phase 6-BF, 갈라테아 ②). 이쪽은 앞의 넷과
     #: 다른 자리에 쓴다 — 되돌릴 대상(``@primary``)이 아니라 **세트할
     #: 카드**(``@set``)의 덱 후보 조건이 ``IsSetCard(SET_ORCUST)`` 다.
-    assert using == [GIRSU, WORLD_WAND, 57835716, 30741503, 21441617], using
+    #: 🔴 **여섯이 되었다** (Phase 6-BI, 갈라테아i ②) — 패에 넣을 카드의
+    #: 덱 · 묘지 후보 조건이 「성유물」 시리즈를 묻는다.
+    assert using == [
+        GIRSU, WORLD_WAND, 57835716, 30741503, 21441617, 48835607,
+    ], using

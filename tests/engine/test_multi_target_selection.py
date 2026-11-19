@@ -366,7 +366,10 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: 것이 아니라 그때 실제로 21건이었다 — 늘어난 것은 **읽은 카드**다.
     #: 🔴 22 → **23** (Phase 6-BF, 오르페골 갈라테아 ②). 이전 수가 틀렸던
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 것은 **읽은 카드**다.
-    assert len(EFFECT_LIBRARY) == 23, "정의 수가 바뀌면 이 Phase 를 다시 읽는다"
+    #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
+    #: 카드**다.
+    assert len(EFFECT_LIBRARY) == 24, "정의 수가 바뀌면 이 Phase 를 다시 읽는다"
     #: 🔴 11 → **12** (Phase 6-AO) — 디베르 ① 이 대상 묶음 하나를 더했다
     #: (덱에서 1장을 해결 중에 고른다). **여러 장 선택도 가변 장수도
     #: 아니다** — 이 시험이 지키는 사실은 그 둘이 하나뿐이라는 것이고,
@@ -380,7 +383,9 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: 효과에 이름이 둘인 첫 등재**이지만 여러 장 선택도 가변 장수도
     #: 아니다 — 둘 다 ``minimum=1, maximum=1`` 이고, 아래 단언들이 그
     #: 사실을 그대로 들고 있다.
-    assert bindings == 15
+    #: 🔴 15 → **16** (Phase 6-BI) — 갈라테아i ② 의 대상 묶음 하나가
+    #: 늘었고, 그것도 ``minimum=1, maximum=1`` 이다 (덱 · 묘지에서 1장).
+    assert bindings == 16
     assert multi == [FINE], multi
     #: 🔴 7 → **8** (Phase 6-AO) — 디베르 ① 도 **정확히 1장**을 고른다
     #: (``SelectMatchingCard(...,1,1,...)``). 이 시험이 지키는 사실은
@@ -391,7 +396,9 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: 가변 장수는 없다 — 그 둘은 위 단언들이 들고 있다.
     #: 🔴 9 → **11** (Phase 6-BF) — 갈라테아 ② 의 **두 이름 다** 정확히
     #: 1장이다 (``SelectTarget(...,1,1,nil)`` · ``g:Select(tp,1,1,nil)``).
-    assert len(exact_one) == 11, exact_one
+    #: 🔴 11 → **12** (Phase 6-BI) — 갈라테아i ② 의 패에 넣을 카드도
+    #: **정확히 1장**이다 (``SelectMatchingCard(...,1,1,nil)``).
+    assert len(exact_one) == 12, exact_one
     assert variable == [], "가변 장수 효과가 생겼다 — §6 을 다시 읽어야 한다"
     assert optional == [], optional
     assert duplicates == [], duplicates

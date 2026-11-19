@@ -324,8 +324,12 @@ def test_b01_galatea_i_has_a_read_fact_that_claims_only_one_thing():
     🔴 **이 Phase 의 본문 ②.** 갈라테아i 가 등록소에 있고, 그 줄이 주장하는
     것은 **「필드에 있다는 것만으로 남의 조작을 막는가」 하나**다.
 
-    🔴 **그 카드의 효과를 구현했다는 뜻이 아니다** — ``e3``(패에 넣기) ·
-    ``e4``(묘지에서 자신을 특수 소환) 는 등재되어 있지 않다.
+    🔴 **그 카드의 효과를 구현했다는 뜻이 아니다** — Phase 6-BI 가
+    ``e3``(패 1장을 묘지로 보내고 패에 넣기) 를 등재했고, ``e3a``(그
+    유발즉시 클론) 와 ``e4`` · ``e4a``(묘지에서 자신을 특수 소환) 는
+    **여전히** 등재되어 있지 않다. 🔴 **그래도 이 줄이 주장하는 것은
+    그대로 하나다** — 등재는 "발동할 수 있다" 이고, 이 줄은 "필드에 있다는
+    것만으로 막는가" 다.
     """
     facts = OPERATION_RULINGS.facts_for(GALATEA_I)
     assert facts is not None, "갈라테아i 가 등록소에 없습니다"
@@ -347,10 +351,17 @@ def test_b01_galatea_i_has_a_read_fact_that_claims_only_one_thing():
         if "전부 구현했다" in sentence:
             assert "아니다" in sentence, sentence
     assert "등재되지 않았고" in note
-    #: 🔴 그리고 그것이 사실이다 — 등재표에 그 카드의 효과가 하나도 없다.
-    assert GALATEA_I not in {
-        entry.definition.effect_ref.card_id for entry in EFFECT_LIBRARY
+    #: 🔴 **그리고 그것이 사실이다 — 등재된 것은 e3 하나뿐이다**
+    #: (Phase 6-BI). 6-AP 시점에는 하나도 없었고 그때의 단언이 그 사실을
+    #: 적었다. 지금 세는 것은 **어느 ordinal 이 등재되었는가**이고, e3a ·
+    #: e4 · e4a 가 없다는 것이 그대로 남는다.
+    registered = {
+        entry.definition.effect_ref.ordinal
+        for entry in EFFECT_LIBRARY
+        if entry.definition.effect_ref.card_id == GALATEA_I
     }
+    assert registered == {2}, registered
+    assert "e3 를 등재했고" in note, note
     #: 질문별 답은 **하나도 적지 않았다** (읽지 않은 것을 적지 않는다).
     assert facts.answers == {}
 

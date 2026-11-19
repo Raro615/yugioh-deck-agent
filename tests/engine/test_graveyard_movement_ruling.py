@@ -765,11 +765,23 @@ def test_f01_the_other_four_questions_stay_unknown(repository):
     🔴 **다섯 질문 공유 경계를 넘지 않았다** (6-W §4.1 이 경고한 것).
 
     같은 카드에 대해 묘지만 ``TRUE`` 이고 나머지 넷은 ``UNKNOWN`` 이다.
+
+    🔴 **Phase 6-BI 가 그 넷에서 하나를 빼냈다.** 「패로 되돌릴 수 있는가」
+    는 이제 ``TRUE`` 다 — 오르페골 갈라테아i ② 가 덱 · 묘지에서 이 카드를
+    **패에 넣을 수 있는** 후보로 묻고, 그래서 그 Phase 가 공식 텍스트를
+    읽어 ``OPERATION_RULINGS`` 에 적었다 (``RuleBasis.CARD_TEXT``).
+    🔴 **경계가 무너진 것이 아니다** — 질문을 공유해서 TRUE 가 된 것이
+    아니라 **그 질문만 따로 읽어** 적었고, 남은 셋은 그대로 모름이다.
+    그것이 이 시험이 지키는 사실이고, 아래 고리가 그 셋을 센다.
     """
     assert _ask(repository, GROWTH).answer is ConditionResult.TRUE
+    assert (
+        _ask(repository, GROWTH,
+             question=RuleQuestion.MAY_BE_RETURNED_TO_HAND).answer
+        is ConditionResult.TRUE
+    )
     for question in (
         RuleQuestion.MAY_BE_BANISHED,
-        RuleQuestion.MAY_BE_RETURNED_TO_HAND,
         RuleQuestion.MAY_BE_RETURNED_TO_DECK,
         RuleQuestion.MAY_BE_DISCARDED,
     ):
@@ -983,7 +995,13 @@ def test_g05_the_verdict_distribution_changed_only_one_way(repository):
     #: 등재로 들어왔고, 그 카드의 ``self_grave_text_fact`` 도 ``None`` 이다
     #: (「묘지의 이 카드를 제외하고」 는 자기 묘지행 유발의 문장이 아니다).
     #: 🔴 뒤집힌 카드는 여전히 0장이다.
-    assert already == 687, already
-    #: 🔴 1,676 → **1,677** (Phase 6-AQ) — ``already`` 가 하나 늘었다
+    #: 🔴 **687 → 691** (Phase 6-BI). 네 장이 등재로 들어왔다 — 갈라테아i
+    #: ② 의 **비용으로 묘지에 놓이는** 패 카드들(하루 우라라 · 증식의 G ·
+    #: 무한포영 · 무덤의 지명자)이고, 넷 다 그 카드의
+    #: ``self_grave_text_fact`` 가 ``None`` 이다 (「이 카드를 패에서 버리고
+    #: 발동」 · 「패에서 묘지로 보내고 발동」 은 **자기 묘지행 유발**의
+    #: 문장이 아니다 — 비용의 문장이다). 🔴 뒤집힌 카드는 여전히 0장이다.
+    assert already == 691, already
+    #: 🔴 1,677 → **1,681** (Phase 6-BI) — ``already`` 가 넷 늘었다
     #: (위 단언의 설명). ``newly_true`` 는 그대로 990 이다.
-    assert newly_true + already == 1677
+    assert newly_true + already == 1681

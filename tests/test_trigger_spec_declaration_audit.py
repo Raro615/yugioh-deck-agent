@@ -1200,7 +1200,20 @@ def test_19_that_phase_added_no_field_but_phase_6e_added_exactly_one():
                 if passcode in text:
                     where[passcode].add(str(path.relative_to(PROJECT_ROOT)))
 
-    assert where["23434538"] == {"scripts/fetch_ocg_rulings.py"}
+    #: 🔴 **자리가 둘이 되었다** (Phase 6-BI). 표본으로 고른 이 비밀번호
+    #: (23434538) 는 **증식의 G** 이고, 그 Phase 가 그 카드의 조작 판정을
+    #: ``engine/effect/library.py`` 의 ``OPERATION_RULINGS`` 에 등재했다 —
+    #: 갈라테아i ② 의 **비용으로 묘지에 놓이는** 패 카드이기 때문이다.
+    #: 🔴 **이 시험이 지키는 사실은 그대로다**: 그 자리들이 전부
+    #: **트리거가 아니다.** 아래 두 고리가 그것을 센다 — 재정 수집기와
+    #: 등재 표 어느 쪽에도 ``TriggerSpec`` 이 없다.
+    assert where["23434538"] == {
+        "scripts/fetch_ocg_rulings.py",
+        "engine/effect/library.py",
+    }
+    library_src = source_of("engine/effect/library.py")
+    for absent in ("TriggerSpec", "TimingPoint", "SummonKind"):
+        assert absent not in library_src, absent
     assert where["42141493"] == set()
     assert where["94145021"] == set()
     assert where["94145022"] == set()
