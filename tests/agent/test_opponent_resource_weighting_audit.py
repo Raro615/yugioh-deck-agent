@@ -146,7 +146,10 @@ def test_01_exactly_one_registered_effect_gives_the_opponent_cards():
     #: 늘어난 것은 **읽은 효과**이고, 그 효과는 패 1장을 묘지로 보내고 덱 ·
     #: 묘지에서 1장을 **자신의** 패에 넣는다. ``DrawOperation`` 을 쓰지
     #: 않고 상대에게 아무것도 주지 않으므로 아래 목록에 더해지지 않았다.
-    assert len(EFFECT_LIBRARY) == 24
+    #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 25
     assert giving == [GIFT_OF_GREED]
 
 

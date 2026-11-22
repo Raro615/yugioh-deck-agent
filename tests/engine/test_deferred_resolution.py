@@ -851,6 +851,9 @@ def test_t_phase_2ah_registered_no_real_card_and_none_uses_a_guard():
     #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
     #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 24
+    #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 25
     for entry in EFFECT_LIBRARY:
         assert entry.definition.guards == ()

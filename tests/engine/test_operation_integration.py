@@ -956,10 +956,17 @@ def test_h_no_real_card_uses_move_yet():
     #: ``RULE-SUMMON-014`` 가 소생 제한을 「"Special Summon Monsters"」 와
     #: 엑스트라 덱 몬스터에만 걸기 때문이다
     #: (``engine.effect.ruling.revival_limit_applies``).
+    #: 🔴 **넷이 되었다** (Phase 6-BJ). 갈라테아i ③ 은 **자기 자신**을
+    #: 묘지에서 소환하는 첫 등재다 — 대상이 ``SELF_TARGET`` 이고, 그래서
+    #: 소생 제한의 답을 자리 표로는 낼 수 없다. 묘지는
+    #: ``REVIVAL_LIMIT_FREE_ZONES`` 밖이므로 그 답은 **이 듀얼의 소환 이력**
+    #: (``engine.state.summon_history``) 에서 온다 — 아래 두 단언이 지키는
+    #: 자리 표의 범위는 **넓어지지 않았다**.
     assert [str(entry.effect_ref) for entry in summoning] == [
         "93920420:e[1]",
         "57835716:e[0]",
         "21441617:e[0]",
+        "48835607:e[4]",
     ]
     from engine.effect.ruling import REVIVAL_LIMIT_FREE_ZONES
     from engine.vocabulary import Zone as _Zone

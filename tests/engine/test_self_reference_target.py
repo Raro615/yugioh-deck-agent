@@ -1091,14 +1091,19 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
     #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 24
+    #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 25
     executable = [e for e in EFFECT_LIBRARY if e.executable]
     #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
     #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
     #: 🔴 17 → **18** (Phase 6-AO) — 디베르 ① 이다.
     #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이다.
     #: 🔴 20 → **21** (Phase 6-BI) — 갈라테아i ② 다.
-    assert len(executable) == 21
+    #: 🔴 21 → **22** (Phase 6-BJ) — 갈라테아i ③ (묘지 소생) 다. 이 시험이 지키는
+    #: 사실은 그대로이고, 수가 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
+    assert len(executable) == 22
     monsters = [
         e.definition.source_card_id
         for e in executable
@@ -1114,6 +1119,9 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     #: 목록은 **등재 단위**로 세므로 기르수가 두 번 나오는 것이 정상이다.
     #: 🔴 **일곱째가 들어왔다** (Phase 6-BF) — 오르페골 갈라테아 ② 다.
     #: 🔴 **여덟째가 들어왔다** (Phase 6-BI) — 오르페골 갈라테아i ② 다.
+    #: 🔴 **아홉째가 들어왔다** (Phase 6-BI → 6-BJ) — 오르페골
+    #: 갈라테아i ③ (묘지 소생) 이고, 그래서 48835607 도 **두 번** 나온다.
+    #: 기르수와 같은 이유로 중복을 집합으로 바꾸지 않는다.
     assert monsters == [
         HONEST,
         GIRSU,
@@ -1122,6 +1130,7 @@ def test_j02_the_library_grew_by_exactly_one_executable():
         57835716,
         30741503,
         21441617,
+        48835607,
         48835607,
     ], monsters
 

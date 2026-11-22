@@ -838,7 +838,10 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
     #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
     #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 24
+    #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 25
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
     #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
@@ -847,7 +850,9 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
     #: 🔴 19 → **20** (Phase 6-BF) — 갈라테아 ② 다.
     #: 🔴 20 → **21** (Phase 6-BI) — 갈라테아i ② 가 실행 가능한 효과로
     #: 들어왔다 (공식 ``c48835607.lua`` 의 ``e3`` 을 읽어 등재했다).
-    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 21
+    #: 🔴 21 → **22** (Phase 6-BJ) — 갈라테아i ③ (묘지 소생) 다. 이 시험이 지키는
+    #: 사실은 그대로이고, 수가 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
+    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 22
 
     definition = definition_registry().definition_for(
         EffectRef(POT_OF_GREED, 0)

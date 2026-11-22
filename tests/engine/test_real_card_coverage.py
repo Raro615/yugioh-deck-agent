@@ -255,6 +255,9 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
     #: ``EFFECT_TYPE_ACTIVATE`` 가 아니다 (몬스터 효과다).
     #: 🔴 **여덟째가 들어왔다** (Phase 6-BI) — 오르페골 갈라테아i ② 다.
     #: 같은 이유다 (``EFFECT_TYPE_IGNITION`` 인 몬스터 효과).
+    #: 🔴 **아홉째가 들어왔다** (Phase 6-BJ) — 오르페골 갈라테아i ③
+    #: (묘지 소생) 이다. 같은 카드가 **두 번** 더 나오는 셈이고 (② · ③),
+    #: 기르수와 같은 이유로 중복을 집합으로 바꾸지 않는다.
     assert not_activate == [
         HONEST,
         GIRSU,
@@ -263,6 +266,7 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
         57835716,
         30741503,
         21441617,
+        48835607,
         48835607,
     ], (
         not_activate
@@ -338,6 +342,9 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
     #: 🔴 **여섯째가 들어왔다** (Phase 6-AQ) — 오르페골 스켈레촌 ① 이다.
     #: 🔴 **일곱째가 들어왔다** (Phase 6-BF) — 오르페골 갈라테아 ② 다.
     #: 🔴 **여덟째가 들어왔다** (Phase 6-BI) — 오르페골 갈라테아i ② 다.
+    #: 🔴 **아홉째가 들어왔다** (Phase 6-BJ) — 오르페골 갈라테아i ③
+    #: (묘지 소생) 이다. 같은 카드가 **두 번** 더 나오는 셈이고 (② · ③),
+    #: 기르수와 같은 이유로 중복을 집합으로 바꾸지 않는다.
     assert skipped == [
         HONEST,
         GIRSU,
@@ -346,6 +353,7 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
         57835716,
         30741503,
         21441617,
+        48835607,
         48835607,
     ], skipped
     assert corpus[HONEST]["blocks"] == 3

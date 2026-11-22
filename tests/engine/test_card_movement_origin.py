@@ -1076,10 +1076,14 @@ def test_h02_exactly_one_registered_effect_has_a_cost():
     #: 🔴 **셋이 되었다** (Phase 6-BI) — 오르페골 갈라테아i ② 이고, 이쪽은
     #: ``SelfCardCost`` 가 아니라 **고르는** ``CardCost`` 다 (패 1장을 묘지로
     #: 보낸다). 이전 수가 틀렸던 것이 아니라 6-AQ 시점에 둘이었다.
+    #: 🔴 **넷이 되었다** (Phase 6-BJ) — 오르페골 갈라테아i ③ 이고,
+    #: 이쪽도 **고르는** ``CardCost`` 다 (묘지의 다른 오르페골 1장을
+    #: 제외한다). 이전 수가 틀렸던 것이 아니라 6-BI 시점에 셋이었다.
     assert [str(ref) for ref in with_cost] == [
         "57835716:e[0]",
         "21441617:e[0]",
         "48835607:e[2]",
+        "48835607:e[4]",
     ], with_cost
     #: 🔴 **고르는 비용이 Phase 6-BI 에서 들어왔다.** 6-AQ 까지는 "고를 것이
     #: 없는 비용뿐" 이었고 그 이유는 듀얼 고리가 선택을 넘기지 않는다는
@@ -1354,7 +1358,10 @@ def test_k02_the_library_grew_no_executable_entry():
     #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
     #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 24
+    #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 25
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: Phase 6-AF — 기르수 ③ 이 실행 가능으로 더해졌다 (16 → 17).
     #: 🔴 Phase 6-AO — 디베르 ① 이 실행 가능으로 더해졌다 (17 → 18).
@@ -1363,7 +1370,9 @@ def test_k02_the_library_grew_no_executable_entry():
     #: 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
     #: 🔴 19 → **20** (Phase 6-BF) — 갈라테아 ② 다.
     #: 🔴 20 → **21** (Phase 6-BI) — 갈라테아i ② 다.
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 21
+    #: 🔴 21 → **22** (Phase 6-BJ) — 갈라테아i ③ (묘지 소생) 다. 이 시험이 지키는
+    #: 사실은 그대로이고, 수가 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 22
 
 
 def test_k03_only_one_registered_operation_declares_its_origin():

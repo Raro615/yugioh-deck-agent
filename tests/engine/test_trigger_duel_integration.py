@@ -287,16 +287,24 @@ def test_03_exactly_one_compiled_trigger_has_a_definition(repository):
     #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
     #: 카드**다.
-    assert len(definitions) == len(EFFECT_LIBRARY) == 24
+    #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(definitions) == len(EFFECT_LIBRARY) == 25
     #: 🔴 0 뿐이던 집합이 {0, 1} 이 되었다 — 공식 ②를 등재한 첫 자리다.
     #: 🔴 Phase 6-AF 가 **셋째 ordinal** 을 열었다 — 기르수 ③(토큰 생성)은
     #: 공식 Lua 의 세 번째 블록이므로 2 다. 억지로 0 이나 1 에 맞추지 않고
     #: **그 효과의 실제 사실**을 적는다 (``c69811710.lua`` e3,
     #: ``EFFECT_TYPE_IGNITION``).
+    #: 🔴 Phase 6-BJ 가 **다섯째 ordinal** 을 열었다 — 갈라테아i ③
+    #: (묘지 소생) 은 ``c48835607.lua`` 의 **다섯 번째** 블록이므로 4 다.
+    #: **3 이 비어 있는 것이 정상이다** — 그 자리(e3a, 바벨 적용 중의 ②)는
+    #: 여전히 등재되지 않았고, 수를 메우려고 억지로 당기지 않는다.
     assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {
         0,
         1,
         2,
+        4,
     }
     assert [
         e.effect_ref.ordinal for e in EFFECT_LIBRARY if e.card_id == WORLD_WAND

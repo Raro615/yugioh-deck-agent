@@ -418,6 +418,11 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
         #: 발동 자리도 **필드**다 (``{MZONE, EMZONE}``). 다른 점은 **비용**
         #: 이다 — 고르는 비용을 치르는 첫 등재다.
         EffectRef(48835607, 2): ActivationKind.IGNITION,
+        #: 🔴 Phase 6-BJ — 오르페골 갈라테아i ③ (묘지 소생) 이다.
+        #: 분류는 같은 기동이지만 발동 자리가 **묘지**다 (``{GRAVE}``) —
+        #: 같은 카드의 ② 가 필드에서 발동하는 것과 대비된다. 둘의 턴 제한도
+        #: 서로 다른 칸을 쓴다 (② 는 카드명당 · ③ 은 효과당).
+        EffectRef(48835607, 4): ActivationKind.IGNITION,
     }
     entry = next(e for e in EFFECT_LIBRARY if e.definition.effect_ref == HONEST_REF)
     #: 🔴 **Phase 6-L 에서 실행된다.** 6-K 시점에는 ``executable=False`` ·

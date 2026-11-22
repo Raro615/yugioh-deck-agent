@@ -378,7 +378,10 @@ def test_c_the_compiler_now_turns_an_archetype_name_into_a_condition():
     #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
     #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 24
+    #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 25
     using_archetype = [
         entry.card_id for entry in EFFECT_LIBRARY
         if entry.definition.targets
@@ -976,14 +979,19 @@ def test_j_the_archetype_condition_is_used_by_exactly_the_two_orcust_effects():
     #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
     #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 24
+    #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 25
     #: 🔴 실행 수 16 → **17** (Phase 6-AF). 기르수 ③ 은 실제로 실행되는
     #: 효과다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 수행한다.
     #: 🔴 17 → **18** (Phase 6-AO).
     #: 🔴 18 → **19** (Phase 6-AQ) — 스켈레촌 ① 이다.
     #: 🔴 19 → **20** (Phase 6-BF) — 갈라테아 ② 다.
     #: 🔴 20 → **21** (Phase 6-BI) — 갈라테아i ② 다.
-    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 21
+    #: 🔴 21 → **22** (Phase 6-BJ) — 갈라테아i ③ (묘지 소생) 다. 이 시험이 지키는
+    #: 사실은 그대로이고, 수가 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
+    assert len([entry for entry in EFFECT_LIBRARY if entry.executable]) == 22
     #: 🔴 실행되는 효과 중 카드군 조건을 쓰는 것이 **정확히 둘**이다.
     using = [
         entry.card_id

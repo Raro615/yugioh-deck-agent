@@ -337,7 +337,10 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
     #: 🔴 23 → **24** (Phase 6-BI, 오르페골 갈라테아i ②). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 23건이었다 — 늘어난 것은 **읽은
     #: 카드**이고, 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 24
+    #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 25
     assert {entry.card_id for entry in EFFECT_LIBRARY} == {
         POT_OF_GREED, RAIN_OF_MERCY, MYSTICAL_SPACE_TYPHOON,
         DARK_HOLE, MONSTER_REBORN,
@@ -411,10 +414,15 @@ def test_a_fifteen_real_effect_refs_are_executable():
     #: 🔴 **Phase 6-AO 가 하나 더했다** — ``EffectRef(57835716, 0)`` 이다.
     #: 🔴 **Phase 6-AQ 가 하나 더했다** — ``EffectRef(21441617, 0)``,
     #: 오르페골 스켈레촌 ① 이고 목록의 **첫 대상 지정 몬스터 효과**다.
+    #: 🔴 **Phase 6-BJ 가 하나 더했다** — ``EffectRef(48835607, 4)``,
+    #: 오르페골 갈라테아i ③ 이다. ordinal 이 **4** 이므로 이쪽도 아래
+    #: ``EffectRef(cid, 0)`` 묶음에 들어가지 않는다 — 공식 Lua 의 다섯째
+    #: 블록이므로 억지로 0 이나 2 에 맞추지 않는다.
     assert executable == {
         EffectRef(GIRSU, 2),
         EffectRef(57835716, 0),
         EffectRef(21441617, 0),
+        EffectRef(48835607, 4),
     } | {
         EffectRef(cid, 0)
         for cid in OLD_CARDS
@@ -445,7 +453,9 @@ def test_a_fifteen_real_effect_refs_are_executable():
     #: 🔴 Phase 6-AO — 디베르 ① 이 더해졌다 (17 → **18**).
     #: 🔴 Phase 6-AQ — 스켈레촌 ① 이 더해졌다 (18 → **19**).
     #: 🔴 Phase 6-BI — 갈라테아i ② 가 더해졌다 (20 → **21**).
-    assert len(executable) == 21
+    #: 🔴 21 → **22** (Phase 6-BJ) — 갈라테아i ③ (묘지 소생) 다. 이 시험이 지키는
+    #: 사실은 그대로이고, 수가 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
+    assert len(executable) == 22
 
 
 def test_a_every_declined_card_says_what_is_missing():
@@ -1089,10 +1099,16 @@ def test_j_exactly_one_real_card_special_summons():
     #:
     #: 🔴 **셋이 되었다** (Phase 6-AQ). 스켈레촌 ① 은 **묘지에서** 소환하고,
     #: 그래서 이 시험의 두 번째 사실도 좁아졌다 — 아래를 보라.
+    #:
+    #: 🔴 **넷이 되었다** (Phase 6-BJ). 갈라테아i ③ 은 **자기 자신**을
+    #: 묘지에서 소환한다 — 묘지는 ``REVIVAL_LIMIT_FREE_ZONES`` 밖이고,
+    #: 그 자리 표는 **넓어지지 않았다**. 소생 제한의 답은 그 대신 이 듀얼의
+    #: 소환 이력(``engine.state.summon_history``) 에서 온다.
     assert [entry.effect_ref for entry in summoners] == [
         EffectRef(WORLD_WAND, 1),
         EffectRef(57835716, 0),
         EffectRef(21441617, 0),
+        EffectRef(48835607, 4),
     ]
     #: 🔴 여전히 못 하는 쪽 — 빼 버리지 않는다.
     reborn = entry_for(EffectRef(MONSTER_REBORN, 0))
@@ -1299,7 +1315,10 @@ def test_k_exactly_one_real_card_has_a_cost():
     #: 🔴 **셋이 되었다** (Phase 6-BI) — 오르페골 갈라테아i ② 이고, 이쪽은
     #: ``SelfCardCost`` 가 아니라 **고르는** ``CardCost`` 다 (패 1장을 묘지로
     #: 보낸다). 고르는 비용이 등재된 **첫 효과**다.
-    assert with_cost == [57835716, 21441617, 48835607], with_cost
+    #: 🔴 **넷이 되었다** (Phase 6-BJ) — 오르페골 갈라테아i ③ 이고,
+    #: 이쪽도 고르는 ``CardCost`` 다 (묘지의 **다른** 오르페골 1장을
+    #: 제외한다). 같은 카드의 효과가 둘이므로 48835607 이 두 번 적힌다.
+    assert with_cost == [57835716, 21441617, 48835607, 48835607], with_cost
     for entry in EFFECT_LIBRARY:
         for cost in entry.definition.cost.costs:
             if isinstance(cost, SelfCardCost):
