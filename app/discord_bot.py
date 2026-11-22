@@ -1184,6 +1184,15 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
         #: 않으면 v2 가 토큰 여부도 세트 종류도 모른다.
         ranking = rank_autonomous_results(found, agent.repository)
         brief = list(head)
+        #: 🔴 **고르는 길이 들어갈 자리를 먼저 잡는다** (Phase 6-BJ
+        #: 후속). 요청 ID 를 적은 줄은 요약의 **맨 끝**에 있었고, 추천이
+        #: 여럿인 판에서는 그 줄이 길이 상한에 걸려 **잘려 나갔다** —
+        #: 실측: 추천 13개 · 요약 4메시지 7,486자 · 8줄 누락, 그 8줄 안에
+        #: 🎞 줄이 들어 있었다. 잘린 줄은 첨부에 전부 있지만, **그 줄이
+        #: 없으면 `/combo-pick` 에 넣을 요청 ID 를 어디서도 읽을 수 없다** —
+        #: 첨부를 열어야 알 수 있는 것은 "고를 수 있다" 가 아니다.
+        #: 🔴 줄 수를 줄이거나 추천을 깎지 않는다. **자리만 앞으로** 옮긴다.
+        invite_at = len(brief)
         brief.extend(
             render_open_search_brief(found, agent.repository,
                                      ranking).splitlines()
@@ -1219,7 +1228,8 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
                 ranking.recommended if ranking is not None else ())],
             picked=(picked if picked is not None else -1),
         )
-        brief.append(_pick_invite(kept, picked))
+        #: 🔴 위에서 잡아 둔 자리에 넣는다 — 추천 절보다 **앞**이다.
+        brief[invite_at:invite_at] = ["", _pick_invite(kept, picked)]
         detail.append("")
         detail.append(why)
         detail.append(_pick_invite(kept, picked))
