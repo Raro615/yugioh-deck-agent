@@ -593,6 +593,38 @@ SPECIAL_SUMMON_KINDS: frozenset[SummonKind] = frozenset(
 )
 
 
+#: **카드 자신의 소환 절차를 완성하는** 소환법들 (Phase 6-BJ).
+#:
+#: 소생 제한이 묻는 「정규 소환을 거쳤는가」 의 "거쳤다" 쪽이 이 표다
+#: (룰북 ``RULE-SUMMON-014`` — 전문은 :data:`~engine.effect.ruling.
+#: REVIVAL_LIMIT_TYPE_NAMES` 의 설명에 있다). 공식 구현의
+#: ``STATUS_PROC_COMPLETE`` 가 켜지는 자리와 같은 뜻이다.
+#:
+#: 🔴 **:data:`SPECIAL_SUMMON_KINDS` 와 다른 질문이다.** 저쪽은 "그것이
+#: 규칙상 특수 소환인가" 이고 이쪽은 **"그것이 그 카드의 절차였는가"** 다.
+#: 둘은 겹치지만 같지 않다 — :attr:`SummonKind.SPECIAL` 은 특수 소환이지만
+#: (저쪽에 있다) **절차가 아니다** (이쪽에 없다): 「이 카드를 특수 소환한다」
+#: 는 다른 카드의 효과가 꺼내는 일이고, 그것으로는 소생 제한이 풀리지
+#: 않는다. 그래서 소생 효과로 나온 엑스트라 덱 몬스터가 다시 묘지에 가도
+#: 「정규 소환을 거쳤다」 가 되지 않는다.
+#:
+#: 🔴 **:attr:`SummonKind.NORMAL` 도 없다.** 소생 제한이 걸리는 종류는
+#: 애초에 일반 소환할 수 없다 (``NEVER_NORMAL_SUMMONABLE``) — 일반 소환된
+#: 카드에는 이 질문이 생기지 않으므로, 넣으면 **쓰이지 않는 허가**가 된다.
+#:
+#: 융합 · 싱크로 · 엑시즈 · 의식 · 펜듈럼은 그 절차가 생기는 날 함께
+#: 들어온다. 지금 이름만 넣어 두면 절차 없는 이름이 "이 소환은 융합이었다"
+#: 고 주장하게 된다 (:class:`SummonKind` 가 그 목록을 비워 둔 것과 같은
+#: 이유다).
+PROCEDURE_SUMMON_KINDS: frozenset[SummonKind] = frozenset({SummonKind.LINK})
+
+#: :data:`PROCEDURE_SUMMON_KINDS` 의 **이름**들. 관측에는 값 타입만 싣기
+#: 때문에 (``GameStateView.summon_history``) 판정이 문자열로 견준다.
+PROCEDURE_SUMMON_KIND_NAMES: frozenset[str] = frozenset(
+    kind.value for kind in PROCEDURE_SUMMON_KINDS
+)
+
+
 @dataclass(frozen=True, slots=True)
 class MonsterSummoned(StateDelta):
     """
@@ -889,6 +921,8 @@ __all__ = [
     "PhaseChanged",
     "SummonKind",
     "SPECIAL_SUMMON_KINDS",
+    "PROCEDURE_SUMMON_KINDS",
+    "PROCEDURE_SUMMON_KIND_NAMES",
     "MonsterSummoned",
     "TokenCreated",
     "TokenVanished",

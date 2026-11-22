@@ -60,6 +60,7 @@ from enum import Enum
 from typing import Mapping, Protocol, runtime_checkable
 
 from engine.condition import ConditionResult
+from engine.effect.delta import PROCEDURE_SUMMON_KIND_NAMES
 from engine.effect.semantics import (
     FIELD_SPELL_REPLACEMENT_RULE,
     RuleQuestion,
@@ -914,7 +915,21 @@ class BoardRuling:
             #: 판의 간섭)은 한 글자도 달라지지 않는다 — 종류가 아니라는
             #: 사실이 "특수 소환해도 된다" 가 되지는 않는다.
             limited = revival_limit_applies(card.definition)
-            if limited is not ConditionResult.FALSE:
+            #: 🔴 **이력을 먼저 읽는다** (Phase 6-BJ). 6-AQ 는 이 질문에
+            #: 답할 자리가 없어 언제나 ``UNKNOWN`` 이었고, 그래서 **정규
+            #: 링크 소환으로 묘지에 간 링크 몬스터도** 되살릴 수 없었다.
+            #: 이제 판이 그 사실을 적는다
+            #: (:mod:`engine.state.summon_history`).
+            #:
+            #: 🔴 **기록이 있을 때만 확정 답이다.** 빈 이력은 "이 듀얼에서
+            #: 소환된 적이 없다" 는 사실이지만 (관측의 규약), 「그전에 정규
+            #: 소환을 거쳤는가」 에 대한 답은 아니다 — 듀얼 시작 시점에
+            #: 이미 묘지에 있던 카드가 그 자리다. 그러니 없는 기록을 거절로
+            #: 읽지 않고 **모름을 유지한다** (ADR-006). 아래 ``UNKNOWN`` 이
+            #: 그것이고, 6-AQ 의 답과 한 글자도 다르지 않다.
+            procedures = set(self._view.summon_procedures_of(instance))
+            completed = sorted(procedures & PROCEDURE_SUMMON_KIND_NAMES)
+            if limited is not ConditionResult.FALSE and not completed:
                 allowed = " · ".join(
                     sorted(z.value for z in REVIVAL_LIMIT_FREE_ZONES)
                 )
@@ -924,13 +939,20 @@ class BoardRuling:
                     if limited is ConditionResult.TRUE
                     else "이 카드가 그 종류인지 읽지 못했습니다"
                 )
+                did = (
+                    "이 듀얼에서 "
+                    + " · ".join(sorted(procedures))
+                    + " 로 소환된 기록이 있지만 그것은 그 카드의 절차가 "
+                    "아닙니다"
+                    if procedures
+                    else "이 듀얼에서 소환된 기록이 없습니다"
+                )
                 return RulingVerdict(
                     ConditionResult.UNKNOWN,
                     f"{instance} 가 {card.zone.value} 에 있고 {said}. "
-                    "그러면 「정규 소환을 거쳤는가」 를 알아야 하는데 이 "
-                    f"엔진은 소환 이력을 적지 않습니다 "
-                    f"({SUMMON_HISTORY_RULE}). 그 질문이 생기지 않는 자리는 "
-                    f"{allowed} 뿐입니다.",
+                    "그러면 「정규 소환을 거쳤는가」 를 알아야 하는데 "
+                    f"{did} ({SUMMON_HISTORY_RULE}). 그 질문이 생기지 않는 "
+                    f"자리는 {allowed} 뿐입니다.",
                 )
         decided = self._explain_fact(RuleQuestion.MAY_BE_SPECIAL_SUMMONED, instance)
         if decided.answer is not ConditionResult.TRUE or permission.allowed:

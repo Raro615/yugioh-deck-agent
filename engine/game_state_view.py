@@ -726,6 +726,24 @@ class GameStateView:
     🔴 **값 타입만 싣는다.** ``AttributeOnlyLimit`` 은 frozen dataclass 이고
     필드가 전부 정수 · 문자열이므로 관측의 규율을 어기지 않는다.
     """
+    summon_history: tuple[tuple[int, tuple[str, ...]], ...] = ()
+    """
+    **이 듀얼에서** 각 개체가 거친 소환 절차들 — ``(instance_id 값,
+    소환법 이름들)`` (Phase 6-BJ).
+
+    :attr:`summons_by_name` 과 **다른 축이다.** 저쪽은 **이번 턴**에 어떤
+    카드명이 몇 번 소환되었는가(제약을 세는 표)이고, 이쪽은 **듀얼 전체**
+    에서 그 **개체**가 어떤 절차를 거쳤는가다 — 소생 제한이 묻는 질문이
+    턴 경계를 넘기 때문이다.
+
+    가릴 것이 없다 — 소환은 공개된 자리에서 일어나므로 어느 몬스터가 링크
+    소환으로 나왔는지는 양쪽 다 본다. 양쪽 카드를 함께 싣는 이유가
+    그것이다 (:attr:`attacks_used` 와 같은 규약).
+
+    **판정기가 이것을 읽는다** (:meth:`~engine.effect.ruling.BoardRuling.
+    explain_special_summon`). 판정은 관측만 보므로 (ADR-007), 여기에 실리지
+    않으면 묘지의 링크 몬스터가 정규 링크 소환을 거쳤는지 알 길이 없다.
+    """
 
     # ------------------------------------------------------------------
     # 만들기
@@ -814,6 +832,10 @@ class GameStateView:
             ),
             summons_by_name=state.summon_uses.entries(state.turn.turn_number),
             summon_limits=state.summon_limits.entries(state.turn.turn_number),
+            #: 🔴 **턴 번호를 넘기지 않는다** (Phase 6-BJ). 이 표만
+            #: 듀얼 전체의 사실이고, 그래서 ``entries()`` 에 턴 인자가
+            #: 없다 — 위의 둘과 가르는 자리다.
+            summon_history=state.summon_history.entries(),
         )
 
     # ------------------------------------------------------------------
@@ -858,6 +880,23 @@ class GameStateView:
             if seat == player and found == card_id and kind == name:
                 return count
         return 0
+
+    def summon_procedures_of(self, instance_id: InstanceId) -> tuple[str, ...]:
+        """
+        그 개체가 **이 듀얼에서** 거친 소환법 이름들 (Phase 6-BJ).
+
+        기록이 없으면 ``()`` 이고, 거기서 빈 튜플은 **"이 듀얼에서 소환된
+        적이 없다"** 는 사실이다 (:meth:`summons_of` 와 같은 규약). 🔴 그
+        사실이 「정규 소환을 거치지 않았다」 와 **같은 말은 아니다** —
+        듀얼 시작 시점에 이미 묘지에 있던 카드의 과거는 이 표에 없고, 그
+        구분은 읽는 쪽이 한다 (``explain_special_summon`` 은 기록이 **있을
+        때만** 확정 답을 낸다).
+        """
+        value = getattr(instance_id, "value", instance_id)
+        for instance, kinds in self.summon_history:
+            if instance == value:
+                return kinds
+        return ()
 
     def special_summon_limits(self, player: int) -> tuple:
         """

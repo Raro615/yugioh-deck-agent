@@ -2793,6 +2793,250 @@ _GALATEA_I_TO_HAND_ENTRY = LibraryEntry(
 )
 
 
+#: 🔴 **오르페골 갈라테아i ③ — 묘지에서 자신을 특수 소환한다** (Phase 6-BJ).
+#:
+#: 공식 텍스트 (한국어 · 영어 둘 다 읽었다)::
+#:
+#:     ③: 자신 묘지에서 다른 "오르페골" 카드 1장을 제외하고 발동할 수 있다.
+#:     이 카드를 특수 소환한다.
+#:
+#:     You can banish 1 other "Orcust" card from your GY; Special Summon
+#:     this card.
+#:
+#:     공식 처리 (``c48835607.lua`` 의 ``e4``)
+#:     --------------------------------------
+#:     ``e4:SetType(EFFECT_TYPE_IGNITION)``        기동 효과
+#:     ``e4:SetRange(LOCATION_GRAVE)``             **묘지에서**
+#:     ``e4:SetCountLimit(1,{id,1})``              「그 카드명의 **이 효과**」 1턴 1번
+#:     ``e4:SetCondition(aux.NOT(s.babelcon))``    바벨이 적용 중이 **아닐 때**
+#:     ``e4:SetCost(s.spcost)``                    「오르페골」 1장을 **제외한다**
+#:     ``e4:SetTarget(s.sptg)``                    이 카드를 특수 소환할 수 있는가
+#:     ``e4:SetOperation(s.spop)``                 이 카드를 특수 소환한다
+#:
+#: 🔴 **턴 제한이 ② 와 다른 축이다 — 그래서 다른 열거형 값이다.**
+#: ② 는 ``SetCountLimit(1,id)`` 이고 ③ 은 ``SetCountLimit(1,{id,1})`` 다.
+#: 앞은 **카드명 기준**이고 (:attr:`~engine.use_limit.LimitScope.
+#: PER_CARD_NAME`) 뒤는 **그 카드명의 이 효과 기준**이다
+#: (:attr:`~engine.use_limit.LimitScope.PER_EFFECT`). 두 값은 서로 다른
+#: 열쇠를 만들므로 (:meth:`~engine.use_limit.UseLimit.key_for`) 세는 칸이
+#: 아예 다르다 — **같은 턴에 ② 를 쓴 갈라테아i 가 링크 소재가 되어 묘지로
+#: 간 뒤에도 ③ 은 그대로 쓸 수 있다.** 그것이 공식 처리이고, 사용자가 이번에
+#: 보려는 장면이 정확히 그 판이다.
+#:
+#: 비용 — **묘지에서만 고른다** (텍스트와 스크립트가 어긋나는 자리)
+#: ----------------------------------------------------------------
+#: 🔴 ``s.spcost`` 는 ``LOCATION_MZONE|LOCATION_GRAVE`` 를 훑는데 **공식
+#: 텍스트는 양쪽 언어가 모두 「자신 묘지에서」 · 「from your GY」 라고
+#: 적는다.** 한쪽을 조용히 고르지 않고, **텍스트를 따라 묘지만** 구현했다.
+#: 이유가 둘이다.
+#:
+#: 1. 이 저장소의 규율은 "출처가 어긋나면 덮어쓰지 않고 적는다" 다. 두
+#:    출처가 다른 말을 하면 **좁은 쪽**이 안전하다 — 넓게 구현하면 규칙이
+#:    허가하지 않는 비용을 엔진이 허가한다.
+#: 2. 필드의 「오르페골」 을 비용으로 제외하는 길은 ``GetMZoneCount(tp,c)``
+#:    의 **"그 카드가 비우는 칸"** 계산과 묶여 있고 (아래), 그 계산을
+#:    이 저장소에는 표현할 자리가 없다.
+#:
+#: 🔴 그래서 **공식보다 덜 허가한다**: 필드의 오르페골을 제외해서 자리를
+#: 비우며 소생하는 갈래는 이 엔진에 없다.
+#:
+#: 🔴 **「오르페골 카드」 이고 몬스터가 아니다.** ``s.spcostfilter`` 에
+#: ``IsMonster()`` 가 **없다** — 묘지의 「오르페골 바벨」 · 「오르페골
+#: 클리막스」 도 비용이 된다. 스켈레촌 ① (「"오르페골" **몬스터**」) 와
+#: 가르는 자리이므로 ``IsMonster()`` 를 적지 **않았다.**
+#:
+#: 🔴 **자기 자신은 비용이 될 수 없다** — 「**다른**」 · 「other」.
+#: ``Duel.SelectMatchingCard(…,1,1,c,tp)`` 의 다섯째 인자 ``c`` 가 그것이고
+#: (``c=e:GetHandler()``), 이 저장소는 그것을 :attr:`~engine.cost.model.
+#: CardCost.exclude_source` 로 적는다 (6-BJ 가 그 칸을 만들었다). 비용
+#: 후보를 거르는 자리는 :class:`~engine.cost.resolver.CandidateResolver`
+#: 하나이므로 발동 관문과 실제 지불이 **같은 후보 목록**을 본다.
+#:
+#: 비용을 치른 뒤의 빈 칸 — ``Duel.GetMZoneCount(tp,c)>0``
+#: ------------------------------------------------------
+#: 그 줄은 ``s.spcostfilter`` **안에** 있다. 즉 공식에서는 "빈 칸이 없으면
+#: 비용 후보가 하나도 없다" 이고, 그 결과가 "발동할 수 없다" 다. 비용을
+#: 묘지로 좁힌 이상 비용 카드는 몬스터 존을 쓰지 않으므로 그 식은
+#: **「자신 몬스터 존에 빈 칸이 있는가」** 와 정확히 같은 말이 되고, 그래서
+#: 발동 조건에 :class:`~engine.condition.model.ZoneHasFreeSlot` 로 적었다.
+#: 🔴 두 자리의 답이 같다는 것을 확인하고 옮긴 것이지, 비용 필터를 발동
+#: 조건으로 **옮겨도 된다**고 일반화한 것이 아니다.
+#:
+#: 소생 제한 — **6-BJ 가 그 계층을 만들었다**
+#: ------------------------------------------
+#: ``c:EnableReviveLimit()`` 와 ``s.sptg`` 의 ``c:IsCanBeSpecialSummoned``
+#: 가 묻는 것이 그것이다. 6-AQ 까지 이 저장소는 그 질문에 답할 자리가 없어
+#: (``SUMMON_HISTORY_RULE``) 묘지의 엑스트라 덱 몬스터를 **언제나**
+#: ``UNKNOWN`` 으로 막았다 — **정규 링크 소환으로 묘지에 간 경우에도**
+#: 그랬고, 그것이 이 효과가 막혀 있던 둘째 지점이었다.
+#:
+#: 6-BJ 가 :mod:`engine.state.summon_history` 를 만들어 "이 개체가 어떤
+#: 소환 절차로 필드에 놓였는가" 를 적고, :meth:`~engine.effect.ruling.
+#: BoardRuling.explain_special_summon` 이 그것을 읽는다. 기록이 **있을
+#: 때만** 확정 답이고, 없으면 여전히 ``UNKNOWN`` 이다 (ADR-006).
+#:
+#: 🔴 **그 사실과 「이 카드를 특수 소환할 수 있는가」 는 다른 질문이다.**
+#: 뒤쪽은 :data:`OPERATION_RULINGS` 에 등재된 사실이고, 6-BJ 가 이 카드에
+#: 그 답을 더했다 (아래 ``CardRuleFacts``).
+#:
+#: 바벨 — **패에 있는 바벨과 필드에서 적용 중인 바벨을 가른다**
+#: ------------------------------------------------------------
+#: ``s.babelcon`` 은 ``Duel.IsPlayerAffectedByEffect(tp,
+#: CARD_ORCUSTRATED_BABEL)`` 다. 지속 효과 계층이 없으므로 (STRUCTURAL-76)
+#: 이 저장소는 그것을 **「바벨이 자신 필드 존에 앞면으로 있는가」** 로만
+#: 읽는다 — ② · 디베르 · 스켈레촌 · 갈라테아와 **같은 범위 · 같은 표현**
+#: 이다.
+#:
+#: 🔴 **그래서 ② 가 패에 가져온 바벨은 이 조건을 건드리지 않는다.** 패의
+#: 바벨은 아직 발동되지 않은 카드이고, 적용은 **필드 존에 앞면으로 놓인
+#: 뒤** 시작한다. 구현된 타이밍 범위는 정확히 그 한 줄이다: *필드 존에
+#: 앞면으로 있는 동안만 적용 중으로 본다* (무효화된 바벨도, 발동 처리 중의
+#: 바벨도 구별하지 못한다).
+#:
+#: 🔴 그 범위에서 **덜 허가한다**: 바벨이 깔린 판에서 공식은 ``e4a``
+#: (``EFFECT_TYPE_QUICK_O``) 로 상대 턴에도 소생할 수 있는데, 이 저장소는
+#: 유발즉시의 발동 시점을 룰북에서 읽지 못했으므로
+#: (``ACTIVATION_KINDS_IN_SCOPE`` · ADR-006) ``e4a`` 를 등재하지 않았고
+#: ``e4`` 는 조건이 거짓이 되어 **어느 쪽도 열리지 않는다.**
+#:
+#: 발동할 수 없는 경우와 해결 시점에 소생이 불가능해진 경우
+#: --------------------------------------------------------
+#: 🔴 **두 결과를 다른 사건으로 남긴다.**
+#:
+#: * **처음부터 발동할 수 없다** — 비용 후보가 없거나 (묘지에 다른
+#:   오르페골이 없다), 빈 칸이 없거나, 바벨이 깔렸거나, 이 턴에 이미 썼다.
+#:   그러면 행동 후보에 오르지 않고 비용도 치르지 않는다.
+#: * **적법하게 비용을 내고 해결에서 소생이 불가능해졌다** — 비용으로 고른
+#:   카드의 제외는 ``COST_OPERATION`` 으로 이미 기록되고, 소환은 일어나지
+#:   않는다. 그 경우 조작 계획이 ``CANDIDATE_NOT_ELIGIBLE`` 로 멈추고
+#:   (자리가 사라졌다) 또는 관문이 ``UNCHECKED_RULES`` 로 멈춘다 (소생
+#:   제한을 읽지 못했다). ``resolution_condition=And(())`` 이 그 갈래를
+#:   남겨 두는 자리다 — ``s.spop`` 이 다시 보는 것은
+#:   ``IsRelateToEffect`` 하나이고 조건 재검사가 **없다.**
+#:
+#: 옮기지 못한 것
+#: --------------
+#: * ``e4a`` (유발즉시 클론) — 위 설명.
+#: * ``s.spcost`` 의 ``LOCATION_MZONE`` 갈래 — 공식 텍스트 양쪽 언어와
+#:   어긋난다 (위 설명). **덜 허가한다.**
+#: * ``Card.IsAbleToRemoveAsCost`` — 비용 계층에 ``*AsCost`` 관문이 없다
+#:   (STRUCTURAL-70, ② 의 ``IsAbleToGraveAsCost`` 와 같은 자리). 그래서
+#:   묘지의 오르페골 카드는 **전부** 비용 후보가 된다 — 제외될 수 없는
+#:   카드를 가리지 못하는 만큼 **공식보다 넓다.**
+#: * ``aux.SpElimFilter(c,true)`` — 보조 함수의 뜻을 스크립트 본문에서
+#:   읽지 못했다. 짐작으로 조건을 지어내지 않는다.
+#: * ``aux.NecroValleyFilter`` 는 이 효과에 **없다** (② 의 ``s.thop`` 에만
+#:   있다) — 옮길 것이 없다는 뜻이고, 없는 제약을 더하지 않는다.
+#: * ``IsRelateToEffect`` — 자기 참조 소환에는 대상 관계 기록이 생기지
+#:   않는다 (``SELF_TARGET`` 은 지정이 아니다). STRUCTURAL-50 과 같은 자리.
+#: * ``Duel.SetOperationInfo(0,CATEGORY_SPECIAL_SUMMON,…)`` 의 예고 ·
+#:   ``aux.Stringid`` 의 표시 문구 · ``Duel.Hint``.
+_GALATEA_I_REVIVE_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(GALATEA_I, 4),
+        source_card_id=GALATEA_I,
+        #: ``e4:SetCost(s.spcost)`` — 「자신 묘지에서 **다른** "오르페골"
+        #: 카드 1장을 제외하고」.
+        cost=CostGroup(
+            (
+                CardCost.banish(
+                    frozenset({Zone.GRAVE}),
+                    #: ``c:IsSetCard(SET_ORCUST)`` 하나다 —
+                    #: ``IsMonster()`` 를 적지 않는다 (위 설명).
+                    require=compile_archetype_condition(
+                        ("SET_ORCUST",)
+                    ).condition,
+                    #: ``SelectMatchingCard(…,c,tp)`` 의 ``c`` =
+                    #: 「**다른**」.
+                    exclude_source=True,
+                ),
+            )
+        ),
+        #: ``s.spop`` — ``Duel.SpecialSummon(c,0,tp,tp,false,false,
+        #: POS_FACEUP)``. ``c`` 가 ``e:GetHandler()`` 이므로
+        #: **자기 참조**다 (Phase 6-L 이 그 이름을 만들었다).
+        operations=(SpecialSummonOperation(SELF_TARGET),),
+        activation=And(
+            (
+                #: ``s.spcostfilter`` 의 ``Duel.GetMZoneCount(tp,c)>0``
+                #: (위 설명 — 비용을 묘지로 좁혀서 같은 말이 된다).
+                ZoneHasFreeSlot(PlayerRef.CONTROLLER, Zone.MZONE),
+                #: ``s.sptg`` 의 ``c:IsCanBeSpecialSummoned`` 중 **판
+                #: 하나**. 「그 카드를 특수 소환할 수 있는가」 는 해결의
+                #: 관문이 카드를 알고 묻는다 (이 조건의 설명).
+                SpecialSummonPermitted(),
+                #: ``e4:SetCondition(aux.NOT(s.babelcon))``.
+                Not(
+                    FaceUpCardPresent(
+                        PlayerRef.CONTROLLER,
+                        frozenset({Zone.FZONE}),
+                        ORCUSTRATED_BABEL,
+                    )
+                ),
+            )
+        ),
+        activation_kind=ActivationKind.IGNITION,
+        #: ``e4:SetRange(LOCATION_GRAVE)`` — 🔴 묘지 **하나**다. ② 와
+        #: 달리 몬스터 존을 적지 않는다.
+        activation_zones=frozenset({Zone.GRAVE}),
+        #: 🔴 **빈 조건을 명시한다.** ``s.spop`` 에 조건 재검사가 없다
+        #: (전문이 아래 ``lua_excerpt`` 다). ``None`` 으로 두면 실행기가
+        #: ``activation`` 전체를 다시 보고, 그러면 "적법하게 비용을 낸 뒤
+        #: 자리가 사라졌다" 가 조작 계획의 거절이 아니라 조건 거짓으로
+        #: 기록된다 — 두 결과를 가르라는 이번 요청의 자리다.
+        resolution_condition=And(()),
+        #: ``e4:SetCountLimit(1,{id,1})`` — ``{id,1}`` 은 「그 카드명의
+        #: **이 효과**」 다. ② 의 ``,id`` 와 **다른 열쇠**를 만든다.
+        use_limit=UseLimit(LimitScope.PER_EFFECT),
+        provenance=EffectProvenance.official_lua(
+            "c48835607.lua 의 e4 (EFFECT_TYPE_IGNITION, "
+            "SetRange(LOCATION_GRAVE), SetCountLimit(1,{id,1})) 에서 발동 "
+            "분류 · 자리 · 횟수를 (PER_EFFECT — ,id 가 아니라 {id,1} 이다), "
+            "aux.NOT(s.babelcon) 에서 발동 조건을, s.spcostfilter 의 "
+            "c:IsSetCard(SET_ORCUST) 에서 비용 후보 조건을 "
+            "(IsMonster() 는 **없다**), SelectMatchingCard 의 c 인자에서 "
+            "exclude_source=True 를 (「다른」), "
+            "s.spcostfilter 의 Duel.GetMZoneCount(tp,c)>0 에서 "
+            "ZoneHasFreeSlot 을, s.sptg 의 c:IsCanBeSpecialSummoned 에서 "
+            "SpecialSummonPermitted 과 해결 관문을, s.spop 의 "
+            "Duel.SpecialSummon(c,0,tp,tp,false,false,POS_FACEUP) 에서 "
+            "SELF_TARGET 특수 소환을 옮겼다. "
+            "🔴 비용의 위치는 **공식 텍스트를 따라 묘지만** 구현했다 — "
+            "스크립트의 LOCATION_MZONE|LOCATION_GRAVE 는 한국어 「자신 "
+            "묘지에서」 와 영어 from your GY 양쪽과 어긋나고, 좁은 쪽을 "
+            "골랐다 (덜 허가한다). "
+            "c:EnableReviveLimit() 는 engine.state.summon_history 와 "
+            "engine.effect.delta.PROCEDURE_SUMMON_KINDS 로 옮겼다 "
+            "(6-BJ 가 만든 계층 — 기록이 있을 때만 확정 답이다). "
+            "옮기지 못한 것: e4a(QUICK_O), Card.IsAbleToRemoveAsCost "
+            "(STRUCTURAL-70 — 그만큼 공식보다 넓다), aux.SpElimFilter "
+            "(보조 함수의 뜻을 읽지 못했다), IsRelateToEffect, "
+            "SetOperationInfo 의 예고, Duel.Hint · aux.Stringid."
+        ),
+    ),
+    lua_file="c48835607.lua",
+    lua_excerpt=(
+        "c:EnableReviveLimit(); "
+        "e4:SetType(EFFECT_TYPE_IGNITION); e4:SetRange(LOCATION_GRAVE); "
+        "e4:SetCountLimit(1,{id,1}); e4:SetCondition(aux.NOT(s.babelcon)); "
+        "e4:SetCost(s.spcost); e4:SetTarget(s.sptg); "
+        "e4:SetOperation(s.spop); "
+        "s.spcostfilter = c:IsSetCard(SET_ORCUST) and "
+        "c:IsAbleToRemoveAsCost() and aux.SpElimFilter(c,true) and "
+        "Duel.GetMZoneCount(tp,c)>0; "
+        "s.spcost = Duel.IsExistingMatchingCard(s.spcostfilter,tp,"
+        "LOCATION_MZONE|LOCATION_GRAVE,0,1,c,tp) → "
+        "Duel.SelectMatchingCard(tp,s.spcostfilter,tp,"
+        "LOCATION_MZONE|LOCATION_GRAVE,0,1,1,c,tp) → "
+        "Duel.Remove(g,POS_FACEUP,REASON_COST); "
+        "s.sptg = c:IsCanBeSpecialSummoned(e,0,tp,false,false); "
+        "s.spop = if c:IsRelateToEffect(e) then "
+        "Duel.SpecialSummon(c,0,tp,tp,false,false,POS_FACEUP) end"
+    ),
+    executable=True,
+)
+
+
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
     _POT_OF_GREED_ENTRY,
@@ -2833,6 +3077,9 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 6-BI — **고르는 비용을 치르는 첫 효과**. 패 1장을 묘지로 보내고
     # 덱 · 묘지에서 패에 넣는다.
     _GALATEA_I_TO_HAND_ENTRY,
+    # Phase 6-BJ — **묘지에서 자신을 특수 소환하는 첫 효과**, 그리고 소생
+    # 제한을 **이력으로** 넘는 첫 효과 (engine.state.summon_history).
+    _GALATEA_I_REVIVE_ENTRY,
 )
 
 
@@ -3369,7 +3616,36 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
         #: 그것이 막는지 알 수 없습니다" 가 나왔다 (6-AP 보고서 §1).
         CardRuleFacts(
             card_id=GALATEA_I,
-            answers={},
+            #: 🔴 **Phase 6-BJ 가 질문 하나에 답했다** — "이 카드를 특수
+            #: 소환할 수 있는가". ③ 이 자기 자신을 묘지에서 특수 소환하므로
+            #: 해결의 관문이 이 카드에게 그것을 묻고 (``s.sptg`` 의
+            #: ``c:IsCanBeSpecialSummoned``), 답이 없으면 비용만 치르고
+            #: 멈춘다.
+            answers={
+                RuleQuestion.MAY_BE_SPECIAL_SUMMONED: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "오르페골 갈라테아i: 공식 텍스트 전문을 읽었고 "
+                    "**소환 조건이 없다** — 「일반 소환할 수 없다」 도 "
+                    "「특수 소환으로만 특수 소환할 수 있다」 도 적혀 있지 "
+                    "않은 링크 2 링크 몬스터이고, 자기 자신의 ③ 이 "
+                    "「이 카드를 특수 소환한다」 라고 **그 일을 직접 "
+                    "적는다** (그 문장이 있는 카드가 그 일을 금지하지 "
+                    "않는다). 기계로 읽은 근거도 같은 방향이다: "
+                    "c48835607.lua 에 EFFECT_CANNOT_SPECIAL_SUMMON 은 "
+                    "s.regop 안의 한 건뿐이고 그 SetTarget 이 "
+                    "`c:IsCode(id) and sumtype&SUMMON_TYPE_LINK` 이므로 "
+                    "**「갈라테아i」 의 링크 소환만** 막는다 — 묘지에서의 "
+                    "특수 소환은 SUMMON_TYPE_LINK 이 아니다. "
+                    "🔴 이 답이 **소생 제한을 판정한 것은 아니다** — 그 "
+                    "질문은 엑스트라 덱 몬스터에게 묘지에서 반드시 "
+                    "생기고 (RULE-SUMMON-014), 그 판정은 "
+                    "engine.state.summon_history 에 적힌 **정규 링크 "
+                    "소환 기록**이 한다. 기록이 없는 갈라테아i (듀얼 "
+                    "시작부터 묘지에 있던 사본) 는 이 답이 TRUE 여도 "
+                    "여전히 UNKNOWN 이다.",
+                ),
+            },
             restricts_others=False,
             restriction_basis=RuleBasis.CARD_TEXT,
             restriction_note=(
@@ -3390,12 +3666,14 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                 "🔴 그러므로 이 'False' 는 '이 카드의 효과를 전부 "
                 "구현했다' 는 뜻이 **아니다** — Phase 6-BI 가 e3 를 "
                 "등재했고 (패 1장을 묘지로 보내고 덱 · 묘지에서 패에 "
-                "넣는다), e3a(유발즉시 클론) 와 e4 · e4a(묘지에서 자신을 "
-                "특수 소환) 는 **여전히 등재되지 않았고** 이 저장소에서 "
-                "발동될 수 없다. 여기서 말하는 것은 **「필드에 있다는 "
+                "넣는다), Phase 6-BJ 가 e4 를 등재했다 (묘지에서 다른 "
+                "오르페골 1장을 제외하고 자신을 특수 소환한다). "
+                "e3a · e4a (바벨이 적용 중일 때의 유발즉시 클론) 는 "
+                "**여전히 등재되지 않았고** 이 저장소에서 발동될 수 "
+                "없다. 여기서 말하는 것은 **「필드에 있다는 "
                 "것만으로 다른 카드의 조작을 막는가」 하나**이고, 그 답이 "
-                "거짓이다 — e3 를 등재해도 그 답은 바뀌지 않는다 (그것은 "
-                "**발동해야** 일어나는 일이다)."
+                "거짓이다 — e3 · e4 를 등재해도 그 답은 바뀌지 않는다 "
+                "(둘 다 **발동해야** 일어나는 일이다)."
             ),
         ),
     )

@@ -118,6 +118,26 @@ class CardCost(Cost):
     who: PlayerRef = PlayerRef.CONTROLLER
     require: Condition | None = None
     """후보가 추가로 만족해야 하는 조건. 예: 어둠 속성 · 레벨 4 이상."""
+    exclude_source: bool = False
+    """
+    **이 효과를 발동한 카드 자신**을 후보에서 뺀다 (Phase 6-BJ).
+
+    공식 스크립트가 ``Duel.SelectMatchingCard(..., c, tp)`` 의 마지막 인자로
+    자신을 넘기는 자리이고 (``c48835607.lua`` 의 ``spcost``), 카드 텍스트의
+    「**다른** "오르페골" 카드 1장을 제외하고」가 그것이다.
+
+    🔴 :class:`SelfCardCost` 와 **반대 축**이다. 저쪽은 자신을 내놓는
+    비용이고, 이쪽은 자신 **이외**에서 고르는 비용이다. 둘을 한 값으로
+    합치지 않는다.
+
+    고르는 계층은 :class:`~engine.cost.choice.CandidateSource` 의 같은 이름
+    필드를 읽고 (:meth:`choice_spec` 이 넘긴다), 실제로 빼는 곳은
+    :class:`~engine.cost.resolver.CostCandidateResolver` 다 — 거기서
+    ``context.source`` 와 ``instance_id`` 를 견준다. 그래서 문맥에 발동
+    카드가 적혀 있지 않으면 **아무도 빠지지 않는다**: 그 경우를 조용히
+    허가로 바꾸지 않도록, 이 비용을 쓰는 효과는 자기 자신이 문맥에 있는
+    발동 경로(``EffectActivator``)로만 치러진다.
+    """
 
     def __post_init__(self) -> None:
         if self.kind is CostSemantics.PAY_LIFE:
@@ -144,7 +164,12 @@ class CardCost(Cost):
     def choice_spec(self) -> ChoiceSpec:
         return ChoiceSpec(
             chooser=self.who,
-            source=CandidateSource(owner=self.who, zones=self.zones, require=self.require),
+            source=CandidateSource(
+                owner=self.who,
+                zones=self.zones,
+                require=self.require,
+                exclude_source=self.exclude_source,
+            ),
             minimum=self.count,
             maximum=self.upper_bound,
         )
@@ -196,7 +221,17 @@ class CardCost(Cost):
         who: PlayerRef = PlayerRef.CONTROLLER,
         require: Condition | None = None,
         maximum: int | None = None,
+        exclude_source: bool = False,
     ) -> "CardCost":
+        """
+        카드를 제외하는 비용.
+
+        🔴 ``exclude_source`` 를 **이 생성자에만** 열었다 (Phase 6-BJ).
+        값은 :class:`CardCost` 의 필드이므로 다른 의미(릴리스 · 버림 ·
+        묘지로 보냄)에도 담을 수는 있지만, 지금 그것을 요구하는 카드가
+        없다. 쓰이지 않는 길을 열어 두고 "있는 것처럼" 적지 않는다 —
+        필요한 카드가 오면 그 생성자에 같은 이름으로 더한다.
+        """
         return cls(
             kind=CostSemantics.BANISH,
             zones=zones,
@@ -204,6 +239,7 @@ class CardCost(Cost):
             maximum=maximum,
             who=who,
             require=require,
+            exclude_source=exclude_source,
         )
 
     @classmethod
@@ -236,6 +272,7 @@ class CardCost(Cost):
             self.maximum,
             self.who.value,
             self.require.canonical_state() if self.require is not None else None,
+            self.exclude_source,
         )
 
     def to_dict(self) -> dict:
@@ -250,6 +287,8 @@ class CardCost(Cost):
             data["maximum"] = self.maximum
         if self.require is not None:
             data["require"] = self.require.to_dict()
+        if self.exclude_source:
+            data["exclude_source"] = True
         return data
 
     def describe_ko(self) -> str:
@@ -266,7 +305,11 @@ class CardCost(Cost):
             else f"{self.count}~{self.maximum}장"
         )
         what = f" ({self.require.describe_ko()})" if self.require is not None else ""
-        return f"{self.who} {'/'.join(sorted(z.value for z in self.zones))} 에서 {amount}{what} {korean}"
+        mine = " (자신 제외)" if self.exclude_source else ""
+        return (
+            f"{self.who} {'/'.join(sorted(z.value for z in self.zones))} 에서 "
+            f"{amount}{what}{mine} {korean}"
+        )
 
 
 @dataclass(frozen=True, slots=True)

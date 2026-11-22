@@ -274,7 +274,21 @@ class SummonProcedure:
     # 적용 — 여기서만 판이 바뀐다
     # ==================================================================
     def place(self, state: GameState, placement: SummonPlacement) -> None:
-        """배치를 그대로 옮기고 착지를 확인한다."""
+        """
+        배치를 그대로 옮기고 착지를 확인하고 **이력을 적는다.**
+
+        🔴 **순서가 규칙이다** (Phase 6-BJ). 이력은 ``verify`` 가 통과한
+        **뒤**에 적는다 — 어긋난 배치는 예외로 멈추므로 (``verify`` 가
+        던진다) 일어나지 않은 소환이 이력에 남지 않는다. "틀린 기록은 없는
+        것보다 나쁘다" 는 ``verify`` 의 설명이 이 줄에도 그대로 적용된다.
+
+        🔴 **여기가 유일한 쓰는 자리다.** 일반 소환 · 특수 소환 · 링크
+        소환이 모두 이 메서드를 지나므로 (각자 다른 :class:`SummonProcedure`
+        **값**이다) 소환법마다 적는 곳이 갈리지 않는다. 토큰은 이 절차를
+        쓰지 않고 (:mod:`engine.token`) 이력도 남지 않는다 — 토큰에는
+        ``MAY_BE_SPECIAL_SUMMONED`` 의 답이 아예 없으므로 (``token_facts``)
+        그 사실이 판정을 바꾸지 않는다.
+        """
         state.move(
             placement.card,
             placement.to_zone,
@@ -283,6 +297,7 @@ class SummonProcedure:
             position=placement.position,
         )
         self.verify(state, placement)
+        state.summon_history.record(placement.card, self.summon)
 
     def verify(self, state: GameState, placement: SummonPlacement) -> None:
         """

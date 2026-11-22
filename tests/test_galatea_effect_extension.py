@@ -1219,8 +1219,22 @@ def test_h01_the_effect_is_offered_once_per_hand_card(repository):
     )
     #: 패는 기르수를 쓴 뒤의 네 장이다 (우라라 · 증G · 무한포영 · 지명자).
     assert paid == sorted([(14558127,), (23434538,), (10045474,), (24224830,)]), paid
-    #: 🔴 **보류에 48835607 이 남아 있지 않다** — 후보가 되었기 때문이다.
-    assert not [w for w in legal.withheld if str(GALATEA_I) in w.reason]
+    #: 🔴 **보류에 이 효과(e[2])가 남아 있지 않다** — 후보가 되었기
+    #: 때문이다.
+    #:
+    #: 🔴 **"48835607 이 아예 없다" 가 아니다** (Phase 6-BJ 에서 고쳤다).
+    #: 6-BJ 가 ③(``e[4]`` — 묘지에서 자신을 특수 소환) 을 등재했고, 이
+    #: 자리의 갈라테아i 는 **필드에 있으므로** 그 효과는 자리가 틀려
+    #: 보류된다 (``SOURCE_WRONG_ZONE`` · "SetRange 가 적은 자리: GRAVE").
+    #: 그것은 **올바른 거절**이므로 이 시험이 금지할 일이 아니다 — 재는
+    #: 것을 이 효과로 좁힌다.
+    assert not [w for w in legal.withheld
+                if f"{GALATEA_I}:e[{GALATEA_I_SECOND[1]}]" in w.reason]
+    #: 🔴 그리고 ③ 은 **자리가 틀려서** 보류된 것이어야 한다 (턴 제한이나
+    #: 조건 거짓이 아니다).
+    said = [w.reason for w in legal.withheld
+            if f"{GALATEA_I}:e[4]" in w.reason]
+    assert len(said) == 1 and "SetRange 가 적은 자리: GRAVE" in said[0], said
 
 
 def test_h02_the_cost_is_sent_to_grave_and_the_pick_enters_the_hand(repository):

@@ -2228,6 +2228,19 @@ class EffectExecutor:
         되는가(관문) → 어디에 놓을 수 있는가. **판에 손대기 전에** 전부
         끝낸다.
         """
+        ref = operation.target_ref
+        try:
+            spec = self._target_spec_of(definition, ref)
+        except KeyError:
+            # 선언되지 않은 이름. **적법성 위반이 아니다** — 정의가 모자란
+            # 것이고, 그렇게 적는다 (``_plan_card_operation`` 과 같은 모양).
+            return _fail(
+                ResolutionStatus.INVALID_CONTEXT,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                f"{operation.kind.value} 가 선언되지 않은 대상 {ref} 를 "
+                "가리킵니다.",
+            )
+
         selected = self._resolve_selection(
             state, definition, context, operation, values
         )
@@ -2235,9 +2248,20 @@ class EffectExecutor:
             return selected
         ref, selection = selected
 
-        legal = self._check_target(state, definition.target_spec(ref), selection, context, ref)
-        if legal is not None:
-            return legal
+        if ref == SELF_TARGET:
+            # **고른 것이 적법한지 묻지 않는다** (Phase 6-L · 6-BJ).
+            # 자기 참조에는 고르는 규칙이 없고
+            # (``EffectDefinition.target_spec`` 은 이 이름에 ``KeyError``
+            # 를 던진다), ``TargetResolver.validate`` 는 규칙을 받아야 답을
+            # 한다. 🔴 **건너뛰는 것은 이 한 검사뿐이다** — 아래의 소환
+            # 관문(``_check_rule_gate``)과 절차의 자리 찾기는 그대로 지난다.
+            # 묘지의 「이 카드를 특수 소환한다」가 이 길을 쓴다
+            # (오르페골 갈라테아i ②, Phase 6-BJ).
+            pass
+        else:
+            legal = self._check_target(state, spec, selection, context, ref)
+            if legal is not None:
+                return legal
 
         placements: "list[SummonPlacement]" = []
         for instance in selection.chosen:

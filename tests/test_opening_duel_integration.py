@@ -1337,7 +1337,12 @@ def test_h02_the_search_depth_is_declared_not_a_rule():
     block = source.split("MAX_EXECUTED_ACTIONS")[0]
     assert "이 단계가 선언한 상한" in block
     assert "유희왕의 규칙이" in block
-    assert MAX_EXECUTED_ACTIONS == 8
+    #: 🔴 **8 → 9 (Phase 6-BJ §4).** 숫자가 움직인 이유는 그 상수의 설명에
+    #: 적혀 있다 — 갈라테아i ③ (묘지 소생) 뒤의 후속 링크가 9번째 걸음이고,
+    #: 8 은 **탐색이 이미 찾은 경로**의 재생을 거절했다. 이 시험이 지키는
+    #: 것은 값이 아니라 **그 값이 선언이라고 적혀 있는가**이고, 그 두 줄은
+    #: 그대로다.
+    assert MAX_EXECUTED_ACTIONS == 9
 
 
 @pytest.mark.real_card

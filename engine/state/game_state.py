@@ -33,6 +33,7 @@ from engine.state.player import DEFAULT_LIFE_POINTS, PlayerState
 from engine.state.turn import TurnState
 from engine.state.rule_usage import RuleUsageRegistry
 from engine.state.summon_limit import SummonLimitRegistry
+from engine.state.summon_history import SummonHistoryRegistry
 from engine.state.summon_usage import SummonUsageRegistry
 from engine.state.target_relation import TargetRelationRegistry
 from engine.state.use_registry import UseRegistry
@@ -66,6 +67,7 @@ class GameState:
         "rule_uses",
         "summon_uses",
         "summon_limits",
+        "summon_history",
         "relations",
         "chain",
         "pending",
@@ -88,6 +90,7 @@ class GameState:
         rule_uses: RuleUsageRegistry | None = None,
         summon_uses: SummonUsageRegistry | None = None,
         summon_limits: SummonLimitRegistry | None = None,
+        summon_history: SummonHistoryRegistry | None = None,
         relations: TargetRelationRegistry | None = None,
         seed: int | None = None,
         rng: "random.Random | RandomSource | None" = None,
@@ -133,6 +136,16 @@ class GameState:
         # 만든 카드가 그때 **필드에 없다**는 것이다 (비용으로 제외된다).
         self.summon_limits: SummonLimitRegistry = (
             summon_limits if summon_limits is not None else SummonLimitRegistry()
+        )
+
+        # 🔴 **소환 절차 이력은 여섯 번째 표다** (Phase 6-BJ). 위의 표들은
+        # **이번 턴**의 일을 세고, 이것은 **듀얼 전체**에서 "이 개체가 어떤
+        # 소환 절차로 필드에 놓였는가" 를 적는다 — 소생 제한이 묻는 질문이
+        # 턴 경계를 넘기 때문이다 (:mod:`engine.state.summon_history`).
+        self.summon_history: SummonHistoryRegistry = (
+            summon_history
+            if summon_history is not None
+            else SummonHistoryRegistry()
         )
 
         # 🔴 **발동 시점에 지정한 대상 관계는 다섯 번째 표다**
@@ -465,6 +478,7 @@ class GameState:
             rule_uses=self.rule_uses.clone(),
             summon_uses=self.summon_uses.clone(),
             summon_limits=self.summon_limits.clone(),
+            summon_history=self.summon_history.clone(),
             relations=self.relations.clone(),
             seed=self._seed,
             rng=rng,
@@ -512,6 +526,9 @@ class GameState:
             #: 🔴 **제한도 복제한다** (Phase 6-AO). 공유하면 한 분기가 걸어
             #: 둔 제약이 다른 분기의 소환을 막는다 (그 모듈의 ``clone``).
             summon_limits=self.summon_limits.clone(),
+            #: 🔴 **소환 절차 이력도 복제한다** (Phase 6-BJ). 공유하면 투영
+            #: 위에서 계획한 소환이 **진짜 판의 이력**에 남는다.
+            summon_history=self.summon_history.clone(),
             #: 🔴 **대상 관계도 복제한다** (Phase 6-AQ 후속). 공유하면 계획이
             #: 투영 위에서 옮긴 카드가 **진짜 판의 관계**까지 끊는다 — 전부
             #: 아니면 무가 깨지는 자리다.
