@@ -709,7 +709,7 @@ card_id=90351981, face_up=False, position='FACEDOWN', …)))` 가 들어 있다)
 | 옵션 | 사용자가 비워 둠 | 실제로 쓰이는 값 | 어디서 |
 | --- | --- | --- | --- |
 | `results` | `""` | `search_result_count("")` → `(1, '')` → `max_results = max(2, 1) = ` **2** | `app/discord_bot.py` → `app/main.py` |
-| `followups` | `""` | `search_followup_count("")` → `(0, '')` → falsy → `actions` 인자를 **넘기지 않는다** → `AUTONOMOUS_DEFAULT_ACTIONS = ` **6** | 같은 자리 |
+| `followups` | `""` | `search_followup_count("")` → `(0, '')` → falsy → `actions` 인자를 **넘기지 않는다** → `AUTONOMOUS_DEFAULT_ACTIONS = ` **6** (🔴 6-BJ 부터 **7** — §43.1) | 같은 자리 |
 | `search` | `auto` | 자율 탐색 (목표 카드 없음) | `is_autonomous_search` |
 | `line` | `""` | 꽂지 않는다 — 🔴 고정 경로 정책이 **없다** | `opening_wiring(repository, None)` |
 
@@ -1235,7 +1235,7 @@ auto
 
 * `results` 를 비우면 **2** 가 쓰이고, 그 2 안에 이번 전개(결과 24)가
   들어간다 — 이 보고서의 모든 수치가 그 설정의 실측이다.
-* `followups` 를 비우면 행동 예산 **6** 이 쓰인다.
+* `followups` 를 비우면 행동 예산 **6** 이 쓰인다 (🔴 6-BJ 부터 **7** — §43.1).
 * 🔴 `line` 은 **반드시 비워 둡니다** — `search:auto` 와 함께 주면
   거절하고, 고정 수순을 주입하는 자리이기도 하다.
 
@@ -1721,7 +1721,7 @@ auto
 ```
 
 **`results` · `followups` · `line` · `board` · `deck`** — 🔴 **비워 둡니다**
-(`results` 를 비우면 2, `followups` 를 비우면 6. `line` 은 `search:auto` 와
+(`results` 를 비우면 2, `followups` 를 비우면 6 — 🔴 6-BJ 부터 **7** 입니다 (§43.1). `line` 은 `search:auto` 와
 함께 주면 거절합니다).
 
 ### 26.2 2단계 — `/combo-pick` (추가 동작)

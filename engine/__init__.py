@@ -235,6 +235,11 @@ Duel Engine.
   ``UnknownSummonRuling`` 으로는 **어떤 특수 소환도 일어나지 않는다**
   (``UNCHECKED_RULES``). Phase 2-M 의 파괴 관문과 같은 구조다.
 
+  🔴 **그 셋 가운데 하나가 생겼다** (Phase 6-BJ) — 「정규 소환을 거쳤는가」
+  를 :mod:`engine.state.summon_history` 가 적는다. 다만 **이 듀얼의 기록
+  만** 알고, 듀얼 시작부터 묘지에 있던 카드의 과거는 여전히 모른다. 기본
+  ``UnknownSummonRuling`` 은 한 글자도 바뀌지 않았다.
+
   죽은 자의 소생(83764718)을 목록에 실었다 — ``executable=False`` 로.
   모양은 맞지만 후보 조건이 ``IsCanBeSpecialSummoned`` 라 추측 없이는
   옮길 수 없다. ``docs/phase2u-effect-special-summon.md`` 참고.
