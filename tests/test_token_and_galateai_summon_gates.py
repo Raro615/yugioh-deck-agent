@@ -370,8 +370,28 @@ def test_b01_galatea_i_has_a_read_fact_that_claims_only_one_thing():
     #: 이 'False' 가 무엇을 뜻하는지 읽는 사람이 알 수 없다.
     assert "e4 를 등재했다" in note, note
     assert "e3a · e4a" in note, note
-    #: 질문별 답은 **하나도 적지 않았다** (읽지 않은 것을 적지 않는다).
-    assert facts.answers == {}
+    #: 🔴 **질문별 답이 하나 생겼다** (Phase 6-BJ). 6-AP 시점에는
+    #: 하나도 없었고 그때의 단언이 그 사실을 적었다 — 읽지 않은 것을 적지
+    #: 않는다는 규칙은 그대로이고, 이제 **하나를 읽었다**: 「특수 소환될 수
+    #: 있는가」. 묘지 소생을 등재하려면 그 답이 필요했다.
+    #: 🔴 **늘어난 것이 아니라 정확히 하나여야 한다** — 다른 질문을 공짜로
+    #: 채우지 않았다는 것이 이 단언이 지키는 사실이다.
+    from engine.effect.ruling import RuleQuestion
+
+    assert set(facts.answers) == {RuleQuestion.MAY_BE_SPECIAL_SUMMONED}, (
+        facts.answers
+    )
+    answer = facts.answers[RuleQuestion.MAY_BE_SPECIAL_SUMMONED]
+    assert answer.basis is RuleBasis.CARD_TEXT
+    #: 🔴 **그 답이 소생 제한까지 판정했다고 적지 않았다.** 그쪽은
+    #: 엑스트라 덱 몬스터에게 묘지에서 반드시 생기는 질문이고
+    #: (``RULE-SUMMON-014``), 판정하는 것은 소환 이력이다 — 설명이 그
+    #: 구분을 적어야 한다.
+    assert "소생 제한을 판정한 것은 아니다" in answer.note, answer.note
+    assert "summon_history" in answer.note, answer.note
+    #: 🔴 링크값을 **카드 데이터 그대로** 적는다 (갈라테아i 는 링크 1
+    #: 이다 — 같은 테마의 갈라테아가 링크 2 여서 틀리기 쉬운 자리다).
+    assert "링크 1 링크 몬스터" in answer.note, answer.note
 
 
 @pytest.mark.real_card
