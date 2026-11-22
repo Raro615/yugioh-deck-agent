@@ -669,7 +669,10 @@ def test_17_all_sixteen_effect_definitions_are_untouched(repository):
             #: 🔴 Phase 6-AF 가 2 를 더했다 — 기르수 ③(토큰 생성)은 공식
             #: Lua 의 **세 번째 블록**이다. 억지로 0·1 에 맞추지 않고 그
             #: 효과의 실제 사실을 적는다.
-            assert ref.ordinal in (0, 1, 2), ref
+            #: 🔴 Phase 6-BJ 가 4 를 더했다 — 갈라테아i ③ (묘지
+            #: 소생) 은 공식 Lua 의 **다섯 번째 블록**이다. 3 이 비어 있는
+            #: 것이 정상이다 (e3a 는 여전히 등재되지 않았다).
+            assert ref.ordinal in (0, 1, 2, 4), ref
             #: 블록이 **셋**이다 — ①기동 · ②유발 즉시, 그리고 ② 의 해결이
             #: 함수 안에서 만드는 ``EFFECT_UPDATE_ATTACK`` 까지 로더가 센다.
             #: 등재된 것은 **0번(기동)** 이다.

@@ -709,12 +709,18 @@ def test_11_no_registered_effect_drops_an_existing_set_condition(analyses):
     #: (범위는 「바벨이 앞면으로 필드 존에 있지 않다」 하나다 — 지속 효과
     #: 계층이 없으므로 그만큼만 읽는다). 즉 ``dropped == []`` 가 그대로
     #: 참이다.
+    #: 🔴 **여섯 → 일곱** (Phase 6-BJ, 오르페골 갈라테아i ③). 그
+    #: 효과도 공식 ``SetCondition`` 을 갖는다 (``aux.NOT(s.babelcon)``) 고,
+    #: 이 저장소가 그것을 **버리지 않고** 옮겼다 — 같은 카드의 ② 와 **같은
+    #: 조건**이므로 48835607 이 두 번 적힌다. 즉 ``dropped == []`` 가
+    #: 그대로 참이다.
     assert [ref.card_id for ref in with_lua_condition] == [
         GALLANTRY,
         GIRSU,
         57835716,
         30741503,
         21441617,
+        48835607,
         48835607,
     ]
 
@@ -783,7 +789,10 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: 🔴 14 → **15** (Phase 6-BI) — 갈라테아i ② 의 발동 조건도
     #: ``Not(FaceUpCardPresent(…, 바벨))`` **하나**이고 판정 가능한
     #: 상태 조건이다 (공식 ``s.babelcon`` 에서 옮겼다).
-    assert len(with_activation) == 15
+    #: 🔴 15 → **16** (Phase 6-BJ) — 갈라테아i ③ 의 발동 조건도
+    #: ``Not(FaceUpCardPresent(…, 바벨))`` **하나**이고 판정 가능한 상태
+    #: 조건이다 (공식 ``aux.NOT(s.babelcon)`` 에서 옮겼다).
+    assert len(with_activation) == 16
 
     #: 🔴 **Phase 6-AF — ``card_id → ordinal`` 사전으로는 더 가를 수 없다.**
     #: 기르수가 블록 둘을 등재했으므로 (① 과 ③) 사전은 하나를 덮어쓴다.

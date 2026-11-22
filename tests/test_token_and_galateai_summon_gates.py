@@ -360,8 +360,16 @@ def test_b01_galatea_i_has_a_read_fact_that_claims_only_one_thing():
         for entry in EFFECT_LIBRARY
         if entry.definition.effect_ref.card_id == GALATEA_I
     }
-    assert registered == {2}, registered
+    #: 🔴 **둘이 되었다** (Phase 6-BJ) — e4(묘지 소생) 도 등재했다.
+    #: 6-BI 시점에는 e3 하나였고 그때의 단언이 그 사실을 적었다. 여기서
+    #: 세는 것은 **어느 ordinal 이 등재되었는가**이고, **e3a(3) · e4a(5) 는
+    #: 여전히 없다** — 그것이 이 집합이 말하는 사실이다.
+    assert registered == {2, 4}, registered
     assert "e3 를 등재했고" in note, note
+    #: 🔴 설명이 e4 도 함께 적어야 한다 — 등재한 것을 적지 않으면
+    #: 이 'False' 가 무엇을 뜻하는지 읽는 사람이 알 수 없다.
+    assert "e4 를 등재했다" in note, note
+    assert "e3a · e4a" in note, note
     #: 질문별 답은 **하나도 적지 않았다** (읽지 않은 것을 적지 않는다).
     assert facts.answers == {}
 
