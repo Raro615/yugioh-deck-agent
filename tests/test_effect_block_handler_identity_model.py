@@ -1069,10 +1069,15 @@ def test_51_engine_v1_library_is_untouched():
     #: 공식 Lua 의 세 번째 블록이므로 2 다. 억지로 0 이나 1 에 맞추지 않고
     #: **그 효과의 실제 사실**을 적는다 (``c69811710.lua`` e3,
     #: ``EFFECT_TYPE_IGNITION``).
+    #: 🔴 Phase 6-BJ 가 **다섯째 ordinal** 을 열었다 — 갈라테아i ③
+    #: (묘지 소생) 은 ``c48835607.lua`` 의 **다섯 번째** 블록이므로 4 다.
+    #: **3 이 비어 있는 것이 정상이다** — 그 자리(e3a, 바벨 적용 중의 ②)는
+    #: 여전히 등재되지 않았고, 수를 메우려고 억지로 당기지 않는다.
     assert {entry.effect_ref.ordinal for entry in EFFECT_LIBRARY} == {
         0,
         1,
         2,
+        4,
     }
     #: 🔴 **1 인 것이 둘이 되었다** (Phase 6-BF) — 오르페골 갈라테아
     #: ② 도 공식 ①②③ 중 **②**를 등재했다 (``e2``). 억지로 하나로

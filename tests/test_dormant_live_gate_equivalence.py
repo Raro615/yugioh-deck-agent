@@ -932,10 +932,13 @@ def test_21_exactly_one_registered_effect_has_a_cost():
     #: 🔴 **둘이 되었다** (Phase 6-AQ) — 스켈레촌 ① 도 ``Cost.SelfBanish`` 다.
     #: 🔴 **셋이 되었다** (Phase 6-BI) — 갈라테아i ② 이고, 이쪽은
     #: ``SelfCardCost`` 가 아니라 **고르는** ``CardCost`` 다.
+    #: 🔴 **넷이 되었다** (Phase 6-BJ) — 갈라테아i ③ 이고, 이쪽도
+    #: 고르는 ``CardCost`` 다 (묘지의 **다른** 오르페골 1장을 제외한다).
     assert [str(ref) for ref in costed_entries] == [
         "57835716:e[0]",
         "21441617:e[0]",
         "48835607:e[2]",
+        "48835607:e[4]",
     ], costed_entries
     #: 🔴 **거름이 두 번 좁혀졌다.** 6-AN 까지는
     #: ``if definition.cost.costs:`` 로 비용 있는 효과를 **전부** 뺐고,
