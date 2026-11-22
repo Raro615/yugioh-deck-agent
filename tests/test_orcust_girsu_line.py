@@ -1021,6 +1021,11 @@ def test_d03_an_effect_without_a_recorded_limit_is_untouched():
     #: 🔴 **여섯 → 일곱** (Phase 6-BI, 오르페골 갈라테아i ②). 그 효과도
     #: 공식 ``SetCountLimit(1,id)`` 를 적으므로 제한이 **기록된** 쪽이다 —
     #: 적히지 않은 효과는 여기서도 건드리지 않았다.
+    #: 🔴 **일곱 → 여덟** (Phase 6-BJ, 오르페골 갈라테아i ③). 그
+    #: 효과도 공식 제한을 적지만 **칸이 다르다** — ② 는
+    #: ``SetCountLimit(1,id)`` 로 카드명당이고 ③ 은
+    #: ``SetCountLimit(1,{id,1})`` 로 **효과당**이다. 둘의 칸이 섞이지
+    #: 않는다는 것은 ``tests/test_galatea_i_grave_revival.py`` 의 b06 이 센다.
     assert limited == {
         f"{GIRSU}:e[0]",
         f"{GIRSU}:e[2]",
@@ -1029,6 +1034,7 @@ def test_d03_an_effect_without_a_recorded_limit_is_untouched():
         "21441617:e[0]",
         "30741503:e[1]",
         "48835607:e[2]",
+        "48835607:e[4]",
     }, limited
 
 

@@ -1051,7 +1051,10 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: 🔴 14 → **15** (Phase 6-BI) — 갈라테아i ② 의 발동 조건도
     #: ``Not(FaceUpCardPresent(…, 바벨))`` **하나**이고 판정 가능한
     #: 상태 조건이다 (공식 ``s.babelcon`` 에서 옮겼다).
-    assert len(activations) == 15
+    #: 🔴 15 → **16** (Phase 6-BJ) — 갈라테아i ③ 의 발동 조건도
+    #: ``Not(FaceUpCardPresent(…, 바벨))`` **하나**이고 판정 가능한 상태
+    #: 조건이다 (공식 ``aux.NOT(s.babelcon)`` 에서 옮겼다).
+    assert len(activations) == 16
     assert not any(isinstance(a, UnimplementedRule) for a in activations)
 
     #: 열 개 전부 **판정 가능한** 조건이다 — 자리표시자가 아니다.
@@ -1096,7 +1099,10 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: 🔴 3 → **4** (Phase 6-AQ). 스켈레촌 ① 의 발동 조건에도
     #: ``SpecialSummonPermitted`` 가 들어 있다 — 같은 이유로 대상이
     #: 하나 더 늘었고, 아래 루프가 넷을 **각각** 확인한다.
-    assert len(noisy) == 4, noisy
+    #: 🔴 4 → **5** (Phase 6-BJ). 갈라테아i ③ 의 발동 조건에도
+    #: ``SpecialSummonPermitted`` 가 들어 있다 — 같은 이유로 대상이
+    #: 하나 더 늘었고, 아래 루프가 다섯을 **각각** 확인한다.
+    assert len(noisy) == 5, noisy
     for condition in noisy:
         assert not isinstance(condition, UnimplementedRule), condition
 

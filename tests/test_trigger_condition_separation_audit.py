@@ -375,7 +375,10 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: ``SetCode`` 가 없다. 유발 쪽 둘은 그대로다.
     #: 🔴 23 → **24** (Phase 6-BI, 갈라테아i ②). 같은 이유다 — 기동이고
     #: ``SetCode`` 가 없다 (공식 ``e3`` 은 ``EFFECT_TYPE_IGNITION`` 이다).
-    assert len(codes) == 24
+    #: 🔴 24 → **25** (Phase 6-BJ, 갈라테아i ③). 같은 이유다 —
+    #: 기동이고 ``SetCode`` 가 없다 (공식 ``e4`` 은
+    #: ``EFFECT_TYPE_IGNITION`` 이다). 유발 쪽 둘은 그대로다.
+    assert len(codes) == 25
     assert set(codes) == {
         "EVENT_FREE_CHAIN",
         "EVENT_SUMMON_SUCCESS",
@@ -397,7 +400,10 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 분포가 말하는 사실이다.
     #: 🔴 5 → **6** (Phase 6-BI). 갈라테아i ② 도 **기동 효과**다 — 자유
     #: 체인 16 과 유발 둘은 여기서도 하나도 움직이지 않았다.
-    assert len([c for c in codes if c is None]) == 6
+    #: 🔴 6 → **7** (Phase 6-BJ). 갈라테아i ③ 도 **기동 효과**다
+    #: (``EFFECT_TYPE_IGNITION``) — 자유 체인 16 과 유발 둘은 여기서도
+    #: 하나도 움직이지 않았다.
+    assert len([c for c in codes if c is None]) == 7
 
 
 @pytest.mark.real_card
@@ -733,10 +739,16 @@ def test_14_no_registered_effect_can_special_summon():
     #: **묘지에서** 특수 소환한다 (6-AC 는 패에서, 6-AO 는 덱에서였다).
     #: 다시 지우는 대신 **그 셋을 못박는다**: 넷이 되면 깨진다 —
     #: **이전 목록이 틀렸던 것이 아니다.**
+    #:
+    #: 🔴 **Phase 6-BJ 에서 넷이 되었다** — 「오르페골 갈라테아i」 ③
+    #: 도 **묘지에서** 특수 소환하지만, 소환하는 것이 **자기 자신**이다
+    #: (``SELF_TARGET``). 다시 지우는 대신 **그 넷을 못박는다**: 다섯이
+    #: 되면 깨진다 — **이전 목록이 틀렸던 것이 아니다.**
     assert users == [
         "93920420:e[1]",
         "57835716:e[0]",
         "21441617:e[0]",
+        "48835607:e[4]",
     ], users
 
     #: **빈 목록이 엉뚱한 이유로 비지 않았다는 것까지 본다.** ``kind`` 조회가
