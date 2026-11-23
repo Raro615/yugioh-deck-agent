@@ -282,6 +282,24 @@ var STEP_KO = {normal_summon:'일반 소환', link_summon:'링크 소환',
                pass:'패스'};
 var ROLE_KO = {act:'발동', move:'이동', cost:'코스트', mat:'소재',
                tgt:'대상', gone:'사라짐'};
+/* 🔴 **지목한 칸을 글자로** (Phase 6-BN). 칸이 뜻을 가지는 행동이
+   들어왔다 (성유물－『성관』 — 링크 마커가 가리키는 칸에만 나온다). */
+var ZONE_KO = {MZONE:'메인 몬스터 존', EMZONE:'엑스트라 몬스터 존',
+               SZONE:'마법·함정 존', FZONE:'필드 존', HAND:'패',
+               GRAVE:'묘지', REMOVED:'제외', DECK:'덱', EXTRA:'엑스트라 덱'};
+function zoneKo(z) { return ZONE_KO[z] || z; }
+function slotText(one) {
+  if (!one) { return ''; }
+  var text = zoneKo(one.zone);
+  if (one.index !== undefined && one.index !== null) {
+    text += ' ' + one.index + '번 칸';
+  }
+  return text;
+}
+function slotList(zones) {
+  return (zones || []).map(slotText).filter(function (s) { return s; })
+    .join(' · ');
+}
 /* 🔴 강조가 **무엇에서 나왔는가**. 연출과 엔진 사건을 섞지 않는다. */
 var ROLE_BASIS = {
   act:'엔진 사건의 source',
@@ -1008,6 +1026,12 @@ function renderWhy(f) {
       why.appendChild(el('div', 'row',
         '대상: ' + codeList(rec, chosen.targets)));
     }
+    /* 🔴 **지목한 칸**. 카드 대상과 다른 사실이므로 줄도 다르다 — 이
+       행동이 어느 칸을 골랐는지가 리플레이와 실제 배치를 묶는다. */
+    if (chosen && chosen.zones && chosen.zones.length) {
+      why.appendChild(el('div', 'row',
+        '놓을 칸: ' + slotList(chosen.zones)));
+    }
     /* 🔴 **엔진이 낸 판정 코드만** 적는다 — 조건을 지어내지 않는다. */
     if (st.gate_code) {
       why.appendChild(el('div', 'sub',
@@ -1051,6 +1075,11 @@ function renderWhy(f) {
           }
           if (a.targets && a.targets.length) {
             t += ' 대상=' + codeList(rec, a.targets);
+          }
+          /* 🔴 칸까지 적는다 — 칸만 다른 수가 여럿 올라올 수 있고
+             (가리켜지는 빈 칸마다 하나), 칸을 빼면 같은 줄로 보인다. */
+          if (a.zones && a.zones.length) {
+            t += ' 칸=' + slotList(a.zones);
           }
           alt.appendChild(el('div', 'sub', t));
         });

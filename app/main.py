@@ -1564,11 +1564,32 @@ def _action_shape(duel, action) -> dict:
         shape["cost"] = [passcode(one) for one in costs]
     targets = tuple(getattr(action, "targets", ()) or ())
     if targets:
+        #: 🔴 **칸 대상과 카드 대상을 가른다** (Phase 6-BN). 전에는 둘을
+        #: 같은 칸에 넣었고, 칸 대상에는 ``instance_id`` 가 없으므로
+        #: ``None`` 이 들어가 화면이 **"대상: —"** 라고 적었다 (실측).
+        #: 칸을 지목한 행동이 "아무것도 지목하지 않았다" 로 보이는 것은
+        #: 거짓이고, 그 칸은 이 전개에서 뜻을 가진다.
         found = []
+        zones = []
         for target in targets:
             instance = getattr(target, "instance_id", None)
-            found.append(None if instance is None else passcode(instance))
-        shape["targets"] = found
+            if instance is not None:
+                found.append(passcode(instance))
+                continue
+            zone = getattr(target, "zone", None)
+            if zone is None:
+                #: 어느 쪽도 아니면 **적지 않는다** — 모르는 것을 카드
+                #: 대상으로 적으면 화면이 없는 사실을 그린다.
+                continue
+            zones.append({
+                "zone": getattr(zone, "value", str(zone)),
+                "index": getattr(target, "index", None),
+                "player": getattr(target, "player", None),
+            })
+        if found:
+            shape["targets"] = found
+        if zones:
+            shape["zones"] = zones
     return shape
 
 
