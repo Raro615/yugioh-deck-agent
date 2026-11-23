@@ -230,6 +230,20 @@ li { margin-bottom:4px; font-size:11px; }
 .legend span { margin-right:9px; font-size:11px; white-space:nowrap; }
 .dot { display:inline-block; width:8px; height:8px; border-radius:50%;
        margin-right:3px; vertical-align:middle; }
+/* 선택 근거 (Phase 6-BL) — 세 묶음을 **출처별로** 가른다. */
+#why-wrap summary { font-size:12px; color:var(--fg); font-weight:600; }
+#why h4 { margin:9px 0 3px; font-size:11px; color:#9fb4d8;
+          text-transform:none; letter-spacing:0; }
+#why .why-why  { border-left:2px solid #ffb02e; padding-left:7px; }
+#why .why-alt  { border-left:2px solid #4fc3f7; padding-left:7px; }
+#why .why-out  { border-left:2px solid #7bdc9a; padding-left:7px; }
+#why .why-rec  { border-left:2px solid #b388ff; padding-left:7px; }
+#why .row { font-size:11px; color:#cdd3e4; margin:2px 0; line-height:1.5; }
+#why .sub { font-size:10px; color:var(--dim); margin:1px 0 0 9px; }
+#why .no { font-size:11px; color:var(--dim); font-style:italic; }
+#why .pick { color:#ffd479; font-weight:600; }
+#why .deny { color:#ff9a8a; }
+#why .cap { font-size:10px; color:var(--dim); margin-top:3px; }
 """
 
 #: 🔴 **스크립트는 기록을 데이터로만 읽는다.** 화면의 글자는 전부
@@ -251,6 +265,17 @@ var POS_KO = {FACEUP_ATTACK:'앞면 공격', FACEUP_DEFENSE:'앞면 수비',
               FACEDOWN_DEFENSE:'뒷면 수비', FACEDOWN:'뒷면',
               FACEUP:'앞면'};
 var KIND_KO = {monster:'몬스터', spell:'마법', trap:'함정'};
+/* 행동 종류의 한국어 이름 (Phase 6-BL). 🔴 **없는 종류는 영어 그대로**
+   적는다 — 모르는 것을 번역해 지어내지 않는다. */
+var ACT_KO = {
+  normal_summon:'일반 소환', special_summon:'특수 소환',
+  link_summon:'링크 소환', activate_effect:'효과 발동',
+  activate_spell:'마법 발동', set_spell_trap:'마법·함정 세트',
+  set_monster:'몬스터 세트', tribute_summon:'어드밴스 소환',
+  attack:'공격', pass:'패스', end_phase:'턴 종료',
+  change_position:'표시 형식 변경'
+};
+function actKo(kind) { return ACT_KO[kind] || kind; }
 var STEP_KO = {normal_summon:'일반 소환', link_summon:'링크 소환',
                special_summon:'특수 소환', activate_effect:'효과 발동',
                set_spell_trap:'마법·함정 세트', end_phase:'턴 종료',
@@ -886,7 +911,351 @@ function renderSide(at) {
   clear(notes);
   (f.notes || []).forEach(function (t) { notes.appendChild(el('li', null, t)); });
   byId('notes-wrap').style.display = (f.notes || []).length ? '' : 'none';
+  renderWhy(f);
   renderZoom();
+}
+
+/* --------------------------------------------------------------------
+   선택 근거 (Phase 6-BL)
+
+   🔴 **기록에 있는 것만 적는다.** 칸이 없으면 "당시 선택지 기록 없음" 이고,
+   비어 있으면 "다른 후보가 없었다" 다 — 둘을 같은 글자로 쓰지 않는다.
+   🔴 **최종 추천을 걸음의 동기로 적지 않는다.** 추천은 마지막 장면의
+   묶음(``why-rec``)이고, 걸음의 묶음과 **글자도 자리도** 다르다.
+   -------------------------------------------------------------------- */
+function decisionNames(rec) {
+  return (rec.decisions && rec.decisions.names) || {};
+}
+
+/** 패스코드 → 사람이 읽는 이름. 🔴 없으면 **패스코드를 적는다.** */
+function codeName(rec, code) {
+  if (code === null || code === undefined) { return '—'; }
+  var nm = decisionNames(rec)[String(code)];
+  return nm || ('[' + code + ']');
+}
+
+function codeList(rec, codes) {
+  return (codes || []).map(function (c) { return codeName(rec, c); }).join(' · ');
+}
+
+/** 이 장면이 속한 걸음. 사건 번호로 되돌려 찾는다 (``stepOf`` 와 같은 표). */
+function stepAt(f) { return f.step || null; }
+
+/** 이 장면의 사건. 🔴 번호로 찾는다 — 순서를 가정하지 않는다. */
+function eventOf(rec, seq) {
+  if (seq === undefined || seq === null || seq < 0) { return null; }
+  var found = null;
+  (rec.events || []).forEach(function (ev) {
+    if (ev.seq === seq) { found = ev; }
+  });
+  return found;
+}
+
+/** 이 장면 뒤 **내** 패와 필드의 개체 번호들 (``where`` 는 확정 상태다). */
+function handAndField(f) {
+  var hand = [], field = [], where = f.where || {};
+  Object.keys(where).forEach(function (id) {
+    var w = where[id];
+    /* 🔴 ``place`` 가 ``seat`` 를 **문자열**로 넣는다 (``String(seat)``) —
+       숫자와 비교하면 전부 빠진다 (실측: 이 줄이 통째로 비었다). */
+    if (!w || String(w.seat) !== '0') { return; }
+    if (w.zone === 'HAND') { hand.push(Number(id)); }
+    else if (w.zone === 'MZONE' || w.zone === 'EMZONE'
+             || w.zone === 'SZONE' || w.zone === 'FZONE') {
+      field.push(Number(id));
+    }
+  });
+  hand.sort(function (a, b) { return a - b; });
+  field.sort(function (a, b) { return a - b; });
+  return {hand:hand, field:field};
+}
+
+function renderWhy(f) {
+  var rec = state.record, box = byId('why'), wrap = byId('why-wrap');
+  clear(box);
+  var st = stepAt(f);
+  var dec = rec.decisions || null;
+  var atEnd = state.at === last();
+  byId('why-sum').textContent = st
+    ? ('이 장면의 선택 근거 — ' + actKo(st.kind))
+    : '이 장면의 선택 근거';
+  wrap.style.display = (st || (atEnd && rec.recommendation)) ? '' : 'none';
+  if (!st && !(atEnd && rec.recommendation)) { return; }
+
+  if (st) {
+    var row = (dec && dec.matched && dec.steps)
+      ? dec.steps[String(st.order)] : null;
+
+    /* ① 선택한 행동과 근거 ------------------------------------------- */
+    var why = el('div', 'why-why');
+    why.appendChild(el('h4', null, '① 고른 행동과 근거'));
+    var head = actKo(st.kind);
+    if (st.card) { head += ' — ' + (st.card.name || ('[' + st.card.passcode + ']')); }
+    why.appendChild(el('div', 'row', head));
+    if (st.effect_ref) {
+      why.appendChild(el('div', 'sub', '효과 ' + st.effect_ref));
+    }
+    var chosen = row ? row.chosen : null;
+    if (chosen && chosen.cost && chosen.cost.length) {
+      why.appendChild(el('div', 'row',
+        '지불한 비용: ' + codeList(rec, chosen.cost)));
+    }
+    if (st.material_passcodes && st.material_passcodes.length) {
+      why.appendChild(el('div', 'row',
+        '소재: ' + codeList(rec, st.material_passcodes)));
+    }
+    if (chosen && chosen.targets && chosen.targets.length) {
+      why.appendChild(el('div', 'row',
+        '대상: ' + codeList(rec, chosen.targets)));
+    }
+    /* 🔴 **엔진이 낸 판정 코드만** 적는다 — 조건을 지어내지 않는다. */
+    if (st.gate_code) {
+      why.appendChild(el('div', 'sub',
+        '엔진 판정: ' + st.gate_code
+        + (st.step_code && st.step_code !== st.gate_code
+           ? ' / ' + st.step_code : '')));
+    }
+    if (st.reason) { why.appendChild(el('div', 'sub', st.reason)); }
+    box.appendChild(why);
+
+    /* ② 같은 시점의 다른 선택지 -------------------------------------- */
+    var alt = el('div', 'why-alt');
+    alt.appendChild(el('h4', null, '② 같은 시점의 다른 선택지'));
+
+    /* ②-가 행동을 고르는 시점 */
+    alt.appendChild(el('div', 'row', '· 행동을 고르는 시점'));
+    if (!dec || !dec.matched) {
+      alt.appendChild(el('div', 'no', '  당시 선택지 기록 없음'));
+    } else if (!row) {
+      alt.appendChild(el('div', 'no', '  당시 선택지 기록 없음 (이 걸음)'));
+    } else {
+      var others = row.allowed || [];
+      var total = Math.max(0, (row.allowed_total || 0) - 1);
+      if (!total) {
+        alt.appendChild(el('div', 'sub', '  이 행동 말고는 허가된 수가 없었습니다.'));
+      } else {
+        others.forEach(function (a) {
+          var t = '  ' + actKo(a.kind);
+          if (a.card !== undefined && a.card !== null) {
+            t += ' — ' + codeName(rec, a.card);
+          }
+          if (a.effect_ref) { t += ' (' + a.effect_ref + ')'; }
+          if (a.materials && a.materials.length) {
+            t += ' 소재=' + codeList(rec, a.materials);
+          }
+          /* 🔴 **비용과 대상까지 적는다.** 같은 효과를 **다른 비용**으로
+             발동하는 수가 여럿 있고, 비용을 빼면 네 줄이 똑같이 보인다
+             (실측: 갈라테아i ② 가 비용만 다른 네 수로 올라온다). */
+          if (a.cost && a.cost.length) {
+            t += ' 비용=' + codeList(rec, a.cost);
+          }
+          if (a.targets && a.targets.length) {
+            t += ' 대상=' + codeList(rec, a.targets);
+          }
+          alt.appendChild(el('div', 'sub', t));
+        });
+        if (others.length < total) {
+          alt.appendChild(el('div', 'cap',
+            '  총 ' + total + '개 중 ' + others.length + '개만 표시'));
+        } else {
+          alt.appendChild(el('div', 'cap', '  모두 ' + total + '개'));
+        }
+      }
+      /* 🔴 **탐색이 이것을 더 좋게 봤다고 적지 않는다** — 그런 기록이 없다.
+         🔴 문장을 **한 덩어리로** 둔다: 시험이 이 글자를 그대로 찾는다
+         (쪼개면 찾지 못하고, 그러면 문구가 바뀌어도 아무도 모른다). */
+      alt.appendChild(el('div', 'cap',
+        '  🔴 가능한 선택지 중 하나로 탐색했습니다 — 이 행동을 더 높게 평가했다는 기록은 없습니다.'));
+      if (row.withheld_total) {
+        var held = el('details');
+        held.appendChild(el('summary',
+          null, '  엔진이 막은 수 ' + row.withheld_total + '개'));
+        (row.withheld || []).forEach(function (w) {
+          held.appendChild(el('div', 'sub',
+            (w.missing ? '🔴 미지원 · ' : '') + actKo(w.kind)
+            + ' — ' + w.reason));
+        });
+        if ((row.withheld || []).length < row.withheld_total) {
+          held.appendChild(el('div', 'cap',
+            '총 ' + row.withheld_total + '개 중 '
+            + (row.withheld || []).length + '개만 표시'));
+        }
+        alt.appendChild(held);
+      }
+    }
+
+    /* ②-나 효과 해결 중 카드를 고르는 시점 */
+    alt.appendChild(el('div', 'row', '· 효과 해결 중 카드를 고르는 시점'));
+    var offers = st.resolution_offers || null;
+    if (!offers) {
+      alt.appendChild(el('div', 'no',
+        (st.resolution_choices && st.resolution_choices.length)
+          ? '  고른 것만 기록되어 있습니다 — 당시 선택지 기록 없음'
+          : '  이 걸음에서는 해결 중에 고를 것이 없었습니다.'));
+    } else {
+      offers.forEach(function (of) {
+        alt.appendChild(el('div', 'sub',
+          '  ' + of.effect_ref + ' — ' + of.minimum + '~' + of.maximum + '장'
+          + (of.declinable ? ' · 하지 않을 수 있었습니다' : '')
+          + ' · 고를 수 있던 카드 ' + of.permitted_total + '장'));
+        var chose = {};
+        (of.chosen || []).forEach(function (i) { chose[String(i)] = true; });
+        (of.candidates || []).forEach(function (c) {
+          if (!c.permitted) { return; }
+          var line = el('div', 'sub',
+            '    ' + (chose[String(c.instance)] ? '▶ ' : '· ')
+            + codeName(rec, c.passcode)
+            + (chose[String(c.instance)] ? ' (고름)' : ''));
+          if (chose[String(c.instance)]) { line.className = 'sub pick'; }
+          alt.appendChild(line);
+        });
+        var denied = (of.candidates || []).filter(function (c) {
+          return !c.permitted;
+        });
+        if (denied.length) {
+          var d = el('details');
+          d.appendChild(el('summary', null,
+            '    고를 수 없던 후보 ' + denied.length + '개'));
+          denied.forEach(function (c) {
+            d.appendChild(el('div', 'sub deny',
+              codeName(rec, c.passcode) + ' — ' + (c.reason || c.verdict)));
+          });
+          alt.appendChild(d);
+        }
+      });
+    }
+    box.appendChild(alt);
+
+    /* ③ 선택한 결과 -------------------------------------------------- */
+    var out = el('div', 'why-out');
+    out.appendChild(el('h4', null, '③ 선택한 결과'));
+    /* 🔴 **사건의 변화를 그대로 읽는다.** ``notes`` 는 다른 목적으로 고른
+       메모여서 이동이 비어 있을 수 있다 — 그걸 "판이 바뀌지 않았다" 로
+       적으면 거짓이 된다 (실측: 일반 소환 장면에서 그렇게 보였다). */
+    var ev = eventOf(rec, f.seq);
+    var said = 0;
+    if (ev) {
+      (ev.changes || []).forEach(function (ch) {
+        var who = (ch.instance !== undefined && ch.instance !== null)
+          ? cardName(rec, ch.instance) : '';
+        var from = ch.from || null, to = ch.to || null;
+        if (ch.kind === 'token_created') {
+          out.appendChild(el('div', 'row', '· 토큰을 만들었습니다 — ' + who));
+          said += 1;
+        } else if (from || to) {
+          var where = '';
+          if (to && to.index !== undefined && to.index !== null) {
+            where = ' ' + (to.index + 1) + '번 칸';
+          }
+          out.appendChild(el('div', 'row',
+            '· ' + who + ': '
+            + (from ? (ZONE_KO[from.zone] || from.zone || '—') : '—')
+            + ' → ' + (to ? (ZONE_KO[to.zone] || to.zone || '—') : '—')
+            + where));
+          said += 1;
+        }
+      });
+      (ev.payments || []).forEach(function (t) {
+        out.appendChild(el('div', 'row', '· 지불: ' + t));
+        said += 1;
+      });
+    }
+    (f.notes || []).forEach(function (t) {
+      out.appendChild(el('div', 'sub', '· ' + t));
+      said += 1;
+    });
+    if (!said) {
+      out.appendChild(el('div', 'no', '  이 장면에서 판이 바뀌지 않았습니다.'));
+    }
+    /* 🔴 **이 장면 뒤에 남은 것** — 사용자가 "성관은 어디에 남았나" 를
+       묻는 자리다. ``where`` 는 그 장면의 확정 상태다. */
+    var mine = handAndField(f);
+    if (mine.hand.length || mine.field.length) {
+      out.appendChild(el('div', 'sub',
+        '이 장면 뒤 내 패: '
+        + (mine.hand.map(function (i) { return cardName(rec, i); }).join(' · ')
+           || '없음')));
+      out.appendChild(el('div', 'sub',
+        '이 장면 뒤 내 필드: '
+        + (mine.field.map(function (i) { return cardName(rec, i); }).join(' · ')
+           || '없음')));
+    }
+    if (st.unsupported_after && st.unsupported_after.length) {
+      var u = el('details');
+      u.appendChild(el('summary', null,
+        '  이 걸음 뒤 그 자리의 미지원 ' + st.unsupported_after.length + '개'));
+      st.unsupported_after.forEach(function (t) {
+        u.appendChild(el('div', 'sub', t));
+      });
+      out.appendChild(u);
+    }
+    box.appendChild(out);
+  }
+
+  /* 최종 장면 — 이 전개가 추천된 이유 --------------------------------- */
+  if (atEnd && rec.recommendation) { box.appendChild(recommendBlock(rec)); }
+}
+
+function recommendBlock(rec) {
+  var r = rec.recommendation, wrap = el('div', 'why-rec');
+  wrap.appendChild(el('h4', null, '이 전개가 추천된 이유 (최종 장면)'));
+  wrap.appendChild(el('div', 'row',
+    (r.recommended ? '추천입니다' : '🔴 추천이 **아닙니다**')
+    + ' · 결과 ' + r.index + ' · 평가 ' + (r.policy || '')));
+  if (r.reason) { wrap.appendChild(el('div', 'row', r.reason)); }
+  if (r.stop_note) { wrap.appendChild(el('div', 'sub', r.stop_note)); }
+  if (r.co_recommended && r.co_recommended.length) {
+    wrap.appendChild(el('div', 'row',
+      '🔴 공동 추천 — 결과 '
+      + r.co_recommended.join(', ')
+      + ' 와 우열을 가리지 못했습니다 (단독 최우수가 아닙니다).'));
+  }
+  if (r.note) { wrap.appendChild(el('div', 'sub', r.note)); }
+  if (r.dominated_by && r.dominated_by.length) {
+    wrap.appendChild(el('div', 'row',
+      '지배한 후보: 결과 ' + r.dominated_by.join(', ')));
+  }
+  if (r.criteria && r.criteria.length) {
+    var c = el('details');
+    c.appendChild(el('summary', null,
+      '평가가 실제로 쓴 축 ' + r.criteria.length + '개와 그 한계'));
+    r.criteria.forEach(function (one) {
+      c.appendChild(el('div', 'row', '· ' + one.label + ' — ' + one.role));
+      c.appendChild(el('div', 'sub', '읽는 것: ' + one.reads));
+      c.appendChild(el('div', 'sub', one.limit));
+    });
+    wrap.appendChild(c);
+  }
+  if (r.unjudged && r.unjudged.length) {
+    var u = el('details');
+    u.appendChild(el('summary', null,
+      '🔴 평가가 **세지 않은 것** ' + r.unjudged.length + '개'));
+    r.unjudged.forEach(function (t) { u.appendChild(el('div', 'sub', t)); });
+    wrap.appendChild(u);
+  }
+  var s = r.search;
+  if (s) {
+    var box = el('details');
+    box.appendChild(el('summary', null, '탐색이 보지 않은 것 (미탐색)'));
+    box.appendChild(el('div', 'sub', '범위: ' + (s.scope || '')));
+    box.appendChild(el('div', 'row',
+      s.choice_offers_truncated
+        ? ('🔴 미탐색 — 확인하지 않은 대안이 남은 물음 '
+           + s.choice_offers_truncated + '개')
+        : '확인하지 않은 대안이 남은 물음은 없었습니다.'));
+    box.appendChild(el('div', 'sub',
+      '해결 중 선택의 대안 각본: 대기 ' + s.choice_branches
+      + ' · 실제로 돌린 것 ' + s.choice_plans));
+    box.appendChild(el('div', 'sub',
+      '펼친 노드 ' + s.nodes_expanded + ' · 가장 깊은 곳 ' + s.deepest));
+    if (s.budget_hit && s.budget_hit.length) {
+      box.appendChild(el('div', 'row',
+        '🔴 닿은 상한: ' + s.budget_hit.join(' · ')
+        + ' — 더 할 수 없다는 뜻이 아닙니다.'));
+    }
+    wrap.appendChild(box);
+  }
+  return wrap;
 }
 
 function renderZoom() {
@@ -1178,6 +1547,10 @@ def render_replay_html(record=None, *, title: str = VIEWER_TITLE,
       <h3>이 장면의 기록</h3>
       <ul id="notes"></ul>
     </div>
+    <details class="box" id="why-wrap" open>
+      <summary id="why-sum">이 장면의 선택 근거</summary>
+      <div id="why"></div>
+    </details>
     <div class="box legend">
       <h3>강조 (카드에 글자로도 적습니다)</h3>
       <span><i class="dot" style="background:#ffb02e"></i>발동</span>

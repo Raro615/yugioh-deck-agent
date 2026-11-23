@@ -964,6 +964,41 @@ def _autonomous_record(agent, draft, hand_ids, found, ranking) -> tuple:
                     f" 의 재실행 기록입니다{tie}."), chosen.index
 
 
+def _recommend_line(ranking, index: "int | None") -> str:
+    """
+    **추천 근거 한 줄** (Phase 6-BL).
+
+    🔴 **요약에는 한 줄만 적고 상세는 리플레이가 보여 준다.** 요약의 길이
+    상한은 §44.4 에서 이미 한 번 줄을 잘라먹었다 — 네 축의 설명과 그
+    한계까지 여기 적으면 같은 일이 다시 난다.
+
+    🔴 **점수를 적지 않는다.** 평가기는 점수를 내지 않고 **지배 관계**로
+    고른다. 그래서 이 줄이 말하는 것은 "어느 축에서도 지지 않았다" 이거나
+    "무엇에게 졌다" 이고, 그 글자는 평가기가 쓴 것을 줄인 것이다.
+    """
+    if ranking is None or index is None:
+        return ""
+    one = ranking.candidate(index)
+    if one is None:
+        return ""
+    best = [other.index for other in ranking.recommended]
+    if index not in best:
+        beaten = ", ".join(f"결과 {other}" for other in one.dominated_by)
+        return (f"🧭 **추천 근거**: 결과 {index} 는 추천이 아닙니다"
+                + (f" — {beaten} 에게 네 축에서 뒤집니다." if beaten
+                   else " (사유는 위 추천 절에 있습니다).")
+                + " 🔴 자세한 근거는 전개 보기의 **마지막 장면**에 있습니다.")
+    others = [other for other in best if other != index]
+    head = (f"🧭 **추천 근거**: 결과 {index} 는 평가 네 축(필드 구성 · 쥔"
+            f" 카드 · 일반 소환권 · 상대 자리)에서 **어느 후보에게도"
+            f" 지배당하지 않았습니다**")
+    if others:
+        head += (f" — 🔴 결과 {', '.join(str(o) for o in others)} 와는"
+                 f" 우열을 가리지 못해 **공동 추천**입니다")
+    return (head + ". 🔴 축마다 **무엇을 증명하지 않는지**와 탐색이 보지"
+            " 않은 것은 전개 보기의 **마지막 장면**에 적혀 있습니다.")
+
+
 def _pick_invite(kept, picked) -> str:
     """
     **다른 추천을 고르는 방법** 한 줄 (Phase 6-BH).
@@ -1237,10 +1272,15 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
             picked=(picked if picked is not None else -1),
         )
         #: 🔴 위에서 잡아 둔 자리에 넣는다 — 추천 절보다 **앞**이다.
-        brief[invite_at:invite_at] = ["", _pick_invite(kept, picked)]
+        brief[invite_at:invite_at] = [
+            "", _pick_invite(kept, picked),
+            #: 🔴 **한 줄만** 더한다 (Phase 6-BL) — 상세는 리플레이에 있다.
+            _recommend_line(ranking, picked),
+        ]
         detail.append("")
         detail.append(why)
         detail.append(_pick_invite(kept, picked))
+        detail.append(_recommend_line(ranking, picked))
         detail.append(_autonomous_spent_line(spent))
         return OpeningReport(
             brief=tuple(brief), detail=tuple(detail), refused=False,
