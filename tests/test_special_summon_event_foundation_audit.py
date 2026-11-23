@@ -481,9 +481,13 @@ def test_10_the_live_gate_refuses_a_special_summon_and_says_unknown(repository):
     assert not step.accepted
     assert step.code is ValidationCode.RULE_NOT_IMPLEMENTED
 
-    #: 후보에도 없고 **보류 목록에도 없다** — ``legal_actions`` 가 특수 소환
-    #: 행위를 아예 만들어 보지 않기 때문이다 (패의 카드마다 세 가지만
-    #: 만든다). 그래서 "아직 못 한다" 는 정직한 기록조차 남지 않는다.
+    #: 후보에도 없고 **보류 목록에도 없다.**
+    #:
+    #: 🔴 까닭이 6-BN 에서 바뀌었다. 전에는 ``legal_actions`` 가 특수 소환
+    #: 행위를 **아예 만들어 보지 않았기** 때문이었다. 지금은 만들어 보지만
+    #: **등재된 카드만** 만들고 (``_hand_summon_actions``), 이 패에는 그
+    #: 카드가 없다. 결과는 같고 뜻이 다르다 — 등재되지 않은 카드의 사실은
+    #: 공통 경로가 ``UNKNOWN`` 으로 적는다 (위에서 확인했다).
     legal = duel.legal_actions(MINE)
     assert PlayerActionKind.SPECIAL_SUMMON not in legal.kinds()
     assert PlayerActionKind.SPECIAL_SUMMON not in {
@@ -493,21 +497,30 @@ def test_10_the_live_gate_refuses_a_special_summon_and_says_unknown(repository):
     #: 그러나 실행기는 그 일을 **안다.**
     assert PlayerActionKind.SPECIAL_SUMMON in duel_executor()._handlers
 
-    #: ``UNKNOWN`` 을 지키는 것이 **둘**이다. 하나만 확인하면 다른 하나를
-    #: 떼어낸 변경이 조용히 지나간다 (고의 위반 4번에서 실제로 그랬다).
+    #: 🔴 **Phase 6-BN 에서 ``UNKNOWN`` 을 지키는 것이 바뀌었다.**
     #:
-    #: ① 요구 목록에 실린 "없는 규칙" 하나.
-    assert UnimplementedRule in {
-        type(requirement.condition)
+    #: 6-BM 까지는 둘이었다 — ① 요구 목록의 ``UnimplementedRule`` 하나와
+    #: ② ``SPECIAL_SUMMON`` 이 ``_COMPLETE_RULES`` 에 **없다**는 사실이다.
+    #: ②는 더 이상 사실이 아니다: 종류는 ``_COMPLETE_RULES`` 에 올랐고,
+    #: 범위를 좁게 적는 자리가 ``HAND_SUMMON_RULES`` 로 옮겨졌다.
+    #:
+    #: 그래서 **느슨해지지 않았다**는 것을 다른 둘로 잰다.
+    #:
+    #: ① 등재되지 않은 카드에는 **조건부 조건**이 규칙 이름을 낸다.
+    conditions = {
+        type(requirement.condition).__name__
         for requirement in _special_summon(ActionValidator(duel.view(MINE)), action)
     }
-    #: ② 그리고 종류 자체가 **"끝까지 볼 수 있는 것" 목록에 없다** — 그쪽이
-    #: 최종 결정권이고 (``validate`` 가 그 집합만 ``VALID`` 로 올린다),
-    #: 둘이 겹치지 않는다는 것은 import 시점에 단정되어 있다.
-    assert PlayerActionKind.SPECIAL_SUMMON not in _COMPLETE_RULES
-    assert _MISSING_RULE[PlayerActionKind.SPECIAL_SUMMON] == (
-        SPECIAL_SUMMON_CONDITION_RULE
-    )
+    assert "_HandSummonLegal" in conditions, conditions
+    #: ② 등재된 카드는 **한 장**이고, 이 패의 카드는 거기 없다.
+    from engine.hand_summon import HAND_SUMMON_RULES, hand_summon_rule_for
+
+    assert len(HAND_SUMMON_RULES) == 1
+    held = duel.state.find_instance(source)
+    assert hand_summon_rule_for(held.card_id) is None
+    #: 그리고 두 표는 여전히 겹치지 않는다 (import 시점에도 단정된다).
+    assert PlayerActionKind.SPECIAL_SUMMON in _COMPLETE_RULES
+    assert PlayerActionKind.SPECIAL_SUMMON not in _MISSING_RULE
     assert not (_COMPLETE_RULES & set(_MISSING_RULE))
 
 

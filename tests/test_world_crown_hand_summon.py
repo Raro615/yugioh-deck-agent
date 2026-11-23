@@ -389,6 +389,67 @@ def test_c03_the_validator_still_answers_unknown_elsewhere(repository):
 
 @requires_official_db
 @pytest.mark.real_card
+def test_c05_a_rule_refusal_is_not_called_unimplemented(repository):
+    """
+    🔴 **규칙이 막은 것을 「엔진 미지원」으로 적지 않는다.**
+
+    6-BN 의 첫 판은 이 요구에 ``RULE_NOT_IMPLEMENTED`` 를 달았다. 그 코드는
+    조건이 ``FALSE`` 를 낼 때 그대로 쓰이므로, 턴 제한을 이미 쓴 판에서도
+    "아직 구현하지 않은 규칙" 이라고 답했다 — 6-AB 보완6 · 보완8 이 세운
+    구분을 정면으로 어긴다. ``test_18_the_indirect_path_into_invalid_
+    exists_but_is_closed_by_construction`` 이 그것을 잡았고, 이 시험이
+    같은 자리를 **행동 쪽에서** 지킨다.
+
+    네 갈래를 한 자리에서 센다.
+    """
+    from engine.action import PlayerAction
+    from engine.hand_summon import HAND_SUMMON_USE_KIND, hand_summon_slots
+    from engine.validation import ActionValidity, ValidationCode
+
+    #: ① 턴 제한을 이미 썼다 → **규칙 거절**이다.
+    state, crown = _board(repository)
+    slot = hand_summon_slots(_view(state), 0, CROWN)[0]
+    state.summon_uses.record(
+        state.turn.turn_number, 0, CROWN, HAND_SUMMON_USE_KIND
+    )
+    verdict = _duel(state).activation_validator(0).validate(
+        PlayerAction.special_summon(actor=0, source=crown.instance_id, slot=slot)
+    )
+    assert verdict.validity is ActionValidity.INVALID
+    assert verdict.code is ValidationCode.SPECIAL_SUMMON_FORBIDDEN
+    assert verdict.code is not ValidationCode.RULE_NOT_IMPLEMENTED
+
+    #: ② 가리켜지지 않는 칸 → 역시 **규칙 거절**이다.
+    state, crown = _board(repository)
+    pointed = set(hand_summon_slots(_view(state), 0, CROWN))
+    elsewhere = next(i for i in range(5) if i not in pointed)
+    verdict = _duel(state).activation_validator(0).validate(
+        PlayerAction.special_summon(
+            actor=0, source=crown.instance_id, slot=elsewhere
+        )
+    )
+    assert verdict.code is ValidationCode.SPECIAL_SUMMON_FORBIDDEN
+
+    #: ③ 등재되지 않은 카드 → **모름**이고 규칙 이름이 붙는다.
+    state, _crown = _board(repository)
+    other = _hand(state, GIRSU)
+    verdict = _duel(state).activation_validator(0).validate(
+        PlayerAction.special_summon(actor=0, source=other.instance_id, slot=0)
+    )
+    assert verdict.validity is ActionValidity.UNKNOWN
+    assert verdict.code is ValidationCode.RULE_NOT_IMPLEMENTED
+
+    #: ④ 정상 → ``VALID``.
+    state, crown = _board(repository)
+    slot = hand_summon_slots(_view(state), 0, CROWN)[0]
+    verdict = _duel(state).activation_validator(0).validate(
+        PlayerAction.special_summon(actor=0, source=crown.instance_id, slot=slot)
+    )
+    assert verdict.validity is ActionValidity.VALID, verdict.reason
+
+
+@requires_official_db
+@pytest.mark.real_card
 def test_c04_a_non_zone_target_is_malformed(repository):
     """
     대상 하나가 **칸이 아니면** 거절한다.

@@ -291,9 +291,14 @@ UNKNOWN_SECTION_MEMBERS = {
 #: ``.code`` 를 **판단 입력으로** 읽는 자리에 등장하는 멤버 — 셋뿐이다.
 COMPARED_MEMBERS = {"OK", "RULE_NOT_IMPLEMENTED", "EXECUTION_FORBIDDEN"}
 
-#: 이 코드를 들고 있는 ``Requirement`` 세 곳. 셋 다 조건이 ``FALSE`` 를
+#: 이 코드를 들고 있는 ``Requirement`` 들. 전부 조건이 ``FALSE`` 를
 #: **내지 않으므로** ``ValidationResult.invalid`` 로 가는 간접 경로가 닫혀 있다.
-REQUIREMENT_CARRIERS = 3
+#: 🔴 **3 → 2** (Phase 6-BN). 줄어든 하나는 ``_special_summon`` 의 카드별
+#: 판정이다. 그 요구는 조건이 ``FALSE`` 를 **내므로** 이 코드를 들고 있으면
+#: 안 된다 — 규칙이 막은 것을 「엔진 미지원」으로 적게 된다. 그래서
+#: ``SPECIAL_SUMMON_FORBIDDEN`` 으로 바꿨고, 아래 ``test_18`` 이 지키는
+#: 사실(**간접 경로가 닫혀 있다**)은 그 덕분에 그대로 남았다.
+REQUIREMENT_CARRIERS = 2
 
 
 # ======================================================================
@@ -781,7 +786,10 @@ def test_10_source_forbidden_is_a_different_code_from_structural_source_forbidde
     #: 🔴 255 → 260 (Phase 6-AC). ``_link_summon`` 의 요구 생성이 그 위에
     #: 더해져 자리가 다섯 줄 밀렸다 — 자리만 움직였고 이 감사가 지키는 사실
     #: (간접 경로가 **하나뿐**이라는 것)은 그대로다.
-    assert hits == [("engine/action_validation.py", 261)]
+    #: 🔴 261 → **275** (Phase 6-BN, +14). ``_HandSummonLegal`` 이 쓰는
+    #: 설명과 ``_zone_slot_of`` 가 이 자리보다 **위**에서 늘었다. 자리가
+    #: **하나뿐**이라는 사실은 그대로이고, 그것이 이 단언이 지키는 것이다.
+    assert hits == [("engine/action_validation.py", 275)]
 
 
 # ======================================================================
@@ -1028,12 +1036,18 @@ def test_18_the_indirect_path_into_invalid_exists_but_is_closed_by_construction(
 
     ``_check_requirements`` 는 조건이 ``FALSE`` 면 ``requirement.code`` 를
     **``ValidationResult.invalid`` 에 그대로** 넘긴다. 이 코드를 든
-    ``Requirement`` 가 3개 있으므로 간접 경로가 **구조적으로는 있다.**
+    ``Requirement`` 가 2개 있으므로 간접 경로가 **구조적으로는 있다.**
 
-    그런데 셋의 조건이 **모두 ``FALSE`` 를 내지 않는다** —
-    ``UnimplementedRule`` ×2 는 언제나 ``UNKNOWN`` 이고,
+    그런데 둘의 조건이 **모두 ``FALSE`` 를 내지 않는다** —
+    ``UnimplementedRule`` 은 언제나 ``UNKNOWN`` 이고,
     ``_NormalSpellActivation`` 은 ``TRUE``/``UNKNOWN`` 만 낸다. 그래서
     닫혀 있다. **타입이 막는 것이 아니라 조건의 성질이 막는다.**
+
+    🔴 **Phase 6-BN 이 이 시험의 값어치를 보여 주었다.** 그 Phase 의 첫
+    판은 ``FALSE`` 를 내는 조건(``_HandSummonLegal``)에 이 코드를 달았고,
+    그러면 턴 제한을 이미 쓴 판이 "아직 구현하지 않은 규칙" 으로
+    보고된다 — 이 시험이 그것을 잡았다. 고친 방식은 그 요구의 코드를
+    ``SPECIAL_SUMMON_FORBIDDEN`` 으로 바꾸는 것이었다.
     """
     source = source_of("engine/action_validation.py")
     #: 🔴 Phase 6-AC 가 이 호출을 여러 줄로 바꿨다 — 거절 사유
@@ -1072,7 +1086,11 @@ def test_18_the_indirect_path_into_invalid_exists_but_is_closed_by_construction(
 
     #: **조건 종류가 둘뿐이다** — 둘 다 ``FALSE`` 를 내지 않는 것들이다.
     kinds = sorted(kind for _, kind in carriers)
-    assert kinds == ["UnimplementedRule", "UnimplementedRule", "scope"], kinds
+    #: 🔴 **``UnimplementedRule`` 이 하나 줄었다** (Phase 6-BN · 위 상수).
+    #: 카드별 판정은 ``FALSE`` 를 내므로 이 코드를 들지 않는다 — 그래서
+    #: 남은 둘은 여전히 ``FALSE`` 를 내지 않는 것들이고, 간접 경로는
+    #: **닫혀 있다.** 그 성질이 이 시험이 지키는 것이다.
+    assert kinds == ["UnimplementedRule", "scope"], kinds
 
     #: 그 둘이 정말 ``FALSE`` 를 내지 않는지 실제로 돌려 본다.
     from engine.action_validation import _NormalSpellActivation

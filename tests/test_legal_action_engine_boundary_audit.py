@@ -695,25 +695,33 @@ def test_09_the_withheld_kinds_name_the_missing_rule(repository):
     assert ActionValidity.UNKNOWN is not ActionValidity.INVALID
 
 
-def test_10_special_summon_is_registered_but_never_offered(repository):
+def test_10_special_summon_is_offered_only_for_registered_cards(repository):
     """
-    🟡 §2 C — **구조적 관찰**: ``special_summon`` 은 실행기에 **등록되어 있지만**
-    후보로 **한 번도 나오지 않는다.**
+    🟡 §2 C — ``special_summon`` 은 실행기에 등록되어 있고, **등재된 카드에
+    대해서만** 후보로 나온다.
 
-    글자 그대로는 §2 의 C(실행 가능하지만 합법이 아님)에 들어맞는다. 그런데
-    **위험이 되지 않는다** — ``apply`` 가 목록과 대조한 뒤에야 실행기로 가므로
-    (``test_02``) 그 수행기에 **닿을 길이 없다.**
+    🔴 **Phase 6-BN 에서 이 시험의 뜻이 바뀌었다.** 6-BM 까지는
+    "후보로 **한 번도** 나오지 않는다" 였고, 그것을 production 전체에서
+    ``PlayerAction.special_summon`` 이 **한 글자도 없다**는 것으로 쟀다.
+    지금은 ``engine/duel.py`` 의 ``_hand_summon_actions`` 가 그 행동을
+    만든다 — 성유물－『성관』 하나가 등재되었기 때문이다
+    (:data:`~engine.hand_summon.HAND_SUMMON_RULES`).
 
-    그리고 후보에서 빠지는 이유가 기록되어 있다 — 검증기가 몬스터에 대해
-    ``UNKNOWN`` 과 ``special-summon-condition (카드마다 다르다)`` 를 돌려준다.
-    실제 특수 소환은 효과 쪽의 ``SPECIAL_SUMMON_PROCEDURE`` 가 수행한다.
+    그래서 **느슨하게 풀지 않고 자리를 못박는다**: 그 행동을 만드는
+    production 파일은 ``engine/duel.py`` **하나**이고, 등재되지 않은
+    카드에는 검증기가 여전히 ``UNKNOWN`` 과 같은 규칙 이름을 돌려준다.
     """
     assert PlayerActionKind.SPECIAL_SUMMON in duel_executor().supported
 
-    #: production 어디에서도 ``PlayerAction.special_summon`` 을 만들지 않는다.
-    for path in production_files():
-        relative = str(path.relative_to(PROJECT_ROOT))
-        assert "PlayerAction.special_summon" not in code_only(relative), relative
+    #: 🔴 **만드는 자리가 하나다.** 늘어나는 날 이 시험이 먼저 깨진다.
+    makers = [
+        str(path.relative_to(PROJECT_ROOT))
+        for path in production_files()
+        if "PlayerAction.special_summon" in code_only(
+            str(path.relative_to(PROJECT_ROOT))
+        )
+    ]
+    assert makers == ["engine/duel.py"], makers
 
     #: 효과 쪽은 **다른 길**로 간다 — 수행기가 아니라 절차다.
     executor_code = code_only("engine/effect/executor.py")
@@ -729,8 +737,16 @@ def test_10_special_summon_is_registered_but_never_offered(repository):
         if card.definition is not None
     ]
     assert monsters, "손에 카드가 없다"
+    #: 🔴 **등재되지 않은 카드만 고른다** (Phase 6-BN). 등재된 카드를
+    #: 집으면 ``VALID`` 가 날 수 있고, 그것은 이 시험이 묻는 것이 아니다.
+    from engine.hand_summon import hand_summon_rule_for
+
+    unregistered = [
+        card for card in monsters if hand_summon_rule_for(card.card_id) is None
+    ]
+    assert unregistered, "등재되지 않은 몬스터가 손에 없다"
     verdict = ActionValidator(duel.view(seat)).validate(
-        PlayerAction.special_summon(seat, monsters[0].instance_id)
+        PlayerAction.special_summon(seat, unregistered[0].instance_id)
     )
     assert verdict.validity in (ActionValidity.UNKNOWN, ActionValidity.INVALID)
     if verdict.validity is ActionValidity.UNKNOWN:

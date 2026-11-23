@@ -688,11 +688,25 @@ def _special_summon(
     #:
     #: 🔴 자리가 **빈 칸 검사보다 뒤**인 것이 뜻을 가진다: 칸이 없으면
     #: 그 사실이 먼저 나오고, 칸이 있을 때만 그 칸에 놓을 수 있는지 묻는다.
+    #: 🔴 **코드가 ``RULE_NOT_IMPLEMENTED`` 가 아니다.**
+    #:
+    #: 이 요구의 코드는 조건이 ``FALSE`` 를 낼 때만 쓰인다
+    #: (``_check_requirements`` 의 거절 갈래). ``_HandSummonLegal`` 은
+    #: **``FALSE`` 를 낸다** — 턴 제한을 이미 썼다 · 가리켜지지 않는 칸이다 ·
+    #: 특수 소환 제한이 막는다 는 전부 **규칙이 막은 것**이다. 그 자리에
+    #: ``RULE_NOT_IMPLEMENTED`` 를 적으면 **규칙이 막은 것을 엔진 미지원으로
+    #: 적는** 바로 그 혼동이 된다 (6-AB 보완6 · 보완8 이 세운 구분).
+    #:
+    #: 🔴 6-BN 의 첫 판이 실제로 그랬고,
+    #: ``test_18_the_indirect_path_into_invalid_exists_but_is_closed_by_construction``
+    #: 이 그것을 잡았다. ``UNKNOWN`` 쪽은 코드와 무관하다 — 조건이
+    #: ``missing_rules`` 를 내면 검증기가 ``RULE_NOT_IMPLEMENTED`` 를 스스로
+    #: 고른다 (위 ``_check_requirements``).
     requirements.append(
         Requirement(
             _HandSummonLegal(action.source, _zone_slot_of(action)),
-            ValidationCode.RULE_NOT_IMPLEMENTED,
-            "이 카드를 특수 소환할 수 있는지 판정할 규칙이 없습니다.",
+            ValidationCode.SPECIAL_SUMMON_FORBIDDEN,
+            "이 카드를 지금 그 칸에 특수 소환할 수 없습니다.",
         )
     )
     return tuple(requirements)

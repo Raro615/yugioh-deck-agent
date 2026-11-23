@@ -611,10 +611,18 @@ def test_f_no_second_summon_engine_was_built():
         node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
     }
 
+    #: 🔴 **수가 하나 늘었다** (Phase 6-BN — ``HandSummonExecutor``). 늘어난
+    #: 까닭은 "특수 소환 엔진을 또 만들었다" 가 **아니다**: 패에서 자신을
+    #: 특수 소환하는 카드는 표시 형식과 놓을 칸이 **규칙으로 정해져** 있고,
+    #: 공통 실행기는 둘 다 고르지 않기 때문이다 (``SPECIAL_SUMMON_POSITION``
+    #: 은 앞면 공격 고정 · ``free[0]``). 절차는 여전히
+    #: :class:`~engine.summon.SummonProcedure` **하나**이고, 새 실행기는 그
+    #: 값을 카드마다 골라 쓴다 — 판을 바꾸는 자리도 ``place`` 하나다.
     assert defined == {
         "SpecialSummonError",
         "SpecialSummonExecutor",
         "SpecialSummonHandler",
+        "HandSummonExecutor",
     }
     for forbidden in ("GameState", "ActionExecutor", "SummonProcedure"):
         assert forbidden not in defined

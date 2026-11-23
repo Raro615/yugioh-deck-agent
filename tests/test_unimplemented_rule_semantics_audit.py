@@ -146,7 +146,14 @@ PRODUCTION_CONSTRUCTIONS = {
     ("engine/action_validation.py", "_special_summon"),
     ("engine/archetype_compiler.py", "compile_archetype_condition"),
 }
-PRODUCTION_CONSTRUCTION_COUNT = 3
+#: 🔴 **3 → 2** (Phase 6-BN). 줄어든 하나는 ``_special_summon`` 의 마지막
+#: 요구였다 — 「이 카드를 특수 소환할 수 있는가」 가 자리표시자
+#: (``UnimplementedRule``) 에서 **조건부 조건**(``_HandSummonLegal``) 으로
+#: 바뀌었다. 6-F 가 트리거 쪽에서 한 것과 **같은 방향**이다: 코드
+#: (``RULE_NOT_IMPLEMENTED``) 는 그대로 쓰이고 조건 객체만 떼어 냈다.
+#: 그래서 이 숫자가 줄어든 것은 이 파일에 좋은 신호다 — 두 개념이 또 한
+#: 자리에서 분리되었다는 뜻이다.
+PRODUCTION_CONSTRUCTION_COUNT = 2
 
 #: ``RULE_NOT_IMPLEMENTED`` 가 production (``engine/`` + ``agent/``) 에
 #: 등장하는 총 횟수. 생성 2곳과 대비하는 수다.
@@ -304,6 +311,11 @@ MISSING_RULES_OVERRIDES = {
     #: 이름으로 낸다 — ``SpecialSummonPermitted`` 와 같은 방향이다
     #: (``UnimplementedRule`` 이 아니면서 **조건부**로 낸다).
     ("engine/condition/model.py", "SimultaneousSpecialSummonPermitted"),
+    #: 🔴 Phase 6-BN 이 열두째를 더했다 — ``_HandSummonLegal`` 은 「이 카드를
+    #: 패에서 특수 소환할 수 있는가」 를 묻고, **등재되지 않은 카드일 때만**
+    #: 규칙 이름을 낸다 (``special-summon-condition``). ``_LinkMaterialsLegal``
+    #: 과 같은 방향이다: ``UnimplementedRule`` 이 아니면서 **조건부**로 낸다.
+    ("engine/action_validation.py", "_HandSummonLegal"),
 }
 
 #: ``_NormalSummonProcedure`` · ``_NormalSpellActivation`` 이 실제로 내놓는
@@ -851,6 +863,13 @@ def test_10_both_production_unimplemented_rules_are_reachable_through_the_valida
 
     그리고 **까닭이 둘이면 둘 다 남는다** — ``missing_rule`` 에는 첫 번째가,
     ``notes`` 에는 전부가 들어간다. 정보가 사라지지 않는다 (§F 반증).
+
+    🔴 **Phase 6-BN 에서 자리표시자가 하나 줄었다.** 전에는
+    ``UnimplementedRule`` 이 둘이었다 — ``special summon from MZONE`` 과
+    **카드별 소환 조건**이다. 뒤의 것이 ``_HandSummonLegal`` 이 되었고
+    (자리표시자가 아니라 **조건부로** 규칙 이름을 내는 조건이다), 그래서
+    ``UnimplementedRule`` 로 세면 하나다. 🔴 **잃은 것은 없다** — 아래에서
+    까닭이 여전히 **둘**임을 ``notes`` 로 확인한다.
     """
     action = special_summon_of(board)
     rules = [
@@ -858,21 +877,27 @@ def test_10_both_production_unimplemented_rules_are_reachable_through_the_valida
         for r in validator.requirements(action)
         if isinstance(r.condition, UnimplementedRule)
     ]
-    assert len(rules) == 2
-    assert SPECIAL_SUMMON_CONDITION_RULE in rules
+    #: 🔴 자리표시자는 **하나** 남았다 (위 설명).
+    assert len(rules) == 1, rules
     assert any("special summon from MZONE" in rule for rule in rules)
 
     verdict = validator.validate(action)
     assert verdict.validity is ActionValidity.UNKNOWN
     assert verdict.code is ValidationCode.RULE_NOT_IMPLEMENTED
-    assert verdict.missing_rule == rules[0]
+    assert verdict.missing_rule in (rules[0], SPECIAL_SUMMON_CONDITION_RULE)
     assert verdict.permits_execution is False
 
-    #: 두 까닭이 모두 ``notes`` 에 남는다.
+    #: 🔴 **까닭은 여전히 둘이고 둘 다 ``notes`` 에 남는다** — 하나는
+    #: 자리표시자가, 다른 하나는 조건부 조건(``_HandSummonLegal``)이 냈다.
     assert len(verdict.notes) == 2
-    for rule in rules:
-        assert any(rule in note for note in verdict.notes)
-        assert any("규칙 미구현" in note for note in verdict.notes)
+    #: ① 자리표시자 쪽은 **규칙 이름**을 적는다.
+    assert any(rules[0] in note for note in verdict.notes)
+    assert any("규칙 미구현" in note for note in verdict.notes)
+    #: ② 조건부 조건 쪽은 **모름의 까닭**을 적는다 (규칙 이름은
+    #: ``missing_rules`` 로 따로 나온다 — 글자가 다른 것이 사실이다).
+    assert any(
+        "패 특수 소환 절차가 등재되지" in note for note in verdict.notes
+    ), verdict.notes
 
 
 @requires_official_db

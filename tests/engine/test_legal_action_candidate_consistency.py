@@ -1938,10 +1938,22 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
     #: "**고를 것이 있는** 비용만 건너뛴다" 로 좁혔고, 건너뛰는 자리에
     #: **왜 후보가 되지 못했는지** 적게 했다 (``COST_SELECTION_MISSING``).
     #: 적지 않으면 "그 효과가 없다" 로 읽힌다.
+    #: 🔴 **정정 (Phase 6-BN).** 자리가 하나 늘어 열하나다.
+    #:
+    #: ``_hand_summon_actions``
+    #:     패에서 자신을 특수 소환하는 후보를 만드는 자리. 가리켜지는 빈
+    #:     메인 몬스터 존이 없다는 사실을 적는다 — 이 자리가 없으면 그
+    #:     사실이 **후보에도 보류에도** 오르지 않는다
+    #:     (``_link_summon_actions`` 가 6-AC 에 들어온 것과 같은 이유다).
+    #:     🔴 ``missing`` 은 **비운다**: 규칙이 **있어서** 막는 자리이고
+    #:     (링크 마커가 가리키는 칸이 없다), 없는 것을 빈 값으로 채우지
+    #:     않는다 — 등재되지 않은 카드의 "모름" 은 여기가 아니라 공통
+    #:     경로가 적는다.
     assert sorted(by_function) == [
         "_activation_actions",
         "_enforce_mandatory",
         "_flow_actions",
+        "_hand_summon_actions",
         "_link_summon_actions",
         "_note_gate_refusal",
         "_note_target_limits",
