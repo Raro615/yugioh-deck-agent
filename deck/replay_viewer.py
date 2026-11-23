@@ -1216,15 +1216,24 @@ function recommendBlock(rec) {
   var head;
   if (r.recommended) { head = '추천입니다'; }
   else if (st.kind === 'excluded') { head = '🔴 평가 비교에 들어가지 않았습니다'; }
+  else if (st.kind === 'unexplored') {
+    /* 🔴 **지배당한 것이 아니다** — 평가기 자신이 그렇게 적는다. */
+    head = '🔴 후속을 탐색받지 못한 기준점입니다';
+  }
   else if (st.kind === 'dominated') { head = '🔴 추천이 아닙니다 (비교에서 뒤졌습니다)'; }
   else if (st.kind === 'unknown') { head = '🔴 평가 기록에 이 번호가 없습니다'; }
-  else { head = '🔴 추천이 아닙니다'; }
+  else { head = '🔴 추천에 오르지 않았습니다'; }
   wrap.appendChild(el('h4', null, '이 전개의 평가 (최종 장면)'));
   wrap.appendChild(el('div', 'row',
     head + ' · 결과 ' + r.index + ' · 평가 ' + (r.policy || '')));
   if (r.reason) { wrap.appendChild(el('div', 'row', r.reason)); }
   /* 🔴 **기록에 있는 상태만 적는다** — 근거가 없는 후보를 다른 후보보다
      낮게 평가했다고 설명하지 않는다 (사용자 요구 §3). */
+  if (st.kind === 'unexplored' || st.kind === 'not_recommended') {
+    /* 🔴 사유를 화면이 **주장하지 않는다** — 위 근거 글자가 말한다. */
+    wrap.appendChild(el('div', 'cap',
+      '🔴 다른 후보보다 낮게 평가했다는 뜻이 아닙니다. 경로는 그대로 남아 있습니다.'));
+  }
   if (st.kind === 'excluded') {
     var bits = [];
     if (st.exclusion) { bits.push('제외 사유 ' + st.exclusion); }

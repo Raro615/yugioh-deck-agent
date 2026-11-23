@@ -470,8 +470,48 @@ def test_e05_the_state_tells_excluded_apart_from_dominated():
     assert unknown["kind"] == "unknown"
     assert "없습니다" in unknown["label"]
     assert set(CANDIDATE_STATES) == {
-        "recommended", "dominated", "excluded", "unknown"
+        "recommended", "dominated", "unexplored", "not_recommended",
+        "excluded", "unknown",
     }
+
+
+def test_e05b_an_unexplored_baseline_is_not_called_dominated():
+    """
+    🔴 **실측으로 잡은 오류** (6-BM 후속). 처음 판은 "추천이 아니고 비교
+    대상이면 뒤진 것" 으로 적었고, 실제 실행에서 **기준점 후보**가 그렇게
+    찍혔다 — 평가기 자신은 그 후보를 *"지배당한 것도, 재생이 실패한 것도
+    아니다"* 라고 적는다. 이름이 있을 때만 뒤졌다고 적어야 한다.
+    """
+    from app.main import _candidate_state
+
+    class _Base:
+        index = 1
+        exclusion = _Kind("none")
+        rerun_state = "verified"
+        verified = True
+        recommended = False
+        dominated_by = ()
+        eligible = True
+
+    class _Ranked:
+        unexplored = (1,)
+
+    got = _candidate_state(_Base(), _Ranked())
+    assert got["kind"] == "unexplored", got
+    assert "뒤졌" not in got["label"], got["label"]
+
+    #: 평가 기록에 ``unexplored`` 가 없고 지배자도 없으면 **사유를
+    #: 주장하지 않는다.**
+    neutral = _candidate_state(_Base(), None)
+    assert neutral["kind"] == "not_recommended"
+    assert "뒤졌" not in neutral["label"], neutral["label"]
+
+    #: 지배자가 **있으면** 그때만 뒤졌다고 적는다.
+    class _Lost(_Base):
+        index = 6
+        dominated_by = (69,)
+
+    assert _candidate_state(_Lost(), None)["kind"] == "dominated"
 
 
 def test_e06_the_block_carries_the_state(): 

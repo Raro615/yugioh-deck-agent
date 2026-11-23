@@ -1682,14 +1682,16 @@ class ScriptedActionPolicy:
 #: "졌다" 가 아니다. 그 둘을 한 낱말로 쓰면 근거가 없는 후보를 **낮게
 #: 평가했다고 설명하는** 셈이 된다 (사용자 요구 §3).
 CANDIDATE_STATES: tuple[str, ...] = (
-    "recommended",   # 지배당하지 않았다
-    "dominated",     # 비교에 들어갔고 다른 후보에게 뒤졌다
-    "excluded",      # 비교에 **들어가지 못했다** (검증 · 측정 · 선정)
-    "unknown",       # 평가 기록에 이 번호가 없다
+    "recommended",       # 지배당하지 않았다
+    "dominated",         # 비교에 들어갔고 **실제로** 다른 후보에게 뒤졌다
+    "unexplored",        # 후속을 한 번도 탐색받지 못한 기준점이다
+    "not_recommended",   # 추천에 오르지 않았고, 위 어느 사유도 아니다
+    "excluded",          # 비교에 **들어가지 못했다** (검증 · 측정 · 선정)
+    "unknown",           # 평가 기록에 이 번호가 없다
 )
 
 
-def _candidate_state(one) -> dict:
+def _candidate_state(one, ranking=None) -> dict:
     """
     후보 하나의 **처지**를 값으로 (Phase 6-BM).
 
@@ -1697,6 +1699,14 @@ def _candidate_state(one) -> dict:
     한다 — ``exclusion`` · ``rerun_state`` · ``verified`` · ``dominated_by``.
     평가 기록에 번호가 없으면 ``unknown`` 이고, 그것을 "낮다" 로 바꾸지
     않는다.
+
+    🔴 **「뒤졌다」 를 추측으로 쓰지 않는다** (6-BM 후속, 실측으로 잡았다).
+    처음 판은 "추천이 아니고 비교 대상이면 뒤진 것" 으로 적었는데, 실제
+    실행에서 **기준점 후보**가 그렇게 찍혔다 — 평가기 자신은 그 후보를
+    *"지배당한 것도, 재생이 실패한 것도 아니다"* 라고 적는다
+    (``RankingV2.unexplored``). 그래서 이제 **``dominated_by`` 에 실제로
+    이름이 있을 때만** 뒤졌다고 적고, 탐색받지 못한 기준점은 따로 적으며,
+    둘 다 아니면 사유를 주장하지 않고 근거 글자에 맡긴다.
     """
     if one is None:
         return {
@@ -1716,10 +1726,23 @@ def _candidate_state(one) -> dict:
             "rerun_state": getattr(one, "rerun_state", ""),
             "verified": bool(getattr(one, "verified", False)),
         }
+    beaten = tuple(getattr(one, "dominated_by", ()) or ())
+    unexplored = tuple(getattr(ranking, "unexplored", ()) or ())
     if getattr(one, "recommended", False):
         kind, label = "recommended", "어느 후보에게도 지배당하지 않았습니다"
+    elif int(getattr(one, "index", -1)) in {int(i) for i in unexplored}:
+        #: 🔴 **탐색받지 못한 기준점** — 지배당한 것이 아니다.
+        kind, label = ("unexplored",
+                       "후속 행동을 한 번도 탐색받지 못한 기준점입니다")
+    elif beaten:
+        #: 🔴 **이름이 있을 때만** 뒤졌다고 적는다.
+        kind, label = ("dominated",
+                       "비교에 들어갔고 다른 후보에게 뒤졌습니다")
     else:
-        kind, label = "dominated", "비교에 들어갔고 다른 후보에게 뒤졌습니다"
+        #: 🔴 **사유를 주장하지 않는다** — 근거 글자가 말한다.
+        kind, label = ("not_recommended",
+                       "추천에 오르지 않았습니다 (사유는 아래 근거에 적혀 "
+                       "있습니다)")
     return {
         "kind": kind,
         "label": label,
@@ -1771,7 +1794,7 @@ def autonomous_recommendation_block(outcome, ranking, index: int) -> "dict | Non
         #: 후보를 "더 낮게 평가했다" 로 적지 않기 위한 칸이다 — 비교에서
         #: 빠진 것인지, 재생 검증을 받지 못한 것인지, 값을 읽지 못한 것인지는
         #: 서로 다른 사실이고 화면이 그대로 적어야 한다.
-        "state": _candidate_state(one),
+        "state": _candidate_state(one, ranking),
         #: 🔴 **평가가 실제로 쓴 축**과 그 축이 증명하지 않는 것.
         "criteria": [
             {
