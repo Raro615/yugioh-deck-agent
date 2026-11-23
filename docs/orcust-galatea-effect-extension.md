@@ -2941,6 +2941,18 @@ continue` 가 삼켰고, 그래서 **모든 제한이 조용히 통과했다.**
 (실측: 13건 전부 통과), 그래서 "깨지게 적어 둔 시험" 이 깨지지 않았다.
 지금은 `action.source` 를 그대로 본다.
 
+### 56.3 규칙 거절을 **「엔진 미지원」으로 적고 있었다**
+
+세 번째로 고친 자리이고, **기존 감사가 잡았다.** 자세한 것은 §63.4 에
+적는다 — 요약하면 카드별 판정 요구에 `RULE_NOT_IMPLEMENTED` 를 달았고,
+그 코드는 조건이 `FALSE` 를 낼 때 그대로 쓰이므로 "턴 제한을 이미 썼다"
+가 "아직 구현하지 않은 규칙" 으로 보고되었다. 코드를
+`SPECIAL_SUMMON_FORBIDDEN` 으로 바꿨다.
+
+🔴 **세 번 다 같은 모양이다**: 내가 글로는 맞게 적어 두고 코드에서는
+다르게 했고, 그것을 **측정**이 잡았다 (①은 시험이, ②는 실제 실행이,
+③은 기존 감사가).
+
 ## 57. §2 — **기본 설정에서 찾았다** (실측 · 예산 조정 없음)
 
 입력은 사용자가 준 그대로다.
@@ -3095,3 +3107,94 @@ continue` 가 삼켰고, 그래서 **모든 제한이 조용히 통과했다.**
 | --- | --- |
 | `docs/viewer/orcust-world-crown-hand-summon-longirsu.html` | 성관을 세워 **롱기르수**까지 (미추천 후보) |
 | `docs/viewer/orcust-world-crown-standing.html` | 성관을 **필드에 세워 둔** 전개 (추천 후보) |
+
+## 63. 검증 — 돌린 것과 돌리지 않은 것 (6-BN)
+
+### 63.1 🔴 **기준선 파일이 낡아서 쓰지 않았다**
+
+`base_fails.txt` (6-BJ 때 만든 68건 목록)로 차분하면 6-BL · 6-BM 의 낙진이
+6-BN 의 것으로 섞여 보인다. 그래서 **6-BN 직전 커밋(`356f4ba0`)을 git
+worktree 로 꺼내** 같은 분할로 양쪽을 돌렸다.
+
+🔴 **첫 기준선 패스는 무효였다.** 워크트리에 `.gitignore` 된
+`data/constants/` 가 없어 카드 35장이 "미확정" 으로 떨어지고 103건이
+`ValueError` 로 죽었다 (`engine/activation.py` 의 "무엇이 없어서인지
+적어야 합니다" 불변식). 데이터를 연결하고 다시 돌렸다 — **없는 데이터로
+낸 "기준선에서도 실패한다" 는 판정을 근거로 쓰지 않았다.**
+
+### 63.2 전체 스위트 — **기준선과 차분했다 (0건 · 0건)**
+
+| | 파일 | 실패 | 통과 |
+| --- | --- | --- | --- |
+| `356f4ba0` (6-BN 직전) | 261 | **71** | 7562 |
+| HEAD (6-BN) | 261 | **71** | 7589 |
+
+```
+HEAD 에서 새로 깨진 것:            (없음)
+기준선에서 깨졌는데 HEAD 에서 통과: (없음)
+```
+
+이름 기준으로 **양방향 0건**이다. 실패 71건은 전부 6-BN 전에도 같은
+이름으로 실패하던 것들이고, 그중 셋은 6-BL · 6-BM 이 남긴 것이다
+(`test_20_nobody_in_production_reads_the_withheld_list` ·
+`test_open_search` 의 `test_e03` · `test_j03`).
+
+### 63.3 등재가 깨뜨린 감사 8건 — **전부 이유를 적었다**
+
+수를 느슨하게 고친 것은 없다. 자리마다 **왜 움직였는지**를 🔴 주석으로
+남겼다.
+
+| 감사 | 무엇이 움직였나 |
+| --- | --- |
+| `test_special_summon.py::test_f` | 클래스 집합에 `HandSummonExecutor` (표시 형식·칸이 규칙인 카드는 공통 실행기를 쓸 수 없다) |
+| `test_legal_action_engine_boundary_audit.py::test_10` | "한 번도 나오지 않는다" → "**등재된 카드에만** 나온다". 만드는 자리가 `engine/duel.py` 하나임을 못박았다 |
+| `test_unimplemented_rule_semantics_audit.py::test_05` | `missing_rules` override 목록에 `_HandSummonLegal` (열하나 → 열둘) |
+| 〃 `test_10` | 자리표시자 2 → 1. **까닭은 여전히 둘**임을 `notes` 로 센다 |
+| 〃 (상수) | `PRODUCTION_CONSTRUCTION_COUNT` 3 → 2 |
+| `test_legal_action_candidate_consistency.py::test_i03` | 보류 자리 10 → 11 (`_hand_summon_actions`). `missing` 은 **비운다** — 규칙이 **있어서** 막는 자리다 |
+| `test_special_summon_event_foundation_audit.py::test_10` | `UNKNOWN` 을 지키는 근거를 "`_COMPLETE_RULES` 에 없다" 에서 **등재표 크기**로 옮겼다 |
+| `test_validation_code_rejection_semantics_audit.py::test_10` · `test_18` | `SOURCE_FORBIDDEN` 자리 261 → 275 · 코드 담지자 3 → 2 |
+
+### 63.4 🔴 **감사가 실제 버그를 잡았다** (56.3 으로 적어 둘 것)
+
+`test_18_the_indirect_path_into_invalid_exists_but_is_closed_by_construction`
+은 "`RULE_NOT_IMPLEMENTED` 를 든 `Requirement` 들은 전부 조건이 `FALSE` 를
+내지 않는다" 를 지킨다. 6-BN 의 첫 판은 그 성질을 깨뜨렸다 —
+`_HandSummonLegal` 은 `FALSE` 를 내므로, **턴 제한을 이미 쓴 판**이
+"아직 구현하지 않은 규칙" 으로 보고되었다. 규칙이 막은 것을 엔진 미지원으로
+적는, 이 저장소가 가장 경계하는 혼동이다.
+
+고친 방식은 그 요구의 코드를 `SPECIAL_SUMMON_FORBIDDEN` 으로 바꾸는
+것이었다. `UNKNOWN` 쪽은 코드와 무관하다 — 조건이 `missing_rules` 를 내면
+검증기가 스스로 `RULE_NOT_IMPLEMENTED` 를 고른다. 실측:
+
+```
+턴 제한 이미 씀 → INVALID  special_summon_forbidden
+가리켜지지 않는 칸 → INVALID  special_summon_forbidden
+등재되지 않은 카드 → UNKNOWN  rule_not_implemented (+ 규칙 이름)
+정상            → VALID    ok
+```
+
+`test_c05_a_rule_refusal_is_not_called_unimplemented` 가 이 네 갈래를
+행동 쪽에서 지킨다.
+
+### 63.5 돌린 것
+
+| 무엇 | 결과 |
+| --- | --- |
+| `tests/test_world_crown_hand_summon.py` (새 파일) | **27건 통과** |
+| `tests/test_world_crown_pointed_zone.py` | 13건 통과 (D 묶음 둘은 뜻을 뒤집어 다시 썼다) |
+| `tests/test_replay_decision_basis.py` · `test_candidate_pick.py` | 38건 통과 |
+| 전체 스위트 × 2 (HEAD · 기준선) | 위 표 |
+| 실제 `/combo search:auto` (기본 예산) | 117.1초 · 후보 113개 |
+| 실제 `/combo-pick` 재실행 2건 | 성관 → 롱기르수 · 추천된 성관 후보 |
+| HTML 리플레이 2벌 (Chromium) | JS 오류 **없음** · 장면 12개 · `놓을 칸` 줄 표시 확인 |
+
+### 63.6 돌리지 않은 것
+
+* **실제 디스코드 봇 호출은 하지 않았다.** 같은 응답 함수(`combo_response`
+  · `pick_response`)를 로컬에서 불렀다. 디스코드를 켜야만 확인되는 상태로
+  끝내지 않으려고 리플레이 두 벌을 저장소에 넣었다.
+* 성관의 **②·③ 효과**는 등재하지 않았다 (§61).
+* **탐색 정책 · 예산 · 추천 순위는 건드리지 않았다.** 추천 집계 방식도
+  그대로다 — 이번에 더한 것은 후보 한 종류와 리플레이의 한 줄이다.
