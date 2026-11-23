@@ -935,8 +935,16 @@ def _autonomous_record(agent, draft, hand_ids, found, ranking) -> tuple:
                   None)
     if chosen is None:  # pragma: no cover - 방어용
         return None, "🖥 **전개 보기를 만들지 않았습니다** — 대표 결과를 찾지 못했습니다.", None
+    #: 🔴 **추천 근거를 기록에 싣는다** (Phase 6-BL). 디스코드 요약에는 한
+    #: 줄만 적고 (아래 ``_recommend_line``) 상세는 리플레이가 보여 준다 —
+    #: 요약의 길이 상한이 §44.4 에서 이미 한 번 줄을 잘라먹었다.
+    from app.main import autonomous_recommendation_block
+
     record, why = autonomous_rerun_record(
-        agent.repository, draft, list(hand_ids), chosen
+        agent.repository, draft, list(hand_ids), chosen,
+        recommendation=autonomous_recommendation_block(
+            found, ranking, chosen.index
+        ),
     )
     #: 🔴 **첨부에 들어가지 **않은** 추천을 이름으로 적는다** (Phase 6-BG).
     #: 6-BC 는 공동 추천의 **개수**만 적었다 — 그러면 요약에는 전개가 둘인데

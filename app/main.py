@@ -1528,6 +1528,90 @@ def autonomous_search_opening(
     return setup, outcome
 
 
+#: 한 자리에서 적는 **다른 후보의 최대 수**. 넘으면 수만 적는다.
+#:
+#: 🔴 **자른 것을 숨기지 않는다** — 자른 자리는 ``allowed_total`` 이
+#: 목록보다 크고, 화면이 "N개 중 M개 표시" 로 적는다 (사용자 요구 §1).
+DECISION_SIBLING_LIMIT: int = 8
+
+#: 보류도 같은 규율로 자른다. 보류는 한 자리에서 수십 건이 될 수 있다.
+DECISION_WITHHELD_LIMIT: int = 6
+
+
+def _action_shape(duel, action) -> dict:
+    """
+    행동 하나를 **값**으로 — 종류 · 카드 · 효과 · 소재 · 비용.
+
+    🔴 **이름을 붙이지 않는다** (패스코드만). 사람이 읽는 이름은 카드
+    저장소가 있는 내보내기 계층이 붙인다.
+    """
+
+    def passcode(instance) -> "int | None":
+        found = duel.state.find_instance(instance)
+        return None if found is None else found.card_id
+
+    shape: dict = {"kind": action.kind.value}
+    if action.source is not None:
+        shape["card"] = passcode(action.source)
+    ref = getattr(action, "effect_ref", None)
+    if ref is not None:
+        shape["effect_ref"] = str(ref)
+    materials = tuple(getattr(action, "materials", ()) or ())
+    if materials:
+        shape["materials"] = [passcode(one) for one in materials]
+    costs = tuple(getattr(action, "cost_cards", ()) or ())
+    if costs:
+        shape["cost"] = [passcode(one) for one in costs]
+    targets = tuple(getattr(action, "targets", ()) or ())
+    if targets:
+        found = []
+        for target in targets:
+            instance = getattr(target, "instance_id", None)
+            found.append(None if instance is None else passcode(instance))
+        shape["targets"] = found
+    return shape
+
+
+def _decision_snapshot(duel, legal, chosen) -> dict:
+    """
+    **고르는 자리 하나**를 값으로 적는다 (Phase 6-BL).
+
+    담는 것은 셋이다 — 고른 행동의 모양, **같은 자리의 다른 허용 후보**,
+    그리고 **그 자리의 보류**(엔진이 묻고 막은 것). 🔴 셋 다 ``legal`` 에서
+    그대로 읽은 것이고 하나도 지어내지 않았다.
+
+    🔴 **보류와 미지원을 가른다.** ``missing`` 이 붙은 보류는 "이 저장소에
+    그 규칙이 없다" 이고, 붙지 않은 것은 "규칙이 막았다" 다 —
+    :meth:`~engine.duel.LegalActions.unsupported` 가 세는 그 구분이다.
+    """
+    key = chosen.canonical_state()
+    siblings = [
+        _action_shape(duel, action)
+        for action in legal.allowed
+        if action.canonical_state() != key
+    ]
+    withheld = [
+        {
+            "kind": held.kind.value,
+            "code": getattr(held.code, "value", str(held.code)),
+            "reason": held.reason,
+            "missing": bool(getattr(held, "missing", None)),
+        }
+        for held in legal.withheld
+    ]
+    return {
+        #: 🔴 **재실행이 본 것**이다 — 탐색이 그때 본 것과 같다고 주장하지
+        #: 않는다 (클래스 머리말).
+        "source": "rerun",
+        "seat": legal.seat,
+        "chosen": _action_shape(duel, chosen),
+        "allowed_total": len(legal.allowed),
+        "allowed": siblings[:DECISION_SIBLING_LIMIT],
+        "withheld_total": len(withheld),
+        "withheld": withheld[:DECISION_WITHHELD_LIMIT],
+    }
+
+
 class ScriptedActionPolicy:
     """
     탐색이 **찾아낸** 행동들을 순서대로 다시 고르는 선택 방식 (Phase 6-BB).
@@ -1539,14 +1623,35 @@ class ScriptedActionPolicy:
     후보에 없으면 ``None`` 을 돌려주고, 그러면 ``execute_opening`` 이
     필수 흐름(패스)만 지나가거나 **멈춘다** — 비슷한 행동으로 메꾸지
     않는다.
+
+    🔴 **그 자리의 다른 후보를 함께 적는다** (Phase 6-BL) —
+    :attr:`decisions`.
+
+    왜 여기인가: 이 함수는 ``execute_opening`` 이 고를 자리마다 부르는
+    것이고, 그때 ``legal`` **전부**를 받는다. 그래서 "엔진이 그 자리에서
+    무엇을 허가했고 무엇을 보류했는가" 를 **지어내지 않고** 적을 수 있는
+    유일한 자리다.
+
+    🔴 **탐색 기록에는 이것이 없다.** :class:`~agent.bounded_search.PathStep`
+    은 고른 행동 하나와 해결 중 선택만 들고 있고, **형제 후보를 적지
+    않는다** (실측: 6-BK 까지 그 칸이 없었다). 그래서 이 칸은 **재실행이
+    같은 자리에서 다시 본 것**이고, 그 사실을 기록이 함께 적는다
+    (``source: "rerun"``) — 탐색이 그때 본 것과 같다고 **주장하지
+    않는다.**
+
+    🔴 **이름을 짓지 않는다.** 여기서는 패스코드와 종류만 적고, 사람이
+    읽는 이름은 카드 저장소가 있는 내보내기 계층이 붙인다
+    (:func:`~deck.replay_export.export_opening_replay`) — 같은 규율이
+    ``ExecutedStep.material_card_ids`` 에도 적혀 있다.
     """
 
-    __slots__ = ("_want", "taken", "name")
+    __slots__ = ("_want", "taken", "name", "decisions")
 
     def __init__(self, keys, name: str = "autonomous-rerun"):
         self._want = list(keys)
         self.taken: list[tuple] = []
         self.name = name
+        self.decisions: list[dict] = []
 
     @property
     def done(self) -> bool:
@@ -1564,12 +1669,77 @@ class ScriptedActionPolicy:
             if action.canonical_state() == want:
                 self._want.pop(0)
                 self.taken.append(want)
+                self.decisions.append(
+                    _decision_snapshot(duel, legal, action)
+                )
                 return action
         return None
 
 
+def autonomous_recommendation_block(outcome, ranking, index: int) -> "dict | None":
+    """
+    **이 후보가 왜 추천인가** — 평가기가 실제로 적은 것만 (Phase 6-BL).
+
+    🔴 **점수를 만들지 않는다.** 평가기는 점수를 내지 않고 **지배 관계**로
+    고른다 (``RankingV2``). 그래서 여기 담기는 것은 그 판정의 글자
+    (:meth:`~agent.open_evaluation_v2.RankingV2.reason_ko`) 와 **그 축이
+    증명하지 않는 것**(``Criterion.limit_ko``) 이다.
+
+    🔴 **최종 추천을 앞선 행동의 동기로 소급하지 않는다.** 이 칸은
+    **마지막 장면**의 것이고, 걸음마다 붙는 ``decisions`` 와 **다른
+    사실**이다 — 그 구분이 사용자 요구 §2 의 핵심이다. 그래서 칸 이름도
+    자리도 따로 둔다.
+
+    🔴 **탐색이 무엇을 보지 않았는지 함께 적는다** — ``choice_*`` 수치는
+    탐색 한 번의 것이고 걸음마다의 것이 아니다 (그 사실을 ``scope`` 로
+    적는다).
+    """
+    if ranking is None:
+        return None
+    one = ranking.candidate(index)
+    best = [other.index for other in ranking.recommended]
+    block: dict = {
+        "index": index,
+        "policy": ranking.policy_label,
+        "recommended": index in best,
+        "reason": ranking.reason_ko(index),
+        "stop_note": ranking.stop_note_ko(index),
+        "note": ranking.note,
+        "co_recommended": [other for other in best if other != index],
+        #: 🔴 **평가가 실제로 쓴 축**과 그 축이 증명하지 않는 것.
+        "criteria": [
+            {
+                "label": item.label_ko,
+                "reads": item.reads_ko,
+                "limit": item.limit_ko,
+                "role": item.role_ko,
+            }
+            for item in (ranking.criteria or ())
+        ],
+        #: 🔴 **센 적이 없는 것**도 적는다 (평가기가 스스로 적어 둔 목록).
+        "unjudged": list(ranking.unjudged or ()),
+    }
+    if one is not None and getattr(one, "dominated_by", ()):
+        block["dominated_by"] = list(one.dominated_by)
+    if outcome is not None:
+        block["search"] = {
+            #: 🔴 이 수치는 **탐색 한 번**의 것이다 — 걸음마다의 것이 아니다.
+            "scope": "탐색 한 번 전체",
+            "choice_branches": int(getattr(outcome, "choice_branches", 0) or 0),
+            "choice_plans": int(getattr(outcome, "choice_plans", 0) or 0),
+            #: 🔴 **미탐색** — 확인하지 않은 대안이 남은 물음의 수.
+            "choice_offers_truncated": int(
+                getattr(outcome, "choice_offers_truncated", 0) or 0
+            ),
+            "budget_hit": list(getattr(outcome, "budget_hit", ()) or ()),
+            "nodes_expanded": int(getattr(outcome, "nodes_expanded", 0) or 0),
+            "deepest": int(getattr(outcome, "deepest", 0) or 0),
+        }
+    return block
+
+
 def autonomous_rerun_record(repository, draft, hand, result, *,
-                             flow_kinds=None) -> tuple:
+                             flow_kinds=None, recommendation=None) -> tuple:
     """
     자율 탐색이 고른 결과를 **처음부터 다시 실행해** 전개 기록을 만든다
     (Phase 6-BB §5).
@@ -1624,7 +1794,14 @@ def autonomous_rerun_record(repository, draft, hand, result, *,
     if wanted and got != wanted:
         return None, (f"다시 실행한 끝 상태가 탐색이 적어 둔 것과 다릅니다"
                       f" (해시 {got[:12]}… ≠ {wanted[:12]}…).")
-    return export_opening_replay(setup, run, repository), ""
+    #: 🔴 **선택 근거를 함께 싣는다** (Phase 6-BL). 이 자리에서만 실을 수
+    #: 있다 — 고르는 함수가 그 자리의 ``legal`` 을 본 유일한 자리이고, 이
+    #: 함수가 그 함수를 꽂은 유일한 자리다.
+    return export_opening_replay(
+        setup, run, repository,
+        decisions=tuple(policy.decisions),
+        recommendation=recommendation,
+    ), ""
 
 
 def rank_autonomous_results(outcome, repository=None, *,

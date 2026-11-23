@@ -497,6 +497,22 @@ class ExecutedStep:
     **이 걸음이 늘린 만큼**만 읽는다. 기록이 없으면 비어 있고, 그것은
     "고르지 않았다" 가 아니라 "읽을 기록이 없다" 다.
     """
+    resolution_offers: tuple = ()
+    """
+    이 걸음의 해결 중 물음마다 **그 자리의 후보 전부** (Phase 6-BL).
+
+    🔴 :attr:`resolution_choices` 와 **다른 사실**이다. 저쪽은 **고른 것**
+    이고 이쪽은 **고를 수 있었던 것**이다. 리플레이가 "그때 다른 무엇을
+    고를 수 있었나" 에 답하려면 둘 다 필요하다.
+
+    담는 것은 ``ChoiceOffer`` 를 값으로 바꾼 사전들이다 — 효과 참조 · 장수
+    범위 · 하지 않을 수 있었는가 · 후보마다 (패스코드 · 허가 여부 · 사유).
+    🔴 **허가되지 않은 후보도 사유와 함께 적는다** — 엔진이 그 자리에서
+    무엇을 보고 무엇을 거절했는지가 설명의 근거다.
+
+    비어 있으면 "물은 것이 없다" 가 아니라 **읽을 기록이 없다** 다
+    (:attr:`resolution_choices` 와 같은 규율).
+    """
     resolution_choice_text: tuple[str, ...] = ()
     """
     위 선택을 **사람이 읽는 한 줄**로 (Phase 6-AD). 보고가 쓴다.
@@ -956,6 +972,42 @@ def _settle_chain(duel, note=None) -> "tuple[object | None, bool]":
     return resolution, resolution.code is ValidationCode.OK
 
 
+def _resolution_offers(records) -> tuple:
+    """
+    해결 시점 물음들을 **그 자리의 후보 전부**와 함께 값으로 (Phase 6-BL).
+
+    🔴 **판을 읽지 않는다** (:func:`_resolution_choices` 와 같은 이유) —
+    기록에 실려 온 후보가 인스턴스마다 패스코드와 **판정 · 사유**를 들고
+    있으므로 그것만 쓴다.
+
+    🔴 **허가된 것만 고르지 않는다.** ``offer.permitted`` 는 ``TRUE`` 만
+    남기지만, 거절된 후보와 **그 사유**가 설명의 절반이다 — 사용자는 "왜
+    저 카드는 고를 수 없었나" 를 묻는다. 그래서 전부 적고 ``permitted``
+    칸으로 가른다.
+    """
+    rows: list[dict] = []
+    for record in records:
+        candidates = []
+        for one in record.offer.candidates:
+            candidates.append({
+                "instance": one.instance.value,
+                "passcode": one.card_id,
+                "permitted": bool(one.permitted),
+                "verdict": getattr(one.verdict, "value", str(one.verdict)),
+                "reason": one.reason,
+            })
+        rows.append({
+            "effect_ref": str(record.effect_ref),
+            "minimum": record.offer.minimum,
+            "maximum": record.offer.maximum,
+            "declinable": bool(record.offer.declinable),
+            "chosen": [one.value for one in record.chosen],
+            "candidates": candidates,
+            "permitted_total": len(record.offer.permitted),
+        })
+    return tuple(rows)
+
+
 def _resolution_choices(records, repository) -> tuple:
     """
     해결 시점 선택 기록 몇 개를 **카드 ID 와 한 줄**로 바꾼다 (Phase 6-AD).
@@ -1266,10 +1318,15 @@ def execute_opening(
         #: 선택이 이 걸음의 것으로 보인다.
         picked_ids: tuple[int, ...] = ()
         picked_text: tuple[str, ...] = ()
+        picked_offers: tuple = ()
         if choice_log is not None:
             fresh = choice_log.records[seen_choices:]
             seen_choices = len(choice_log.records)
             picked_ids, picked_text = _resolution_choices(fresh, repository)
+            #: 🔴 **같은 슬라이스**에서 후보도 뽑는다 (Phase 6-BL) — 두
+            #: 계층이 서로 다른 기록을 읽으면 "고른 것" 과 "고를 수 있던
+            #: 것" 이 다른 물음의 것이 될 수 있다.
+            picked_offers = _resolution_offers(fresh)
 
         events = []
         #: 🔴 이 걸음이 늘린 기록의 **구간**을 그대로 들고 나간다 (6-AR).
@@ -1320,6 +1377,7 @@ def execute_opening(
             unsupported_during=during,
             resolved_without_operation=no_operation,
             resolution_choices=picked_ids,
+            resolution_offers=picked_offers,
             resolution_choice_text=picked_text,
             material_card_ids=material_ids,
             materials=materials,

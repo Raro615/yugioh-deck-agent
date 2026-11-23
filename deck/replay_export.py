@@ -293,7 +293,8 @@ def _card_table(rows, repository=None, tokens=()) -> dict:
 # 내보내기
 # ======================================================================
 def export_opening_replay(setup, run, repository=None, *,
-                          line=None, progress=None) -> dict:
+                          line=None, progress=None,
+                          decisions=None, recommendation=None) -> dict:
     """
     한 번의 전개 실행을 **값 한 장**으로 (Phase 6-AR).
 
@@ -345,7 +346,93 @@ def export_opening_replay(setup, run, repository=None, *,
                               getattr(run, "final_slots", ())),
         "unsupported": list(run.unsupported),
     }
+    #: 🔴 **선택 근거는 있을 때만 싣는다** (Phase 6-BL). 칸이 **없는** 기록은
+    #: "당시 선택지 기록 없음" 이고, 빈 목록은 "물었고 다른 후보가
+    #: 없었다" 다 — 읽는 쪽이 둘을 다르게 적는다.
+    has_offers = any(
+        getattr(step, "resolution_offers", ()) for step in getattr(run, "steps", ())
+    )
+    if decisions or has_offers:
+        record["decisions"] = _decision_blocks(decisions or (), run, repository)
+    if recommendation:
+        record["recommendation"] = dict(recommendation)
     return record
+
+
+def _decision_blocks(decisions, run, repository=None) -> dict:
+    """
+    고르는 자리들을 **걸음 번호에 붙인다** (Phase 6-BL).
+
+    🔴 **번호를 짐작하지 않는다.** 고르는 함수는 걸음 번호를 모르므로
+    (그 자리에 ``order`` 가 넘어오지 않는다), 여기서 ``run.steps`` 를
+    순서대로 걸으며 **종류와 카드가 맞는 걸음**에 하나씩 붙인다. 고르는
+    함수는 걸음 순서대로 불리므로 이 맞춤은 한 방향으로만 진행한다.
+
+    🔴 **하나라도 붙이지 못하면 전부 버린다.** 반쯤 붙은 표는 "이 장면의
+    다른 후보" 를 **다른 장면의 것**으로 보여 줄 수 있고, 그것은 틀린
+    설명이다. 그때는 ``matched`` 가 거짓이고 화면이 기록 없음으로 적는다.
+    """
+    rows = [dict(one) for one in decisions]
+    cursor = 0
+    placed: dict[str, dict] = {}
+    for step in getattr(run, "steps", ()):
+        if cursor >= len(rows):
+            break
+        want = rows[cursor].get("chosen") or {}
+        if step.kind != want.get("kind"):
+            continue
+        if want.get("card") is not None and step.card_id != want.get("card"):
+            continue
+        rows[cursor]["step"] = step.order
+        placed[str(step.order)] = rows[cursor]
+        cursor += 1
+    matched = cursor == len(rows)
+    #: 🔴 **해결 중 후보의 이름도 여기서 붙인다.** 그 카드들은 덱에 있던
+    #: 것이어서 ``cards`` 표(시작 · 최종 판에서 만든다)에 **없을 수
+    #: 있다** — 없으면 화면이 패스코드만 적게 되고, 그러면 "다른 어떤
+    #: 카드를 고를 수 있었나" 에 답할 수 없다.
+    wanted: list[int] = []
+    for row in rows:
+        wanted.extend(_decision_passcodes(row))
+    for step in getattr(run, "steps", ()):
+        for offer in getattr(step, "resolution_offers", ()) or ():
+            for one in offer.get("candidates") or ():
+                if one.get("passcode") is not None:
+                    wanted.append(int(one["passcode"]))
+    names: dict[str, str] = {}
+    if repository is not None:
+        for code in wanted:
+            key = str(code)
+            if key in names:
+                continue
+            found = repository.get(code)
+            if found is not None:
+                names[key] = found.display_name()
+    return {
+        #: 🔴 **맞추지 못한 것을 반쯤 보여 주지 않는다.**
+        "matched": matched,
+        "count": len(rows),
+        "steps": placed if matched else {},
+        #: 패스코드 → 사람이 읽는 이름. 🔴 저장소가 없으면 **비어 있고**,
+        #: 그때 화면은 패스코드를 적는다 (이름을 지어내지 않는다).
+        "names": names,
+    }
+
+
+def _decision_passcodes(row: dict) -> "list[int]":
+    """선택 근거 한 줄이 가리키는 패스코드 전부 (이름을 붙이기 위해)."""
+    found: list[int] = []
+    shapes = [row.get("chosen") or {}]
+    shapes.extend(row.get("allowed") or ())
+    for shape in shapes:
+        for key in ("card",):
+            if shape.get(key) is not None:
+                found.append(int(shape[key]))
+        for key in ("materials", "cost", "targets"):
+            for code in shape.get(key) or ():
+                if code is not None:
+                    found.append(int(code))
+    return found
 
 
 def _source_block(setup, line) -> dict:
@@ -421,6 +508,25 @@ def _step_block(step) -> dict:
         block["material_passcodes"] = list(step.material_card_ids)
     if step.resolution_choice_text:
         block["resolution_choices"] = list(step.resolution_choice_text)
+    #: 🔴 **고른 것과 고를 수 있던 것을 가른다** (Phase 6-BL). 위 칸은
+    #: 고른 것의 한 줄이고, 이 칸은 그 자리의 후보 전부다.
+    if getattr(step, "resolution_offers", ()):
+        block["resolution_offers"] = [
+            dict(one) for one in step.resolution_offers
+        ]
+    #: 🔴 **엔진이 그 자리에서 낸 판정 코드**를 함께 싣는다 (Phase 6-BL).
+    #: 화면이 "왜 이 행동이 허가되었는가" 를 적을 때 쓰는 **유일한 근거**다
+    #: — 없는 조건을 지어내지 않는다.
+    if step.gate_code:
+        block["gate_code"] = step.gate_code
+    if step.step_code:
+        block["step_code"] = step.step_code
+    if step.reason:
+        block["reason"] = step.reason
+    #: 🔴 **이 걸음 뒤 그 자리의 미지원**이다 — 지금 자리의 사실이 아니다
+    #: (``ExecutedStep.unsupported`` 의 설명). 섞지 않도록 칸을 가른다.
+    if step.unsupported:
+        block["unsupported_after"] = list(step.unsupported)
     if step.resolved_without_operation:
         #: 🔴 **미지원도 오류도 아니다** — 규칙대로 해결되고 할 일이 없었다.
         block["resolved_without_operation"] = True
