@@ -402,11 +402,192 @@ def test_e02_the_search_counters_say_their_scope_and_mark_unexplored():
 
 
 def test_e03_a_not_recommended_candidate_says_so():
+    """
+    🔴 **추천이 아닌 후보에는 공동 추천을 적지 않는다** (Phase 6-BM).
+
+    6-BL 은 추천 목록을 그대로 실었고, 그러면 화면이 "결과 107 과 **우열을
+    가리지 못했다**" 고 적었다 — 지배당해서 빠진 후보에게 그 문장은
+    **일어나지 않은 비교**다. 이 시험이 그 역행을 막는다.
+    """
     from app.main import autonomous_recommendation_block
 
     got = autonomous_recommendation_block(_Outcome(), _Ranking([107]), 69)
     assert got["recommended"] is False
-    assert got["co_recommended"] == [107]
+    assert got["co_recommended"] == []
+    #: 추천인 후보 쪽은 그대로다.
+    mine = autonomous_recommendation_block(_Outcome(), _Ranking([69, 107]), 69)
+    assert mine["co_recommended"] == [107]
+
+
+def test_e05_the_state_tells_excluded_apart_from_dominated():
+    """
+    🔴 **비교에서 빠진 것과 비교해서 뒤진 것은 다른 사실이다** (Phase 6-BM).
+
+    근거가 없는 후보를 "다른 후보보다 낮게 평가했다" 로 적지 않기 위한
+    칸이고, 그 구분을 ``state.kind`` 가 들고 있다.
+    """
+    from app.main import CANDIDATE_STATES, _candidate_state
+
+    class _Excl:
+        index = 5
+        exclusion = _Kind("not_verified")
+        rerun_state = "not_selected"
+        verified = False
+        recommended = False
+        dominated_by = ()
+        eligible = False
+
+    class _Lost:
+        index = 6
+        exclusion = _Kind("none")
+        rerun_state = "verified"
+        verified = True
+        recommended = False
+        dominated_by = (69,)
+        eligible = True
+
+    class _Best:
+        index = 7
+        exclusion = _Kind("none")
+        rerun_state = "verified"
+        verified = True
+        recommended = True
+        dominated_by = ()
+        eligible = True
+
+    excluded = _candidate_state(_Excl())
+    assert excluded["kind"] == "excluded"
+    assert excluded["eligible"] is False
+    #: 🔴 **"졌다" 라고 적지 않는다.**
+    assert "빠" not in excluded["label"] or "뒤" not in excluded["label"]
+    assert "뒤졌" not in excluded["label"], excluded["label"]
+    assert excluded["exclusion"] == "not_verified"
+
+    assert _candidate_state(_Lost())["kind"] == "dominated"
+    assert _candidate_state(_Best())["kind"] == "recommended"
+    #: 평가 기록에 번호가 없으면 **모른다** — 낮다가 아니다.
+    unknown = _candidate_state(None)
+    assert unknown["kind"] == "unknown"
+    assert "없습니다" in unknown["label"]
+    assert set(CANDIDATE_STATES) == {
+        "recommended", "dominated", "excluded", "unknown"
+    }
+
+
+def test_e06_the_block_carries_the_state(): 
+    from app.main import autonomous_recommendation_block
+
+    got = autonomous_recommendation_block(_Outcome(), _Ranking([69]), 69)
+    assert got["state"]["kind"] in ("recommended", "dominated", "excluded",
+                                    "unknown")
+
+
+# ======================================================================
+# H. 요청마다의 근거 보관 — /combo-pick 이 자기 번호의 것을 받는다
+# ======================================================================
+
+
+def test_h01_the_store_keeps_a_rationale_per_candidate_index():
+    """
+    🔴 **번호마다 따로 보관한다** — 하나를 돌려쓰면 다른 후보를 골랐을 때
+    최초 표시 후보의 설명이 따라온다 (Phase 6-BM 의 핵심).
+    """
+    from app.candidate_store import CandidateStore
+
+    class _R:
+        def __init__(self, index):
+            self.index = index
+
+    store = CandidateStore()
+    kept = store.remember(
+        owner="u", hand_ids=(1,), draft=None,
+        results=(_R(69), _R(107)), recommended=[69],
+        rationales={69: {"index": 69}, 107: {"index": 107}},
+    )
+    assert kept.rationale(69) == {"index": 69}
+    assert kept.rationale(107) == {"index": 107}
+    #: 🔴 보관하지 않은 번호는 **None** 이고, 그것은 "근거가 없는 후보" 가
+    #: 아니라 "근거를 받지 못했다" 다.
+    assert kept.rationale(999) is None
+
+
+def test_h02_the_rationale_is_a_copy_so_callers_cannot_poison_the_store():
+    """🔴 돌려준 사전을 고쳐도 보관된 것이 바뀌지 않는다."""
+    from app.candidate_store import CandidateStore
+
+    class _R:
+        index = 1
+
+    store = CandidateStore()
+    kept = store.remember(owner="u", hand_ids=(), draft=None,
+                          results=(_R(),), recommended=[],
+                          rationales={1: {"index": 1}})
+    got = kept.rationale(1)
+    got["index"] = 999
+    assert kept.rationale(1)["index"] == 1
+
+
+def test_h03_string_keys_are_normalised_to_ints():
+    """🔴 문자열 번호로 보관해도 정수로 조회된다 (조용히 비지 않는다)."""
+    from app.candidate_store import CandidateStore
+
+    class _R:
+        index = 69
+
+    store = CandidateStore()
+    kept = store.remember(owner="u", hand_ids=(), draft=None,
+                          results=(_R(),), recommended=[],
+                          rationales={"69": {"index": 69}})
+    assert kept.rationale(69) == {"index": 69}
+
+
+def test_h04_the_pick_path_passes_the_stored_rationale():
+    """
+    🔴 ``pick_response`` 가 **그 번호의** 근거를 넘기는지 소스로 못박는다 —
+    6-BL 에서는 이 인자가 아예 빠져 있었다.
+    """
+    import inspect
+
+    from app import discord_bot
+
+    src = inspect.getsource(discord_bot.pick_response)
+    assert "recommendation=kept.rationale(chosen.index)" in src
+
+
+def test_h05_the_search_path_stores_one_rationale_per_result():
+    """
+    🔴 **후보마다 따로 만들어 보관한다.**
+
+    자리는 ``_run_bounded_search`` 다 — ``search:auto`` 의 탐색이 끝나고
+    요청을 보관하는 바로 그 함수이고, 평가기(``ranking``)가 살아 있는
+    **마지막 자리**다. ``/combo-pick`` 에는 그 객체가 없다.
+    """
+    import inspect
+
+    from app import discord_bot
+
+    src = inspect.getsource(discord_bot._run_bounded_search)
+    assert "rationales" in src
+    assert "autonomous_recommendation_block(" in src
+    #: 🔴 **번호마다** 만든다 — 하나를 돌려쓰지 않는다.
+    assert "for one in (getattr(found, \"results\", ()) or ())" in src
+
+
+def test_h06_the_viewer_never_claims_a_tie_for_a_rejected_candidate():
+    """
+    🔴 **추천이 아닌 후보에게 「우열을 가리지 못했다」 를 적지 않는다.**
+    만드는 쪽이 비워 주지만, 옛 기록을 열 때도 막혀야 한다.
+    """
+    from deck.replay_viewer import render_replay_html
+
+    html = render_replay_html({"format": "x", "cards": {}, "steps": [],
+                               "events": []})
+    assert "r.recommended && r.co_recommended" in html
+    #: 상태별 머리말이 들어 있다.
+    assert "평가 비교에 들어가지 않았습니다" in html
+    assert "다른 후보보다 낮게 평가했다는 뜻이 아닙니다" in html
+    #: 근거 칸이 없는 기록을 "추천이 아니다" 로 적지 않는다.
+    assert "추천 근거 기록 없음" in html
 
 
 def test_e04_no_ranking_means_no_block():

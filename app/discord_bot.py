@@ -1264,12 +1264,30 @@ def _run_bounded_search(agent, recipe_text: str, hand_ids: "list[int]",
         #: ID 로 보관하고, 사용자가 **다른 추천**을 고를 길을 적는다 —
         #: 고르는 것이 탐색을 다시 돌리는 일이 되지 않게 한다.
         keeper = store if store is not None else CANDIDATE_STORE
+        #: 🔴 **고를 수 있는 후보마다 추천 근거를 함께 보관한다**
+        #: (Phase 6-BM). ``/combo-pick`` 은 탐색을 다시 돌리지 않으므로 그
+        #: 자리에 평가기가 없다 — 지금 만들어 두지 않으면 고른 후보의
+        #: 근거를 **영원히 만들 수 없다.**
+        #:
+        #: 🔴 **같은 함수로 만든다** (``autonomous_recommendation_block``) —
+        #: 최초 리플레이에 들어간 것과 글자가 달라지면 사용자가 본 추천과
+        #: 어긋난다. 그리고 **번호마다 따로** 만든다: 하나를 만들어
+        #: 돌려쓰면 다른 후보를 골랐을 때 최초 표시 후보의 설명이 따라온다.
+        from app.main import autonomous_recommendation_block
+
+        rationales = {
+            int(one.index): autonomous_recommendation_block(
+                found, ranking, int(one.index)
+            )
+            for one in (getattr(found, "results", ()) or ())
+        }
         kept = keeper.remember(
             owner=owner, hand_ids=hand_ids, draft=parsed.draft,
             results=getattr(found, "results", ()) or (),
             recommended=[one.index for one in (
                 ranking.recommended if ranking is not None else ())],
             picked=(picked if picked is not None else -1),
+            rationales={k: v for k, v in rationales.items() if v is not None},
         )
         #: 🔴 위에서 잡아 둔 자리에 넣는다 — 추천 절보다 **앞**이다.
         brief[invite_at:invite_at] = [
@@ -2004,8 +2022,15 @@ def pick_response(agent, request_text: str, result_text: str, *,
 
     from app.main import autonomous_rerun_record
 
+    #: 🔴 **그 후보에 붙었던 근거를 그대로 넘긴다** (Phase 6-BM).
+    #: ``kept.rationale`` 은 **이 요청 안에서** 그 번호를 찾으므로, 다른
+    #: 후보를 골랐을 때 최초 표시 후보의 설명이 따라오지 않는다.
+    #: 🔴 보관하지 못한 후보는 ``None`` 이고, 그때 기록에 그 칸이 **아예
+    #: 생기지 않는다** — 화면이 "근거 기록 없음" 으로 적는다 (없는 근거를
+    #: 지어내지 않는다).
     record, why = autonomous_rerun_record(
-        agent.repository, kept.draft, list(kept.hand_ids), chosen)
+        agent.repository, kept.draft, list(kept.hand_ids), chosen,
+        recommendation=kept.rationale(chosen.index))
     if record is None:
         #: 🔴 **다른 후보로 조용히 바꾸지 않는다.**
         head.append(f"🔴 **다시 실행한 기록을 만들지 못했습니다** — {why}")

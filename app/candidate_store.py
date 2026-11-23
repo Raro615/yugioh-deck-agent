@@ -105,6 +105,24 @@ class StoredRequest:
     created: float
     picked: int = -1
     """``/combo`` 가 기본으로 고른 후보 번호. -1 은 고르지 못했다는 뜻이다."""
+    rationales: dict = field(default_factory=dict)
+    """
+    후보 번호 → **그때 그 평가가 그 후보에 붙인 추천 근거** (Phase 6-BM).
+
+    왜 여기인가 — ``/combo-pick`` 은 탐색을 **다시 돌리지 않는다.** 그래서
+    평가기(``RankingV2``)도 그 자리에 없고, 고른 후보의 근거를 그때 만들 수
+    없다. 🔴 다시 평가하면 **다른 글자**가 나올 수 있다 (예산 · 시간 상한에
+    걸리는 자리가 달라진다) — 사용자가 본 추천과 어긋나므로, 처음 탐색이
+    만든 것을 그대로 들고 있다가 그대로 넘긴다.
+
+    🔴 **번호는 이 요청 안에서만 뜻이 있다.** 이 사전이
+    :class:`StoredRequest` 안에 있는 이유가 그것이다 — 다른 요청의 같은
+    번호가 섞이지 않는다.
+
+    🔴 **여기서 판정하지 않는다.** 받은 값을 그대로 보관하고 그대로
+    돌려준다 (이 모듈의 규율). 비어 있으면 "근거를 받지 못했다" 이고,
+    그것을 "근거가 없는 후보" 로 바꾸지 않는다.
+    """
 
     @property
     def indexes(self) -> tuple[int, ...]:
@@ -117,6 +135,16 @@ class StoredRequest:
             if int(getattr(one, "index")) == int(index):
                 return one
         return None
+
+    def rationale(self, index: int) -> "dict | None":
+        """
+        그 번호에 붙은 추천 근거. **없으면 ``None``** (Phase 6-BM).
+
+        🔴 ``None`` 은 "근거를 보관하지 못했다" 이고 "근거가 없는 후보" 가
+        아니다. 부르는 쪽이 그 구분을 지켜야 한다.
+        """
+        got = self.rationales.get(int(index))
+        return dict(got) if isinstance(got, dict) else None
 
     def describe_ko(self) -> str:
         return (f"요청 `{self.request_id}` — 후보 {len(self.results)}개 ·"
@@ -153,7 +181,8 @@ class CandidateStore:
 
     # ------------------------------------------------------------------
     def remember(self, *, owner: str, hand_ids, draft, results,
-                 recommended, picked: int = -1) -> StoredRequest:
+                 recommended, picked: int = -1,
+                 rationales=None) -> StoredRequest:
         """
         그 탐색 결과를 보관하고 **요청 ID 를 돌려준다.**
 
@@ -170,6 +199,13 @@ class CandidateStore:
             recommended=tuple(int(i) for i in recommended),
             created=now,
             picked=int(picked),
+            #: 🔴 **번호를 정수로 못박아 둔다** — 뒤에서 문자열 번호로
+            #: 조회하면 조용히 비게 된다.
+            rationales={
+                int(key): value
+                for key, value in dict(rationales or {}).items()
+                if isinstance(value, dict)
+            },
         )
         with self._lock:
             self._evict(now)

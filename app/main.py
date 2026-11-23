@@ -1676,6 +1676,60 @@ class ScriptedActionPolicy:
         return None
 
 
+#: 후보가 **평가에서 어떤 처지였는가** — 화면이 그대로 적는 낱말들.
+#:
+#: 🔴 **우열이 아니다.** ``excluded`` 는 "비교에 들어가지 못했다" 이고
+#: "졌다" 가 아니다. 그 둘을 한 낱말로 쓰면 근거가 없는 후보를 **낮게
+#: 평가했다고 설명하는** 셈이 된다 (사용자 요구 §3).
+CANDIDATE_STATES: tuple[str, ...] = (
+    "recommended",   # 지배당하지 않았다
+    "dominated",     # 비교에 들어갔고 다른 후보에게 뒤졌다
+    "excluded",      # 비교에 **들어가지 못했다** (검증 · 측정 · 선정)
+    "unknown",       # 평가 기록에 이 번호가 없다
+)
+
+
+def _candidate_state(one) -> dict:
+    """
+    후보 하나의 **처지**를 값으로 (Phase 6-BM).
+
+    🔴 **판정하지 않는다.** ``OpenCandidate`` 에 이미 적힌 것을 옮기기만
+    한다 — ``exclusion`` · ``rerun_state`` · ``verified`` · ``dominated_by``.
+    평가 기록에 번호가 없으면 ``unknown`` 이고, 그것을 "낮다" 로 바꾸지
+    않는다.
+    """
+    if one is None:
+        return {
+            "kind": "unknown",
+            "label": "평가 기록에 이 번호가 없습니다",
+            "eligible": None,
+        }
+    exclusion = getattr(getattr(one, "exclusion", None), "value", None)
+    eligible = bool(getattr(one, "eligible", False))
+    if not eligible:
+        return {
+            "kind": "excluded",
+            #: 🔴 **"빠졌다" 이고 "졌다" 가 아니다.**
+            "label": "평가 비교에 들어가지 않았습니다",
+            "eligible": False,
+            "exclusion": exclusion,
+            "rerun_state": getattr(one, "rerun_state", ""),
+            "verified": bool(getattr(one, "verified", False)),
+        }
+    if getattr(one, "recommended", False):
+        kind, label = "recommended", "어느 후보에게도 지배당하지 않았습니다"
+    else:
+        kind, label = "dominated", "비교에 들어갔고 다른 후보에게 뒤졌습니다"
+    return {
+        "kind": kind,
+        "label": label,
+        "eligible": True,
+        "exclusion": exclusion,
+        "rerun_state": getattr(one, "rerun_state", ""),
+        "verified": bool(getattr(one, "verified", False)),
+    }
+
+
 def autonomous_recommendation_block(outcome, ranking, index: int) -> "dict | None":
     """
     **이 후보가 왜 추천인가** — 평가기가 실제로 적은 것만 (Phase 6-BL).
@@ -1698,14 +1752,26 @@ def autonomous_recommendation_block(outcome, ranking, index: int) -> "dict | Non
         return None
     one = ranking.candidate(index)
     best = [other.index for other in ranking.recommended]
+    mine = index in best
     block: dict = {
         "index": index,
         "policy": ranking.policy_label,
-        "recommended": index in best,
+        "recommended": mine,
         "reason": ranking.reason_ko(index),
         "stop_note": ranking.stop_note_ko(index),
         "note": ranking.note,
-        "co_recommended": [other for other in best if other != index],
+        #: 🔴 **추천인 후보에만 적는다** (Phase 6-BM). 추천이 아닌 후보에
+        #: 추천 목록을 실으면 화면이 "그 후보들과 **우열을 가리지 못했다**"
+        #: 고 적게 되는데, 그것은 **일어나지 않은 비교**다 — 지배당해서
+        #: 빠진 후보도, 평가 대상에서 제외된 후보도 그 문장의 뜻이 아니다.
+        "co_recommended": (
+            [other for other in best if other != index] if mine else []
+        ),
+        #: 🔴 **기록에 있는 상태를 그대로 싣는다** (Phase 6-BM). 근거가 없는
+        #: 후보를 "더 낮게 평가했다" 로 적지 않기 위한 칸이다 — 비교에서
+        #: 빠진 것인지, 재생 검증을 받지 못한 것인지, 값을 읽지 못한 것인지는
+        #: 서로 다른 사실이고 화면이 그대로 적어야 한다.
+        "state": _candidate_state(one),
         #: 🔴 **평가가 실제로 쓴 축**과 그 축이 증명하지 않는 것.
         "criteria": [
             {

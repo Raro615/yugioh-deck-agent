@@ -106,8 +106,11 @@ def test_a04_the_store_holds_values_not_a_duel():
     from app.candidate_store import StoredRequest
 
     names = {field.name for field in dataclasses.fields(StoredRequest)}
+    #: 🔴 ``rationales`` 가 늘었다 (Phase 6-BM) — 후보 번호마다의 **추천
+    #: 근거**이고, ``/combo-pick`` 이 탐색을 다시 돌리지 않기 때문에 여기
+    #: 보관한다. 🔴 **값이다** (사전) — 판도 평가기도 담지 않는다.
     assert names == {"request_id", "owner", "hand_ids", "draft", "results",
-                     "recommended", "created", "picked"}
+                     "recommended", "created", "picked", "rationales"}
     for forbidden in ("duel", "state", "board", "chain", "executor"):
         assert forbidden not in names, forbidden
 

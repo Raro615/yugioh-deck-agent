@@ -1192,19 +1192,52 @@ function renderWhy(f) {
     box.appendChild(out);
   }
 
-  /* 최종 장면 — 이 전개가 추천된 이유 --------------------------------- */
-  if (atEnd && rec.recommendation) { box.appendChild(recommendBlock(rec)); }
+  /* 최종 장면 — 이 전개의 평가 ---------------------------------------- */
+  if (atEnd) {
+    if (rec.recommendation) {
+      box.appendChild(recommendBlock(rec));
+    } else {
+      /* 🔴 **칸이 없는 기록**이다 — 「추천이 아니다」 가 아니라 「근거를
+         받지 못했다」 다. 둘을 같은 글자로 쓰지 않는다. */
+      var none = el('div', 'why-rec');
+      none.appendChild(el('h4', null, '이 전개의 평가 (최종 장면)'));
+      none.appendChild(el('div', 'no',
+        '추천 근거 기록 없음 — 이 기록에는 평가 근거가 실려 있지 않습니다 (추천이 아니라는 뜻이 아닙니다).'));
+      box.appendChild(none);
+    }
+  }
 }
 
 function recommendBlock(rec) {
   var r = rec.recommendation, wrap = el('div', 'why-rec');
-  wrap.appendChild(el('h4', null, '이 전개가 추천된 이유 (최종 장면)'));
+  var st = r.state || {};
+  /* 🔴 **머리말이 처지를 먼저 말한다** (Phase 6-BM). 「추천이 아니다」 하나로
+     뭉치면 **비교에서 빠진 것**과 **비교해서 뒤진 것**이 같은 말로 보인다. */
+  var head;
+  if (r.recommended) { head = '추천입니다'; }
+  else if (st.kind === 'excluded') { head = '🔴 평가 비교에 들어가지 않았습니다'; }
+  else if (st.kind === 'dominated') { head = '🔴 추천이 아닙니다 (비교에서 뒤졌습니다)'; }
+  else if (st.kind === 'unknown') { head = '🔴 평가 기록에 이 번호가 없습니다'; }
+  else { head = '🔴 추천이 아닙니다'; }
+  wrap.appendChild(el('h4', null, '이 전개의 평가 (최종 장면)'));
   wrap.appendChild(el('div', 'row',
-    (r.recommended ? '추천입니다' : '🔴 추천이 **아닙니다**')
-    + ' · 결과 ' + r.index + ' · 평가 ' + (r.policy || '')));
+    head + ' · 결과 ' + r.index + ' · 평가 ' + (r.policy || '')));
   if (r.reason) { wrap.appendChild(el('div', 'row', r.reason)); }
+  /* 🔴 **기록에 있는 상태만 적는다** — 근거가 없는 후보를 다른 후보보다
+     낮게 평가했다고 설명하지 않는다 (사용자 요구 §3). */
+  if (st.kind === 'excluded') {
+    var bits = [];
+    if (st.exclusion) { bits.push('제외 사유 ' + st.exclusion); }
+    if (st.rerun_state) { bits.push('재생 상태 ' + st.rerun_state); }
+    bits.push(st.verified ? '재생 검증 통과' : '재생 검증 없음');
+    wrap.appendChild(el('div', 'sub', '기록된 상태: ' + bits.join(' · ')));
+    wrap.appendChild(el('div', 'cap',
+      '🔴 비교에 들어가지 않았다는 뜻이고, 다른 후보보다 낮게 평가했다는 뜻이 아닙니다. 경로는 그대로 남아 있습니다.'));
+  }
   if (r.stop_note) { wrap.appendChild(el('div', 'sub', r.stop_note)); }
-  if (r.co_recommended && r.co_recommended.length) {
+  /* 🔴 **추천인 후보에만** 공동 추천을 적는다 — 만드는 쪽이 이미 비워
+     주지만, 옛 기록을 열 때도 틀린 문장이 나오지 않게 여기서도 막는다. */
+  if (r.recommended && r.co_recommended && r.co_recommended.length) {
     wrap.appendChild(el('div', 'row',
       '🔴 공동 추천 — 결과 '
       + r.co_recommended.join(', ')
@@ -1213,7 +1246,7 @@ function recommendBlock(rec) {
   if (r.note) { wrap.appendChild(el('div', 'sub', r.note)); }
   if (r.dominated_by && r.dominated_by.length) {
     wrap.appendChild(el('div', 'row',
-      '지배한 후보: 결과 ' + r.dominated_by.join(', ')));
+      '이 후보를 지배한 후보: 결과 ' + r.dominated_by.join(', ')));
   }
   if (r.criteria && r.criteria.length) {
     var c = el('details');
