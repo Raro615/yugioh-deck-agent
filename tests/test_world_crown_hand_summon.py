@@ -710,25 +710,64 @@ def test_g01_the_follow_up_comes_from_the_existing_material_judgment(
 @pytest.mark.real_card
 def test_g02_a_token_joins_only_if_the_material_rule_admits_it(repository):
     """
-    토큰도 **소재 조건을 만족할 때만** 후보가 된다.
+    토큰도 **소재 조건을 만족할 때만** 소재가 된다.
 
-    🔴 토큰을 특별히 넣거나 빼지 않는다 — 같은 판정에게 묻는다. 롱기르수는
-    「오르페골」 몬스터를 포함하는 **효과 몬스터**
-    2장 이상을 요구한다.
+    🔴 토큰을 특별히 넣거나 빼지 않는다 — **같은 판정에게 묻는다.**
+    롱기르수는 「오르페골」 몬스터를 포함하는 **효과 몬스터** 2장 이상을
+    요구하고, 성유물 토큰은 통상 몬스터 토큰이므로 (``type`` 에
+    ``NORMAL|TOKEN``) 그 조건을 지나지 못한다.
+
+    실측한 전개의 판에도 이 토큰이 서 있다 — 그래서 "쓰이지 않았다" 가
+    우연이 아니라 **판정의 답**이라는 것을 여기서 확인한다.
     """
+    from engine.hand_summon import hand_summon_slots
     from engine.link_rules import assess_link_materials, material_rule_for
+    from engine.token import TOKEN_RULES, create_token, plan_token
 
     rule = material_rule_for(LONGIRSU)
     assert rule is not None
+    assert "효과 몬스터" in rule.describe_ko()
+
     state, crown = _board(repository)
     longirsu = state.create_instance(LONGIRSU, owner=0, zone=Zone.EXTRA)
     galatea = next(
         card for card in state.zone(0, Zone.EMZONE) if card is not None
     )
-    #: 성관을 필드가 아니라 패에 둔 채, 필드의 갈라테아 한 장만으로 묻는다
-    #: — 장수가 모자라므로 판정이 거절해야 한다.
-    got = assess_link_materials(
-        _view(state), 0, longirsu.instance_id, (galatea.instance_id,)
+    #: 성유물 토큰을 실제로 놓는다 (전개에 나오는 그 토큰이다).
+    #: 🔴 **가리켜지는 칸을 비워 둔다** (``taken``). 토큰도 가장 작은 빈
+    #: 칸을 쓰므로 (STRUCTURAL-41) 비워 두지 않으면 성관이 설 칸을
+    #: 토큰이 먹고, 이 시험은 "칸이 없다" 를 재게 된다 (실측으로 잡았다).
+    pointed = hand_summon_slots(_view(state), 0, CROWN)
+    assert pointed, "가리켜지는 빈 칸이 없다 — 전제가 깨졌다"
+    plan = plan_token(
+        state, TOKEN_RULES[0], controller=0, summoner=0,
+        position=Position.FACEUP_ATTACK,
+        taken={0: set(pointed)},
     )
-    assert not got.permits_procedure
-    assert crown is not None
+    token, _created, _summoned = create_token(state, plan)
+
+    #: 🔴 **갈라테아 + 토큰은 소재가 되지 않는다** — 장수는 맞는데
+    #: 조건이 맞지 않는다.
+    with_token = assess_link_materials(
+        _view(state), 0, longirsu.instance_id,
+        (galatea.instance_id, token.instance_id),
+    )
+    assert not with_token.permits_procedure, with_token.reason
+
+    #: 같은 판에서 **성관을 세우면** 같은 판정이 허락한다 — 거절이 "토큰이
+    #: 미지원" 이어서가 아니라 조건 때문이라는 뜻이다.
+    from engine.action import PlayerAction
+
+    slot = hand_summon_slots(_view(state), 0, CROWN)[0]
+
+    assert _duel(state).apply(
+        PlayerAction.special_summon(
+            actor=0, source=crown.instance_id, slot=slot
+        )
+    ).accepted
+    standing = state.zone(0, Zone.MZONE).slot(slot)
+    with_crown = assess_link_materials(
+        _view(state), 0, longirsu.instance_id,
+        (galatea.instance_id, standing.instance_id),
+    )
+    assert with_crown.permits_procedure, with_crown.reason
