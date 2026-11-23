@@ -2,7 +2,7 @@
 특수 소환의 **실행** — 공통 mutation 경로 하나.
 
     PlayerAction(SPECIAL_SUMMON)
-        ↓  ActionValidator            해도 되는가 (지금은 **UNKNOWN**)
+        ↓  ActionValidator            해도 되는가 (등재되지 않으면 **UNKNOWN**)
         ↓  ActionExecutor             허가된 것만 넘긴다
         ↓  SpecialSummonHandler       ← 이 파일
         ↓  SummonProcedure            계획 → 적용 → 확인   (engine.summon)
@@ -12,10 +12,14 @@
 
 이 단계가 만든 것은 **경로**이지 규칙이 아니다
 ----------------------------------------------
-"이 카드를 특수 소환할 수 있는가" 는 카드마다 다르고, 그 조건을 읽는
-계층이 아직 없다. 그래서 :class:`~engine.action_validation.ActionValidator`
-는 ``SPECIAL_SUMMON`` 에 **언제나 ``UNKNOWN``** 을 돌려준다 — 허가를 밖에서
-받지 않으면 아무것도 소환되지 않는다.
+"이 카드를 특수 소환할 수 있는가" 는 카드마다 다르다. 그래서 조건은 카드
+단위로만 적히고 (:data:`~engine.hand_summon.HAND_SUMMON_RULES`), 거기
+적히지 않은 카드에는 :class:`~engine.action_validation.ActionValidator` 가
+여전히 **``UNKNOWN``** 을 돌려준다 — 허가를 밖에서 받지 않으면 아무것도
+소환되지 않는다.
+
+🔴 **Phase 6-BN 에서 한 장이 등재되었다** (성유물－『성관』). 바뀐 것은
+"조건을 아는 카드가 하나 생겼다" 이고, ``UNKNOWN`` 의 뜻은 그대로다.
 
 **``UNKNOWN`` 을 ``VALID`` 로 바꾸지 않는다.** "조건을 모른다" 와 "특수
 소환할 수 없다" 도 합치지 않는다.
@@ -28,7 +32,7 @@
 소환권                  **쓴다**            **쓰지 않는다**
 출발 자리               패                   패 · 묘지 (지금 옮긴 것)
 페이즈                  메인                 여기서 정하지 않는다
-검증                    ``VALID`` 가 난다    언제나 ``UNKNOWN``
+검증                    ``VALID`` 가 난다    등재된 카드만 ``VALID``
 =====================  ==================  ==========================
 
 첫 줄이 중요하다. 이 파일에는 :class:`
@@ -58,6 +62,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from engine.action import PlayerAction, PlayerActionKind
+from engine.action_target import ActionTargetKind
 from engine.effect.delta import StateDelta, SummonKind
 from engine.summon import SummonError, SummonPlacement, SummonProcedure
 from engine.vocabulary import Position, Zone
@@ -141,6 +146,123 @@ class SpecialSummonExecutor:
         return f"<SpecialSummonExecutor {self._procedure.describe_ko()}>"
 
 
+#: 🔴 **카드별 패 특수 소환 절차들** (Phase 6-BN).
+#:
+#: :data:`SPECIAL_SUMMON_PROCEDURE` 와 **같은 클래스의 다른 값**이다 —
+#: 다른 것은 출발 자리 하나와 표시 형식 하나뿐이고, 둘 다
+#: :data:`~engine.hand_summon.HAND_SUMMON_RULES` 가 카드마다 적어 둔 값을
+#: 그대로 옮긴다. 옮기지 않고 여기서 다시 적으면 판정과 절차가 갈린다.
+_HAND_SUMMON_PROCEDURES: "dict[int, SummonProcedure]" = {}
+
+
+def hand_summon_procedure(card_id: int) -> "SummonProcedure | None":
+    """
+    그 카드의 **패 특수 소환 절차**. 등재되지 않았으면 ``None`` (ADR-006).
+
+    🔴 표시 형식이 :data:`SPECIAL_SUMMON_POSITION` 이 아니다 — 성관은 앞면
+    **수비** 표시로만 나온다 (``c27918365.lua`` 의
+    ``SetTargetRange(POS_FACEUP_DEFENSE,0)``). 공통 절차의 고정값
+    (STRUCTURAL-61) 은 "고르는 계층이 없다" 는 뜻이었고, **규칙이 형식을
+    정하는 카드**는 그 고정값을 쓰면 안 된다.
+    """
+    # 여기서 읽는다 — 판정 계층은 실행 계층을 모르고, 반대 방향으로만
+    # 의존한다 (ADR-007).
+    from engine.hand_summon import hand_summon_rule_for
+
+    rule = hand_summon_rule_for(card_id)
+    if rule is None:
+        return None
+    found = _HAND_SUMMON_PROCEDURES.get(int(card_id))
+    if found is None:
+        found = SummonProcedure(
+            kind=PlayerActionKind.SPECIAL_SUMMON,
+            summon=SummonKind.SPECIAL,
+            from_zones=frozenset({rule.from_zone}),
+            to_zone=SPECIAL_SUMMON_TO_ZONE,
+            position=rule.position,
+            error=SpecialSummonError,
+        )
+        _HAND_SUMMON_PROCEDURES[int(card_id)] = found
+    return found
+
+
+def _named_slot(action: PlayerAction) -> "int | None":
+    """행위가 지목한 **칸 번호**. 🔴 ``ZONE`` 대상에서만 읽는다."""
+    for target in tuple(getattr(action, "targets", ()) or ()):
+        if getattr(target, "kind", None) is ActionTargetKind.ZONE:
+            return getattr(target, "index", None)
+    return None
+
+
+class HandSummonExecutor:
+    """
+    **패에서 자신을 특수 소환하는 카드별 절차**를 수행한다 (Phase 6-BN).
+
+    공통 :class:`SpecialSummonExecutor` 와 다른 것이 셋이다.
+
+    1. 절차를 **카드마다** 고른다 (:func:`hand_summon_procedure`) — 표시
+       형식이 카드가 정하는 값이기 때문이다.
+    2. 행위가 지목한 **칸에만** 놓는다 (``ActionTargetKind.ZONE``).
+    3. **카드명당 턴 제한**을 쓴 것으로 적는다
+       (:data:`~engine.hand_summon.HAND_SUMMON_USE_KIND`).
+
+    🔴 **판정하지 않는다.** "지금 이 칸에 놓을 수 있는가" 는
+    :func:`~engine.hand_summon.assess_hand_summon` 이 이미 답했고 검증기가
+    그 답을 썼다. 여기서 다시 묻는다면 두 답이 갈리는 날이 온다.
+
+    🔴 **체인을 만들지 않는다.** ``EFFECT_SPSUMMON_PROC`` 는 소환 **절차**
+    이고 효과가 아니다 — 이 파일에 ``engine.chain`` 이 없는 이유다.
+    """
+
+    __slots__ = ()
+
+    def plan(self, state, action: PlayerAction) -> SummonPlacement:
+        """배치를 정한다. **아무것도 바꾸지 않는다.**"""
+        procedure, slot = self._procedure_for(state, action)
+        return procedure.plan(state, action, slot=slot)
+
+    def apply(self, state, action: PlayerAction) -> "tuple[StateDelta, ...]":
+        procedure, slot = self._procedure_for(state, action)
+        placement = procedure.plan(state, action, slot=slot)
+        procedure.place(state, placement)
+        #: 🔴 **이 턴에 그 카드명을 이 방법으로 썼다고 적는다.** 판정이
+        #: 읽는 자리와 같은 이름이다 (``HAND_SUMMON_USE_KIND``) — 링크
+        #: 소환 기록과 섞이지 않는다. 🔴 **판정하지 않는다**: 센다.
+        from engine.hand_summon import HAND_SUMMON_USE_KIND
+
+        summoned = state.find_instance(placement.card)
+        if summoned is not None:
+            state.summon_uses.record(
+                state.turn.turn_number,
+                placement.player,
+                summoned.card_id,
+                HAND_SUMMON_USE_KIND,
+            )
+        return (placement.to_delta(procedure.summon),)
+
+    # ------------------------------------------------------------------
+    def _procedure_for(
+        self, state, action: PlayerAction
+    ) -> "tuple[SummonProcedure, int | None]":
+        card = (
+            state.find_instance(action.source)
+            if action.source is not None else None
+        )
+        if card is None:
+            raise SpecialSummonError(
+                f"{action.source} 를 이 판에서 찾을 수 없습니다."
+            )
+        procedure = hand_summon_procedure(card.card_id)
+        if procedure is None:  # pragma: no cover - 라우팅이 막는다
+            raise SpecialSummonError(
+                f"{card.card_id} 의 패 특수 소환 절차가 등재되지 않았습니다."
+            )
+        return procedure, _named_slot(action)
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return "<HandSummonExecutor 카드별 패 특수 소환>"
+
+
 @dataclass(frozen=True, slots=True)
 class SpecialSummonHandler:
     """
@@ -152,9 +274,29 @@ class SpecialSummonHandler:
     """
 
     executor: SpecialSummonExecutor = field(default_factory=SpecialSummonExecutor)
+    hand: HandSummonExecutor = field(default_factory=HandSummonExecutor)
+    """🔴 Phase 6-BN — 카드별 패 특수 소환은 **다른 실행기**가 맡는다."""
 
     def apply(self, state, action: PlayerAction) -> "tuple[StateDelta, ...]":
+        #: 🔴 **갈림은 등재 여부 하나로 정한다** (ADR-006). 등재된 카드가
+        #: 칸을 지목했으면 카드별 절차로, 그 밖의 모든 특수 소환은 예전
+        #: 그대로 공통 절차로 간다 — 효과가 부르는 길은 이 핸들러를 아예
+        #: 지나지 않으므로 (``SummonProcedure.plan_for``) 영향이 없다.
+        if self._is_hand_summon(state, action):
+            return self.hand.apply(state, action)
         return self.executor.apply(state, action)
+
+    @staticmethod
+    def _is_hand_summon(state, action: PlayerAction) -> bool:
+        if _named_slot(action) is None:
+            return False
+        card = (
+            state.find_instance(action.source)
+            if action.source is not None else None
+        )
+        if card is None:
+            return False
+        return hand_summon_procedure(card.card_id) is not None
 
 
 def special_summoning_executor() -> "ActionExecutor":
@@ -174,6 +316,8 @@ def special_summoning_executor() -> "ActionExecutor":
 
 
 __all__ = [
+    "HandSummonExecutor",
+    "hand_summon_procedure",
     "SPECIAL_SUMMON_FROM_ZONES",
     "SPECIAL_SUMMON_TO_ZONE",
     "SPECIAL_SUMMON_POSITION",

@@ -36,7 +36,7 @@ from enum import Enum
 
 from engine.action_target import ActionTarget, ActionTargetKind
 from engine.ids import EffectRef, InstanceId
-from engine.vocabulary import Phase
+from engine.vocabulary import Phase, Zone
 
 
 class PlayerActionKind(str, Enum):
@@ -201,9 +201,17 @@ _NEEDS_PHASE: frozenset[PlayerActionKind] = frozenset(
 )
 
 #: 대상을 **몇 개** 가져야 하는가. ``None`` 이면 제한 없음.
-_TARGET_COUNT: dict[PlayerActionKind, int | None] = {
+#:
+#: 🔴 값이 **tuple 이면 허용되는 수들**이다 (Phase 6-BN). 하나의 수로는
+#: "칸을 지목해도 되고 안 해도 된다" 를 적을 수 없고, ``None`` 으로 적으면
+#: 제한이 사라진다 — 둘 다 사실이 아니다.
+_TARGET_COUNT: dict[PlayerActionKind, "int | tuple[int, ...] | None"] = {
     PlayerActionKind.NORMAL_SUMMON: 0,
-    PlayerActionKind.SPECIAL_SUMMON: 0,
+    #: 🔴 **0 또는 1** (Phase 6-BN). 1 개일 때 그 하나는 놓을 칸을 지목하는
+    #: ``ZONE`` 대상이고 (``PlayerAction.special_summon`` 의 ``slot``),
+    #: 모양은 검증기가 다시 확인한다. 「대상」 이라는 규칙 용어와 다르다 —
+    #: 칸을 가리키는 것은 효과의 대상 지정이 아니다.
+    PlayerActionKind.SPECIAL_SUMMON: (0, 1),
     #: 🔴 **소재는 대상이 아니다** — 링크 소재는 ``materials`` 에 들어가고
     #: 이 칸은 ``0`` 이다 (``PlayerAction.materials`` 의 설명).
     PlayerActionKind.LINK_SUMMON: 0,
@@ -343,15 +351,38 @@ class PlayerAction:
         return cls(kind=PlayerActionKind.NORMAL_SUMMON, actor=actor, source=source)
 
     @classmethod
-    def special_summon(cls, actor: int, source: InstanceId) -> "PlayerAction":
+    def special_summon(
+        cls,
+        actor: int,
+        source: InstanceId,
+        slot: "int | None" = None,
+    ) -> "PlayerAction":
         """
         그 카드를 특수 소환한다. **고수준 의도**다.
 
-        어느 칸에 · 어떤 표시 형식으로 놓을지는 여기서 말하지 않는다 —
-        고르는 계층이 아직 없고, 지금 칸을 적으면 그것이 규칙처럼 굳는다
-        (STRUCTURAL-41 · 61).
+        어떤 표시 형식으로 놓을지는 여기서 말하지 않는다 — 고르는 계층이
+        아직 없고, 지금 적으면 그것이 규칙처럼 굳는다 (STRUCTURAL-61).
+
+        🔴 **칸은 Phase 6-BN 에서 말할 수 있게 되었다.** ``slot`` 을 주면
+        ``ZONE`` 대상 하나가 붙고, 그 칸이 후보 생성 · 검증 · 절차 ·
+        리플레이를 통과하는 **같은 한 칸**이 된다. 놓을 칸이 규칙으로
+        정해진 카드가 있기 때문이다 (성유물－『성관』: 링크 마커가 가리키는
+        메인 몬스터 존). ``None`` 이면 예전과 한 글자도 다르지 않다 —
+        칸을 고르지 않는다 (STRUCTURAL-41).
         """
-        return cls(kind=PlayerActionKind.SPECIAL_SUMMON, actor=actor, source=source)
+        targets = ()
+        if slot is not None:
+            targets = (
+                ActionTarget.zone_target(
+                    player=actor, zone=Zone.MZONE, index=int(slot)
+                ),
+            )
+        return cls(
+            kind=PlayerActionKind.SPECIAL_SUMMON,
+            actor=actor,
+            source=source,
+            targets=targets,
+        )
 
     @classmethod
     def link_summon(

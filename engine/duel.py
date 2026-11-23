@@ -1004,6 +1004,14 @@ class Duel:
             opened, held = self._link_summon_actions(seat, validator)
             allowed.extend(opened)
             withheld.extend(held)
+            # 🔴 **패에서 자신을 특수 소환하는 카드도 후보가 된다**
+            # (Phase 6-BN). 위의 패를 도는 고리는 일반 소환 · 세트 둘만
+            # 만들므로, 이 자리가 없으면 성관의 소환 절차는 **후보에도
+            # 보류에도** 오르지 않는다 — 링크 소환이 6-AC 에서 들어온 것과
+            # 같은 이유다.
+            opened, held = self._hand_summon_actions(seat, validator)
+            allowed.extend(opened)
+            withheld.extend(held)
             opened, held = self._activation_actions(seat, validator)
             allowed.extend(opened)
             withheld.extend(held)
@@ -1468,6 +1476,86 @@ class Duel:
                             None
                             if len(reasons) <= 1
                             else f"소재 조합 {len(reasons)}가지가 막혔고 "
+                            "그중 하나의 이유"
+                        ),
+                    )
+                )
+        return allowed, held
+
+    def _hand_summon_actions(self, seat: int, validator: ActionValidator):
+        """
+        지금 **허가가 나는 패 특수 소환들**과 막힌 이유 (Phase 6-BN).
+
+        ``_link_summon_actions`` 와 같은 모양이다 — 짝(카드 · 칸)을 만들어
+        **검증기에게 하나씩 물어본다.** 절차 · 턴 제한 · 특수 소환 제한 ·
+        놓을 칸은 전부 검증기의 몫이고 (그 안에서
+        :func:`~engine.hand_summon.assess_hand_summon` 하나가 답한다),
+        그래야 규칙이 한 곳에만 있다.
+
+        🔴 **범위를 좁게 적는다.** 후보가 되는 카드는 내 패에서
+        :data:`~engine.hand_summon.HAND_SUMMON_RULES` 에 등재된 것뿐이고,
+        칸은 :func:`~engine.hand_summon.hand_summon_slots` 가 좁힌
+        **가리켜지는 빈 칸**들뿐이다. 그래서 짝의 수가 ``등재된 패 카드 ×
+        가리켜지는 빈 칸`` 으로 닫힌다 (최대 5 × 5).
+
+        🔴 **칸을 짝마다 적는다.** 칸이 행위에 실리므로 후보 생성 · 검증 ·
+        절차 · 리플레이가 **같은 한 칸**을 가리킨다 — 실행기가 칸을 다시
+        고르면 허가가 난 칸과 놓인 칸이 갈린다.
+
+        🔴 **등재되지 않은 패 카드를 보류에 적지 않는다.** 그 사실은 공통
+        경로가 이미 ``UNKNOWN`` 으로 적고 (``_special_summon`` 의 마지막
+        요구), 여기서 또 적으면 같은 사유가 두 줄이 된다.
+        """
+        #: 🔴 **판정 모듈에서 읽는다** — 절차(``engine.special_summon``)를
+        #: 읽으면 ``engine.effect`` 가 딸려 오고, 이 모듈은 그것을 import
+        #: 하지 않는다 (``test_e_the_duel_makes_no_rules_of_its_own``).
+        from engine.hand_summon import hand_summon_rule_for, hand_summon_slots
+
+        allowed: list[PlayerAction] = []
+        groups: dict[tuple, list[str]] = {}
+        for card in self.state.player(seat).hand:
+            if hand_summon_rule_for(card.card_id) is None:
+                continue
+            slots = hand_summon_slots(self.view(seat), seat, card.card_id)
+            if not slots:
+                #: 🔴 **칸이 0가지인 것과 조건 위반은 다른 사실이다.** 이
+                #: 자리가 없으면 "가리켜지는 빈 칸이 없다" 가 후보에도
+                #: 보류에도 오르지 않는다 (``_link_summon_actions`` 의
+                #: "필드에 몬스터가 부족하다" 와 같은 자리다).
+                groups.setdefault(
+                    (ValidationCode.SPECIAL_SUMMON_FORBIDDEN, None), []
+                ).append(
+                    "자신 필드의 링크 몬스터가 가리키는 빈 메인 몬스터 존이 "
+                    "없어 패에서 특수 소환할 칸을 고를 수 없습니다."
+                )
+                continue
+            for slot in slots:
+                action = PlayerAction.special_summon(
+                    actor=seat, source=card.instance_id, slot=slot
+                )
+                verdict = validator.validate(action)
+                if verdict.validity is ActionValidity.VALID:
+                    allowed.append(action)
+                    continue
+                groups.setdefault(
+                    (verdict.code, verdict.missing_rule), []
+                ).append(verdict.reason)
+
+        held: list[WithheldAction] = []
+        #: 🔴 **허가된 칸이 하나라도 있으면 거절 사유를 적지 않는다** —
+        #: ``_link_summon_actions`` 와 같은 invariant 다.
+        if not allowed:
+            for (code, missing), reasons in groups.items():
+                held.append(
+                    WithheldAction(
+                        PlayerActionKind.SPECIAL_SUMMON,
+                        reasons[0],
+                        code,
+                        missing=missing,
+                        scope=(
+                            None
+                            if len(reasons) <= 1
+                            else f"칸 {len(reasons)}가지가 막혔고 "
                             "그중 하나의 이유"
                         ),
                     )

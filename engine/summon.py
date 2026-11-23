@@ -191,13 +191,25 @@ class SummonProcedure:
     # ==================================================================
     # 계획 — 아무것도 바꾸지 않는다
     # ==================================================================
-    def plan(self, state: GameState, action: PlayerAction) -> SummonPlacement:
+    def plan(
+        self,
+        state: GameState,
+        action: PlayerAction,
+        slot: "int | None" = None,
+    ) -> SummonPlacement:
         """
         지시를 수행할 수 있는지 보고 배치를 정한다.
 
-        **칸을 고르지 않는다** — 가장 작은 빈 칸을 쓴다 (STRUCTURAL-41).
-        그것이 규칙이어서가 아니라 고르는 계층이 아직 없어서이고, 일반
-        소환이 쓰던 방식을 그대로 쓴다.
+        **칸을 고르지 않는다** — ``slot`` 을 주지 않으면 가장 작은 빈 칸을
+        쓴다 (STRUCTURAL-41). 그것이 규칙이어서가 아니라 고르는 계층이 아직
+        없어서이고, 일반 소환이 쓰던 방식을 그대로 쓴다.
+
+        🔴 **``slot`` 은 Phase 6-BN 에서 생겼다.** 놓을 칸이 규칙으로 정해진
+        카드가 들어왔기 때문이다 (성유물－『성관』: 링크 마커가 가리키는
+        메인 몬스터 존). 부르는 쪽이 칸을 지목하면 그 칸에만 놓고, 비어
+        있지 않으면 **판에 손대기 전에** 멈춘다 — 그래서 후보 생성 · 검증 ·
+        절차 · 리플레이가 **같은 칸**을 가리킨다. ``None`` 일 때의 행동은
+        한 글자도 바뀌지 않는다.
         """
         if not isinstance(state, GameState):
             raise TypeError(
@@ -222,10 +234,14 @@ class SummonProcedure:
                 f"{action.source} 는 P{card.controller} 의 카드입니다 "
                 f"(P{action.actor} 가 소환하려 했습니다)."
             )
-        return self.plan_for(state, action.source, action.actor)
+        return self.plan_for(state, action.source, action.actor, slot=slot)
 
     def plan_for(
-        self, state: GameState, card_id: InstanceId, player: int
+        self,
+        state: GameState,
+        card_id: InstanceId,
+        player: int,
+        slot: "int | None" = None,
     ) -> SummonPlacement:
         """
         **식별자만으로** 배치를 정한다. ``PlayerAction`` 을 모른다.
@@ -259,6 +275,19 @@ class SummonProcedure:
         if not free:
             raise self.error(f"{self.to_zone.value} 에 빈 칸이 없습니다.")
 
+        # 🔴 지목한 칸이 있으면 **그 칸뿐이다** (Phase 6-BN). 비어 있지
+        # 않으면 다른 칸으로 옮겨 놓지 않고 멈춘다 — 조용히 옮기면 허가가
+        # 난 칸과 실제로 놓인 칸이 갈리고, 리플레이가 거짓을 적는다.
+        if slot is None:
+            chosen = free[0]
+        elif int(slot) in free:
+            chosen = int(slot)
+        else:
+            raise self.error(
+                f"{self.to_zone.value}[{slot}] 가 비어 있지 않습니다 "
+                f"(빈 칸 {free})."
+            )
+
         return SummonPlacement(
             card=card_id,
             player=player,
@@ -266,7 +295,7 @@ class SummonProcedure:
             from_player=card.controller,
             from_zone=located.zone,
             to_zone=self.to_zone,
-            slot=free[0],
+            slot=chosen,
             position=self.position,
         )
 

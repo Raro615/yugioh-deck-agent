@@ -114,7 +114,13 @@ class Requirement:
 #: 종류별로 "어떤 규칙 계층이 더 있어야 **허가**까지 갈 수 있는가".
 #: 전부 차 있다는 것은 지금 어떤 Action 도 VALID 가 될 수 없다는 뜻이다.
 _MISSING_RULE: dict[PlayerActionKind, str] = {
-    PlayerActionKind.SPECIAL_SUMMON: "special-summon-condition (카드마다 다르다)",
+    #: 🔴 ``SPECIAL_SUMMON`` 이 Phase 6-BN 에서 여기를 떠났다. 떠난 이유는
+    #: "이제 전부 구현했다" 가 **아니다** — 범위를 좁게 적는 자리가
+    #: 생겼기 때문이다 (``engine.hand_summon.HAND_SUMMON_RULES``). 거기
+    #: 적히지 않은 카드는 ``_HandSummonLegal`` 이 **그대로 ``UNKNOWN``**
+    #: 으로 막고, 그때 없는 규칙의 이름도 같은 글자로 돌려준다
+    #: (``SPECIAL_SUMMON_CONDITION_RULE``). ``LINK_SUMMON`` 이 6-AC 에서
+    #: 떠난 것과 **같은 구조**다.
     PlayerActionKind.ACTIVATE_CARD: "activation-timing (Phase 2-C/2-F)",
     PlayerActionKind.CHANGE_POSITION: "position-change-legality (Phase 2-G)",
     PlayerActionKind.CHANGE_PHASE: "turn-progression (Phase 2-G)",
@@ -147,6 +153,14 @@ _COMPLETE_RULES: frozenset[PlayerActionKind] = frozenset(
         # 링크 몬스터를 ``UNKNOWN`` 으로 남기므로, 여기 올려도 범위가
         # 넓어지지 않는다 (``ACTIVATE_EFFECT`` 와 같은 구조).
         PlayerActionKind.LINK_SUMMON,
+        # Phase 6-BN — 패에서 자신을 특수 소환하는 **카드별 절차**. 범위는
+        # ``engine.hand_summon.HAND_SUMMON_RULES`` 가 정하고 그 밖의 모든
+        # 카드를 ``_HandSummonLegal`` 이 ``UNKNOWN`` 으로 남기므로, 여기
+        # 올려도 범위가 넓어지지 않는다 (``LINK_SUMMON`` 과 같은 구조).
+        #
+        # 🔴 **효과에 의한 특수 소환은 이 길로 오지 않는다** — 그쪽은
+        # ``SummonProcedure.plan_for`` 를 쓰고 검증기를 지나지 않는다.
+        PlayerActionKind.SPECIAL_SUMMON,
     }
 )
 
@@ -286,12 +300,30 @@ class ActionValidator:
             )
 
         expected = _TARGET_COUNT.get(kind)
-        if expected is not None and len(action.targets) != expected:
-            return ValidationResult.invalid(
-                ValidationCode.TARGET_COUNT_MISMATCH,
-                f"{kind.value} 의 대상은 {expected}개여야 합니다: "
-                f"{len(action.targets)}개가 들어왔습니다.",
-            )
+        if expected is not None:
+            #: 🔴 **tuple 이면 허용되는 수들**이다 (Phase 6-BN). 하나의 수일
+            #: 때의 문장은 한 글자도 바뀌지 않는다.
+            counts = expected if isinstance(expected, tuple) else (expected,)
+            if len(action.targets) not in counts:
+                wanted = " 또는 ".join(str(n) for n in counts)
+                return ValidationResult.invalid(
+                    ValidationCode.TARGET_COUNT_MISMATCH,
+                    f"{kind.value} 의 대상은 {wanted}개여야 합니다: "
+                    f"{len(action.targets)}개가 들어왔습니다.",
+                )
+
+        #: 🔴 **칸을 지목했으면 그것이 칸이어야 한다** (Phase 6-BN).
+        #: ``ATTACK`` 아래의 모양 검사와 같은 자리이고 같은 이유다 — 수만
+        #: 맞추고 종류를 보지 않으면 ``INSTANCE`` 대상 하나가 칸을 지목한
+        #: 것으로 읽힌다.
+        if kind is PlayerActionKind.SPECIAL_SUMMON and action.targets:
+            target = action.targets[0]
+            if target.kind is not ActionTargetKind.ZONE or target.index is None:
+                return ValidationResult.invalid(
+                    ValidationCode.TARGET_KIND_INVALID,
+                    "특수 소환이 대상을 하나 가진다면 그것은 놓을 칸을 "
+                    "가리키는 ZONE 대상이어야 합니다 (칸 번호 포함).",
+                )
 
         if kind is PlayerActionKind.ATTACK:
             target = action.targets[0]
@@ -646,14 +678,38 @@ def _special_summon(
             )
         )
 
+    #: 🔴 **Phase 6-BN — 마지막 요구가 카드별 판정이 되었다.**
+    #:
+    #: 6-BM 까지 이 자리는 **언제나** ``UnimplementedRule`` 이었고, 그래서
+    #: 어떤 특수 소환도 허가가 나지 않았다. 지금은
+    #: ``engine.hand_summon.assess_hand_summon`` 이 답하고, **등재되지
+    #: 않은 카드에는 그 함수가 ``UNKNOWN`` 과 같은 규칙 이름을 돌려준다**
+    #: — 그러므로 범위는 ``HAND_SUMMON_RULES`` 에 적힌 카드만큼만 넓어졌다.
+    #:
+    #: 🔴 자리가 **빈 칸 검사보다 뒤**인 것이 뜻을 가진다: 칸이 없으면
+    #: 그 사실이 먼저 나오고, 칸이 있을 때만 그 칸에 놓을 수 있는지 묻는다.
     requirements.append(
         Requirement(
-            UnimplementedRule(SPECIAL_SUMMON_CONDITION_RULE),
+            _HandSummonLegal(action.source, _zone_slot_of(action)),
             ValidationCode.RULE_NOT_IMPLEMENTED,
             "이 카드를 특수 소환할 수 있는지 판정할 규칙이 없습니다.",
         )
     )
     return tuple(requirements)
+
+
+def _zone_slot_of(action: PlayerAction) -> "int | None":
+    """
+    행동이 지목한 **칸 번호**. 🔴 ``ZONE`` 대상에서만 읽는다.
+
+    행동이 칸을 들고 가야 후보 생성 · 판정 · 절차 · 리플레이가 **같은
+    칸**을 가리킨다 (사용자 요구). 지목하지 않았으면 ``None`` 이고, 그때
+    카드별 판정이 칸을 지목해야 한다고 거절한다.
+    """
+    for target in tuple(getattr(action, "targets", ()) or ()):
+        if getattr(target, "kind", None) is ActionTargetKind.ZONE:
+            return getattr(target, "index", None)
+    return None
 
 
 #: 링크 소환이 메인 페이즈의 행위라는 근거.
@@ -2298,6 +2354,86 @@ class _NormalSpellActivation(Condition):
             "이번 Phase 가 판정할 수 있는 발동이다 (통상 · 속공 마법 · "
             "세트된 일반 함정 또는 기동 효과)"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _HandSummonLegal(Condition):
+    """
+    패에서 자신을 특수 소환하는 **카드별 절차**를 지금 밟을 수 있는가.
+
+    판정은 ``engine.hand_summon.assess_hand_summon`` 하나가 한다 —
+    ``_LinkMaterialsLegal`` 이 ``assess_link_materials`` 에게 묻는 것과
+    **같은 자리**이고 같은 이유다 (검증기와 후보 생성기가 같은 답을 써야
+    한다).
+
+    세 갈래가 그대로 보존된다.
+
+    - ``LEGAL`` → ``TRUE``
+    - ``ILLEGAL`` → ``FALSE``
+    - ``UNKNOWN`` → ``UNKNOWN`` (+ 없는 규칙 이름)
+
+    🔴 **등재되지 않은 카드가 여기서 막힌다.** 그래서
+    ``PlayerActionKind.SPECIAL_SUMMON`` 을 ``_COMPLETE_RULES`` 에 올려도
+    범위가 넓어지지 않는다 — 넓어진 범위는 ``HAND_SUMMON_RULES`` 에
+    적힌 카드만큼이다.
+    """
+
+    instance: InstanceId | None = None
+    slot: "int | None" = None
+
+    def evaluate(self, view, context) -> ConditionResult:
+        got = self._assess(view, context)
+        if got.permits_procedure:
+            return ConditionResult.TRUE
+        if got.eligibility.value == "illegal":
+            return ConditionResult.FALSE
+        return ConditionResult.UNKNOWN
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        got = self._assess(view, context)
+        if got.eligibility.value == "unknown":
+            return (got.reason,)
+        return ()
+
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        """🔴 등재되지 않은 카드에는 **같은 규칙 이름**을 돌려준다."""
+        got = self._assess(view, context)
+        if got.eligibility.value == "unknown" and got.rule is None:
+            return (SPECIAL_SUMMON_CONDITION_RULE,)
+        return ()
+
+    def refusal_reasons(self, view, context) -> tuple[str, ...]:
+        got = self._assess(view, context)
+        return (got.reason,) if got.eligibility.value == "illegal" else ()
+
+    def _assess(self, view, context):
+        # 🔴 **판정 모듈에서 읽는다** — ``engine.special_summon`` 은
+        # ``engine.summon`` 을 끌고 오고 그 길은 이 파일로 되돌아온다
+        # (``_LinkMaterialsLegal`` 의 설명과 같은 고리다).
+        from engine.hand_summon import assess_hand_summon
+
+        source = self.instance if self.instance is not None else context.source
+        return assess_hand_summon(view, context.player, source, self.slot)
+
+    def canonical_state(self) -> tuple:
+        return (
+            "hand_summon_legal",
+            self.instance.value if self.instance else None,
+            None if self.slot is None else int(self.slot),
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {"kind": "hand_summon_legal"}
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        if self.slot is not None:
+            data["slot"] = int(self.slot)
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        where = "칸 미지정" if self.slot is None else f"칸 {self.slot}"
+        return f"{which} 를 패에서 특수 소환할 수 있는가 ({where})"
 
 
 @dataclass(frozen=True, slots=True)

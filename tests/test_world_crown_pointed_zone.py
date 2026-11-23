@@ -300,48 +300,68 @@ def test_c03_the_crown_is_a_defense_position_summon(repository):
 
 
 # ======================================================================
-# D. 아직 등재되지 않은 것 — 소환 **절차**
+# D. 등재된 것과 **아직 등재되지 않은 것** (Phase 6-BN 에서 갈라졌다)
 # ======================================================================
 
 
 @requires_official_db
 @pytest.mark.real_card
-def test_d01_the_crown_has_no_registered_summon_procedure_yet(repository):
+def test_d01_the_crown_has_a_registered_summon_procedure_now(repository):
     """
-    🔴 **성관의 소환 절차는 등재되지 않았다** (6-BK 범위 밖).
+    🔴 **성관의 소환 절차가 Phase 6-BN 에서 등재되었다.**
 
-    그래서 ``/combo`` 의 후보에도 보류에도 성관이 오르지 않는다 — ADR-006
-    대로 등재되지 않은 것은 **없는 것처럼** 동작한다. 이 시험은 그 사실을
-    못박아 두어, 등재되는 날 **먼저 깨지게** 한다.
+    6-BK 의 이 시험은 반대를 적고 있었다 ("등재되지 않았다"). 등재되는 날
+    먼저 깨지라고 적어 둔 시험이고, 그날이 와서 **뜻을 뒤집어 다시
+    적는다** — 느슨하게 푸는 것이 아니라 새 사실을 못박는다.
 
-    등재를 막고 있는 것은 두 가지이고 둘 다 수로 적어 둔다:
+    갈라진 것이 무엇인지 수로 적는다.
 
-    1. :func:`~engine.action_validation._special_summon` 의 마지막 요구가
-       **언제나** ``UnimplementedRule`` 이다 — 카드별 소환 조건을 읽는
-       계층이 없다.
-    2. :meth:`~engine.link_summon.LinkSummonHandler._plan_placement` 가
-       빈 칸을 **고르지 않고** 첫 칸을 쓴다 (``free[0]``) — 놓을 칸이
-       선택이 아니다.
+    1. **소환 절차는 등재되었다** — :data:`~engine.hand_summon.
+       HAND_SUMMON_RULES` 에 한 장. 그래서 검증기의 마지막 요구가 더는
+       언제나 ``UnimplementedRule`` 이 아니다.
+    2. **효과는 여전히 하나도 등재되지 않았다** — ``EFFECT_LIBRARY`` 에
+       성관의 ②(무효) · ③(서치)가 없다. 소환 절차는 효과가 아니므로
+       (``EFFECT_SPSUMMON_PROC``) 둘이 따로 움직인다.
+    3. **놓을 칸은 이제 선택이다** — 행위가 ``ZONE`` 대상으로 칸을 들고
+       가고 (``PlayerAction.special_summon`` 의 ``slot``), 절차가 그 칸에만
+       놓는다 (``SummonProcedure.plan_for`` 의 ``slot``).
     """
     from engine.action_validation import SPECIAL_SUMMON_CONDITION_RULE
     from engine.effect.library import EFFECT_LIBRARY
+    from engine.hand_summon import HAND_SUMMON_RULES, hand_summon_rule_for
+    from engine.vocabulary import Position
 
-    #: 성관의 효과는 **하나도** 등재되지 않았다 (e1 소환 절차 · e2 무효 ·
-    #: e3 서치 전부).
+    #: 🔴 **한 장이다.** 수가 움직이면 어느 카드가 들어왔는지 적어야 한다.
+    assert len(HAND_SUMMON_RULES) == 1
+    rule = hand_summon_rule_for(CROWN)
+    assert rule is not None
+    assert rule.from_zone is Zone.HAND
+    #: 🔴 공통 특수 소환의 고정값(앞면 공격)이 **아니다** — 카드가 형식을
+    #: 정한다 (``SetTargetRange(POS_FACEUP_DEFENSE,0)``).
+    assert rule.position is Position.FACEUP_DEFENSE
+    assert rule.requires_link_pointed_zone is True
+    assert rule.limit_count == 1
+
+    #: 효과는 그대로 0건이다 (②·③ 는 이번 범위가 아니다).
     assert [e for e in EFFECT_LIBRARY if e.card_id == CROWN] == []
-    #: 그리고 특수 소환 조건을 읽는 규칙은 여전히 "구현되지 않았다" 다.
+    #: 없는 규칙의 **이름은 그대로다** — 등재되지 않은 카드가 그 이름으로
+    #: 막힌다 (``_HandSummonLegal.missing_rules``).
     assert "카드마다 다르다" in SPECIAL_SUMMON_CONDITION_RULE
 
 
 @requires_official_db
 @pytest.mark.real_card
-def test_d02_the_engine_offers_no_crown_action_and_withholds_none(repository):
+def test_d02_the_engine_now_offers_the_crown_at_the_galatea_board(repository):
     """
-    실측 — 네 시점 전부에서 성관은 후보에도 **보류에도** 없다.
+    실측 — 갈라테아가 선 **그 시점**에 성관이 **후보로 오른다**.
 
-    🔴 보류에 없다는 것이 중요하다. 보류는 "물어봤고 막혔다" 는 기록이고,
-    성관은 **물어보지도 않았다** — 그 차이가 「엔진 미지원」 과 「규칙상
-    불가」 를 가른다.
+    🔴 **6-BK 의 이 시험은 두 번 틀렸다.**
+
+    1. 뜻이 뒤집혔다 (6-BN 에서 등재되었으므로 후보가 난다).
+    2. 그리고 **옛 단정은 비어 있었다** — ``canonical_state()[2]`` 는
+       ``int`` 이고 ``crown_ids`` 는 ``InstanceId`` 들이라, ``in`` 이
+       **언제나 거짓**이었다. 등재되기 전에도 그 줄은 아무것도 재지
+       않았다. 그래서 여기서는 ``action.source`` 를 그대로 본다.
     """
     from tests.test_galatea_effect_extension import _is, _setup, _take
 
@@ -354,15 +374,29 @@ def test_d02_the_engine_offers_no_crown_action_and_withholds_none(repository):
     _take(duel, _is("activate_effect", effect=(GALATEA_I, 2)), "갈라테아i ②")
     _take(duel, lambda k: k[0] == "link_summon" and k[2] in (83, 84), "갈라테아")
 
-    legal = duel.legal_actions(0)
     crown_ids = {
-        c.instance_id
-        for c in duel.state.zone(0, Zone.HAND).cards()
-        if c.card_id == CROWN
+        card.instance_id
+        for card in duel.state.player(0).hand
+        if card.card_id == CROWN
     }
     assert crown_ids, "성관이 패에 없다 — 이 시험의 전제가 깨졌다"
-    assert not [
-        a for a in legal.allowed
-        if a.canonical_state()[2] in crown_ids
+
+    legal = duel.legal_actions(0)
+    offered = [
+        action for action in legal.allowed
+        if action.source in crown_ids
     ]
-    assert not [w for w in legal.withheld if str(CROWN) in w.reason]
+    #: 🔴 **한 건이다** — 가리켜지는 빈 칸이 한 칸이므로 (실측: 왼쪽
+    #: 정렬에서 ``(0,)``). 칸이 늘면 후보도 늘고, 그때 이 수가 깨진다.
+    assert len(offered) == 1, [str(a) for a in offered]
+    action = offered[0]
+    assert action.kind.value == "special_summon"
+    #: 🔴 **행위가 칸을 들고 간다.** 이것이 없으면 실행기가 칸을 다시
+    #: 고르고, 허가가 난 칸과 놓인 칸이 갈린다.
+    assert len(action.targets) == 1
+    assert action.targets[0].kind.value == "zone"
+    assert action.targets[0].index == 0
+    #: 막힌 것이 없으므로 보류에 특수 소환 줄이 없다.
+    assert not [
+        w for w in legal.withheld if w.kind.value == "special_summon"
+    ]
