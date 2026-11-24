@@ -88,6 +88,29 @@ class PlayerActionKind(str, Enum):
     허가가 나는 것은 **소재 조건을 손으로 확인한 링크 몬스터**뿐이고, 그
     목록은 :data:`~engine.link_summon.LINK_MATERIAL_RULES` 다.
     """
+    XYZ_SUMMON = "xyz_summon"
+    """
+    **엑시즈 소환한다** (Phase 6-BO). 엑스트라 덱의 엑시즈 몬스터 하나와
+    :attr:`PlayerAction.materials` 가 필요하다.
+
+    ``LINK_SUMMON`` 과 가르는 이유
+    -----------------------------
+    =====================  =====================  =======================
+                            ``LINK_SUMMON``        ``XYZ_SUMMON``
+    =====================  =====================  =======================
+    소재가 가는 곳          **묘지**                **그 카드 아래**
+    소재의 그 뒤            판을 떠났다              판에 남아 꺼내 쓴다
+    소재를 세는 축          링크 수치                레벨 · 랭크
+    =====================  =====================  =======================
+
+    첫 줄이 가르는 이유 전부다. 소재가 묘지로 가는 절차와 **겹쳐 두는**
+    절차를 한 종류로 적으면, 「엑시즈 소재를 제거하고」 류의 비용이 어디서
+    카드를 꺼내야 하는지 영영 말할 수 없다.
+
+    🔴 **``SPECIAL_SUMMON`` 의 ``UNKNOWN`` 을 이 종류가 풀어 주지 않는다** —
+    ``LINK_SUMMON`` 과 같다. 허가가 나는 것은 소재 조건을 손으로 확인한
+    카드뿐이고, 그 목록은 :data:`~engine.xyz_rules.XYZ_MATERIAL_RULES` 다.
+    """
     SET_MONSTER = "set_monster"
     """일반 소환권을 써서 뒷면 수비 표시로 세트한다."""
     SET_SPELL_TRAP = "set_spell_trap"
@@ -182,7 +205,10 @@ _ALLOWS_EFFECT_REF: frozenset[PlayerActionKind] = _NEEDS_EFFECT_REF | frozenset(
 #: 그 절차가 아직 없으므로 (``PlayerActionKind`` 에 종류도 없다) 여기 적지
 #: 않는다 — 미리 적어 두면 "소재를 받을 수 있는 행위" 가 절차 없이 생긴다.
 _ALLOWS_MATERIALS: frozenset[PlayerActionKind] = frozenset(
-    {PlayerActionKind.LINK_SUMMON}
+    #: 🔴 **둘이 되었다** (Phase 6-BO). 엑시즈 소환도 소재를 고른다 —
+    #: 다른 것은 소재가 **가는 곳**이고 (묘지 / 그 카드 아래) 그 차이는
+    #: 절차가 들고 있다.
+    {PlayerActionKind.LINK_SUMMON, PlayerActionKind.XYZ_SUMMON}
 )
 
 #: 소재가 **반드시 있어야 하는** 종류.
@@ -192,7 +218,8 @@ _ALLOWS_MATERIALS: frozenset[PlayerActionKind] = frozenset(
 #: 질문**이고, 두 표가 갈리는 날 (소재가 선택인 절차가 들어오는 날) 한쪽만
 #: 고치면 된다.
 _NEEDS_MATERIALS: frozenset[PlayerActionKind] = frozenset(
-    {PlayerActionKind.LINK_SUMMON}
+    #: 엑시즈 소환도 소재가 0장일 수 없다 (공식 절차).
+    {PlayerActionKind.LINK_SUMMON, PlayerActionKind.XYZ_SUMMON}
 )
 
 #: ``phase`` 가 필요한 종류.
@@ -215,6 +242,8 @@ _TARGET_COUNT: dict[PlayerActionKind, "int | tuple[int, ...] | None"] = {
     #: 🔴 **소재는 대상이 아니다** — 링크 소재는 ``materials`` 에 들어가고
     #: 이 칸은 ``0`` 이다 (``PlayerAction.materials`` 의 설명).
     PlayerActionKind.LINK_SUMMON: 0,
+    #: 🔴 엑시즈 소재도 ``materials`` 에 들어간다 — 이 칸은 ``0`` 이다.
+    PlayerActionKind.XYZ_SUMMON: 0,
     PlayerActionKind.SET_MONSTER: 0,
     PlayerActionKind.SET_SPELL_TRAP: 0,
     PlayerActionKind.CHANGE_POSITION: 0,
@@ -400,6 +429,31 @@ class PlayerAction:
         """
         return cls(
             kind=PlayerActionKind.LINK_SUMMON,
+            actor=actor,
+            source=source,
+            materials=tuple(materials),
+        )
+
+    @classmethod
+    def xyz_summon(
+        cls,
+        actor: int,
+        source: InstanceId,
+        materials: "tuple[InstanceId, ...]",
+    ) -> "PlayerAction":
+        """
+        엑스트라 덱의 엑시즈 몬스터를 **고른 소재로** 엑시즈 소환한다.
+
+        어느 칸에 놓이는지는 여기서 말하지 않는다 —
+        :data:`~engine.xyz_summon.XYZ_SUMMON_PROCEDURE` 가 정하고, 그
+        범위가 어디까지인지는 그 모듈이 적는다.
+
+        🔴 **소재가 어디로 가는지도 여기서 말하지 않는다.** 엑시즈 소재는
+        묘지로 가지 않고 그 카드 아래에 겹쳐지며, 그 일을 하는 자리는
+        :meth:`~engine.state.game_state.GameState.attach_material` 하나다.
+        """
+        return cls(
+            kind=PlayerActionKind.XYZ_SUMMON,
             actor=actor,
             source=source,
             materials=tuple(materials),

@@ -557,6 +557,24 @@ class SummonKind(str, Enum):
     여전히 여기 없다.
     """
 
+    XYZ = "xyz"
+    """
+    엑시즈 소환 (Phase 6-BO). **특수 소환의 한 종류다.**
+
+    ``LINK`` 과 가르는 이유가 ``LINK`` 이 ``SPECIAL`` 과 갈린 것과 같다.
+
+    1. **절차가 다르다.** 소재를 묘지로 **보내지 않고** 그 카드 **아래에
+       겹친다** (:class:`~engine.effect.delta.MaterialAttached`). 그래서
+       소재가 판을 떠나지 않고, 뒤에 꺼내 쓸 수 있다.
+    2. **사건이 다르다.** 「엑시즈 소환했을 경우」 와 「링크 소환했을
+       경우」 는 서로 다른 유발 시점이다.
+
+    🔴 **위의 설명이 그대로 유효하다**: 이름이 먼저 생긴 것이 아니라
+    **소재를 고르고 겹치고 놓는 절차**가 먼저 생겼고 (:mod:`engine.
+    xyz_summon`), 그 뒤에 이름을 주었다. 융합 · 싱크로 · 의식 · 펜듈럼은
+    여전히 여기 없다.
+    """
+
     LINK = "link"
     """
     링크 소환 (Phase 6-AC). **특수 소환의 한 종류다.**
@@ -589,7 +607,9 @@ class SummonKind(str, Enum):
 #: 없으므로 그 사실을 한 곳에 적고, 묻는 쪽은 전부 여기를 읽는다 — 두 곳에
 #: 적으면 융합이 들어오는 날 한쪽만 고쳐진다.
 SPECIAL_SUMMON_KINDS: frozenset[SummonKind] = frozenset(
-    {SummonKind.SPECIAL, SummonKind.LINK}
+    #: 🔴 **엑시즈가 Phase 6-BO 에서 들어왔다.** 공식 룰북이 링크와 같은
+    #: 문장으로 적는다 — "Xyz Summoning is a type of Special Summon".
+    {SummonKind.SPECIAL, SummonKind.LINK, SummonKind.XYZ}
 )
 
 
@@ -616,7 +636,11 @@ SPECIAL_SUMMON_KINDS: frozenset[SummonKind] = frozenset(
 #: 들어온다. 지금 이름만 넣어 두면 절차 없는 이름이 "이 소환은 융합이었다"
 #: 고 주장하게 된다 (:class:`SummonKind` 가 그 목록을 비워 둔 것과 같은
 #: 이유다).
-PROCEDURE_SUMMON_KINDS: frozenset[SummonKind] = frozenset({SummonKind.LINK})
+#: 🔴 **엑시즈가 Phase 6-BO 에서 들어왔다.** 엑시즈 소환은 그 카드 자신의
+#: 절차이므로 (``Xyz.AddProcedure``) 소생 제한의 "거쳤다" 쪽이다.
+PROCEDURE_SUMMON_KINDS: frozenset[SummonKind] = frozenset(
+    {SummonKind.LINK, SummonKind.XYZ}
+)
 
 #: :data:`PROCEDURE_SUMMON_KINDS` 의 **이름**들. 관측에는 값 타입만 싣기
 #: 때문에 (``GameStateView.summon_history``) 판정이 문자열로 견준다.
@@ -738,6 +762,91 @@ class MonsterSummoned(StateDelta):
             f"P{self.player} 가 {self.card} 를 {whence} "
             f"{self.to_zone.value}[{self.to_index}] 로 "
             f"{self.summon.value} 소환 ({self.position.value})"
+        )
+
+
+#: 소재가 된 **까닭** — 소환 절차로 겹쳐졌다.
+MATERIAL_BY_XYZ_SUMMON: str = "xyz-summon"
+
+#: 소재가 된 **까닭** — 효과 해결로 붙여졌다
+#: (「제외된 기계족 1장을 이 카드의 소재로 한다」).
+MATERIAL_BY_EFFECT: str = "effect"
+
+#: 🔴 **적을 수 있는 까닭 둘.** 늘어나면 이 표가 먼저 드러낸다.
+MATERIAL_ATTACH_BASES: tuple[str, ...] = (
+    MATERIAL_BY_XYZ_SUMMON,
+    MATERIAL_BY_EFFECT,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class MaterialAttached(StateDelta):
+    """
+    카드 한 장이 다른 카드 **아래의 소재**가 되었다 (Phase 6-BO).
+
+    🔴 **:class:`ZoneMoved` 로 적지 않는다.** 두 가지가 모자라기 때문이다.
+
+    1. **숙주가 없다.** 소재는 "어느 존으로" 가 아니라 **"어느 카드
+       아래로"** 간다. ``ZoneMoved`` 에는 그 칸이 없고, 넣으면 모든 이동이
+       숙주 칸을 들고 다니게 된다.
+    2. ``Zone.OVERLAY`` 는 **플레이어 존이 아니다**
+       (:data:`~engine.vocabulary.PLAYER_ZONES` 에 없다 — 소재는 숙주가
+       들고 있다). ``destination_zone`` 에 적으면 존 목록과 어긋난다.
+
+    🔴 **:attr:`basis` 가 두 이동을 가른다.** 같은 "소재가 되었다" 가
+    **소환 절차**로 일어날 수도 있고 (엑시즈 소환의 소재) **효과 해결**로
+    일어날 수도 있으므로 (「제외된 기계족 1장을 이 카드의 소재로 한다」),
+    한 사실로 뭉치면 리플레이가 둘을 영영 가를 수 없다.
+    """
+
+    host: InstanceId
+    card: InstanceId
+    source_player: int
+    source_zone: Zone
+    basis: str
+
+    def __post_init__(self) -> None:
+        if self.source_player not in (0, 1):
+            raise ValueError(f"source_player 는 0 또는 1 입니다: {self.source_player}")
+        if self.basis not in MATERIAL_ATTACH_BASES:
+            raise ValueError(
+                f"소재가 된 까닭은 적어 둔 둘 중 하나입니다: {self.basis!r} "
+                f"({' · '.join(MATERIAL_ATTACH_BASES)})"
+            )
+        if self.host == self.card:
+            raise ValueError("카드가 자기 아래의 소재가 될 수는 없습니다.")
+
+    @property
+    def kind(self) -> str:
+        return "material_attached"
+
+    def canonical_state(self) -> tuple:
+        return (
+            "material_attached",
+            self.host.value,
+            self.card.value,
+            self.source_player,
+            self.source_zone.value,
+            self.basis,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "material_attached",
+            "host": self.host.value,
+            "instance": self.card.value,
+            "from": {"player": self.source_player, "zone": self.source_zone.value},
+            "to": {"zone": Zone.OVERLAY.value, "host": self.host.value},
+            "basis": self.basis,
+        }
+
+    def describe_ko(self) -> str:
+        why = (
+            "엑시즈 소환" if self.basis == MATERIAL_BY_XYZ_SUMMON else "효과"
+        )
+        return (
+            f"{self.card} P{self.source_player}/{self.source_zone.value} → "
+            f"{self.host} 아래의 소재 ({why})"
         )
 
 
@@ -920,6 +1029,10 @@ __all__ = [
     "SpecialSummonLimited",
     "PhaseChanged",
     "SummonKind",
+    "MATERIAL_ATTACH_BASES",
+    "MATERIAL_BY_EFFECT",
+    "MATERIAL_BY_XYZ_SUMMON",
+    "MaterialAttached",
     "SPECIAL_SUMMON_KINDS",
     "PROCEDURE_SUMMON_KINDS",
     "PROCEDURE_SUMMON_KIND_NAMES",

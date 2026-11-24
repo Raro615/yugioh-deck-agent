@@ -273,6 +273,20 @@ class ValidationCode(str, Enum):
     제한을 들고 있는지는 ``EffectDefinition.use_limit`` 이 말한다. 모르는
     것을 위반으로 접지 않는다.
     """
+    XYZ_MATERIAL_INVALID = "xyz_material_invalid"
+    """
+    **고른 소재가 그 엑시즈 몬스터의 소재 조건을 만족하지 않는다**
+    (Phase 6-BO).
+
+    ``LINK_MATERIAL_INVALID`` 와 **다른 코드로 둔다.** 같은 "소재가 틀렸다"
+    이지만 세는 축이 다르고 (레벨 · 랭크 / 링크 수치) 틀린 방식도 다르다 —
+    한 코드로 합치면 보고가 두 절차를 영영 가를 수 없다.
+
+    조건을 **읽은** 엑시즈 몬스터에만 쓴다 — 읽지 못한 카드는
+    ``RULE_NOT_IMPLEMENTED`` 이고 ``UNKNOWN`` 이다. 그리고 **기본 절차의
+    장수로 고른 경우도 이 코드가 아니다**: 그쪽은 옮기지 않은 절차이므로
+    역시 ``UNKNOWN`` 이다 (:data:`~engine.xyz_rules.XYZ_BASE_PROCEDURE_RULE`).
+    """
     LINK_MATERIAL_INVALID = "link_material_invalid"
     """
     **고른 소재가 그 링크 몬스터의 소재 조건을 만족하지 않는다.**
@@ -437,6 +451,8 @@ CODE_VALIDITY: "dict[ValidationCode, ActionValidity | None]" = {
     #: 읽지 못한 쪽은 이 코드가 아니라 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
     ValidationCode.EFFECT_USE_LIMIT_REACHED: ActionValidity.INVALID,
     ValidationCode.LINK_MATERIAL_INVALID: ActionValidity.INVALID,
+    #: Phase 6-BO — 엑시즈 쪽도 같은 결이다 (확인된 소재 조건의 위반).
+    ValidationCode.XYZ_MATERIAL_INVALID: ActionValidity.INVALID,
     #: Phase 6-AD — **확인된** 금지의 위반이다. 금지가 지금 걸리는지 읽지
     #: 못한 쪽은 이 코드가 아니라 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
     ValidationCode.SPECIAL_SUMMON_FORBIDDEN: ActionValidity.INVALID,

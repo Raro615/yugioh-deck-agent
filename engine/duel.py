@@ -220,6 +220,8 @@ OPEN_STATE_ONLY_KINDS: tuple[PlayerActionKind, ...] = (
     #: Phase 6-AC — 링크 소환도 **열린 판에서만** 선언한다. 소환은 발동이
     #: 아니므로 체인에 끼어들 수 없다 (RULE-CHAIN-011).
     PlayerActionKind.LINK_SUMMON,
+    #: Phase 6-BO — 엑시즈 소환도 **열린 판에서만** 선언한다.
+    PlayerActionKind.XYZ_SUMMON,
     PlayerActionKind.SET_MONSTER,
     PlayerActionKind.SET_SPELL_TRAP,
     PlayerActionKind.CHANGE_POSITION,
@@ -1009,6 +1011,12 @@ class Duel:
             # 만들므로, 이 자리가 없으면 성관의 소환 절차는 **후보에도
             # 보류에도** 오르지 않는다 — 링크 소환이 6-AC 에서 들어온 것과
             # 같은 이유다.
+            # 🔴 **엑시즈 소환도 후보가 된다** (Phase 6-BO). 링크가 6-AC
+            # 에서 들어온 것과 같은 자리다 — 이 줄이 없으면 엑시즈 소환은
+            # 후보에도 보류에도 오르지 않는다.
+            opened, held = self._xyz_summon_actions(seat, validator)
+            allowed.extend(opened)
+            withheld.extend(held)
             opened, held = self._hand_summon_actions(seat, validator)
             allowed.extend(opened)
             withheld.extend(held)
@@ -1472,6 +1480,123 @@ class Duel:
                         #: 서로 다를 수 있다 (실측: 소재 조건 위반과 놓을
                         #: 자리 없음이 같은 코드로 묶인다). 묶음이 몇 가지를
                         #: 덮는지와 **그중 하나**라는 사실을 적는다.
+                        scope=(
+                            None
+                            if len(reasons) <= 1
+                            else f"소재 조합 {len(reasons)}가지가 막혔고 "
+                            "그중 하나의 이유"
+                        ),
+                    )
+                )
+        return allowed, held
+
+    def _xyz_summon_actions(self, seat: int, validator: ActionValidator):
+        """
+        지금 **허가가 나는 엑시즈 소환들**과 막힌 이유 (Phase 6-BO).
+
+        ``_link_summon_actions`` 와 같은 모양이다 — 짝을 만들어 **검증기에게
+        하나씩 물어본다.** 소재 조건 · 놓을 칸 · 턴당 특수 소환 제한은 전부
+        검증기의 몫이고 (그 안에서
+        :func:`~engine.xyz_rules.assess_xyz_materials` 하나가 답한다), 그래야
+        규칙이 한 곳에만 있다.
+
+        🔴 **조합을 만드는 범위를 좁게 적는다.** 소재 후보는 자신 필드의
+        몬스터이고 (``XYZ_MATERIAL_ZONES``), 장수는 **등재된 대체 절차가 적은
+        장수**다. 그래서 조합 수가 ``C(필드 몬스터, 그 장수)`` 로 닫힌다 —
+        지금 등재된 카드는 1장짜리 하나이므로 카드당 최대 6가지다.
+
+        🔴 **기본 절차의 조합을 만들지 않는다.** 「레벨 8 몬스터 2장」 은
+        옮기지 않았고 (``XYZ_BASE_PROCEDURE_RULE``), 조합을 만들어 두면
+        판정이 전부 ``UNKNOWN`` 을 돌려주므로 **후보도 보류도 늘지 않고
+        탐색만 느려진다.** 그 사실은 아래 보류 한 줄이 적는다.
+
+        🔴 **어느 카드인지는 보류에 적지 않는다** — 엑스트라 덱은 비공개
+        자리이므로 수만 센다 (3-E-41 · ``_link_summon_actions`` 와 같다).
+        """
+        from itertools import combinations
+
+        #: 🔴 **판정 모듈에서 읽는다** — 절차(``engine.xyz_summon``)를 읽으면
+        #: ``engine.token`` 과 ``engine.summon`` 이 딸려 온다.
+        from engine.xyz_rules import (
+            XYZ_MATERIAL_ZONES,
+            XYZ_RULE_MISSING,
+            alternative_rule_for,
+        )
+
+        extra = [
+            card
+            for card in self.state.player(seat).zone(Zone.EXTRA)
+            if card is not None
+        ]
+        field = [
+            card.instance_id
+            for zone in sorted(XYZ_MATERIAL_ZONES, key=lambda z: z.value)
+            for card in self.state.player(seat).zone(zone)
+            if card is not None
+        ]
+
+        allowed: list[PlayerAction] = []
+        groups: dict[tuple, list[str]] = {}
+        unread = 0
+        for card in extra:
+            definition = card.definition
+            if definition is None or not definition.is_xyz:
+                continue
+            rule = alternative_rule_for(card.card_id)
+            if rule is None:
+                unread += 1
+                continue
+            if len(field) < rule.material_count:
+                #: 🔴 **조합이 0가지인 것과 조건 위반은 다른 사실이다**
+                #: (``_link_summon_actions`` 와 같은 자리).
+                groups.setdefault(
+                    (ValidationCode.XYZ_MATERIAL_INVALID, None), []
+                ).append(
+                    f"자신 필드의 몬스터가 {len(field)}장이라 소재 "
+                    f"{rule.material_count}장을 고를 수 없습니다 "
+                    f"(소재 조건: {rule.describe_ko()})."
+                )
+                continue
+            for picked in combinations(field, rule.material_count):
+                action = PlayerAction.xyz_summon(
+                    actor=seat, source=card.instance_id, materials=picked
+                )
+                verdict = validator.validate(action)
+                if verdict.validity is ActionValidity.VALID:
+                    allowed.append(action)
+                    continue
+                groups.setdefault(
+                    (verdict.code, verdict.missing_rule), []
+                ).append(verdict.reason)
+
+        held: list[WithheldAction] = []
+        if unread:
+            held.append(
+                WithheldAction(
+                    PlayerActionKind.XYZ_SUMMON,
+                    "엑스트라 덱 엑시즈 몬스터의 소재 조건을 이 저장소가 "
+                    "아직 읽지 않았습니다. 레벨과 장수만 맞춰 통과시키지 "
+                    "않으므로 후보를 만들지 않았습니다.",
+                    ValidationCode.RULE_NOT_IMPLEMENTED,
+                    missing=XYZ_RULE_MISSING,
+                    scope=(
+                        None
+                        if len(extra) <= 1
+                        else f"엑스트라 덱 {len(extra)}장 중 {unread}장이 "
+                        "같은 이유"
+                    ),
+                )
+            )
+        #: 🔴 **허가된 조합이 하나라도 있으면 거절 사유를 적지 않는다** —
+        #: ``_link_summon_actions`` 와 같은 invariant 다.
+        if not allowed:
+            for (code, missing), reasons in groups.items():
+                held.append(
+                    WithheldAction(
+                        PlayerActionKind.XYZ_SUMMON,
+                        reasons[0],
+                        code,
+                        missing=missing,
                         scope=(
                             None
                             if len(reasons) <= 1

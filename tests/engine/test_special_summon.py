@@ -184,27 +184,30 @@ def test_a_the_summon_kind_names_only_implemented_procedures():
     §7 — "어떤 카드가 특수 소환되었는가" 와 "어떤 방법으로" 는 다른 질문이다.
     융합 · 싱크로 · 엑시즈 · 링크는 **각자의 절차가 생길 때** 이름을 갖는다.
 
-    🔴 **Phase 6-AC 에서 링크가 그 이름을 가졌다.** 이 단언이 지키는 것은
-    "이름이 둘이다" 가 아니라 **"절차 없는 이름이 없다"** 이고, 그래서 목록을
-    늘리는 것이 아니라 **절차와 맞춰** 본다 — 링크는
-    :data:`~engine.link_summon.LINK_SUMMON_PROCEDURE` 가 있고, 융합 · 싱크로
-    · 엑시즈 · 의식 · 펜듈럼은 여전히 **이름도 절차도 없다.**
+    🔴 **Phase 6-AC 에서 링크가, 6-BO 에서 엑시즈가 그 이름을 가졌다.** 이
+    단언이 지키는 것은 "이름이 몇 개다" 가 아니라 **"절차 없는 이름이
+    없다"** 이고, 그래서 목록을 늘리는 것이 아니라 **절차와 맞춰** 본다 —
+    엑시즈는 :data:`~engine.xyz_summon.XYZ_SUMMON_PROCEDURE` 가 있고,
+    융합 · 싱크로 · 의식 · 펜듈럼은 여전히 **이름도 절차도 없다.**
     """
-    assert [k.value for k in SummonKind] == ["normal", "special", "link"]
+    assert [k.value for k in SummonKind] == ["normal", "special", "xyz", "link"]
 
     #: 🔴 **이름마다 절차가 있는가.** 이 대조가 이 테스트의 요점이다.
     from engine.link_summon import LINK_SUMMON_PROCEDURE
     from engine.normal_summon import NORMAL_SUMMON_PROCEDURE
+    from engine.xyz_summon import XYZ_SUMMON_PROCEDURE
 
     procedures = (
         NORMAL_SUMMON_PROCEDURE,
         SPECIAL_SUMMON_PROCEDURE,
         LINK_SUMMON_PROCEDURE,
+        XYZ_SUMMON_PROCEDURE,
     )
     assert {p.summon for p in procedures} == set(SummonKind)
 
     #: 아직 없는 소환법의 이름이 들어오지 않았다.
-    assert not {"fusion", "synchro", "xyz", "ritual", "pendulum"} & {
+    #: 🔴 ``xyz`` 가 이 목록을 떠났다 — 절차가 생겼기 때문이다.
+    assert not {"fusion", "synchro", "ritual", "pendulum"} & {
         k.value for k in SummonKind
     }
 

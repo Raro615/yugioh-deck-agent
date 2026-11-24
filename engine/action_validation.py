@@ -153,6 +153,12 @@ _COMPLETE_RULES: frozenset[PlayerActionKind] = frozenset(
         # 링크 몬스터를 ``UNKNOWN`` 으로 남기므로, 여기 올려도 범위가
         # 넓어지지 않는다 (``ACTIVATE_EFFECT`` 와 같은 구조).
         PlayerActionKind.LINK_SUMMON,
+        # Phase 6-BO — 엑시즈 소환. 범위는
+        # ``engine.xyz_rules.XYZ_ALTERNATIVE_RULES`` 가 정하고 그 밖의 모든
+        # 엑시즈 몬스터를 ``_XyzMaterialsLegal`` 이 ``UNKNOWN`` 으로
+        # 남기므로, 여기 올려도 범위가 넓어지지 않는다 (``LINK_SUMMON`` 과
+        # 같은 구조).
+        PlayerActionKind.XYZ_SUMMON,
         # Phase 6-BN — 패에서 자신을 특수 소환하는 **카드별 절차**. 범위는
         # ``engine.hand_summon.HAND_SUMMON_RULES`` 가 정하고 그 밖의 모든
         # 카드를 ``_HandSummonLegal`` 이 ``UNKNOWN`` 으로 남기므로, 여기
@@ -620,6 +626,70 @@ def _normal_summon(
 
 #: 특수 소환 조건을 읽는 계층이 없다는 사실. ``missing_rule`` 에 그대로 실린다.
 SPECIAL_SUMMON_CONDITION_RULE = "special-summon-condition (카드마다 다르다)"
+
+
+#: 엑시즈 소환을 선언할 수 있는 페이즈. 링크 소환과 같다.
+XYZ_SUMMON_PHASES = MAIN_PHASES
+
+
+def _xyz_summon(
+    validator: ActionValidator, action: PlayerAction
+) -> tuple[Requirement, ...]:
+    """
+    엑시즈 소환. **이 목록을 전부 통과하면 허가가 난다** (``_COMPLETE_RULES``).
+
+    🔴 :func:`_link_summon` 과 **같은 모양이고 같은 이유**다. 허가가 나는
+    범위는 :data:`~engine.xyz_rules.XYZ_ALTERNATIVE_RULES` 에 손으로 적힌
+    카드뿐이고, 적히지 않은 카드는 마지막 요구가 ``UNKNOWN`` 으로 막는다.
+
+    소환권을 보지 않는다 — 엑시즈 소환은 특수 소환이므로 그 권리를 쓰지
+    않는다.
+
+    빈 칸도 여기서 보지 않는다.
+    :func:`~engine.xyz_rules.assess_xyz_materials` 가 **소재가 떠난 뒤의
+    판**으로 세기 때문이다 — 대체 절차의 소재는 엑스트라 몬스터 존에 서
+    있으므로, 여기서 ``ZONE_FULL`` 로 잡으면 합법인 엑시즈 소환이 전부
+    거절된다.
+    """
+    return (
+        Requirement(
+            IsTurnPlayer(PlayerRef.CONTROLLER),
+            ValidationCode.NOT_TURN_PLAYER,
+            "자신의 턴이 아닙니다.",
+        ),
+        Requirement(
+            PhaseIs(XYZ_SUMMON_PHASES),
+            ValidationCode.WRONG_PHASE,
+            "메인 페이즈가 아닙니다.",
+        ),
+        Requirement(
+            ControllerIs(PlayerRef.CONTROLLER, action.source),
+            ValidationCode.SOURCE_NOT_CONTROLLED,
+            "자신의 엑스트라 덱 카드가 아닙니다.",
+        ),
+        Requirement(
+            IsMonster(action.source),
+            ValidationCode.SOURCE_WRONG_CARD_TYPE,
+            "몬스터가 아닙니다.",
+        ),
+        #: 🔴 **엑시즈 소환도 특수 소환이다** (공식 룰북). 자리가 소재
+        #: 요구보다 **앞**인 것이 뜻을 가진다 — 링크 소환과 같다.
+        Requirement(
+            SpecialSummonPermitted(),
+            ValidationCode.SPECIAL_SUMMON_FORBIDDEN,
+            "이 판에서는 특수 소환이 금지되어 있습니다.",
+        ),
+        #: 🔴 **판정은 한 곳에서만 한다.** 엑시즈 몬스터인가 · 소재가
+        #: 조건에 맞는가 · 이 턴에 이미 특수 소환했는가 · 놓을 칸이
+        #: 있는가를 여기서 다시 적지 않고
+        #: :func:`~engine.xyz_rules.assess_xyz_materials` 에게 묻는다 —
+        #: 후보 생성기도 **같은 함수**를 부른다.
+        Requirement(
+            _XyzMaterialsLegal(action.source, action.materials),
+            ValidationCode.XYZ_MATERIAL_INVALID,
+            "고른 소재가 그 엑시즈 몬스터의 소재 조건을 만족하지 않습니다.",
+        ),
+    )
 
 
 def _special_summon(
@@ -1347,6 +1417,7 @@ _REQUIREMENT_BUILDERS: dict[
     PlayerActionKind.NORMAL_SUMMON: _normal_summon,
     PlayerActionKind.SPECIAL_SUMMON: _special_summon,
     PlayerActionKind.LINK_SUMMON: _link_summon,
+    PlayerActionKind.XYZ_SUMMON: _xyz_summon,
     PlayerActionKind.SET_MONSTER: _set_monster,
     PlayerActionKind.SET_SPELL_TRAP: _set_spell_trap,
     PlayerActionKind.CHANGE_POSITION: _change_position,
@@ -2448,6 +2519,85 @@ class _HandSummonLegal(Condition):
         which = str(self.instance) if self.instance is not None else "자신"
         where = "칸 미지정" if self.slot is None else f"칸 {self.slot}"
         return f"{which} 를 패에서 특수 소환할 수 있는가 ({where})"
+
+
+@dataclass(frozen=True, slots=True)
+class _XyzMaterialsLegal(Condition):
+    """
+    고른 소재로 그 엑시즈 몬스터를 엑시즈 소환할 수 있는가 (Phase 6-BO).
+
+    판정은 :func:`~engine.xyz_rules.assess_xyz_materials` 하나가 한다 —
+    :class:`_LinkMaterialsLegal` 이 ``assess_link_materials`` 에게 묻는 것과
+    **같은 자리**이고 같은 이유다 (검증기와 후보 생성기가 같은 답을 써야
+    한다).
+
+    세 갈래가 그대로 보존된다.
+
+    - ``LEGAL`` → ``TRUE``
+    - ``ILLEGAL`` → ``FALSE``
+    - ``UNDETERMINED`` → ``UNKNOWN`` (+ 없는 규칙 이름)
+
+    🔴 **등재되지 않은 엑시즈 몬스터가 여기서 막힌다.** 그래서
+    ``PlayerActionKind.XYZ_SUMMON`` 을 ``_COMPLETE_RULES`` 에 올려도 범위가
+    넓어지지 않는다 — 넓어진 범위는
+    :data:`~engine.xyz_rules.XYZ_ALTERNATIVE_RULES` 에 적힌 카드만큼이다.
+    """
+
+    instance: InstanceId | None = None
+    materials: tuple[InstanceId, ...] = ()
+
+    def evaluate(self, view, context) -> ConditionResult:
+        assessment = self._assess(view, context)
+        if assessment.permits_procedure:
+            return ConditionResult.TRUE
+        if assessment.is_refusal:
+            return ConditionResult.FALSE
+        return ConditionResult.UNKNOWN
+
+    def unknown_reasons(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        if assessment.permits_procedure or assessment.is_refusal:
+            return ()
+        return (assessment.reason,)
+
+    def missing_rules(self, view, context) -> tuple[str, ...]:
+        rule = self._assess(view, context).missing_rule
+        return (rule,) if rule else ()
+
+    def refusal_reasons(self, view, context) -> tuple[str, ...]:
+        assessment = self._assess(view, context)
+        return (assessment.reason,) if assessment.is_refusal else ()
+
+    def _assess(self, view, context):
+        # 🔴 **판정 모듈에서 읽는다** (:mod:`engine.xyz_rules`). 절차
+        # (``engine.xyz_summon``) 를 읽으면 ``engine.summon`` ·
+        # ``engine.token`` 이 딸려 오고 그 길은 이 파일로 되돌아온다 —
+        # ``_LinkMaterialsLegal`` 의 설명과 같은 고리다.
+        from engine.xyz_rules import assess_xyz_materials
+
+        source = self.instance if self.instance is not None else context.source
+        return assess_xyz_materials(view, context.player, source, self.materials)
+
+    def canonical_state(self) -> tuple:
+        return (
+            "xyz_materials_legal",
+            self.instance.value if self.instance else None,
+            tuple(m.value for m in self.materials),
+        )
+
+    def to_dict(self) -> dict:
+        data: dict = {
+            "kind": "xyz_materials_legal",
+            "materials": [m.value for m in self.materials],
+        }
+        if self.instance is not None:
+            data["instance"] = self.instance.value
+        return data
+
+    def describe_ko(self) -> str:
+        which = str(self.instance) if self.instance is not None else "자신"
+        sent = " · ".join(str(m) for m in self.materials) or "없음"
+        return f"{which} 를 소재 {sent} 로 엑시즈 소환할 수 있다"
 
 
 @dataclass(frozen=True, slots=True)

@@ -37,6 +37,23 @@ class PlayerState:
         for zone in PLAYER_ZONES:
             if zone not in self.zones:
                 self.zones[zone] = ZoneContainer(zone, self.player_id)
+        #: 🔴 **소재 보관함** (Phase 6-BO). ``PLAYER_ZONES`` 에는 **넣지
+        #: 않는다** — 엑시즈 소재는 존에 있는 것이 아니라 숙주가 들고 있고
+        #: (``engine.vocabulary.Zone.OVERLAY`` 의 설명), 「존의 카드 수」 를
+        #: 묻는 조건이 소재를 세기 시작하면 규칙이 달라진다.
+        #:
+        #: 그런데 **객체가 살 곳은 있어야 한다.** 인스턴스는 존 컨테이너에만
+        #: 살고 (:meth:`find_instance`), ``CardInstance.materials`` 는
+        #: ``InstanceId`` 만 들고 있다 — 컨테이너에서 빼기만 하면 그 카드의
+        #: **card_id 도 표시 형식도 어디서도 읽을 수 없게 된다** (실측:
+        #: 6-BO 의 첫 판에서 ``find_instance`` 가 ``None`` 을 돌려주었다).
+        #:
+        #: 그래서 보관함은 **있고**, 어느 숙주 아래 몇 번째인지는 그 숙주의
+        #: ``materials`` 가 적는다. 두 기록은 다른 질문에 답한다.
+        if Zone.OVERLAY not in self.zones:
+            self.zones[Zone.OVERLAY] = ZoneContainer(
+                Zone.OVERLAY, self.player_id
+            )
 
     # ------------------------------------------------------------------
     # 존 접근
@@ -94,9 +111,20 @@ class PlayerState:
                 return container
         return None
 
+    @property
+    def overlay(self) -> ZoneContainer:
+        """엑시즈 소재들이 **사는 곳** (Phase 6-BO · :meth:`__post_init__`)."""
+        return self.zones[Zone.OVERLAY]
+
     def all_instances(self) -> list[CardInstance]:
+        """
+        이 플레이어의 카드 전부 — **소재까지** (Phase 6-BO).
+
+        🔴 소재도 판에 있는 카드다. 빼면 "듀얼에 있는 카드 전부" 라는 말이
+        거짓이 되고, 소재가 된 카드를 세는 쪽이 그것을 못 본다.
+        """
         cards: list[CardInstance] = []
-        for zone in PLAYER_ZONES:
+        for zone in (*PLAYER_ZONES, Zone.OVERLAY):
             cards.extend(self.zones[zone])
         return cards
 
@@ -124,7 +152,12 @@ class PlayerState:
             self.life_points,
             tuple(
                 self.zones[zone].canonical_state(instance_key)
-                for zone in PLAYER_ZONES
+                #: 🔴 **소재 보관함이 해시에 들어간다** (Phase 6-BO).
+                #: 숙주의 ``materials`` 는 **자리 번호**만 싣는다 — 어느
+                #: 카드가 소재인지(``card_id``)는 그 보관함만 안다. 빼면
+                #: 스켈레촌이 붙은 판과 기르수가 붙은 판이 같은 해시를
+                #: 갖고, 탐색의 중복 제거가 둘을 합친다.
+                for zone in (*PLAYER_ZONES, Zone.OVERLAY)
                 if zone in self.zones
             ),
         )

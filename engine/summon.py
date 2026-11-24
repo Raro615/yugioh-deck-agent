@@ -398,6 +398,7 @@ def duel_executor(journal=None) -> "ActionExecutor":
     - Phase 3-E-1-B: ``ATTACK``
     - Phase 3-E-2: ``SET_MONSTER`` · ``SET_SPELL_TRAP``
     - Phase 6-AC: ``LINK_SUMMON``
+    - Phase 6-BO: ``XYZ_SUMMON``
 
     🔴 ``LINK_SUMMON`` 을 :func:`summon_executor` 에 넣지 않은 이유: 그
     이름이 말하는 것은 "일반 소환과 특수 소환 둘" 이고 (docstring 이 그렇게
@@ -408,6 +409,7 @@ def duel_executor(journal=None) -> "ActionExecutor":
     from engine.battle import AttackHandler
     from engine.link_summon import LinkSummonHandler
     from engine.set_card import SetMonsterHandler, SetSpellTrapHandler
+    from engine.xyz_summon import XyzSummonHandler
 
     return (
         summon_executor(journal=journal)
@@ -415,6 +417,10 @@ def duel_executor(journal=None) -> "ActionExecutor":
         .register(PlayerActionKind.SET_MONSTER, SetMonsterHandler())
         .register(PlayerActionKind.SET_SPELL_TRAP, SetSpellTrapHandler())
         .register(PlayerActionKind.LINK_SUMMON, LinkSummonHandler())
+        #: 🔴 **엑시즈가 Phase 6-BO 에서 들어왔다.** 링크와 같은 자리이고
+        #: 같은 이유다 — 소재를 고르는 절차는 "일반 소환과 특수 소환 둘"
+        #: 이라는 :func:`summon_executor` 의 설명 밖이다.
+        .register(PlayerActionKind.XYZ_SUMMON, XyzSummonHandler())
     )
 
 

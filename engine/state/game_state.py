@@ -427,6 +427,71 @@ class GameState:
             self.relations.break_for(moved.instance_id)
         return moved
 
+    def attach_material(
+        self,
+        host: CardInstance | InstanceId,
+        card: CardInstance | InstanceId,
+    ) -> CardInstance:
+        """
+        카드를 **다른 카드 아래의 소재로** 옮긴다 (Phase 6-BO).
+
+        🔴 **:meth:`move` 로 할 수 없다.** ``Zone.OVERLAY`` 는 플레이어 존이
+        아니므로 (:data:`~engine.vocabulary.PLAYER_ZONES` 에 없다 — 소재는
+        숙주가 들고 있다) ``players[p].zone(OVERLAY)`` 라는 컨테이너가 없다.
+        그래서 옮기는 자리가 따로 필요하고, **여기가 그 하나다.**
+
+        하는 일은 셋이다.
+
+        1. 지금 있는 컨테이너에서 뺀다 (있으면).
+        2. ``zone`` 을 ``OVERLAY`` 로, ``sequence`` 를 숙주 아래의 순번으로
+           맞춘다 — 컨테이너가 해 주던 일을 여기서 대신한다.
+        3. 숙주의 :attr:`~engine.state.card_instance.CardInstance.materials`
+           맨 뒤에 넣는다.
+
+        **옮겨도 되는지는 판정하지 않는다** (:meth:`move` 와 같은 규율).
+        적법성은 판정 계층의 질문이고, 여기서 보는 것은 "지시를 수행할 수
+        있는가" 뿐이다.
+
+        🔴 **대상 관계를 끊는다.** 존 종류가 바뀌므로 :meth:`move` 와 같은
+        처리다 — 공식 처리의 ``clear_relate_effect()`` 가 불리는 자리다.
+        """
+        owner = (
+            host if isinstance(host, CardInstance) else self.find_instance(host)
+        )
+        if owner is None:
+            raise KeyError(f"{host} 를 찾을 수 없습니다.")
+        moved = (
+            card if isinstance(card, CardInstance) else self.find_instance(card)
+        )
+        if moved is None:
+            raise KeyError(f"{card} 를 찾을 수 없습니다.")
+        if moved.instance_id == owner.instance_id:
+            raise ValueError("카드가 자기 아래의 소재가 될 수는 없습니다.")
+        if moved.instance_id in owner.materials:
+            raise ValueError(
+                f"{moved.instance_id} 는 이미 {owner.instance_id} 의 소재입니다."
+            )
+
+        #: :meth:`locate` 는 **컨테이너**를 돌려준다 (존 이름이 아니다).
+        #: :meth:`locate` 는 **컨테이너**를 돌려준다 (존 이름이 아니다).
+        source = self.locate(moved.instance_id)
+        moved.snapshot_previous()
+        if source is not None:
+            source.remove(moved)
+        #: 🔴 **보관함에 넣는다** (:meth:`~engine.state.player.PlayerState.
+        #: overlay`). 컨테이너가 ``zone`` · ``sequence`` · ``controller`` 를
+        #: 맞춰 주므로 여기서 손으로 적지 않는다 — 존과 인스턴스가 서로
+        #: 다른 말을 하는 상태를 만들지 않는 규율이다.
+        #:
+        #: 🔴 **컨트롤러는 숙주를 따른다**: 보관함을 숙주의 컨트롤러 쪽에서
+        #: 고르므로 컨테이너가 그 값을 넣는다. 그리고 ``sequence`` 는
+        #: 보관함 안의 자리이고, **숙주 아래 몇 번째인지는** 숙주의
+        #: ``materials`` 순서가 적는다 (두 기록의 질문이 다르다).
+        self.players[owner.controller].overlay.append(moved)
+        owner.materials.append(moved.instance_id)
+        self.relations.break_for(moved.instance_id)
+        return moved
+
     def draw(self, player_id: int, count: int = 1) -> list[CardInstance]:
         """
         덱 맨 위에서 패로 옮긴다. **드로우 규칙이 아니라 존 이동일 뿐이다** —
