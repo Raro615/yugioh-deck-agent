@@ -379,6 +379,11 @@ def test_a_the_library_is_exactly_eighteen_real_cards():
         #: 그 비용은 **행위**가 들고 가고 (``PlayerAction.cost_cards``),
         #: 패에 넣을 카드는 해결 중에 고른다.
         48835607,
+        #: 🔴 Phase 6-BO — 시오르페골 딩기르수. **엑시즈 몬스터의 첫
+        #: 등재**이고, **소재로 붙이는 첫 등재**이며 (``Zone.OVERLAY``),
+        #: **제외 존에서 고르는 첫 등재**다. 유발이지만 반응하는 사건이
+        #: 기르수 · 성유물과 다르다 (``EVENT_SPSUMMON_SUCCESS``).
+        93854893,
     }
 
 
@@ -450,6 +455,9 @@ def test_a_fifteen_real_effect_refs_are_executable():
         #: 🔴 Phase 6-BI — 오르페골 갈라테아i 는 ``ordinal`` 이 **2** 다
         #: (공식 블록 일곱 중 ``e3``). 같은 이유로 손으로 적는다.
         EffectRef(48835607, 2),
+        #: 🔴 Phase 6-BO — 시오르페골 딩기르수 는 ``ordinal`` 이 **1** 이다
+        #: (공식 블록 둘 중 ``e2``). 같은 이유로 손으로 적는다.
+        EffectRef(93854893, 1),
     }
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 Phase 6-AF — 기르수 ③(토큰 생성)이 더해졌다 (16 → **17**).
@@ -458,7 +466,10 @@ def test_a_fifteen_real_effect_refs_are_executable():
     #: 🔴 Phase 6-BI — 갈라테아i ② 가 더해졌다 (20 → **21**).
     #: 🔴 21 → **22** (Phase 6-BJ) — 갈라테아i ③ (묘지 소생) 다. 이 시험이 지키는
     #: 사실은 그대로이고, 수가 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
-    assert len(executable) == 22
+    #: 🔴 22 → **23** (Phase 6-BO) — 딩기르수 ② 다. 이 시험이 지키는
+    #: 사실은 그대로이고, 수가 움직인 것은 **다른 Phase 가 등재했기
+    #: 때문**이다.
+    assert len(executable) == 23
 
 
 def test_a_every_declined_card_says_what_is_missing():
@@ -564,6 +575,12 @@ def test_a_operation_coverage_by_real_cards():
         #: (``c30741503.lua`` 의 ``s.tdop`` 이 ``Duel.SSet`` 를 쓴다).
         #: 🔴 **발동이 아니다** — 뒷면으로 놓을 뿐이다.
         OperationKind.SET_SPELL_TRAP,
+        #: 🔴 Phase 6-BO — ``ATTACH_AS_MATERIAL`` 도 **처음부터 A** 다.
+        #: 이 종류를 더한 까닭이 실제 카드 하나이기 때문이다: 딩기르수 ②
+        #: 가 제외된 자신의 기계족 1장을 자기 엑시즈 소재로 붙인다
+        #: (``c93854893.lua`` 의 ``s.effop`` 이 ``Duel.Overlay`` 를 쓴다).
+        #: 🔴 **소환도 이동도 아니다** — 숙주 아래로 겹칠 뿐이다.
+        OperationKind.ATTACH_AS_MATERIAL,
     }
     # B. synthetic 으로만 검증된 종류 (STRUCTURAL-66)
     #

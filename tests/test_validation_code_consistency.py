@@ -113,6 +113,11 @@ ADDED_IN_PHASE_6AD = frozenset({"SPECIAL_SUMMON_FORBIDDEN"})
 #: ``INVALID`` 쪽이다 — 모름이 아니라 확인된 거부다.
 ADDED_IN_PHASE_6AQ_FOLLOWUP = frozenset({"TARGET_RELATION_LOST"})
 
+#: 🔴 Phase 6-BO 가 하나를 더했다 — 엑시즈 소재가 절차를 만족하지 않는다는
+#: 거절이고 **``INVALID``** 다. 숫자를 올리지 않고 **무엇이 늘었는지를
+#: 이름으로** 고정하는 이 파일의 방식 그대로다.
+ADDED_IN_PHASE_6BO = frozenset({"XYZ_MATERIAL_INVALID"})
+
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -462,6 +467,7 @@ def test_09_no_new_vocabulary_was_added():
     assert ADDED_IN_FOLLOWUP8 <= set(ValidationCode.__members__)
     assert ADDED_IN_PHASE_6AC <= set(ValidationCode.__members__)
     assert ADDED_IN_PHASE_6AD <= set(ValidationCode.__members__)
+    assert ADDED_IN_PHASE_6BO <= set(ValidationCode.__members__)
     assert ADDED_IN_PHASE_6AQ_FOLLOWUP <= set(ValidationCode.__members__)
     assert (
         len(ValidationCode)
@@ -471,6 +477,8 @@ def test_09_no_new_vocabulary_was_added():
         #: 🔴 Phase 6-AQ 후속의 하나를 뺀다 — 숫자 48 을 올리지 않고
         #: **무엇이 늘었는지를 이름으로** 고정하는 이 파일의 방식 그대로다.
         - len(ADDED_IN_PHASE_6AQ_FOLLOWUP)
+        #: 🔴 Phase 6-BO 의 하나도 같은 방식으로 뺀다 (``XYZ_MATERIAL_INVALID``).
+        - len(ADDED_IN_PHASE_6BO)
         == 48
     )
     #: 🔴 셋 다 ``INVALID`` 다 — 모름 쪽은 7 그대로다.

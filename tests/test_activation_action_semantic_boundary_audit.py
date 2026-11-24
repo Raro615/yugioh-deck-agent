@@ -561,7 +561,9 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 카드 22 · 차이는 여전히 기르수 한 장에 둘).
     #: 🔴 22 → **23** (Phase 6-BI) — 갈라테아i 도 **새 카드**다
     #: (등재 24 · 카드 23 · 차이는 여전히 기르수 한 장에 둘).
-    assert len(card_ids) == 23
+    #: 🔴 23 → **24** (Phase 6-BO) — 딩기르수도 **새 카드**다 (등재 26 ·
+    #: 카드 24 · 차이는 기르수 한 장에 둘 · 갈라테아i 한 장에 둘).
+    assert len(card_ids) == 24
 
     kinds = collections.Counter()
     executable_kinds = collections.Counter()
@@ -599,7 +601,11 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 함정 5 는 여기서도 **그대로**다 — 그 효과가 덱 · 묘지에서 패에
     #: 넣는 카드(바벨 · 성유물)는 **등재된 효과가 아니다.** 등재된
     #: 것은 패에 넣는 **몬스터 효과** 하나다.
-    assert kinds["monster"] == 7, dict(kinds)
+    #: 🔴 7 → **8** (Phase 6-BO, 시오르페골 딩기르수 ②). 마법 11 ·
+    #: 함정 5 는 여기서도 **그대로**다 — 그 효과가 소재로 붙이는 카드는
+    #: **등재된 효과가 아니다.** 등재된 것은 붙이는 **몬스터 효과**
+    #: 하나이고, 늘어난 쪽이 몬스터이고 거기뿐이다.
+    assert kinds["monster"] == 8, dict(kinds)
     assert kinds["spell"] + kinds["trap"] == 16, dict(kinds)
     #: 🔴 **실행되는 몬스터가 하나 있다** (Phase 6-L · 어니스트 ①). 6-K
     #: 시점에는 0이었고 그것이 그때의 사실이었다. 단언을 지우지 않는다 —
@@ -614,7 +620,10 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 🔴 6 → **7** (Phase 6-BI, 갈라테아i ② 도 ``executable=True`` 다).
     #: 마법 · 함정 쪽 13 은 **그대로**이고, 그것이 "늘어난 쪽이
     #: 몬스터이고 거기뿐" 을 센다.
-    assert executable_kinds["monster"] == 7, dict(executable_kinds)
+    #: 🔴 7 → **8** (Phase 6-BO, 딩기르수 ② 도 ``executable=True`` 다).
+    #: 마법 9 · 함정 4 는 **그대로**이고, 그것이 "늘어난 쪽이 몬스터이고
+    #: 거기뿐" 을 센다.
+    assert executable_kinds["monster"] == 8, dict(executable_kinds)
     assert executable_kinds["spell"] + executable_kinds["trap"] == 13, dict(
         executable_kinds
     )
@@ -623,7 +632,9 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 🔴 18 → **19** (Phase 6-BF) — 같은 이유다.
     #: 🔴 19 → **20** (Phase 6-BI) — 같은 이유다 (마법 9 · 함정 4 는
     #: 그대로이고 늘어난 쪽은 몬스터뿐이다).
-    assert sum(executable_kinds.values()) == 20, dict(executable_kinds)
+    #: 🔴 20 → **21** (Phase 6-BO) — 같은 이유다 (마법 9 · 함정 4 는
+    #: 그대로이고 늘어난 쪽은 몬스터뿐이다).
+    assert sum(executable_kinds.values()) == 21, dict(executable_kinds)
 
 
 def test_13_the_engine_splits_on_effect_ref_not_on_card_versus_effect(repository):

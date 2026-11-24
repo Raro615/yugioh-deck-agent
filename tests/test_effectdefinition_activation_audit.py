@@ -157,6 +157,14 @@ ACTIVATION_FROM_SET_TARGET = (
     #: 기르수 · 어리석은 매장과 같은 모양이다 — 발동 조건이 ``SetTarget``
     #: 의 ``chk==0`` 갈래에서 나온다.
     93920420,  # 성유물－『성장』 — GetLocationCount(tp,LOCATION_MZONE)>0
+    #: 🔴 Phase 6-BO — 시오르페골 딩기르수 ②. ``s.efftg`` 의 ``chk==0``
+    #: 갈래가 ``b1 or b2`` 이고, 그 블록에 조건 함수(``SetCondition``)는
+    #: **없다** (``e1`` 도 ``SetTarget`` 만 쓴다). 🔴 등재한 것은 ``b2``
+    #: 쪽 하나다 — ``IsExistingMatchingCard(s.matfilter,tp,LOCATION_REMOVED,
+    #: 0,1,nil,tp)`` 에서 ``ZoneCountAtLeast(CONTROLLER, REMOVED, 1)`` 로
+    #: 옮겼다. ``b1`` (상대 필드의 카드 1장을 묘지로) 은 **옮기지 않았고**,
+    #: 옮기지 않은 것은 여전히 범위 밖이다 (ADR-006).
+    93854893,  # 딩기르수       — IsExistingMatchingCard(... LOCATION_REMOVED ... 1 ...)
 )
 
 
@@ -795,7 +803,11 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: 🔴 15 → **16** (Phase 6-BJ) — 갈라테아i ③ 의 발동 조건도
     #: ``Not(FaceUpCardPresent(…, 바벨))`` **하나**이고 판정 가능한 상태
     #: 조건이다 (공식 ``aux.NOT(s.babelcon)`` 에서 옮겼다).
-    assert len(with_activation) == 16
+    #: 🔴 16 → **17** (Phase 6-BO) — 딩기르수 ② 의 발동 조건은
+    #: ``ZoneCountAtLeast(CONTROLLER, REMOVED, 1)`` **하나**이고 판정 가능한
+    #: 상태 조건이다 (공식 ``Duel.GetFieldGroupCount(tp,0,LOCATION_REMOVED)``
+    #: 에서 옮겼다) — 자리표시자가 아니다.
+    assert len(with_activation) == 17
 
     #: 🔴 **Phase 6-AF — ``card_id → ordinal`` 사전으로는 더 가를 수 없다.**
     #: 기르수가 블록 둘을 등재했으므로 (① 과 ③) 사전은 하나를 덮어쓴다.
@@ -809,8 +821,8 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     ]
     from_target = [ref.card_id for ref in from_target_refs]
     assert sorted(from_target) == sorted(ACTIVATION_FROM_SET_TARGET)
-    #: 🔴 7 → **8** (Phase 6-V) → **9** (Phase 6-AC).
-    assert len(from_target) == 9
+    #: 🔴 7 → **8** (Phase 6-V) → **9** (Phase 6-AC) → **10** (Phase 6-BO).
+    assert len(from_target) == 10
 
     #: 아홉 장 모두 ``SetTarget`` 이 있고 ``chk==0`` 분기를 가진다.
     #: 🔴 Phase 6-AC — **등재한 블록의 ordinal 로** 묻는다. 성유물－

@@ -279,7 +279,10 @@ def test_06_the_validity_is_not_stored_but_is_derivable_from_the_code():
     #: 🔴 Phase 6-AC 가 둘을 더했다 — ``EFFECT_USE_LIMIT_REACHED`` ·
     #: ``LINK_MATERIAL_INVALID``. **둘 다 ``INVALID``** 이므로 모름 쪽은
     #: 그대로이고 확정 거부 쪽만 늘었다 (보완8 과 같은 결).
-    assert sum(1 for v in recoverable.values() if v is not None) == 54
+    #: 🔴 54 → **55** (Phase 6-BO) — ``XYZ_MATERIAL_INVALID`` 도
+    #: **``INVALID``** 이므로 모름 쪽은 그대로이고 확정 거부 쪽만 늘었다.
+    #: 복구 불가로 남는 하나는 여전히 ``CHAIN_DEFINITION_UNAVAILABLE`` 다.
+    assert sum(1 for v in recoverable.values() if v is not None) == 55
     assert [n for n, v in recoverable.items() if v is None] == [
         "CHAIN_DEFINITION_UNAVAILABLE"
     ]

@@ -272,7 +272,13 @@ PRODUCTION_CONSTRUCTION_COUNT = 2
 #: ``PRODUCTION_CONSTRUCTION_COUNT`` 가 따로 센다), 비율이 재던 모집단
 #: (``engine/action_validation.py`` 의 두 곳) 도 그대로이며 배수(30)도
 #: 낮추지 않았다.
-RULE_NOT_IMPLEMENTED_MENTIONS = 127
+#: 🔴 127 → **135** (Phase 6-BO, +8). 늘어난 여덟은 전부 엑시즈 쪽이다 —
+#: ``engine/xyz_rules.py`` 가 "절차를 읽지 못했다" 를 적는 자리와 그 까닭을
+#: 적은 주석, 그리고 ``_XyzMaterialsLegal`` 이 조건부로 이름을 내는 자리다.
+#: 이 수가 가리키는 요지("코드 등장이 생성의 수십 배다")는 그대로이고,
+#: **생성 자리는 하나도 늘지 않았다** (``PRODUCTION_CONSTRUCTIONS`` 가 둘
+#: 그대로다 — 엑시즈 쪽은 자리표시자를 쓰지 않고 조건 객체로 적는다).
+RULE_NOT_IMPLEMENTED_MENTIONS = 135
 
 #: ``missing_rules`` 를 override 하는 production 클래스 — 7 → **8개**
 #: (Phase 6-D). ``UnimplementedRule`` 은 그중 **하나**일 뿐이다.
@@ -299,6 +305,13 @@ MISSING_RULES_OVERRIDES = {
     ("engine/action_validation.py", "_NormalSpellActivation"),
     ("engine/action_validation.py", "_NormalSummonProcedure"),
     ("engine/action_validation.py", "_LinkMaterialsLegal"),
+    #: 🔴 Phase 6-BO — ``_XyzMaterialsLegal`` 은 ``_LinkMaterialsLegal`` 과
+    #: **같은 쓰임**이다: 규칙 이름을 내기 위해 override 하고,
+    #: ``UnimplementedRule`` 이 아니면서 **조건부로** 낸다 (절차를 읽은
+    #: 엑시즈 몬스터에는 이름을 내지 않고, 읽지 못한 쪽 — 기본 절차의
+    #: 장수로 고른 경우 — 에만 낸다). 이 테스트가 지키는 사실은 그대로이고
+    #: 그 근거가 하나 늘었다.
+    ("engine/action_validation.py", "_XyzMaterialsLegal"),
     #: 🔴 Phase 6-AD — 특수 소환 금지 조건. ``UnimplementedRule`` 을 쓰지
     #: 않고 ``missing_rules`` 를 직접 채운다 (``summon-prohibition-scope``):
     #: 판정 모듈이 **왜** 모르는지 알고 있으므로 자리표시자가 필요 없다.
@@ -1082,7 +1095,11 @@ def test_13_the_effect_library_contains_no_unimplemented_rule_at_all():
     #: 🔴 15 → **16** (Phase 6-BJ) — 갈라테아i ③ 의 발동 조건도
     #: ``Not(FaceUpCardPresent(…, 바벨))`` **하나**이고 판정 가능한 상태
     #: 조건이다 (공식 ``aux.NOT(s.babelcon)`` 에서 옮겼다).
-    assert len(activations) == 16
+    #: 🔴 16 → **17** (Phase 6-BO) — 딩기르수 ② 의 발동 조건은
+    #: ``ZoneCountAtLeast(CONTROLLER, REMOVED, 1)`` **하나**이고 판정 가능한
+    #: 상태 조건이다 (공식 ``Duel.GetFieldGroupCount(tp,0,LOCATION_REMOVED)``
+    #: 에서 옮겼다) — 자리표시자가 아니다.
+    assert len(activations) == 17
     assert not any(isinstance(a, UnimplementedRule) for a in activations)
 
     #: 열 개 전부 **판정 가능한** 조건이다 — 자리표시자가 아니다.

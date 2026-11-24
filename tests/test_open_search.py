@@ -1833,11 +1833,17 @@ def test_l07_extra_deck_blockers_split_by_summon_kind(repository):
     """
     from engine.action import PlayerActionKind
 
-    #: 🔴 엔진에 **엑시즈 · 융합 소환 행동 종류가 아예 없다** — 그것이
-    #: 딩기르수(엑시즈) · 아자미나(융합) 가 후보가 되지 못하는 이유다.
+    #: 🔴 **Phase 6-BO 가 엑시즈 쪽을 끝냈다.** 그때까지 "엑시즈 · 융합
+    #: 소환 행동 종류가 아예 없다" 가 참이었고 그것이 두 카드가 후보가
+    #: 되지 못하는 이유였다. 6-BO 가 ``xyz_summon`` 을 실제 행동으로
+    #: 등재했으므로 **엑시즈 쪽 이유가 달라졌다** — 종류가 없는 것이
+    #: 아니라, 그 판에 소재가 될 카드가 없으면 후보가 서지 않는다.
+    #: 지우는 대신 **둘을 가른다**: 융합은 여전히 종류가 없고 (아래 줄),
+    #: 엑시즈는 종류가 있다. 이 시험이 지키는 사실은 "집계된 경고 한 줄로
+    #: 특정 카드를 단정하지 않는다" 이고, 그것은 그대로다.
     names = {kind.value for kind in PlayerActionKind}
     assert "link_summon" in names
-    assert not any("xyz" in name for name in names)
+    assert "xyz_summon" in names
     assert not any("fusion" in name for name in names)
 
     #: 🔴 소재 조건이 **기록된** 링크 몬스터와 **읽지 않은** 쪽을 가른다.

@@ -423,6 +423,11 @@ def test_b04_the_library_declares_the_kind_by_hand_for_exactly_one_effect():
         #: 같은 카드의 ② 가 필드에서 발동하는 것과 대비된다. 둘의 턴 제한도
         #: 서로 다른 칸을 쓴다 (② 는 카드명당 · ③ 은 효과당).
         EffectRef(48835607, 4): ActivationKind.IGNITION,
+        #: 🔴 Phase 6-BO — 시오르페골 딩기르수 ② 다. 분류가 **유발**이고
+        #: (``EVENT_SPSUMMON_SUCCESS``) 발동 자리는 **필드**다. 손으로
+        #: 적은 것은 분류가 아니라 **효과의 내용**이고, 유발 선언 자체는
+        #: ``trigger_compiler`` 가 공식 Lua 에서 옮겼다.
+        EffectRef(93854893, 1): ActivationKind.TRIGGER,
     }
     entry = next(e for e in EFFECT_LIBRARY if e.definition.effect_ref == HONEST_REF)
     #: 🔴 **Phase 6-L 에서 실행된다.** 6-K 시점에는 ``executable=False`` ·

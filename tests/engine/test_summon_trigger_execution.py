@@ -198,6 +198,10 @@ def test_a01_girsu_is_now_in_the_library_and_it_is_the_first_trigger(repository)
     assert [str(e.effect_ref) for e in others] == [
         "69811710:e[0]",  # Phase 6-V — 첫 유발
         "93920420:e[1]",  # Phase 6-AC — 특수 소환을 실행하는 첫 유발
+        #: 🔴 Phase 6-BO — **특수 소환 성공**에 반응하는 첫 유발이다
+        #: (``EVENT_SPSUMMON_SUCCESS``). 위 둘은 일반 소환 성공 · 묘지로
+        #: 감이었다 — 셋이 서로 다른 사건이다.
+        "93854893:e[1]",
     ]
 
 

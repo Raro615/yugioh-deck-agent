@@ -279,6 +279,13 @@ DECLARED_SECTIONS = {
     #: (6-AD · 6-AC · 보완8 과 같은 결). 처음에는 「비용 · 선택」 묶음
     #: 안에 적었다가, 이 파일이 지키는 그 사실에 맞춰 자기 묶음으로
     #: 옮겼다.
+    #: 🔴 Phase 6-BO 가 더한 묶음 — ``INVALID`` 하나다
+    #: (``XYZ_MATERIAL_INVALID``). 기존 열두 묶음의 멤버 수는 **하나도**
+    #: 바뀌지 않았다: 새 코드가 기존 묶음에 끼어들지 않았다는 뜻이다
+    #: (6-AQ 후속 · 6-AD · 6-AC · 보완8 과 같은 결). 처음에는 「횟수 제한 ·
+    #: 링크 소재 (Phase 6-AC)」 묶음 안에 적었다가, 이 파일이 지키는 그
+    #: 사실에 맞춰 자기 묶음으로 옮겼다 — 6-AQ 후속과 같은 고침이다.
+    "엑시즈 소재 (Phase 6-BO)": 1,
     "대상 관계 (Phase 6-AQ 후속)": 1,
 }
 
@@ -793,7 +800,11 @@ def test_10_source_forbidden_is_a_different_code_from_structural_source_forbidde
     #: 🔴 261 → **275** (Phase 6-BN, +14). ``_HandSummonLegal`` 이 쓰는
     #: 설명과 ``_zone_slot_of`` 가 이 자리보다 **위**에서 늘었다. 자리가
     #: **하나뿐**이라는 사실은 그대로이고, 그것이 이 단언이 지키는 것이다.
-    assert hits == [("engine/action_validation.py", 275)]
+    #: 🔴 275 → **281** (Phase 6-BO, +6). ``_xyz_summon`` 과
+    #: ``_XyzMaterialsLegal`` 이 쓰는 어휘가 이 자리보다 **위**에서 늘었다.
+    #: 자리가 **하나뿐**이라는 사실은 그대로이고, 그것이 이 단언이 지키는
+    #: 것이다 — 움직인 것은 줄 번호뿐이다.
+    assert hits == [("engine/action_validation.py", 281)]
 
 
 # ======================================================================

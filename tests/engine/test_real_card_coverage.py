@@ -258,6 +258,9 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
     #: 🔴 **아홉째가 들어왔다** (Phase 6-BJ) — 오르페골 갈라테아i ③
     #: (묘지 소생) 이다. 같은 카드가 **두 번** 더 나오는 셈이고 (② · ③),
     #: 기르수와 같은 이유로 중복을 집합으로 바꾸지 않는다.
+    #: 🔴 **열째가 들어왔다** (Phase 6-BO) — 시오르페골 딩기르수 ② 다.
+    #: 같은 이유다 (``EFFECT_TYPE_ACTIVATE`` 가 아닌 몬스터 효과이고, 이쪽은
+    #: ``EFFECT_TYPE_TRIGGER_O`` 다).
     assert not_activate == [
         HONEST,
         GIRSU,
@@ -268,6 +271,7 @@ def test_a_the_engine_targets_activate_only_cards(corpus, activate_only):
         21441617,
         48835607,
         48835607,
+        93854893,
     ], (
         not_activate
     )
@@ -345,6 +349,9 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
     #: 🔴 **아홉째가 들어왔다** (Phase 6-BJ) — 오르페골 갈라테아i ③
     #: (묘지 소생) 이다. 같은 카드가 **두 번** 더 나오는 셈이고 (② · ③),
     #: 기르수와 같은 이유로 중복을 집합으로 바꾸지 않는다.
+    #: 🔴 **열째가 들어왔다** (Phase 6-BO) — 시오르페골 딩기르수 ② 다.
+    #: 같은 이유다 (``EFFECT_TYPE_ACTIVATE`` 가 아닌 몬스터 효과이고, 이쪽은
+    #: ``EFFECT_TYPE_TRIGGER_O`` 다).
     assert skipped == [
         HONEST,
         GIRSU,
@@ -355,6 +362,7 @@ def test_a_the_executing_cards_calibrate_the_classifier(corpus):
         21441617,
         48835607,
         48835607,
+        93854893,
     ], skipped
     assert corpus[HONEST]["blocks"] == 3
     assert corpus[GIRSU]["blocks"] >= 3
@@ -430,6 +438,11 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     #: 🔴 **갈라테아i 도 같은 이유로 예외다** (Phase 6-BI) — 일곱 장
     #: 다 **세는 범위가 다르다**.
     assert 48835607 not in set(activate_only)
+    #: 🔴 **딩기르수도 같은 이유로 예외다** (Phase 6-BO) — ``EFFECT_TYPE_
+    #: TRIGGER_O`` 인 몬스터 효과이고 ``EFFECT_TYPE_ACTIVATE`` 가 아니므로
+    #: 그 슬라이스에 들어오지 않는다. 여덟 장 다 "막는 것이 있다" 가
+    #: 아니라 **세는 범위가 다르다** 다.
+    assert 93854893 not in set(activate_only)
     #: 🔴 **갈라테아i 가 들어왔다** (Phase 6-BI) — 위의 여섯 장과 같은
     #: 이유로 ``activate_only`` 슬라이스 밖이므로 ``clean`` 에 들어올 수
     #: 없고, 그래서 이 예외 목록에 이름을 적는다.
@@ -443,6 +456,7 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
         21441617,
         30741503,
         48835607,
+        93854893,
     }
 
 

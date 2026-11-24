@@ -273,6 +273,23 @@ class ValidationCode(str, Enum):
     제한을 들고 있는지는 ``EffectDefinition.use_limit`` 이 말한다. 모르는
     것을 위반으로 접지 않는다.
     """
+    LINK_MATERIAL_INVALID = "link_material_invalid"
+    """
+    **고른 소재가 그 링크 몬스터의 소재 조건을 만족하지 않는다.**
+
+    장수 · 링크 수치만 맞은 것은 통과가 아니다 (공식 링크 소환 절차 —
+    "using monsters you control whose total number equals its Link Rating
+    **and that meet its material requirements**"). 조건을 **읽은** 링크
+    몬스터에만 쓴다 — 읽지 못한 카드는 ``RULE_NOT_IMPLEMENTED`` 이고
+    ``UNKNOWN`` 이다.
+    """
+
+    # --- 엑시즈 소재 (Phase 6-BO) ----------------------------------------
+    #: 🔴 **자기 묶음이다.** 「횟수 제한 · 링크 소재 (Phase 6-AC)」 안에
+    #: 적었다가 옮겼다 — 새 코드가 기존 묶음에 끼어들지 않는다는 것이
+    #: 이 enum 의 약속이고, 6-AQ 후속도 같은 이유로 「비용 · 선택」 에서
+    #: 옮겨 나왔다 (``tests/test_validation_code_rejection_semantics_audit``
+    #: 의 ``DECLARED_SECTIONS`` 가 묶음마다 멤버 수를 고정한다).
     XYZ_MATERIAL_INVALID = "xyz_material_invalid"
     """
     **고른 소재가 그 엑시즈 몬스터의 소재 조건을 만족하지 않는다**
@@ -286,16 +303,6 @@ class ValidationCode(str, Enum):
     ``RULE_NOT_IMPLEMENTED`` 이고 ``UNKNOWN`` 이다. 그리고 **기본 절차의
     장수로 고른 경우도 이 코드가 아니다**: 그쪽은 옮기지 않은 절차이므로
     역시 ``UNKNOWN`` 이다 (:data:`~engine.xyz_rules.XYZ_BASE_PROCEDURE_RULE`).
-    """
-    LINK_MATERIAL_INVALID = "link_material_invalid"
-    """
-    **고른 소재가 그 링크 몬스터의 소재 조건을 만족하지 않는다.**
-
-    장수 · 링크 수치만 맞은 것은 통과가 아니다 (공식 링크 소환 절차 —
-    "using monsters you control whose total number equals its Link Rating
-    **and that meet its material requirements**"). 조건을 **읽은** 링크
-    몬스터에만 쓴다 — 읽지 못한 카드는 ``RULE_NOT_IMPLEMENTED`` 이고
-    ``UNKNOWN`` 이다.
     """
 
     # --- 대상 관계 (Phase 6-AQ 후속) --------------------------------------

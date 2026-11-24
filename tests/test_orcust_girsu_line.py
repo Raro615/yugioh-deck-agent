@@ -1026,6 +1026,11 @@ def test_d03_an_effect_without_a_recorded_limit_is_untouched():
     #: ``SetCountLimit(1,id)`` 로 카드명당이고 ③ 은
     #: ``SetCountLimit(1,{id,1})`` 로 **효과당**이다. 둘의 칸이 섞이지
     #: 않는다는 것은 ``tests/test_galatea_i_grave_revival.py`` 의 b06 이 센다.
+    #: 🔴 **여덟 → 아홉** (Phase 6-BO, 시오르페골 딩기르수 ②). 그 효과도
+    #: 공식 ``SetCountLimit(1,id)`` 를 적으므로 제한이 **기록된** 쪽이고
+    #: 칸은 카드명당(``PER_CARD_NAME``)이다. 이 시험이 지키는 사실은
+    #: "제한이 적히지 않은 효과는 건드리지 않았다" 이고, 그 사실은
+    #: 그대로다 — 늘어난 것은 **적힌** 쪽이다.
     assert limited == {
         f"{GIRSU}:e[0]",
         f"{GIRSU}:e[2]",
@@ -1035,6 +1040,7 @@ def test_d03_an_effect_without_a_recorded_limit_is_untouched():
         "30741503:e[1]",
         "48835607:e[2]",
         "48835607:e[4]",
+        "93854893:e[1]",
     }, limited
 
 

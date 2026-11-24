@@ -782,8 +782,13 @@ def test_f04_no_registered_effect_asks_about_the_face():
         for entry in EFFECT_LIBRARY
         if "CardIsFaceUp" in repr(entry.definition)
     ]
+    #: 🔴 **Phase 6-BO 가 하나를 더했다** — 딩기르수 ② 의 후보 조건도
+    #: ``CardIsFaceUp()`` 을 적는다 (공식 ``s.matfilter`` 의
+    #: ``c:IsFaceup()``). 이 시험이 지키는 사실은 아래 두 줄 — **후보 생성
+    #: 밖에서는 쓰지 않는다** — 이고 그것은 그대로다.
     assert [(r.card_id, r.ordinal) for r in with_face] == [
-        (30741503, 1)
+        (30741503, 1),
+        (93854893, 1),
     ], with_face
 
     #: 🔴 **후보 생성 밖에서는 여전히 쓰지 않는다.** 등재부

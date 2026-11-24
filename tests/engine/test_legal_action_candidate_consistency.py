@@ -1961,6 +1961,15 @@ def test_i03_every_withheld_site_fills_missing_only_when_something_is_missing(
         "_stage_closed_actions",
         "_trigger_actions",
         "_withheld_board_actions",
+        #: 🔴 **정정 (Phase 6-BO).** 자리가 하나 늘어 열둘이다.
+        #:
+        #: ``_xyz_summon_actions``
+        #:     엑스트라 덱의 엑시즈 몬스터를 소재로 올리는 후보를 만드는
+        #:     자리. ``_link_summon_actions`` 와 **같은 이유**로 보류를
+        #:     적는다 — 절차를 읽지 못한 카드(기본 절차의 장수로 고른
+        #:     경우)와 소재 조건을 만족하지 못한 카드를 가려서 적지
+        #:     않으면 그 사실이 **후보에도 보류에도** 오르지 않는다.
+        "_xyz_summon_actions",
     ], sorted(by_function)
     #: 그 한 자리는 **언제나 ``missing`` 을 채운다** — 모름이므로 무엇이
     #: 없어서인지 적어야 한다 (``WithheldAction.__post_init__`` 의 규율).

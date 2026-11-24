@@ -391,7 +391,11 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: 사실을 그대로 들고 있다.
     #: 🔴 15 → **16** (Phase 6-BI) — 갈라테아i ② 의 대상 묶음 하나가
     #: 늘었고, 그것도 ``minimum=1, maximum=1`` 이다 (덱 · 묘지에서 1장).
-    assert bindings == 16
+    #: 🔴 16 → **17** (Phase 6-BO) — 딩기르수 ② 의 대상 묶음 하나가
+    #: 늘었고, 그것도 ``minimum=1, maximum=1`` 이다 (제외된 기계족 1장).
+    #: 이 시험이 지키는 사실은 "여러 장 선택은 하나뿐이고 가변 장수는
+    #: 없다" 이고, 그 둘은 아래 단언들이 그대로 들고 있다.
+    assert bindings == 17
     assert multi == [FINE], multi
     #: 🔴 7 → **8** (Phase 6-AO) — 디베르 ① 도 **정확히 1장**을 고른다
     #: (``SelectMatchingCard(...,1,1,...)``). 이 시험이 지키는 사실은
@@ -404,7 +408,10 @@ def test_a01_the_library_has_exactly_one_multi_select_and_no_variable_count():
     #: 1장이다 (``SelectTarget(...,1,1,nil)`` · ``g:Select(tp,1,1,nil)``).
     #: 🔴 11 → **12** (Phase 6-BI) — 갈라테아i ② 의 패에 넣을 카드도
     #: **정확히 1장**이다 (``SelectMatchingCard(...,1,1,nil)``).
-    assert len(exact_one) == 12, exact_one
+    #: 🔴 12 → **13** (Phase 6-BO) — 딩기르수 ② 가 소재로 붙일 카드도
+    #: **정확히 1장**이다 (``g:Select(tp,1,1,nil)``). 여러 장 선택은
+    #: 하나뿐이고 가변 장수는 없다 — 그 둘은 위아래 단언들이 들고 있다.
+    assert len(exact_one) == 13, exact_one
     assert variable == [], "가변 장수 효과가 생겼다 — §6 을 다시 읽어야 한다"
     assert optional == [], optional
     assert duplicates == [], duplicates

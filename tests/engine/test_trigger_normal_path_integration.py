@@ -957,8 +957,11 @@ def test_b12_activation_time_targeting_is_untouched(repository):
     #: **덱 · 묘지**를 보고 (가려진 존이 섞여 있다) 공식 스크립트가
     #: ``s.thop`` 안에서 고르므로 (선언) 디베르 ① · 갈라테아 ② 와 **같은
     #: 두 이유**로 미루는 쪽이다.
+    #: 🔴 Phase 6-BO — 딩기르수 ② 도 **해결 중에** 고른다 (제외된 기계족
+    #: 1장) 이므로 미루는 쪽이다. 미루는 쪽이 일곱이 되었고, 그대로 두는
+    #: 쪽 열여섯은 하나도 움직이지 않았다 (아래 줄).
     assert sorted(deferred) == sorted(
-        [GIRSU, BURIAL, GROWTH, HARP_HORROR, 30741503, 48835607]
+        [GIRSU, BURIAL, GROWTH, HARP_HORROR, 30741503, 48835607, 93854893]
     ), deferred
     #: 🔴 13 → 14 (Phase 6-AC) → **13** (Phase 6-AD). 6-AC 는 성유물－
     #: 『성장』 ② 를 "패를 보므로 그대로 두는 쪽" 에 넣었고, 6-AD 가 그
@@ -999,8 +1002,14 @@ def test_b12_activation_time_targeting_is_untouched(repository):
         for binding in definition.targets:
             looked |= binding.spec.looked_at_zones()
             declared = declared or binding.spec.chosen_at_resolution
-        if card_id == GROWTH:
+        if card_id in (GROWTH, 93854893):
             #: 패만 본다 — 가려진 존이 아니다. 그래도 미뤄진다.
+            #: 🔴 **딩기르수 ② 도 같은 쪽이다** (Phase 6-BO). 그 효과가
+            #: 보는 것은 **제외 존**이고 그것은 가려진 존이 아니다 (앞면
+            #: 으로 제외된 카드는 양쪽이 본다 — 그래서 후보 조건이
+            #: ``CardIsFaceUp()`` 을 적는다). 그래도 공식 스크립트가
+            #: **해결 중에** 고르므로 (``s.effop`` 안의
+            #: ``g:Select(tp,1,1,nil)``) 미뤄진다 — 두 사실을 섞지 않는다.
             assert not (looked & CONCEALED_ZONES), (card_id, looked)
             assert declared is True
         elif card_id in (HARP_HORROR, 30741503, 48835607):
@@ -1351,7 +1360,10 @@ def test_c09_two_registered_trigger_effects_now_exist():
         if entry.executable
         and entry.definition.activation_kind is ActivationKind.TRIGGER
     )
-    assert triggers == sorted([GIRSU, WORLD_WAND]), triggers
+    #: 🔴 Phase 6-BO — 딩기르수 ② 가 셋째다. 세 유발이 **서로 다른
+    #: 사건**에 반응한다 (일반 소환 성공 · 묘지로 감 · 특수 소환 성공) —
+    #: 그 다름이 "한 카드에 맞춘 우회로" 가 아니라는 근거다.
+    assert triggers == sorted([GIRSU, WORLD_WAND, 93854893]), triggers
     #: 🔴 **서로 다른 일을 한다** — 같은 배선이 둘을 다 태운다. 어느 사건에
     #: 반응하는지는 정의가 아니라 컴파일된 ``TriggerSpec`` 이 들고 있으므로
     #: (``activation_waits_for_event``), 여기서는 **정의가 들고 있는 차이**를

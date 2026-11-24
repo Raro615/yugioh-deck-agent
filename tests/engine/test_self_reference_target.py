@@ -1128,6 +1128,9 @@ def test_j02_the_library_grew_by_exactly_one_executable():
     #: 🔴 **아홉째가 들어왔다** (Phase 6-BI → 6-BJ) — 오르페골
     #: 갈라테아i ③ (묘지 소생) 이고, 그래서 48835607 도 **두 번** 나온다.
     #: 기르수와 같은 이유로 중복을 집합으로 바꾸지 않는다.
+    #: 🔴 **열째가 들어왔다** (Phase 6-BO) — 시오르페골 딩기르수 ② 다.
+    #: 같은 이유다 (``EFFECT_TYPE_ACTIVATE`` 가 아닌 몬스터 효과이고, 이쪽은
+    #: ``EFFECT_TYPE_TRIGGER_O`` 다).
     assert monsters == [
         HONEST,
         GIRSU,
@@ -1138,6 +1141,7 @@ def test_j02_the_library_grew_by_exactly_one_executable():
         21441617,
         48835607,
         48835607,
+        93854893,
     ], monsters
 
 

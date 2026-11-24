@@ -86,6 +86,8 @@ OTHER_SUMMON_CARD = 987311
 
 #: 잭나이츠 오르페골 기르수 — 6-E 가 거짓 양성을 재현한 회귀 사례.
 GIRSU = 69811710
+#: 🔴 Phase 6-BO — 시오르페골 딩기르수 (유발 ②).
+DINGIRSU = 93854893
 
 
 # ======================================================================
@@ -320,12 +322,13 @@ def test_03_exactly_one_compiled_trigger_has_a_definition(repository):
         if registered:
             with_registered_trigger[entry.card_id] = registered
 
+    #: 🔴 Phase 6-BO — 딩기르수가 셋째다 (``EVENT_SPSUMMON_SUCCESS``).
     assert sorted(with_registered_trigger) == sorted(
-        [GIRSU, WORLD_WAND]
+        [GIRSU, WORLD_WAND, DINGIRSU]
     ), list(with_registered_trigger)
     #: 🔴 **식별이 모호하지 않다** — 정의가 가리키는 ordinal 의 등록이 있다.
     #: 등재한 ordinal 이 카드마다 다르므로 **그 카드의 ordinal 로** 묻는다.
-    for card_id, ordinal in ((GIRSU, 0), (WORLD_WAND, 1)):
+    for card_id, ordinal in ((GIRSU, 0), (WORLD_WAND, 1), (DINGIRSU, 1)):
         ordinals = {
             c.spec.effect_ref.ordinal for c in with_registered_trigger[card_id]
         }
@@ -1119,7 +1122,9 @@ def test_24_the_whole_corpus_has_exactly_one_executable_trigger(repository):
     #: 하나이고, 그 유발 선언은 손으로 적은 것이 아니라 trigger_compiler 가
     #: ``EVENT_SPSUMMON_SUCCESS`` 를 옮긴 것이다.
     assert with_definition == 3
-    assert with_implementation == 2
+    #: 🔴 2 → **3** (Phase 6-BO) — 딩기르수 ② 의 구현도 함께 등록되어
+    #: 있다 (``executable=True``), 그래서 둘 다 움직인다.
+    assert with_implementation == 3
 
 
 # ======================================================================

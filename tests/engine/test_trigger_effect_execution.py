@@ -268,7 +268,9 @@ def test_05_the_census_of_what_blocks_resolution(repository):
         #: 🔴 6-AC: 4,172 → 4,171 (성유물－『성장』 ② 의 정의가 생겼다).
         #: 나머지 네 막는 이유는 **하나도** 움직이지 않았다 — 이 Phase 가
         #: 더한 것은 정의이고 새 막는 이유가 아니다.
-        "definition_missing": 4171,
+        #: 🔴 6-BO: 4,171 → 4,170 (딩기르수 ② 의 정의가 생겼다). 나머지
+        #: 네 막는 이유는 여기서도 **하나도** 움직이지 않았다.
+        "definition_missing": 4170,
         "operation_unreadable": 726,
         "cost_unpayable": 260,
         "operation_untranslatable": 222,
@@ -741,10 +743,12 @@ def test_16_the_library_now_has_exactly_two_triggers(repository=None):
     #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 효과는 구현도 함께
     #: 등록되었다 (``executable=True``).
     assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 23
-    #: 🔴 등재된 발동 분류 — 유발이 **정확히 둘**이고 유발 즉시 · 플립은 없다.
+    #: 🔴 등재된 발동 분류 — 유발이 **정확히 셋**이고 유발 즉시 · 플립은
+    #: 없다. 🔴 2 → **3** (Phase 6-BO, 딩기르수 ②) — 분류 집합은 **하나도**
+    #: 늘지 않았고, 유발 즉시 · 플립이 0건이라는 사실도 그대로다.
     kinds = [entry.definition.activation_kind for entry in EFFECT_LIBRARY]
     assert set(kinds) == {None, ActivationKind.IGNITION, ActivationKind.TRIGGER}
-    assert kinds.count(ActivationKind.TRIGGER) == 2
+    assert kinds.count(ActivationKind.TRIGGER) == 3
     assert kinds.count(ActivationKind.QUICK) == 0
     assert kinds.count(ActivationKind.FLIP) == 0
 
