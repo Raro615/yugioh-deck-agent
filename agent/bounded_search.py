@@ -128,7 +128,13 @@ FOLLOWUP_DEFAULT_ACTIONS: int = 2
 #: 그것이 "이 패로 더 갈 수 없다" 로 읽힌다. 🔴 **기본값은 그대로다**
 #: (:data:`FOLLOWUP_DEFAULT_ACTIONS` = 2) — 올린 것은 **고를 수 있는
 #: 상한**뿐이고, 올린 값은 ``budget.describe_ko()`` 에 그대로 보인다.
-FOLLOWUP_CAP: int = 10
+#:
+#: 🔴 **10 → 12 (Phase 6-BO §4).** 천장을 올린 이유는
+#: :data:`CANDIDATE_CAP` 과 같다 — 자율 탐색의 기본값이 10 이 되었고
+#: (``app.main.AUTONOMOUS_DEFAULT_ACTIONS``), 기본값이 천장과 같으면
+#: 사용자가 `actions:` 로 더 넓힐 자리가 없어진다. 🔴 **기본값을 올린 것이
+#: 아니다** — 그 값의 근거와 실측 표는 그쪽 상수에 있다.
+FOLLOWUP_CAP: int = 12
 
 #: 탐색이 **내부로 모아 두는 후보 풀**의 상한 (Phase 6-BB).
 #:
