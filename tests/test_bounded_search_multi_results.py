@@ -113,6 +113,10 @@ class _MCard:
             "FACEUP_ATTACK" if face_up else "FACEDOWN_DEFENSE"
         )
         self.sequence = 0
+        #: 🔴 **소재를 들고 있다** (Phase 6-BO §4). 실제 ``CardInstance`` 에
+        #: 언제나 있는 칸이고, 요약이 그것을 읽는다 — 이 대역에 없으면
+        #: ``_slots_of`` 가 ``AttributeError`` 로 멈춘다 (실측).
+        self.materials = ()
 
 
 class _MZone:

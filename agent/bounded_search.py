@@ -1397,6 +1397,23 @@ class CardSlot:
     face_up: bool
     position: str
     sequence: int = 0
+    materials: "tuple[int, ...]" = ()
+    """
+    이 카드가 **소재로 들고 있는 개체 번호들** (Phase 6-BO §4).
+
+    🔴 **왜 개체 번호인가.** 소재는 카드명이 아니라 개체다 — 같은 이름의
+    두 장이 하나는 소재, 하나는 묘지에 있을 수 있고, 그 차이가 전개의
+    차이다. 읽는 쪽이 번호로 그 개체를 찾는다.
+
+    🔴 **왜 요약이 들고 있어야 하는가 — 실측이다.** 6-BO §4 에서 "딩기르수
+    아래에 롱기르수가 있는 후보" 를 세려 했을 때, 요약에는 ``OVERLAY`` 존의
+    **납작한 목록**만 있었다. 엑시즈 몬스터가 둘이면 어느 쪽 아래인지 말할
+    수 없고, 그러면 ② (롱기르수 위) 와 ③ (스켈레촌까지) 를 **후보 기록에서
+    가를 수 없다** — 판을 다시 밟아야만 알 수 있었다.
+
+    🔴 **비어 있다는 것이 "소재가 없다" 는 뜻이다** — 가려진 카드의 소재도
+    번호만 적는다 (정체는 ``OVERLAY`` 쪽 칸이 가린다).
+    """
 
     @property
     def concealed(self) -> bool:
@@ -1578,6 +1595,10 @@ def _slots_of(container, *, concealed: bool) -> "tuple[CardSlot, ...]":
                 face_up=face_up,
                 position=card.position.value,
                 sequence=card.sequence,
+                #: 🔴 **엔진이 들고 있는 그대로** (Phase 6-BO §4) — 순서를
+                #: 지킨다. 소재의 순서는 기록이고, 정렬해 버리면 요약이
+                #: 판과 달라진다.
+                materials=tuple(m.value for m in card.materials),
             )
         )
     return tuple(out)
