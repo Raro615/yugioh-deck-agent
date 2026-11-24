@@ -212,6 +212,14 @@ def _sample_action(state, kind: PlayerActionKind) -> PlayerAction:
         PlayerActionKind.LINK_SUMMON: lambda: PlayerAction.link_summon(
             MINE, hand, (monster,)
         ),
+        #: 🔴 **엑시즈 소환 (Phase 6-BO).** 링크 소환과 같은 이유로 소재를
+        #: 하나 준다 — 소재 없는 엑시즈 소환은 표현 자체가 성립하지 않는다
+        #: (``PlayerAction.__post_init__``). 이 판의 카드는 저장소 없이 만든
+        #: 것이라 절차를 읽을 수 없으므로 판정은 아래 단언대로 허가를 내지
+        #: 않는다 — 그것이 이 테스트의 요점이고, 하나도 약해지지 않았다.
+        PlayerActionKind.XYZ_SUMMON: lambda: PlayerAction.xyz_summon(
+            MINE, hand, (monster,)
+        ),
         PlayerActionKind.SET_MONSTER: lambda: PlayerAction.set_monster(MINE, hand),
         PlayerActionKind.SET_SPELL_TRAP: lambda: PlayerAction(
             kind=PlayerActionKind.SET_SPELL_TRAP, actor=MINE, source=hand

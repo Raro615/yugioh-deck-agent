@@ -255,7 +255,10 @@ def test_05_the_census_of_what_blocks_resolution(repository):
     #: 🔴 6-V 가 기르수 ① 을 등재했다 (0 → 1).
     #: 🔴 6-AC 가 성유물－『성장』 ② 를 등재했다 (1 → 2). 둘 다 유발이고
     #: 둘 다 컴파일된다 — 그래서 "정의가 없다" 가 하나 더 줄었다.
-    assert with_definition == 2
+    #: 🔴 2 → **3** (Phase 6-BO, 딩기르수 ②). 늘어난 것은 **유발 정의**
+    #: 하나이고, 그 유발 선언은 손으로 적은 것이 아니라 trigger_compiler 가
+    #: ``EVENT_SPSUMMON_SUCCESS`` 를 옮긴 것이다.
+    assert with_definition == 3
     assert len(two_gate) == 31
     assert len(resolvable) == 2999
     assert len(resolvable & two_gate) == 24
@@ -707,7 +710,10 @@ def test_16_the_library_now_has_exactly_two_triggers(repository=None):
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 떡기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
     #: 🔴 Phase 6-AF 가 **셋째 ordinal** 을 열었다 — 기르수 ③(토큰 생성)은
     #: 공식 Lua 의 세 번째 블록이므로 2 다. 억지로 0 이나 1 에 맞추지 않고
     #: **그 효과의 실제 사실**을 적는다 (``c69811710.lua`` e3,
@@ -731,7 +737,10 @@ def test_16_the_library_now_has_exactly_two_triggers(repository=None):
     #: 🔴 20 → **21** (Phase 6-BI) — 갈라테아i ② 다.
     #: 🔴 21 → **22** (Phase 6-BJ) — 갈라테아i ③ (묘지 소생) 다. 이 시험이 지키는
     #: 사실은 그대로이고, 수가 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 22
+    #: 🔴 22 → **23** (Phase 6-BO, 시오르페골 딩기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 효과는 구현도 함께
+    #: 등록되었다 (``executable=True``).
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 23
     #: 🔴 등재된 발동 분류 — 유발이 **정확히 둘**이고 유발 즉시 · 플립은 없다.
     kinds = [entry.definition.activation_kind for entry in EFFECT_LIBRARY]
     assert set(kinds) == {None, ActivationKind.IGNITION, ActivationKind.TRIGGER}

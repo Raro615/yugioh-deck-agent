@@ -15,11 +15,20 @@ from engine.vocabulary import PLAYER_ZONES, Zone
 
 
 def test_player_has_every_player_zone():
+    #: 🔴 Phase 6-BO — 소재 보관함(``Zone.OVERLAY``)이 ``zones`` 에 함께
+    #: 있지만 ``PLAYER_ZONES`` 에는 **없다.** 둘을 합치지 않는다 (ADR-002):
+    #: 보관함이 없으면 소재가 된 카드의 객체가 사라지고(실측: 첫 판에서
+    #: ``find_instance`` 가 ``None`` 을 돌려주었다), 반대로 그것을 플레이어
+    #: 존으로 세면 "그 존에 카드가 몇 장인가" 를 묻는 조건이 소재까지 세어
+    #: 규칙이 달라진다. 그래서 이 테스트는 **두 사실을 따로** 적는다.
     player = PlayerState(player_id=0)
-    assert set(player.zones) == set(PLAYER_ZONES)
+    assert set(player.zones) == set(PLAYER_ZONES) | {Zone.OVERLAY}
+    assert Zone.OVERLAY not in PLAYER_ZONES
     for zone in PLAYER_ZONES:
         assert player.zone(zone).owner == 0
         assert len(player.zone(zone)) == 0
+    assert player.zone(Zone.OVERLAY).owner == 0
+    assert len(player.zone(Zone.OVERLAY)) == 0
 
 
 def test_zone_accessors_point_at_the_same_containers():

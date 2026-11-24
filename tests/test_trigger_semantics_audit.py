@@ -371,8 +371,13 @@ def test_09_no_registered_effect_needs_a_trigger_event(repository):
     #: ``EVENT_TO_GRAVE`` · ``SINGLE``+``TRIGGER_O``). 종류 집합은 **하나도**
     #: 늘지 않았다 — 두 유발이 같은 종류 선언을 쓴다. ``QUICK`` 과 ``FLIP``
     #: 은 여전히 0건이고, 그것이 이 시험에 남은 사실이다.
+    #: 🔴 **Phase 6-BO 가 둘을 셋으로 만들었다** (딩기르수 ② ·
+    #: ``EVENT_SPSUMMON_SUCCESS`` · ``SINGLE``+``TRIGGER_O``). 종류 집합은
+    #: **하나도** 늘지 않았다 — 세 유발이 같은 종류 선언을 쓴다. ``QUICK``
+    #: 과 ``FLIP`` 은 여전히 0건이고, 그것이 이 시험에 남은 사실이다.
     assert codes == {
-        "EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE", None
+        "EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE",
+        "EVENT_SPSUMMON_SUCCESS", None,
     }, codes
     assert types == {"ACTIVATE", "IGNITION", "SINGLE", "TRIGGER_O"}, types
     assert not [t for t in types if t.startswith(("QUICK", "FLIP"))], types
@@ -399,7 +404,10 @@ def test_09_no_registered_effect_needs_a_trigger_event(repository):
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 딩기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
 
 
 def test_10_analysis_can_say_it_failed_on_conditions_but_not_on_triggers():
@@ -470,8 +478,13 @@ def test_11_free_chain_must_not_be_read_as_a_trigger_event(repository):
     #: 🔴 Phase 6-AC: 틀린 읽기 17 → 18 · 맞는 읽기 1 → 2 (성유물－『성장』
     #: ②). **차이는 16 그대로다** — 그것이 이 시험이 재는 값이고, 등재가
     #: 늘어도 두 읽기의 거리는 바뀌지 않는다.
-    assert len(naive_trigger) == 18, "틀린 읽기는 전부를 유발로 본다"
-    assert sorted(correct_trigger) == [69811710, 93920420], correct_trigger
+    #: 🔴 Phase 6-BO: 틀린 읽기 18 → 19 · 맞는 읽기 2 → 3 (딩기르수 ②).
+    #: **차이는 16 그대로다** — 그것이 이 시험이 재는 값이고, 등재가 늘어도
+    #: 두 읽기의 거리는 바뀌지 않는다.
+    assert len(naive_trigger) == 19, "틀린 읽기는 전부를 유발로 본다"
+    assert sorted(correct_trigger) == [
+        69811710, 93854893, 93920420,
+    ], correct_trigger
     assert len(naive_trigger) - len(correct_trigger) == 16
 
 

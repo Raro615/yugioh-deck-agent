@@ -768,7 +768,10 @@ def test_12_most_registered_activations_come_from_set_target_not_set_condition(
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 떡기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
     #: 🔴 8 → **9** (Phase 6-V, 기르수 ①).
     #: 🔴 9 → **10** (Phase 6-AC, 성유물－『성장』 ②). 그 조건도 상태
     #: 조건이다 (``ZoneHasFreeSlot`` — 자신 몬스터 존에 빈 자리가 있다).

@@ -302,8 +302,10 @@ def test_c_the_two_summon_events_compile_to_different_declarations():
     #: ``{SPECIAL}`` 을 고정하고 있던 동안에는 소환법이 둘뿐이어서 같은
     #: 값이었다 — 링크가 생기자 **둘이 갈렸고**, 갈린 쪽이 맞다.
     assert special.spec.summons == SPECIAL_SUMMON_KINDS
+    #: 🔴 **Phase 6-BO — 엑시즈 소환도 그 묶음이다.** 적은 자리는 여전히
+    #: 한 곳이고, 갈린 쪽이 맞다는 위 설명이 그대로 적용된다.
     assert special.spec.summons == frozenset(
-        {SummonKind.SPECIAL, SummonKind.LINK}
+        {SummonKind.SPECIAL, SummonKind.LINK, SummonKind.XYZ}
     )
     #: 일반 소환은 그 묶음에 **들지 않는다** — 이 줄이 없으면 위의 변경이
     #: "소환이면 다 발화한다" 로 넓어졌는지 알 수 없다.

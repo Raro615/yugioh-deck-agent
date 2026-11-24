@@ -388,7 +388,10 @@ def test_10_the_registered_definitions_have_no_trigger_specs_today():
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 떡기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
     assert registry is not None
 
     #: production 에서 ``TriggerSpec`` 을 만드는 자리는 컴파일러 하나다.
@@ -637,6 +640,8 @@ def test_16_this_audit_changed_no_production_file():
     #: **링크 소환 절차**를 구현해서 늘었다 — 이 감사가 재는 사실(유발을
     #: 위해 새 종류가 생기지 않았다)은 그대로이고, 바로 위의 "사건을 적는
     #: 칸이 정의 쪽에 생기지 않았다" 가 그것을 센다.
-    assert len(list(PlayerActionKind)) == 12
+    #: 🔴 12 → **13** (Phase 6-BO, ``XYZ_SUMMON``). 늘어난 것은 **엑시즈
+    #: 소환**이고, 이 감사가 재는 사실은 하나도 약해지지 않았다 — 수만 움직였다.
+    assert len(list(PlayerActionKind)) == 13
     assert "LINK_SUMMON" in PlayerActionKind.__members__
     assert not [k for k in PlayerActionKind.__members__ if "TRIGGER" in k]

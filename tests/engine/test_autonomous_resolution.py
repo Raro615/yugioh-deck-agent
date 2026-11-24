@@ -755,7 +755,10 @@ def test_d04_the_engine_gate_is_not_bypassed(repository):
     #: 무덤의 지명자는 갈라테아i ② 의 **비용으로 묘지에 놓이는** 패 카드다.
     #: 그 넷이 등재되지 않으면 자기가 치른 비용 때문에 자기 효과의 해결이
     #: ``UNKNOWN`` 이 된다 (6-BI §29 의 실측).
-    assert len(OPERATION_RULINGS) == 33
+    #: 🔴 33 → **34** (Phase 6-BO, 시오르페골 딩기르수). 이전 수가 틀렸던 것이
+    #: 아니라 그때 실제로 33장이었다 — 늘어난 것은 **읽은 카드**이고, 그 판정
+    #: 사실이 없으면 딩기르수 ② 의 해결이 "확인된 것이 없다" 로 멈춘다.
+    assert len(OPERATION_RULINGS) == 34
     _, _, _, runs = _drive(repository, FirstPermittedChoice())
     choice = runs[0].choice
     #: 제안이 들고 온 판정이 ``BoardRuling`` 의 것과 같은 질문이다.

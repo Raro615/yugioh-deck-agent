@@ -192,7 +192,11 @@ def test_01_the_enum_declares_every_member_it_uses():
     #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
     #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
     #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
-    assert len(ValidationCode) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(ValidationCode) == 56
     #: 그리고 ``str`` enum 이라는 성질도 그대로다 — policy 가 멤버를 만들지 않았다.
     assert issubclass(ValidationCode, str)
 
@@ -223,7 +227,11 @@ def test_02_no_new_member_was_added_and_none_was_renamed():
     #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
     #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
     #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
-    assert len(declared) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(declared) == 56
     assert declared == list(ValidationCode.__members__)
     #: 값도 이름의 소문자형 그대로다.
     for name in declared:
@@ -269,7 +277,11 @@ def test_04_the_policy_is_total_and_breaks_at_import_if_a_member_is_missed():
     #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
     #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
     #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
-    assert len(CODE_VALIDITY) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(CODE_VALIDITY) == 56
 
     #: 검사가 실제로 있는지 구문으로 확인한다.
     source = source_of("engine/validation.py")
@@ -475,7 +487,9 @@ def test_16_unknown_is_not_invalid():
     #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
     #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
     #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
-    assert len(invalid_set) == 46
+    #: 🔴 46 → **47** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 늘어난 하나가
+    #: ``INVALID`` 를 선언한다 — 모름 쪽은 그대로다.
+    assert len(invalid_set) == 47
 
 
 def test_17_unknown_is_not_a_loss_and_not_a_zero_score():
@@ -637,9 +651,13 @@ def test_24_the_four_buckets_partition_the_enum_without_a_remainder():
     #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
     #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
     #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
+    #: 🔴 46 → **47** (Phase 6-BO) — ``XYZ_MATERIAL_INVALID`` 가 늘었다.
+    #: 그것도 **``INVALID``** 다 (소재가 절차를 만족하지 않는다는 것은 판에
+    #: 적힌 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정
+    #: 거부 쪽만 하나 늘었다 — 6-AC · 6-AD · 6-AQ 와 같은 결이다.
     assert (len(valid), len(invalid), len(unknown), len(undecided)) == (
         1,
-        46,
+        47,
         7,
         1,
     )
@@ -647,7 +665,11 @@ def test_24_the_four_buckets_partition_the_enum_without_a_remainder():
     #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
     #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
     #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
-    assert len(valid | invalid | unknown | undecided) == 55 == len(ValidationCode)
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(valid | invalid | unknown | undecided) == 56 == len(ValidationCode)
     assert valid == frozenset({ValidationCode.OK})
 
 
@@ -870,7 +892,11 @@ def test_33_the_only_thing_this_phase_changed_is_where_the_policy_lives():
     #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
     #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
     #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
-    assert len(ValidationCode) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(ValidationCode) == 56
     assert len(SimulationStatus) == 5
     assert len(ActionValidity) == 3
     #: 🔴 14 → **15** (Phase 6-AD 후속2): ``RESOLVED_WITHOUT_EFFECT`` 하나가

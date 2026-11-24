@@ -819,12 +819,19 @@ def test_23_engine_v1_was_not_widened():
     아래 금지 항목 셋(``_activate_card_actions`` ·
     ``ActivationTimingRule`` · ``ActivationRouter``)은 여전히 **없다**.
     """
-    assert len(list(PlayerActionKind)) == 12
+    #: 🔴 12 → **13** (Phase 6-BO, ``XYZ_SUMMON``). 이전 수가 틀렸던 것이
+    #: 아니라 그때 실제로 12종이었다 — 늘어난 것은 **엑시즈 소환**이고,
+    #: 특수 소환이면서 그 카드 자신의 절차다.
+    assert len(list(PlayerActionKind)) == 13
+    #: 🔴 Phase 6-BO — 엑시즈 소환의 구현이 꽂혔으므로 실행기가 아는
+    #: 종류가 하나 늘었다 (``engine.xyz_summon``). 이 단언이 지키는 사실은
+    #: 그대로다 — **구현이 있는 종류만** 여기 있다.
     assert duel_executor().supported == frozenset(
         {
             PlayerActionKind.NORMAL_SUMMON,
             PlayerActionKind.SPECIAL_SUMMON,
             PlayerActionKind.LINK_SUMMON,
+            PlayerActionKind.XYZ_SUMMON,
             PlayerActionKind.SET_MONSTER,
             PlayerActionKind.SET_SPELL_TRAP,
             PlayerActionKind.ATTACK,

@@ -648,9 +648,16 @@ def test_09_the_second_requirement_needs_the_same_axes_plus_more():
     빠지고 나머지 다섯은 **여전히 없다** — 구현하지 않은 소환법의 이름을
     어휘에 적지 않는다는 것이 이 시험이 지키는 사실이고, 그것은 그대로다.
     """
-    assert {kind.value for kind in SummonKind} == {"normal", "special", "link"}
+    #: 🔴 **Phase 6-BO 가 그 축에 값 하나를 더했다** — ``XYZ``. 역시 지어
+    #: 내서 더한 것이 아니라 **그 절차를 실제로 구현해서** 더했다 (대체
+    #: 절차 판정 · 소재 겹치기 · 칸 배치). 그래서 아래 목록에서 ``xyz`` 도
+    #: 빠지고 나머지 넷은 **여전히 없다** — 구현하지 않은 소환법의 이름을
+    #: 어휘에 적지 않는다는 이 시험의 사실은 그대로다.
+    assert {kind.value for kind in SummonKind} == {
+        "normal", "special", "link", "xyz",
+    }
     #: 구현하지 않은 소환법 이름이 하나도 없다 — 지어내지 않았기 때문이다.
-    for method in ("fusion", "synchro", "xyz", "ritual", "pendulum"):
+    for method in ("fusion", "synchro", "ritual", "pendulum"):
         assert method not in {kind.value for kind in SummonKind}
 
     #: 그래서 첫 요구가 막히는 세 축은 그대로 막히고,

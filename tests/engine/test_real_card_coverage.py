@@ -395,7 +395,9 @@ def test_a_five_hundred_sixteen_cards_have_nothing_blocking_them(
     #: (20) 와 다르다**: 기르수가 한 장에 둘을 갖고 있어 카드 단위 집합은
     #: 하나 적다 — 그것이 이 줄이 ``card_id`` 집합인 이유다.
     #: 🔴 19 → **20** (Phase 6-BI) — 갈라테아i ② 가 들어왔다.
-    assert len(executable) == 20
+    #: 🔴 20 → **21** (Phase 6-BO, 시오르페골 딩기르수 ②). 늘어난 것은
+    #: **읽은 효과**이고 구현도 함께 등록되었다 (``executable=True``).
+    assert len(executable) == 21
     # 실행되는 카드는 **하나도 빠짐없이** 막는 것이 없어야 한다.
     #
     # 🔴 어니스트는 예외 집합에 있다 (Phase 6-L). ``clean`` 은

@@ -1043,7 +1043,10 @@ def test_27_all_sixteen_effect_definitions_are_untouched(repository):
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 떡기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
     for entry in EFFECT_LIBRARY:
         ref = entry.definition.effect_ref
         card = repository.get(ref.card_id)
@@ -1117,10 +1120,17 @@ def test_27_all_sixteen_effect_definitions_are_untouched(repository):
                 #: 않고 **실측한 사실**을 적는다. 두 유발의 사건이
                 #: **다르다** (소환 성공 · 묘지로 감).
                 assert entry.definition.activation_kind is _Kind.TRIGGER, ref
+                #: 🔴 **Phase 6-BO 에서 유발이 셋이 됐다** — 시오르페골
+                #: 딩기르수 ② 다. ordinal 로는 더 갈 수 없다 (성유물과
+                #: **같은 1** 인데 블록 수도 사건도 다르다), 그래서
+                #: 기동 쪽과 같은 방식으로 **카드로** 가르고 각 카드의
+                #: 실측한 블록 수와 사건을 적는다. 이전 표가 틀렸던 것이
+                #: 아니라 그때는 이 카드가 등재되지 않았다.
                 expected_blocks, expected_code = {
-                    0: (4, "EVENT_SUMMON_SUCCESS"),
-                    1: (5, "EVENT_TO_GRAVE"),
-                }[ref.ordinal]
+                    69811710: (4, "EVENT_SUMMON_SUCCESS"),  # 기르수 ①
+                    93920420: (5, "EVENT_TO_GRAVE"),        # 성유물 ②
+                    93854893: (2, "EVENT_SPSUMMON_SUCCESS"),  # 딩기르수 ②
+                }[ref.card_id]
                 assert len(card.script.effects) == expected_blocks, ref
                 assert ref.resolve(card).code == expected_code, ref
             continue

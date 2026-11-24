@@ -354,10 +354,15 @@ def test_08_the_code_carries_no_discriminating_information_here(repository):
     #: ``EVENT_TO_GRAVE``). 지키는 사실은 그대로다 — 한 블록이 가질 수
     #: 있는 것은 **하나의** 상수 아니면 없음이고, 등재 전체의 상수 수가
     #: 하나라는 뜻이 아니었다.
+    #: 🔴 **Phase 6-BO 가 상수를 넷으로 만들었다** (딩기르수 ② 의
+    #: ``EVENT_SPSUMMON_SUCCESS``). 지키는 사실은 그대로다 — 한 블록이
+    #: 가질 수 있는 것은 **하나의** 상수 아니면 없음이고, 등재 전체의
+    #: 상수 수가 하나라는 뜻이 아니었다.
     assert codes == {
-        "EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE", None
+        "EVENT_FREE_CHAIN", "EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE",
+        "EVENT_SPSUMMON_SUCCESS", None,
     }, codes
-    assert len([c for c in codes if c]) == 3, codes
+    assert len([c for c in codes if c]) == 4, codes
     # 🔴 Phase 6-V 에서 17 → 18 (기르수 ①, 목록의 **첫 유발 효과** ·
     # ``executable=True``). 이 테스트가 틀린 가정을 갖고 있었던 것이
     # 아니라 그 시점에 실제로 17건이었다.
@@ -380,7 +385,10 @@ def test_08_the_code_carries_no_discriminating_information_here(repository):
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 딩기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
 
 
 # ======================================================================

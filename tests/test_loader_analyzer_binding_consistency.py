@@ -1057,7 +1057,10 @@ def test_34_engine_v1_definitions_are_untouched():
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 떡기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
     #: 🔴 **Phase 6-AC 가 "등재한 ordinal 은 전부 0" 을 끝냈다** —
     #: 성유물－『성장』 은 공식 **②**를 등재했으므로 1 이다. 억지로 0 에
     #: 맞추지 않고 실제 사실을 적는다: 1 인 것은 **정확히 한 장**이다.
@@ -1073,7 +1076,10 @@ def test_34_engine_v1_definitions_are_untouched():
     #: 맞추지 않고 실제 사실을 적는다. 🔴 이 시험이 지키는 사실은
     #: "ordinal 을 추론하지 않고 **블록 번호를 그대로 적는다**" 이고,
     #: 그 사실은 한 글자도 약해지지 않았다.
-    assert sum(1 for _c, ordinal in refs if ordinal == 1) == 2
+    #: 🔴 2 → **3** (Phase 6-BO). 딩기르수 ② 는 공식 Lua 의 **두 번째
+    #: 블록**이므로 ordinal 이 1 이다 — 억지로 0 에 맞추지 않고 그 효과의
+    #: 실제 자리를 적는다 (이 파일의 방식이 그것이다).
+    assert sum(1 for _c, ordinal in refs if ordinal == 1) == 3
     assert {c for c, _o in refs} & set(PHASE32_CARDS) == set()
 
 

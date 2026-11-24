@@ -68,6 +68,13 @@ UNSUPPORTED_REASON: dict[PlayerActionKind, str] = {
     PlayerActionKind.LINK_SUMMON: (
         "링크 소환 절차 — 소재 조건 · 소재 보내기 · 엑스트라 몬스터 존 배치"
     ),
+    #: 🔴 Phase 6-BO — 엑시즈 소환. 종류를 더하면 이 표도 함께 채운다
+    #: (``test_every_action_kind_names_what_it_is_waiting_for`` 가 빈 자리를
+    #: 잡는다). 절차가 **등재된 카드**는 실행기가 처리하고, 이 문장은
+    #: 구현이 꽂히지 않은 자리에서만 쓰인다 — 링크 소환과 같은 결이다.
+    PlayerActionKind.XYZ_SUMMON: (
+        "엑시즈 소환 절차 — 레벨 · 장수 또는 대체 절차 · 소재 겹치기 · 칸 배치"
+    ),
     PlayerActionKind.SET_MONSTER: "세트 절차 (일반 소환권을 함께 쓴다)",
     PlayerActionKind.SET_SPELL_TRAP: "마법 · 함정 세트 절차",
     PlayerActionKind.ACTIVATE_CARD: "발동 절차 — 비용 · 대상 · 체인 삽입이 앞선다",

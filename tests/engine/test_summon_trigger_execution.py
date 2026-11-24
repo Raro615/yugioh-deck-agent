@@ -349,7 +349,10 @@ def test_c01_the_two_registrations_are_split_by_summon_kind(repository):
     #: 공식 룰북이 "Link Summoning is a type of Special Summon" 이라고
     #: 적고, 그 사실은 ``SPECIAL_SUMMON_KINDS`` 한 곳에만 있다. ``e2`` 가
     #: 일반 소환에 반응하지 않는다는 요점은 그대로다 (아래 줄).
-    assert {k.value for k in specs[1].summons} == {"special", "link"}
+    #: 🔴 **Phase 6-BO — 엑시즈 소환도 특수 소환이다.** 같은 한 곳
+    #: (``SPECIAL_SUMMON_KINDS``) 이 그렇게 적고, ``e2`` 가 일반 소환에
+    #: 반응하지 않는다는 요점은 그대로다 (아래 줄).
+    assert {k.value for k in specs[1].summons} == {"special", "link", "xyz"}
     assert "normal" not in {k.value for k in specs[1].summons}
     for spec in specs.values():
         assert spec.point is TimingPoint.MONSTER_SUMMONED

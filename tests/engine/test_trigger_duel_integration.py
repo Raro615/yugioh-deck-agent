@@ -290,7 +290,10 @@ def test_03_exactly_one_compiled_trigger_has_a_definition(repository):
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(definitions) == len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 떡기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(definitions) == len(EFFECT_LIBRARY) == 26
     #: 🔴 0 뿐이던 집합이 {0, 1} 이 되었다 — 공식 ②를 등재한 첫 자리다.
     #: 🔴 Phase 6-AF 가 **셋째 ordinal** 을 열었다 — 기르수 ③(토큰 생성)은
     #: 공식 Lua 의 세 번째 블록이므로 2 다. 억지로 0 이나 1 에 맞추지 않고
@@ -1112,7 +1115,10 @@ def test_24_the_whole_corpus_has_exactly_one_executable_trigger(repository):
     #: 구현도 함께 등록되었다 (``executable=True``), 그래서 둘 다 움직인다.
     #: 전체 컴파일 수 4173 은 **바뀌지 않았다**: 등재가 늘었을 뿐 컴파일러가
     #: 더 많이 읽게 된 것이 아니다.
-    assert with_definition == 2
+    #: 🔴 2 → **3** (Phase 6-BO, 딩기르수 ②). 늘어난 것은 **유발 정의**
+    #: 하나이고, 그 유발 선언은 손으로 적은 것이 아니라 trigger_compiler 가
+    #: ``EVENT_SPSUMMON_SUCCESS`` 를 옮긴 것이다.
+    assert with_definition == 3
     assert with_implementation == 2
 
 

@@ -351,7 +351,10 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 떡기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
     #: 🔴 Phase 6-K — 열일곱 번째(어니스트 ①)는 ``code`` 가 **없다.** 기동
     #: 효과는 사건이 아니라 선언으로 발동하므로 ``SetCode`` 를 적지 않는다.
     #:
@@ -378,11 +381,18 @@ def test_04_every_registered_effect_is_free_chain(repository):
     #: 🔴 24 → **25** (Phase 6-BJ, 갈라테아i ③). 같은 이유다 —
     #: 기동이고 ``SetCode`` 가 없다 (공식 ``e4`` 은
     #: ``EFFECT_TYPE_IGNITION`` 이다). 유발 쪽 둘은 그대로다.
-    assert len(codes) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 딩기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(codes) == 26
+    #: 🔴 Phase 6-BO — 딩기르수 ② 의 ``EVENT_SPSUMMON_SUCCESS`` 가
+    #: 하나 늘었다. 유발 쪽이 셋이 되었고, 블록마다 상수가 하나라는
+    #: 사실은 그대로다.
     assert set(codes) == {
         "EVENT_FREE_CHAIN",
         "EVENT_SUMMON_SUCCESS",
         "EVENT_TO_GRAVE",
+        "EVENT_SPSUMMON_SUCCESS",
         None,
     }
     assert len([c for c in codes if c == "EVENT_FREE_CHAIN"]) == 16
@@ -449,7 +459,10 @@ def test_05_the_eight_activation_conditions_are_state_conditions(repository):
     #: 사건을 묻지 않는다.
     #: 🔴 13 → **14** (Phase 6-BI) — 갈라테아i ② 의 발동 조건
     #: (「바벨이 앞면으로 필드 존에 있지 않다」) 이 하나 늘었다.
-    assert len(with_condition) == 14
+    #: 🔴 14 → **15** (Phase 6-BO) — 딩기르수 ② 의 발동 조건
+    #: (「제외 존에 카드가 한 장 이상 있다」) 이 하나 늘었다. 그것도
+    #: **상태 조건**이다 — 존의 카드 수를 묻고 사건을 묻지 않는다.
+    assert len(with_condition) == 15
     #: 사례로 쓰는 넷의 종류를 못박는다.
     assert with_condition[POT_OF_GREED]["types"] == ["SPELL"]
     assert with_condition[RELOAD]["types"] == ["QUICKPLAY", "SPELL"]
@@ -651,7 +664,12 @@ def test_12_the_summon_kind_vocabulary_exists_but_the_timing_point_does_not():
     않았고 여전히 ``monster_summoned`` 하나다. 소환의 종류가 늘어도 시점이
     갈리지 않는다는 것이 요점이고, 아래 두 단언이 그것을 센다.
     """
-    assert [kind.value for kind in SummonKind] == ["normal", "special", "link"]
+    #: 🔴 **Phase 6-BO 가 어휘를 넷으로 만들었다** (``xyz``). 이 시험이
+    #: 지키는 사실은 그대로다 — ``TimingPoint`` 는 **하나도** 늘지 않았고
+    #: 여전히 ``monster_summoned`` 하나다.
+    assert [kind.value for kind in SummonKind] == [
+        "normal", "special", "xyz", "link",
+    ]
     assert "summon" in [f.name for f in dataclasses.fields(MonsterSummoned)]
 
     points = [point.value for point in TimingPoint]
@@ -776,6 +794,10 @@ def test_14_no_registered_effect_can_special_summon():
         #: 그것도 소환하는 일이 **아니므로** 위 ``users`` 에 들지 않는다 —
         #: 뒷면으로 놓는 것이고 소환도 발동도 아니다.
         "SET_SPELL_TRAP",
+        #: 🔴 Phase 6-BO — 딩기르수 ② 가 제외된 기계족을 **엑시즈 소재로
+        #: 붙인다**. 그것도 소환하는 일이 **아니므로** 위 ``users`` 에
+        #: 들지 않는다 — 숙주 아래로 겹치는 것이고 소환도 발동도 아니다.
+        "ATTACH_AS_MATERIAL",
     }
     #: 🔴 그리고 **그 둘뿐**이다 — 위 ``users`` 가 어느 효과인지 적는다.
     assert "SPECIAL_SUMMON" in present

@@ -542,6 +542,10 @@ def test_14_no_validation_code_was_added_or_redefined():
         #: 🔴 Phase 6-AD 가 하나를 더했다 — 특수 소환이 금지된 판의 거절
         #: 이고, 확인된 금지이므로 ``INVALID`` 쪽이다.
         "SPECIAL_SUMMON_FORBIDDEN",
+        #: 🔴 Phase 6-BO 가 하나를 더했다 — 엑시즈 소재가 절차를 만족하지
+        #: 않는다는 거절이고, **확인된** 소재 조건의 위반이므로 ``INVALID``
+        #: 쪽이다. 절차를 읽지 못한 쪽은 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
+        "XYZ_MATERIAL_INVALID",
     }
     assert added <= set(ValidationCode.__members__)
     assert len(ValidationCode) - len(added) == 49
@@ -554,7 +558,11 @@ def test_14_no_validation_code_was_added_or_redefined():
     #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
     #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
     #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
-    assert len(CODE_VALIDITY) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(CODE_VALIDITY) == 56
     for name in (
         "OK",
         "CANDIDATE_NOT_ELIGIBLE",

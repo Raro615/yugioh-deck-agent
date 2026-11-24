@@ -714,11 +714,18 @@ def test_12_trigger_metadata_is_the_largest_category_the_engine_cannot_run(repos
     #: (``EVENT_TO_GRAVE``) 를 등재했다. 같은 성질의 고침이고, 늘어난 쪽이
     #: **서로 다른 사건**이라는 것이 이 수가 말하는 사실이다 — 한 사건에
     #: 맞춘 우회로가 아니라 사건 코드를 읽는 같은 길이 둘을 다 태운다.
+    #: 🔴 **Phase 6-BO 가 그 2 를 3 으로 만들었다.** 딩기르수 ②
+    #: (``EVENT_SPSUMMON_SUCCESS``) 를 등재했다. 같은 성질의 고침이고,
+    #: 늘어난 쪽이 **또 다른 사건**이라는 것이 이 수가 말하는 사실이다 —
+    #: 사건 코드를 읽는 같은 길이 셋을 다 태운다.
     assert set(codes) == {
         "EVENT_FREE_CHAIN",
         "EVENT_SUMMON_SUCCESS",
         "EVENT_TO_GRAVE",
+        "EVENT_SPSUMMON_SUCCESS",
         None,
     }
     triggers = sorted(c for c in codes if c and c != "EVENT_FREE_CHAIN")
-    assert triggers == ["EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE"], triggers
+    assert triggers == [
+        "EVENT_SPSUMMON_SUCCESS", "EVENT_SUMMON_SUCCESS", "EVENT_TO_GRAVE",
+    ], triggers

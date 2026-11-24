@@ -515,7 +515,9 @@ def test_10_the_existing_action_kinds_already_cover_the_optional_choice():
     #: ``LINK_SUMMON`` 은 **링크 소환 절차**이고 임의 발동과 무관하다. 이
     #: Phase 의 결론("임의 발동은 ``ACTIVATE_EFFECT`` 와 ``PASS`` 로 이미
     #: 표현된다")은 그대로다 — 아래 두 단언이 그 결론을 직접 센다.
-    assert len(kinds) == 12
+    #: 🔴 12 → **13** (Phase 6-BO, ``XYZ_SUMMON``). 늘어난 것은 **엑시즈
+    #: 소환**이고, 이 감사가 재는 사실은 하나도 약해지지 않았다 — 수만 움직였다.
+    assert len(kinds) == 13
     #: 시스템 전용 종류를 만들지 않았다.
     assert not {k for k in kinds if "SYSTEM" in k or "TRIGGER" in k}
 

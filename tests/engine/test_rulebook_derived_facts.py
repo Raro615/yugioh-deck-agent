@@ -187,14 +187,20 @@ def test_a01_the_registry_holds_twenty_one_hand_written_cards():
     #: 네 장 (하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자 — 그
     #: 효과의 **비용으로 묘지에 놓이는** 카드들). 등재하지 않으면 자기가
     #: 치른 비용 때문에 자기 효과의 해결이 ``UNKNOWN`` 이 된다.
-    assert len(OPERATION_RULINGS) == 33
+    #: 🔴 33 → **34** (Phase 6-BO, 시오르페골 딩기르수). 이전 수가 틀렸던 것이
+    #: 아니라 그때 실제로 33장이었다 — 늘어난 것은 **읽은 카드**이고, 그 판정
+    #: 사실이 없으면 딩기르수 ② 의 해결이 "확인된 것이 없다" 로 멈춘다.
+    assert len(OPERATION_RULINGS) == 34
     #: 🔴 22 → **25** (Phase 6-AO) — 오르페골 디베르 · 스켈레촌 · 카노네.
     #: 🔴 26 → **28** (Phase 6-BF) — 오르페골 바벨 · 클리막스.
     #: 🔴 28 → **33** (Phase 6-BI) — 성유물－『성관』 과 이번 패의 네
     #: 장(하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자)을 읽어
     #: 등재했다. 뒤의 넷은 갈라테아i ② 의 **비용으로 묘지에 놓이는**
     #: 카드들이고, 등재하지 않으면 그 판의 조작 판정이 모름이 된다.
-    assert len(OPERATION_RULINGS.card_ids) == 33
+    #: 🔴 33 → **34** (Phase 6-BO, 시오르페골 딩기르수). 이전 수가 틀렸던 것이
+    #: 아니라 그때 실제로 33장이었다 — 늘어난 것은 **읽은 카드**이고, 그 판정
+    #: 사실이 없으면 딩기르수 ② 의 해결이 "확인된 것이 없다" 로 멈춘다.
+    assert len(OPERATION_RULINGS.card_ids) == 34
     assert PACHYCEPHALO in OPERATION_RULINGS.card_ids
     assert FEATHERMAN in OPERATION_RULINGS.card_ids
     assert HONEST in OPERATION_RULINGS.card_ids
@@ -841,7 +847,10 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 떡기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: 🔴 16 → **17** (Phase 6-AF, 기르수 ③). 토큰 생성은 실제로 수행되는
     #: 조작이다 — ``CreateTokenOperation`` 을 ``engine.token`` 이 처리한다.
@@ -852,7 +861,10 @@ def test_f04_the_existing_activate_effects_are_unchanged(repository):
     #: 들어왔다 (공식 ``c48835607.lua`` 의 ``e3`` 을 읽어 등재했다).
     #: 🔴 21 → **22** (Phase 6-BJ) — 갈라테아i ③ (묘지 소생) 다. 이 시험이 지키는
     #: 사실은 그대로이고, 수가 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
-    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 22
+    #: 🔴 22 → **23** (Phase 6-BO, 시오르페골 딩기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 효과는 구현도 함께
+    #: 등록되었다 (``executable=True``).
+    assert sum(1 for e in EFFECT_LIBRARY if e.executable) == 23
 
     definition = definition_registry().definition_for(
         EffectRef(POT_OF_GREED, 0)
@@ -900,7 +912,10 @@ def test_g01_no_new_rule_engine_and_no_new_result_type():
     #: 🔴 **8 → 9** (Phase 6-BF) — ``MAY_BE_SET`` 이다. 위와 같은
     #: 이유로 수만 움직인다: 같은 ``RuleFact`` · 같은 ``RuleBasis`` ·
     #: 같은 세 값을 쓰고, 새 판정 체계를 만들지 않았다.
-    assert len(list(RuleQuestion)) == 9
+    #: 🔴 9 → **10** (Phase 6-BO, ``MAY_BE_XYZ_MATERIAL``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 아홉이었다 — 늘어난 것은 **엑시즈
+    #: 소재로 붙일 수 있는가** 하나다.
+    assert len(list(RuleQuestion)) == 10
     assert RuleQuestion.MAY_BE_SPECIAL_SUMMONED.value == "may_be_special_summoned"
 
 
@@ -935,7 +950,10 @@ def test_g02_the_registry_data_was_not_expanded():
     #: 네 장 (하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자 — 그
     #: 효과의 **비용으로 묘지에 놓이는** 카드들). 등재하지 않으면 자기가
     #: 치른 비용 때문에 자기 효과의 해결이 ``UNKNOWN`` 이 된다.
-    assert len(OPERATION_RULINGS) == 33
+    #: 🔴 33 → **34** (Phase 6-BO, 시오르페골 딩기르수). 이전 수가 틀렸던 것이
+    #: 아니라 그때 실제로 33장이었다 — 늘어난 것은 **읽은 카드**이고, 그 판정
+    #: 사실이 없으면 딩기르수 ② 의 해결이 "확인된 것이 없다" 로 멈춘다.
+    assert len(OPERATION_RULINGS) == 34
     #: 라이브러리 쪽은 6-O 가 건드리지 않았다 — 유도는 ruling.py 에 있다.
     assert "rulebook_facts" not in library
 

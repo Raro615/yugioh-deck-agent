@@ -107,6 +107,11 @@ ADDED_IN_PHASE_6AD = frozenset({"SPECIAL_SUMMON_FORBIDDEN"})
 #: ``INVALID`` 쪽이다 — 모름이 아니라 확인된 거부다.
 ADDED_IN_PHASE_6AQ_FOLLOWUP = frozenset({"TARGET_RELATION_LOST"})
 
+#: 🔴 Phase 6-BO 가 하나를 더했다 — 엑시즈 소재가 절차를 만족하지 않는다는
+#: 거절이고 **``INVALID``** 다. 숫자를 올리지 않고 **무엇이 늘었는지를
+#: 이름으로** 고정하는 이 파일의 방식 그대로다.
+ADDED_IN_PHASE_6BO = frozenset({"XYZ_MATERIAL_INVALID"})
+
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 MINE = 0
@@ -508,11 +513,16 @@ def test_13_no_new_validation_code_was_added():
     #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
     #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
     #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
-    assert len(ValidationCode) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(ValidationCode) == 56
     assert ADDED_IN_FOLLOWUP8 <= set(ValidationCode.__members__)
     assert ADDED_IN_PHASE_6AC <= set(ValidationCode.__members__)
     assert ADDED_IN_PHASE_6AD <= set(ValidationCode.__members__)
     assert ADDED_IN_PHASE_6AQ_FOLLOWUP <= set(ValidationCode.__members__)
+    assert ADDED_IN_PHASE_6BO <= set(ValidationCode.__members__)
     assert (
         len(ValidationCode)
         - len(ADDED_IN_FOLLOWUP8)
@@ -521,6 +531,8 @@ def test_13_no_new_validation_code_was_added():
         #: 🔴 Phase 6-AQ 후속의 하나를 뺀다 — 숫자 48 을 올리지 않고
         #: **무엇이 늘었는지를 이름으로** 고정하는 이 파일의 방식 그대로다.
         - len(ADDED_IN_PHASE_6AQ_FOLLOWUP)
+        #: 🔴 Phase 6-BO 의 하나도 같은 방식으로 뺀다 (``XYZ_MATERIAL_INVALID``).
+        - len(ADDED_IN_PHASE_6BO)
         == 48
     )
     #: 🔴 셋 다 ``INVALID`` 다 — 모름 쪽은 7 그대로다.
@@ -807,6 +819,7 @@ def test_23_the_distinctions_from_phase_3e24_to_3e37_still_hold():
     assert ADDED_IN_PHASE_6AC <= set(ValidationCode.__members__)
     assert ADDED_IN_PHASE_6AD <= set(ValidationCode.__members__)
     assert ADDED_IN_PHASE_6AQ_FOLLOWUP <= set(ValidationCode.__members__)
+    assert ADDED_IN_PHASE_6BO <= set(ValidationCode.__members__)
     assert (
         len(ValidationCode)
         - len(ADDED_IN_FOLLOWUP8)
@@ -815,6 +828,8 @@ def test_23_the_distinctions_from_phase_3e24_to_3e37_still_hold():
         #: 🔴 Phase 6-AQ 후속의 하나를 뺀다 — 숫자 48 을 올리지 않고
         #: **무엇이 늘었는지를 이름으로** 고정하는 이 파일의 방식 그대로다.
         - len(ADDED_IN_PHASE_6AQ_FOLLOWUP)
+        #: 🔴 Phase 6-BO 의 하나도 같은 방식으로 뺀다 (``XYZ_MATERIAL_INVALID``).
+        - len(ADDED_IN_PHASE_6BO)
         == 48
     )
     assert len(ConditionResult) == 3

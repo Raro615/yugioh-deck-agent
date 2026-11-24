@@ -285,7 +285,9 @@ def test_03_both_kinds_exist_and_neither_was_added_or_removed():
     #: **소환 절차**이고, 이 시험이 지키는 사실(두 발동 enum 이 그대로
     #: 있고 합치지도 지우지도 않았다)은 그대로다 — 바로 위 두 줄이 그것을
     #: 센다. 아래 금지 이름 셋도 여전히 없다.
-    assert len(values) == 12
+    #: 🔴 12 → **13** (Phase 6-BO, ``XYZ_SUMMON``). 늘어난 것은 **엑시즈
+    #: 소환**이고, 이 감사가 재는 사실은 하나도 약해지지 않았다 — 수만 움직였다.
+    assert len(values) == 13
     assert "link_summon" in values
     #: 새 activation enum 도 없다.
     for forbidden in ("ActivationAction", "ActivateKind", "ACTIVATE_ANY"):
@@ -543,7 +545,10 @@ def test_12_every_registered_effect_belongs_to_a_spell_or_trap(repository):
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 떡기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
     #: 🔴 Phase 6-AF 에서 **등재 수와 카드 수가 갈라졌다** — 카드 수는 19
     #: 로 그대로이고 등재 수만 20 이 되었다. 기르수 ③(토큰 생성)이 이미
     #: 등재된 기르수 ①(유발) 과 **같은 카드**에 붙기 때문이다. 6-AC 까지는

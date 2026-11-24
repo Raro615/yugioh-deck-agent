@@ -994,7 +994,10 @@ def test_24_engine_v1_was_not_widened():
     무관한 **소환 절차**이고, 이 감사가 금지하는 네 이름(새 trigger engine ·
     event bus · timing engine · Condition DSL)은 여전히 **하나도 없다**.
     """
-    assert len(list(PlayerActionKind)) == 12
+    #: 🔴 12 → **13** (Phase 6-BO, ``XYZ_SUMMON``). 이전 수가 틀렸던 것이
+    #: 아니라 그때 실제로 12종이었다 — 늘어난 것은 **엑시즈 소환**이고,
+    #: 특수 소환이면서 그 카드 자신의 절차다.
+    assert len(list(PlayerActionKind)) == 13
     #: 새 trigger engine · event bus · timing engine · Condition DSL 없음.
     for forbidden in (
         "EventBus",

@@ -126,7 +126,11 @@ MINE = 0
 #: (손으로 읽은 금지 표가 범위까지 답한 경우), 신호는 있는데 누구에게
 #: 걸리는지 읽지 못한 쪽은 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
 #: 🔴 54 → **55** (Phase 6-AQ 후속, TARGET_RELATION_LOST).
-CODE_MEMBER_COUNT = 55
+#: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 늘어난 하나는
+#: 엑시즈 소재가 절차를 만족하지 않는다는 거절이고 **``INVALID``** 다 —
+#: 모름 쪽은 5 그대로다. **확인된** 소재 조건의 위반에만 쓰고, 절차를
+#: 읽지 못한 쪽은 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
+CODE_MEMBER_COUNT = 56
 
 #: ``engine/`` + ``agent/`` 에서 코드가 **등장하는** 줄.
 #: 69 → **67** (Phase 3-E-38 이 M1 ×2 · M2 ×2 를 고치면서 2 감소).
@@ -1566,7 +1570,11 @@ def test_31_the_distinctions_from_phase_3e24_to_3e36_still_hold():
     #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
     #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
     #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
-    assert len(ValidationCode) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(ValidationCode) == 56
     assert len(ConditionResult) == 3
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5

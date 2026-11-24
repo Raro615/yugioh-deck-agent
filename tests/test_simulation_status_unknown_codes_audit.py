@@ -291,7 +291,11 @@ def test_07_seven_of_forty_eight_codes_are_in_the_set():
     #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
     #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
     #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
-    assert len(ValidationCode) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(ValidationCode) == 56
     #: 집합의 정의가 ``frozenset`` 이다 — 런타임에 늘어날 수 없다.
     assert isinstance(_UNKNOWN_CODES, frozenset)
 
@@ -683,6 +687,10 @@ def test_25_no_new_enum_member_was_added_anywhere():
         #: 🔴 Phase 6-AD 가 하나를 더했다 — 특수 소환이 금지된 판의 거절
         #: 이고, 확인된 금지이므로 ``INVALID`` 쪽이다.
         "SPECIAL_SUMMON_FORBIDDEN",
+        #: 🔴 Phase 6-BO 가 하나를 더했다 — 엑시즈 소재가 절차를 만족하지
+        #: 않는다는 거절이고, **확인된** 소재 조건의 위반이므로 ``INVALID``
+        #: 쪽이다. 절차를 읽지 못한 쪽은 ``RULE_NOT_IMPLEMENTED`` 로 남는다.
+        "XYZ_MATERIAL_INVALID",
     }
     assert added <= set(ValidationCode.__members__)
     assert len(ValidationCode) - len(added) == 49
@@ -933,7 +941,11 @@ def test_32_the_agent_layer_no_longer_writes_the_policy_down():
     #: **모름이던 흐름 거절을 규칙 거절로 옮겼다.**
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
     #: 🔴 54 → **55** (Phase 6-AQ 후속, TARGET_RELATION_LOST).
-    assert sizes["ValidationCode"] == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert sizes["ValidationCode"] == 56
     assert sizes["ActionValidity"] == 3
 
 
@@ -968,9 +980,21 @@ def test_33_the_forty_eight_codes_partition_without_a_remainder():
     #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
     #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
     #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
-    assert len(rest) == 43
+    #: 🔴 43 → **44** (Phase 6-BO) — ``XYZ_MATERIAL_INVALID`` 가 늘었다.
+    #: 그것도 **``INVALID``** 다 (소재가 절차를 만족하지 않는다는 것은 판에
+    #: 적힌 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정
+    #: 거부 쪽만 하나 늘었다 — 6-AC · 6-AD · 6-AQ 와 같은 결이다.
+    assert len(rest) == 44
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
     #: 🔴 54 → **55** (Phase 6-AQ 후속, TARGET_RELATION_LOST).
-    assert len(named) + len(rest) == len(ValidationCode) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(named) + len(rest) == len(ValidationCode) == 56
     #: Phase 6-AC 가 둘을 더했다 — EFFECT_USE_LIMIT_REACHED · LINK_MATERIAL_INVALID (51 → 53).
-    assert len(all_names) == 55 == len(named) + len(rest)
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(all_names) == 56 == len(named) + len(rest)

@@ -3654,8 +3654,8 @@ def _skipped_choices_line(ask: ChoiceAsk, cap: int) -> str:
 #: 전에 **무엇을 반드시 보아야 하는가**" 를 적는다.
 #:
 #: 🔴 **왜 알파벳을 버렸는가 — 실측이다.** 6-BO 가 ``xyz_summon`` 을
-#: 더하자 그 종류가 **이름 때문에** 맨 뒤에 놓였다 (``pass`` ·
-#: ``set_spell_trap`` · ``special_summon`` 뒤). 같은 입력 (덱
+#: 더하자 그 종류가 **이름 때문에** 맨 뒤에 놓였다 (``pass`` · 세트 두
+#: 종류 · ``special_summon`` 뒤). 같은 입력 (덱
 #: ``docs/orcust-azamina-note.ydk`` · 패 기르수 · 하루 우라라 · 증식의 G ·
 #: 무한포영 · 무덤의 지명자) 에서, 롱기르수가 선 자리의 **세트 가지**가
 #: (세트할 카드 × 빈 칸) 으로 불어나 기준점별 보관 상한을 먼저 채웠고,
@@ -3690,8 +3690,11 @@ ACTION_ORDER: dict = {
     "special_summon": 1,
     "link_summon": 1,
     "xyz_summon": 1,
-    "set_monster": 2,
-    "set_spell_trap": 2,
+    #: 🔴 **세트 두 종류는 여기에 적지 않는다** — 그 이름을 ``agent/`` 에
+    #: 쓰지 않는 것이 이 묶음의 약속이고 (``tests/agent/
+    #: test_set_action_space.py`` 가 글자로 잡는다), 적지 않아도 자리는
+    #: 같다: :data:`ACTION_ORDER_DEFAULT` 가 순위 **2** 다. 위 표의 "세트"
+    #: 줄이 뜻하는 자리가 바로 그 기본값이다.
     #: 🔴 **흐름은 함께 뒤에 둔다** (:data:`FLOW_ACTION_KINDS` 와 같은 셋).
     "pass": 3,
     "change_phase": 3,

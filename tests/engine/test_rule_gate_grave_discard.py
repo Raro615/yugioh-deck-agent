@@ -256,6 +256,11 @@ def test_b_every_question_is_its_own_value():
         #: 않는다**는 것이고, 그 사실은 그대로다 — 세트는 묘지행도 덱
         #: 반환도 아니다.
         "may_be_set",  # I — Phase 6-BF
+        #: 🔴 J — Phase 6-BO (``Card.IsCanBeXyzMaterial``). 엑시즈 **소재로
+        #: 붙일 수 있는가** 의 질문이다. 이 시험이 지키는 것은 개수가 아니라
+        #: **합치지 않는다**는 것이고, 그 사실은 그대로다 — 소재가 되는 것은
+        #: 묘지행도 제외도 특수 소환도 아니다.
+        "may_be_xyz_material",  # J — Phase 6-BO
     }
     assert RuleQuestion.MAY_BE_SENT_TO_GRAVE is not RuleQuestion.MAY_BE_DISCARDED
     # 아홉이 **아홉 개의 다른 값**이다. 하나라도 겹치면 질문이 뭉개진다.
@@ -269,7 +274,12 @@ def test_b_every_question_is_its_own_value():
     # 선언할 때만 물어진다. 8 → 9 는 **그때 8 이었다**는 사실을 고치는 것이
     # 아니라 읽은 술어가 하나 늘었다는 뜻이고, 이 시험이 지키는 "합치지
     # 않는다" 는 한 글자도 약해지지 않았다.
-    assert len({q.value for q in RuleQuestion}) == len(list(RuleQuestion)) == 9
+    #: 🔴 **J 는 H 쪽이다** (Phase 6-BO) — 카드의 선언을 기다리지 않고
+    #: 종류만 보고 언제나 물어진다 (``RULE_GATED`` 가 ``ATTACH_AS_MATERIAL``
+    #: 을 들고 있다). 9 → 10 은 그때 9 였다는 사실을 고치는 것이 아니라
+    #: 읽은 술어가 하나 늘었다는 뜻이고, 이 시험이 지키는 "합치지 않는다" 는
+    #: 한 글자도 약해지지 않았다.
+    assert len({q.value for q in RuleQuestion}) == len(list(RuleQuestion)) == 10
     from engine.effect.semantics import DECLARED_GATE_RULINGS, RULE_GATED_PREDICATES
 
     assert RuleQuestion.MAY_BE_SPECIAL_SUMMONED not in (
@@ -356,8 +366,12 @@ def test_b_destruction_is_not_widened_into_this_phase():
     §6 — 파괴는 이번 범위가 아니다. 종류로 거는 관문은 **둘 그대로**이고,
     이동 판정기는 파괴에 답하지 않는다.
     """
+    #: 🔴 Phase 6-BO — 종류로 거는 관문이 **셋**이 됐다
+    #: (``ATTACH_AS_MATERIAL``). 이 시험이 지키는 사실은 그대로다 —
+    #: 이동 판정기는 **파괴에 답하지 않는다** (아래 세 줄).
     assert RULE_GATED == frozenset(
-        {OperationKind.DESTROY, OperationKind.SPECIAL_SUMMON}
+        {OperationKind.DESTROY, OperationKind.SPECIAL_SUMMON,
+         OperationKind.ATTACH_AS_MATERIAL}
     )
     assert OperationKind.DESTROY not in DECLARED_GATE_RULINGS
     assert OperationKind.DESTROY not in DECLARABLE_GATE_KINDS

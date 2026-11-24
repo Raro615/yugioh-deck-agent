@@ -1138,7 +1138,13 @@ def test_sending_and_discarding_are_still_ungated():
     있는가" 를 모르는 채로 소환하면 소생 제한을 무시한 몬스터가 판에
     올라온다. 파괴 내성과 같은 자리다.
     """
-    assert RULE_GATED == {DESTROY, OperationKind.SPECIAL_SUMMON}
+    #: 🔴 Phase 6-BO — 소재로 붙이기도 관문을 지난다. 제외된 기계족을
+    #: 숙주 아래로 옮기는 일이 **카드마다 다른 규칙**에 걸리기 때문이다
+    #: (이 카드는 "제외된 자신의 기계족" 만 받는다).
+    assert RULE_GATED == {
+        DESTROY, OperationKind.SPECIAL_SUMMON,
+        OperationKind.ATTACH_AS_MATERIAL,
+    }
     assert is_rule_gated(DESTROY)
     assert is_rule_gated(OperationKind.SPECIAL_SUMMON)
     assert not is_rule_gated(SEND)

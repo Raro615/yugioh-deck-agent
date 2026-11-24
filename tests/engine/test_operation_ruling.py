@@ -958,7 +958,10 @@ def test_f_the_registry_covers_every_registered_real_card():
     #: 네 장 (하루 우라라 · 증식의 G · 무한포영 · 무덤의 지명자 — 그
     #: 효과의 **비용으로 묘지에 놓이는** 카드들). 등재하지 않으면 자기가
     #: 치른 비용 때문에 자기 효과의 해결이 ``UNKNOWN`` 이 된다.
-    assert len(OPERATION_RULINGS) == 33
+    #: 🔴 33 → **34** (Phase 6-BO, 시오르페골 딩기르수). 이전 수가 틀렸던 것이
+    #: 아니라 그때 실제로 33장이었다 — 늘어난 것은 **읽은 카드**이고, 그 판정
+    #: 사실이 없으면 딩기르수 ② 의 해결이 "확인된 것이 없다" 로 멈춘다.
+    assert len(OPERATION_RULINGS) == 34
 
 
 def test_f_no_spell_or_trap_claims_to_be_returnable(repository):

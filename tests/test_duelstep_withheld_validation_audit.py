@@ -271,7 +271,11 @@ def test_06_the_validity_is_not_stored_but_is_derivable_from_the_code():
     #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
     #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
     #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
-    assert len(recoverable) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(recoverable) == 56
     #: 🔴 Phase 6-AC 가 둘을 더했다 — ``EFFECT_USE_LIMIT_REACHED`` ·
     #: ``LINK_MATERIAL_INVALID``. **둘 다 ``INVALID``** 이므로 모름 쪽은
     #: 그대로이고 확정 거부 쪽만 늘었다 (보완8 과 같은 결).
@@ -1244,7 +1248,11 @@ def test_29_the_validation_vocabulary_is_unchanged():
     #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
     #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
     #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
-    assert len(ValidationCode) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(ValidationCode) == 56
     assert len(ActionValidity) == 3
     assert len(SimulationStatus) == 5
     assert len(unknown_codes()) == 7
@@ -1295,7 +1303,11 @@ def test_31_this_phase_changed_no_production_file():
     #: 🔴 54 → **55** (Phase 6-AQ 후속) — TARGET_RELATION_LOST 가 늘었다.
     #: 발동 때 지정한 대상과의 관계가 끊긴 것은 '후보 조건을 만족하지 않는다'
     #: 와 **다른 사실**이고, 그 구분이 비공개 정보에서 뜻을 갖는다.
-    assert len(CODE_VALIDITY) == 55
+    #: 🔴 55 → **56** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 이전 수가
+    #: 틀렸던 것이 아니라 그때 실제로 55건이었다 — 늘어난 것은 **엑시즈
+    #: 소재가 절차를 만족하지 않는다**는 거절 이유 하나이고, 그 코드는
+    #: ``INVALID`` 를 선언한다 (아래 분할도 그만큼 움직였다).
+    assert len(CODE_VALIDITY) == 56
     assert "CODE_VALIDITY" in source_of("engine/validation.py")
     #: 🔴 **표를 만드는 자리는 여전히 하나다.** 듀얼은 읽기만 한다 —
     #: ``CODE_VALIDITY = {`` 같은 선언이 그쪽에 없다는 것으로 센다.
@@ -1326,7 +1338,9 @@ def test_32_adding_validity_to_the_step_would_recreate_the_copy_3e40_removed():
     #: 늘었다. 그것도 **``INVALID``** 다 (관계가 끊겼다는 것은 판에 적힌
     #: 사실이고 모름이 아니다), 그래서 모름 쪽 7 은 그대로이고 확정 거부
     #: 쪽만 하나 늘었다 — 6-AC · 6-AD 와 같은 결이다.
-    assert len(codes_declaring(ActionValidity.INVALID)) == 46
+    #: 🔴 46 → **47** (Phase 6-BO, ``XYZ_MATERIAL_INVALID``). 늘어난 하나가
+    #: ``INVALID`` 를 선언한다 — 모름 쪽은 그대로다.
+    assert len(codes_declaring(ActionValidity.INVALID)) == 47
     assert len(codes_declaring(ActionValidity.UNKNOWN)) == 7
     assert len(codes_declaring(ActionValidity.VALID)) == 1
     assert len(codes_declaring(None)) == 1

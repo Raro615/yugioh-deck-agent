@@ -1696,9 +1696,33 @@ def test_l03_a_second_resolution_choice_really_gets_followups(repository):
 
     🔴 카드 이름을 보지 않는다 — "서로 다른 해결 선택에서 출발한 기준점 중
     둘 이상이 후속을 받았는가" 를 센다.
+
+    🔴 **보관 예산을 이 시험이 직접 적는다 (Phase 6-BO).** 전에는 기본값을
+    그대로 받아 썼고, 6-BO 가 그 기본값을 올리자 (보관 64 → 96 · 기준점별
+    48 → 72) 같은 입력에서 **첫 기준점이 통째로 먹었다.** 실측 (actions=6,
+    같은 덱·패):
+
+      ===========  =========  ===================================
+      보관/기준점  후보 합계  후속을 받은 기준점
+      ===========  =========  ===================================
+      64 / 48      106        **2개** — ``((7,),)`` 69 · ``((16,),)`` 29
+      96 / 72      146        1개 — ``((7,),)`` 138
+      ===========  =========  ===================================
+
+    🔴 **자식 순서 때문이 아니다.** :data:`~agent.bounded_search.ACTION_ORDER`
+    를 6-BC 의 알파벳으로 되돌려 같은 네 조합을 재어 보았고, 수는 각각
+    2개 / 1개로 **똑같았다** (후보 105 / 146). 움직인 것은 예산뿐이다.
+
+    그래서 이 시험은 **기구를 재는 시험**으로 남기고 (기준점별 상한을 두면
+    첫 해결 선택이 아닌 선택 뒤에도 후속이 탐색된다), 그 기구가 증명된
+    예산을 손으로 적는다 — 기본값이 바뀔 때마다 이 사실이 흔들리지 않게.
+    기본값에서 첫 기준점이 풀을 다 먹는다는 것은 **따로 적어 둔 한계**다
+    (``docs/orcust-galatea-effect-extension.md`` §71).
     """
-    quota = _autonomous(repository)[1]
-    plain = _autonomous(repository, candidates_per_baseline=0)[1]
+    pinned = {"candidates": 64, "candidates_per_baseline": 48}
+    quota = _autonomous(repository, **pinned)[1]
+    plain = _autonomous(repository, candidates=64,
+                        candidates_per_baseline=0)[1]
 
     def _fed(outcome):
         rows = []

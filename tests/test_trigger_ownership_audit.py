@@ -185,6 +185,9 @@ def test_04_activate_effect_already_names_a_single_effect():
         "normal_summon",
         "special_summon",
         "link_summon",
+        #: 🔴 Phase 6-BO — 엑시즈 소환. 이 감사가 재는 사실(행동의 주체를
+        #: 누가 적는가)은 그대로다 — 수만 움직였다.
+        "xyz_summon",
         "set_monster",
         "set_spell_trap",
         "activate_card",

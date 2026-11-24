@@ -593,11 +593,15 @@ def test_07_the_executable_set_is_exactly_nine_kinds():
     한 일은 새 절차 하나를 실제로 실행하게 만든 것이고, 못 하던 것을
     할 수 있는 척 바꾼 것이 아니다.
     """
+    #: 🔴 Phase 6-BO — 엑시즈 소환의 구현이 꽂혔으므로 실행기가 아는
+    #: 종류가 하나 늘었다 (``engine.xyz_summon``). 이 단언이 지키는 사실은
+    #: 그대로다 — **구현이 있는 종류만** 여기 있다.
     assert duel_executor().supported == frozenset(
         {
             PlayerActionKind.NORMAL_SUMMON,
             PlayerActionKind.SPECIAL_SUMMON,
             PlayerActionKind.LINK_SUMMON,
+            PlayerActionKind.XYZ_SUMMON,
             PlayerActionKind.SET_MONSTER,
             PlayerActionKind.SET_SPELL_TRAP,
             PlayerActionKind.ATTACK,
@@ -608,6 +612,7 @@ def test_07_the_executable_set_is_exactly_nine_kinds():
             PlayerActionKind.NORMAL_SUMMON,
             PlayerActionKind.SPECIAL_SUMMON,
             PlayerActionKind.LINK_SUMMON,
+            PlayerActionKind.XYZ_SUMMON,
             PlayerActionKind.SET_MONSTER,
             PlayerActionKind.SET_SPELL_TRAP,
             PlayerActionKind.ATTACK,
@@ -662,6 +667,9 @@ def test_08_the_offered_set_is_exactly_seven_kinds(repository):
         PlayerActionKind.SPECIAL_SUMMON,
         #: 🔴 Phase 6-AC — 이 세 덱에는 엑스트라 덱 카드가 없다.
         PlayerActionKind.LINK_SUMMON,
+        #: 🔴 Phase 6-BO — 같은 이유로 엑시즈 소환도 제시되지 않는다
+        #: (엑스트라 덱이 비어 있으면 소재를 겹칠 카드가 없다).
+        PlayerActionKind.XYZ_SUMMON,
     }
 
 
@@ -1110,11 +1118,17 @@ def test_27_no_new_action_kind_or_generator_was_added():
     더해졌는지** 를 적는다. 자리와 순서는 그대로다: 새 종류는 목록의
     **끝이 아니라 소환 묶음 안**에 들어갔다 (어휘를 뜻으로 묶는다).
     """
-    assert len(list(PlayerActionKind)) == 12
+    #: 🔴 12 → **13** (Phase 6-BO, ``XYZ_SUMMON``). 이전 수가 틀렸던 것이
+    #: 아니라 그때 실제로 12종이었다 — 늘어난 것은 **엑시즈 소환**이고,
+    #: 특수 소환이면서 그 카드 자신의 절차다.
+    assert len(list(PlayerActionKind)) == 13
+    #: 🔴 Phase 6-BO 가 ``xyz_summon`` 을 **링크 소환 다음**에 더했다 —
+    #: 선언 순서 그대로 적는다 (이 단언은 수가 아니라 **순서**를 고정한다).
     assert [k.value for k in PlayerActionKind] == [
         "normal_summon",
         "special_summon",
         "link_summon",
+        "xyz_summon",
         "set_monster",
         "set_spell_trap",
         "activate_card",

@@ -1316,6 +1316,15 @@ def test_k01_no_new_operation_kind_and_no_new_destination():
         "shuffle",
         "move",
         "create_token",
+        #: 🔴 **Phase 6-BO 가 종류를 하나 더했다** — ``attach_as_material``,
+        #: 「제외된 기계족 한 장을 이 카드의 엑시즈 소재로 붙인다」 다.
+        #: **이동 시스템이 아니다**: 목적지가 ``Zone.OVERLAY`` 이고 그것은
+        #: 플레이어 존이 아니라 숙주 아래의 자리이므로
+        #: :data:`MOVABLE_DESTINATIONS` 가 받을 수 없다 — 그 표에 한 글자도
+        #: 더하지 않았다. 붙이는 일은
+        #: ``GameState.attach_material`` 한 곳이 하고 전용 델타
+        #: (``MaterialAttached``)를 남긴다.
+        "attach_as_material",
         #: 🔴 **Phase 6-AO 가 종류를 하나 더했다** — 「무엇을 특수 소환할 수
         #: 없는가」 를 적는 일이다. 이동이 **아니다**: 카드를 움직이지
         #: 않으므로 출발 자리도 목적지도 없고, 아래 두 번째 단언이 그 사실을
@@ -1361,7 +1370,10 @@ def test_k02_the_library_grew_no_executable_entry():
     #: 🔴 24 → **25** (Phase 6-BJ, 오르페골 갈라테아i ③ — 묘지 소생). 이전 수가
     #: 틀렸던 것이 아니라 그때 실제로 24건이었다 — 늘어난 것은 **읽은 효과**이고,
     #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
-    assert len(EFFECT_LIBRARY) == 25
+    #: 🔴 25 → **26** (Phase 6-BO, 시오르페골 떡기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 25건이었다 — 늘어난 것은 **읽은 효과**이고,
+    #: 등재되지 않은 카드는 여전히 범위 밖이다 (ADR-006).
+    assert len(EFFECT_LIBRARY) == 26
     #: Phase 6-AC — 성유물－『성장』 ② 이 실행 가능으로 더해졌다 (15 → 16).
     #: Phase 6-AF — 기르수 ③ 이 실행 가능으로 더해졌다 (16 → 17).
     #: 🔴 Phase 6-AO — 디베르 ① 이 실행 가능으로 더해졌다 (17 → 18).
@@ -1372,7 +1384,10 @@ def test_k02_the_library_grew_no_executable_entry():
     #: 🔴 20 → **21** (Phase 6-BI) — 갈라테아i ② 다.
     #: 🔴 21 → **22** (Phase 6-BJ) — 갈라테아i ③ (묘지 소생) 다. 이 시험이 지키는
     #: 사실은 그대로이고, 수가 움직인 것은 **다른 Phase 가 등재했기 때문**이다.
-    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 22
+    #: 🔴 22 → **23** (Phase 6-BO, 시오르페골 딩기르수 ②). 이전 수가 틀렸던
+    #: 것이 아니라 그때 실제로 22건이었다 — 늘어난 효과는 구현도 함께
+    #: 등록되었다 (``executable=True``).
+    assert sum(1 for entry in EFFECT_LIBRARY if entry.executable) == 23
 
 
 def test_k03_only_one_registered_operation_declares_its_origin():

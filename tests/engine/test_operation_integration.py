@@ -319,6 +319,11 @@ def test_a_the_taxonomy_is_exactly_what_is_executable():
         #: 만들어 놓는 일이다 — 이동이 아니다. ``engine.token`` 이
         #: 덱 · 패 · 엑스트라 덱의 장수가 변하지 않았음을 실제로 확인한다.
         "create_token",
+        #: 🔴 **소재로 붙이기 (Phase 6-BO).** 제외된 기계족 한 장을 숙주
+        #: 아래로 옮기는 일이다. 🔴 **이동 표에는 들어가지 않는다** —
+        #: 목적지가 ``Zone.OVERLAY`` 이고 그것은 플레이어 존이 아니므로
+        #: ``MOVABLE_DESTINATIONS`` 는 한 글자도 늘지 않았다.
+        "attach_as_material",
         #: 🔴 **세트 (Phase 6-BF).** 덱에서 고른 마법 · 함정을 뒷면으로
         #: 놓는 일이다. 🔴 **이동 표에는 들어가지 않는다** — 목적지가
         #: 칸이 있는 존(``SZONE`` · ``FZONE``)이므로 놓는 일은 소환과
@@ -934,6 +939,10 @@ def test_h_no_real_card_uses_move_yet():
         #: **``MOVE`` 가 아니다**: 전용 종류를 쓰고 전용 델타
         #: (``engine.set_card.CardSet``)를 남긴다.
         OperationKind.SET_SPELL_TRAP,
+        #: 🔴 Phase 6-BO — 딩기르수 ② 가 제외된 기계족을 소재로 붙인다.
+        #: **``MOVE`` 가 아니다**: 전용 종류를 쓰고 전용 델타
+        #: (``engine.effect.delta.MaterialAttached``)를 남긴다.
+        OperationKind.ATTACH_AS_MATERIAL,
     }
     assert OperationKind.MOVE not in kinds
 
