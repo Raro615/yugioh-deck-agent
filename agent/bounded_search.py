@@ -1354,6 +1354,12 @@ class MultiSearchOutcome:
 OWN_DETAIL_ZONES: tuple[Zone, ...] = (
     Zone.HAND, Zone.MZONE, Zone.EMZONE, Zone.SZONE,
     Zone.FZONE, Zone.PZONE, Zone.GRAVE, Zone.REMOVED,
+    #: 🔴 **엑시즈 소재도 내용까지 적는다** (Phase 6-BO). 소재는 **공개
+    #: 정보**이고 (양쪽이 볼 수 있다), 무엇보다 "이 전개가 남긴 것" 이다 —
+    #: 장수만 적으면 딩기르수 아래에 롱기르수가 있는 판과 스켈레촌이 있는
+    #: 판을 보고서가 구별할 수 없다 (실측: 6-BO 의 첫 실행에서 소재가
+    #: 빈 칸으로 보고되었다).
+    Zone.OVERLAY,
 )
 #: 자기 자리에서 **장수만** 적는 존. 🔴 덱의 순서는 입력에 없고
 #: (``build_opening`` 의 설명) 엑스트라 덱의 내용은 레시피가 말한다 —
@@ -1363,6 +1369,8 @@ OWN_COUNT_ZONES: tuple[Zone, ...] = (Zone.DECK, Zone.EXTRA)
 THEIR_DETAIL_ZONES: tuple[Zone, ...] = (
     Zone.MZONE, Zone.EMZONE, Zone.SZONE,
     Zone.FZONE, Zone.PZONE, Zone.GRAVE, Zone.REMOVED,
+    #: 🔴 상대의 소재도 **공개 정보**다 — 가려진 것을 적는 것이 아니다.
+    Zone.OVERLAY,
 )
 #: 상대 자리에서 **장수만** 적는 존. 🔴 **가려진 정보를 지어내지 않는다.**
 THEIR_COUNT_ZONES: tuple[Zone, ...] = (Zone.HAND, Zone.DECK, Zone.EXTRA)

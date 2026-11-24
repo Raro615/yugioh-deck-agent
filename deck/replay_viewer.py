@@ -423,6 +423,18 @@ function buildFrames(rec) {
                    + ' 에 뒷면으로 세트했습니다 — 🔴 소환도 발동도'
                    + ' 아닙니다. 지금 발동할 수 있는지는 이 기록이'
                    + ' 말하지 않습니다.');
+      } else if (ch.kind === 'material_attached') {
+        /* 🔴 **소재가 되는 것은 존 이동과 다른 사건이다** (Phase 6-BO).
+           목적지가 존이 아니라 **어느 카드 아래**이므로, 보관함으로
+           옮기고 숙주 아래의 목록을 따로 들고 간다. */
+        place(ch.instance, ch.from.player, 'OVERLAY', null, null);
+        roles[ch.instance] = 'mat'; basis['mat'] = 1;
+        notes.push(cardName(rec, ch.instance) + ' 를 '
+                   + (ZONE_KO[ch.from.zone] || ch.from.zone) + ' 에서 '
+                   + cardName(rec, ch.host) + ' 의 엑시즈 소재로 '
+                   + '겹쳤습니다 ('
+                   + (ch.basis === 'xyz-summon' ? '엑시즈 소환 절차'
+                      : '효과 해결') + ').');
       } else if (ch.kind === 'token_created') {
         notes.push('토큰이 생겼습니다 — ' + cardName(rec, ch.instance)
                    + ' (일반 카드의 이동이 아닙니다)');
@@ -490,6 +502,24 @@ function frameTitle(rec, ev, st) {
   return head;
 }
 
+/** 그 걸음의 소재를 **무엇이라 부르는가.** 🔴 걸음의 종류가 정한다. */
+function matKo(kind) {
+  if (kind === 'xyz_summon') { return '엑시즈 소재'; }
+  if (kind === 'link_summon') { return '링크 소재'; }
+  return '소재';
+}
+
+/** 최종 판의 **숙주 → 소재 카드명들.** 🔴 기록에 있을 때만 적는다. */
+function finalMaterials(rec) {
+  var rows = (rec.final && rec.final.materials) || [];
+  return rows.map(function (row) {
+    var under = (row.materials || []).map(function (one) {
+      return cardName(rec, one);
+    });
+    return {host: cardName(rec, row.host), seat: row.seat, under: under};
+  });
+}
+
 function frameText(rec, ev, st) {
   var bits = [];
   (ev.changes || []).forEach(function (ch) {
@@ -507,6 +537,13 @@ function frameText(rec, ev, st) {
                 + (ZONE_KO[ch.to_zone] || ch.to_zone) + ' 에 '
                 + (POS_KO[ch.position] || ch.position)
                 + ' 로 세트했습니다 (소환이 아닙니다).');
+    } else if (ch.kind === 'material_attached') {
+      bits.push(cardName(rec, ch.instance) + ' 를 '
+                + (ZONE_KO[ch.from.zone] || ch.from.zone) + ' 에서 '
+                + cardName(rec, ch.host) + ' 아래의 엑시즈 소재로 '
+                + '겹쳤습니다 ('
+                + (ch.basis === 'xyz-summon' ? '엑시즈 소환 절차'
+                   : '효과 해결') + ').');
     }
   });
   if (!bits.length) { bits.push('판의 자리는 바뀌지 않았습니다.'); }
@@ -517,7 +554,11 @@ function frameText(rec, ev, st) {
     bits.push('비용 기록: ' + ev.payments.join(' · '));
   }
   if (st && st.materials && st.materials.length && ev.type === 'action') {
-    bits.push('링크 소재: ' + st.materials.join(' · '));
+    /* 🔴 **소재의 이름을 걸음에서 읽는다** (Phase 6-BO). 전에는 '링크
+       소재' 로 고정되어 있어서, 엑시즈 소환 장면이 소재를 **링크 소재로
+       잘못 적었다** (사용자 지적). 두 소재는 가는 곳이 다르다 — 링크
+       소재는 묘지로 가고 엑시즈 소재는 그 카드 아래에 남는다. */
+    bits.push(matKo(st.kind) + ': ' + st.materials.join(' · '));
   }
   return bits.join(' ');
 }
@@ -1219,6 +1260,27 @@ function renderWhy(f) {
       out.appendChild(u);
     }
     box.appendChild(out);
+  }
+
+  /* 최종 장면 — 엑시즈 소재 --------------------------------------------- */
+  if (atEnd) {
+    /* 🔴 **소재는 존 목록으로 말할 수 없다** (Phase 6-BO). "보관함에 두
+       장" 과 "딩기르수 아래에 롱기르수와 스켈레촌" 은 다른 사실이고,
+       사용자가 확인해야 하는 것은 뒤쪽이다. 기록(``final.materials``)이
+       있을 때만 적는다 — 없으면 이 줄 자체가 없다. */
+    var mats = finalMaterials(rec);
+    if (mats.length) {
+      var mbox = el('div', 'why-rec');
+      mbox.appendChild(el('h4', null, '엑시즈 소재 (최종 장면)'));
+      mats.forEach(function (row) {
+        mbox.appendChild(el('div', 'row',
+          row.host + ' — 소재 ' + row.under.length + '장: '
+          + row.under.join(', ')));
+      });
+      mbox.appendChild(el('div', 'cap',
+        '  🔴 기록된 소재 그대로입니다 (final.materials).'));
+      box.appendChild(mbox);
+    }
   }
 
   /* 최종 장면 — 이 전개의 평가 ---------------------------------------- */

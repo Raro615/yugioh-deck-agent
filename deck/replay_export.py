@@ -123,7 +123,11 @@ EVENT_COST = "cost_payment"
 #: 등재하면서 그 길을 처음 지나게 되었다.
 _MOVE_KINDS = frozenset(
     {"zone_moved", "card_drawn", "monster_summoned", "token_created",
-     "token_vanished", "card_set"}
+     "token_vanished", "card_set",
+     #: 🔴 **소재가 되는 것도 자리가 바뀌는 일이다** (Phase 6-BO). 적지
+     #: 않으면 기록으로 계산한 자리가 "제외 구역" 에 머물고 최종 판은
+     #: ``OVERLAY`` 를 말하므로, ``verify_replay`` 가 어긋남으로 잡는다.
+     "material_attached"}
 )
 
 __all__ = [
@@ -564,7 +568,15 @@ def _event_block(event) -> dict:
 
 
 def _final_block(state, rows, slots=()) -> dict:
-    """최종 판 — 존 구성 · **칸 번호** · 특수 소환 제한 · 상태 해시."""
+    """
+    최종 판 — 존 구성 · **칸 번호** · **소재 관계** · 특수 소환 제한 ·
+    상태 해시.
+
+    🔴 **소재 관계가 Phase 6-BO 에서 들어왔다.** 존 구성만으로는 "어느
+    카드 **아래**에 있는가" 를 말할 수 없다 — ``OVERLAY`` 에 두 장이
+    있다는 사실과 "딩기르수 아래에 롱기르수와 스켈레촌이 있다" 는 사실은
+    다르고, 사용자가 확인해야 하는 것은 뒤쪽이다.
+    """
     block: dict = {"zones": _grouped(rows)}
     #: 🔴 **칸이 있는 존만** 번호가 있다 (Phase 6-AY). 이 칸이 비어 있는
     #: 것과 **없는 것**은 다르다 — 옛 형식의 기록에는 칸 자체가 없고,
@@ -575,6 +587,21 @@ def _final_block(state, rows, slots=()) -> dict:
     ]
     if state is None:
         return block
+    #: 🔴 **숙주 → 소재들.** 살아 있는 판에서 그대로 읽는다 (지어내지
+    #: 않는다). 소재가 없는 카드는 적지 않으므로, 빈 표는 "소재가 하나도
+    #: 없다" 는 사실이다.
+    materials = []
+    for player in state.players:
+        for card in player.all_instances():
+            under = tuple(getattr(card, "materials", ()) or ())
+            if not under:
+                continue
+            materials.append({
+                "host": card.instance_id.value,
+                "seat": player.player_id,
+                "materials": [one.value for one in under],
+            })
+    block["materials"] = materials
     limits = getattr(state, "summon_limits", None)
     if limits is not None:
         active = limits.active(state.turn.turn_number, 0)
@@ -628,6 +655,18 @@ def replay_membership(record) -> dict:
             if kind == "monster_summoned":
                 seat = str(change["player"])
                 where[instance] = (seat, change["to"]["zone"])
+                continue
+            if kind == "material_attached":
+                #: 🔴 **숙주의 컨트롤러 쪽 보관함으로 간다.** 사건은
+                #: 출발 자리(``from``)와 숙주(``host``)를 적고, 소재가
+                #: 사는 자리는 그 숙주를 들고 있는 사람의 ``OVERLAY``
+                #: 다 (``GameState.attach_material``). 숙주의 좌석은
+                #: 지금까지 계산된 자리에서 읽는다 — 사건에 적힌 출발
+                #: 자리는 **소재의** 것이고 숙주의 것이 아니다.
+                host_seat, _host_zone = where.get(
+                    change["host"], (str(change["from"]["player"]), "")
+                )
+                where[instance] = (host_seat, "OVERLAY")
                 continue
             if kind == "card_set":
                 #: 🔴 **``CardSet`` 은 목적지를 평평하게 적는다** —
