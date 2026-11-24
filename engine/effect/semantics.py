@@ -217,7 +217,15 @@ ORIGIN_RULES: dict[OperationKind, OriginRule] = {
 #: 아니라 **종류로 거는 관문이 아니기** 때문이다 (Phase 2-X). 그 둘의 관문은
 #: 카드가 선언하고, :data:`DECLARED_GATE_RULINGS` 가 그 자리다.
 RULE_GATED: frozenset[OperationKind] = frozenset(
-    {OperationKind.DESTROY, OperationKind.SPECIAL_SUMMON}
+    {
+        OperationKind.DESTROY,
+        OperationKind.SPECIAL_SUMMON,
+        #: 🔴 Phase 6-BO — 겹치기도 **언제나** 판정을 받는다. 공식
+        #: 스크립트가 ``IsCanBeXyzMaterial`` 을 후보 조건에 **직접** 적고
+        #: (``c93854893.lua`` 의 ``s.matfilter``), 그것이 카드의 선언이
+        #: 아니라 **그 일의 성질**이다 — 어떤 겹치기든 그 술어를 지난다.
+        OperationKind.ATTACH_AS_MATERIAL,
+    }
 )
 
 #: 관문을 통과하려면 무엇이 판정되어야 하는가.
@@ -229,6 +237,9 @@ GATING_RULES: dict[OperationKind, tuple[str, ...]] = {
     OperationKind.SPECIAL_SUMMON: (
         "이 카드를 특수 소환할 수 있는가 (소환 조건)",
         "지금 특수 소환해도 되는가 (소생 제한 · 제약)",
+    ),
+    OperationKind.ATTACH_AS_MATERIAL: (
+        "이 카드를 엑시즈 소재로 쓸 수 있는가 (IsCanBeXyzMaterial)",
     ),
     # 아래 둘은 **카드가 선언할 때만** 물어진다 (Phase 2-X).
     OperationKind.SEND_TO_GRAVE: (
@@ -479,6 +490,21 @@ class RuleQuestion(str, Enum):
     이다. 이 칸이 말하는 것은 **카드 자신의 텍스트가 특수 소환을 막지
     않는다**는 사실 하나다.
     """
+    MAY_BE_XYZ_MATERIAL = "may_be_xyz_material"
+    """
+    J — "이 카드를 엑시즈 소재로 쓸 수 있는가"
+    (``Card.IsCanBeXyzMaterial``, Phase 6-BO).
+
+    A · B 와 **같은 이유로 따로 있다.** 공식 스크립트가 다른 술어들과
+    **함께** 적는다 — ``c93854893.lua`` 의 ``s.matfilter`` 가
+    ``IsRace(RACE_MACHINE) and IsFaceup() and IsCanBeXyzMaterial(...)`` 다.
+    같은 질문이라면 셋을 함께 쓸 이유가 없다.
+
+    🔴 **소환 절차의 소재 조건과 다른 질문이다.** 저쪽은 "이 소재로 그
+    카드를 소환할 수 있는가" 이고 (:func:`~engine.xyz_rules.
+    assess_xyz_materials`), 이쪽은 **이 카드가 소재가 될 수 있는가** 다.
+    앞은 조합의 질문, 뒤는 카드 한 장의 질문이다.
+    """
     MAY_BE_SET = "may_be_set"
     """
     I — "이 카드를 세트할 수 있는가" (``Card.IsSSetable``, Phase 6-BF).
@@ -590,6 +616,7 @@ RULE_GATED_PREDICATES: dict[RuleQuestion, str] = {
 #: 『성장』 ② 의 해결이 "0장 골랐습니다 (최소 1장)" 으로 끝났다.
 RULE_GATED_QUESTIONS: dict[OperationKind, RuleQuestion] = {
     OperationKind.SPECIAL_SUMMON: RuleQuestion.MAY_BE_SPECIAL_SUMMONED,
+    OperationKind.ATTACH_AS_MATERIAL: RuleQuestion.MAY_BE_XYZ_MATERIAL,
 }
 
 #: 질문을 한국어 동사로. 거절 이유 문장에 그대로 들어간다.
@@ -601,6 +628,7 @@ QUESTION_VERBS: dict[RuleQuestion, str] = {
     RuleQuestion.MAY_BE_RETURNED_TO_DECK: "덱으로 되돌릴",
     RuleQuestion.MAY_BE_SPECIAL_SUMMONED: "특수 소환할",
     RuleQuestion.MAY_BE_SET: "세트할",
+    RuleQuestion.MAY_BE_XYZ_MATERIAL: "엑시즈 소재로 쓸",
 }
 
 #: **아직 아무도 묻지 않는** 질문들.

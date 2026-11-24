@@ -79,6 +79,7 @@ from engine.effect.definition import (
 from engine.effect.executor import EffectExecutor, EffectImplementationRegistry
 from engine.effect.journal import EventJournal
 from engine.effect.operation import (
+    AttachMaterialOperation,
     CardOperation,
     CreateTokenOperation,
     DrawOperation,
@@ -270,6 +271,13 @@ CALLED_BY_THE_GRAVE = 24224830
 #: 오르페골 디베르 (Phase 6-AO) — 묘지에서 발동하는 **첫 효과**이고 비용을
 #: 치르는 **첫 등재 효과**다.
 HARP_HORROR = 57835716
+
+#: 시오르페골 딩기르수 (Phase 6-BO) — 이 저장소의 **첫 엑시즈 몬스터**이고,
+#: 소재 조건을 등재한 첫 엑시즈 카드다 (:data:`~engine.xyz_rules.
+#: XYZ_ALTERNATIVE_RULES`). 등재된 효과는 ② 의 **뒤쪽 갈래 하나**다 —
+#: 앞쪽 갈래(상대 필드의 카드 1장을 묘지로)를 등재하지 않은 이유는 그 항목의
+#: 주석이 적는다.
+DINGIRSU = 93854893
 
 #: 오르페골 클리막스 (Phase 6-BF) — 이 덱의 「오르페골」 함정이다.
 ORCUST_CLIMAX = 703897
@@ -3037,6 +3045,132 @@ _GALATEA_I_REVIVE_ENTRY = LibraryEntry(
 )
 
 
+#: 🔴 **시오르페골 딩기르수 ② — 제외된 기계족을 소재로** (Phase 6-BO).
+#:
+#: 공식 텍스트 (``data/cards.cdb`` 93854893):
+#:
+#:     이 카드가 특수 소환에 성공했을 경우에 발동할 수 있다. 다음 효과 중
+#:     하나를 고르고 발동한다.
+#:     ●상대 필드의 카드 1장을 묘지로 보낸다.
+#:     ●제외되어 있는 자신의 기계족 몬스터 1장을 이 카드의 엑시즈 소재로 한다.
+#:
+#: 무엇을 옮겼는가 — ``c93854893.lua`` 의 ``e2``
+#: --------------------------------------------
+#: ``e2:SetType(EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O)`` →
+#: :attr:`~engine.vocabulary.ActivationKind.TRIGGER`. ``e2:SetCode(
+#: EVENT_SPSUMMON_SUCCESS)`` 는 **정의가 아니라 트리거 등록**이 들고 간다
+#: (:mod:`engine.trigger_compiler` 의 ``EVENT_TIMING`` 이 그 코드를
+#: ``MONSTER_SUMMONED`` + :data:`~engine.effect.delta.SPECIAL_SUMMON_KINDS`
+#: 로 옮긴다) — 🔴 그래서 **엑시즈 소환에도 발화한다**: 그 표가 소환법
+#: 목록을 손으로 다시 적지 않고 읽기 때문이다.
+#:
+#: ``s.matfilter`` 의 세 술어를 가른다::
+#:
+#:     c:IsRace(RACE_MACHINE)      → RaceIs("MACHINE")       후보 조건
+#:     c:IsFaceup()                → CardIsFaceUp()          후보 조건
+#:     c:IsCanBeXyzMaterial(...)   → **옮기지 못했다**        아래 참고
+#:
+#: ``Duel.SelectMatchingCard(tp,…,LOCATION_REMOVED,0,1,1,nil,tp)`` 에서
+#: 후보의 자리(자신 제외 구역)와 장수(정확히 1장)를, ``Duel.Overlay(c,g)``
+#: 에서 하는 일을 옮겼다 (:class:`~engine.effect.operation.
+#: AttachMaterialOperation`).
+#:
+#: 🔴 **고르는 시점이 해결 중이다** (``chosen_at_resolution=True``). 공식
+#: 스크립트가 ``efftg`` 가 아니라 ``effop`` 에서 고르고, 카드 텍스트에
+#: 「대상으로 하고」 가 **없다** — 그래서 :meth:`~engine.effect.target.
+#: TargetSpec.targeting` 이 아니라 ``choosing`` 이다.
+#:
+#: 🔴 **앞쪽 갈래를 등재하지 않았다** (●상대 필드의 카드 1장을 묘지로).
+#: 두 갈래는 Lua 에서 **한 효과**이고 (``e2`` 하나 · ``Duel.SelectEffect``
+#: 가 갈래를 고른다), :class:`~engine.ids.EffectRef` 는 ``(카드, ordinal)``
+#: 이므로 **같은 ordinal 에 정의 둘을 둘 수 없다.** 그리고 이 저장소에는
+#: "한 효과 안에서 갈래를 고른다" 를 적는 자리가 없다 — 고르는 것은 카드이고
+#: (``ChoiceSpec``) 수다 (``DeclarationBinding``). 갈래가 아니다.
+#:
+#: 그래서 **덜 적는 쪽**을 골랐다 (ADR-006): 등재된 갈래만 후보가 되고,
+#: 앞쪽 갈래는 **없는 것처럼** 동작한다. 🔴 그것이 "상대 필드에 카드가
+#: 없다" 는 뜻이 **아니다** — 이 판에는 기르수 ③ 이 상대 필드에 놓은
+#: 성유물 토큰이 있고, 공식 규칙으로는 앞쪽 갈래도 발동할 수 있다.
+#: 그 사실을 보고서가 적는다 (6-BO §4).
+#:
+#: 🔴 **1턴 제한을 ``PER_CARD_NAME`` 으로 적었다.** Lua 의 ``e2`` 에는
+#: ``SetCountLimit`` 이 **없고**, "하나를 고르고 발동한다" 의 배타성은
+#: 유발 창 하나당 한 번이라는 뜻이다. 그런데 이 카드는
+#: ``c:SetSPSummonOnce(id)`` 로 **같은 이름을 1턴에 1번만 특수 소환**할 수
+#: 있으므로, 그 창도 1턴에 한 번뿐이다 — 두 제한은 **이 카드에서 같은
+#: 범위**가 된다. 적지 않으면 같은 턴에 두 번 발동하는 길이 열리고, 그쪽이
+#: 더 틀린다.
+#:
+#: 옮기지 못한 것
+#: --------------
+#: 1. ``c:IsCanBeXyzMaterial(nil,tp,REASON_EFFECT)`` — 「이 카드를 엑시즈
+#:    소재로 쓸 수 있는가」 를 판정하는 계층이 없다. 그래서 이 조작의
+#:    결과는 ``UNKNOWN`` 으로 나간다 (:data:`~engine.effect.semantics.
+#:    UNCHECKED_SEMANTIC_RULES`) — **일어나지만 전부 보고 한 것은 아니다.**
+#: 2. 앞쪽 갈래 (위 설명).
+#: 3. ``e1`` 의 파괴 대체 (``EFFECT_DESTROY_REPLACE``) — 지속 효과도
+#:    파괴 대체 계층도 없다.
+#: 4. 발동 조건을 **제외 구역 장수**로만 옮겼다. "기계족이면서 앞면인
+#:    카드가 제외되어 있는가" 는 장수로 답할 수 없고, 기르수 ① · 욕망의
+#:    항아리와 같은 태도다 (필요조건이지 충분조건이 아니다).
+_DINGIRSU_ATTACH_ENTRY = LibraryEntry(
+    definition=EffectDefinition(
+        effect_ref=EffectRef(DINGIRSU, 1),
+        source_card_id=DINGIRSU,
+        targets=TargetBinding.single(
+            TargetSpec.choosing(
+                ChoiceSpec(
+                    source=CandidateSource(
+                        # ``LOCATION_REMOVED, 0`` — 자신 제외 구역만이다.
+                        zones=frozenset({Zone.REMOVED}),
+                        owner=PlayerRef.CONTROLLER,
+                        # ``s.matfilter`` 의 **앞 둘만.** 뒤쪽
+                        # ``IsCanBeXyzMaterial`` 은 옮기지 못했다.
+                        require=And(
+                            (
+                                CardIsFaceUp(),
+                                RaceIs("MACHINE"),
+                            )
+                        ),
+                    ),
+                    minimum=1,
+                    maximum=1,
+                ),
+                #: 🔴 ``effop`` 에서 고른다 — 발동 시점이 아니다.
+                chosen_at_resolution=True,
+            )
+        ),
+        operations=(AttachMaterialOperation(PRIMARY_TARGET),),
+        activation=ZoneCountAtLeast(PlayerRef.CONTROLLER, Zone.REMOVED, 1),
+        activation_kind=ActivationKind.TRIGGER,
+        use_limit=UseLimit(LimitScope.PER_CARD_NAME),
+        provenance=EffectProvenance.official_lua(
+            "c93854893.lua 의 e2 (EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O, "
+            "EVENT_SPSUMMON_SUCCESS) 에서 발동 분류를, s.matfilter 의 "
+            "IsRace(RACE_MACHINE) 와 IsFaceup() 에서 후보 조건을, "
+            "Duel.SelectMatchingCard(...,LOCATION_REMOVED,0,1,1,nil,tp) 에서 "
+            "후보의 자리와 장수를, Duel.Overlay(c,g) 에서 하는 일을 옮겼다. "
+            "IsCanBeXyzMaterial 은 옮기지 못했고 그 사실이 조작의 결과를 "
+            "UNKNOWN 으로 만든다. 앞쪽 갈래(상대 필드의 카드 1장을 묘지로)는 "
+            "같은 ordinal 에 정의 둘을 둘 수 없어 등재하지 않았다 — 상대 "
+            "필드가 비어 있다는 뜻이 아니다. 1턴 제한은 SetCountLimit 이 "
+            "아니라 SetSPSummonOnce(id) 에서 왔고, 이 카드에서는 두 제한의 "
+            "범위가 같다."
+        ),
+    ),
+    lua_file="c93854893.lua",
+    lua_excerpt=(
+        "e2:SetType(EFFECT_TYPE_SINGLE+EFFECT_TYPE_TRIGGER_O); "
+        "e2:SetCode(EVENT_SPSUMMON_SUCCESS); "
+        "s.matfilter = c:IsRace(RACE_MACHINE) and c:IsFaceup() and "
+        "c:IsCanBeXyzMaterial(nil,tp,REASON_EFFECT); "
+        "Duel.SelectMatchingCard(tp,s.matfilter,tp,LOCATION_REMOVED,0,1,1,nil,tp); "
+        "Duel.Overlay(c,g)"
+    ),
+    executable=True,
+)
+
+
 EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 2-K ~ 2-U
     _POT_OF_GREED_ENTRY,
@@ -3080,6 +3214,9 @@ EFFECT_LIBRARY: tuple[LibraryEntry, ...] = (
     # Phase 6-BJ — **묘지에서 자신을 특수 소환하는 첫 효과**, 그리고 소생
     # 제한을 **이력으로** 넘는 첫 효과 (engine.state.summon_history).
     _GALATEA_I_REVIVE_ENTRY,
+    # Phase 6-BO — **엑시즈 소재를 붙이는 첫 효과**, 그리고 엑시즈 소환에
+    # 발화하는 첫 유발이다.
+    _DINGIRSU_ATTACH_ENTRY,
 )
 
 
@@ -3198,6 +3335,21 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                     "질문은 패 · 덱에서 나오는 특수 소환에 생기지 않고, 그 "
                     "구분은 engine.effect.ruling.REVIVAL_LIMIT_FREE_ZONES 가 "
                     "한다.",
+                ),
+                #: 🔴 **Phase 6-BO — 딩기르수 ② 가 이 자리에 묻는다.**
+                #: 이 카드는 갈라테아i ④ 의 비용으로 **제외될 수 있고**
+                #: (실측: 소생 경로의 최종 판에서 기르수가 제외에 있다),
+                #: 그러면 「제외되어 있는 자신의 기계족 몬스터」 의 후보가
+                #: 된다.
+                RuleQuestion.MAY_BE_XYZ_MATERIAL: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "잭나이츠 오르페골 기르수: 공식 텍스트 전문을 읽었고, "
+                    "자기가 엑시즈 소재가 되는 것을 막는 문장이 없다 — "
+                    "「이 카드는 엑시즈 소재로 할 수 없다」 류의 문장이 "
+                    "어디에도 없는 메인 덱의 효과 몬스터다. 🔴 소재가 "
+                    "**될 수 있는가**와 어떤 엑시즈 몬스터의 소재 **조건을 "
+                    "만족하는가**는 다른 질문이다.",
                 ),
             },
             restricts_others=False,
@@ -3457,6 +3609,20 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                     "(토큰도 엑스트라 덱 카드도 아니다), 덱 이외의 곳으로 "
                     "보내는 대체 효과도 적혀 있지 않다.",
                 ),
+                #: 🔴 **Phase 6-BO — 딩기르수 ② 가 이 자리에 묻는다**
+                #: (``Card.IsCanBeXyzMaterial``). ① 의 비용이 자기 자신을
+                #: 제외하므로 **제외된 기계족**이 되고, 그 효과의 후보
+                #: 판정이 이 카드를 만난다 (덱으로 되돌리기와 같은 자리).
+                RuleQuestion.MAY_BE_XYZ_MATERIAL: RuleFact(
+                    ConditionResult.TRUE,
+                    RuleBasis.CARD_TEXT,
+                    "오르페골 스켈레촌: 공식 텍스트 전문을 읽었고, 자기가 "
+                    "엑시즈 소재가 되는 것을 막는 문장이 없다 — 「이 카드는 "
+                    "엑시즈 소재로 할 수 없다」 류의 문장이 어디에도 없는 "
+                    "메인 덱의 효과 몬스터다. 🔴 소재가 **될 수 있는가**와 "
+                    "어떤 엑시즈 몬스터의 소재 **조건을 만족하는가**는 다른 "
+                    "질문이고, 뒤쪽은 engine.xyz_rules 가 답한다.",
+                ),
             },
             restricts_others=False,
             restriction_basis=RuleBasis.CARD_TEXT,
@@ -3579,6 +3745,43 @@ OPERATION_RULINGS: OperationRulingRegistry = OperationRulingRegistry(
                 "않았고, 이 저장소에서 바벨이 앞면으로 깔린 판은 디베르 · "
                 "스켈레촌 · 갈라테아의 ① 쪽 조건을 **거짓**으로 만들 뿐 "
                 "②(유발즉시) 를 열지 못한다."
+            ),
+        ),
+        #: 🔴 **시오르페골 딩기르수** (Phase 6-BO). 왜 여기 한 줄이
+        #: 필요한가 — 이 카드가 **앞면으로 필드에 서 있는 동안** 그 판의
+        #: 모든 조작 판정이 ``_interference`` 의 훑기에 걸린다. 등재하지
+        #: 않으면 "막는지 알 수 없다" 가 되어, **자기 ② 의 후보 판정이
+        #: 자기 때문에 UNKNOWN 이 된다** (실측: 6-BO 의 첫 판에서 "@primary
+        #: 의 후보를 지금 쓸 수 있는지 판정하지 못했습니다 … #42: EMZONE 의
+        #: 93854893 에 대해 확인된 것이 없어" 로 해결이 멈췄다).
+        #:
+        #: 🔴 ``restricts_others=False`` 의 근거가 **두 걸음**이다.
+        #:
+        #: 1. ``e2`` (②) 는 **발동해야** 일어난다 — 클리막스와 같은 결이다.
+        #: 2. ``e1`` 은 발동하지 않는 지속 효과이고
+        #:    (``EFFECT_TYPE_FIELD+EFFECT_TYPE_CONTINUOUS`` ·
+        #:    ``EFFECT_DESTROY_REPLACE``), 하는 일은 **파괴를 대신하는
+        #:    것**이다. 그런데 이 계층은 파괴에 **언제나 ``UNKNOWN``** 으로
+        #:    답한다 (:meth:`~engine.effect.ruling.BoardRuling.
+        #:    may_be_destroyed` — "파괴 지식은 이 계층에 없다"). 그래서
+        #:    이 표가 답하는 질문들 중 ``e1`` 이 바꿀 수 있는 것은 **하나도
+        #:    없다.**
+        #:
+        #: 🔴 그러므로 이 ``False`` 는 "``e1`` 을 구현했다" 는 뜻이 **아니다**
+        #: — 파괴 대체는 등재되지 않았고, 그 사실은
+        #: :data:`~engine.xyz_rules.XYZ_BLIND_SPOTS` 가 적는다.
+        CardRuleFacts(
+            card_id=DINGIRSU,
+            answers={},
+            restricts_others=False,
+            restriction_basis=RuleBasis.CARD_TEXT,
+            restriction_note=(
+                "시오르페골 딩기르수: 공식 텍스트 전문과 c93854893.lua 를 "
+                "읽었다. ② 는 발동해야 일어나고, 발동하지 않는 ① 은 "
+                "**파괴를 대신하는** 지속 효과다 — 이 계층은 파괴에 언제나 "
+                "UNKNOWN 으로 답하므로 (may_be_destroyed) 이 표가 답하는 "
+                "질문 중 ① 이 바꿀 수 있는 것이 없다. 🔴 파괴 대체를 "
+                "구현했다는 뜻이 아니다."
             ),
         ),
         CardRuleFacts(

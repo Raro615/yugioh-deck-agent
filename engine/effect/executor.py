@@ -72,8 +72,10 @@ from engine.condition import (
 from engine.cost import CandidateSource, ChoiceSpec, Selection
 from engine.cost.resolver import CandidateResolver
 from engine.effect.delta import (
+    MATERIAL_BY_EFFECT,
     CardDrawn,
     LifeChanged,
+    MaterialAttached,
     SpecialSummonLimited,
     StateDelta,
     ZoneMoved,
@@ -486,6 +488,14 @@ class _Step:
     **:meth:`result` 의 성패를 바꾸지 않는다.** 바꾸면 같은 효과 안의 뒤
     조작이 앞의 결과를 읽을 때 막히고, 그것은 "못 본 자리가 있다" 와는
     다른 결정이다 — 근거를 모으기 전에 내릴 결정이 아니다.
+    """
+    host: "InstanceId | None" = None
+    """
+    이 일이 카드를 **누구 아래에** 겹치는가 (Phase 6-BO).
+
+    🔴 :attr:`owners` 와 **다른 질문이다.** 저쪽은 "목적지의 주인" 이고
+    (존은 주인의 자리다) 이쪽은 **숙주 카드 한 장**이다. 겹치기가 아닌
+    일에는 ``None`` 이고, 계획 단계가 정한다 — 적용 단계는 고르지 않는다.
     """
     outcome: "RandomOutcome | None" = None
     """
@@ -3332,6 +3342,148 @@ class EffectExecutor:
         )
         return step.record(), (changed,)
 
+    def _plan_attach_material(
+        self,
+        state: GameState,
+        definition: EffectDefinition,
+        context: ResolutionContext,
+        operation,
+        values: ExecutionValues,
+    ) -> "_Step | EffectResult":
+        """
+        고른 카드를 **이 효과를 발동한 카드 아래로** 겹칠 계획 (Phase 6-BO).
+
+        순서가 규칙이다. ① 고른 것이 적법한 대상인가 → ② 숙주가 아직
+        필드의 앞면 엑시즈 몬스터인가 → ③ 고른 카드가 판에 있고 이미 그
+        숙주의 소재가 아닌가. **판에 손대기 전에** 전부 끝낸다 (ADR-008).
+
+        🔴 **후보 조건은 여기서 다시 적지 않는다.** 「제외된 · 앞면 ·
+        기계족」 은 정의의 :class:`~engine.effect.definition.TargetBinding`
+        이 적고, 그 판정은 ``_check_target`` 이 한다 — 두 곳에 적으면 둘이
+        갈라진다.
+
+        🔴 **숙주가 떠난 갈래는 거절로 적는다.** 공식 스크립트는
+        ``if not (c:IsRelateToEffect(e) and c:IsType(TYPE_XYZ)) then return
+        end`` 로 **조용히 아무것도 하지 않는데**, 이 저장소에는 "효과는
+        해결되었고 이 일만 일어나지 않았다" 를 적는 자리가 이 조작에
+        없다. 지어내지 않고 거절로 적고, 그 차이를 여기 남긴다.
+        """
+        selected = self._resolve_selection(
+            state, definition, context, operation, values
+        )
+        if isinstance(selected, EffectResult):
+            return selected
+        ref, selection = selected
+
+        legal = self._check_target(
+            state, definition.target_spec(ref), selection, context, ref
+        )
+        if legal is not None:
+            return legal
+
+        host = context.source
+        if host is None:
+            return _fail(
+                ResolutionStatus.INVALID_CONTEXT,
+                ValidationCode.RULE_NOT_IMPLEMENTED,
+                "겹칠 숙주(이 효과를 발동한 카드)를 알 수 없습니다.",
+            )
+        owner = state.find_instance(host)
+        if owner is None:
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.CANDIDATE_NOT_FOUND,
+                f"{host} 가 이 듀얼에 없어 소재를 겹칠 수 없습니다.",
+            )
+        if owner.zone not in (Zone.MZONE, Zone.EMZONE) or not owner.is_faceup:
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                f"{host} 가 필드의 앞면 몬스터가 아닙니다 "
+                f"(현재 {owner.zone.value}) — 소재를 겹칠 수 없습니다.",
+            )
+        try:
+            host_definition = owner.definition
+        except (RuntimeError, KeyError):
+            host_definition = None
+        if host_definition is None or not getattr(
+            host_definition, "is_xyz", False
+        ):
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                f"{host} 가 엑시즈 몬스터가 아닙니다 — "
+                "c:IsType(TYPE_XYZ) 가 요구합니다.",
+            )
+
+        chosen: list[InstanceId] = []
+        for instance in selection.chosen:
+            card = state.find_instance(instance)
+            if card is None:
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.CANDIDATE_NOT_FOUND,
+                    f"{instance} 가 이 듀얼에 없습니다.",
+                )
+            if instance == host or instance in owner.materials:
+                return _fail(
+                    ResolutionStatus.INVALID_TARGET,
+                    ValidationCode.CANDIDATE_NOT_ELIGIBLE,
+                    f"{instance} 는 이미 {host} 자신이거나 그 소재입니다.",
+                )
+            chosen.append(instance)
+        if not chosen:
+            return _fail(
+                ResolutionStatus.INVALID_TARGET,
+                ValidationCode.TOO_FEW_SELECTED,
+                f"{ref} 에 고른 카드가 없습니다.",
+            )
+        return _Step(
+            operation,
+            instances=tuple(chosen),
+            #: 소재는 숙주 아래로 가므로 **목적지의 주인은 숙주의
+            #: 컨트롤러**다 (``GameState.attach_material`` 과 같은 규율).
+            owners=tuple(owner.controller for _ in chosen),
+            host=host,
+        )
+
+    def _apply_attach_material(
+        self, state: GameState, step: "_Step"
+    ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
+        """
+        계획한 카드를 숙주 아래로 겹친다 (Phase 6-BO).
+
+        🔴 **출발 자리를 옮기기 전에 읽는다** —
+        :meth:`_apply_card_movement` 와 같은 규율이다. 뒤에서 읽으면
+        ``OVERLAY`` 가 되어 있어 어디서 왔는지 영영 알 수 없다.
+
+        🔴 **판을 바꾸는 자리는 하나다** —
+        :meth:`~engine.state.game_state.GameState.attach_material`. 소환
+        절차도 같은 함수를 쓰고, 다른 것은 사건의 ``basis`` 뿐이다.
+        """
+        assert step.host is not None  # 계획 단계가 확인했다
+        changes: list = []
+        for instance in step.instances:
+            card = state.find_instance(instance)
+            assert card is not None  # 계획 단계가 확인했다
+            from_player, from_zone = card.controller, card.zone
+            state.attach_material(step.host, instance)
+            if card.zone is not Zone.OVERLAY:
+                raise EffectExecutionError(
+                    f"{instance} 를 {step.host} 아래로 겹쳤는데 "
+                    f"{card.zone.value} 에 있습니다."
+                )
+            changes.append(
+                MaterialAttached(
+                    host=step.host,
+                    card=instance,
+                    source_player=from_player,
+                    source_zone=from_zone,
+                    basis=MATERIAL_BY_EFFECT,
+                )
+            )
+        return step.record(), tuple(changes)
+
     def _apply_card_movement(
         self, state: GameState, step: _Step
     ) -> "tuple[AppliedOperation, tuple[StateDelta, ...]]":
@@ -3448,6 +3600,11 @@ OPERATION_HANDLERS: dict[OperationKind, OperationHandler] = {
         EffectExecutor._plan_card_operation,
         EffectExecutor._apply_card_movement,
         "GameState.move — 의미 없는 이동 (Phase 2-L)",
+    ),
+    OperationKind.ATTACH_AS_MATERIAL: OperationHandler(
+        EffectExecutor._plan_attach_material,
+        EffectExecutor._apply_attach_material,
+        "GameState.attach_material (Phase 6-BO)",
     ),
     **{
         kind: OperationHandler(

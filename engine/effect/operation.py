@@ -146,6 +146,30 @@ class OperationKind(str, Enum):
     :class:`~engine.effect.delta.MonsterSummoned` 가 함께 들어가므로
     「특수 소환되었을 경우」 유발이 토큰을 본다.
     """
+    ATTACH_AS_MATERIAL = "attach_as_material"
+    """
+    **고른 카드를 이 효과를 발동한 카드 아래의 엑시즈 소재로 겹친다**
+    (Phase 6-BO). ``Duel.Overlay(c,g)`` 다.
+
+    ``MOVE`` 와 가르는 이유가 셋이다.
+
+    1. **목적지가 존이 아니다.** 소재는 어느 **카드 아래**로 가고,
+       ``Zone.OVERLAY`` 는 플레이어 존이 아니다 —
+       :func:`~engine.effect.semantics.movement_destination` 가 답할 수
+       있는 모양이 아니므로 그 길을 쓸 수 없다.
+    2. **묘지로 보내기도 제외도 아니다.** 소재가 된 카드는 판에 남고,
+       뒤에 꺼내 쓸 수 있다 (ADR-002 — 도착지가 같아도 뜻이 다르면 다른
+       일이다).
+    3. **소환 절차의 겹치기와도 다르다.** 그쪽은
+       :class:`~engine.xyz_summon.XyzSummonExecutor` 가 하고 사건의
+       ``basis`` 가 ``xyz-summon`` 이다. 이쪽은 **효과 해결**이고
+       ``effect`` 다 (:class:`~engine.effect.delta.MaterialAttached`).
+
+    🔴 **숙주는 고르지 않는다.** 공식 스크립트가 ``e:GetHandler()`` 를
+    숙주로 쓰므로 (딩기르수 ②: ``Duel.Overlay(c,g)`` 의 ``c``), 숙주는
+    **그 효과를 발동한 카드 하나**다 — 고를 것이 없으니 후보도 없다
+    (:data:`~engine.effect.target.SELF_TARGET` 의 설명과 같은 자리).
+    """
     RESTRICT_SPECIAL_SUMMON = "restrict_special_summon"
     """
     **이 턴 남은 동안 무엇을 특수 소환할 수 없는지 적는다** (Phase 6-AO).
@@ -219,6 +243,11 @@ REASON_NAMES: dict[OperationKind, tuple[str, ...]] = {
     # 🔴 ``REASON_SPSUMMON`` 은 아니다 — 세트는 소환이 아니다
     # (RULE-SUMMON-010 과 같은 결).
     OperationKind.SET_SPELL_TRAP: ("EFFECT",),
+    #: 효과로 겹쳐진 것은 맞으므로 ``REASON_EFFECT`` 를 적는다 (Phase 6-BO).
+    #: 🔴 ``REASON_XYZ`` 같은 이름은 적지 않는다 — 소환 절차의 겹치기는 이
+    #: 조작을 지나지 않고 (``XyzSummonExecutor``), 그쪽 사건의 ``basis`` 가
+    #: 그 사실을 적는다.
+    OperationKind.ATTACH_AS_MATERIAL: ("EFFECT",),
     OperationKind.UNKNOWN: (),
 }
 
@@ -893,6 +922,59 @@ class SpecialSummonOperation(Operation):
 
 
 @dataclass(frozen=True, slots=True)
+class AttachMaterialOperation(Operation):
+    """
+    고른 카드를 **이 효과를 발동한 카드 아래의 엑시즈 소재로** 겹친다
+    (Phase 6-BO · ``Duel.Overlay``).
+
+    ``CardOperation`` 이 아닌 이유
+    ------------------------------
+    :class:`SpecialSummonOperation` 과 **같은 이유**다. ``CardOperation`` 의
+    일들은 목적지가 의미가 정하는 **한 존**이고 (파괴 → 묘지) 실행기가
+    ``DESTINATION`` 표를 보고 옮긴다. 겹치기는 그 모양이 아니다 — 목적지가
+    존이 아니라 **어느 카드 아래**이고, 남기는 변화도 ``ZoneMoved`` 가
+    아니라 :class:`~engine.effect.delta.MaterialAttached` 다.
+
+    그 표에 끼워 넣으면 "어떤 존으로 갔다" 와 "누구의 소재가 되었다" 가 같은
+    기록이 되고, 소재를 세는 쪽이 둘을 영영 가를 수 없다.
+
+    🔴 **숙주는 고르지 않는다** — ``e:GetHandler()`` 하나다
+    (:attr:`OperationKind.ATTACH_AS_MATERIAL` 의 설명).
+    """
+
+    target_ref: TargetRef
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target_ref, TargetRef):
+            raise TypeError(
+                "AttachMaterialOperation 에는 TargetRef 가 필요합니다. 어느 "
+                f"카드를 겹치는지 말하지 않는 일은 일이 아닙니다: "
+                f"{self.target_ref!r}"
+            )
+
+    @property
+    def kind(self) -> OperationKind:
+        return OperationKind.ATTACH_AS_MATERIAL
+
+    @property
+    def target_refs(self) -> tuple[TargetRef, ...]:
+        return (self.target_ref,)
+
+    def canonical_state(self) -> tuple:
+        return ("attach_as_material", self.target_ref.name)
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "attach_as_material",
+            "target_ref": self.target_ref.name,
+            "reasons": list(self.reason_names),
+        }
+
+    def describe_ko(self) -> str:
+        return f"{self.target_ref} 를 이 카드의 엑시즈 소재로 겹친다"
+
+
+@dataclass(frozen=True, slots=True)
 class SetSpellTrapOperation(Operation):
     """
     대상으로 고른 마법 · 함정을 **세트한다** (Phase 6-BF).
@@ -1159,6 +1241,7 @@ __all__ = [
     "OperationKind",
     "REASON_NAMES",
     "CARD_OPERATION_KINDS",
+    "AttachMaterialOperation",
     "SEMANTIC_CARD_KINDS",
     "DECLARABLE_GATE_KINDS",
     "SHUFFLEABLE_ZONES",
