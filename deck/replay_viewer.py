@@ -269,7 +269,10 @@ var KIND_KO = {monster:'몬스터', spell:'마법', trap:'함정'};
    적는다 — 모르는 것을 번역해 지어내지 않는다. */
 var ACT_KO = {
   normal_summon:'일반 소환', special_summon:'특수 소환',
-  link_summon:'링크 소환', activate_effect:'효과 발동',
+  /* 🔴 **엑시즈 소환을 적는다** (Phase 6-BO §5). 없으면 장면 머리글이
+     `xyz_summon` 으로 나온다 — 실측으로 그렇게 보였다. */
+  link_summon:'링크 소환', xyz_summon:'엑시즈 소환',
+  activate_effect:'효과 발동',
   activate_spell:'마법 발동', set_spell_trap:'마법·함정 세트',
   set_monster:'몬스터 세트', tribute_summon:'어드밴스 소환',
   attack:'공격', pass:'패스', end_phase:'턴 종료',
@@ -277,6 +280,7 @@ var ACT_KO = {
 };
 function actKo(kind) { return ACT_KO[kind] || kind; }
 var STEP_KO = {normal_summon:'일반 소환', link_summon:'링크 소환',
+               xyz_summon:'엑시즈 소환',
                special_summon:'특수 소환', activate_effect:'효과 발동',
                set_spell_trap:'마법·함정 세트', end_phase:'턴 종료',
                pass:'패스'};
@@ -305,7 +309,9 @@ var ROLE_BASIS = {
   act:'엔진 사건의 source',
   move:'엔진 사건 (delta)',
   cost:'엔진 사건 (비용 지불)',
-  mat:'엔진 사건 (링크 소환 행동의 이동)',
+  /* 🔴 **소환법을 못 박지 않는다** (Phase 6-BO §5) — 같은 역할이 링크
+     소환과 엑시즈 소환 둘 다에서 나온다. */
+  mat:'엔진 사건 (소환 행동의 이동)',
   tgt:'걸음 기록의 글자 설명 — 연출입니다',
   gone:'엔진 사건 (토큰 소멸)'
 };
@@ -399,9 +405,12 @@ function buildFrames(rec) {
   (rec.events || []).forEach(function (ev) {
     var roles = {}, notes = [], basis = {};
     var st = stepOf[ev.seq] || null;
-    /* 사건 종류가 기본 역할을 정한다. 링크 소환 행동의 이동은 소재다. */
+    /* 사건 종류가 기본 역할을 정한다. 🔴 **소환 행동의 이동은 소재다** —
+       링크 소환과 엑시즈 소환 둘 다다 (Phase 6-BO §5). */
     var role = (ev.type === 'cost_payment') ? 'cost'
-             : (st && st.kind === 'link_summon' && ev.type === 'action') ? 'mat'
+             : (st && ev.type === 'action'
+                && (st.kind === 'link_summon' || st.kind === 'xyz_summon'))
+               ? 'mat'
              : 'move';
 
     (ev.changes || []).forEach(function (ch) {

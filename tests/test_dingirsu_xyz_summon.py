@@ -797,3 +797,82 @@ def test_h03_resolving_moves_one_banished_machine_under_the_host(repository):
     after = _names(duel, Zone.REMOVED)
     assert len(after) == len(before) - 1
     assert "오르페골 스켈레촌" not in after
+
+
+# ======================================================================
+# G. 자율 탐색이 **기본 예산으로** 찾는가
+# ======================================================================
+def _hosted(result, repository, seat=0):
+    """``(숙주 카드 ID, [소재 카드 ID])`` — 후보 요약이 적어 둔 그대로."""
+    where = {}
+    for zone in result.resources.zones:
+        for card in zone.cards:
+            if card is not None and card.instance is not None:
+                where[card.instance] = card.card_id
+    out = []
+    for name in (Zone.MZONE, Zone.EMZONE):
+        box = result.resources.zone(seat, name)
+        if box is None:
+            continue
+        for card in box.cards:
+            if card is None or not card.materials:
+                continue
+            out.append((card.card_id, [where.get(m) for m in card.materials]))
+    return out
+
+
+@requires_official_db
+@pytest.mark.real_card
+def test_g01_the_autonomous_search_stacks_dingirsu_on_longirsu(repository):
+    """
+    🔴 **기본 예산 · 기본 입력에서 자율 탐색이 스스로 찾는다** —
+    「오르페골 롱기르수」 를 소재로 한 딩기르수 엑시즈 소환.
+
+    🔴 **수순을 하나도 주지 않는다.** ``autonomous_search_opening`` 을
+    기본값으로 돌리고, 돌아온 후보들 **안에** 그 전개가 있는지만 센다.
+    카드 이름으로 고르는 자리도 없다 — 소재의 **카드 ID** 로 센다.
+
+    🔴 **짧은 전개도 함께 있어야 한다** — 갈라테아 · 갈라테아i 위에 겹치는
+    길이 사라지면 이 시험이 깨진다.
+    """
+    from app.main import (
+        AUTONOMOUS_DEFAULT_ACTIONS, AUTONOMOUS_DEFAULT_CANDIDATES,
+        AUTONOMOUS_DEFAULT_CANDIDATES_PER_BASELINE,
+        autonomous_search_opening,
+    )
+    from tests.test_galatea_effect_extension import ORCUST_HAND, _draft
+
+    _, outcome = autonomous_search_opening(
+        repository, _draft(repository), list(ORCUST_HAND), max_results=3,
+    )
+    assert outcome is not None
+    #: 🔴 **기본 상한이 그대로다** — 예산을 키워 찾은 것이 아니다.
+    assert outcome.budget.max_followup_actions == AUTONOMOUS_DEFAULT_ACTIONS
+    assert outcome.budget.max_candidates == AUTONOMOUS_DEFAULT_CANDIDATES
+    assert (outcome.budget.max_candidates_per_baseline
+            == AUTONOMOUS_DEFAULT_CANDIDATES_PER_BASELINE)
+
+    xyz, over_longirsu = [], []
+    for result in outcome.results:
+        if not any(step.action_key[0] == "xyz_summon"
+                   for step in result.path):
+            continue
+        xyz.append(result)
+        for host, under in _hosted(result, repository):
+            if host != DINGIRSU:
+                continue
+            if LONGIRSU in under:
+                over_longirsu.append(result)
+
+    assert xyz, (
+        "딩기르수를 엑시즈 소환한 후보가 없습니다. 종료 이유: "
+        f"{outcome.budget_hit} · 노드 {outcome.nodes_expanded} · "
+        f"깊이 {outcome.deepest} · 후보 {len(outcome.results)}"
+    )
+    assert over_longirsu, (
+        "롱기르수를 소재로 한 후보가 없습니다. 종료 이유: "
+        f"{outcome.budget_hit} · 엑시즈 후보 {len(xyz)}건"
+    )
+    #: 🔴 **짧은 길도 남아 있다** — 롱기르수가 아닌 소재로 겹친 후보.
+    others = [r for r in xyz if r not in over_longirsu]
+    assert others, "롱기르수 위에 겹치는 길만 남았습니다 (짧은 전개가 사라졌다)"

@@ -899,7 +899,31 @@ AUTONOMOUS_SEARCH_NAME: str = "auto"
 #: (:data:`AUTONOMOUS_DEFAULT_CANDIDATES` 쪽) 이 먼저 차므로 같은 일을 다른
 #: 깊이로 나눠 쓴다. 8 로는 올리지 않았다: 위 설명의 실측(47노드 132초)이
 #: 그 값에서 노드 하나가 비싸진다고 말한다.
-AUTONOMOUS_DEFAULT_ACTIONS: int = 7
+#:
+#: 🔴 **7 → 10 (Phase 6-BO §4).** 숫자가 움직인 이유: 「시오르페골
+#: 딩기르수」 를 **롱기르수 위에 겹쳐** 엑시즈 소환하는 수가 기준점 뒤
+#: **8번째 행동**이고 (실측: 기준점은 걸음 2 · 롱기르수가 걸음 10 ·
+#: 엑시즈가 11), 그 뒤의 **소환 성공 시 효과 발동**이 9번째다. 7 에서는
+#: ``flow_only`` 가 그 자리에서 **비흐름 행동을 전부** 막고 패스만 이었다.
+#:
+#: 🔴 **이 값 하나로는 모자랐다 — 세 상한이 함께 움직였다.** 같은 입력
+#: (덱 ``docs/orcust-azamina-note.ydk`` · 패 기르수 · 하루 우라라 ·
+#: 증식의 G · 무한포영 · 무덤의 지명자) 의 실측이고, ``_order_key`` 의
+#: 자식 순서 수정(:data:`~agent.bounded_search.ACTION_ORDER`) 과 **함께**
+#: 재야 한다 — 예산만 올리면 단조롭게 좋아지지 않았다 (행동 7~11 · 보관
+#: 64~96 · 노드 400~600 의 12가지 조합에서 ② 가 최대 2건, 보고서 §65):
+#:
+#: ============ ======== ====== ====== ===== ===== ======================
+#: 설정          소요      후보   깊이   ①     ②     멈춘 사유
+#: ============ ======== ====== ====== ===== ===== ======================
+#: 7 · 64/48    151.9초  87     10     7     0     행동 · 기준점 · 노드
+#: **10 · 96/72** 159.8초 93    13     13    6     행동 · 기준점 · 노드
+#: ============ ======== ====== ====== ===== ===== ======================
+#:
+#: 🔴 **값을 올린 대가를 적는다** — 같은 입력의 탐색이 151.9초에서
+#: **159.8초**가 되었다 (+5%, 탐색 상한 240초 안이다). 그 8초로 ② 가
+#: 0건에서 6건이 된다.
+AUTONOMOUS_DEFAULT_ACTIONS: int = 10
 AUTONOMOUS_DEFAULT_RESULTS: int = 3
 #: 🔴 **20 → 64 (Phase 6-BI §2).** 「오르페골 갈라테아i」 ② 가 한 자리에서
 #: 후보를 12개로 가르므로 (비용으로 낼 패 4장 × 패에 넣을 카드 3장), 20 은
@@ -929,7 +953,14 @@ AUTONOMOUS_DEFAULT_RESULTS: int = 3
 #: 🔴 **값을 올린 대가를 적는다** — 같은 입력의 탐색이 24초에서 **73초**가
 #: 되었다 (탐색 상한 240초 안이다). 사용자가 기다리는 시간은 여기에 재생
 #: 검증과 기록 만들기가 더해진 값이다.
-AUTONOMOUS_DEFAULT_CANDIDATES: int = 64
+#:
+#: 🔴 **64 → 96 (Phase 6-BO §4).** 숫자가 움직인 이유는
+#: :data:`AUTONOMOUS_DEFAULT_ACTIONS` 의 표와 **같은 실측**이다 — 행동
+#: 예산만 10 으로 올리면 깊이 우선 고리가 앞쪽 가지의 **더 깊은 변형들**로
+#: 보관을 다 채우고 (실측: 64 에서 69.7초에 ``max_candidates`` 로 종료 ·
+#: ② 0건), 롱기르수 가지가 자리를 받지 못한다. 보관을 96 으로 올렸을 때
+#: 같은 입력에서 ② 가 6건이 되었다.
+AUTONOMOUS_DEFAULT_CANDIDATES: int = 96
 
 #: **재생 검증 자리**를 후보 보관 상한에 맞춰 늘리는 비율 (Phase 6-BI §3).
 #:
@@ -1063,7 +1094,13 @@ AUTONOMOUS_DEFAULT_ROTATE_BASELINES: bool = False
 #: 🔴 **64 (= 전체 상한) 는 6-BE 가 고친 것을 되돌린다** — 기준점 하나가
 #: 보관을 다 쓰고, 실측으로 「효과를 쓰지 않은 갈라테아② 전개」 가 0건이다.
 #: 48 에서 **두 전개가 함께** 들어오고 기준점도 나뉜다.
-AUTONOMOUS_DEFAULT_CANDIDATES_PER_BASELINE: int = 48
+#:
+#: 🔴 **48 → 72 (Phase 6-BO §4).** 전체 보관이 64 → 96 으로 올랐고
+#: (:data:`AUTONOMOUS_DEFAULT_CANDIDATES`), 이 값은 **그 3/4 이라는 비율을
+#: 지킨 것**이다 — 6-BI 가 고른 비율이고, 기준점 하나가 전체를 다 쓰지
+#: 못하게 하는 자리다. 실측: 같은 입력에서 96/48 로 두면 ① 이 4건 · ② 가
+#: 0건이고 (141.9초), 96/72 에서 ① 13건 · ② 6건이다 (159.8초).
+AUTONOMOUS_DEFAULT_CANDIDATES_PER_BASELINE: int = 72
 #: 🔴 **값을 실측으로 골랐다** (보고서 §13.4 — **6-BE 당시의 기록**).
 #: 전체 보관 상한 20 · 노드 400 · 240초 · 깊이 8 을 그대로 두고 상한만
 #: 나눴다. **12** 에서 스켈레촌 기준점이 후속 12개(깊이 6)를 쓰고
@@ -1666,13 +1703,19 @@ class ScriptedActionPolicy:
     ``ExecutedStep.material_card_ids`` 에도 적혀 있다.
     """
 
-    __slots__ = ("_want", "taken", "name", "decisions")
+    __slots__ = ("_want", "taken", "name", "decisions", "_on_action")
 
-    def __init__(self, keys, name: str = "autonomous-rerun"):
+    def __init__(self, keys, name: str = "autonomous-rerun", *,
+                 on_action=None):
         self._want = list(keys)
         self.taken: list[tuple] = []
         self.name = name
         self.decisions: list[dict] = []
+        #: 🔴 **걸음이 바뀌는 순간을 알리는 자리** (Phase 6-BO §5). 해결 중
+        #: 선택의 각본을 **걸음마다** 새로 주려면 "지금부터 그 걸음" 이라는
+        #: 경계가 필요하고, 그 경계를 아는 곳은 여기뿐이다 — 물음은 이
+        #: 함수가 돌려준 행동을 적용하는 **동안** 들어온다.
+        self._on_action = on_action
 
     @property
     def done(self) -> bool:
@@ -1693,8 +1736,92 @@ class ScriptedActionPolicy:
                 self.decisions.append(
                     _decision_snapshot(duel, legal, action)
                 )
+                if self._on_action is not None:
+                    #: 🔴 **고른 다음, 적용되기 전에** 알린다 — 이 걸음의
+                    #: 물음은 이 뒤에 들어온다.
+                    self._on_action(len(self.taken) - 1)
                 return action
         return None
+
+
+class _StepScriptedChoice:
+    """
+    **걸음마다 그 걸음의 각본만** 쓰는 해결 중 선택 정책 (Phase 6-BO §5).
+
+    🔴 **왜 필요한가 — 실측이다.** 6-BB 는 경로 전체의 선택을 **하나로 이어
+    붙인** ``ScriptedChoice`` 를 썼다. 그 정책은 각본의 자리를 **그때까지
+    물은 횟수**로 세므로 (``choose_cards`` 의 ``index = len(self._log)``),
+    물음이 하나라도 더 들어오거나 덜 들어오면 **그 뒤 전부가 한 칸씩
+    밀린다.** 밀린 답은 "후보에 없다" 로 떨어져 기본 정책이 메꾸고, 그러면
+    다음 행동의 소재·대상이 달라져 기록된 행동이 **그 자리의 허용 후보에서
+    사라진다.**
+
+    실측 (6-BO §5 · 같은 입력): 기본 탐색이 남긴 12~13걸음 후보 **6건 전부**
+    가 `/combo-pick` 의 재실행에서 10번째 행동부터 어긋났고
+    ("기록된 행동 12개 가운데 3개를 찾지 못했습니다"), **같은 경로**를
+    :func:`~agent.bounded_search.rerun_steps` 는 12~13걸음 전부 재현했다
+    (``ok=True``). 두 재생기의 다른 점은 이것 하나다 — 저쪽은 **걸음마다**
+    그 걸음의 각본으로 새 ``ScriptedChoice`` 를 만든다.
+
+    🔴 **각본 밖은 그대로 뒤 정책에게 넘긴다.** 걸음에 적힌 물음보다 더 물으면
+    그 자리는 기본 정책이 답하고, 그 사실이 :attr:`plan_was_missed` 에 남는다
+    — 조용히 비슷한 것을 집어 "재현했다" 고 말하지 않는다.
+    """
+
+    __slots__ = ("_plans", "_index", "_inner", "_fallback", "_missed", "name")
+
+    def __init__(self, plans, then=None, name: str = "autonomous-rerun"):
+        from agent.choice import FirstPermittedChoice, ScriptedChoice
+
+        self._plans = [tuple(tuple(ask) for ask in plan) for plan in plans]
+        self._fallback = FirstPermittedChoice() if then is None else then
+        self.name = name
+        self._index = -1
+        self._missed = False
+        #: 🔴 **걸음 밖의 물음은 각본 없이 답한다** — 처음 상태를 세우는
+        #: 동안의 물음까지 각본으로 답하면 자리가 또 밀린다.
+        self._inner = ScriptedChoice((), self._fallback, name=name)
+
+    def begin_step(self, index: int) -> None:
+        """그 걸음의 각본으로 **새로 시작한다.**"""
+        from agent.choice import ScriptedChoice
+
+        self._index = int(index)
+        plan = (
+            self._plans[self._index]
+            if 0 <= self._index < len(self._plans) else ()
+        )
+        self._inner = ScriptedChoice(
+            plan, self._fallback, name=f"{self.name}-{self._index}"
+        )
+
+    @property
+    def plan_was_missed(self) -> bool:
+        """적어 둔 선택을 **쓸 수 없었던 자리가 있었는가.**"""
+        return self._missed
+
+    def accept_offer(self, offer) -> bool:
+        return self._inner.accept_offer(offer)
+
+    def choose_cards(self, offer):
+        chosen = self._inner.choose_cards(offer)
+        if self._inner.plan_was_missed:
+            self._missed = True
+        return chosen
+
+    def forked(self) -> "_StepScriptedChoice":
+        """사본은 **같은 자리를 다시 묻는다** — 같은 각본, 빈 기록."""
+        copy = _StepScriptedChoice(
+            self._plans, self._fallback.forked(), name=f"{self.name}-fork"
+        )
+        if self._index >= 0:
+            copy.begin_step(self._index)
+        return copy
+
+    def __repr__(self) -> str:  # pragma: no cover - 표시용
+        return (
+            f"<{self.name} 걸음 {len(self._plans)}개 · 지금 {self._index}>"
+        )
 
 
 #: 후보가 **평가에서 어떤 처지였는가** — 화면이 그대로 적는 낱말들.
@@ -1870,7 +1997,9 @@ def autonomous_rerun_record(repository, draft, hand, result, *,
     """
     from agent.bounded_search import FLOW_ACTION_KINDS
     from agent.choice import FirstPermittedChoice, ScriptedChoice
-    from deck.opening import build_opening, execute_opening
+    from deck.opening import (
+        MAX_EXECUTED_ACTIONS, build_opening, execute_opening,
+    )
     from deck.replay_export import export_opening_replay
     from integration.autonomy import PolicyChooser, TriggerSource
 
@@ -1878,27 +2007,66 @@ def autonomous_rerun_record(repository, draft, hand, result, *,
     steps = [step for step in result.path if step.kind not in flow]
     if not steps:
         return None, "다시 실행할 비흐름 행동이 없습니다."
-    plan = tuple(ask.chosen for step in steps for ask in step.choices)
+    #: 🔴 **걸음마다 그 걸음의 각본을 준다** (Phase 6-BO §5,
+    #: :class:`_StepScriptedChoice`). 6-BB 는 전체를 하나로 이어 붙였고,
+    #: 그러면 물음 하나가 어긋나는 순간 그 뒤가 전부 밀린다 — 실측으로
+    #: 12걸음 후보 6건이 모두 10번째 행동에서 멈췄다.
+    plans = tuple(tuple(ask.chosen for ask in step.choices)
+                  for step in steps)
     #: 🔴 **흐름 걸음의 선택도 빠뜨리지 않는다** — 흐름 걸음에서 물은 것이
     #: 있으면 각본 순서가 어긋나므로, 그때는 다시 실행하지 않는다.
     if any(step.choices for step in result.path if step.kind in flow):
         return None, ("흐름 걸음에서도 해결 중 선택을 물었습니다 — 각본"
                       " 순서를 보장할 수 없어 다시 실행하지 않았습니다.")
 
-    selector = ScriptedChoice(plan, FirstPermittedChoice(),
-                              name="autonomous-rerun")
+    selector = _StepScriptedChoice(plans, FirstPermittedChoice(),
+                                   name="autonomous-rerun")
     setup = build_opening(
         repository, draft, list(hand),
         chooser=PolicyChooser(selector), triggers=TriggerSource(repository),
     )
     if not setup.can_run:
         return None, "다시 실행할 초기 상태를 만들지 못했습니다."
-    policy = ScriptedActionPolicy(step.action_key for step in steps)
-    run = execute_opening(setup, repository, choose=policy)
+    policy = ScriptedActionPolicy(
+        (step.action_key for step in steps), on_action=selector.begin_step
+    )
+    #: 🔴 **걸음 상한을 기록에서 가져온다** (Phase 6-BO §5). 기본값
+    #: :data:`~deck.opening.MAX_EXECUTED_ACTIONS` 는 **전개를 처음 돌려
+    #: 보는 단계**가 선언한 상한이고, 재생은 "이미 찾은 경로를 그대로 다시
+    #: 밟는 일" 이므로 그 상한을 쓸 이유가 없다.
+    #:
+    #: 🔴 **실측으로 겪었다.** 그 상한이 9 인 채로, 12걸음 후보의 재생이
+    #: **9번째 행동에서 멈췄고** 바깥은 그것을 "기록된 행동 12개 가운데
+    #: 3개를 그 자리의 허용 후보에서 찾지 못했습니다" 로 적었다 — 상한에
+    #: 걸린 것을 **규칙이 막은 것처럼** 읽는 보고다 (6-BJ 가 같은 자리에서
+    #: 8 → 9 로 올려 막아 둔 것과 같은 결함이고, 이번에는 상한을 **기록의
+    #: 길이에서** 받는다). 상한을 넓히자 같은 경로가 12걸음 전부 재현됐다.
+    #:
+    #: 더하는 ``MAX_EXECUTED_ACTIONS`` 는 **엔진이 끼워 넣는 필수 걸음**
+    #: (패스) 의 자리다 — 탐색 기록은 그것을 걸음으로 세지 않으므로 기록
+    #: 길이만으로는 모자랄 수 있다.
+    budget = len(result.path) + MAX_EXECUTED_ACTIONS
+    run = execute_opening(setup, repository, choose=policy,
+                          max_actions=budget)
     if not policy.done:
+        #: 🔴 **두 사실을 가른다** (ADR-002) — 상한에 닿은 것과 그 자리의
+        #: 허용 후보에 없던 것은 다른 일이다.
+        if run.stopped_kind == "limit":
+            return None, (f"재생이 걸음 상한 {budget} 에 닿아 기록된 행동"
+                          f" {len(steps)}개 가운데 {policy.left}개를 밟지"
+                          " 못했습니다 — 🔴 허용 후보에서 찾지 못한 것이"
+                          " 아닙니다.")
         return None, (f"기록된 행동 {len(steps)}개 가운데 {policy.left}개를"
                       " 그 자리의 허용 후보에서 찾지 못했습니다 — 🔴 비슷한"
                       " 행동으로 메꾸지 않았습니다.")
+    #: 🔴 **적어 둔 선택이 쓰이지 않았으면 재현이 아니다** (Phase 6-BO §5).
+    #: 6-BB 는 이 자리를 보지 않았고, 그래서 기본 정책이 메꾼 전개도
+    #: "같은 경로" 로 나갈 수 있었다 — 행동은 전부 찾았는데 **그 안의 선택이
+    #: 달랐던** 경우다.
+    if selector.plan_was_missed:
+        return None, ("기록된 해결 중 선택을 그 자리의 후보에서 찾지"
+                      " 못했습니다 — 🔴 기본 정책이 메꾼 전개를 같은"
+                      " 경로로 내보내지 않습니다.")
     wanted = getattr(result.resources, "state_hash", "")
     got = setup.duel.state.state_hash()
     if wanted and got != wanted:
