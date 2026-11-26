@@ -1734,6 +1734,73 @@ def _summon_limits(state) -> "tuple[tuple[int, str, int], ...]":
 # ======================================================================
 # 중복 제거
 # ======================================================================
+def interchangeable_copies(duel: Duel, seat: int) -> "dict[int, int]":
+    """
+    **물리적으로 같은 카드**끼리 묶어 대표 개체 번호를 돌려준다 (Phase 6-BP).
+
+    🔴 **엑스트라 덱만 본다.** 그 존은 칸이 없고 뒷면이며 고를 때 순서가
+    없으므로, 같은 ``card_id`` 의 두 개체는 **고르는 사람에게 구분되지
+    않는다.** 다른 존은 그렇지 않다 — 메인 몬스터 존은 칸 번호가 링크
+    마커의 답을 바꾸고 (``engine.link_zone``), 패 구성은 다른 Phase 가 이미
+    비교에 넣어 두었다 (6-BI). 그래서 넓히지 않는다.
+
+    🔴 **카드 이름도 효과도 보지 않는다** — 존과 ``card_id`` 로만 묶는다.
+
+    🔴 **사본이 하나뿐인 카드는 들어가지 않는다.** 한 장이 엑스트라 덱을
+    떠나면 그 묶음은 즉시 사라지고, 남은 한 장은 대표가 될 일이 없다.
+    """
+    groups: "dict[int, list[int]]" = {}
+    for card in duel.state.zone(seat, Zone.EXTRA):
+        if card is None:
+            continue
+        groups.setdefault(card.card_id, []).append(card.instance_id.value)
+    leaders: "dict[int, int]" = {}
+    for ids in groups.values():
+        if len(ids) < 2:
+            continue
+        lead = min(ids)
+        for one in ids:
+            leaders[one] = lead
+    return leaders
+
+
+def fold_interchangeable(actions, leaders: "dict[int, int]", ledger=None):
+    """
+    **고르는 카드만 다른** 행동 가운데 첫 하나만 남긴다 (Phase 6-BP).
+
+    🔴 **왜 — 실측이다.** 이 저장소의 기준 덱은 엑스트라 덱에 같은 카드를
+    두 장 넣는다 (실측: 두 카드가 각 2장). 그 두 장으로 만든 두 행동은
+    적용하면 **같은 판**이 되는데 (``state_hash`` 가 같다 — 6-BO 보고서
+    §70-5 의 실측이고 ``tests/test_bounded_search_copies.py`` 가 다시
+    잰다), 탐색은 둘을 다른 노드로 보고 **같은 가지를 두 번 펼쳤다.** 한
+    전개가 그런 카드를 둘 쓰면 변형이 **네 개**가 된다.
+
+    🔴 **버리는 것은 "어느 사본을 썼는가" 뿐이다.** 그것은 사용자가 고르는
+    것이 아니다 — 같은 카드이고, 남은 한 장은 어느 쪽을 썼든 엑스트라 덱에
+    그대로 남는다.
+
+    🔴 **``source`` 만 대표로 바꾼다.** 소재 · 대상 · 비용은 판 위나 패의
+    카드를 가리키고, 그 자리들은 칸 번호와 구성이 의미를 갖는다
+    (:func:`interchangeable_copies` 의 설명).
+    """
+    if not leaders:
+        return list(actions)
+    kept, seen = [], set()
+    for action in actions:
+        state = list(action.canonical_state())
+        source = state[2]
+        if isinstance(source, int):
+            state[2] = leaders.get(source, source)
+        key = tuple(state)
+        if key in seen:
+            if ledger is not None:
+                ledger.folded_copies += 1
+            continue
+        seen.add(key)
+        kept.append(action)
+    return kept
+
+
 def node_key(duel: Duel, legal) -> "tuple | None":
     """
     두 노드를 **같은 것으로 볼 수 있는가.** 볼 수 없으면 ``None``.
@@ -2264,6 +2331,12 @@ class _Ledger:
     choice_offers_truncated: int = 0
     """**확인하지 못한 대안이 남은 물음**의 수 (Phase 6-AH 보완 B)."""
     deduped: int = 0
+    folded_copies: int = 0
+    """
+    **같은 카드의 사본만 다른** 행동이라 펼치지 않은 횟수 (Phase 6-BP,
+    :func:`fold_interchangeable`). 🔴 중복 제거(``deduped``) 와 섞지 않는다 —
+    그쪽은 **같은 판에 두 번 닿은** 것이고 이쪽은 **애초에 같은 행동**이다.
+    """
     revisited: int = 0
     """같은 상태에 **더 얕게** 다시 닿아 다시 펼친 횟수 (보완 A)."""
     stale: int = 0
@@ -3142,7 +3215,11 @@ class BoundedSearch:
                 " 수에 세지 않습니다.",
             )
 
-        ordered = sorted(legal.allowed, key=_order_key)
+        ordered = fold_interchangeable(
+            sorted(legal.allowed, key=_order_key),
+            interchangeable_copies(duel, self.goal.seat),
+            ledger,
+        )
         children: list[_Node] = []
         for action in ordered:
             if action.kind is PlayerActionKind.END_PHASE:
@@ -4079,6 +4156,8 @@ __all__ = [
     "CardSlot",
     "ContinuationStop",
     "choice_family",
+    "fold_interchangeable",
+    "interchangeable_copies",
     "DEFAULT_MAX_BASELINES",
     "DEFAULT_MAX_CHOICE_BRANCHES",
     "DEFAULT_MAX_DEPTH",
