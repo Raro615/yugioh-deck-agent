@@ -124,6 +124,19 @@ class _GraphState:
     def player(self, seat: int):
         return self._player
 
+    def zone(self, seat: int, zone: Zone):
+        """
+        🔴 **Phase 6-BP 가 더했다.** 탐색이 같은 카드의 사본을 접을 때
+        엑스트라 덱을 읽는다
+        (:func:`~agent.bounded_search.interchangeable_copies`) — 이 대역에
+        이 메서드가 없으면 그 자리에서 ``AttributeError`` 가 난다 (실측:
+        이 파일의 14건이 그렇게 깨졌다). 🔴 **production 쪽을 느슨하게
+        하지 않는다** — 판을 읽을 수 없는 것은 대역뿐이고, 진짜
+        ``GameState`` 는 언제나 답한다 (6-BO 가 ``_MCard.materials`` 를,
+        6-BP 가 ``_MState.zone`` 을 더한 것과 같은 결).
+        """
+        return tuple(self._player.zone(zone).cards())
+
 
 class _GraphWindow:
     value = "none"
